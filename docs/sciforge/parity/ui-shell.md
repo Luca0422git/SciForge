@@ -43,8 +43,8 @@ Unavailable items are greyed out. Separators group related commands.
   constraint glyphs, green "create" badge), drawn from scratch. No Autodesk artwork (outline 2.5).
 - Omitted on purpose: Create Form (sculpt, out of scope), Create PCB (electronics, out of scope),
   McMaster-Carr / manufacturer / TraceParts inserts (cloud catalogues), CONFIGURE group.
-- Tabs not shown: SHEET METAL, PLASTIC, MANAGE. Not in the outline's scope. **Question for Luca:**
-  do you use sheet metal? If so it needs to be added to the outline.
+- Tabs not shown: SHEET METAL, PLASTIC, MANAGE. Out of scope; Luca confirmed he does not need
+  them for now (2026-10-09).
 - Commands SciForge does not have yet appear greyed out with "Not available in SciForge yet",
   so the menus double as a parity to-do list.
 - Interim: Extrude and Revolve have separate "(Cut)" entries until the unified Fusion-style Extrude

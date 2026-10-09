@@ -47,6 +47,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 | 2026-10-09 | Removed FreeCAD-org automation workflows (translations, stale bot, backport, labeler, CodeQL, scorecards, Fedora nightly, weekly release, dependabot); `CI_master.yml` made manual-only | They serve FreeCAD's organization, fail or waste minutes here; a weekly release cron would have run on our default branch |
 | 2026-10-09 | SciForge module lives at `src/Mod/SciForge` and is installed by the normal CMake build | Ships inside every SciForge build; no separate add-on install step |
 | 2026-10-09 | Golden models are JSON step lists run by a small interpreter in real FreeCAD | Same file runs in CI (headless) and can later be compared with Fusion reference metrics |
+| 2026-10-09 | No SHEET METAL, PLASTIC or MANAGE tabs (Luca: "not for now") | Not used; out of scope |
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
 
 ## Status by phase (outline section 10)
@@ -124,8 +125,6 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 ## Questions waiting for Luca
 
-- Do you use SHEET METAL (or PLASTIC / MANAGE)? Not in the outline's scope, so those tabs are
-  left out of the ribbon for now.
 
 (See outline section 12. Also:)
 - OK to make the repo public at some point? Public repos get unlimited free Actions minutes,
