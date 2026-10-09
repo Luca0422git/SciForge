@@ -1,0 +1,68 @@
+{
+  "id": "hole_blind",
+  "title": "Blind hole d6 depth 6 in a 40x40x10 plate",
+  "tags": [
+    "hole"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            20,
+            1
+          ],
+          "name": "pt"
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "hole",
+      "id": "h1",
+      "sketch": "s2",
+      "diameter": 6,
+      "depth": 6
+    }
+  ],
+  "expect": {
+    "volume": 15830.353996706152,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "Flat-bottom hole: V = 40*40*10 - pi*3^2*6; faces = 6 + wall + floor"
+  }
+}

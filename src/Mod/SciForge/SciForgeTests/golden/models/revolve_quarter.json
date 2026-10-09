@@ -1,0 +1,39 @@
+{
+  "id": "revolve_quarter",
+  "title": "Offset rectangle revolved 90 degrees",
+  "tags": [
+    "revolve",
+    "angle"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            0,
+            20,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z",
+      "angle": 90
+    }
+  ],
+  "expect": {
+    "volume": 1178.0972450961724,
+    "faces": 6,
+    "source": "analytic",
+    "note": "Quarter of the washer: V = 1500pi/4"
+  }
+}

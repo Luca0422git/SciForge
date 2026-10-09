@@ -1,0 +1,59 @@
+{
+  "id": "shell_open_box",
+  "title": "Box 60x40x30 shelled 2 mm inward, top removed",
+  "tags": [
+    "shell",
+    "enclosure"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 30
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "thickness": 2,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 15552,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      30
+    ],
+    "source": "analytic",
+    "note": "V = 60*40*30 - 56*36*28; faces = 5 outer + 5 inner + rim"
+  }
+}

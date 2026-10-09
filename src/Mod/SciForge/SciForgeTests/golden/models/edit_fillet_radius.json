@@ -1,0 +1,63 @@
+{
+  "id": "edit_fillet_radius",
+  "title": "Fillet all edges r1, then edit radius to 3",
+  "tags": [
+    "reference-stability",
+    "edit",
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 1,
+      "edges": {
+        "all": true,
+        "count": 12
+      }
+    },
+    {
+      "op": "edit",
+      "target": "f1",
+      "set": {
+        "radius": 3
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7495.362697409256,
+    "faces": 26,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Rounded box with r = 3 (see fillet_all_edges)"
+  }
+}

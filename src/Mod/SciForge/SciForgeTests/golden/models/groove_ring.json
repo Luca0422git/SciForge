@@ -1,0 +1,67 @@
+{
+  "id": "groove_ring",
+  "title": "Cylinder r10 h20 with a 2 mm deep ring groove",
+  "tags": [
+    "revolve",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            8,
+            8,
+            12,
+            12
+          ],
+          "name": "g"
+        }
+      ]
+    },
+    {
+      "op": "revolve",
+      "id": "g1",
+      "profile": "s2",
+      "axis": "Z",
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 5830.795965062655,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "Groove removes the ring r 8..10, z 8..12: pi(100-64)*4 = 144pi"
+  }
+}

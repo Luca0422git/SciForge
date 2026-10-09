@@ -1,0 +1,46 @@
+{
+  "id": "revolve_washer",
+  "title": "Offset rectangle revolved 360 (washer)",
+  "tags": [
+    "revolve"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            0,
+            20,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z"
+    }
+  ],
+  "expect": {
+    "volume": 4712.38898038469,
+    "area": 2827.4333882308138,
+    "faces": 4,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "V = pi(20^2 - 10^2)*5; A = 2pi(400-100) + 2pi*20*5 + 2pi*10*5"
+  }
+}

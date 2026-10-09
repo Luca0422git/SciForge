@@ -1,0 +1,59 @@
+{
+  "id": "chamfer_top_edges",
+  "title": "Box 40x20x10, the 4 top edges chamfered 2",
+  "tags": [
+    "chamfer",
+    "corner"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "chamfer",
+      "id": "c1",
+      "distance": 2,
+      "edges": {
+        "type": "line",
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 4
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7770.666666666667,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Removed = d^2/2 * 120 - 4 * d^3/3 (mitred corners overlap by d^3/3)"
+  }
+}

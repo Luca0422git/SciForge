@@ -1,0 +1,90 @@
+{
+  "id": "bracket_inner_fillet",
+  "title": "L bracket with the inside corner filleted r3",
+  "tags": [
+    "fillet",
+    "concave",
+    "bracket"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              5
+            ],
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              30
+            ],
+            [
+              0,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 3,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 5
+          },
+          {
+            "axis": "z",
+            "value": 5
+          }
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 6538.628330588459,
+    "faces": 9,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      30
+    ],
+    "source": "analytic",
+    "note": "A concave fillet adds (1 - pi/4) r^2 per unit length: 20 * 9 * (1 - pi/4)"
+  }
+}

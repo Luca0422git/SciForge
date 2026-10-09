@@ -1,0 +1,47 @@
+{
+  "id": "hex_prism",
+  "title": "Hexagon (circumradius 10) extruded 10",
+  "tags": [
+    "extrude",
+    "polygon"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polygon": {
+            "center": [
+              0,
+              0
+            ],
+            "radius": 10,
+            "sides": 6
+          }
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 2598.0762113533156,
+    "faces": 8,
+    "bbox": [
+      -10,
+      -8.660254037844386,
+      0,
+      10,
+      8.660254037844386,
+      10
+    ],
+    "source": "analytic",
+    "note": "Hexagon area = (3 sqrt3 / 2) R^2 with R = 10; V = 10 * area"
+  }
+}

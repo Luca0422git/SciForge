@@ -1,0 +1,71 @@
+{
+  "id": "pocket_depth",
+  "title": "Block 50x50x20 with a 20x20 pocket 8 deep",
+  "tags": [
+    "cut",
+    "pocket"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            50
+          ],
+          "name": "block"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            25,
+            25,
+            20,
+            20
+          ],
+          "name": "pocket"
+        }
+      ],
+      "offset": 20
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "distance": 8,
+      "operation": "cut",
+      "flip": true
+    }
+  ],
+  "expect": {
+    "volume": 46800,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      50,
+      20
+    ],
+    "source": "analytic",
+    "note": "V = 50*50*20 - 20*20*8; faces = 6 + pocket floor + 4 pocket walls"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "cylinder_extrude",
+  "title": "Circle r10 extruded 25",
+  "tags": [
+    "extrude",
+    "cylinder"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 25
+    }
+  ],
+  "expect": {
+    "volume": 7853.981633974483,
+    "area": 2199.114857512855,
+    "faces": 3,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      25
+    ],
+    "source": "analytic",
+    "note": "V = pi r^2 h = pi*100*25; A = 2 pi r^2 + 2 pi r h = 200pi + 500pi"
+  }
+}

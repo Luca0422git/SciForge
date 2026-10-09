@@ -1,0 +1,66 @@
+{
+  "id": "l_bracket_profile",
+  "title": "L profile on XZ extruded 20",
+  "tags": [
+    "extrude",
+    "bracket",
+    "polyline"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              5
+            ],
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              30
+            ],
+            [
+              0,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    }
+  ],
+  "expect": {
+    "volume": 6500,
+    "faces": 8,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      30
+    ],
+    "source": "analytic",
+    "note": "L area = 40*5 + 5*25 = 325; V = 325*20. XZ sketch normal is -Y in FreeCAD, so y runs 0 to -20"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "slot_extrude",
+  "title": "Slot 30 long, 10 wide, extruded 5",
+  "tags": [
+    "extrude",
+    "slot"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "slot": [
+            0,
+            0,
+            30,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    }
+  ],
+  "expect": {
+    "volume": 1892.6990816987243,
+    "faces": 6,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      35,
+      5,
+      5
+    ],
+    "source": "analytic",
+    "note": "Profile area = 30*10 + pi*5^2; V = 5 * area"
+  }
+}

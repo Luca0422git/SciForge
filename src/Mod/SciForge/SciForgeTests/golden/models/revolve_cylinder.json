@@ -1,0 +1,46 @@
+{
+  "id": "revolve_cylinder",
+  "title": "Rectangle on XZ revolved 360 about Z",
+  "tags": [
+    "revolve"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            20
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z"
+    }
+  ],
+  "expect": {
+    "volume": 6283.185307179586,
+    "area": 1884.9555921538758,
+    "faces": 3,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "Cylinder r10 h20: V = pi*100*20; A = 2*100pi + 2pi*10*20"
+  }
+}

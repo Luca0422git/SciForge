@@ -1,0 +1,73 @@
+{
+  "id": "shell_filleted_box",
+  "title": "Enclosure: box 60x40x30, vertical edges r5, shell 2 open top",
+  "tags": [
+    "shell",
+    "fillet",
+    "enclosure"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 30
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 5,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "count": 4
+      }
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "thickness": 2,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 15124.51314148771,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      30
+    ],
+    "source": "analytic",
+    "note": "Outer: rounded rect 60x40 r5 * 30. Inner offset by 2: rounded rect 56x36 r3 * 28. Rounded rect area = w h - 4(1-pi/4) r^2"
+  }
+}

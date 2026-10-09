@@ -1,0 +1,85 @@
+{
+  "id": "plate_hole_grid",
+  "title": "Plate 60x40x5 with a 3x2 rectangular pattern of holes",
+  "tags": [
+    "pattern",
+    "rectangular"
+  ],
+  "upstream_bug": "LinearPattern Spacings2 defaults to [0.0], so the second direction's first gap is 0 mm (docs/sciforge/core-patches.md #4)",
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            3
+          ],
+          "name": "hole"
+        }
+      ],
+      "offset": 5
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "pattern_rect",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "direction": "X",
+      "count": 3,
+      "spacing": 20,
+      "direction2": "Y",
+      "count2": 2,
+      "spacing2": 20
+    }
+  ],
+  "expect": {
+    "volume": 11151.769983530756,
+    "area": 6026.194671058465,
+    "faces": 12,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      5
+    ],
+    "source": "analytic",
+    "note": "6 holes r3: V = 60*40*5 - 6*pi*9*5; A = 2*2400 + 2*60*5 + 2*40*5 - 12*9pi + 6*2pi*3*5"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "id": "hole_countersink",
+  "title": "Through hole d6 with 90 degree countersink d12",
+  "tags": [
+    "hole",
+    "countersink"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            20,
+            1
+          ],
+          "name": "pt"
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "hole",
+      "id": "h1",
+      "sketch": "s2",
+      "diameter": 6,
+      "through_all": true,
+      "countersink": {
+        "diameter": 12,
+        "angle": 90
+      }
+    }
+  ],
+  "expect": {
+    "volume": 15604.159325647686,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "Cone 90deg from d12 to d6 is 3 deep: frustum pi*h/3*(R^2+Rr+r^2) = 63pi, plus cylinder pi*9*7 = 63pi"
+  }
+}

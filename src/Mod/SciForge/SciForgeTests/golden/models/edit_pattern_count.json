@@ -1,0 +1,88 @@
+{
+  "id": "edit_pattern_count",
+  "title": "Hole pattern count edited from 3 to 5",
+  "tags": [
+    "reference-stability",
+    "edit",
+    "pattern"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            20
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            2
+          ],
+          "name": "hole"
+        }
+      ],
+      "offset": 5
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "pattern_rect",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "direction": "X",
+      "count": 3,
+      "spacing": 10
+    },
+    {
+      "op": "edit",
+      "target": "p1",
+      "set": {
+        "count": 5
+      }
+    }
+  ],
+  "expect": {
+    "volume": 5685.84073464102,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "5 holes r2 through 5: V = 60*20*5 - 5*pi*4*5"
+  }
+}

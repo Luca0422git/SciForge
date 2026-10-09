@@ -1,0 +1,49 @@
+{
+  "id": "box_basic",
+  "title": "Rectangle 40x20 extruded 10",
+  "tags": [
+    "extrude",
+    "basic"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 8000,
+    "area": 2800,
+    "faces": 6,
+    "edges": 12,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 40*20*10; A = 2(40*20 + 40*10 + 20*10)"
+  }
+}

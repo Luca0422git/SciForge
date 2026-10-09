@@ -1,0 +1,79 @@
+{
+  "id": "flange_polar_holes",
+  "title": "Disc r40 x 10 with 6 holes r4 on a circular pattern",
+  "tags": [
+    "pattern",
+    "circular"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            40
+          ],
+          "name": "disc"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            30,
+            0,
+            4
+          ],
+          "name": "hole"
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "pattern_circ",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "axis": "Z",
+      "count": 6
+    }
+  ],
+  "expect": {
+    "volume": 47249.55350999049,
+    "area": 13471.149298593033,
+    "faces": 9,
+    "bbox": [
+      -40,
+      -40,
+      0,
+      40,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = pi*40^2*10 - 6*pi*4^2*10; A = 2*1600pi + 2pi*40*10 - 12*16pi + 6*2pi*4*10"
+  }
+}

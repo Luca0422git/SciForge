@@ -1,0 +1,70 @@
+{
+  "id": "symmetric_cut_slot",
+  "title": "Slot cut symmetric through a block from the XZ plane",
+  "tags": [
+    "cut",
+    "symmetric"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "block"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            10,
+            5,
+            20
+          ],
+          "name": "slot"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "distance": 40,
+      "operation": "cut",
+      "direction": "symmetric"
+    }
+  ],
+  "expect": {
+    "volume": 28000,
+    "faces": 10,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      20
+    ],
+    "source": "analytic",
+    "note": "V = 40*40*20 - 10*10*40; faces: bottom, 2 top halves, 4 sides, 3 slot faces"
+  }
+}

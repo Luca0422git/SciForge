@@ -1,0 +1,75 @@
+{
+  "id": "mirror_boss",
+  "title": "Plate with a boss mirrored across YZ",
+  "tags": [
+    "mirror"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            80,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            25,
+            0,
+            5
+          ],
+          "name": "boss"
+        }
+      ],
+      "offset": 5
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10
+    },
+    {
+      "op": "mirror",
+      "id": "m1",
+      "features": [
+        "e2"
+      ],
+      "plane": "YZ"
+    }
+  ],
+  "expect": {
+    "volume": 17570.796326794898,
+    "faces": 10,
+    "bbox": [
+      -40,
+      -20,
+      0,
+      40,
+      20,
+      15
+    ],
+    "source": "analytic",
+    "note": "V = 80*40*5 + 2*pi*25*10; faces = 6 plate + 2*(wall + top)"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "id": "plate_through_hole_cut",
+  "title": "Plate 50x30x8 with a through cut r5",
+  "tags": [
+    "cut",
+    "through-all"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 8
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            25,
+            15,
+            5
+          ],
+          "name": "hole"
+        }
+      ],
+      "offset": 8
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    }
+  ],
+  "expect": {
+    "volume": 11371.68146928204,
+    "area": 4374.247779607694,
+    "faces": 7,
+    "edges": 15,
+    "source": "analytic",
+    "note": "V = 50*30*8 - pi*25*8; A = 2*1500 + 2*50*8 + 2*30*8 - 2*pi*25 + 2*pi*5*8"
+  }
+}

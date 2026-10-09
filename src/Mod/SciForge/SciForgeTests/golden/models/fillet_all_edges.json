@@ -1,0 +1,56 @@
+{
+  "id": "fillet_all_edges",
+  "title": "Box 40x20x10, all 12 edges filleted r2",
+  "tags": [
+    "fillet",
+    "vertex-blend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "all": true,
+        "count": 12
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7770.359817271124,
+    "area": 2555.114978090269,
+    "faces": 26,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Rounded box: V = a'b'c' + 2r(a'b'+b'c'+a'c') + pi r^2 (a'+b'+c') + 4/3 pi r^3 with a' = a - 2r; spherical corners"
+  }
+}

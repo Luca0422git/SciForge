@@ -1,0 +1,69 @@
+{
+  "id": "chamfer_one_edge",
+  "title": "Box 40x20x10, one top edge chamfer 3",
+  "tags": [
+    "chamfer"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "chamfer",
+      "id": "c1",
+      "distance": 3,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "z",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "min"
+          }
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7820.0,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Equal chamfer d removes d^2/2 per unit length: 4.5 * 40"
+  }
+}

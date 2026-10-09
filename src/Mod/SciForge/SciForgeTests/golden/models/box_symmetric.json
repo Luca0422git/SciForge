@@ -1,0 +1,48 @@
+{
+  "id": "box_symmetric",
+  "title": "Center rectangle 30x30, symmetric extrude 20",
+  "tags": [
+    "extrude",
+    "symmetric"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            30,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20,
+      "direction": "symmetric"
+    }
+  ],
+  "expect": {
+    "volume": 18000,
+    "area": 4200,
+    "faces": 6,
+    "bbox": [
+      -15,
+      -15,
+      -10,
+      15,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "Symmetric: total height 20 split 10/10. V = 30*30*20; A = 2*900 + 4*30*20"
+  }
+}

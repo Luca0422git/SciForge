@@ -1,0 +1,73 @@
+{
+  "id": "hole_counterbore",
+  "title": "Through hole d6.6 with counterbore d11 x 6.5",
+  "tags": [
+    "hole",
+    "counterbore"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            20,
+            1
+          ],
+          "name": "pt"
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "hole",
+      "id": "h1",
+      "sketch": "s2",
+      "diameter": 6.6,
+      "through_all": true,
+      "counterbore": {
+        "diameter": 11,
+        "depth": 6.5
+      }
+    }
+  ],
+  "expect": {
+    "volume": 15262.542540496332,
+    "faces": 9,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 16000 - pi(5.5^2*6.5 + 3.3^2*3.5); faces = 6 + bore wall + bore floor + hole wall"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "id": "fillet_top_edges",
+  "title": "Box 40x20x10, the 4 top edges filleted r2",
+  "tags": [
+    "fillet",
+    "corner"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 4
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7900.058969306672,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Removed = (1-pi/4) r^2 * 120 - 4 * r^3 (5/3 - pi/2): two fillets meeting at a corner with a sharp third edge overlap by r^3 (5/3 - pi/2)"
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "id": "edit_width_after_fillet_and_hole",
+  "title": "Change the first sketch's width after fillet + hole",
+  "tags": [
+    "reference-stability",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 4
+      }
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            10,
+            3
+          ],
+          "name": "hole"
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 7617.315630483591,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "s1",
+      "constraint": "base.width",
+      "value": 60
+    }
+  ],
+  "expect": {
+    "volume": 11582.979336627182,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "After the edit the fillet must still round all 4 top edges (now 60, 60, 20, 20 long) and the hole stays at (20,10). Fusion keeps both."
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "id": "fillet_one_vertical_edge",
+  "title": "Box 40x20x10, one vertical edge fillet r5",
+  "tags": [
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 5,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7946.349540849362,
+    "area": 2767.8097245096174,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Convex 90deg edge fillet removes (1 - pi/4) r^2 per unit length; A = 2800 - 2*(1-pi/4)*25 - 2*5*10 + (pi*5/2)*10"
+  }
+}
