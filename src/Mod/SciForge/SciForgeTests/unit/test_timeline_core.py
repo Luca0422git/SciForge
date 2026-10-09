@@ -156,3 +156,32 @@ class SciForgeFeatureTests(unittest.TestCase):
         self.assertEqual(items[2].title, "Press Pull 1")
         self.assertEqual(items[2].state, "tip")
         self.assertEqual(core.icon_for(items[2].kind), "press_pull")
+
+
+class DropTargetTests(unittest.TestCase):
+    FEATURES = [
+        feat("Sketch", SKETCH),
+        feat("Pad", PAD),
+        feat("Sketch001", SKETCH),
+        feat("Pad001", PAD),
+        feat("Fillet", FILLET),
+    ]
+
+    def items(self, tip):
+        return core.build_items(self.FEATURES, tip)
+
+    def test_drop_between_features(self):
+        # Marker at the end, dropped after Pad001 (4 items to its left).
+        self.assertEqual(core.drop_target(self.items("Fillet"), 4), "Pad001")
+
+    def test_drop_after_a_sketch_snaps_to_the_solid_before(self):
+        self.assertEqual(core.drop_target(self.items("Fillet"), 3), "Pad")
+
+    def test_drop_before_everything_goes_to_first_solid(self):
+        self.assertEqual(core.drop_target(self.items("Fillet"), 0), "Pad")
+
+    def test_drop_at_the_end_rolls_forward(self):
+        self.assertEqual(core.drop_target(self.items("Pad"), 5), "Fillet")
+
+    def test_drop_where_it_already_is(self):
+        self.assertIsNone(core.drop_target(self.items("Pad001"), 4))

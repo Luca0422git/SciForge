@@ -137,14 +137,20 @@ def _rgba(hex_color):
     return (value << 8) | 0xFF
 
 
-# (kind, name, SciForge value). Fusion: flat dark background; middle button pans,
-# Shift+middle orbits, wheel zooms at the cursor, which is FreeCAD's "Revit" style.
+_NAVICUBE_PARAMS = "User parameter:BaseApp/Preferences/NaviCube"
+
+# (parameter group, kind, name, SciForge value). Fusion: flat dark background; middle
+# button pans, Shift+middle orbits, wheel zooms at the cursor (FreeCAD's "Revit" style);
+# a light ViewCube with dark labels and a blue hover.
 VIEWER_SETTINGS = [
-    ("Bool", "Gradient", False),
-    ("Bool", "RadialGradient", False),
-    ("Unsigned", "BackgroundColor", _rgba(VIEW)),
-    ("String", "NavigationStyle", "Gui::RevitNavigationStyle"),
-    ("Bool", "ZoomAtCursor", True),
+    (_VIEW_PARAMS, "Bool", "Gradient", False),
+    (_VIEW_PARAMS, "Bool", "RadialGradient", False),
+    (_VIEW_PARAMS, "Unsigned", "BackgroundColor", _rgba(VIEW)),
+    (_VIEW_PARAMS, "String", "NavigationStyle", "Gui::RevitNavigationStyle"),
+    (_VIEW_PARAMS, "Bool", "ZoomAtCursor", True),
+    (_NAVICUBE_PARAMS, "Unsigned", "BaseColor", (0xF0F0F0 << 8) | 0xE6),
+    (_NAVICUBE_PARAMS, "Unsigned", "EmphaseColor", _rgba("#4a4f57")),
+    (_NAVICUBE_PARAMS, "Unsigned", "HiliteColor", _rgba("#6fb7f0")),
 ]
 
 _saved_qss = None
@@ -165,12 +171,16 @@ def apply():
     try:
         import FreeCAD as App
 
-        group = App.ParamGet(_VIEW_PARAMS)
         if not _saved_params:
-            for kind, name, _ in VIEWER_SETTINGS:
-                _saved_params.append((kind, name, getattr(group, "Get" + kind)(name)))
-        for kind, name, value in VIEWER_SETTINGS:
-            getattr(group, "Set" + kind)(name, value)
+            for path, kind, name, _ in VIEWER_SETTINGS:
+                group = App.ParamGet(path)
+                # Remember whether the user had set it at all: if not, restore() removes it
+                # again so FreeCAD falls back to its own default (not to 0/False).
+                existed = name in getattr(group, "Get" + kind + "s")()
+                value = getattr(group, "Get" + kind)(name) if existed else None
+                _saved_params.append((path, kind, name, value))
+        for path, kind, name, value in VIEWER_SETTINGS:
+            getattr(App.ParamGet(path), "Set" + kind)(name, value)
     except Exception as exc:
         warn("theme: could not apply viewer settings: %s" % exc)
     log("theme applied")
@@ -189,9 +199,12 @@ def restore():
     try:
         import FreeCAD as App
 
-        group = App.ParamGet(_VIEW_PARAMS)
-        for kind, name, value in _saved_params:
-            getattr(group, "Set" + kind)(name, value)
+        for path, kind, name, value in _saved_params:
+            group = App.ParamGet(path)
+            if value is None:
+                getattr(group, "Rem" + kind)(name)
+            else:
+                getattr(group, "Set" + kind)(name, value)
         _saved_params.clear()
     except Exception as exc:
         warn("theme: could not restore viewer settings: %s" % exc)

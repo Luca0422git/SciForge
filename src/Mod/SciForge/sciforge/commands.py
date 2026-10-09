@@ -151,10 +151,15 @@ def _feature_commands():
     from .parameters_ui import ChangeParametersCommand
     from .presspull_ui import PressPullCommand
 
+    from .construct_ui import command_classes
+    from .make3d_ui import PrintCommand
+
     return {
+        **command_classes(),
         "SciForge_PressPull": PressPullCommand,
         "SciForge_Extrude": ExtrudeCommand,
         "SciForge_ChangeParameters": ChangeParametersCommand,
+        "SciForge_3DPrint": PrintCommand,
     }
 
 

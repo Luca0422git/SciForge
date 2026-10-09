@@ -7,7 +7,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
-from sciforge import config, ribbon_config as cfg, ui_icon_path  # noqa: E402
+from sciforge import config, construct, ribbon_config as cfg, ui_icon_path  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Every command name FreeCAD 1.1.4 registers (with all workbench GUIs loaded).
@@ -23,7 +23,8 @@ SCIFORGE_COMMANDS = {
     "SciForge_PressPull",
     "SciForge_Extrude",
     "SciForge_ChangeParameters",
-}
+    "SciForge_3DPrint",
+} | {"SciForge_Construct_" + key for key in construct.PRESETS}
 
 
 def all_groups():

@@ -59,14 +59,19 @@ Unavailable items are greyed out. Separators group related commands.
 - While SciForge is on, Fusion's single-letter keys win: FreeCAD shortcuts on the same key
   (e.g. the Sketcher's L, S, E, P constraint keys) are parked and given back when leaving.
 
+## Done since the first pass
+
+- Browser with Fusion's structure (browser_ui.py), marking menu (marking_menu.py), Press Pull,
+  Extrude, Change Parameters, Construct presets, draggable timeline marker, ViewCube colours,
+  3D Print.
+
 ## Known gaps (next passes)
 
-- ViewCube: FreeCAD's navigation cube, restyled later or replaced (outline 9.5).
-- Browser: FreeCAD's tree, restyled. Fusion's structure (Document Settings, Named Views, Origin,
-  Bodies, Sketches, eye toggles) needs a new browser panel (outline 7.2).
+- Marking menu slot order is a guess: needs a screenshot of Fusion's right-click menu.
+- ViewCube: FreeCAD's navigation cube with Fusion-like colours; shape/behaviour differ (9.5).
 - Document tabs sit at the bottom of the view (FreeCAD); Fusion has them in the application bar.
 - Sketch Palette: FreeCAD's sketch task panel, restyled; Fusion's palette options differ.
 - Command dialogs appear in the Tasks dock on the right; Fusion shows floating dialogs.
-- Timeline marker cannot be dragged yet; use right click or the playback buttons.
+- Timeline: no drag-to-reorder, suppress or groups yet.
 - Menu icons are 16 px (Fusion about 20 px); COMMENTS panel and "Unsaved" banner not done.
 - Orbit and Pan buttons on the navigation bar are hints only (the mouse does it).

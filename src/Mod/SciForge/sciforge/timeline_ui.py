@@ -17,6 +17,43 @@ ICON = 24  # feature icon size, as in Fusion's timeline
 _dock = None
 
 
+class _Marker(QtWidgets.QFrame):
+    """The history marker. Drag it left or right and drop it between features."""
+
+    def __init__(self, timeline):
+        super().__init__()
+        self.timeline = timeline
+        self.setProperty("role", "marker")
+        self.setCursor(QtCore.Qt.SizeHorCursor)
+        self.setToolTip("History marker: drag it to roll the design back or forward")
+        self._guide = None
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._guide = QtWidgets.QFrame(self.timeline._inner)
+            self._guide.setStyleSheet("background: #6fb7f0;")
+            self._guide.resize(2, self.height())
+            self._guide.show()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._guide is not None:
+            x = self.timeline._inner.mapFromGlobal(event.globalPosition().toPoint()).x()
+            self._guide.move(x, self.y())
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if self._guide is None:
+            return
+        self._guide.deleteLater()
+        self._guide = None
+        try:
+            self.timeline.drop_marker(event.globalPosition().toPoint())
+        except Exception as exc:
+            warn("timeline marker: %s" % exc)
+        event.accept()
+
+
 class _ItemButton(QtWidgets.QToolButton):
     doubleClicked = Signal()
 
@@ -82,6 +119,7 @@ class TimelineWidget(QtWidgets.QWidget):
         self._sig = None
         self._body = None
         self._items = []
+        self._buttons = []
 
         outer = QtWidgets.QHBoxLayout(self)
         outer.setContentsMargins(8, 3, 8, 3)
@@ -167,8 +205,11 @@ class TimelineWidget(QtWidgets.QWidget):
             self._row.addWidget(hint)
             self._row.addStretch(1)
             return
+        self._buttons = []
         for item in self._items:
-            self._row.addWidget(self._item_button(item))
+            button = self._item_button(item)
+            self._buttons.append(button)
+            self._row.addWidget(button)
             if item.state == "tip":
                 self._row.addWidget(self._marker())
         if not any(item.state == "tip" for item in self._items):
@@ -195,11 +236,18 @@ class TimelineWidget(QtWidgets.QWidget):
         return button
 
     def _marker(self):
-        marker = QtWidgets.QFrame()
-        marker.setProperty("role", "marker")
-        marker.setFixedSize(4, ICON + 6)
-        marker.setToolTip("Timeline marker: features after it are rolled back")
+        marker = _Marker(self)
+        marker.setFixedSize(6, ICON + 6)
         return marker
+
+    def drop_marker(self, global_pos):
+        """Roll the design to where the marker was dropped."""
+        slot = sum(
+            1 for b in self._buttons if b.mapToGlobal(b.rect().center()).x() < global_pos.x()
+        )
+        target = core.drop_target(self._items, slot)
+        if target and self._body is not None:
+            _set_tip(self._body, target, "move history marker")
 
     def step(self, where):
         if self._body is None:

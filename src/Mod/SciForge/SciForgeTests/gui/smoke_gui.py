@@ -96,7 +96,20 @@ def _build_part():
     state["sketch"] = sketch
 
 
+def _preferences():
+    """The preferences SciForge changes: {(group, name): value or None if unset}."""
+    from sciforge import theme
+
+    snapshot = {}
+    for path, kind, name, _ in theme.VIEWER_SETTINGS:
+        group = App.ParamGet(path)
+        exists = name in getattr(group, "Get" + kind + "s")()
+        snapshot[(path, name)] = getattr(group, "Get" + kind)(name) if exists else None
+    return snapshot
+
+
 def step_activate():
+    state["prefs_before"] = _preferences()
     state["qss_before"] = QtWidgets.QApplication.instance().styleSheet()
     state["toolbars_before"] = visible_toolbars()
     Gui.activateWorkbench("SciForgeWorkbench")
@@ -455,6 +468,77 @@ def step_parameters():
     check("Press Pull follows the parameter", abs(pp.Distance.Value - 10.0) < 1e-9, pp.Distance)
     shot("screenshot-parameters.png")
     dialog.accept()
+    later(300, step_construct)
+
+
+def step_construct():
+    """Construct > Offset Plane on the top face: a datum plane 10 mm above it."""
+    from sciforge import commands, construct_ui
+
+    body = commands.active_body()
+    tip = body.Tip
+    top = tip.Shape.BoundBox.ZMax
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(App.ActiveDocument.Name, tip.Name, _top_face_name(tip))
+    Gui.runCommand("SciForge_Construct_OffsetPlane")
+    panel = construct_ui.ConstructPanel.last
+    check(
+        "Offset Plane created from the selected face", panel is not None and panel.datum is not None
+    )
+    panel.accept()
+    App.ActiveDocument.recompute()
+    plane = panel.datum
+    check(
+        "Offset Plane sits 10 mm above the face",
+        abs(plane.Placement.Base.z - (top + 10)) < 1e-6,
+        plane.Placement.Base.z,
+    )
+    later(300, step_marker)
+
+
+def step_marker():
+    """Drag the history marker to the start: the design rolls back to the first extrude."""
+    from sciforge import commands, timeline_ui
+
+    widget = timeline_ui._dock.widget()
+    widget.refresh()
+    marker = [
+        w for w in widget._inner.findChildren(QtWidgets.QFrame) if w.property("role") == "marker"
+    ][0]
+    first = widget._buttons[0]
+    target = marker.mapFromGlobal(first.mapToGlobal(first.rect().center()) - QtCore.QPoint(20, 0))
+    QtTest.QTest.mousePress(marker, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, QtCore.QPoint(2, 5))
+    QtTest.QTest.mouseMove(marker, target)
+    QtTest.QTest.mouseRelease(marker, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, target)
+    body = commands.active_body()
+    check(
+        "Dragging the marker to the start rolls back to the first extrude",
+        body.Tip is not None and body.Tip.Name == "Pad",
+        body.Tip and body.Tip.Name,
+    )
+    widget.refresh()
+    widget.step("end")
+    check("Go to end rolls forward again", body.Tip.Name != "Pad", body.Tip.Name)
+    later(300, step_print)
+
+
+def step_print():
+    """Utilities > 3D Print: a 3MF a slicer can read, with the body's volume."""
+    import Mesh
+
+    from sciforge import commands, make3d_ui
+
+    Gui.runCommand("SciForge_3DPrint")
+    dialog = make3d_ui.PrintDialog.last
+    dialog.open_folder.setChecked(False)
+    path = os.path.join(OUT_DIR, "print-test.3mf")
+    ok = dialog.save(path)
+    body = commands.active_body()
+    mesh = Mesh.Mesh(path) if ok and os.path.exists(path) else None
+    check("3D Print writes a 3MF", mesh is not None and mesh.CountFacets > 0)
+    if mesh is not None:
+        error = abs(mesh.Volume - body.Shape.Volume) / body.Shape.Volume
+        check("3MF volume within 1% of the body", error < 0.01, (mesh.Volume, body.Shape.Volume))
     Gui.activateWorkbench("PartDesignWorkbench")
     later(800, step_left)
 
@@ -467,6 +551,13 @@ def step_left():
         "Stylesheet restored", QtWidgets.QApplication.instance().styleSheet() == state["qss_before"]
     )
     check("Menu bar back", Gui.getMainWindow().menuBar().isVisible())
+    after = _preferences()
+    changed = {
+        k: (state["prefs_before"][k], after[k])
+        for k in after
+        if after[k] != state["prefs_before"][k]
+    }
+    check("FreeCAD preferences exactly as before SciForge", not changed, changed)
     dock = Gui.getMainWindow().findChild(QtWidgets.QDockWidget, "Model")
     from sciforge import browser_ui
 

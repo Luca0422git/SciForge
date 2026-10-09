@@ -25,6 +25,12 @@ free build minutes per month (Windows minutes count double). One full build uses
 of it, so builds are started by hand rather than on every change. The small automatic test run
 (**SciForge tests**) takes a few minutes and runs on every push.
 
+## Getting updates without rebuilding (most of the time)
+
+See [quick-update.md](quick-update.md): download `SciForge-quick-update-...` from the newest green
+**SciForge tests** run and install it with `install_update.ps1` (about a minute). A full build is
+only needed when FreeCAD's C++ core changes; MEMORY.md says when.
+
 ## What to send back after testing
 
 1. **View > Panels > Report view**: copy everything, especially lines starting with `[SciForge]`.

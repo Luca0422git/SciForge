@@ -15,9 +15,13 @@ SET(SciForge_Package
     sciforge/commands.py
     sciforge/compat.py
     sciforge/config.py
+    sciforge/construct.py
+    sciforge/construct_ui.py
     sciforge/diagnostics.py
     sciforge/extrude.py
     sciforge/extrude_ui.py
+    sciforge/make3d.py
+    sciforge/make3d_ui.py
     sciforge/marking_menu.py
     sciforge/navbar_ui.py
     sciforge/parameters.py

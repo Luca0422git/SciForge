@@ -83,10 +83,20 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       visual style, quick-access bar, navigation bar, Fusion-style timeline with playback,
       contextual SKETCH tab, Fusion shortcut keys with clash handling, Revit mouse style (=Fusion).
       Spec + known gaps: `docs/sciforge/parity/ui-shell.md`. Not yet signed off by Luca.
-- [ ] Browser panel with Fusion's structure (7.2)
-- [ ] ViewCube parity, doc tabs in the app bar, floating command dialogs, Sketch Palette
-- [ ] Timeline: draggable marker, reorder, suppress, groups (7.3)
-- [ ] Parameters (7.4), sketcher parity (7.5), Extrude/Revolve/Hole/Pattern dialogs (7.6) ...
+- [x] Press/Pull v1 (7.0): faces push/pull (planar + cylindrical exact), edges -> fillet, fillet face ->
+      radius; parametric feature in the timeline; dialog + drag arrow + live preview; 13 golden
+      models (2 documented gaps: sloped neighbours, shared corners -> need C++ per-face offset, 9.1)
+- [x] Fusion-style Extrude (E): join/cut/new body, one side/two sides/symmetric, distance/all,
+      taper, drag arrow, auto-switch to Cut when dragged into material
+- [x] Right-click marking menu (8 slots + list, Repeat last command). **Slot order unconfirmed.**
+- [x] Browser panel with Fusion's structure (7.2), eye toggles, rename, activate
+- [x] Change Parameters (7.4): user params (App::VarSet "Parameters"), model params, bare names
+- [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed)
+- [x] Timeline marker drag + playback; ViewCube colours; 3D Print (3MF/STL) export
+- [ ] Unified Revolve / Hole / Fillet dialogs Fusion-style (FreeCAD's dialogs used meanwhile)
+- [ ] ViewCube shape, doc tabs in the app bar, floating command dialogs, Sketch Palette
+- [ ] Timeline: reorder by drag, suppress, groups (7.3)
+- [ ] Sketcher parity (7.5): inference, glyphs, Fusion dimension tool feel (needs captures)
 
 ## Known issues / findings
 
@@ -120,6 +130,23 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - FreeCAD's "Revit" navigation style is exactly Fusion's default mouse mapping.
 - The 3D view does render under xvfb in the GUI smoke test (screenshots show the part), the
   earlier blank view was just timing.
+- **Quick updates**: SciForge is pure Python, so the CI artifact `SciForge-quick-update-<sha>`
+  (made on every green `SciForge tests` run) + `install_update.ps1` replaces Mod\SciForge in
+  Luca's portable build. Full builds only for C++ changes (core patches). Tell Luca when one is due.
+- FreeCAD only honours a command's shortcut if the command is in a visible menu/toolbar. SciForge
+  binds keys with QShortcut on the main window instead (`shortcuts.py`); GUI test presses real keys.
+- FreeCAD saves dock visibility and toolbar state on exit: SciForge turns itself off on the main
+  window's Close event (and back on if the close is cancelled). The browser lives *inside* the
+  "Model" dock (its widget swapped), never hiding the dock.
+- Preferences: SciForge records whether each preference existed and removes it again on exit
+  (writing back GetBool's False default would have turned off FreeCAD's gradient for good).
+- PartDesign::FeaturePython works as a timeline feature (Press Pull); its proxy class path is
+  stored in files: keep `sciforge.presspull.PressPullFeature` stable.
+- OCC's generic offset ("fill") gives BSpline end caps that do not merge with planar neighbours;
+  build exact slabs for planes (prism) and cylinders (revolved ring).
+- Sketch constraint expressions: path `.Constraints[i]` works; names with dots (base.width) do not.
+- Attacher: AxisOfCurvature/CenterOfCurvature need a circular *edge*; SciForge maps a round face
+  to its edge (Fusion lets you click the face).
 - Fusion semantics still unknown (need parity capture before adding golden models): taper
   angle sign, chamfer two-distance side assignment, "intersect" and "new body" behavior.
 
@@ -150,10 +177,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   1.1.4's command list).
 - Luca was compiling the first Windows build during this; result still unknown.
 
+### 2026-10-09: Session 1, part 3 (big features)
+- Luca asked for the big Fusion features and no more 4-hour waits. Added the quick-update path,
+  then Press/Pull, Extrude, marking menu, Browser, Change Parameters, Construct presets, marker
+  drag, ViewCube colours, 3D Print. Tests: 77 unit, 43 golden (+3 xfail), 70 GUI checks.
+
 ## Next steps (in order)
 
-1. Ask Luca to start `SciForge build` (windows) once; fix the build workflow until it produces
-   a portable 7z, and check golden `plate_hole_grid` PASSES on the built SciForge (patch #4).
+1. Luca installs the quick update on his portable build and reports (screenshots, Report view).
+   Ask for: right-click marking menu screenshot (slot order), Press Pull and Extrude feel.
+   Earlier: confirm the C++ build ran golden `plate_hole_grid` as PASS (patch #4).
 2. Luca launches the portable build on Windows and reports (Report view + Diagnostics).
 3. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
 4. Spike 9.1 (Press/Pull): research OCC `BRepOffsetAPI_MakeOffsetShape`, `LocOpe`,

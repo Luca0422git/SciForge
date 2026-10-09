@@ -202,3 +202,21 @@ def step_target(items, where):
     if target is None or target == current:
         return None
     return items[target].name
+
+
+def drop_target(items, slot):
+    """Feature to make the Tip when the marker is dropped after `slot` items (0..len).
+
+    The marker can only sit after a solid feature, so it snaps back to the nearest
+    one on the left (or to the first solid if dropped before everything).
+    Returns None when nothing changes."""
+    solids = [i for i, item in enumerate(items) if is_solid(item.kind)]
+    if not solids:
+        return None
+    left = [i for i in solids if i < slot]
+    target = left[-1] if left else solids[0]
+    if items[target].state == "tip":
+        return None
+    if all(item.state != "tip" for item in items) and target == solids[-1]:
+        return None  # already at the end
+    return items[target].name
