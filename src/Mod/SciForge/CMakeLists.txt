@@ -9,6 +9,8 @@ SET(SciForge_Init
 
 SET(SciForge_Package
     sciforge/__init__.py
+    sciforge/browser_core.py
+    sciforge/browser_ui.py
     sciforge/build_info.py
     sciforge/commands.py
     sciforge/compat.py
@@ -51,6 +53,7 @@ SET(SciForge_Tests
     SciForgeTests/__init__.py
     SciForgeTests/unit/__init__.py
     SciForgeTests/unit/freecad_1_1_4_commands.txt
+    SciForgeTests/unit/test_browser_core.py
     SciForgeTests/unit/test_golden_schema.py
     SciForgeTests/unit/test_ribbon_config.py
     SciForgeTests/unit/test_search_core.py

@@ -1343,6 +1343,42 @@ def _():
     return block(0, 0, 0, 16, 16, 14, BLUE, 24, 30)
 
 
+@icon("eye")
+def _():
+    return path("M4 24 Q24 6 44 24 Q24 42 4 24 Z", STROKE, 2.6) + circle(24, 24, 6.5, STROKE)
+
+
+@icon("eye_off")
+def _():
+    return (
+        path("M4 24 Q24 6 44 24 Q24 42 4 24 Z", "#7d8593", 2.6)
+        + circle(24, 24, 6.5, "#7d8593")
+        + line(8, 40, 40, 8, "#7d8593", 3)
+    )
+
+
+@icon("folder")
+def _():
+    return path("M5 14 H19 L23 18 H43 V40 H5 Z", "none", 0, "#c9d1dc") + rect(
+        5, 21, 38, 19, "#e3e8ee", 1
+    )
+
+
+@icon("document")
+def _():
+    return block(0, 0, 0, 16, 16, 14, GREY, 24, 30)
+
+
+@icon("units")
+def _():
+    return (
+        rect(9, 6, 30, 36, WHITE, 2)
+        + line(15, 16, 33, 16, "#8a93a3", 2.2)
+        + line(15, 24, 33, 24, "#8a93a3", 2.2)
+        + line(15, 32, 27, 32, "#8a93a3", 2.2)
+    )
+
+
 @icon("not_available")
 def _():
     return circle(24, 24, 14, "none", "#7d8593", 2.4) + line(14, 34, 34, 14, "#7d8593", 2.4)

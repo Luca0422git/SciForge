@@ -24,7 +24,6 @@ _state = {
     "ribbon": None,
     "hidden": [],
     "menubar": None,
-    "model_title": None,
     "panels": [],
 }
 
@@ -95,7 +94,8 @@ def enable():
     _show_ribbon()
     _hide_toolbars()
     _hide_menubar()
-    _rename_model_dock(True)
+    _safely(lambda: __import__("sciforge.browser_ui").browser_ui.show())
+    _install_close_guard()
     _hide_panels()
     shortcuts.apply()
     timeline_ui.show()
@@ -123,7 +123,7 @@ def disable():
         _restore_menubar,
         _restore_toolbars,
         _hide_ribbon,
-        lambda: _rename_model_dock(False),
+        lambda: __import__("sciforge.browser_ui").browser_ui.hide(),
         theme.restore,
     ):
         try:
@@ -228,16 +228,36 @@ def _restore_menubar():
     _state["menubar"] = None
 
 
-def _rename_model_dock(on):
-    """The tree on the left is Fusion's 'BROWSER'."""
-    dock = _main().findChild(QtWidgets.QDockWidget, "Model")
-    if dock is None:
-        return
-    if on:
-        _state["model_title"] = dock.windowTitle()
-        dock.setWindowTitle("BROWSER")
-    elif _state["model_title"] is not None:
-        dock.setWindowTitle(_state["model_title"])
+class _CloseGuard(QtCore.QObject):
+    """FreeCAD saves toolbar/dock layout when its window closes. Turn SciForge off
+    first so only FreeCAD's own layout is saved; if the close is cancelled (unsaved
+    changes > Cancel), turn it back on."""
+
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.Close and _state["on"]:
+            disable()
+            QtCore.QTimer.singleShot(0, _reenable_if_still_open)
+        return False
+
+
+def _reenable_if_still_open():
+    import FreeCADGui as Gui
+
+    try:
+        main = _main()
+        if main.isVisible() and Gui.activeWorkbench().name() == SCIFORGE_WB:
+            enable()
+    except Exception:
+        pass
+
+
+_guard = {"filter": None}
+
+
+def _install_close_guard():
+    if _guard["filter"] is None:
+        _guard["filter"] = _CloseGuard()
+        _main().installEventFilter(_guard["filter"])
 
 
 def _hide_panels():

@@ -101,6 +101,11 @@ QSint--ActionGroup QFrame[class="separator"] {{ background: transparent; }}
 #SciForgeRibbon QLabel[role="document"] {{ color: {text}; font-size: 13px; }}
 #SciForgeRibbon QWidget[role="docbar"] {{ background: {chrome}; border-bottom: 1px solid #2f3643; }}
 
+/* browser */
+#SciForgeBrowser {{ font-size: 13px; background: {view}; }}
+#SciForgeBrowser::item {{ height: 26px; }}
+#SciForgeBrowser::item:selected {{ background: {hover}; }}
+
 /* timeline and navigation bar */
 #SciForgeTimeline, #SciForgeTimeline QWidget {{ background: {chrome}; }}
 #SciForgeTimeline QToolButton {{ background: transparent; border: none; border-radius: 2px; padding: 2px; }}

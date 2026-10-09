@@ -152,9 +152,46 @@ def step_timeline():
     widget = timeline_ui._dock.widget() if timeline_ui._dock else None
     titles = widget.titles() if widget else []
     check("Timeline shows Sketch 1, Extrude 1", titles == ["Sketch 1", "Extrude 1"], titles)
+    _check_browser()
     shot("screenshot.png")
     press("S")
     later(400, step_search_open)
+
+
+def _browser_labels():
+    from sciforge import browser_ui
+
+    tree = browser_ui.widget()
+    labels = []
+    it = QtWidgets.QTreeWidgetItemIterator(tree)
+    while it.value():
+        labels.append(it.value().text(1))
+        it += 1
+    return tree, labels
+
+
+def _check_browser():
+    from sciforge import browser_ui
+
+    tree, labels = _browser_labels()
+    dock = Gui.getMainWindow().findChild(QtWidgets.QDockWidget, "Model")
+    check(
+        "Browser replaces the tree inside FreeCAD's dock",
+        dock is not None and dock.widget() is tree and dock.windowTitle() == "BROWSER",
+    )
+    for folder in ("Document Settings", "Named Views", "Origin", "Bodies", "Sketches"):
+        check("Browser shows %s" % folder, folder in labels, labels)
+    check("Browser hides features (they are in the timeline)", "Pad" not in labels, labels)
+    # Click the eye of the sketch: it must show/hide the sketch in the 3D view.
+    tree.refresh()
+    item = [
+        i for i in tree.findItems("Sketch", QtCore.Qt.MatchExactly | QtCore.Qt.MatchRecursive, 1)
+    ][0]
+    sketch = App.ActiveDocument.getObject("Sketch")
+    before = sketch.ViewObject.Visibility
+    tree._clicked(item, 0)
+    check("Browser eye toggles visibility", sketch.ViewObject.Visibility != before)
+    sketch.ViewObject.Visibility = before
 
 
 def view_widget():
@@ -407,6 +444,14 @@ def step_left():
         "Stylesheet restored", QtWidgets.QApplication.instance().styleSheet() == state["qss_before"]
     )
     check("Menu bar back", Gui.getMainWindow().menuBar().isVisible())
+    dock = Gui.getMainWindow().findChild(QtWidgets.QDockWidget, "Model")
+    from sciforge import browser_ui
+
+    check(
+        "FreeCAD's tree is back in its dock",
+        dock is not None and dock.isVisible() and dock.widget() is not browser_ui.widget(),
+        dock and dock.windowTitle(),
+    )
     check("FreeCAD toolbars back", len(visible_toolbars()) > 3, visible_toolbars())
     from sciforge import shortcuts
 
