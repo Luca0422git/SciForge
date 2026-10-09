@@ -64,7 +64,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - [x] GUI smoke test in real FreeCAD under xvfb (14 checks, screenshot)
 - [x] `tools/sciforge/run_tests.sh` runs all of it with one command
 - [x] CI `sciforge-tests.yml`: unit + golden + GUI smoke on every push (against stock FreeCAD)
-- [ ] Confirm first `sciforge-tests.yml` run on GitHub is green
+- [x] First `sciforge-tests.yml` run on GitHub is green (2026-10-09)
 - [x] CI `sciforge-build.yml` written (manual): Windows portable 7z + Linux AppImage, then
       golden models run on the built SciForge
 - [ ] First `sciforge-build.yml` run succeeds (never run yet: expect fixes; it is hours long)
@@ -121,15 +121,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 ## Next steps (in order)
 
-1. Check the first `SciForge tests` run on GitHub; fix anything CI-specific.
-2. Ask Luca to start `SciForge build` (windows) once; fix the build workflow until it produces
+1. Ask Luca to start `SciForge build` (windows) once; fix the build workflow until it produces
    a portable 7z, and check golden `plate_hole_grid` PASSES on the built SciForge (patch #4).
-3. Luca launches the portable build on Windows and reports (Report view + Diagnostics).
-4. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
-5. Spike 9.1 (Press/Pull): research OCC `BRepOffsetAPI_MakeOffsetShape`, `LocOpe`,
+2. Luca launches the portable build on Windows and reports (Report view + Diagnostics).
+3. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
+4. Spike 9.1 (Press/Pull): research OCC `BRepOffsetAPI_MakeOffsetShape`, `LocOpe`,
    `BRepAlgoAPI_Defeaturing`, `BRepOffset_MakeSimpleOffset`, face replacement; write
    feasibility report + first 40 Press/Pull golden cases (needs new ops in the builder).
-6. Spike 9.2 (Fillets): 100+ case benchmark from real part workflows, success-rate metric.
-7. Branding pass (app name, icons, user-data folder, installer) so CI can ship an installer.
-8. Grow golden models toward 100 (gear, bottle loft+shell, sweep pipe, snap-fit, hinge, threads)
+5. Spike 9.2 (Fillets): 100+ case benchmark from real part workflows, success-rate metric.
+6. Branding pass (app name, icons, user-data folder, installer) so CI can ship an installer.
+7. Grow golden models toward 100 (gear, bottle loft+shell, sweep pipe, snap-fit, hinge, threads)
    once the builder supports loft/sweep/thread.
