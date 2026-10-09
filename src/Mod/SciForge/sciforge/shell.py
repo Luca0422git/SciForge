@@ -100,6 +100,7 @@ def enable():
     shortcuts.apply()
     timeline_ui.show()
     navbar_ui.show()
+    _safely(lambda: __import__("sciforge.marking_menu").marking_menu.enable())
     log("interface on")
 
 
@@ -114,6 +115,7 @@ def disable():
         timeline_ui.hide()
         return
     for step in (
+        lambda: __import__("sciforge.marking_menu").marking_menu.disable(),
         shortcuts.restore,
         timeline_ui.hide,
         navbar_ui.hide,
@@ -260,3 +262,10 @@ def _restore_panels():
         except RuntimeError:
             pass
     _state["panels"] = []
+
+
+def _safely(step):
+    try:
+        step()
+    except Exception as exc:
+        warn("interface: %s" % exc)

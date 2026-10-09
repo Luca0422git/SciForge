@@ -16,10 +16,12 @@ SET(SciForge_Package
     sciforge/diagnostics.py
     sciforge/extrude.py
     sciforge/extrude_ui.py
+    sciforge/marking_menu.py
     sciforge/navbar_ui.py
     sciforge/presspull.py
     sciforge/presspull_core.py
     sciforge/presspull_ui.py
+    sciforge/recent.py
     sciforge/registry.py
     sciforge/ribbon_config.py
     sciforge/ribbon_ui.py

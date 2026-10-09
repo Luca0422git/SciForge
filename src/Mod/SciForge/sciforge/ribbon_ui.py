@@ -29,6 +29,9 @@ def run(resolved, label):
     if not resolved:
         return
     name, index = resolved
+    from . import recent
+
+    recent.record(name, label, index)
     try:
         if index is None:
             Gui.runCommand(name)

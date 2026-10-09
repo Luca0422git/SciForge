@@ -536,6 +536,33 @@ NAV_BAR = [
 ]
 
 
+# Right-click marking menu: 8 slots around the cursor, clockwise from the top
+# (N, NE, E, SE, S, SW, W, NW), then a list underneath. "__repeat__" repeats the
+# last command. NOTE: positions are a first guess; confirm against Fusion
+# (docs/sciforge/parity/ui-shell.md).
+MARKING_MENU = [
+    item("Repeat", "__repeat__", "compute"),
+    item("Delete", "Std_Delete", "delete", "Del"),
+    item("Press Pull", "SciForge_PressPull", "press_pull", "Q"),
+    item("Undo", "Std_Undo", "qa_undo", "Ctrl+Z"),
+    item("Move/Copy", "Std_TransformManip", "move", "M"),
+    item("Hole", "PartDesign_Hole", "hole", "H"),
+    item("Create Sketch", "SciForge_NewSketch", "sketch_create"),
+    item("Extrude", "SciForge_Extrude", "extrude", "E"),
+]
+
+MARKING_LIST = [
+    item("Redo", "Std_Redo", "qa_redo", "Ctrl+Y"),
+    item("Fillet", "PartDesign_Fillet", "fillet", "F"),
+    item("Measure", "Std_Measure", "measure", "I"),
+    SEP,
+    item("Hide", "Std_HideSelection", "nav_display"),
+    item("Show All", "Std_ShowObjects", "nav_display"),
+    item("Fit", "Std_ViewFitAll", "nav_fit", "F6"),
+    item("Look At", "Std_AlignToSelection", "nav_lookat"),
+]
+
+
 def iter_items(entries):
     """Every item (not separators or submenus) in a list, depth first."""
     for entry in entries:
@@ -557,6 +584,8 @@ def all_items():
             yield from iter_items(grp["items"])
     yield from iter_items(QUICK_ACCESS)
     yield from iter_items(NAV_BAR)
+    yield from iter_items([e for e in MARKING_MENU if e["command"] != "__repeat__"])
+    yield from iter_items(MARKING_LIST)
 
 
 def find(grp, label):

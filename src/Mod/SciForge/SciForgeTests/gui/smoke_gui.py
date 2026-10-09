@@ -362,6 +362,39 @@ def step_extrude_ok():
     timeline_ui._dock.widget().refresh()
     titles = timeline_ui._dock.widget().titles()
     check("Timeline calls the cut Extrude 2", "Extrude 2" in titles, titles)
+    # A short right click on the 3D view opens the marking menu.
+    gl = [
+        w
+        for w in view_widget().findChildren(QtWidgets.QWidget)
+        if w.metaObject().className() == "QOpenGLWidget"
+    ][0]
+    QtTest.QTest.mouseClick(
+        gl, QtCore.Qt.RightButton, QtCore.Qt.NoModifier, QtCore.QPoint(300, 300)
+    )
+    later(400, step_marking_menu)
+
+
+def step_marking_menu():
+    from sciforge import marking_menu
+
+    menu = marking_menu._last_menu["widget"]
+    visible = menu is not None and menu.isVisible()
+    check("Right click opens the marking menu", visible)
+    if visible:
+        check("Marking menu has 8 slots", len(menu.slots) == 8, len(menu.slots))
+        check(
+            "Slot 1 repeats the last command",
+            menu.slots[0].text().startswith("Repeat ") and menu.slots[0].isEnabled(),
+            menu.slots[0].text(),
+        )
+        shot("screenshot-marking-menu.png")
+        menu.close()
+    menus = [
+        w
+        for w in QtWidgets.QApplication.topLevelWidgets()
+        if isinstance(w, QtWidgets.QMenu) and w.isVisible()
+    ]
+    check("FreeCAD's own context menu did not open", not menus)
     Gui.activateWorkbench("PartDesignWorkbench")
     later(800, step_left)
 

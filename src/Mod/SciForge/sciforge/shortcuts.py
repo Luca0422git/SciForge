@@ -57,6 +57,14 @@ def _run(name):
         cmd = Gui.Command.get(name)
         if cmd is not None and hasattr(cmd, "isActive") and not cmd.isActive():
             return
+        from . import recent
+
+        label = name
+        try:
+            label = (cmd.getInfo().get("menuText") or name).replace("&", "")
+        except Exception:
+            pass
+        recent.record(name, label)
         Gui.runCommand(name)
     except Exception as exc:
         warn("shortcut for %s failed: %s" % (name, exc))
