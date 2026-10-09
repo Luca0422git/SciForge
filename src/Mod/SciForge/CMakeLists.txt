@@ -9,11 +9,15 @@ SET(SciForge_Init
 
 SET(SciForge_Package
     sciforge/__init__.py
+    sciforge/build_info.py
     sciforge/commands.py
     sciforge/compat.py
     sciforge/config.py
     sciforge/diagnostics.py
     sciforge/navbar_ui.py
+    sciforge/presspull.py
+    sciforge/presspull_core.py
+    sciforge/presspull_ui.py
     sciforge/registry.py
     sciforge/ribbon_config.py
     sciforge/ribbon_ui.py
@@ -21,6 +25,7 @@ SET(SciForge_Package
     sciforge/search_ui.py
     sciforge/shell.py
     sciforge/shortcuts.py
+    sciforge/taskui.py
     sciforge/theme.py
     sciforge/timeline_core.py
     sciforge/timeline_ui.py

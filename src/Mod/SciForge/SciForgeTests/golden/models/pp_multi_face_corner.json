@@ -1,0 +1,72 @@
+{
+  "id": "pp_multi_face_corner",
+  "title": "Press Pull: top and side together +2",
+  "tags": [
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 2,
+      "faces": {
+        "any_of": [
+          {
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              1,
+              0,
+              0
+            ],
+            "count": 1
+          }
+        ],
+        "count": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 10080,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      42,
+      20,
+      12
+    ],
+    "source": "analytic",
+    "note": "Fusion extends both faces so the corner fills: 42x20x12"
+  },
+  "xfail": "v1 offsets faces independently; the corner where they meet stays empty (needs per-face offset, outline 9.1)"
+}

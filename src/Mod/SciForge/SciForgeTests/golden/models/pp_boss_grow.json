@@ -1,0 +1,76 @@
+{
+  "id": "pp_boss_grow",
+  "title": "Press Pull: boss wall +2 (boss r5 -> r7)",
+  "tags": [
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            20,
+            5
+          ],
+          "name": "boss"
+        }
+      ],
+      "offset": 5
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 2,
+      "faces": {
+        "type": "cylinder",
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 9539.380400258999,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      40,
+      15
+    ],
+    "source": "analytic",
+    "note": "8000 + pi*7^2*10; faces: plate 6 (top has a round cut-out) + boss wall + boss top"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "id": "pp_then_edit_extrude",
+  "title": "Press Pull survives editing the extrude before it",
+  "tags": [
+    "press-pull",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 5,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "distance": 20
+      }
+    }
+  ],
+  "expect": {
+    "volume": 20000,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      25
+    ],
+    "source": "analytic",
+    "note": "Extrude 10 -> 20, the pushed top face follows: 40x20x25"
+  }
+}

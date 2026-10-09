@@ -1,0 +1,62 @@
+{
+  "id": "pp_slanted_neighbours",
+  "title": "Press Pull: top of a trapezoid, sloped sides extend",
+  "tags": [
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              10,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 5,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 13750.0,
+    "faces": 6,
+    "source": "analytic",
+    "note": "Fusion extends the sloped faces: height 25, top width 15, area (40+15)/2*25"
+  },
+  "xfail": "v1 adds a straight slab (a step) instead of extending sloped neighbours (outline 9.1)"
+}

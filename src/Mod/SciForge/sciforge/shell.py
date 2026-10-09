@@ -62,7 +62,7 @@ def on_workbench(name):
             _set_sketch_mode(False)
         elif name == SKETCH_WB and _state["on"]:
             # FreeCAD just put the Sketcher's toolbars up; hide them after it is done.
-            QtCore.QTimer.singleShot(0, _hide_toolbars)
+            _hide_toolbars_soon()
             _set_sketch_mode(True)
         elif _state["on"]:
             disable()
@@ -86,7 +86,7 @@ def enable():
             timeline_ui.show()
         return
     if _state["on"]:
-        _hide_toolbars()
+        _hide_toolbars_soon()
         return
     from . import navbar_ui, shortcuts, theme, timeline_ui
 
@@ -158,6 +158,13 @@ def _hide_ribbon():
 
 
 # -- FreeCAD's own toolbars and menu bar ----------------------------------
+def _hide_toolbars_soon():
+    """FreeCAD (re)shows a workbench's toolbars after announcing the switch, partly
+    from its own timers, so hide again once it is done."""
+    for delay in (0, 150, 600):
+        QtCore.QTimer.singleShot(delay, lambda: _state["on"] and _hide_toolbars())
+
+
 def _hide_toolbars():
     """Hide every other toolbar. Hiding the toggle action first makes FreeCAD's
     ToolBarManager::saveState() skip the toolbar, so the hidden state is never

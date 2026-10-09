@@ -145,3 +145,14 @@ class StepTargetTests(unittest.TestCase):
     def test_every_kind_has_an_icon(self):
         for kind in core.KIND_TITLES:
             self.assertTrue(core.icon_for(kind))
+
+
+class SciForgeFeatureTests(unittest.TestCase):
+    def test_press_pull_is_a_solid_step(self):
+        items = core.build_items(
+            [feat("Sketch", SKETCH), feat("Pad", PAD), feat("PressPull", "SciForge::PressPull")],
+            "PressPull",
+        )
+        self.assertEqual(items[2].title, "Press Pull 1")
+        self.assertEqual(items[2].state, "tip")
+        self.assertEqual(core.icon_for(items[2].kind), "press_pull")

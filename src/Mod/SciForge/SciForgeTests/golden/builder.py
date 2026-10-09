@@ -38,6 +38,7 @@ _EDIT_PROPS = {
     "chamfer": {"distance": "Size", "distance2": "Size2", "angle": "Angle"},
     "shell": {"thickness": "Value"},
     "hole": {"diameter": "Diameter", "depth": "Depth"},
+    "press_pull": {"distance": "Distance"},
     "pattern_rect": {
         "count": "Occurrences",
         "spacing": "Offset",
@@ -239,6 +240,41 @@ class Builder:
         feature.Reversed = direction == "inside"
         self._recompute(step, feature)
         return feature
+
+    def op_press_pull(self, step):
+        """SciForge's Press/Pull, exactly as the Q command builds it."""
+        from sciforge import presspull, presspull_core
+
+        base = self._tip()
+        if "faces" in step:
+            names = selectors.select(base.Shape, step["faces"], "faces")
+            obj = presspull.make(self.body, base, names, step["distance"], step["id"])
+            self.objects[step["id"]] = obj
+            self.ops[step["id"]] = "press_pull"
+            self._recompute(step, obj)
+            return obj
+        if "edges" in step:  # Press Pull on edges = fillet with that radius
+            fillet = self._add(dict(step, op="fillet"), "PartDesign::Fillet")
+            self.ops[step["id"]] = "fillet"
+            fillet.Base = (base, selectors.select(base.Shape, step["edges"], "edges"))
+            fillet.Radius = step["distance"]
+            self._recompute(step, fillet)
+            return fillet
+        # Press Pull on a fillet face = edit that fillet's radius
+        names = selectors.select(base.Shape, step["fillet_face"], "faces")
+        face = base.Shape.getElement(names[0])
+        fillet = presspull_core.owning_fillet(self.body, face)
+        if fillet is None:
+            raise BuildError("press_pull %r: the face is not made by a fillet" % step["id"])
+        fillet.Radius = step["distance"]
+        self.objects[step["id"]] = fillet
+        self.ops[step["id"]] = "fillet"
+        self.doc.recompute()
+        if "Invalid" in list(fillet.State):
+            raise BuildError(
+                "press_pull %r: fillet radius %g failed" % (step["id"], step["distance"])
+            )
+        return fillet
 
     def op_hole(self, step):
         feature = self._add(step, "PartDesign::Hole")

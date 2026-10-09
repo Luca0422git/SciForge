@@ -197,6 +197,80 @@ def step_after_sketch():
         shell.ribbon().current_tab() == "solid",
         shell.ribbon().current_tab(),
     )
+    check(
+        "FreeCAD toolbars stay hidden after the sketch",
+        visible_toolbars() == ["SciForgeRibbonBar"],
+        visible_toolbars(),
+    )
+    later(300, step_presspull)
+
+
+def _top_face_name(obj):
+    shape = obj.Shape
+    best = max(range(len(shape.Faces)), key=lambda i: shape.Faces[i].CenterOfMass.z)
+    return "Face%d" % (best + 1)
+
+
+def step_presspull():
+    """Q with the top face selected, type 5, OK: the box grows to 40x20x15."""
+    from sciforge import commands
+
+    body = commands.active_body()
+    tip = body.Tip
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(App.ActiveDocument.Name, tip.Name, _top_face_name(tip))
+    Gui.runCommand("SciForge_PressPull")
+    panel = Gui.Control.activeDialog() and _active_panel()
+    check("Press Pull dialog opens with the face", panel is not None and panel.target is not None)
+    check("Press Pull arrow shown in the 3D view", panel is not None and panel.dragger is not None)
+    panel.field.widget.setProperty("rawValue", 5.0)
+    state["panel"] = panel
+    later(600, step_presspull_ok)
+
+
+def _active_panel():
+    from sciforge import presspull_ui
+
+    return presspull_ui.PressPullPanel.last
+
+
+def step_presspull_ok():
+    from sciforge import commands, timeline_ui
+
+    state["panel"].accept()
+    body = commands.active_body()
+    check(
+        "Press Pull +5 gives 12000 mm^3", abs(body.Shape.Volume - 12000.0) < 1e-6, body.Shape.Volume
+    )
+    timeline_ui._dock.widget().refresh()
+    titles = timeline_ui._dock.widget().titles()
+    check("Timeline shows Press Pull 1", "Press Pull 1" in titles, titles)
+    shot("screenshot-presspull.png")
+    # Cancel must leave the model untouched.
+    tip = body.Tip
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(App.ActiveDocument.Name, tip.Name, _top_face_name(tip))
+    Gui.runCommand("SciForge_PressPull")
+    panel = _active_panel()
+    panel.field.widget.setProperty("rawValue", -3.0)
+    state["panel"] = panel
+    later(600, step_presspull_cancel)
+
+
+def step_presspull_cancel():
+    from sciforge import commands
+
+    state["panel"].reject()
+    body = commands.active_body()
+    check(
+        "Cancel leaves the part unchanged",
+        abs(body.Shape.Volume - 12000.0) < 1e-6,
+        body.Shape.Volume,
+    )
+    check(
+        "Cancel removes the unfinished feature",
+        len([o for o in body.Group if getattr(o, "SciForgeType", "") == "PressPull"]) == 1,
+    )
     Gui.activateWorkbench("PartDesignWorkbench")
     later(800, step_left)
 

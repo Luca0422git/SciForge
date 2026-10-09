@@ -20,6 +20,7 @@ SCIFORGE_COMMANDS = {
     "SciForge_ToggleTimeline",
     "SciForge_ResetShortcuts",
     "SciForge_Diagnostics",
+    "SciForge_PressPull",
 }
 
 

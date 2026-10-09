@@ -49,6 +49,25 @@ jobs:
       - name: Unit tests, golden models, GUI smoke test
         run: tools/sciforge/run_tests.sh --freecad .sciforge-cache/freecad --out test-output
 
+      - name: Package the quick update (SciForge module only, no rebuild needed)
+        if: success()
+        run: |
+          mkdir -p quick-update
+          cp -r src/Mod/SciForge quick-update/SciForge
+          find quick-update -name __pycache__ -prune -exec rm -rf {} +
+          printf 'COMMIT = "%s"\nDATE = "%s"\n' "${GITHUB_SHA::8}" "$(date -u +%Y-%m-%d)" \
+            > quick-update/SciForge/sciforge/build_info.py
+          cp tools/sciforge/install_update.ps1 quick-update/
+          cp docs/sciforge/quick-update.md quick-update/README.md
+
+      - name: Upload the quick update
+        if: success()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: SciForge-quick-update-${{ github.sha }}
+          path: quick-update/
+          retention-days: 30
+
       - name: Add golden report to the run summary
         if: always()
         run: |

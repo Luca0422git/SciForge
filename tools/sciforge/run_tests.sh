@@ -100,6 +100,12 @@ run_gui() {
     SCIFORGE_SMOKE_OUT="${OUT}" timeout 300 xvfb-run -a -s "-screen 0 1920x1200x24" \
         "${FC_GUI[@]}" "${MODULE}/SciForgeTests/gui/smoke_gui.py" > "${OUT}/gui.log" 2>&1
     grep -aoE "\[SciForge\] smoke .*" "${OUT}/gui.log"
+    # A Python error that FreeCAD only printed (e.g. inside a Qt callback) is still a failure.
+    if grep -aq "Traceback (most recent call last)" "${OUT}/gui.log"; then
+        echo "Python errors in the GUI log:"
+        grep -a -A 6 "Traceback (most recent call last)" "${OUT}/gui.log" | head -40
+        FAILED+=("gui (Python errors in log)")
+    fi
     python3 - "${OUT}/result.json" <<'EOF' || FAILED+=("gui")
 import json, sys
 try:

@@ -145,6 +145,7 @@ FORGE_MENU = [
 # own muscle memory and adjust.
 SHORTCUTS = {
     "SciForge_CommandSearch": "S",
+    "SciForge_PressPull": "Q",
     "PartDesign_Pad": "E",
     "PartDesign_Fillet": "F",
     "PartDesign_Hole": "H",

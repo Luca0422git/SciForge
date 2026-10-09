@@ -1,0 +1,79 @@
+{
+  "id": "pp_pocket_deeper",
+  "title": "Press Pull: pocket floor -4 (pocket 8 -> 12 deep)",
+  "tags": [
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            50
+          ],
+          "name": "block"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            25,
+            25,
+            20,
+            20
+          ],
+          "name": "pocket"
+        }
+      ],
+      "offset": 20
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "distance": 8,
+      "operation": "cut",
+      "flip": true
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": -4,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 45200,
+    "faces": 11,
+    "source": "analytic",
+    "note": "The floor's outward normal is +Z (into the pocket); -4 cuts below it: 50000 - 20*20*12"
+  }
+}

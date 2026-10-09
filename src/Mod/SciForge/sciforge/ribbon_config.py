@@ -89,10 +89,10 @@ SOLID_MODIFY = group(
     [
         item(
             "Press Pull",
-            None,
+            "SciForge_PressPull",
             "press_pull",
             "Q",
-            note="The centrepiece of the outline (7.0); in development.",
+            note="Faces: push/pull. Edges: fillet. A fillet face: change its radius.",
         ),
         item("Fillet", "PartDesign_Fillet", "fillet", "F"),
         item("Chamfer", "PartDesign_Chamfer", "chamfer"),

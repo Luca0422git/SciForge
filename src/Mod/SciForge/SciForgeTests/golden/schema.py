@@ -46,6 +46,7 @@ STEP_KEYS = {
     ),
     "pattern_circ": ({"id", "features", "axis", "count"}, {"angle", "comment"}),
     "mirror": ({"id", "features", "plane"}, {"comment"}),
+    "press_pull": ({"id", "distance"}, {"faces", "edges", "fillet_face", "comment"}),
     "edit": ({"target"}, {"set", "constraint", "value", "comment"}),
     "check": ({"expect"}, {"comment"}),
 }
@@ -213,6 +214,11 @@ def validate(model):
             _fail(here, "'axis' must be X, Y, Z, sketch_h or sketch_v")
         if op in ("fillet", "chamfer"):
             _check_number(here + ".size", step.get("radius", step.get("distance")), positive=True)
+        if op == "press_pull":
+            modes = [k for k in ("faces", "edges", "fillet_face") if k in step]
+            if len(modes) != 1:
+                _fail(here, "press_pull needs exactly one of faces, edges, fillet_face")
+            _check_number(here + ".distance", step["distance"])
         if op == "shell":
             _check_number(here + ".thickness", step["thickness"], positive=True)
         if op == "hole" and seen.get(step["sketch"]) != "sketch":

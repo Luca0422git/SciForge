@@ -1,0 +1,70 @@
+{
+  "id": "pp_fillet_face_radius",
+  "title": "Press Pull on a fillet face edits its radius (1 -> 5)",
+  "tags": [
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 5,
+      "fillet_face": {
+        "type": "cylinder",
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7946.349540849362,
+    "faces": 7,
+    "source": "analytic",
+    "note": "The existing fillet becomes r5, as in Fusion (no new timeline feature)"
+  }
+}

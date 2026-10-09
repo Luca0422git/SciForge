@@ -18,8 +18,14 @@ def report():
         qt = QtCore.qVersion()
     except Exception:
         qt = "unknown"
+    try:
+        from . import build_info
+
+        build = "%s %s" % (build_info.COMMIT, build_info.DATE)
+    except Exception:
+        build = "unknown"
     lines = [
-        "SciForge %s" % __version__,
+        "SciForge %s (build %s)" % (__version__, build.strip()),
         "FreeCAD %s" % fc_version,
         "Python %s" % sys.version.split()[0],
         "Qt %s" % qt,

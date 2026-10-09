@@ -34,12 +34,18 @@ def _snapshot():
     if body is None:
         return None, [], None
     features = [
-        {"name": o.Name, "label": o.Label, "type_id": o.TypeId}
+        {"name": o.Name, "label": o.Label, "type_id": _type_id(o)}
         for o in body.Group
         if o.TypeId != "App::Origin"
     ]
     tip = body.Tip.Name if getattr(body, "Tip", None) else None
     return body, features, tip
+
+
+def _type_id(obj):
+    """SciForge's own Python features report "SciForge::<Type>" so the timeline knows them."""
+    kind = getattr(obj, "SciForgeType", "")
+    return "SciForge::" + kind if kind else obj.TypeId
 
 
 def _select(body, name):

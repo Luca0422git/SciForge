@@ -1,0 +1,58 @@
+{
+  "id": "pp_side_pull",
+  "title": "Press Pull: side face +10",
+  "tags": [
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 10,
+      "faces": {
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 10000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Box becomes 50x20x10"
+  }
+}

@@ -145,8 +145,20 @@ FORGE_COMMANDS = {
 }
 
 
+def _feature_commands():
+    """Commands implemented in their own modules (imported lazily: they need the GUI)."""
+    from .presspull_ui import PressPullCommand
+
+    return {"SciForge_PressPull": PressPullCommand}
+
+
 def register_all():
-    for name, cls in FORGE_COMMANDS.items():
+    commands = dict(FORGE_COMMANDS)
+    try:
+        commands.update(_feature_commands())
+    except Exception as exc:
+        warn("could not load feature commands: %s" % exc)
+    for name, cls in commands.items():
         try:
             Gui.addCommand(name, cls())
         except Exception as exc:
