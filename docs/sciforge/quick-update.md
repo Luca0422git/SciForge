@@ -13,19 +13,23 @@ when it happens).
 ## Install it (about a minute)
 
 1. Close SciForge.
-2. Unzip the download anywhere.
-3. Right-click `install_update.ps1` > **Run with PowerShell**.
-4. Drag your SciForge folder (the one with `bin` and `Mod` inside) into the window, press Enter.
-5. Start SciForge. **SciForge > Diagnostics** (or the Report view) shows the build number.
+2. Unzip the download: right-click the .zip > **Extract All** (running it from inside the
+   .zip does not work).
+3. In the unzipped folder, double-click **`install_update.cmd`**.
+4. A folder picker opens: pick your SciForge folder (the one with `bin` and `Mod` inside).
+5. Read the result in the window, press a key to close it, and start SciForge.
+   **SciForge > Diagnostics** shows the build number.
+
+If anything goes wrong, the window stays open with the reason, and everything is also written to
+`install_update.log` in the unzipped folder: send that file.
 
 Your previous version is kept as `Mod\SciForge.backup-<date>`. To go back: delete `Mod\SciForge`
 and rename the backup to `SciForge`.
 
-Without the script: replace the folder `<your SciForge>\Mod\SciForge` with the `SciForge` folder
-from the download.
+Without the installer: rename `<your SciForge>\Mod\SciForge` to `SciForge.old` and copy the
+`SciForge` folder from the download into `Mod`.
 
-If Windows blocks the script ("running scripts is disabled"), open PowerShell in the unzipped
-folder and run:
+The .cmd already starts PowerShell with permission to run the script. The manual equivalent:
 
 ```
 powershell -ExecutionPolicy Bypass -File .\install_update.ps1

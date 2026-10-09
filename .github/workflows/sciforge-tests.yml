@@ -57,7 +57,7 @@ jobs:
           find quick-update -name __pycache__ -prune -exec rm -rf {} +
           printf 'COMMIT = "%s"\nDATE = "%s"\n' "${GITHUB_SHA::8}" "$(date -u +%Y-%m-%d)" \
             > quick-update/SciForge/sciforge/build_info.py
-          cp tools/sciforge/install_update.ps1 quick-update/
+          cp tools/sciforge/install_update.ps1 tools/sciforge/install_update.cmd quick-update/
           cp docs/sciforge/quick-update.md quick-update/README.md
 
       - name: Upload the quick update
