@@ -20,6 +20,9 @@ SET(SciForge_Package
     sciforge/extrude_ui.py
     sciforge/marking_menu.py
     sciforge/navbar_ui.py
+    sciforge/parameters.py
+    sciforge/parameters_core.py
+    sciforge/parameters_ui.py
     sciforge/presspull.py
     sciforge/presspull_core.py
     sciforge/presspull_ui.py
@@ -55,6 +58,7 @@ SET(SciForge_Tests
     SciForgeTests/unit/freecad_1_1_4_commands.txt
     SciForgeTests/unit/test_browser_core.py
     SciForgeTests/unit/test_golden_schema.py
+    SciForgeTests/unit/test_parameters_core.py
     SciForgeTests/unit/test_ribbon_config.py
     SciForgeTests/unit/test_search_core.py
     SciForgeTests/unit/test_smoke_fake_freecad.py

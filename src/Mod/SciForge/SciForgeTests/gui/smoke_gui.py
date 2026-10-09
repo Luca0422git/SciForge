@@ -432,6 +432,29 @@ def step_marking_menu():
         if isinstance(w, QtWidgets.QMenu) and w.isVisible()
     ]
     check("FreeCAD's own context menu did not open", not menus)
+    later(200, step_parameters)
+
+
+def step_parameters():
+    """Change Parameters: add 'wall', drive the Press Pull distance with it."""
+    from sciforge import commands, parameters_ui
+
+    Gui.runCommand("SciForge_ChangeParameters")
+    dialog = parameters_ui.ParametersDialog.last
+    check("Change Parameters opens", dialog is not None and dialog.isVisible())
+    dialog.add_parameter("wall", "mm", "5")
+    dialog.reload()
+    rows = [dialog.model.topLevelItem(i) for i in range(dialog.model.topLevelItemCount())]
+    owners = [r.text(0) for r in rows]
+    check("Model parameters list the features", "Pad" in owners and "PressPull" in owners, owners)
+    press = [r for r in rows if r.text(0) == "PressPull"][0].child(0)
+    press.setText(2, "wall * 2")  # Fusion-style: just the parameter name
+    App.ActiveDocument.recompute()
+    body = commands.active_body()
+    pp = [o for o in body.Group if getattr(o, "SciForgeType", "") == "PressPull"][0]
+    check("Press Pull follows the parameter", abs(pp.Distance.Value - 10.0) < 1e-9, pp.Distance)
+    shot("screenshot-parameters.png")
+    dialog.accept()
     Gui.activateWorkbench("PartDesignWorkbench")
     later(800, step_left)
 

@@ -47,7 +47,8 @@ STEP_KEYS = {
     "pattern_circ": ({"id", "features", "axis", "count"}, {"angle", "comment"}),
     "mirror": ({"id", "features", "plane"}, {"comment"}),
     "press_pull": ({"id", "distance"}, {"faces", "edges", "fillet_face", "comment"}),
-    "edit": ({"target"}, {"set", "constraint", "value", "comment"}),
+    "parameter": ({"name", "value"}, {"unit", "comment"}),
+    "edit": ({"target"}, {"set", "constraint", "value", "expressions", "comment"}),
     "check": ({"expect"}, {"comment"}),
 }
 
@@ -185,6 +186,11 @@ def validate(model):
         unknown = set(step) - required - optional - {"op"}
         if unknown:
             _fail(here, "op %r does not take %s" % (op, sorted(unknown)))
+        if op == "parameter":
+            # A second step with the same name changes the parameter (like editing its value).
+            if seen.get(step["name"], "parameter") != "parameter":
+                _fail(here, "parameter name %r clashes with a step id" % step["name"])
+            seen[step["name"]] = "parameter"
         if "id" in step:
             if step["id"] in seen:
                 _fail(here, "duplicate step id %r" % step["id"])
@@ -232,8 +238,8 @@ def validate(model):
                 _fail(here, "'target' names unknown step %r" % step["target"])
             if ("constraint" in step) != ("value" in step):
                 _fail(here, "'constraint' and 'value' go together")
-            if "set" not in step and "constraint" not in step:
-                _fail(here, "edit needs 'set' or 'constraint'+'value'")
+            if "set" not in step and "constraint" not in step and "expressions" not in step:
+                _fail(here, "edit needs 'set', 'constraint'+'value' or 'expressions'")
         if op == "check":
             _check_expect(here, step["expect"])
 

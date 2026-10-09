@@ -121,7 +121,7 @@ SOLID_MODIFY = group(
         item("Appearance", "Std_SetAppearance", "appearance"),
         item("Manage Materials", "Material_Edit", "material"),
         SEP,
-        item("Change Parameters", None, "parameters"),
+        item("Change Parameters", "SciForge_ChangeParameters", "parameters"),
         item("Compute All", "Std_Refresh", "compute", "Ctrl+B"),
     ],
 )

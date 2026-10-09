@@ -317,6 +317,23 @@ class Builder:
         self._recompute(step, feature)
         return feature
 
+    def op_parameter(self, step):
+        """A user parameter (Change Parameters > +): value may be an expression."""
+        from sciforge import parameters
+
+        if step["name"] in parameters.user_names(self.doc):
+            parameters.set_user(self.doc, step["name"], str(step["value"]))
+        else:
+            parameters.add_user(
+                self.doc,
+                step["name"],
+                step.get("unit", "mm"),
+                str(step["value"]),
+                step.get("comment", ""),
+            )
+        self.ops[step["name"]] = "parameter"
+        self.doc.recompute()
+
     def op_edit(self, step):
         """Change an earlier step, like double-clicking it in Fusion's timeline."""
         target = self.objects[step["target"]]
@@ -331,6 +348,25 @@ class Builder:
                     "edit %r: cannot set %s = %r: %s"
                     % (step["target"], step["constraint"], step["value"], exc)
                 )
+        for key, text in step.get("expressions", {}).items():
+            # Fusion-style expression on a dimension: key is a step option ("distance") or,
+            # for sketches, a constraint name ("base.width").
+            from sciforge import parameters
+
+            if op == "sketch":
+                index = [i for i, c in enumerate(target.Constraints) if c.Name == key]
+                if not index:
+                    raise BuildError("edit %r: no constraint named %r" % (step["target"], key))
+                path = ".Constraints[%d]" % index[0]
+            elif op == "parameter":
+                path = None
+            else:
+                path = _EDIT_PROPS.get(op, {}).get(key)
+                if path is None:
+                    raise BuildError(
+                        "edit %r: cannot set %r on a %s step" % (step["target"], key, op)
+                    )
+            parameters._set(target, path, str(text), parameters.user_names(self.doc))
         for key, value in step.get("set", {}).items():
             prop = _EDIT_PROPS.get(op, {}).get(key)
             if prop is None:

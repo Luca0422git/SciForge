@@ -1,0 +1,93 @@
+{
+  "id": "param_driven_box",
+  "title": "Box driven by user parameters, then width changed",
+  "tags": [
+    "parameters",
+    "edit",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "width",
+      "value": 60,
+      "unit": "mm",
+      "comment": "overall width"
+    },
+    {
+      "op": "parameter",
+      "name": "depth",
+      "value": "width / 4",
+      "unit": "mm"
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "edit",
+      "target": "s1",
+      "expressions": {
+        "base.width": "width"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "expressions": {
+        "distance": "depth"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 18000,
+        "bbox": [
+          0,
+          0,
+          0,
+          60,
+          20,
+          15
+        ],
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "width",
+      "value": 80
+    }
+  ],
+  "expect": {
+    "volume": 32000,
+    "bbox": [
+      0,
+      0,
+      0,
+      80,
+      20,
+      20
+    ],
+    "source": "analytic",
+    "note": "width 60 -> 60x20x15 = 18000; then width 80 -> depth = 80/4 = 20 -> 80x20x20 = 32000"
+  }
+}
