@@ -188,7 +188,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   then Press/Pull, Extrude, marking menu, Browser, Change Parameters, Construct presets, marker
   drag, ViewCube colours, 3D Print. Tests: 77 unit, 43 golden (+3 xfail), 70 GUI checks.
 - Quick-update installer fixes after Luca's reports (closed at once; then "access denied" when
-  renaming the old folder). See Known issues. Waiting for Luca to confirm it installs.
+  renaming the old folder). See Known issues.
+- Luca installed manually. Keeping `SciForge.old` inside Mod gave "'SciForgeWorkbench' already
+  exists" (FreeCAD loads every Mod folder); told him to move it out. Then: "the icons are awesome,
+  it really does feel like fusion". Asked him for the feedback list in Next steps 1.
 
 ## Next steps (in order)
 
