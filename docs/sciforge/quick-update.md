@@ -23,10 +23,19 @@ when it happens).
 If anything goes wrong, the window stays open with the reason, and everything is also written to
 `install_update.log` in the unzipped folder: send that file.
 
-Your previous version is kept as `Mod\SciForge.backup-<date>`. To go back: delete `Mod\SciForge`
-and rename the backup to `SciForge`.
+If the SciForge folder is somewhere protected (for example `C:\Program Files`), Windows asks
+for administrator permission: click **Yes**. A second window does the update and shows the result.
 
-Without the installer: rename `<your SciForge>\Mod\SciForge` to `SciForge.old` and copy the
+Your previous version is copied to `<your SciForge>\SciForge-backups\<date>` (outside `Mod`,
+because FreeCAD loads every folder inside `Mod`). To go back: delete `Mod\SciForge` and copy the
+backup folder there under the name `SciForge`. Old backups can be deleted any time.
+
+**"Access to the path is denied"**: Windows would not let the files be changed. Close SciForge
+(also look in Task Manager for `FreeCAD`), close every File Explorer window showing the SciForge
+folder, and run `install_update.cmd` again (right-click > **Run as administrator** if it still
+fails). Keeping SciForge in a normal folder such as `C:\SciForge` avoids this.
+
+Without the installer: close SciForge, delete `<your SciForge>\Mod\SciForge` and copy the
 `SciForge` folder from the download into `Mod`.
 
 The .cmd already starts PowerShell with permission to run the script. The manual equivalent:

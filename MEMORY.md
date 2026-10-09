@@ -133,6 +133,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - **Quick updates**: SciForge is pure Python, so the CI artifact `SciForge-quick-update-<sha>`
   (made on every green `SciForge tests` run) + `install_update.ps1` replaces Mod\SciForge in
   Luca's portable build. Full builds only for C++ changes (core patches). Tell Luca when one is due.
+- Installer lessons (Luca's Windows): a plain `.ps1` double-click closes at once, so start it via
+  `install_update.cmd` (Bypass + pause). Renaming `Mod\SciForge` failed with "Access to the path
+  is denied" (an open Explorer window/antivirus/OneDrive blocks folder renames), so the installer
+  now copies files over the old ones, removes leftovers, backs up to `<SciForge>\SciForge-backups`
+  (never inside `Mod`: FreeCAD loads every folder there) and self-elevates if the folder is not
+  writable. Tested with pwsh as an unprivileged user (locked file, read-only folder).
 - FreeCAD only honours a command's shortcut if the command is in a visible menu/toolbar. SciForge
   binds keys with QShortcut on the main window instead (`shortcuts.py`); GUI test presses real keys.
 - FreeCAD saves dock visibility and toolbar state on exit: SciForge turns itself off on the main
@@ -181,6 +187,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Luca asked for the big Fusion features and no more 4-hour waits. Added the quick-update path,
   then Press/Pull, Extrude, marking menu, Browser, Change Parameters, Construct presets, marker
   drag, ViewCube colours, 3D Print. Tests: 77 unit, 43 golden (+3 xfail), 70 GUI checks.
+- Quick-update installer fixes after Luca's reports (closed at once; then "access denied" when
+  renaming the old folder). See Known issues. Waiting for Luca to confirm it installs.
 
 ## Next steps (in order)
 
