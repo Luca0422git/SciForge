@@ -1,3 +1,9 @@
+<!-- SCIFORGE: banner (docs/sciforge/core-patches.md #5) -->
+> **This is SciForge**, a fork of FreeCAD 1.1.4 working toward Autodesk Fusion-level modeling.
+> Start at [docs/sciforge/README.md](docs/sciforge/README.md). Progress: [MEMORY.md](MEMORY.md).
+> Everything below is FreeCAD's original README. SciForge is not FreeCAD and is not endorsed by
+> the FreeCAD project.
+
 <a href="https://freecad.org"><img src="/src/Gui/Icons/freecad.svg" height="100px" width="100px"></a>
 
 ### Your own 3D Parametric Modeler

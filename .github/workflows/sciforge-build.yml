@@ -1,0 +1,172 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SciForge: full build of the fork (C++ and all), producing files Luca downloads and tests:
+#   Windows: portable .7z (unzip anywhere, run bin\FreeCAD.exe)
+#   Linux:   .AppImage
+# Then the golden models run on the freshly built SciForge (not stock FreeCAD).
+#
+# Started by hand: GitHub > Actions > "SciForge build" > Run workflow. It is not run on
+# every push because a build takes hours of runner time (Windows minutes count double on
+# a private repository). Pushing a tag named sciforge-v* also starts it.
+#
+# Packaging reuses FreeCAD's own pipeline (package/rattler-build). Until the branding
+# pass lands, the Windows installer is not built: it would install as "FreeCAD" and could
+# collide with a real FreeCAD installation. The portable .7z is self-contained.
+
+name: SciForge build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Which platforms to build"
+        type: choice
+        default: both
+        options: [both, windows, linux]
+  push:
+    tags: ["sciforge-v*"]
+
+concurrency:
+  group: sciforge-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.pick.outputs.include }}
+    steps:
+      - id: pick
+        env:
+          CHOICE: ${{ github.event.inputs.platforms || 'both' }}
+        run: |
+          win='{"target":"win-64","os":"windows-2022"}'
+          lin='{"target":"linux-64","os":"ubuntu-22.04"}'
+          case "$CHOICE" in
+            windows) echo "include=[$win]" >> "$GITHUB_OUTPUT" ;;
+            linux) echo "include=[$lin]" >> "$GITHUB_OUTPUT" ;;
+            *) echo "include=[$win,$lin]" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  build:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 350
+    steps:
+      # Prevent running out of disk space on Ubuntu runners.
+      - name: Maximize build space
+        if: runner.os == 'Linux'
+        uses: AdityaGarg8/remove-unwanted-software@90e01b21170618765a73370fcc3abbd1684a7793 # v5
+        with:
+          remove-android: 'true'
+          remove-cached-tools: 'true'
+
+      - name: Use drive D for caches (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo 'PIXI_CACHE_DIR=D:\rattler' >> "$GITHUB_ENV"
+          echo 'RATTLER_CACHE_DIR=D:\rattler' >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 2
+          submodules: recursive
+
+      - name: Build name
+        shell: bash
+        run: echo "BUILD_TAG=sciforge-$(date -u +%Y%m%d)-${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+
+      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          pixi-version: v0.59.0
+          cache: false
+          run-install: false
+
+      - name: Compile SciForge (takes a long time)
+        shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          python3 package/scripts/write_version_info.py ../freecad_version.txt
+          cd package/rattler-build
+          pixi install
+
+      - name: Package
+        shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+          MAKE_INSTALLER: "false"
+          UPLOAD_RELEASE: "false"
+        run: |
+          set -euo pipefail
+          cd package/rattler-build
+          pixi run -e package create_bundle
+
+      # ---- Linux: test the built AppImage, then upload it ----------------
+      - name: Test the Linux build (unit, golden models, GUI smoke)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
+          image=$(ls package/rattler-build/linux/*.AppImage | head -1)
+          mkdir -p .sciforge-cache/sciforge
+          (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)
+          tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output
+
+      - name: Upload Linux AppImage
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: SciForge-Linux-${{ env.BUILD_TAG }}
+          path: |
+            package/rattler-build/linux/*.AppImage
+            package/rattler-build/linux/*-SHA256.txt
+          retention-days: 30
+          compression-level: 0
+
+      # ---- Windows: test the portable build, then upload it --------------
+      - name: Test the Windows build (golden models)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=$(ls -d package/rattler-build/windows/*/ | grep -v '/bin/' | head -1)
+          mkdir -p test-output
+          export SCIFORGE_GOLDEN_OUT="$GITHUB_WORKSPACE/test-output"
+          export FREECAD_USER_HOME="$RUNNER_TEMP/fc-profile"
+          mkdir -p "$FREECAD_USER_HOME"
+          "${dir}bin/freecadcmd.exe" -c "from SciForgeTests.golden import runner; runner.main()" | tr -d '\r' | grep -aE "\[SciForge\]" || true
+          python -c "import json,sys; r=json.load(open('test-output/golden-report.json')); print(r['summary']); sys.exit(0 if r['passed'] and r['sciforge_build'] else 1)"
+
+      - name: Upload Windows portable build
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: SciForge-Windows-portable-${{ env.BUILD_TAG }}
+          path: |
+            package/rattler-build/windows/*.7z
+            package/rattler-build/windows/*-SHA256.txt
+          retention-days: 30
+          compression-level: 0
+
+      - name: Add golden report to the run summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f test-output/golden-report.md ]; then cat test-output/golden-report.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: test-output-${{ matrix.target }}
+          path: test-output/
+          retention-days: 30
