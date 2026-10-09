@@ -19,7 +19,7 @@ jobs:
         mkdir -p ~/.config
         echo "$copr_token" > ~/.config/copr
     - name: checkout sources
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         submodules: recursive
         fetch-depth: 500
