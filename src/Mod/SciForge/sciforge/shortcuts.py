@@ -6,6 +6,7 @@ import os
 from . import config, log, warn
 
 _saved = {}  # command name -> shortcut it had before we changed it
+_parked = {}  # other commands whose shortcut clashed with ours -> their old shortcut
 
 
 def _overrides():
@@ -43,13 +44,43 @@ def apply():
             applied += 1
         except Exception:
             skipped.append(name)
-    log("shortcuts applied: %d, skipped: %d" % (applied, len(skipped)))
+    _park_conflicts(Gui, current_map())
+    log(
+        "shortcuts applied: %d, skipped: %d, conflicts parked: %d"
+        % (applied, len(skipped), len(_parked))
+    )
     if skipped:
         warn("no shortcut set for: %s" % ", ".join(skipped))
 
 
+def _park_conflicts(Gui, mapping):
+    """Fusion's keys win: clear other commands bound to the same key while SciForge
+    is active (e.g. the Sketcher binds L, S, E, P to constraints), and remember them."""
+    ours = {key.replace(" ", "").upper(): name for name, key in mapping.items() if key}
+    for name in Gui.listCommands():
+        if name in mapping or name in _parked:
+            continue
+        try:
+            cmd = Gui.Command.get(name)
+            key = (cmd.getShortcut() or "").replace(" ", "").upper() if cmd else ""
+            if key and key in ours:
+                _parked[name] = cmd.getShortcut()
+                cmd.setShortcut("")
+        except Exception:
+            pass
+
+
 def restore():
     import FreeCADGui as Gui
+
+    for name, previous in list(_parked.items()):
+        try:
+            cmd = Gui.Command.get(name)
+            if cmd is not None:
+                cmd.setShortcut(previous)
+        except Exception:
+            pass
+    _parked.clear()
 
     for name, previous in list(_saved.items()):
         try:

@@ -167,9 +167,12 @@ class SmokeTest(unittest.TestCase):
         return self.workbenches[0]
 
     def test_full_lifecycle(self):
+        """Legacy (plain toolbar) mode: the whole lifecycle, without a ribbon."""
         wb = self._load_workbench()
         self.assertEqual(wb.MenuText, "SciForge")
+        import sciforge.config as config
 
+        config.USE_RIBBON = False
         wb.Initialize()
         self.assertIn("SciForge Design", wb.toolbars)
         design = wb.toolbars["SciForge Design"]
@@ -184,14 +187,28 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(self.commands["PartDesign_Pad"].shortcut, "E")
         self.assertEqual(self.commands["Std_ViewFitAll"].shortcut, "F6")
 
+        # Leaving for the Sketcher (editing a sketch) keeps the SciForge interface ...
         wb.Deactivated()
+        import sciforge.shell as shell
+
+        shell.on_workbench("SketcherWorkbench")
+        self.assertEqual(self.commands["PartDesign_Pad"].shortcut, "E")
+        # ... any other workbench turns it off and gives the shortcuts back.
+        shell.on_workbench("PartDesignWorkbench")
         self.assertEqual(self.commands["PartDesign_Pad"].shortcut, "")
+
+    def test_ribbon_mode_adds_no_plain_toolbars(self):
+        wb = self._load_workbench()
+        wb.Initialize()
+        self.assertFalse(getattr(wb, "toolbars", {}), "the ribbon replaces the plain toolbars")
+        self.assertIn(("SciForge",), wb.menus)
 
     def test_flat_toolbar_mode(self):
         wb = self._load_workbench()
         import sciforge.config as config
 
         config.USE_DROPDOWNS = False
+        config.USE_RIBBON = False
         wb.Initialize()
         self.assertNotIn("SciForge_GroupCreate", wb.toolbars["SciForge Design"])
         self.assertIn("PartDesign_Pad", wb.toolbars["SciForge Design"])

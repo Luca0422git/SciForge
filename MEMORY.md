@@ -75,7 +75,17 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - [ ] Spike 9.2: Fillet robustness benchmark + feasibility report
 - [ ] Answers to the open questions in outline section 12
 
-### Phase 1+ : not started
+### Phase 1: The modeling core (started)
+
+- [x] Interface shell, first pass (7.1): Fusion-style ribbon (tabs, groups, menus in Fusion's order,
+      unavailable items greyed), dark theme with measured colours, 131 original icons in Fusion's
+      visual style, quick-access bar, navigation bar, Fusion-style timeline with playback,
+      contextual SKETCH tab, Fusion shortcut keys with clash handling, Revit mouse style (=Fusion).
+      Spec + known gaps: `docs/sciforge/parity/ui-shell.md`. Not yet signed off by Luca.
+- [ ] Browser panel with Fusion's structure (7.2)
+- [ ] ViewCube parity, doc tabs in the app bar, floating command dialogs, Sketch Palette
+- [ ] Timeline: draggable marker, reorder, suppress, groups (7.3)
+- [ ] Parameters (7.4), sketcher parity (7.5), Extrude/Revolve/Hole/Pattern dialogs (7.6) ...
 
 ## Known issues / findings
 
@@ -98,10 +108,24 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - OCC results matched the hand formulas for corner fillets (two fillets meeting a sharp edge),
   vertex blends (all-edge rounded box), chamfer corners, countersinks and shells: a good sign
   for 9.2, but these are easy cases. The real fillet benchmark (100+ hard cases) is still to do.
+- **Editing a sketch switches FreeCAD to the Sketcher workbench** (and back after). So the
+  SciForge interface is a "shell" (`shell.py`) that follows workbench changes instead of living in
+  the workbench's Activated/Deactivated.
+- **Trap:** FreeCAD's `ToolBarManager::saveState()` saves every toolbar's visibility on workbench
+  switches. Hiding toolbars naively would hide them in plain FreeCAD forever. SciForge hides the
+  toolbar's toggle action first (saveState skips those). Menu-bar visibility is not persisted.
+- FreeCAD's Sketcher binds single letters (L, S, E, P, I, C, H, V, T...) to constraints. Fusion's
+  keys win while SciForge is on; clashing FreeCAD keys are parked and restored (`shortcuts.py`).
+- FreeCAD's "Revit" navigation style is exactly Fusion's default mouse mapping.
+- The 3D view does render under xvfb in the GUI smoke test (screenshots show the part), the
+  earlier blank view was just timing.
 - Fusion semantics still unknown (need parity capture before adding golden models): taper
   angle sign, chamfer two-distance side assignment, "intersect" and "new body" behavior.
 
 ## Questions waiting for Luca
+
+- Do you use SHEET METAL (or PLASTIC / MANAGE)? Not in the outline's scope, so those tabs are
+  left out of the ribbon for now.
 
 (See outline section 12. Also:)
 - OK to make the repo public at some point? Public repos get unlimited free Actions minutes,
@@ -118,6 +142,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Built the golden-model harness (schema, selectors, builder, runner) and 32 models;
   found and patched an upstream FreeCAD bug with it.
 - Added GUI smoke test, `tools/sciforge/*.sh`, CI workflows, docs (`docs/sciforge/`).
+
+### 2026-10-09: Session 1, part 2 (UI shell)
+- Luca sent 5 screenshots of stock Fusion. Built the Fusion-style shell from them: `ribbon_config.py`
+  (data), `ribbon_ui.py`, `theme.py`, `shell.py`, `navbar_ui.py`, new `timeline_ui.py`, icon
+  generator `tools/sciforge/make_icons.py` (131 icons). GUI smoke test now 29 checks incl. sketch
+  mode and clean switch-off; unit tests 53 (ribbon data checked against a snapshot of FreeCAD
+  1.1.4's command list).
+- Luca was compiling the first Windows build during this; result still unknown.
 
 ## Next steps (in order)
 

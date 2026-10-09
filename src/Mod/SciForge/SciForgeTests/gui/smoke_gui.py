@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""GUI smoke test for the SciForge workbench, run inside a real FreeCAD GUI.
+"""GUI smoke test for the SciForge interface, run inside a real FreeCAD GUI.
 
 Run it by passing this file to the FreeCAD GUI executable (CI uses a virtual
 screen via xvfb-run):
 
     SCIFORGE_SMOKE_OUT=/some/dir FreeCAD smoke_gui.py
 
-It activates the workbench, checks toolbars, shortcuts and diagnostics, builds
-a small part, checks the timeline, saves a screenshot and writes
-result.json into SCIFORGE_SMOKE_OUT. FreeCAD's own exit code is not reliable
-for this, so the runner script reads result.json to decide pass/fail.
+It switches to SciForge, checks the ribbon, theme, shortcuts and timeline,
+builds a small part, opens a sketch (the SKETCH tab must appear and the ribbon
+must stay), leaves SciForge (FreeCAD must be restored), saves screenshots and
+writes result.json into SCIFORGE_SMOKE_OUT. FreeCAD's own exit code is not
+reliable for this, so the runner script reads result.json to decide pass/fail.
 """
 import json
 import os
@@ -17,10 +18,9 @@ import traceback
 
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore, QtWidgets
+from PySide import QtCore, QtGui, QtWidgets
 
 OUT_DIR = os.environ.get("SCIFORGE_SMOKE_OUT") or App.getUserAppDataDir()
-EXPECTED_TOOLBARS = ["SciForge Design", "SciForge Sketch", "SciForge View"]
 EXPECTED_SHORTCUTS = {
     "SciForge_CommandSearch": "S",
     "PartDesign_Pad": "E",
@@ -29,6 +29,7 @@ EXPECTED_SHORTCUTS = {
 
 checks = []  # (name, ok, detail)
 errors = []  # every [SciForge] error printed to the console
+state = {}
 
 
 class _ErrorCatcher:
@@ -47,6 +48,30 @@ def check(name, ok, detail=""):
     checks.append({"name": name, "ok": bool(ok), "detail": str(detail)})
 
 
+def later(ms, fn):
+    def guarded():
+        try:
+            fn()
+        except Exception:
+            check("No exception in %s" % fn.__name__, False, traceback.format_exc())
+            finish()
+
+    QtCore.QTimer.singleShot(ms, guarded)
+
+
+def shot(name):
+    """Screenshot of the whole virtual screen (includes open menus)."""
+    path = os.path.join(OUT_DIR, name)
+    screen = QtWidgets.QApplication.primaryScreen()
+    ok = screen.grabWindow(0).save(path)
+    check("Screenshot %s" % name, ok, path)
+
+
+def visible_toolbars():
+    main = Gui.getMainWindow()
+    return [t.objectName() for t in main.findChildren(QtWidgets.QToolBar) if t.isVisible()]
+
+
 def _build_part():
     import Part
 
@@ -55,8 +80,6 @@ def _build_part():
     Gui.runCommand("SciForge_NewDesign")
     body = commands.active_body()
     check("New Design creates an active body", body is not None)
-    if body is None:
-        return None
     sketch = body.newObject("Sketcher::SketchObject", "Sketch")
     sketch.AttachmentSupport = (body.Origin.OriginFeatures[3], [""])  # XY plane
     sketch.MapMode = "FlatFace"
@@ -69,72 +92,133 @@ def _build_part():
     pad.Length = 10
     App.ActiveDocument.recompute()
     check("Pad volume is 8000 mm^3", abs(pad.Shape.Volume - 8000.0) < 1e-6, pad.Shape.Volume)
-    return body
+    state["sketch"] = sketch
 
 
-def step_one():
-    try:
-        Gui.activateWorkbench("SciForgeWorkbench")
-        check(
-            "Workbench activates",
-            Gui.activeWorkbench().name() == "SciForgeWorkbench",
-            Gui.activeWorkbench().name(),
-        )
-
-        from sciforge import diagnostics, registry
-
-        report = diagnostics.report()
-        missing = sorted(set(registry.MISSING))
-        check("All configured commands exist", not missing, ", ".join(missing))
-
-        main = Gui.getMainWindow()
-        visible = [t.windowTitle() for t in main.findChildren(QtWidgets.QToolBar) if t.isVisible()]
-        for title in EXPECTED_TOOLBARS:
-            check("Toolbar visible: %s" % title, title in visible, visible)
-
-        for name, key in EXPECTED_SHORTCUTS.items():
-            cmd = Gui.Command.get(name)
-            got = cmd.getShortcut() if cmd else None
-            check("Shortcut %s = %s" % (name, key), got == key, got)
-
-        _build_part()
-        with open(os.path.join(OUT_DIR, "diagnostics.txt"), "w", encoding="utf-8") as handle:
-            handle.write(report + "\n")
-    except Exception:
-        check("No exception in step one", False, traceback.format_exc())
-    # The timeline refreshes on a timer, so give it time before reading it.
-    QtCore.QTimer.singleShot(1500, step_two)
+def step_activate():
+    state["qss_before"] = QtWidgets.QApplication.instance().styleSheet()
+    state["toolbars_before"] = visible_toolbars()
+    Gui.activateWorkbench("SciForgeWorkbench")
+    later(800, step_ribbon)
 
 
-def step_two():
-    try:
-        from sciforge import timeline_ui
+def step_ribbon():
+    from sciforge import registry, ribbon_ui, shell
 
-        widget = timeline_ui._dock.widget() if timeline_ui._dock else None
-        titles = []
-        if widget is not None:
-            row = widget._row
-            titles = [
-                row.itemAt(i).widget().text() for i in range(row.count()) if row.itemAt(i).widget()
-            ]
-        check("Timeline shows Sketch 1, Extrude 1", titles == ["Sketch 1", "Extrude 1"], titles)
+    check("Workbench activates", Gui.activeWorkbench().name() == "SciForgeWorkbench")
+    check(
+        "All configured commands exist",
+        not sorted(set(registry.MISSING)),
+        sorted(set(registry.MISSING)),
+    )
+    ribbon = shell.ribbon()
+    check("Ribbon visible", ribbon is not None and ribbon.isVisible())
+    check(
+        "Only the ribbon toolbar is visible",
+        visible_toolbars() == ["SciForgeRibbonBar"],
+        visible_toolbars(),
+    )
+    check("Menu bar hidden like Fusion", not Gui.getMainWindow().menuBar().isVisible())
+    check("SOLID tab selected", ribbon.current_tab() == "solid", ribbon.current_tab())
+    check("SKETCH tab hidden outside sketches", not ribbon.tab_buttons["sketch"].isVisible())
+    groups = ribbon.findChildren(ribbon_ui.GroupWidget)
+    solid_titles = [g.group["title"] for g in groups if g.isVisible()]
+    check(
+        "SOLID groups in Fusion's order",
+        solid_titles[:3] == ["CREATE", "MODIFY", "CONSTRUCT"],
+        solid_titles,
+    )
+    check("Dark theme applied", "SciForgeRibbon" in QtWidgets.QApplication.instance().styleSheet())
+    for name, key in EXPECTED_SHORTCUTS.items():
+        cmd = Gui.Command.get(name)
+        got = cmd.getShortcut() if cmd else None
+        check("Shortcut %s = %s" % (name, key), got == key, got)
+    distx = Gui.Command.get("Sketcher_ConstrainDistanceX")
+    check(
+        "Clashing FreeCAD key parked (L)",
+        distx is None or distx.getShortcut() == "",
+        distx and distx.getShortcut(),
+    )
+    _build_part()
+    Gui.SendMsgToActiveView("ViewFit")
+    later(1200, step_timeline)
 
-        shot = os.path.join(OUT_DIR, "screenshot.png")
-        check("Screenshot saved", Gui.getMainWindow().grab().save(shot), shot)
 
-        Gui.activateWorkbench("PartDesignWorkbench")
-        cmd = Gui.Command.get("PartDesign_Pad")
-        check(
-            "Shortcuts restored after leaving the workbench",
-            cmd.getShortcut() != "E",
-            cmd.getShortcut(),
-        )
-    except Exception:
-        check("No exception in step two", False, traceback.format_exc())
+def step_timeline():
+    from sciforge import shell, timeline_ui
+
+    widget = timeline_ui._dock.widget() if timeline_ui._dock else None
+    titles = widget.titles() if widget else []
+    check("Timeline shows Sketch 1, Extrude 1", titles == ["Sketch 1", "Extrude 1"], titles)
+    shot("screenshot.png")
+    # Open the CREATE menu without blocking, for a screenshot of a drop-down.
+    group = [
+        g
+        for g in shell.ribbon().findChildren(__import__("sciforge.ribbon_ui").ribbon_ui.GroupWidget)
+        if g.isVisible()
+    ][0]
+    group.menu.popup(group.label.mapToGlobal(QtCore.QPoint(0, group.label.height())))
+    state["menu"] = group.menu
+    later(500, step_menu_shot)
+
+
+def step_menu_shot():
+    shot("screenshot-menu.png")
+    state["menu"].hide()
+    Gui.ActiveDocument.setEdit(state["sketch"].Name)
+    later(1200, step_sketch)
+
+
+def step_sketch():
+    from sciforge import shell
+
+    ribbon = shell.ribbon()
+    check("Editing a sketch keeps the SciForge interface", shell.is_on())
+    check(
+        "SKETCH tab shown while sketching",
+        ribbon.current_tab() == "sketch" and ribbon.tab_buttons["sketch"].isVisible(),
+        ribbon.current_tab(),
+    )
+    check(
+        "Sketcher toolbars stay hidden",
+        visible_toolbars() == ["SciForgeRibbonBar"],
+        visible_toolbars(),
+    )
+    shot("screenshot-sketch.png")
+    Gui.ActiveDocument.resetEdit()
+    later(1000, step_after_sketch)
+
+
+def step_after_sketch():
+    from sciforge import shell
+
+    check(
+        "Back to SOLID after the sketch",
+        shell.ribbon().current_tab() == "solid",
+        shell.ribbon().current_tab(),
+    )
+    Gui.activateWorkbench("PartDesignWorkbench")
+    later(800, step_left)
+
+
+def step_left():
+    from sciforge import shell
+
+    check("Leaving SciForge turns the interface off", not shell.is_on())
+    check(
+        "Stylesheet restored", QtWidgets.QApplication.instance().styleSheet() == state["qss_before"]
+    )
+    check("Menu bar back", Gui.getMainWindow().menuBar().isVisible())
+    check("FreeCAD toolbars back", len(visible_toolbars()) > 3, visible_toolbars())
+    cmd = Gui.Command.get("PartDesign_Pad")
+    check("Shortcuts restored after leaving", cmd.getShortcut() != "E", cmd.getShortcut())
     finish()
 
 
 def finish():
+    if state.get("finished"):
+        return
+    state["finished"] = True
     check("No [SciForge] errors on the console", not errors, errors)
     result = {"passed": all(c["ok"] for c in checks), "checks": checks}
     with open(os.path.join(OUT_DIR, "result.json"), "w", encoding="utf-8") as handle:
@@ -151,4 +235,4 @@ def finish():
 
 App.Console.PrintError = _ErrorCatcher()
 # Wait for the main window and start-up modules to settle first.
-QtCore.QTimer.singleShot(2000, step_one)
+later(2000, step_activate)

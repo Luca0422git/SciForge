@@ -145,3 +145,56 @@ def can_roll_forward(items):
 def signature(items, body_name):
     """Cheap value to compare between refreshes to detect any change."""
     return (body_name, tuple((i.name, i.label, i.kind, i.state) for i in items))
+
+
+# Timeline icons, by kind (files in icons/ui, made by tools/sciforge/make_icons.py).
+KIND_ICONS = {
+    "sketch": "sk_rectangle",
+    "extrude": "extrude",
+    "cut": "extrude",
+    "revolve": "revolve",
+    "groove": "revolve",
+    "hole": "hole",
+    "fillet": "fillet",
+    "chamfer": "chamfer",
+    "draft": "draft",
+    "shell": "shell",
+    "pattern": "pattern_rect",
+    "loft": "loft",
+    "sweep": "sweep",
+    "datum": "offset_plane",
+    "primitive": "box",
+    "other": "workspace_design",
+}
+
+
+def icon_for(kind):
+    return KIND_ICONS.get(kind, KIND_ICONS["other"])
+
+
+def step_target(items, where):
+    """Feature to make the Tip for the playback buttons.
+
+    where: "start" | "prev" | "next" | "end". Only solid features can be a Tip,
+    so steps skip sketches and datums. Returns None when there is nowhere to go.
+    """
+    solids = [i for i, item in enumerate(items) if is_solid(item.kind)]
+    if not solids:
+        return None
+    tips = [i for i, item in enumerate(items) if item.state == "tip"]
+    current = tips[0] if tips else solids[-1]
+    if where == "start":
+        target = solids[0]
+    elif where == "end":
+        target = solids[-1]
+    elif where == "prev":
+        earlier = [i for i in solids if i < current]
+        target = earlier[-1] if earlier else None
+    elif where == "next":
+        later = [i for i in solids if i > current]
+        target = later[0] if later else None
+    else:
+        raise ValueError("unknown step %r" % where)
+    if target is None or target == current:
+        return None
+    return items[target].name

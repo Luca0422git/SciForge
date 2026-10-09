@@ -97,7 +97,7 @@ run_gui() {
         return
     fi
     rm -f "${OUT}/result.json"
-    SCIFORGE_SMOKE_OUT="${OUT}" timeout 300 xvfb-run -a -s "-screen 0 1600x1000x24" \
+    SCIFORGE_SMOKE_OUT="${OUT}" timeout 300 xvfb-run -a -s "-screen 0 1920x1200x24" \
         "${FC_GUI[@]}" "${MODULE}/SciForgeTests/gui/smoke_gui.py" > "${OUT}/gui.log" 2>&1
     grep -aoE "\[SciForge\] smoke .*" "${OUT}/gui.log"
     python3 - "${OUT}/result.json" <<'EOF' || FAILED+=("gui")

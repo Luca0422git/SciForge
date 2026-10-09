@@ -10,6 +10,10 @@ nothing are skipped and listed in SciForge > Diagnostics.
 # False and every group becomes a flat run of buttons instead.
 USE_DROPDOWNS = True
 
+# The Fusion-style ribbon (ribbon_config.py) replaces the plain toolbars below.
+# Set to False to get the old toolbars back (e.g. if the ribbon misbehaves).
+USE_RIBBON = True
+
 # Drop-down groups. Keys are SciForge command ids.
 GROUPS = {
     "SciForge_GroupCreate": {
@@ -150,5 +154,9 @@ SHORTCUTS = {
     "Sketcher_CreateRectangle": "R",
     "Sketcher_Trimming": "T",
     "Sketcher_ToggleConstruction": "X",
+    "Sketcher_Offset": "O",
+    "Sketcher_Projection": "P",
+    "Std_TransformManip": "M",
+    "Std_Measure": "I",
     "Std_ViewFitAll": "F6",
 }

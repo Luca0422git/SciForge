@@ -5,7 +5,7 @@ from . import commands, config, log, registry, warn
 
 def _import_sibling_workbench_commands():
     # Commands of other workbenches only exist after their GUI module loads.
-    for module in ("PartGui", "PartDesignGui", "SketcherGui"):
+    for module in ("PartGui", "PartDesignGui", "SketcherGui", "MeshGui", "SurfaceGui", "MatGui"):
         try:
             __import__(module)
         except Exception as exc:
@@ -22,7 +22,7 @@ def build(wb):
         commands.register_groups(groups)
         available = registry.available_commands()
 
-    for title, items in config.TOOLBARS:
+    for title, items in [] if config.USE_RIBBON else config.TOOLBARS:
         names = []
         for item in items:
             if isinstance(item, str) and item in config.GROUPS:
@@ -53,14 +53,12 @@ def build(wb):
 
 
 def activated():
-    from . import shortcuts, timeline_ui
+    from . import shell
 
-    shortcuts.apply()
-    timeline_ui.show()
+    shell.on_workbench("SciForgeWorkbench")
 
 
 def deactivated():
-    from . import shortcuts, timeline_ui
-
-    shortcuts.restore()
-    timeline_ui.hide()
+    # Nothing here: leaving for the Sketcher (editing a sketch) must keep the
+    # SciForge interface. shell.py follows workbench changes and decides.
+    pass

@@ -108,3 +108,40 @@ class RollbackTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StepTargetTests(unittest.TestCase):
+    FEATURES = [
+        feat("Sketch", SKETCH),
+        feat("Pad", PAD),
+        feat("Sketch001", SKETCH),
+        feat("Pad001", PAD),
+        feat("Fillet", FILLET),
+    ]
+
+    def items(self, tip):
+        return core.build_items(self.FEATURES, tip)
+
+    def test_steps_skip_sketches(self):
+        items = self.items("Fillet")
+        self.assertEqual(core.step_target(items, "prev"), "Pad001")
+        self.assertEqual(core.step_target(items, "start"), "Pad")
+        self.assertIsNone(core.step_target(items, "next"))
+        self.assertIsNone(core.step_target(items, "end"))
+
+    def test_from_the_middle(self):
+        items = self.items("Pad001")
+        self.assertEqual(core.step_target(items, "next"), "Fillet")
+        self.assertEqual(core.step_target(items, "prev"), "Pad")
+        self.assertEqual(core.step_target(items, "end"), "Fillet")
+
+    def test_nothing_before_the_first_solid(self):
+        self.assertIsNone(core.step_target(self.items("Pad"), "prev"))
+        self.assertIsNone(core.step_target(self.items("Pad"), "start"))
+
+    def test_empty(self):
+        self.assertIsNone(core.step_target([], "end"))
+
+    def test_every_kind_has_an_icon(self):
+        for kind in core.KIND_TITLES:
+            self.assertTrue(core.icon_for(kind))

@@ -1,21 +1,18 @@
-"""The feature timeline: a bar along the bottom of the window showing the
-active body's features in order. Click selects, double-click edits, right
-click rolls back or forward. Rollback sets the body's Tip, which is how
-FreeCAD represents it."""
+"""The feature timeline: a bar along the bottom of the window, Fusion style.
+
+Playback buttons on the left, one icon per feature of the active body, a
+marker after the current step, a settings button on the right. Click
+selects, double-click edits, right click rolls back or forward. Rolling back
+sets the body's Tip, which is how FreeCAD represents the timeline marker."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import timeline_core as core
-from . import warn
-from .compat import QtCore, QtWidgets, Signal
+from . import ui_icon, warn
+from .compat import QtCore, QtGui, QtWidgets, Signal
 
-_STYLES = {
-    "done": "QToolButton { padding: 4px 10px; border: 1px solid #888; border-radius: 4px; }",
-    "tip": "QToolButton { padding: 4px 10px; border: 2px solid #2d8cf0; border-radius: 4px; font-weight: bold; }",
-    "pending": "QToolButton { padding: 4px 10px; border: 1px dashed #888; border-radius: 4px; }",
-    "rolled_back": "QToolButton { padding: 4px 10px; border: 1px dashed #aaa; border-radius: 4px; color: #999; font-style: italic; }",
-}
+ICON = 24  # feature icon size, as in Fusion's timeline
 
 _dock = None
 
@@ -68,25 +65,53 @@ def _set_tip(body, target_name, label):
 class TimelineWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("SciForgeTimeline")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self._sig = None
         self._body = None
         self._items = []
 
         outer = QtWidgets.QHBoxLayout(self)
-        outer.setContentsMargins(6, 2, 6, 2)
+        outer.setContentsMargins(8, 3, 8, 3)
+        outer.setSpacing(2)
+        for icon, where, tip in (
+            ("tl_start", "start", "Go to beginning"),
+            ("tl_prev", "prev", "Step back"),
+            ("tl_play", "play", "Play the history"),
+            ("tl_next", "next", "Step forward"),
+            ("tl_end", "end", "Go to end"),
+        ):
+            outer.addWidget(self._tool(icon, tip, lambda _=False, w=where: self.step(w), 18))
+        outer.addSpacing(16)
+
         self._scroll = QtWidgets.QScrollArea()
         self._scroll.setWidgetResizable(True)
-        self._scroll.setFixedHeight(46)
+        self._scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self._scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self._scroll.setFixedHeight(ICON + 14)
         self._inner = QtWidgets.QWidget()
         self._row = QtWidgets.QHBoxLayout(self._inner)
-        self._row.setContentsMargins(2, 2, 2, 2)
-        self._row.setSpacing(6)
+        self._row.setContentsMargins(0, 0, 0, 0)
+        self._row.setSpacing(2)
         self._scroll.setWidget(self._inner)
-        outer.addWidget(self._scroll)
+        outer.addWidget(self._scroll, 1)
+        outer.addWidget(self._tool("tl_settings", "Timeline settings", self._settings, 18))
 
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(400)
         self._timer.timeout.connect(self.refresh)
+        self._play_timer = QtCore.QTimer(self)
+        self._play_timer.setInterval(450)
+        self._play_timer.timeout.connect(self._play_step)
+
+    def _tool(self, icon, tip, slot, size):
+        button = QtWidgets.QToolButton()
+        button.setIcon(ui_icon(icon))
+        button.setIconSize(QtCore.QSize(size, size))
+        button.setToolTip(tip)
+        button.setAutoRaise(True)
+        button.clicked.connect(slot)
+        return button
 
     def start(self):
         self.refresh()
@@ -94,6 +119,7 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def stop(self):
         self._timer.stop()
+        self._play_timer.stop()
 
     def refresh(self):
         try:
@@ -110,6 +136,10 @@ class TimelineWidget(QtWidgets.QWidget):
         self._items = items
         self._rebuild()
 
+    def titles(self):
+        """Feature titles in timeline order ("Sketch 1", "Extrude 1", ...); used by tests."""
+        return [item.title for item in self._items]
+
     def _clear(self):
         while self._row.count():
             entry = self._row.takeAt(0)
@@ -120,31 +150,84 @@ class TimelineWidget(QtWidgets.QWidget):
     def _rebuild(self):
         self._clear()
         if self._body is None:
-            hint = QtWidgets.QLabel("No active design. Use New Design or Create Sketch to begin.")
+            hint = QtWidgets.QLabel("No active design. Use Create Sketch to begin.")
+            hint.setStyleSheet("color: #c3cad4;")
             self._row.addWidget(hint)
             self._row.addStretch(1)
             return
         for item in self._items:
-            button = _ItemButton()
-            button.setText(item.title)
-            button.setToolTip("%s\n%s" % (item.label, item.type_id))
-            button.setStyleSheet(_STYLES[item.state])
-            button.clicked.connect(lambda _=False, n=item.name: _select(self._body, n))
-            button.doubleClicked.connect(lambda n=item.name: _edit(self._body, n))
-            button.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-            button.customContextMenuRequested.connect(
-                lambda pos, b=button, i=item: self._menu(b, i, pos)
-            )
-            self._row.addWidget(button)
+            self._row.addWidget(self._item_button(item))
+            if item.state == "tip":
+                self._row.addWidget(self._marker())
+        if not any(item.state == "tip" for item in self._items):
+            self._row.addWidget(self._marker())
         self._row.addStretch(1)
+
+    def _item_button(self, item):
+        button = _ItemButton()
+        icon = ui_icon(core.icon_for(item.kind))
+        if item.state == "rolled_back":
+            # Greyed-out icon, like features after Fusion's marker.
+            icon = QtGui.QIcon(icon.pixmap(ICON, ICON, QtGui.QIcon.Disabled))
+        button.setIcon(icon)
+        button.setIconSize(QtCore.QSize(ICON, ICON))
+        button.setAccessibleName(item.title)
+        button.setProperty("state", item.state)
+        button.setToolTip("%s\n%s" % (item.label, item.title))
+        button.clicked.connect(lambda _=False, n=item.name: _select(self._body, n))
+        button.doubleClicked.connect(lambda n=item.name: _edit(self._body, n))
+        button.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        button.customContextMenuRequested.connect(
+            lambda pos, b=button, i=item: self._menu(b, i, pos)
+        )
+        return button
+
+    def _marker(self):
+        marker = QtWidgets.QFrame()
+        marker.setProperty("role", "marker")
+        marker.setFixedSize(4, ICON + 6)
+        marker.setToolTip("Timeline marker: features after it are rolled back")
+        return marker
+
+    def step(self, where):
+        if self._body is None:
+            return
+        if where == "play":
+            first = core.step_target(self._items, "start")
+            if first:
+                _set_tip(self._body, first, "play")
+            self._play_timer.start()
+            return
+        target = core.step_target(self._items, where)
+        if target:
+            _set_tip(self._body, target, where)
+
+    def _play_step(self):
+        try:
+            self.refresh()
+            target = core.step_target(self._items, "next")
+            if self._body is None or target is None:
+                self._play_timer.stop()
+                return
+            _set_tip(self._body, target, "play")
+        except Exception as exc:
+            self._play_timer.stop()
+            warn("timeline play stopped: %s" % exc)
+
+    def _settings(self):
+        menu = QtWidgets.QMenu(self)
+        hide = menu.addAction("Hide timeline")
+        chosen = menu.exec_(QtGui.QCursor.pos())
+        if chosen is hide:
+            hide_timeline()
 
     def _menu(self, button, item, pos):
         menu = QtWidgets.QMenu(button)
-        edit = menu.addAction("Edit")
+        edit = menu.addAction("Edit Feature")
         back_target = core.rollback_target(self._items, item.index)
-        back = menu.addAction("Roll back to here")
+        back = menu.addAction("Roll History Marker Here")
         back.setEnabled(back_target is not None)
-        forward = menu.addAction("Roll forward to end")
+        forward = menu.addAction("Roll History Marker to End")
         forward.setEnabled(core.can_roll_forward(self._items))
         chosen = menu.exec_(button.mapToGlobal(pos))
         if chosen is edit:
@@ -161,6 +244,8 @@ def _ensure_dock():
         main = Gui.getMainWindow()
         _dock = QtWidgets.QDockWidget("Timeline", main)
         _dock.setObjectName("SciForgeTimelineDock")
+        _dock.setTitleBarWidget(QtWidgets.QWidget())  # no title bar, like Fusion
+        _dock.setFeatures(QtWidgets.QDockWidget.NoDockWidgetFeatures)
         _dock.setWidget(TimelineWidget())
         main.addDockWidget(QtCore.Qt.BottomDockWidgetArea, _dock)
     return _dock
@@ -176,6 +261,9 @@ def hide():
     if _dock is not None:
         _dock.widget().stop()
         _dock.hide()
+
+
+hide_timeline = hide
 
 
 def toggle():
