@@ -142,39 +142,26 @@ class Builder:
         return sketch
 
     def op_extrude(self, step):
-        operation = step.get("operation", "join")
-        cut = operation == "cut"
-        if (
-            operation == "new_body"
-            and self.body.Tip is not None
-            and not self.body.Tip.Shape.isNull()
-        ):
-            raise BuildError(
-                "multi-body 'new_body' after the first solid is not supported by the builder yet"
-            )
-        feature = self._add(step, "PartDesign::Pocket" if cut else "PartDesign::Pad")
-        feature.Profile = self.objects[step["profile"]]
-        extent = step.get("extent", "distance")
-        if extent == "through_all":
-            if not cut:
-                raise BuildError("'through_all' is only supported for cut extrudes")
-            feature.Type = "ThroughAll"
-        else:
-            feature.Type = "Length"
-            feature.Length = step["distance"]
-        direction = step.get("direction", "one_side")
-        if direction == "symmetric":
-            feature.SideType = "Symmetric"
-        elif direction == "two_sides":
-            feature.SideType = "Two sides"
-            feature.Type2 = "Length"
-            feature.Length2 = step["distance2"]
-        if "taper" in step:
-            feature.TaperAngle = step["taper"]
-        flip = bool(step.get("flip", False))
-        # A Pocket cuts against the sketch normal by default; normalize so
-        # "distance along the normal" means the same thing for join and cut.
-        feature.Reversed = (not flip) if cut else flip
+        """SciForge's Fusion-style Extrude (sciforge/extrude.py), as the E command builds it."""
+        from sciforge import extrude
+
+        if step.get("extent") == "through_all" and step.get("operation", "join") != "cut":
+            raise BuildError("'through_all' is only supported for cut extrudes")
+        distance = step.get("distance", 1.0)
+        options = {
+            "operation": step.get("operation", "join"),
+            "direction": step.get("direction", "one_side"),
+            "extent": "all" if step.get("extent") == "through_all" else "distance",
+            "distance": -distance if step.get("flip") else distance,
+            "distance2": step.get("distance2", distance),
+            "taper": step.get("taper", 0.0),
+        }
+        try:
+            feature = extrude.make(self.body, self.objects[step["profile"]], options, step["id"])
+        except extrude.ExtrudeError as exc:
+            raise BuildError("extrude %r: %s" % (step["id"], exc))
+        self.objects[step["id"]] = feature
+        self.ops[step["id"]] = "extrude"
         self._recompute(step, feature)
         return feature
 

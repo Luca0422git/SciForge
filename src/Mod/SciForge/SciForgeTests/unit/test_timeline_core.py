@@ -20,7 +20,7 @@ FILLET = "PartDesign::Fillet"
 class ClassifyTests(unittest.TestCase):
     def test_known_and_fallbacks(self):
         self.assertEqual(core.classify(PAD), "extrude")
-        self.assertEqual(core.classify("PartDesign::Pocket"), "cut")
+        self.assertEqual(core.classify("PartDesign::Pocket"), "extrude")  # Fusion naming
         self.assertEqual(core.classify("PartDesign::AdditiveBox"), "primitive")
         self.assertEqual(core.classify("Something::Else"), "other")
 

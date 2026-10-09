@@ -146,7 +146,7 @@ FORGE_MENU = [
 SHORTCUTS = {
     "SciForge_CommandSearch": "S",
     "SciForge_PressPull": "Q",
-    "PartDesign_Pad": "E",
+    "SciForge_Extrude": "E",
     "PartDesign_Fillet": "F",
     "PartDesign_Hole": "H",
     "Sketcher_Dimension": "D",

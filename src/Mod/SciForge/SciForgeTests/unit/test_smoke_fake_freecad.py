@@ -183,19 +183,25 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(group.GetCommands(), ("PartDesign_Pad",))
         self.assertIn(("SciForge",), wb.menus)
 
+        # FreeCAD's Sketcher binds T itself; SciForge must park it while on.
+        self.commands["Sketcher_Trimming"].shortcut = "T"
         wb.Activated()
-        self.assertEqual(self.commands["PartDesign_Pad"].shortcut, "E")
-        self.assertEqual(self.commands["Std_ViewFitAll"].shortcut, "F6")
+        import sciforge.shortcuts as shortcuts
+
+        self.assertEqual(shortcuts.bound_keys().get("F"), "PartDesign_Fillet")
+        self.assertEqual(shortcuts.bound_keys().get("F6"), "Std_ViewFitAll")
+        self.assertEqual(self.commands["Sketcher_Trimming"].shortcut, "", "clashing key parked")
 
         # Leaving for the Sketcher (editing a sketch) keeps the SciForge interface ...
         wb.Deactivated()
         import sciforge.shell as shell
 
         shell.on_workbench("SketcherWorkbench")
-        self.assertEqual(self.commands["PartDesign_Pad"].shortcut, "E")
-        # ... any other workbench turns it off and gives the shortcuts back.
+        self.assertEqual(shortcuts.bound_keys().get("F"), "PartDesign_Fillet")
+        # ... any other workbench turns it off and gives the keys back.
         shell.on_workbench("PartDesignWorkbench")
-        self.assertEqual(self.commands["PartDesign_Pad"].shortcut, "")
+        self.assertEqual(shortcuts.bound_keys(), {})
+        self.assertEqual(self.commands["Sketcher_Trimming"].shortcut, "T", "parked key restored")
 
     def test_ribbon_mode_adds_no_plain_toolbars(self):
         wb = self._load_workbench()

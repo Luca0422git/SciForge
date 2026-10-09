@@ -1,12 +1,25 @@
-"""Apply the Fusion-style shortcut map while the SciForge workbench is active."""
+"""Fusion-style single-key shortcuts while the SciForge interface is on.
+
+FreeCAD only honours a command's shortcut when the command sits in a visible
+menu or toolbar. SciForge's commands live in the ribbon and the menu bar is
+hidden, so the keys are bound here with Qt shortcuts on the main window:
+
+  * every FreeCAD command bound to one of these keys is "parked" (shortcut
+    cleared) so no key is bound twice, which would make Qt ignore both;
+  * the key runs the command through Gui.runCommand;
+  * typing in a text field still types: Qt gives the field the key first.
+
+restore() deletes the shortcuts and gives the parked keys back.
+Per-machine overrides: <user data>/SciForge/shortcuts.json, {"Command_Name": "Key"}.
+"""
 
 import json
 import os
 
 from . import config, log, warn
 
-_saved = {}  # command name -> shortcut it had before we changed it
-_parked = {}  # other commands whose shortcut clashed with ours -> their old shortcut
+_bound = {}  # normalised key -> (command name, QShortcut)
+_parked = {}  # FreeCAD command -> the shortcut it had before
 
 
 def _overrides():
@@ -28,51 +41,73 @@ def current_map():
     return merged
 
 
+def normalise(key):
+    return (key or "").replace(" ", "").upper()
+
+
+def bound_keys():
+    """{key: command name} currently active (for tests and diagnostics)."""
+    return {key: name for key, (name, _) in _bound.items()}
+
+
+def _run(name):
+    import FreeCADGui as Gui
+
+    try:
+        cmd = Gui.Command.get(name)
+        if cmd is not None and hasattr(cmd, "isActive") and not cmd.isActive():
+            return
+        Gui.runCommand(name)
+    except Exception as exc:
+        warn("shortcut for %s failed: %s" % (name, exc))
+
+
 def apply():
     import FreeCADGui as Gui
 
-    applied, skipped = 0, []
-    for name, key in current_map().items():
-        try:
-            cmd = Gui.Command.get(name)
-            if cmd is None:
-                skipped.append(name)
-                continue
-            if name not in _saved:
-                _saved[name] = cmd.getShortcut() or ""
-            cmd.setShortcut(key)
-            applied += 1
-        except Exception:
-            skipped.append(name)
-    _park_conflicts(Gui, current_map())
-    log(
-        "shortcuts applied: %d, skipped: %d, conflicts parked: %d"
-        % (applied, len(skipped), len(_parked))
-    )
-    if skipped:
-        warn("no shortcut set for: %s" % ", ".join(skipped))
+    from .compat import QtCore, QtGui
 
-
-def _park_conflicts(Gui, mapping):
-    """Fusion's keys win: clear other commands bound to the same key while SciForge
-    is active (e.g. the Sketcher binds L, S, E, P to constraints), and remember them."""
-    ours = {key.replace(" ", "").upper(): name for name, key in mapping.items() if key}
+    if _bound:
+        return
+    mapping = current_map()
+    keys = {normalise(k) for k in mapping.values() if k}
+    # Park every FreeCAD shortcut on one of our keys (including on our target commands
+    # themselves, e.g. the Sketcher's own "D"), so each key has exactly one owner.
     for name in Gui.listCommands():
-        if name in mapping or name in _parked:
-            continue
         try:
             cmd = Gui.Command.get(name)
-            key = (cmd.getShortcut() or "").replace(" ", "").upper() if cmd else ""
-            if key and key in ours:
-                _parked[name] = cmd.getShortcut()
+            current = cmd.getShortcut() if cmd else ""
+            if current and normalise(current) in keys:
+                _parked[name] = current
                 cmd.setShortcut("")
         except Exception:
             pass
+    main = Gui.getMainWindow()
+    available = set(Gui.listCommands())
+    skipped = []
+    for name, key in mapping.items():
+        if not key or name not in available:
+            skipped.append(name)
+            continue
+        shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), main)
+        shortcut.setContext(QtCore.Qt.WindowShortcut)
+        shortcut.activated.connect(lambda n=name: _run(n))
+        _bound[normalise(key)] = (name, shortcut)
+    log("shortcuts bound: %d, FreeCAD keys parked: %d" % (len(_bound), len(_parked)))
+    if skipped:
+        warn("no shortcut for (command not found): %s" % ", ".join(skipped))
 
 
 def restore():
     import FreeCADGui as Gui
 
+    for _, shortcut in _bound.values():
+        try:
+            shortcut.setEnabled(False)
+            shortcut.deleteLater()
+        except Exception:
+            pass
+    _bound.clear()
     for name, previous in list(_parked.items()):
         try:
             cmd = Gui.Command.get(name)
@@ -81,12 +116,3 @@ def restore():
         except Exception:
             pass
     _parked.clear()
-
-    for name, previous in list(_saved.items()):
-        try:
-            cmd = Gui.Command.get(name)
-            if cmd is not None:
-                cmd.setShortcut(previous)
-        except Exception:
-            pass
-    _saved.clear()

@@ -14,6 +14,8 @@ SET(SciForge_Package
     sciforge/compat.py
     sciforge/config.py
     sciforge/diagnostics.py
+    sciforge/extrude.py
+    sciforge/extrude_ui.py
     sciforge/navbar_ui.py
     sciforge/presspull.py
     sciforge/presspull_core.py

@@ -33,7 +33,7 @@ def group(gid, title, big, items):
     return {"id": gid, "title": title, "big": big, "items": items}
 
 
-INTERIM = "Interim: until SciForge's unified Extrude/Revolve exists, cutting is a separate command."
+INTERIM = "Interim: until SciForge has a unified Revolve dialog, cutting is a separate command."
 
 # ---------------------------------------------------------------- SOLID tab
 SOLID_CREATE = group(
@@ -44,8 +44,13 @@ SOLID_CREATE = group(
         item("Create Sketch", "SciForge_NewSketch", "sketch_create"),
         item("Derive", None, "derive"),
         SEP,
-        item("Extrude", "PartDesign_Pad", "extrude", "E"),
-        item("Extrude (Cut)", "PartDesign_Pocket", "extrude", note=INTERIM),
+        item(
+            "Extrude",
+            "SciForge_Extrude",
+            "extrude",
+            "E",
+            note="Join, cut or new body in one dialog; drag into the part to cut.",
+        ),
         item("Revolve", "PartDesign_Revolution", "revolve"),
         item("Revolve (Cut)", "PartDesign_Groove", "revolve", note=INTERIM),
         item("Sweep", "PartDesign_AdditivePipe", "sweep"),

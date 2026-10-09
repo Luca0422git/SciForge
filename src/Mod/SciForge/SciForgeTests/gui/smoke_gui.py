@@ -19,11 +19,12 @@ import traceback
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtGui, QtWidgets
+from PySide6 import QtTest
 
 OUT_DIR = os.environ.get("SCIFORGE_SMOKE_OUT") or App.getUserAppDataDir()
 EXPECTED_SHORTCUTS = {
     "SciForge_CommandSearch": "S",
-    "PartDesign_Pad": "E",
+    "SciForge_Extrude": "E",
     "Sketcher_CreateLine": "L",
 }
 
@@ -129,10 +130,11 @@ def step_ribbon():
         solid_titles,
     )
     check("Dark theme applied", "SciForgeRibbon" in QtWidgets.QApplication.instance().styleSheet())
+    from sciforge import shortcuts
+
     for name, key in EXPECTED_SHORTCUTS.items():
-        cmd = Gui.Command.get(name)
-        got = cmd.getShortcut() if cmd else None
-        check("Shortcut %s = %s" % (name, key), got == key, got)
+        got = shortcuts.bound_keys().get(key)
+        check("Key %s bound to %s" % (key, name), got == name, got)
     distx = Gui.Command.get("Sketcher_ConstrainDistanceX")
     check(
         "Clashing FreeCAD key parked (L)",
@@ -151,6 +153,41 @@ def step_timeline():
     titles = widget.titles() if widget else []
     check("Timeline shows Sketch 1, Extrude 1", titles == ["Sketch 1", "Extrude 1"], titles)
     shot("screenshot.png")
+    press("S")
+    later(400, step_search_open)
+
+
+def view_widget():
+    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    return (
+        area.activeSubWindow().widget() if area and area.activeSubWindow() else Gui.getMainWindow()
+    )
+
+
+def press(key):
+    """A real key press on the 3D view, as the user would type it."""
+    widget = view_widget()
+    widget.setFocus()
+    QtTest.QTest.keyClick(widget, key)
+
+
+def step_search_open():
+    from sciforge import search_ui
+
+    popups = [
+        w
+        for w in QtWidgets.QApplication.topLevelWidgets()
+        if isinstance(w, search_ui.CommandSearchDialog) and w.isVisible()
+    ]
+    check("Pressing S opens command search", bool(popups))
+    for w in popups:
+        w.close()
+    later(200, step_open_menu)
+
+
+def step_open_menu():
+    from sciforge import shell
+
     # Open the CREATE menu without blocking, for a screenshot of a drop-down.
     group = [
         g
@@ -219,8 +256,9 @@ def step_presspull():
     tip = body.Tip
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(App.ActiveDocument.Name, tip.Name, _top_face_name(tip))
-    Gui.runCommand("SciForge_PressPull")
+    press("Q")
     panel = Gui.Control.activeDialog() and _active_panel()
+    check("Pressing Q opens Press Pull", panel is not None)
     check("Press Pull dialog opens with the face", panel is not None and panel.target is not None)
     check("Press Pull arrow shown in the 3D view", panel is not None and panel.dragger is not None)
     panel.field.widget.setProperty("rawValue", 5.0)
@@ -271,6 +309,59 @@ def step_presspull_cancel():
         "Cancel removes the unfinished feature",
         len([o for o in body.Group if getattr(o, "SciForgeType", "") == "PressPull"]) == 1,
     )
+    later(300, step_extrude)
+
+
+def step_extrude():
+    """A circle sketch on top, E, distance -5: Fusion switches to Cut by itself."""
+    import Part
+
+    from sciforge import commands, extrude_ui
+
+    body = commands.active_body()
+    top = body.Shape.BoundBox.ZMax
+    sketch = body.newObject("Sketcher::SketchObject", "HoleSketch")
+    sketch.AttachmentSupport = (body.Origin.OriginFeatures[3], [""])
+    sketch.MapMode = "FlatFace"
+    sketch.AttachmentOffset = App.Placement(App.Vector(0, 0, top), App.Rotation())
+    sketch.addGeometry(Part.Circle(App.Vector(20, 10, 0), App.Vector(0, 0, 1), 4))
+    App.ActiveDocument.recompute()
+    state["volume_before"] = body.Shape.Volume
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(App.ActiveDocument.Name, sketch.Name)
+    press("E")
+    panel = extrude_ui.ExtrudePanel.last
+    check(
+        "Pressing E opens Extrude with the sketch", panel is not None and panel.target is not None
+    )
+    panel.distance.widget.setProperty("rawValue", -5.0)
+    state["panel"] = panel
+    later(600, step_extrude_ok)
+
+
+def step_extrude_ok():
+    import math
+
+    from sciforge import commands, timeline_ui
+
+    panel = state["panel"]
+    check(
+        "Dragging into the part switches to Cut",
+        panel.operation.currentData() == "cut",
+        panel.operation.currentData(),
+    )
+    shot("screenshot-extrude.png")
+    panel.accept()
+    body = commands.active_body()
+    expected = state["volume_before"] - math.pi * 16 * 5
+    check(
+        "Extrude cut removes pi*4^2*5",
+        abs(body.Shape.Volume - expected) < 1e-6,
+        (body.Shape.Volume, expected),
+    )
+    timeline_ui._dock.widget().refresh()
+    titles = timeline_ui._dock.widget().titles()
+    check("Timeline calls the cut Extrude 2", "Extrude 2" in titles, titles)
     Gui.activateWorkbench("PartDesignWorkbench")
     later(800, step_left)
 
@@ -284,8 +375,11 @@ def step_left():
     )
     check("Menu bar back", Gui.getMainWindow().menuBar().isVisible())
     check("FreeCAD toolbars back", len(visible_toolbars()) > 3, visible_toolbars())
-    cmd = Gui.Command.get("PartDesign_Pad")
-    check("Shortcuts restored after leaving", cmd.getShortcut() != "E", cmd.getShortcut())
+    from sciforge import shortcuts
+
+    check("Keys released after leaving", shortcuts.bound_keys() == {}, shortcuts.bound_keys())
+    distx = Gui.Command.get("Sketcher_ConstrainDistanceX")
+    check("FreeCAD's own L key given back", distx.getShortcut() == "L", distx.getShortcut())
     finish()
 
 

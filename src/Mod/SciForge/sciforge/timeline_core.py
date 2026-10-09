@@ -7,7 +7,7 @@ from dataclasses import dataclass
 KIND_BY_TYPEID = {
     "Sketcher::SketchObject": "sketch",
     "PartDesign::Pad": "extrude",
-    "PartDesign::Pocket": "cut",
+    "PartDesign::Pocket": "extrude",  # Fusion calls cut extrudes "Extrude" too
     "PartDesign::Revolution": "revolve",
     "PartDesign::Groove": "groove",
     "PartDesign::Hole": "hole",

@@ -21,6 +21,7 @@ SCIFORGE_COMMANDS = {
     "SciForge_ResetShortcuts",
     "SciForge_Diagnostics",
     "SciForge_PressPull",
+    "SciForge_Extrude",
 }
 
 

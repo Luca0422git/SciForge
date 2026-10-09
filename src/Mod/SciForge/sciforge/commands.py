@@ -147,9 +147,10 @@ FORGE_COMMANDS = {
 
 def _feature_commands():
     """Commands implemented in their own modules (imported lazily: they need the GUI)."""
+    from .extrude_ui import ExtrudeCommand
     from .presspull_ui import PressPullCommand
 
-    return {"SciForge_PressPull": PressPullCommand}
+    return {"SciForge_PressPull": PressPullCommand, "SciForge_Extrude": ExtrudeCommand}
 
 
 def register_all():
