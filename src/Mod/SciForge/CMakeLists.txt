@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SciForge module: the Fusion-style interface layer and the golden-model suite.
+# Pure Python for now, so this only copies files into the build and install trees.
+
+SET(SciForge_Init
+    Init.py
+    InitGui.py
+)
+
+SET(SciForge_Package
+    sciforge/__init__.py
+    sciforge/commands.py
+    sciforge/compat.py
+    sciforge/config.py
+    sciforge/diagnostics.py
+    sciforge/registry.py
+    sciforge/search_core.py
+    sciforge/search_ui.py
+    sciforge/shortcuts.py
+    sciforge/timeline_core.py
+    sciforge/timeline_ui.py
+    sciforge/workbench.py
+)
+
+SET(SciForge_Icons
+    sciforge/icons/design.svg
+    sciforge/icons/sciforge.svg
+    sciforge/icons/search.svg
+    sciforge/icons/sketch.svg
+    sciforge/icons/timeline.svg
+)
+
+SET(SciForge_Tests
+    SciForgeTests/__init__.py
+    SciForgeTests/unit/__init__.py
+    SciForgeTests/unit/test_golden_schema.py
+    SciForgeTests/unit/test_search_core.py
+    SciForgeTests/unit/test_smoke_fake_freecad.py
+    SciForgeTests/unit/test_timeline_core.py
+    SciForgeTests/golden/__init__.py
+    SciForgeTests/golden/builder.py
+    SciForgeTests/golden/README.md
+    SciForgeTests/golden/runner.py
+    SciForgeTests/golden/schema.py
+    SciForgeTests/golden/selectors.py
+    SciForgeTests/gui/smoke_gui.py
+)
+
+# Golden models are data files; new ones are picked up when CMake re-runs.
+FILE(GLOB SciForge_GoldenModels RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} SciForgeTests/golden/models/*.json)
+LIST(APPEND SciForge_Tests ${SciForge_GoldenModels})
+
+SET(SciForge_ALL ${SciForge_Init} ${SciForge_Package} ${SciForge_Icons} ${SciForge_Tests})
+
+ADD_CUSTOM_TARGET(SciForge ALL SOURCES ${SciForge_ALL})
+
+fc_copy_sources(SciForge "${CMAKE_BINARY_DIR}/Mod/SciForge" ${SciForge_ALL})
+
+INSTALL(FILES ${SciForge_Init} DESTINATION Mod/SciForge)
+INSTALL(FILES ${SciForge_Package} DESTINATION Mod/SciForge/sciforge)
+INSTALL(FILES ${SciForge_Icons} DESTINATION Mod/SciForge/sciforge/icons)
+INSTALL(DIRECTORY SciForgeTests DESTINATION Mod/SciForge
+    FILES_MATCHING PATTERN "*.py" PATTERN "*.json" PATTERN "*.md" PATTERN "__pycache__" EXCLUDE)

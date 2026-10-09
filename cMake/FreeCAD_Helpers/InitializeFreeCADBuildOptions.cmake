@@ -100,6 +100,8 @@ macro(InitializeFreeCADBuildOptions)
     endif(APPLE)
 
     option(BUILD_FEM "Build the FreeCAD FEM module" ON)
+    # SCIFORGE: SciForge's own module (docs/sciforge/core-patches.md #3).
+    option(BUILD_SCIFORGE "Build the SciForge module (Fusion-style interface layer)" ON)
     option(BUILD_SANDBOX "Build the FreeCAD Sandbox module which is only for testing purposes" OFF)
     option(BUILD_TEMPLATE "Build the FreeCAD template module which is only for testing purposes" OFF)
     option(BUILD_ADDONMGR "Build the FreeCAD addon manager module" ON)

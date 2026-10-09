@@ -30,6 +30,11 @@ if(BUILD_HELP)
   add_subdirectory(Help)
 endif(BUILD_HELP)
 
+# SCIFORGE: SciForge's own module (docs/sciforge/core-patches.md #3).
+if(BUILD_SCIFORGE)
+  add_subdirectory(SciForge)
+endif(BUILD_SCIFORGE)
+
 if(BUILD_IDF)
   add_subdirectory(Idf)
 endif(BUILD_IDF)
