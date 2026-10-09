@@ -26,15 +26,10 @@
 
 name: FreeCAD master CI
 
+# SCIFORGE: manual trigger only. The full upstream pipeline is expensive on a
+# private repo; SciForge's own workflows are .github/workflows/sciforge-*.yml.
 on:
   workflow_dispatch: ~
-  push:
-    branches:
-      - main
-      - releases/**
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-  merge_group: ~
 
 
 concurrency:
