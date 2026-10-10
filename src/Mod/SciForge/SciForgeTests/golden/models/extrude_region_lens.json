@@ -1,0 +1,60 @@
+{
+  "id": "extrude_region_lens",
+  "title": "Two overlapping circles: extrude only the lens where they cross",
+  "tags": [
+    "extrude",
+    "regions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "a"
+        },
+        {
+          "circle": [
+            12,
+            0,
+            10
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "regions": [
+        [
+          6,
+          0
+        ]
+      ],
+      "distance": 5
+    }
+  ],
+  "expect": {
+    "volume": 447.2952180016122,
+    "area": 364.37713080096734,
+    "faces": 4,
+    "bbox": [
+      2,
+      -8,
+      0,
+      10,
+      8,
+      5
+    ],
+    "source": "analytic",
+    "note": "Crossing curves split areas, as in Fusion. Lens of two r10 circles 12 apart: A = 2r^2 acos(d/2r) - (d/2)sqrt(4r^2-d^2); V = A*5; sides: two arcs of length 2r*acos(0.6), height 5; y extent = sqrt(100-36) = 8"
+  }
+}

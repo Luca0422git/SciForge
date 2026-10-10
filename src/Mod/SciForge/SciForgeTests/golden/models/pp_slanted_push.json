@@ -1,6 +1,6 @@
 {
-  "id": "pp_slanted_neighbours",
-  "title": "Press Pull: top of a trapezoid, sloped sides extend",
+  "id": "pp_slanted_push",
+  "title": "Press Pull: top of a trapezoid pushed -5, sloped sides trimmed",
   "tags": [
     "press-pull"
   ],
@@ -41,7 +41,7 @@
     {
       "op": "press_pull",
       "id": "p1",
-      "distance": 5,
+      "distance": -5,
       "faces": {
         "normal": [
           0,
@@ -53,9 +53,17 @@
     }
   ],
   "expect": {
-    "volume": 13750.0,
+    "volume": 9750.0,
     "faces": 6,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      15
+    ],
     "source": "analytic",
-    "note": "Fusion extends the sloped faces: height 25, top width 15, area (40+15)/2*25"
+    "note": "Sides slope 10 in 20 (x = z/2): at z=15 the top is 25 wide. V = (40+25)/2*15*20"
   }
 }

@@ -1,0 +1,61 @@
+{
+  "id": "extrude_region_disc",
+  "title": "Rectangle with a circle inside: extrude only the disc",
+  "tags": [
+    "extrude",
+    "regions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        },
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "regions": [
+        [
+          20,
+          15
+        ]
+      ],
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 785.3981633974482,
+    "area": 471.23889803846896,
+    "faces": 3,
+    "bbox": [
+      15,
+      10,
+      0,
+      25,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Only the circle's area: a cylinder r5 h10. V = pi*25*10; A = 2*pi*25 + 2*pi*5*10"
+  }
+}

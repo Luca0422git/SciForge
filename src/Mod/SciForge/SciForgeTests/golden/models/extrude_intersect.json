@@ -1,0 +1,70 @@
+{
+  "id": "extrude_intersect",
+  "title": "Intersect: keep the 20x20x6 part of the box inside the extrusion",
+  "tags": [
+    "extrude",
+    "intersect"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            30,
+            25
+          ],
+          "name": "k"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "i1",
+      "profile": "s2",
+      "distance": 6,
+      "operation": "intersect"
+    }
+  ],
+  "expect": {
+    "volume": 2400,
+    "area": 1280,
+    "faces": 6,
+    "bbox": [
+      10,
+      5,
+      0,
+      30,
+      25,
+      6
+    ],
+    "source": "analytic",
+    "note": "Box 40x30x10 intersected with 20x20x6: V = 20*20*6; A = 2*400 + 4*20*6"
+  }
+}

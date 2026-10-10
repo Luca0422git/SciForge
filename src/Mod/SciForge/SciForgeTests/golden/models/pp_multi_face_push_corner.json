@@ -1,8 +1,9 @@
 {
-  "id": "pp_multi_face_corner",
-  "title": "Press Pull: top and side together +2",
+  "id": "pp_multi_face_push_corner",
+  "title": "Press Pull: top and side together -2",
   "tags": [
-    "press-pull"
+    "press-pull",
+    "multi-face"
   ],
   "steps": [
     {
@@ -30,7 +31,7 @@
     {
       "op": "press_pull",
       "id": "p1",
-      "distance": 2,
+      "distance": -2,
       "faces": {
         "any_of": [
           {
@@ -55,17 +56,18 @@
     }
   ],
   "expect": {
-    "volume": 10080,
+    "volume": 6080,
+    "area": 2448,
     "faces": 6,
     "bbox": [
       0,
       0,
       0,
-      42,
+      38,
       20,
-      12
+      8
     ],
     "source": "analytic",
-    "note": "Fusion extends both faces so the corner fills: 42x20x12"
+    "note": "Both faces move 2 inward: 38x20x8. V = 38*20*8; A = 2(38*20 + 38*8 + 20*8)"
   }
 }

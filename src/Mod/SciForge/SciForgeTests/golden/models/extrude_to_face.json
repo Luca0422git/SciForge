@@ -1,0 +1,79 @@
+{
+  "id": "extrude_to_face",
+  "title": "Extrude from a sketch 30 up down to the top face of the box",
+  "tags": [
+    "extrude",
+    "to-object"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            10
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 14000,
+    "faces": 9,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      30
+    ],
+    "source": "analytic",
+    "note": "Column 10x10 from z=30 down to the box top (z=10): 2000 on top of 12000. Faces: bottom, x=0 and y=0 sides (box+column merged), x=40, y=30, box top, column top, 2 column sides"
+  }
+}

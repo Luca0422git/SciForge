@@ -1,8 +1,9 @@
 {
-  "id": "pp_slanted_neighbours",
-  "title": "Press Pull: top of a trapezoid, sloped sides extend",
+  "id": "pp_slanted_side_pull",
+  "title": "Press Pull: a sloped side of a trapezoid +2 (top and bottom extend)",
   "tags": [
-    "press-pull"
+    "press-pull",
+    "multi-face"
   ],
   "steps": [
     {
@@ -41,21 +42,29 @@
     {
       "op": "press_pull",
       "id": "p1",
-      "distance": 5,
+      "distance": 2,
       "faces": {
         "normal": [
+          0.894427191,
           0,
-          0,
-          1
+          0.4472135955
         ],
         "count": 1
       }
     }
   ],
   "expect": {
-    "volume": 13750.0,
+    "volume": 12894.427190999915,
     "faces": 6,
+    "bbox": [
+      0,
+      -20,
+      0,
+      42.23606797749979,
+      0,
+      20
+    ],
     "source": "analytic",
-    "note": "Fusion extends the sloped faces: height 25, top width 15, area (40+15)/2*25"
+    "note": "The right side (length sqrt(10^2+20^2) = 22.36) moves 2 along its normal; top and bottom extend to meet it, so the section grows by a parallelogram 22.36 x 2 (V += 2*22.36*20), with no end triangles because both neighbours are extended planes"
   }
 }

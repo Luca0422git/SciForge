@@ -1,0 +1,73 @@
+{
+  "id": "extrude_taper_cut",
+  "title": "Tapered pocket: 20x20 cut 5 deep, narrowing 10 degrees",
+  "tags": [
+    "extrude",
+    "cut",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "center_rect": [
+            20,
+            15,
+            20,
+            20
+          ],
+          "name": "pocket"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "distance": 5,
+      "flip": true,
+      "operation": "cut",
+      "taper": -10
+    }
+  ],
+  "expect": {
+    "volume": 10171.14511335417,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Pocket is a frustum: 20x20 at the top, 20 - 10 tan(10deg) at 5 deep. V = 12000 - h/3(A1 + A2 + sqrt(A1*A2)). Faces: 6 of the box + floor + 4 sloped walls"
+  }
+}

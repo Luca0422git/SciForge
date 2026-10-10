@@ -1,8 +1,9 @@
 {
-  "id": "pp_multi_face_corner",
-  "title": "Press Pull: top and side together +2",
+  "id": "pp_three_faces_corner",
+  "title": "Press Pull: top, right and back faces +2 meet in one corner",
   "tags": [
-    "press-pull"
+    "press-pull",
+    "multi-face"
   ],
   "steps": [
     {
@@ -48,24 +49,33 @@
               0
             ],
             "count": 1
+          },
+          {
+            "normal": [
+              0,
+              1,
+              0
+            ],
+            "count": 1
           }
         ],
-        "count": 2
+        "count": 3
       }
     }
   ],
   "expect": {
-    "volume": 10080,
+    "volume": 11088,
+    "area": 3384,
     "faces": 6,
     "bbox": [
       0,
       0,
       0,
       42,
-      20,
+      22,
       12
     ],
     "source": "analytic",
-    "note": "Fusion extends both faces so the corner fills: 42x20x12"
+    "note": "Fusion extends all three so the corner fills: 42x22x12"
   }
 }
