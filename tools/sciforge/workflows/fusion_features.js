@@ -103,10 +103,20 @@ zero crashes. Green tests that do not click are worthless here.
 - Screenshots land in ${out}; LOOK at them (Read tool) to check it looks and behaves like Fusion.
 - Another agent runs GUI tests at the same time on this 4-CPU machine. If xvfb fails to start, retry.
 - Black formatting, line length 100: ${S}/venv/bin/black --line-length 100 <files>
-- Baseline at the start: everything passes except scenario ribbon_sweep's 2 known failures
-  ("Shell" prints <Exception> Base feature's TopoShape is invalid when nothing is selected -> owned by
-  shell_draft; "Circumscribed Polygon" opens a pop-up -> owned by sketch). Your branch must not add any
-  failure anywhere. If you own one of those two, fix it.
+- Baseline at the start: the whole suite passes (unit, golden, smoke, journey, ~20 scenarios incl.
+  ribbon_sweep). ribbon_sweep reports one KNOWN issue instead of failing: "Shell" prints
+  <Exception> Base feature's TopoShape is invalid when nothing is selected (owned by shell_draft:
+  fix it and remove its KNOWN entry in SciForgeTests/gui/scenarios/ribbon_sweep.py). Your branch must
+  not add any failure anywhere.
+- Already merged on the base branch (Fusion-style, with scenarios): Extrude/Press Pull (regions,
+  all options), Sketch workspace (keys, palette, dimension box, polygon, offset, trim, project),
+  Timeline/Browser (design-wide timeline, reorder, suppress, groups, delete), Fillet/Chamfer. Read
+  their modules before building on them; reuse their helpers (SciForgeTests/gui/widget_input.py for
+  real input on Qt widgets, sketch_input.py for sketch drawing, dialog_input.py, blend_steps.py).
+- Scenario lessons: click edges with h.click_edge(point); after a Ctrl+click that must ADD to the
+  selection call h.ensure_also_selected(point) (GitHub's runner drops synthesized Ctrl); never keep a
+  pivy handle to a FreeCAD-owned Coin node across time (look it up fresh or node.ref()/unref()):
+  writing to a node FreeCAD deleted crashes it. Debug crashes with Python's faulthandler.
 
 ## Ownership (other agents work in parallel on other branches; merges must stay conflict-free)
 Files you own (create/edit freely; paths under src/Mod/SciForge unless absolute): ${f.owns.join(', ')}.
@@ -163,8 +173,8 @@ ${f.spec}
 ${common(f, 'qa')}
 
 ## Your job
-Start with: git checkout -b sf/${f.key}-qa ${built ? built.branch : 'sf/' + f.key}
-(If that branch does not exist, the build failed: then build the feature yourself on sf/${f.key}-qa.)
+Start with: ${f.mode === 'qa_only' ? 'git checkout -b sf/' + f.key + '-qa   (from the current HEAD: the feature is already merged there)' : 'git checkout -b sf/' + f.key + '-qa ' + (built && built.branch ? built.branch : 'sf/' + f.key)}
+(If the build branch does not exist, the build failed: then build the feature yourself on sf/${f.key}-qa.)
 
 1. Use the feature like Luca will. Write SciForgeTests/gui/scenarios/${f.key}_qa.py with at least 8
    realistic paths, beginner and power user, only real input: picks in the "wrong" order; OK with
@@ -183,11 +193,20 @@ Start with: git checkout -b sf/${f.key}-qa ${built ? built.branch : 'sf/' + f.ke
 Commit everything on sf/${f.key}-qa and return the structured result.`
 }
 
+// Features already merged ("qa_only") go straight to the break-and-fix stage, on top of the
+// base branch (which contains them). Their QA agent is started in stage 1 so it queues in list
+// order, interleaved with the builds.
+const MERGED = { branch: 'HEAD of the base branch (already merged)', summary: 'Already merged; see the feature spec and its scenarios.' }
+function runQa(f, built) {
+  return agent(qaPrompt(f, built), { label: 'qa:' + f.key, phase: 'Break and fix', schema: QA_SCHEMA, isolation: 'worktree' })
+    .then(q => { log('qa ' + f.key + ': ' + (q ? (q.bugs.length + ' bugs, ' + (q.all_tests_pass ? 'tests pass' : 'TESTS FAIL')) : 'no result')); return { key: f.key, built, qa: q } })
+}
 const results = await pipeline(
   FEATURES,
-  (f) => agent(implPrompt(f), { label: 'build:' + f.key, phase: 'Build', schema: IMPL_SCHEMA, isolation: 'worktree' })
-    .then(r => { log('built ' + f.key + ': ' + (r ? (r.all_tests_pass ? 'tests pass' : 'TESTS FAIL') : 'no result')); return r }),
-  (built, f) => agent(qaPrompt(f, built), { label: 'qa:' + f.key, phase: 'Break and fix', schema: QA_SCHEMA, isolation: 'worktree' })
-    .then(q => { log('qa ' + f.key + ': ' + (q ? (q.bugs.length + ' bugs, ' + (q.all_tests_pass ? 'tests pass' : 'TESTS FAIL')) : 'no result')); return { key: f.key, built, qa: q } }),
+  (f) => f.mode === 'qa_only'
+    ? runQa(f, MERGED)
+    : agent(implPrompt(f), { label: 'build:' + f.key, phase: 'Build', schema: IMPL_SCHEMA, isolation: 'worktree' })
+        .then(r => { log('built ' + f.key + ': ' + (r ? (r.all_tests_pass ? 'tests pass' : 'TESTS FAIL') : 'no result')); return r }),
+  (prev, f) => f.mode === 'qa_only' ? prev : runQa(f, prev),
 )
 return results
