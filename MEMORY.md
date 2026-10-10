@@ -116,6 +116,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `SciForgeTests/gui/journey_gui.py` driven by real mouse clicks/drags on the 3D view**, and a
   feature is not "done" until that passes. Click one step *after* the key that opens a task panel
   (the panel narrows the 3D view).
+- **Trap: never keep a pivy handle to a FreeCAD-owned Coin node across time** (between timer
+  ticks, until a dialog closes). FreeCAD deletes view-provider/edit nodes when it rebuilds a
+  display or leaves sketch edit; writing to the stale handle segfaults (sketch_mode polygon
+  preview, 2026-10-10; faulthandler showed pivy `__setattr__` -> `getField`). Look nodes up
+  fresh (`sketch_mode.find_node`) each time, or hold a Coin reference (`node.ref()` /
+  `node.unref()`, see `fillet_ui._Looks`). Debug crashes with Python's faulthandler (prints the
+  Python stack on SIGSEGV) or gdb (`bt`).
 - **Trap: pivy dragger callbacks crash FreeCAD** (`addMotionCallback`/`addFinishCallback`): pivy
   calls Python without the GIL (gdb: SIGSEGV in `SoDraggerPythonCB` -> `PyDict_New`), and doing a
   recompute or Pad<->Pocket swap inside Coin's event traversal is unsafe anyway. `ArrowDragger`
@@ -287,8 +294,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   ribbon_sweep = every SOLID/SKETCH command, keys), `run_tests.sh --only scenarios /
   --scenario NAME`. Rules for feature work: `docs/sciforge/dev/feature-guide.md`.
 - Parallel feature workflow (12 features, each in its own git worktree, branch `sf/<key>`):
-  built and merged: extrude_presspull, sketch, timeline_browser (full suite green locally), and
-  fillet (merged from its committed branch; its full-suite run was still going when this was written). Then the org's monthly agent spend limit stopped all other agents.
+  built and merged: extrude_presspull, sketch, timeline_browser, fillet. The full suite after the
+  fillet merge found a reproducible FreeCAD crash (stale Coin node in sketch_mode, see Known
+  issues) and a unit failure (one bad import disabled all commands); both fixed. Then the org's monthly agent spend limit stopped all other agents.
   NOT built yet: hole (WIP, untested, on branch `sf/hole`), revolve, patterns, shell_draft,
   bodies, inspect, primitives, sweep_loft. The QA ("break and fix") stage ran for none of them.
   The workflow script and its feature list are in `tools/sciforge/workflows/fusion_features.js`
