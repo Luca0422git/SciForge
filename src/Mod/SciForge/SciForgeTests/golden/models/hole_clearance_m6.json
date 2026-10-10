@@ -1,0 +1,69 @@
+{
+  "id": "hole_clearance_m6",
+  "title": "Clearance hole for M6, normal fit, through",
+  "tags": [
+    "hole",
+    "clearance"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "extent": "all",
+      "tap_type": "clearance",
+      "standard": "iso",
+      "size": "6",
+      "designation": "M6x1",
+      "fit": "normal"
+    }
+  ],
+  "expect": {
+    "volume": 11657.880560024072,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "ISO 273 medium (Fusion: normal) clearance for M6 is 6.6: V = 12000 - pi 3.3^2 10"
+  }
+}

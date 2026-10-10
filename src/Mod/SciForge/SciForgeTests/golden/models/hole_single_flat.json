@@ -1,0 +1,67 @@
+{
+  "id": "hole_single_flat",
+  "title": "Single Hole d5 x 6 (flat) clicked on the top face of a 40x30x10 plate",
+  "tags": [
+    "hole",
+    "single"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        12,
+        8,
+        10
+      ],
+      "diameter": 5,
+      "depth": 6,
+      "drill_point": "flat"
+    }
+  ],
+  "expect": {
+    "volume": 11882.190275490382,
+    "area": 3894.2477796076937,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 12000 - pi 2.5^2 6; area = 3800 + hole wall 2 pi 2.5 6 (the top loses the disc the bottom adds back); faces = 6 + wall + bottom"
+  }
+}

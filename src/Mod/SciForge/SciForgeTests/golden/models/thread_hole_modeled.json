@@ -1,0 +1,80 @@
+{
+  "id": "thread_hole_modeled",
+  "title": "Modeled inside M6x1 thread in a d5 through hole (size taken from the hole)",
+  "tags": [
+    "thread",
+    "modeled",
+    "inside"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            2.5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 2.5,
+        "count": 1
+      },
+      "modeled": true
+    }
+  ],
+  "expect": {
+    "volume": 11768.6672428808,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the d5 hole is M6's tap drill, so the thread is M6x1; the inside groove is P/8 wide at R = 3 and widens 2 tan 30 per mm inward; slice loss beyond the hole (2 pi / P) * int_2.5^3 r w(r) dr = 3.498321627; times 10 mm"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "id": "hole_tapped_m6",
+  "title": "Tapped hole M6x1 through, cosmetic thread",
+  "tags": [
+    "hole",
+    "tapped"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "extent": "all",
+      "tap_type": "tapped",
+      "standard": "iso",
+      "size": "6",
+      "designation": "M6x1"
+    }
+  ],
+  "expect": {
+    "volume": 11803.650459150638,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "a tapped hole is drilled at the tap drill size, M6x1: 5.0 (ISO 2306); the cosmetic thread changes nothing: V = 12000 - pi 2.5^2 10"
+  }
+}

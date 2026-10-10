@@ -1,0 +1,134 @@
+{
+  "id": "hole_references_follow_edge",
+  "title": "Through hole d10 placed 3 from the right edge and 15 from the front; plate made wider",
+  "tags": [
+    "hole",
+    "single",
+    "references",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        37,
+        15,
+        10
+      ],
+      "diameter": 10,
+      "extent": "all",
+      "references": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "x",
+                "value": "max"
+              },
+              {
+                "axis": "z",
+                "value": "max"
+              }
+            ],
+            "count": 1
+          },
+          "distance": 3
+        },
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "y",
+                "value": "min"
+              },
+              {
+                "axis": "z",
+                "value": "max"
+              }
+            ],
+            "count": 1
+          },
+          "distance": 15
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11326.425641102955,
+        "bbox": [
+          0,
+          0,
+          0,
+          40,
+          30,
+          10
+        ],
+        "source": "analytic",
+        "note": "the hole breaks out of the right side: inside the plate is the circle minus the segment beyond the edge"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "s1",
+      "constraint": "plate.width",
+      "value": 50
+    }
+  ],
+  "expect": {
+    "volume": 14326.425641102955,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "r 5 centred 3 from the edge: segment beyond it = 25 acos(3/5) - 3 * 4; the hole keeps its 3 mm from the right edge when the plate grows to 50, so it still removes 10 (25 pi - seg)"
+  }
+}

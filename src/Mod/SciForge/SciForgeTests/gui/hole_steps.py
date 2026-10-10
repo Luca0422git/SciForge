@@ -193,6 +193,21 @@ def browser_double_click(label):
     return True
 
 
+def timeline_menu(title, entry):
+    """Right-click a timeline step and click a menu entry, like a person."""
+    from SciForgeTests.gui import widget_input as w
+    from sciforge import timeline_ui
+
+    widget = timeline_ui.widget()
+    widget.refresh()
+    QtWidgets.QApplication.processEvents()
+    for button in widget._buttons:
+        if button.item.display == title:
+            ok = w.right_click(button, w.center(button), entry)
+            return h.check("timeline menu %s > %s" % (title, entry), ok)
+    return h.check("timeline has %r" % title, False, widget.titles())
+
+
 def no_popups(where):
     h.check("no pop-up after %s" % where, not h.popups(), h.popups())
 

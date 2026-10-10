@@ -502,6 +502,7 @@ def set_position(hole, base, face_name, point, refs=None):
         lines.append(line)
     _rebuild_sketch(sketch, xy, wanted[:2])
     sketch.solve()
+    sketch.recompute()  # its shape tells where the hole is (a To extent measures from it)
     meta = load_meta(hole)
     meta["face"] = _ref_json((base, face_name))
     _save_meta(hole, meta)
@@ -521,6 +522,7 @@ def move_to(hole, xy):
             refs.append((ref, point_line_distance(xy, line)))
     _rebuild_sketch(sketch, xy, refs)
     sketch.solve()
+    sketch.recompute()
 
 
 def set_reference_distance(hole, index, distance):
@@ -535,6 +537,7 @@ def set_reference_distance(hole, index, distance):
                 raise HoleError("A reference distance must be more than 0.")
             sketch.setDatum(i, App.Units.Quantity("%r mm" % float(distance)))
             sketch.solve()
+            sketch.recompute()
             return
 
 

@@ -442,6 +442,49 @@ def after_second():
     h.check("no kernel errors in the Report view", not b.report_has_kernel_errors())
     hs.no_popups("the second hole")
     h.shot("9-end")
+    s["v2"] = h.solid_volume()
+
+
+def edit_profile_sketch():
+    """Timeline right-click > Edit Profile Sketch on a Single Hole: its position is edited in
+    the Hole dialog (Fusion has no sketch for a single hole)."""
+    hs.timeline_menu("Hole 1", "Edit Profile Sketch")
+
+
+def profile_opens_hole():
+    p = hs.hole_panel()
+    h.check(
+        "Edit Profile Sketch opens the Hole dialog on Hole 1",
+        p is not None and p.editing and p.target is hs.holes()[0],
+    )
+    h.check("no sketch editing", h.in_sketch() is None)
+    h.task_button("Cancel")
+
+
+def delete_hole2():
+    hs.timeline_menu("Hole 2", "Delete")
+
+
+def after_delete():
+    h.check("one hole left", len(hs.holes()) == 1, hs.holes())
+    h.check("its volume is back", hs.close(h.solid_volume(), s["v"]), h.solid_volume())
+    helpers = hs.helper_sketches()
+    h.check(
+        "the deleted hole's sketch is not shown",
+        all(not hs.visible(x) for x in helpers),
+        [(x.Label, hs.visible(x)) for x in helpers],
+    )
+
+
+def undo_delete():
+    h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
+
+
+def after_undo_delete():
+    h.check("Ctrl+Z brings Hole 2 back", len(hs.holes()) == 2, hs.holes())
+    h.check("with its volume", hs.close(h.solid_volume(), s["v2"]), h.solid_volume())
+    h.check("valid solid", h.body().Shape.isValid())
+    h.check("no helper sketch shown", all(not hs.visible(x) for x in hs.helper_sketches()))
 
 
 h.run(
@@ -495,5 +538,11 @@ h.run(
         started_on_face,
         second_enter,
         after_second,
+        edit_profile_sketch,
+        profile_opens_hole,
+        delete_hole2,
+        after_delete,
+        undo_delete,
+        after_undo_delete,
     ],
 )

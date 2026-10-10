@@ -1,0 +1,88 @@
+{
+  "id": "thread_two_holes",
+  "title": "One modeled M6x1 thread on two d5 through holes at once",
+  "tags": [
+    "thread",
+    "modeled",
+    "inside",
+    "multiple"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            15,
+            2.5
+          ]
+        },
+        {
+          "circle": [
+            30,
+            15,
+            2.5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 2.5,
+        "count": 2
+      },
+      "modeled": true
+    }
+  ],
+  "expect": {
+    "volume": 11537.3344857616,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "two d5 holes, each threaded M6x1 over 10 mm: V = 12000 - 2 (pi 2.5^2 10 + 10 * 3.498321627)"
+  }
+}

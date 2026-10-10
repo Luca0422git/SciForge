@@ -346,3 +346,50 @@ def validate(model):
 
     _check_expect(where + ".expect", model["expect"])
     return model
+
+
+# Fusion-style Hole and Thread (golden/hole_ops.py; sciforge/hole.py and sciforge/thread.py,
+# the same code as the H and Thread dialogs).
+_HOLE_OPTION_KEYS = {
+    "extent",
+    "depth",
+    "to",
+    "hole_type",
+    "diameter",
+    "cbore_diameter",
+    "cbore_depth",
+    "csink_diameter",
+    "csink_angle",
+    "drill_point",
+    "drill_angle",
+    "tap_type",
+    "standard",
+    "size",
+    "designation",
+    "fit",
+    "thread_class",
+    "direction",
+    "modeled",
+    "full_tap",
+    "tap_depth",
+    "flip",
+    "comment",
+}
+STEP_KEYS["hole_at"] = ({"id", "face", "at"}, {"references"} | _HOLE_OPTION_KEYS)
+STEP_KEYS["hole_points"] = ({"id", "sketch"}, set(_HOLE_OPTION_KEYS))
+STEP_KEYS["thread"] = (
+    {"id", "faces"},
+    {
+        "standard",
+        "size",
+        "designation",
+        "thread_class",
+        "direction",
+        "modeled",
+        "full_length",
+        "length",
+        "offset",
+        "from_end",
+        "comment",
+    },
+)

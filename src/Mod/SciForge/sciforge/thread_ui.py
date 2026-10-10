@@ -916,6 +916,9 @@ class _AppWatch:
     def slotRedoDocument(self, doc):
         CosmeticThreads.schedule()
 
+    def slotFinishRestoreDocument(self, doc):
+        CosmeticThreads.schedule()  # a file opened with cosmetic threads in it
+
     def slotDeletedDocument(self, doc):
         try:
             CosmeticThreads.forget(doc.Name)

@@ -1,0 +1,87 @@
+{
+  "id": "thread_edit_length",
+  "title": "Modeled M6x1 thread, 8 long, edited to 5",
+  "tags": [
+    "thread",
+    "modeled",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 12
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 3,
+        "count": 1
+      },
+      "modeled": true,
+      "full_length": false,
+      "length": 8
+    },
+    {
+      "op": "edit",
+      "target": "t1",
+      "set": {
+        "length": 5
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12312.706357416553,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      22
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "after the edit the groove runs 5 mm: V = boss - 5 * 5.317129834"
+  }
+}
