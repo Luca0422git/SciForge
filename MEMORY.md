@@ -115,7 +115,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Modeled, tap depth), Flat/Angle drill point, blue depth + diameter arrows. Thread on shaft
       or hole faces: size from the diameter, full/partial length (+ blue length arrow), cosmetic
       (dashed helix overlay, also for tapped holes) or modeled (own ISO 68-1 groove sweep,
-      `thread_core.py`). 5 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
+      `thread_core.py`). 6 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
 
 ## Known issues / findings
 
@@ -350,7 +350,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   (Thread, cosmetic overlay), `thread_tables.py` (ISO / ANSI sizes, checked row by row against
   FreeCAD 1.1.4's Hole), `hole_common.py` (selection boxes, selection gate, undo watch).
   Ribbon: Thread now runs `SciForge_Thread` (was greyed).
-- Tests: scenarios `hole`, `hole_sketch`, `hole_tapped`, `hole_thread`, `hole_thread_inside`
+- Tests: scenarios `hole`, `hole_sketch`, `hole_tapped`, `hole_thread`, `hole_thread_inside`, `hole_edges`
   (only real input; volumes hand-derived, incl. a slab check of FreeCAD's own modeled tapped
   thread), 16 golden models (`golden/hole_ops.py`: ops hole_at, hole_points, thread), unit
   tests `test_thread_core.py`.

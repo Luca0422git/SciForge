@@ -58,8 +58,9 @@ signed off**.
   Cancel/Esc, undo/redo, timeline Delete), `hole_sketch.py` (From Sketch, flip),
   `hole_tapped.py` (tapped, modeled, clearance fits, ANSI, To a plane), `hole_thread.py`
   (cosmetic / modeled / partial / left-hand thread on a shaft), `hole_thread_inside.py` (hole on
-  a curved face, inside thread from a selected hole wall). Volumes hand-derived
-  (`gui/hole_steps.py`).
+  a curved face and dragging it along the face, inside thread from a selected hole wall),
+  `hole_edges.py` (empty design, Ctrl+Z / Ctrl+Y inside the open dialog, a hole in a second
+  body). Volumes hand-derived (`gui/hole_steps.py`).
 - Golden models `hole_*` and `thread_*` (ops `hole_at`, `hole_points`, `thread` in
   `golden/hole_ops.py`; the same code as the dialogs).
 - Unit tests: `SciForgeTests/unit/test_thread_core.py` (sizes, groove, volumes, lengths).

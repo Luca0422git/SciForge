@@ -12,7 +12,6 @@
 
 Hand-derived: a through hole d removes pi d^2/4 * 10 from the 10 mm thick box.
 """
-import math
 
 import FreeCAD as App
 import FreeCADGui as Gui

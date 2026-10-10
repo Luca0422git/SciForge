@@ -14,7 +14,6 @@ Hand-derived geometry (box 40 x 30 x 10 from the origin, V = 12000):
 import math
 
 import FreeCAD as App
-import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import blend_steps as b
@@ -229,15 +228,3 @@ def task_widgets_visible(*widgets):
 
 def message(panel):
     return panel.message.text() if panel is not None else ""
-
-
-def process():
-    QtWidgets.QApplication.processEvents()
-
-
-def press_key(key, modifiers=QtCore.Qt.NoModifier):
-    h.press(key, modifiers)
-
-
-def gui_doc():
-    return Gui.ActiveDocument

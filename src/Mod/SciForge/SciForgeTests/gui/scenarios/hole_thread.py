@@ -24,7 +24,6 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import sketch_input as si
-from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
 s = {}
