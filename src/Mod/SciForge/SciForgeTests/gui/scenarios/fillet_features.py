@@ -144,8 +144,8 @@ def rolled_back():
         "the part shows Fillet 1 (later chamfer rolled back while editing)",
         b.close(h.body().Shape.Volume, s["v"])
         and p is not None
-        and p.target.ViewObject.Visibility
-        and not b.blends()[1].ViewObject.Visibility,
+        and p.target.ViewObject.isVisible()
+        and not b.blends()[1].ViewObject.isVisible(),
     )
     h.check("both boss edges shown picked", p is not None and len(p.refs) == 2, p and p.refs)
     h.shot("2-edit-earlier")
@@ -164,8 +164,8 @@ def after_edit():
     fillet, chamfer = b.blends()
     h.check(
         "the body shows its last step again",
-        chamfer.ViewObject.Visibility
-        and not fillet.ViewObject.Visibility
+        chamfer.ViewObject.isVisible()
+        and not fillet.ViewObject.isVisible()
         and h.body().Tip is chamfer,
     )
     h.check("valid solid", h.body().Shape.isValid())

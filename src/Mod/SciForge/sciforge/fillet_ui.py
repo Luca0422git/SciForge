@@ -30,7 +30,10 @@ from .taskui import ArrowDragger, DistanceField, Panel
 GHOST = 75  # transparency (%) of the part before the blend while the preview is shown
 GREEDY = 1  # FreeCAD selection style where a click toggles a pick, like in Fusion's commands
 NORMAL = 0
-PICK_HELP = "Click edges or faces of the part (or a feature in the timeline).\nClick a pick again to drop it."
+PICK_HELP = (
+    "Click edges or faces of the part (or a feature in the timeline).\n"
+    "Click a pick again to drop it."
+)
 
 
 @contextlib.contextmanager
@@ -159,6 +162,87 @@ class _Observer:
         self.panel._selection_event(True)
 
 
+def _alive(obj):
+    """False for None and for objects an undo (or a closed document) took away."""
+    if obj is None:
+        return False
+    try:
+        return (
+            obj.isAttachedToDocument() if hasattr(obj, "isAttachedToDocument") else bool(obj.Name)
+        )
+    except Exception:
+        return False
+
+
+def _nodes(root, type_name):
+    """Every Coin node of a type below `root` (pivy)."""
+    from pivy import coin
+
+    search = coin.SoSearchAction()
+    search.setType(getattr(coin, type_name).getClassTypeId())
+    search.setInterest(coin.SoSearchAction.ALL)
+    search.setSearchingAll(True)
+    search.apply(root)
+    paths = search.getPaths()
+    return [paths[i].getTail() for i in range(paths.getLength())]
+
+
+class _Looks:
+    """Field changes on Coin nodes, remembered so restore() puts every old value back."""
+
+    def __init__(self):
+        self.saved = []  # (node, field name, old value or values)
+        self.tags = set()
+
+    def done(self, tag):
+        """True if `tag` was applied already (and marks it applied)."""
+        if tag in self.tags:
+            return True
+        self.tags.add(tag)
+        return False
+
+    def set(self, node, field, value):
+        fld = getattr(node, field)
+        if hasattr(fld, "getNum"):  # a multi-value field (per-face colours)
+            old = [fld[i] for i in range(fld.getNum())]
+        else:
+            old = fld.getValue()
+        self.saved.append((node, field, old))
+        fld.setValue(value)
+
+    def restore(self):
+        for node, field, old in reversed(self.saved):
+            try:
+                fld = getattr(node, field)
+                if isinstance(old, list):
+                    fld.setValues(0, len(old), old)
+                    fld.setNum(len(old))
+                else:
+                    fld.setValue(old)
+            except Exception:
+                pass
+        self.saved = []
+        self.tags = set()
+
+
+class _DocumentWatch:
+    """Undo/redo or closing the document while the dialog is open: FreeCAD lets Ctrl+Z run
+    and it takes the dialog's own unfinished step away. The dialog then ends (cancelled)
+    instead of working on objects that no longer exist; Ctrl+Y brings the step back."""
+
+    def __init__(self, panel):
+        self.panel = panel
+
+    def slotUndoDocument(self, doc):
+        self.panel._document_event(doc, False)
+
+    def slotRedoDocument(self, doc):
+        self.panel._document_event(doc, False)
+
+    def slotDeletedDocument(self, doc):
+        self.panel._document_event(doc, True)
+
+
 class _Gate:
     """Only edges/faces that can be rounded (and whole features of the body) can be picked;
     everything else does not even light up under the mouse."""
@@ -208,11 +292,12 @@ class BlendPanel(Panel):
         self._cleared = False
         self._syncing = False
         self._accepted = False
-        self._saved = {}  # view settings to put back: (object name, property) -> value
+        self._looks = _Looks()  # Coin-level look of the preview, undone at the end
         self._ghost = False  # the preview is shown (before-shape see-through)
-        self._offset = None  # (feature, SoPolygonOffset) pushing the preview's faces back
         self.view = None
         self._keys = None
+        self._watch = None
+        self._doc_name = doc.Name
         self._bound = False
         self._events = QtCore.QTimer()
         self._events.setSingleShot(True)
@@ -309,6 +394,8 @@ class BlendPanel(Panel):
         Gui.Selection.clearSelection()
         self.observer = _Observer(self)
         Gui.Selection.addObserver(self.observer)
+        self._watch = _DocumentWatch(self)
+        App.addDocumentObserver(self._watch)
         try:
             Gui.Selection.addSelectionGate(_Gate(self))
             self.gate = True
@@ -329,6 +416,46 @@ class BlendPanel(Panel):
         if self.target is not None:
             self._bind()
             self._show_preview(bool(self.refs))
+
+    def _document_event(self, doc, closing):
+        try:
+            if self._closed or getattr(doc, "Name", None) != self._doc_name:
+                return
+            if closing:
+                self._abandon()
+            else:
+                QtCore.QTimer.singleShot(0, self._undone)
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
+
+    def _undone(self):
+        """Ctrl+Z / Ctrl+Y ran while the dialog was open: end it, keeping what undo did."""
+        if self._closed:
+            return
+        try:
+            self._accepted = False
+            self._timer.stop()
+            self.cleanup()
+            if self.doc.HasPendingTransaction:
+                self.doc.abortTransaction()
+            self._close()
+            log("%s ended by undo" % self.title)
+        except Exception as exc:
+            warn("%s could not end after undo: %s" % (self.title, exc))
+
+    def _abandon(self):
+        """The document is closing: let go of everything without touching it."""
+        self.base = self.target = self.body = None
+        self._looks = _Looks()
+        self.cleanup()
+        try:
+            from . import taskui
+
+            if taskui.current() is self:
+                taskui.set_current(None)
+            QtCore.QTimer.singleShot(0, Gui.Control.closeDialog)
+        except Exception:
+            pass
 
     def _key(self, info):
         """Esc in the 3D view cancels, like in Fusion (FreeCAD only listens to Esc while the
@@ -520,101 +647,67 @@ class BlendPanel(Panel):
             warn("%s arrow unavailable: %s" % (self.title, exc))
 
     # -- display -------------------------------------------------------------------------
-    # PartDesign shows one feature of a body at a time: making one visible hides the others.
-    # The see-through "before" shape is therefore shown with makeTemporaryVisible(), which
-    # displays it without touching any Visibility property.
-    def _remember(self, obj, prop):
-        key = (obj.Name, prop)
-        if key not in self._saved:
-            self._saved[key] = getattr(obj.ViewObject, prop)
-
-    def _set_view(self, obj, prop, value):
-        vo = getattr(obj, "ViewObject", None)
-        if vo is None:
-            return
-        self._remember(obj, prop)
-        if getattr(vo, prop) != value:
-            setattr(vo, prop, value)
+    # Nothing here changes a document or view property: FreeCAD records those in the undo
+    # history (a Ctrl+Z / Ctrl+Y would replay a see-through or unclickable part). PartDesign
+    # shows one feature of a body at a time; makeTemporaryVisible() shows or hides one
+    # without touching its Visibility, and the see-through look is set on the Coin nodes.
+    def _features(self):
+        if self.body is None:
+            return []
+        return [
+            o
+            for o in self.body.Group
+            if o.isDerivedFrom("PartDesign::Feature") and getattr(o, "ViewObject", None)
+        ]
 
     def _prepare_display(self):
         """Show the part before the blend (the timeline rolled back to it while picking)."""
-        if self.body is None:
-            return
-        for obj in self.body.Group:
-            if obj.isDerivedFrom("PartDesign::Feature") and obj.ViewObject is not None:
-                self._remember(obj, "Visibility")
-        self._remember(self.base, "Transparency")
-        self._set_view(self.base, "Visibility", True)  # hides the other features of the body
+        for obj in self._features():
+            if obj is not self.base:
+                obj.ViewObject.makeTemporaryVisible(False)
+        self.base.ViewObject.makeTemporaryVisible(True)
 
     def _show_preview(self, on):
         """on: the result solid (not clickable) with the part before the blend see-through
         around it, so its edges stay clickable and the picks stay highlighted.
         off: just the part before the blend."""
-        if self.target is None or self.target.ViewObject is None:
+        if not _alive(self.target) or self.target.ViewObject is None:
             on = False
         try:
             if on:
-                self._set_view(self.target, "Selectable", False)
-                self._set_view(self.target, "Visibility", True)
-                self._set_view(self.base, "Transparency", GHOST)
+                self.target.ViewObject.makeTemporaryVisible(True)
                 self.base.ViewObject.makeTemporaryVisible(True)
-                self._push_back(True)
+                if not self._looks.done("preview"):
+                    root = self.target.ViewObject.RootNode
+                    for node in _nodes(root, "SoPickStyle"):
+                        self._looks.set(node, "style", node.UNPICKABLE)
+                    for node in _nodes(root, "SoPolygonOffset"):
+                        # behind the see-through faces it shares: a picked face's highlight
+                        # then shows cleanly instead of flickering stripes
+                        self._looks.set(node, "factor", 3.0)
+                        self._looks.set(node, "units", 8.0)
+                    for node in _nodes(self.base.ViewObject.RootNode, "SoMaterial"):
+                        if node.getName().getString() == "ShapeMaterial":
+                            self._looks.set(node, "transparency", GHOST / 100.0)
             else:
-                self._set_view(self.base, "Visibility", True)
-                self._set_view(
-                    self.base, "Transparency", self._saved[(self.base.Name, "Transparency")]
-                )
+                self._looks.restore()
+                if _alive(self.target) and self.target.ViewObject is not None:
+                    self.target.ViewObject.makeTemporaryVisible(False)
+                self.base.ViewObject.makeTemporaryVisible(True)
             if on != self._ghost:
                 self._ghost = on
                 self._sync()  # the highlight follows the shape that is displayed now
         except Exception as exc:
             warn("%s preview display: %s" % (self.title, exc))
 
-    def _push_back(self, on):
-        """Draw the preview's faces a hair behind the see-through shape: where both have the
-        same face, the picked face's highlight shows cleanly instead of flickering stripes."""
-        try:
-            if on and self._offset is None and self.target is not None:
-                from pivy import coin
-
-                node = coin.SoPolygonOffset()
-                node.factor.setValue(1.5)
-                node.units.setValue(4.0)
-                self.target.ViewObject.RootNode.insertChild(node, 0)
-                self._offset = (self.target, node)
-            elif not on and self._offset is not None:
-                obj, node = self._offset
-                self._offset = None
-                if obj.ViewObject is not None:
-                    obj.ViewObject.RootNode.removeChild(node)
-        except Exception as exc:
-            warn("%s preview depth: %s" % (self.title, exc))
-
     def _restore_display(self):
-        self._push_back(False)
-        doc = self.doc
-        visible = []
-        for (name, prop), value in self._saved.items():
-            obj = doc.getObject(name)
-            if obj is None or obj.ViewObject is None:
-                continue
+        """Undo the look changes and show what the body's Visibility properties say."""
+        self._looks.restore()
+        for obj in self._features():
             try:
-                if prop == "Visibility":
-                    if value:
-                        visible.append(obj)
-                elif getattr(obj.ViewObject, prop) != value:
-                    setattr(obj.ViewObject, prop, value)
+                obj.ViewObject.makeTemporaryVisible(bool(obj.ViewObject.Visibility))
             except Exception:
                 pass
-        if self._accepted and self.created and self.target is not None:
-            visible = [self.target]  # the new blend is the end of the timeline: the body shows it
-        try:
-            for obj in visible:
-                obj.ViewObject.Visibility = True  # (hides the body's other features)
-            if self.base is not None and self.base.ViewObject is not None:
-                self.base.ViewObject.makeTemporaryVisible(bool(self.base.ViewObject.Visibility))
-        except Exception as exc:
-            warn("%s could not restore the view: %s" % (self.title, exc))
 
     # -- preview --------------------------------------------------------------------------
     def _bind(self):
@@ -764,6 +857,12 @@ class BlendPanel(Panel):
             except Exception:
                 pass
             self.observer = None
+        if self._watch is not None:
+            try:
+                App.removeDocumentObserver(self._watch)
+            except Exception:
+                pass
+            self._watch = None
         if self.gate:
             try:
                 Gui.Selection.removeSelectionGate()

@@ -200,6 +200,11 @@ def after_ok():
         fl,
     )
     h.check("no leftover selection", not Gui.Selection.getSelectionEx())
+    extrude = App.ActiveDocument.getObject("Extrude")
+    h.check(
+        "only the fillet is shown (no see-through leftover)",
+        fl and fl[0].ViewObject.isVisible() and not extrude.ViewObject.isVisible(),
+    )
     h.shot("6-fillet1")
 
 
@@ -281,6 +286,12 @@ def cancel_preview():
 
 
 def after_cancel():
+    shown = [
+        o.Name
+        for o in h.body().Group
+        if o.isDerivedFrom("PartDesign::Feature") and o.ViewObject.isVisible()
+    ]
+    h.check("after Cancel the body shows its last step only", shown == [h.body().Tip.Name], shown)
     h.check(
         "Cancel leaves the model as it was", b.close(h.solid_volume(), s["v"]), h.solid_volume()
     )
@@ -335,6 +346,49 @@ def after_second():
     h.shot("9-end")
 
 
+def undo_inside_start():
+    s["v"] = h.solid_volume()
+    h.press("f")
+
+
+def undo_inside_pick():
+    h.fit()
+    h.click(RIGHT_TOP)
+
+
+def undo_inside_press():
+    p = b.blend_panel()
+    h.check("third fillet previewed", p is not None and p.refs and p.target is not None)
+    h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
+
+
+def undo_inside_after():
+    h.check(
+        "Ctrl+Z inside the dialog ends it",
+        b.blend_panel() is None and not Gui.Control.activeDialog(),
+    )
+    h.check(
+        "and takes the unfinished fillet away",
+        b.close(h.solid_volume(), s["v"]) and len(b.blends()) == 2,
+        (h.solid_volume(), b.blends()),
+    )
+    h.press(QtCore.Qt.Key_Y, QtCore.Qt.ControlModifier)
+
+
+def redo_after_inside():
+    shape = h.body().Shape
+    h.check(
+        "Ctrl+Y brings that fillet back as a valid step",
+        len(b.blends()) == 3 and shape.isValid() and shape.Volume < s["v"],
+        (len(b.blends()), shape.Volume),
+    )
+    fl = b.blends()[-1]
+    h.check(
+        "the redone fillet is shown and clickable",
+        fl.ViewObject.isVisible() and fl.ViewObject.Selectable,
+    )
+
+
 h.run(
     "fillet",
     b.box_steps("Fillet")
@@ -376,5 +430,10 @@ h.run(
         started_with_picks,
         second_ok,
         after_second,
+        undo_inside_start,
+        undo_inside_pick,
+        undo_inside_press,
+        undo_inside_after,
+        redo_after_inside,
     ],
 )
