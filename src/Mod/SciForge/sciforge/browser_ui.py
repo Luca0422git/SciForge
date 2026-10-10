@@ -49,6 +49,12 @@ def _units():
         return "mm"
 
 
+def _edit_object(obj):
+    from . import taskui
+
+    taskui.edit_object(obj)
+
+
 class BrowserWidget(QtWidgets.QTreeWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -181,7 +187,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             if node["kind"] == "body" and obj is not None:
                 self._activate(obj)
             elif node["kind"] in ("sketch", "construction") and obj is not None:
-                Gui.ActiveDocument.setEdit(obj.Name)
+                from . import taskui
+
+                taskui.edit_object(obj)
             elif node["kind"] == "units":
                 Gui.runCommand("Std_DlgPreferences")
         except Exception as exc:
@@ -216,7 +224,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             label = "Hide" if node["visible"] else "Show"
             actions[menu.addAction(label)] = lambda: self._set_visible(node, not node["visible"])
         if node["kind"] in ("sketch", "construction") and obj is not None:
-            actions[menu.addAction("Edit")] = lambda: Gui.ActiveDocument.setEdit(obj.Name)
+            actions[menu.addAction("Edit")] = lambda: _edit_object(obj)
         if node["kind"] == "body" and obj is not None:
             actions[menu.addAction("Activate")] = lambda: self._activate(obj)
         if obj is not None and node["kind"] != "origin":

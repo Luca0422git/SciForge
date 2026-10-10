@@ -280,3 +280,11 @@ class PressPullCommand:
             log("press pull started")
         except Exception as exc:
             warn("Press Pull failed to start: %s" % exc)
+
+
+def edit(obj):
+    """Timeline double-click: the Press Pull dialog on the existing feature."""
+    Gui.Control.showDialog(PressPullPanel(obj.Document, feature=obj))
+
+
+EDITORS = {"SciForge::PressPull": edit}

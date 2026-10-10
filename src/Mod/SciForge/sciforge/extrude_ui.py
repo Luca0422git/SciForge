@@ -37,9 +37,14 @@ def _used_profiles(body):
 
 def selected_profile(body):
     """The selected sketch, or a selected planar face of the body as (feature, "FaceN")."""
+    used = _used_profiles(body) if body is not None else set()
     for sel in Gui.Selection.getSelectionEx():
         if sel.Object.TypeId == "Sketcher::SketchObject":
-            return sel.Object
+            sketch = sel.Object
+            # A sketch already extruded and hidden is a leftover selection, not a pick.
+            if sketch.Name in used and not sketch.ViewObject.Visibility:
+                continue
+            return sketch
         for name in sel.SubElementNames:
             obj, short = sel.Object, name
             if "." in name:  # picked through the body: "Pad.Face6"
@@ -344,3 +349,6 @@ class ExtrudeCommand:
 def edit(feature):
     """Open the Extrude dialog on an existing Pad/Pocket (timeline double-click)."""
     Gui.Control.showDialog(ExtrudePanel(feature.Document, feature=feature))
+
+
+EDITORS = {"PartDesign::Pad": edit, "PartDesign::Pocket": edit}

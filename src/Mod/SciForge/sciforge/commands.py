@@ -52,6 +52,22 @@ def tell(msg):
         pass
 
 
+def leave_edit():
+    """Finish the edit in progress. A sketch is closed with FreeCAD's own Finish Sketch,
+    which first stops the active drawing tool: a plain resetEdit() with a tool still
+    running crashes FreeCAD 1.1 (SketcherGui solver update on a closing view)."""
+    gdoc = Gui.ActiveDocument
+    if gdoc is None or gdoc.getInEdit() is None:
+        return
+    obj = gdoc.getInEdit().Object
+    if obj is not None and obj.TypeId == "Sketcher::SketchObject":
+        Gui.runCommand("Sketcher_LeaveSketch")
+    else:
+        gdoc.resetEdit()
+    if App.ActiveDocument is not None:
+        App.ActiveDocument.recompute()
+
+
 def finish_open_dialog():
     """Fusion: starting a command ends the one in progress. SciForge dialogs are
     finished (OK, or Cancel if OK is not possible) and a sketch being edited is
@@ -65,9 +81,7 @@ def finish_open_dialog():
         if current is not None:
             current.finish()
         elif Gui.ActiveDocument is not None and Gui.ActiveDocument.getInEdit() is not None:
-            Gui.ActiveDocument.resetEdit()
-            if App.ActiveDocument is not None:
-                App.ActiveDocument.recompute()
+            leave_edit()
     except Exception as exc:
         warn("could not close the open dialog: %s" % exc)
     if Gui.Control.activeDialog():
@@ -211,7 +225,14 @@ FORGE_COMMANDS = {
 
 
 def _feature_commands():
-    """Commands implemented in their own modules (imported lazily: they need the GUI)."""
+    """Commands implemented in their own modules (imported lazily: they need the GUI).
+
+    Besides the modules listed here, every sciforge/*_ui.py module that defines a
+    module-level COMMANDS = {"SciForge_Name": CommandClass, ...} is registered
+    automatically, so a new feature only adds its own file."""
+    import importlib
+    import os
+
     from .extrude_ui import ExtrudeCommand
     from .parameters_ui import ChangeParametersCommand
     from .presspull_ui import PressPullCommand
@@ -219,13 +240,28 @@ def _feature_commands():
     from .construct_ui import command_classes
     from .make3d_ui import PrintCommand
 
-    return {
+    found = {
         **command_classes(),
         "SciForge_PressPull": PressPullCommand,
         "SciForge_Extrude": ExtrudeCommand,
         "SciForge_ChangeParameters": ChangeParametersCommand,
         "SciForge_3DPrint": PrintCommand,
     }
+    here = os.path.dirname(os.path.abspath(__file__))
+    for filename in sorted(os.listdir(here)):
+        if not filename.endswith("_ui.py"):
+            continue
+        try:
+            module = importlib.import_module("." + filename[:-3], __package__)
+        except Exception as exc:
+            warn("could not load %s: %s" % (filename, exc))
+            continue
+        for name, cls in getattr(module, "COMMANDS", {}).items():
+            found[name] = cls
+        from . import taskui
+
+        taskui.EDITORS.update(getattr(module, "EDITORS", {}))
+    return found
 
 
 def register_all():

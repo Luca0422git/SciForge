@@ -91,13 +91,9 @@ def _select(body, name):
 
 
 def _edit(body, name):
-    obj = body.Document.getObject(name)
-    if obj is not None and obj.TypeId in ("PartDesign::Pad", "PartDesign::Pocket"):
-        from . import extrude_ui
+    from . import taskui
 
-        extrude_ui.edit(obj)  # SciForge's Fusion-style Extrude dialog
-        return
-    Gui.ActiveDocument.setEdit(name)
+    taskui.edit_object(body.Document.getObject(name))  # the feature's SciForge dialog
 
 
 def _set_tip(body, target_name, label):

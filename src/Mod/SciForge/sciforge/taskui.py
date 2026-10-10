@@ -30,6 +30,35 @@ def set_current(dialog):
     _OPEN["dialog"] = dialog
 
 
+# Editors for existing features: {type key: function(obj)}. The type key is the
+# FreeCAD TypeId ("PartDesign::Fillet") or "SciForge::<SciForgeType>" for SciForge's
+# own Python features. Feature modules declare EDITORS = {...}; commands.py collects
+# them. The timeline and the browser open features with edit_object().
+EDITORS = {}
+
+
+def type_key(obj):
+    kind = getattr(obj, "SciForgeType", "")
+    return "SciForge::" + kind if kind else obj.TypeId
+
+
+def edit_object(obj):
+    """Open the right dialog for an existing feature (Fusion: double-click in the
+    timeline). Finishes whatever is open first."""
+    from . import commands
+
+    if obj is None or not commands.finish_open_dialog():
+        return
+    editor = EDITORS.get(type_key(obj))
+    try:
+        if editor is not None:
+            editor(obj)
+        else:
+            Gui.ActiveDocument.setEdit(obj.Name)
+    except Exception as exc:
+        warn("could not edit %s: %s" % (obj.Label, exc))
+
+
 class DistanceField:
     def __init__(self, value=0.0, unit="mm", on_change=None):
         self.widget = Gui.UiLoader().createWidget("Gui::QuantitySpinBox")
@@ -231,11 +260,19 @@ class Panel:
         if _OPEN["dialog"] is self:
             _OPEN["dialog"] = None
         Gui.Control.closeDialog()
+        # Fusion clears the selection when a command ends. A selection left behind
+        # was picked up by the next command (a second Extrude re-used the first
+        # sketch, cut into the part and made it disappear).
         try:
-            if Gui.ActiveDocument is not None and Gui.ActiveDocument.getInEdit() is not None:
-                Gui.ActiveDocument.resetEdit()
+            Gui.Selection.clearSelection()
         except Exception:
             pass
+        try:
+            from . import commands
+
+            commands.leave_edit()
+        except Exception as exc:
+            warn("could not finish editing: %s" % exc)
 
     def cleanup(self):
         """Remove draggers/observers (override, call super)."""

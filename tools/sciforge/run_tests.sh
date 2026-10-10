@@ -4,7 +4,8 @@
 #   2. golden models       (real FreeCAD, headless)
 #   3. GUI smoke test      (real FreeCAD GUI on a virtual screen via xvfb-run)
 #
-#   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR] [--only unit|golden|gui]
+#   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR] [--only unit|golden|gui|scenarios]
+#                               [--scenario NAME]   (one file of SciForgeTests/gui/scenarios)
 #
 # --freecad  folder from tools/sciforge/get_freecad.sh (default .sciforge-cache/freecad),
 #            or a SciForge install prefix containing bin/FreeCADCmd
@@ -22,6 +23,7 @@ while [ $# -gt 0 ]; do
         --freecad) FREECAD_DIR="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --only) ONLY="$2"; shift 2 ;;
+        --scenario) SCENARIO="$2"; ONLY="scenarios"; shift 2 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -122,14 +124,58 @@ run_gui() {
     run_gui_script smoke smoke_gui.py gui.log result.json
     # The journey uses SciForge like a person: real clicks and drags on the 3D view.
     run_gui_script journey journey_gui.py journey.log journey-result.json
+    run_scenarios
+}
+
+# Scenario tests (SciForgeTests/gui/scenarios/*.py, see harness.py): each one a
+# person's workflow with real input; any error FreeCAD prints fails it.
+run_scenarios() {
+    echo "== [SciForge] GUI scenarios"
+    need_freecad scenarios || return
+    local dir="${MODULE}/SciForgeTests/gui/scenarios" file name
+    for file in "${dir}"/*.py; do
+        name="$(basename "${file}" .py)"
+        [ "${name}" = "__init__" ] && continue
+        [ -n "${SCENARIO:-}" ] && [ "${name}" != "${SCENARIO}" ] && continue
+        SCIFORGE_SCENARIO="${name}" SCIFORGE_SMOKE_OUT="${OUT}" timeout 900 \
+            xvfb-run -a -s "-screen 0 1920x1200x24" \
+            "${FC_GUI[@]}" "${file}" > "${OUT}/scenario-${name}.log" 2>&1
+        python3 - "${OUT}" "${name}" <<'EOF' || FAILED+=("scenario ${name}")
+import glob, json, os, sys
+out, name = sys.argv[1], sys.argv[2]
+log = os.path.join(out, "scenario-%s.log" % name)
+ok, found = True, False
+for path in sorted(glob.glob(os.path.join(out, "*-result.json"))):
+    try:
+        result = json.load(open(path))
+    except ValueError:
+        continue
+    if result.get("file") != name:
+        continue
+    found = True
+    for c in result["checks"]:
+        if not c["ok"]:
+            print("  FAIL %s: %s %s" % (result["name"], c["name"], c["detail"][:600]))
+    if not result.get("finished"):
+        print("  %s did not finish (crash or hang? see %s)" % (result["name"], log))
+    ok = ok and bool(result.get("passed"))
+    print("  %s: %s (%d checks)" % (
+        result["name"], "PASS" if result.get("passed") else "FAIL", len(result["checks"])))
+if not found:
+    print("  %s: no result (FreeCAD crashed before the first step? see %s)" % (name, log))
+    ok = False
+sys.exit(0 if ok else 1)
+EOF
+    done
 }
 
 case "${ONLY}" in
     unit) run_unit ;;
     golden) run_golden ;;
     gui) run_gui ;;
+    scenarios) run_scenarios ;;
     "") run_unit; run_golden; run_gui ;;
-    *) echo "--only must be unit, golden or gui" >&2; exit 2 ;;
+    *) echo "--only must be unit, golden, gui or scenarios" >&2; exit 2 ;;
 esac
 
 echo "== [SciForge] reports in ${OUT}"

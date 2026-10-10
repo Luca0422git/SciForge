@@ -27,6 +27,30 @@ SCIFORGE_COMMANDS = {
 } | {"SciForge_Construct_" + key for key in construct.PRESETS}
 
 
+def _module_commands():
+    """Names in the COMMANDS = {...} table of every sciforge/*_ui.py (auto-registered)."""
+    import ast
+
+    names = set()
+    package = os.path.join(ROOT, "sciforge")
+    for filename in os.listdir(package):
+        if not filename.endswith("_ui.py"):
+            continue
+        with open(os.path.join(package, filename), encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and any(getattr(t, "id", "") == "COMMANDS" for t in node.targets)
+                and isinstance(node.value, ast.Dict)
+            ):
+                names |= {k.value for k in node.value.keys if isinstance(k, ast.Constant)}
+    return names
+
+
+SCIFORGE_COMMANDS |= _module_commands()
+
+
 def all_groups():
     seen = []
     for tab in cfg.TABS:

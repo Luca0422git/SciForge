@@ -15,6 +15,7 @@ Columns: **Upstreamable?** = could this be contributed back to FreeCAD so we sto
 | 3 | `src/Mod/CMakeLists.txt`, `cMake/FreeCAD_Helpers/InitializeFreeCADBuildOptions.cmake`, `cMake/FreeCAD_Helpers/PrintFinalReport.cmake` | Adds the `BUILD_SCIFORGE` option (default ON) and builds `src/Mod/SciForge` | Ships the SciForge module in every build | No |
 | 4 | `src/Mod/PartDesign/App/FeatureLinearPattern.cpp` | `Spacings2` default changed from `({})` to `({-1.0})` | **Upstream bug** in 1.1.4: `({})` stores `[0.0]`, i.e. a custom 0 mm first gap in direction 2, so a 2-direction linear pattern in Spacing mode puts its second row on top of the first. Found by golden model `plate_hole_grid`. Documents saved by stock FreeCAD keep their stored `[0.0]` | **Yes**: report and send upstream |
 | 5 | `README.md` | SciForge banner prepended | Visitors must see this is SciForge (outline 2.5: do not imply it is FreeCAD) | No |
+| 6 | `src/Mod/Sketcher/Gui/ViewProviderSketch.cpp` (`slotSolverUpdate`) | Null checks on `editDocument()` / its active view before redrawing | **Upstream crash** in 1.1.4: leaving sketch edit with `resetEdit()` while a sketch tool (line, circle, ...) is active makes the tool solve once more after the edit document was cleared, and FreeCAD segfaults (gdb trace in MEMORY.md, found by the ribbon sweep scenario). SciForge also avoids the path in Python (`commands.leave_edit` uses Sketcher_LeaveSketch), so quick updates are safe without a rebuild | **Yes** |
 
 ## Merging a new FreeCAD release
 

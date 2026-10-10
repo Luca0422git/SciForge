@@ -81,10 +81,8 @@ def profile_frame(profile):
         obj, sub = profile
         face = obj.Shape.getElement(sub if isinstance(sub, str) else sub[0])
         u0, u1, v0, v1 = face.ParameterRange
-        normal = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
-        if face.Orientation == "Reversed":
-            normal = normal * -1
-        return face.CenterOfMass, normal
+        # normalAt already points out of the solid, "Reversed" faces included.
+        return face.CenterOfMass, face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
     placement = profile.getGlobalPlacement()
     return profile.Shape.BoundBox.Center, placement.Rotation.multVec(App.Vector(0, 0, 1))
 

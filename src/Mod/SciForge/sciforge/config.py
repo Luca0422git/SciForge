@@ -161,3 +161,13 @@ SHORTCUTS = {
     "Std_Measure": "I",
     "Std_ViewFitAll": "F6",
 }
+
+# When SciForge has its own Fusion-style version of a command, the key runs that
+# one instead (the ribbon does the same: see the ("SciForge_X", "FreeCAD_X") pairs
+# in ribbon_config.py).
+PREFERRED = {
+    "PartDesign_Fillet": "SciForge_Fillet",
+    "PartDesign_Hole": "SciForge_Hole",
+    "Std_TransformManip": "SciForge_Move",
+    "Std_Measure": "SciForge_Measure",
+}

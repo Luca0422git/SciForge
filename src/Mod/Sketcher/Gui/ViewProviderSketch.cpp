@@ -3259,8 +3259,12 @@ void ViewProviderSketch::slotSolverUpdate()
     if (getSketchObject()->getExternalGeometryCount()
             + getSketchObject()->getHighestCurveIndex() + 1
         == getSolvedSketch().getGeometrySize()) {
-        Gui::MDIView* mdi = Gui::Application::Instance->editDocument()->getActiveView();
-        if (mdi->isDerivedFrom<Gui::View3DInventor>())
+        // SCIFORGE: while edit mode is being left (resetEdit with a sketch tool still active,
+        // the tool's deactivate() solves once more) editDocument() is already null and this
+        // crashed FreeCAD. Skip the redraw then; the sketch is leaving edit anyway.
+        Gui::Document* editDoc = Gui::Application::Instance->editDocument();
+        Gui::MDIView* mdi = editDoc ? editDoc->getActiveView() : nullptr;
+        if (mdi && mdi->isDerivedFrom<Gui::View3DInventor>())
             draw(false, true);
 
         signalConstraintsChanged();

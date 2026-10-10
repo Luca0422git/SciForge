@@ -94,6 +94,9 @@ def apply():
     available = set(Gui.listCommands())
     skipped = []
     for name, key in mapping.items():
+        better = config.PREFERRED.get(name)
+        if better in available:
+            name = better
         if not key or name not in available:
             skipped.append(name)
             continue
