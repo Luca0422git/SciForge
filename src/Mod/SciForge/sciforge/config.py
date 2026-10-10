@@ -179,4 +179,6 @@ PREFERRED = {
     "Std_TransformManip": "SciForge_Move",
     "Std_Measure": "SciForge_Measure",
     "Std_Delete": "SciForge_Delete",
+    "Sketcher_CreateLine": "SciForge_SketchLine",
+    "Sketcher_Offset": "SciForge_SketchOffset",
 }

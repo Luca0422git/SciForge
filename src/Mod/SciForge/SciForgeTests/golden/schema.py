@@ -73,6 +73,12 @@ STEP_KEYS = {
     "parameter": ({"name", "value"}, {"unit", "comment"}),
     "edit": ({"target"}, {"set", "constraint", "value", "expressions", "comment"}),
     "check": ({"expect"}, {"comment"}),
+    # SKETCH tab tools (golden/sketch_ops.py)
+    "sketch_polygon": (
+        {"sketch", "center", "point", "sides"},
+        {"circumscribed", "diameter", "name", "comment"},
+    ),
+    "sketch_trim": ({"sketch", "points"}, {"comment"}),
 }
 
 GEOMETRY_KINDS = ("rect", "center_rect", "circle", "polyline", "polygon", "slot")
@@ -305,6 +311,14 @@ def validate(model):
                 _fail(here, "edit needs 'set', 'constraint'+'value' or 'expressions'")
         if op == "check":
             _check_expect(here, step["expect"])
+        if op in ("sketch_polygon", "sketch_trim") and seen.get(step["sketch"]) != "sketch":
+            _fail(here, "'sketch' must name an earlier sketch step, got %r" % step["sketch"])
+        if op == "sketch_polygon":
+            sides = step["sides"]
+            if not isinstance(sides, int) or isinstance(sides, bool) or sides < 3:
+                _fail(here, "'sides' must be a whole number >= 3")
+            if "diameter" in step:
+                _check_number(here + ".diameter", step["diameter"], positive=True)
 
     _check_expect(where + ".expect", model["expect"])
     return model

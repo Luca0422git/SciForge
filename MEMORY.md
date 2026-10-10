@@ -94,9 +94,18 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed)
 - [x] Timeline marker drag + playback; ViewCube colours; 3D Print (3MF/STL) export
 - [ ] Unified Revolve / Hole / Fillet dialogs Fusion-style (FreeCAD's dialogs used meanwhile)
-- [ ] ViewCube shape, doc tabs in the app bar, floating command dialogs, Sketch Palette
+- [ ] ViewCube shape, doc tabs in the app bar, floating command dialogs (Sketch Palette: done)
 - [ ] Timeline: reorder by drag, suppress, groups (7.3)
 - [ ] Sketcher parity (7.5): inference, glyphs, Fusion dimension tool feel (needs captures)
+- [x] Sketch workspace, first parity pass (branch `sf/sketch`): Fusion keys in sketches (L R C D T
+      X O P E, Esc / Esc), on-screen dimension box (type the value, Enter; double-click a
+      dimension to change it), Finish Sketch always works (also with a tool running), Look At on
+      entry + camera restored, SKETCH PALETTE (grid, snap, slice, profile, points, dimensions,
+      constraints, projected geometry, construction, Look At), light-blue profile shading,
+      Circumscribed/Inscribed Polygon without the sides pop-up, Offset/Trim like Fusion, Project /
+      Include 3D Geometry, Mirror / patterns / scale / move starting with nothing selected,
+      Rectangular Pattern panel, double-click a sketch in browser/timeline to edit it.
+      7 scenarios (`sketch_*.py`), 3 golden models (`sketch_*`), core patch #7 (trim)
 
 ## Known issues / findings
 
@@ -175,6 +184,38 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   to its edge (Fusion lets you click the face).
 - Fusion semantics still unknown (need parity capture before adding golden models): taper
   angle sign, chamfer two-distance side assignment, "intersect" and "new body" behavior.
+- **Sketch mode architecture (sf/sketch)**: `sketch_mode.py` starts a `SketchSession` whenever a
+  sketch goes into edit (Gui document observer) and ends it on reset: event filter on the 3D
+  view (Esc, Enter, dimension double-click, ShortcutOverride so typed digits never reach view
+  shortcuts), dimension box, profile shading (`sketch_regions.py`, generalFuse of the curves),
+  palette (`sketch_palette.py`), polygon preview. Sketcher preferences it needs (Esc does not
+  leave the sketch, no datum pop-up, Fusion colours, collapsed panel widgets) are set on enable
+  and restored on disable. Settled work runs off the document's commit/abort/undo/redo signals.
+- **Trap: FreeCAD notification balloons are not in the Report view.** Sketcher errors (malformed
+  constraints, solver failures) go to `Gui::NotificationArea`; scenarios watch it
+  (`sketch_input.watched`) and fail on any new message.
+- **Trap: Sketcher creates constraint actions with single-letter shortcuts (C, T, E, P...) the
+  first time a sketch opens**, after SciForge parked the clashing keys, so C/T/E/P went dead in
+  sketches. `sketch_mode.repark_keys()` re-parks them on every sketch session.
+- Ctrl+Z / Ctrl+Y did nothing (FreeCAD only honours shortcuts of visible menus and the menu bar
+  is hidden): `config.SHORTCUTS` now binds Std_Undo/Std_Redo. Other Ctrl shortcuts (Ctrl+S,
+  Ctrl+O...) are probably dead for the same reason: not checked yet.
+- **Upstream bug (core patch #7):** trimming a line where it crosses a full circle at 0 degrees
+  makes a Coincident with the circle's non-existent start point: malformed constraint, invalid
+  sketch, error balloons. Python repair `sketch_fix.py` runs after every sketch commit.
+- FreeCAD's polygon constraints (equal + tangent) can lean into a rhombus for even n; SciForge's
+  polygons use equal sides + corners on a construction circle (`sketch_polygon.py`), checked
+  for n = 3..12 at many rotations, 4 DoF like Fusion.
+- FreeCAD topological naming: a sketch's projected *vertical* edge of a part loses its reference
+  after the base sketch's dimension changes (horizontal/top-face edges survive). Not fixable in
+  SciForge Python; known gap.
+- `addRectangularArray(ids, vec, clone, rows, cols, constr, perpscale)`: rows go along `vec`,
+  columns along `vec` turned -90 degrees and scaled, so a +Y second direction needs a negative
+  `perpscale`.
+- QTest quirks: `mouseDClick` on item views does not emit `itemDoubleClicked` (send press,
+  release, DblClick, release by hand: `sketch_input.double_click_widget`); clicks in fast
+  succession on the 3D view merge (one click per scenario step); a Coin search path dies with
+  its action (keep node + parent, never the path: SIGSEGV otherwise).
 
 ## Questions waiting for Luca
 
@@ -222,6 +263,17 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `find_body` (reopened files), deferred selection handling, copyable Diagnostics with the last
   200 SciForge messages. New GUI journey test (25 checks, real clicks/drags) + 2 golden models
   (face extrude join/cut). Tests: 77 unit, 45 golden (+3 xfail), 70 smoke, 25 journey.
+
+### 2026-10-10: Sketch workspace parity (branch `sf/sketch`)
+- Luca: "sketching on a shape works until I click finish sketch. I get errors EVERYWHERE."
+  Rebuilt the sketch environment Fusion-style (see Phase 1 checkbox and Known issues):
+  new `sketch_mode.py`, `sketch_palette.py`, `sketch_tools_ui.py`, `sketch_pick_ui.py`,
+  `sketch_regions.py`, `sketch_polygon.py`, `sketch_fix.py`; core patch #7 (trim, not compiled).
+- Every SKETCH command is now swept from its menu with curves present (`sketch_sweep.py`): no
+  pop-up, no notification, no error, Esc keeps the sketch. 7 sketch scenarios with real input.
+- Gaps left: Include 3D Geometry is a flat projection, greyed tools (Edge Polygon, 3-Point
+  Rectangle, 2-Point/Tangent circles, Tangent Arc, Midpoint Line, Overall/Center Point Slot,
+  Conic, Text, Project to Surface, 3D Sketch), M in a sketch still runs the part Move.
 
 ## Next steps (in order)
 

@@ -74,6 +74,19 @@ def _set_sketch_mode(on):
         _state["ribbon"].set_sketch_mode(on)
 
 
+def _sketch_mode_on():
+    """Fusion's sketch environment (Esc, dimension box, palette, profiles, colours)."""
+    from . import sketch_mode
+
+    sketch_mode.enable()
+
+
+def _sketch_mode_off():
+    from . import sketch_mode
+
+    sketch_mode.disable()
+
+
 def enable():
     _connect()
     if not config.USE_RIBBON:  # legacy mode: plain toolbars, no theme
@@ -83,6 +96,7 @@ def enable():
             _state["on"] = True
             shortcuts.apply()
             timeline_ui.show()
+            _safely(_sketch_mode_on)
         return
     if _state["on"]:
         _hide_toolbars_soon()
@@ -101,6 +115,7 @@ def enable():
     timeline_ui.show()
     navbar_ui.show()
     _safely(lambda: __import__("sciforge.marking_menu").marking_menu.enable())
+    _safely(_sketch_mode_on)
     log("interface on")
 
 
@@ -110,6 +125,7 @@ def disable():
     from . import navbar_ui, shortcuts, theme, timeline_ui
 
     _state["on"] = False
+    _safely(_sketch_mode_off)
     if not config.USE_RIBBON:
         shortcuts.restore()
         timeline_ui.hide()
