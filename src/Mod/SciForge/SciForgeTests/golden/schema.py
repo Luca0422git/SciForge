@@ -346,3 +346,102 @@ def validate(model):
 
     _check_expect(where + ".expect", model["expect"])
     return model
+
+
+# -- Fusion Revolve (sciforge/revolve.py, the Revolve dialog's code; golden/revolve_ops.py) ---
+STEP_KEYS["sf_revolve"] = (
+    {"id", "axis"},
+    {
+        "profile",
+        "regions",
+        "face",
+        "type",
+        "direction",
+        "angle",
+        "angle2",
+        "operation",
+        "comment",
+    },
+)
+STEP_KEYS["sf_revolve_edit"] = ({"target", "set"}, {"comment"})
+REVOLVE_TYPES = ("angle", "full")
+REVOLVE_DIRECTIONS = ("one_side", "two_sides", "symmetric")
+REVOLVE_OPERATIONS = ("auto",) + OPERATIONS
+REVOLVE_OPTIONS = ("type", "direction", "angle", "angle2", "operation")
+
+
+def _check_revolve_options(here, options):
+    if options.get("type", "angle") not in REVOLVE_TYPES:
+        _fail(here, "'type' must be one of %s" % (REVOLVE_TYPES,))
+    if options.get("direction", "one_side") not in REVOLVE_DIRECTIONS:
+        _fail(here, "'direction' must be one of %s" % (REVOLVE_DIRECTIONS,))
+    if options.get("operation", "auto") not in REVOLVE_OPERATIONS:
+        _fail(here, "'operation' must be one of %s" % (REVOLVE_OPERATIONS,))
+    for key in ("angle", "angle2"):
+        if key in options:
+            _check_number(here + "." + key, options[key])
+            if abs(options[key]) > 360:
+                _fail(here, "'%s' must be between -360 and 360 degrees" % key)
+
+
+def _check_revolve_axis(here, axis, seen):
+    if isinstance(axis, str):
+        if axis not in AXES:
+            _fail(here, "'axis' must be X, Y, Z or an object (see golden/README.md)")
+        return
+    if not isinstance(axis, dict):
+        _fail(here, "'axis' must be X, Y, Z or an object")
+    if "edge" in axis:
+        if set(axis) != {"edge"}:
+            _fail(here, "an edge axis is {'edge': selector}")
+        return
+    if seen.get(axis.get("sketch")) != "sketch":
+        _fail(here, "the axis 'sketch' must name an earlier sketch step")
+    kinds = [k for k in ("at", "construction", "axis") if k in axis]
+    if len(kinds) != 1 or set(axis) != {"sketch", kinds[0]}:
+        _fail(here, "a sketch axis needs exactly one of 'at', 'construction', 'axis'")
+    if "axis" in axis and axis["axis"] not in ("H", "V"):
+        _fail(here, "a sketch's own axis is 'H' or 'V'")
+    if "at" in axis and (not isinstance(axis["at"], list) or len(axis["at"]) != 2):
+        _fail(here, "'at' is an [x, y] point in sketch coordinates")
+    if "construction" in axis:
+        line = axis["construction"]
+        if not isinstance(line, list) or len(line) != 2 or any(len(p) != 2 for p in line):
+            _fail(here, "'construction' is [[x1, y1], [x2, y2]] in sketch coordinates")
+
+
+def _check_revolve_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_revolve":
+            if ("profile" in step) == ("face" in step):
+                _fail(here, "sf_revolve needs exactly one of 'profile' (a sketch) or 'face'")
+            if "profile" in step and seen.get(step["profile"]) != "sketch":
+                _fail(here, "'profile' must name an earlier sketch step, got %r" % step["profile"])
+            if "regions" in step and "profile" not in step:
+                _fail(here, "'regions' go with 'profile'")
+            _check_revolve_axis(here, step["axis"], seen)
+            _check_revolve_options(here, step)
+        if op == "sf_revolve_edit":
+            if seen.get(step["target"]) != "sf_revolve":
+                _fail(here, "'target' must name an earlier sf_revolve step")
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object of revolve options")
+            unknown = set(step["set"]) - set(REVOLVE_OPTIONS)
+            if unknown:
+                _fail(here, "sf_revolve_edit cannot set %s" % sorted(unknown))
+            _check_revolve_options(here, step["set"])
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_revolve = validate
+
+
+def validate(model):  # noqa: F811  (adds the revolve checks to the checks above)
+    _validate_before_revolve(model)
+    _check_revolve_steps(model)
+    return model

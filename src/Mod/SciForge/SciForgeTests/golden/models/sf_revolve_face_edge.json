@@ -1,0 +1,84 @@
+{
+  "id": "sf_revolve_face_edge",
+  "title": "Revolve dialog: a side face turned 90 degrees out about its top edge",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "face-profile",
+    "edge-axis"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "face": {
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "count": 1
+      },
+      "axis": {
+        "edge": {
+          "type": "line",
+          "parallel": [
+            0,
+            1,
+            0
+          ],
+          "at": [
+            {
+              "axis": "x",
+              "value": 40
+            },
+            {
+              "axis": "z",
+              "value": 10
+            }
+          ],
+          "count": 1
+        }
+      },
+      "angle": -90
+    }
+  ],
+  "expect": {
+    "volume": 14356.194490192345,
+    "area": 4428.318530717959,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "The x = 40 face turns -90 degrees about the edge x = 40, z = 10 (away from the box): a quarter round r10, length 30, is added: V = 12000 + pi*100/4*30. Faces after refine: top (40x30 + 10x30 strip), bottom, front and back (rectangle + quarter disc), x = 0, the quarter round (tangent to the bottom). A = top 1200 + 300, bottom 1200, front/back 2(400 + 25 pi), x=0 300, round 2 pi 10/4 * 30."
+  }
+}

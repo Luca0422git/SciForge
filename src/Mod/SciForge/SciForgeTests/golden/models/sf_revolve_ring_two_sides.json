@@ -1,0 +1,52 @@
+{
+  "id": "sf_revolve_ring_two_sides",
+  "title": "Revolve dialog: ring section, Two Sides 90 and 30 degrees",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "two-sides"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            0,
+            20,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z",
+      "direction": "two_sides",
+      "angle": 90,
+      "angle2": 30
+    }
+  ],
+  "expect": {
+    "volume": 1570.7963267948967,
+    "area": 1042.477796076938,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      0,
+      -10,
+      0,
+      20,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "Annulus r10..20, z 0..5, from -30 to +90 degrees about +Z (side one turns right-handed, towards +Y; side two the other way): V = pi(20^2-10^2)*5*120/360 = 500 pi; A = 2 end rectangles 10x5 + 120/360 of (outer, inner, top, bottom) = 100 + (200 pi + 100 pi + 600 pi)/3; bbox x 0..20 (at 90 deg x = 0), y -20 sin 30 .. 20."
+  }
+}

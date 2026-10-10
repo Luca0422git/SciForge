@@ -1,0 +1,86 @@
+{
+  "id": "sf_revolve_new_body_construction",
+  "title": "Revolve dialog: ring about a construction line, New Body next to a box",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "new-body",
+    "construction-line"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            60,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s2",
+      "axis": {
+        "sketch": "s2",
+        "construction": [
+          [
+            70,
+            -5
+          ],
+          [
+            70,
+            15
+          ]
+        ]
+      },
+      "type": "full",
+      "operation": "new_body"
+    }
+  ],
+  "expect": {
+    "volume": 4712.38898038469,
+    "area": 2827.4333882308138,
+    "faces": 4,
+    "solids": 1,
+    "bbox": [
+      50,
+      -20,
+      0,
+      90,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "The new body is measured (Fusion makes it the active one): a washer about the vertical construction line x = 70: r 10..20, h 5: V = 1500 pi; A = 2*300 pi + 200 pi + 100 pi."
+  }
+}

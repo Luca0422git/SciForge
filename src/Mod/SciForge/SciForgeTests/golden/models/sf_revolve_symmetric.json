@@ -1,0 +1,50 @@
+{
+  "id": "sf_revolve_symmetric",
+  "title": "Revolve dialog: ring section, Symmetric 45 degrees each way",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "symmetric"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            0,
+            20,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z",
+      "direction": "symmetric",
+      "angle": 45
+    }
+  ],
+  "expect": {
+    "volume": 1178.0972450961724,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      7.0710678118654755,
+      -14.14213562373095,
+      0,
+      20,
+      14.14213562373095,
+      5
+    ],
+    "source": "analytic",
+    "note": "Fusion's symmetric angle is per side: -45..45 degrees = a quarter of the ring: V = pi(400-100)*5/4 = 375 pi; bbox x from 10 cos 45 to 20, y +-20 sin 45."
+  }
+}

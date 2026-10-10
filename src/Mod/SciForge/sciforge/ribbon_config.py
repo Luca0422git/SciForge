@@ -52,7 +52,6 @@ SOLID_CREATE = group(
             note="Join, cut or new body in one dialog; drag into the part to cut.",
         ),
         item("Revolve", ("SciForge_Revolve", "PartDesign_Revolution"), "revolve"),
-        item("Revolve (Cut)", "PartDesign_Groove", "revolve", note=INTERIM),
         item("Sweep", ("SciForge_Sweep", "PartDesign_AdditivePipe"), "sweep"),
         item("Loft", ("SciForge_Loft", "PartDesign_AdditiveLoft"), "loft"),
         item("Rib", None, "rib"),
