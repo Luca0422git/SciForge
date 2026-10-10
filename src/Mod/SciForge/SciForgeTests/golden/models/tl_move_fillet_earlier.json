@@ -1,0 +1,97 @@
+{
+  "id": "tl_move_fillet_earlier",
+  "title": "Drag the fillet before the boss sketch in the timeline",
+  "tags": [
+    "timeline",
+    "reorder"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 40
+          },
+          {
+            "axis": "y",
+            "value": 0
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "move",
+      "target": "f1",
+      "before": "s2"
+    }
+  ],
+  "expect": {
+    "volume": 12384.115008234621,
+    "faces": 9,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "The round is on a box edge the boss does not touch, so the order does not change the part: 40*30*10 - 2^2*(1-pi/4)*10 + pi*5^2*5"
+  }
+}

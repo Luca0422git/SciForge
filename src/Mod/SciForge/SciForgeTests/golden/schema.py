@@ -79,6 +79,12 @@ STEP_KEYS = {
         {"circumscribed", "diameter", "name", "comment"},
     ),
     "sketch_trim": ({"sketch", "points"}, {"comment"}),
+    # Timeline (sciforge/timeline_ops.py): right-click a step / drag it / drag the marker.
+    "suppress": ({"target"}, {"comment"}),
+    "unsuppress": ({"target"}, {"comment"}),
+    "delete": ({"target"}, {"comment"}),
+    "move": ({"target"}, {"before", "after", "comment"}),
+    "roll": (set(), {"after", "end", "comment"}),
 }
 
 GEOMETRY_KINDS = ("rect", "center_rect", "circle", "polyline", "polygon", "slot")
@@ -319,6 +325,16 @@ def validate(model):
                 _fail(here, "'sides' must be a whole number >= 3")
             if "diameter" in step:
                 _check_number(here + ".diameter", step["diameter"], positive=True)
+        if op in ("suppress", "unsuppress", "delete", "move") and step["target"] not in seen:
+            _fail(here, "'target' names unknown step %r" % step["target"])
+        if op == "move":
+            refs = [k for k in ("before", "after") if k in step]
+            if len(refs) != 1 or step[refs[0]] not in seen:
+                _fail(here, "move needs one of 'before'/'after' naming an earlier step")
+        if op == "roll" and ("after" in step) == bool(step.get("end")):
+            _fail(here, "roll needs 'after' (a step id) or \"end\": true")
+        if op == "roll" and "after" in step and step["after"] not in seen:
+            _fail(here, "'after' names unknown step %r" % step["after"])
 
     _check_expect(where + ".expect", model["expect"])
     return model

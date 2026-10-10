@@ -1,0 +1,105 @@
+{
+  "id": "tl_delete_hole",
+  "title": "Box, hole, boss; delete the hole from the timeline",
+  "tags": [
+    "timeline",
+    "delete"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            30,
+            15,
+            5
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            5,
+            5,
+            15,
+            15
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e3",
+      "profile": "s3",
+      "distance": 5
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11714.601836602551,
+        "source": "analytic",
+        "note": "40*30*10 - pi*5^2*10 + 10*10*5"
+      }
+    },
+    {
+      "op": "delete",
+      "target": "e2"
+    }
+  ],
+  "expect": {
+    "volume": 12500,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "Hole gone, the boss after it still builds: 40*30*10 + 10*10*5; box 6 faces + boss 4 sides + boss top"
+  }
+}
