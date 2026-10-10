@@ -465,6 +465,26 @@ def _set_tips(doc, tips):
         current = getattr(body, "Tip", None)
         if current is not tip:
             body.Tip = tip
+            _show_only_tip(body, tip)
+
+
+def _show_only_tip(body, tip):
+    """A PartDesign body is drawn through its Tip, but changing the Tip from Python does not
+    hide the features after it or show the new Tip: after a marker roll the 3D view showed
+    the wrong step, and a click on the part could land on a face of a rolled-back feature
+    (a sketch attached there then failed). Show exactly the new Tip, like FreeCAD's own
+    "Set tip" command does."""
+    try:
+        if not App.GuiUp:
+            return
+        for obj in body.Group:
+            if not obj.isDerivedFrom("PartDesign::Feature") or obj.ViewObject is None:
+                continue
+            want = obj is tip
+            if obj.ViewObject.Visibility != want:
+                obj.ViewObject.Visibility = want
+    except Exception:
+        pass
 
 
 def _add_prop(obj, kind, name, doc_text=""):
