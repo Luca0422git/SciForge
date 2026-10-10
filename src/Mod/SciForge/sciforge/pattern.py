@@ -1,0 +1,1490 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""Rectangular Pattern, Circular Pattern, Pattern on Path and Mirror: the document side
+(no Qt), shared by the dialogs (pattern_ui.py, mirror_ui.py) and the golden models.
+
+What gets built, by Fusion's Pattern Type:
+
+  Features  PartDesign::LinearPattern / PolarPattern / Mirrored, the features FreeCAD's
+            own commands make (Direction 2 is LinearPattern's second direction). Features
+            FreeCAD cannot repeat (fillets, chamfers, shells, Press Pull...) and Pattern on
+            Path use SciForge's PatternFeature below.
+  Faces     PatternFeature: the picked faces are closed into a solid (the hole or boss
+            they bound), which is copied and joined or cut at every instance.
+  Bodies    the same FreeCAD features in "Whole shape" mode: the body's shape is copied
+            (copies that touch it join it; the others stay separate solids of the body).
+
+Spacing rules (Quantity, Distance, Extent/Spacing, One Direction/Symmetric, Full/Angle/
+Symmetric) live in pattern_core.py. Every feature carries SciForgeType (the timeline shows
+it as Fusion's step and opens SciForge's dialog on it) and a hidden JSON property with the
+dialog choices FreeCAD has no property for.
+
+FreeCAD 1.1.4 stores LinearPattern.Spacings2 = [0.0] by default, which stacks a second row
+on the first (core patch #4 fixes the default in C++). SciForge always writes both spacing
+lists itself, so two-direction patterns are right on stock FreeCAD and in old files too.
+"""
+import json
+import math
+
+import FreeCAD as App
+import Part
+
+from . import pattern_core as core
+from .pattern_core import PatternError
+
+KINDS = ("rectangular", "circular", "path", "mirror")
+TITLES = {
+    "rectangular": "Rectangular Pattern",
+    "circular": "Circular Pattern",
+    "path": "Pattern on Path",
+    "mirror": "Mirror",
+}
+NATIVE = {
+    "rectangular": "PartDesign::LinearPattern",
+    "circular": "PartDesign::PolarPattern",
+    "mirror": "PartDesign::Mirrored",
+}
+KIND_OF_TYPE = {type_id: kind for kind, type_id in NATIVE.items()}
+SCIFORGE_TYPE = {
+    "rectangular": "RectangularPattern",
+    "circular": "CircularPattern",
+    "path": "PathPattern",
+    "mirror": "Mirror",
+}
+KIND_OF_SCIFORGE = {value: kind for kind, value in SCIFORGE_TYPE.items()}
+ENGINE = "PartDesign::FeaturePython"
+META = "SciForgePattern"
+LINE_TYPES = ("App::Line", "PartDesign::Line", "Part::DatumLine")
+PLANE_TYPES = ("App::Plane", "PartDesign::Plane", "Part::DatumPlane")
+SKETCH = "Sketcher::SketchObject"
+SUBTRACTIVE = (
+    "PartDesign::Pocket",
+    "PartDesign::Groove",
+    "PartDesign::Hole",
+)
+TOL = 1e-7
+
+DEFAULTS = {
+    "pattern_type": "features",  # "faces", "bodies" or "features"
+    "objects": [],  # [(feature, "")], [(feature, "FaceN")] or [(body, "")]
+    # rectangular (and the shared fields of Pattern on Path)
+    "direction": None,
+    "quantity": 2,
+    "distance": 20.0,
+    "direction_type": "one",
+    "direction2": None,
+    "quantity2": 1,
+    "distance2": 20.0,
+    "direction_type2": "one",
+    "distribution": "extent",
+    # circular
+    "axis": None,
+    "circular_type": "full",
+    "angle": 360.0,
+    # mirror
+    "plane": None,
+    # pattern on path
+    "path": None,
+    "orientation": "identical",  # or "path": copies turn with the path
+    "expressions": {},  # value field key -> formula typed in the dialog
+}
+
+
+class NeedsPick(PatternError):
+    """A selection the pattern cannot do without is still empty: the dialog waits for it
+    (Fusion shows no error for that, the selection box is just still blue)."""
+
+
+def with_defaults(options):
+    merged = dict(DEFAULTS)
+    merged.update(options or {})
+    merged["expressions"] = dict(merged.get("expressions") or {})
+    merged["objects"] = list(merged.get("objects") or [])
+    return merged
+
+
+# -- objects in the document ---------------------------------------------------------------
+def owner_body(obj):
+    if obj is None:
+        return None
+    if obj.TypeId == "PartDesign::Body":
+        return obj
+    try:
+        parent = obj.getParentGeoFeatureGroup()
+    except Exception:
+        return None
+    if parent is not None and parent.TypeId == "PartDesign::Body":
+        return parent
+    return None
+
+
+def alive(obj):
+    if obj is None:
+        return False
+    try:
+        if hasattr(obj, "isAttachedToDocument"):
+            return obj.isAttachedToDocument()
+        return bool(obj.Name)
+    except Exception:
+        return False
+
+
+def kind_of(obj):
+    """'rectangular' / 'circular' / 'path' / 'mirror' for a pattern feature, else None."""
+    if obj is None:
+        return None
+    kind = KIND_OF_SCIFORGE.get(getattr(obj, "SciForgeType", ""))
+    if kind is not None:
+        return kind
+    return KIND_OF_TYPE.get(obj.TypeId)
+
+
+def is_pattern(obj):
+    return kind_of(obj) is not None
+
+
+def is_engine(obj):
+    return obj is not None and obj.TypeId == ENGINE and kind_of(obj) is not None
+
+
+def is_solid_feature(obj):
+    """A step of a body's history that has a solid (what Features can pattern)."""
+    try:
+        return obj.isDerivedFrom("PartDesign::Feature") and obj.TypeId not in (
+            "PartDesign::Body",
+            "PartDesign::FeatureBase",
+        )
+    except Exception:
+        return False
+
+
+def is_add_sub(obj):
+    try:
+        return obj.isDerivedFrom("PartDesign::FeatureAddSub")
+    except Exception:
+        return False
+
+
+def is_subtractive(obj):
+    if obj.TypeId in SUBTRACTIVE or obj.TypeId.startswith("PartDesign::Subtractive"):
+        return True
+    if getattr(obj, "SciForgeType", "") == "Extrude":
+        return getattr(obj, "Operation", "") == "Cut"
+    return False
+
+
+def _is_dress_up(obj):
+    try:
+        return obj.isDerivedFrom("PartDesign::DressUp")
+    except Exception:
+        return False
+
+
+def natively_patternable(features):
+    """True when FreeCAD's own pattern features can repeat every one of `features`."""
+    return bool(features) and all(is_add_sub(f) for f in features)
+
+
+def body_history(body):
+    """The body's solid steps, in timeline order."""
+    return [o for o in body.Group if is_solid_feature(o)] if body is not None else []
+
+
+def before(body, feature, other):
+    """True if `other` comes before `feature` in the body's timeline."""
+    order = [o.Name for o in body.Group]
+    try:
+        return order.index(other.Name) < order.index(feature.Name)
+    except ValueError:
+        return False
+
+
+# -- references (edges, axes, planes) in body coordinates ----------------------------------
+def _element(obj, sub):
+    try:
+        return obj.Shape.getElement(sub)
+    except Exception:
+        raise PatternError("%s of %s no longer exists. Pick it again." % (sub, obj.Label))
+
+
+def _datum_frame(obj):
+    """(base point, X direction, Z direction) of an origin/datum element, body coordinates."""
+    place = obj.Placement
+    return (
+        App.Vector(place.Base),
+        place.Rotation.multVec(App.Vector(1, 0, 0)),
+        place.Rotation.multVec(App.Vector(0, 0, 1)),
+    )
+
+
+def _line_of_datum(obj):
+    if obj.TypeId == "App::Line":
+        base, x, _z = _datum_frame(obj)
+        return base, x
+    edges = obj.Shape.Edges if not obj.Shape.isNull() else []
+    if edges:
+        edge = edges[0]
+        return edge.valueAt(edge.FirstParameter), _unit(edge.tangentAt(edge.FirstParameter))
+    base, _x, z = _datum_frame(obj)
+    return base, z
+
+
+def _plane_of_datum(obj):
+    if obj.TypeId == "App::Plane":
+        base, _x, z = _datum_frame(obj)
+        return base, z
+    faces = obj.Shape.Faces if not obj.Shape.isNull() else []
+    if faces:
+        face = faces[0]
+        return face.CenterOfMass, _unit(face.normalAt(0, 0))
+    base, _x, z = _datum_frame(obj)
+    return base, z
+
+
+def _unit(vec):
+    vec = App.Vector(vec)
+    if vec.Length < 1e-12:
+        raise PatternError("That reference has no direction.")
+    return vec.normalize()
+
+
+def _is_line(edge):
+    return edge.Curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment")
+
+
+def _is_circle(edge):
+    return edge.Curve.TypeId in ("Part::GeomCircle", "Part::GeomArcOfCircle")
+
+
+ORIGIN_NAMES = {
+    "X_Axis": "X Axis",
+    "Y_Axis": "Y Axis",
+    "Z_Axis": "Z Axis",
+    "XY_Plane": "XY Plane",
+    "XZ_Plane": "XZ Plane",
+    "YZ_Plane": "YZ Plane",
+}
+
+
+def ref_label(ref):
+    """How a picked reference is shown in a selection box (Fusion's origin names)."""
+    if not ref:
+        return ""
+    obj, sub = ref
+    if not alive(obj):
+        return ""
+    role = getattr(obj, "Role", "")
+    if role in ORIGIN_NAMES:
+        return ORIGIN_NAMES[role]
+    if obj.TypeId in LINE_TYPES + PLANE_TYPES:
+        return obj.Label
+    if sub:
+        return "%s of %s" % (sub.rstrip("0123456789") or sub, obj.Label)
+    return obj.Label
+
+
+def direction_of(ref):
+    """(point, unit vector) of a rectangular pattern direction, body coordinates.
+    A straight edge or axis, or the normal of a flat face or plane."""
+    obj, sub = ref
+    if obj.TypeId in LINE_TYPES:
+        return _line_of_datum(obj)
+    if obj.TypeId in PLANE_TYPES:
+        return _plane_of_datum(obj)
+    if not sub:
+        raise PatternError("Pick a straight edge, an axis or a flat face for the direction.")
+    element = _element(obj, sub)
+    if sub.startswith("Edge"):
+        if not _is_line(element):
+            raise PatternError("The direction must be a straight edge. Pick a straight edge.")
+        return element.valueAt(element.FirstParameter), _unit(element.tangentAt(0))
+    if sub.startswith("Face"):
+        if element.Surface.TypeId != "Part::GeomPlane":
+            raise PatternError("Only a flat face gives a direction (its normal).")
+        return element.CenterOfMass, _unit(element.normalAt(0, 0))
+    raise PatternError("Pick a straight edge, an axis or a flat face for the direction.")
+
+
+def axis_of(ref):
+    """(point, unit vector) of a circular pattern axis, body coordinates: an axis, a
+    straight edge, a circular edge (its centre line) or a round face (its axis)."""
+    obj, sub = ref
+    if obj.TypeId in LINE_TYPES:
+        return _line_of_datum(obj)
+    if not sub:
+        raise PatternError("Pick an axis, a straight or round edge, or a round face.")
+    element = _element(obj, sub)
+    if sub.startswith("Edge"):
+        if _is_line(element):
+            return element.valueAt(element.FirstParameter), _unit(element.tangentAt(0))
+        if _is_circle(element):
+            return App.Vector(element.Curve.Center), _unit(element.Curve.Axis)
+        raise PatternError("That edge has no axis. Pick a straight or round edge.")
+    if sub.startswith("Face"):
+        surface = element.Surface
+        if surface.TypeId in ("Part::GeomCylinder", "Part::GeomCone"):
+            return App.Vector(surface.Center), _unit(surface.Axis)
+        raise PatternError("That face has no axis. Pick a round face (a hole or a shaft).")
+    raise PatternError("Pick an axis, a straight or round edge, or a round face.")
+
+
+def plane_of(ref):
+    """(point, unit normal) of a mirror plane, body coordinates."""
+    obj, sub = ref
+    if obj.TypeId in PLANE_TYPES:
+        return _plane_of_datum(obj)
+    if sub.startswith("Face"):
+        element = _element(obj, sub)
+        if element.Surface.TypeId != "Part::GeomPlane":
+            raise PatternError("The mirror plane must be flat. Pick a flat face or a plane.")
+        return element.CenterOfMass, _unit(element.normalAt(0, 0))
+    raise PatternError("Pick a plane or a flat face to mirror across.")
+
+
+def native_axis_ref(ref):
+    """FreeCAD's PolarPattern takes an axis or an edge, not a face: a round face is
+    replaced by one of its circular edges (same axis)."""
+    obj, sub = ref
+    if not sub.startswith("Face"):
+        return ref
+    face = _element(obj, sub)
+    point, axis = axis_of(ref)
+    for i, edge in enumerate(obj.Shape.Edges, start=1):
+        if not _is_circle(edge):
+            continue
+        if not any(edge.isSame(e) for e in face.Edges):
+            continue
+        if abs(abs(_unit(edge.Curve.Axis).dot(axis)) - 1.0) > 1e-9:
+            continue
+        offset = App.Vector(edge.Curve.Center) - point
+        if (offset - axis * offset.dot(axis)).Length < 1e-6:
+            return (obj, "Edge%d" % i)
+    raise PatternError("This round face has no circular edge to use as the axis. Pick an axis.")
+
+
+def to_global(body, point=None, vector=None):
+    place = body.getGlobalPlacement() if body is not None else App.Placement()
+    out = []
+    if point is not None:
+        out.append(place.multVec(point))
+    if vector is not None:
+        out.append(place.Rotation.multVec(vector))
+    return out[0] if len(out) == 1 else tuple(out)
+
+
+# -- what is patterned -----------------------------------------------------------------------
+def _features(options):
+    return [obj for obj, sub in options["objects"] if not sub and is_solid_feature(obj)]
+
+
+def _faces(options):
+    return [(obj, sub) for obj, sub in options["objects"] if sub.startswith("Face")]
+
+
+def _bodies(options):
+    return [obj for obj, sub in options["objects"] if obj.TypeId == "PartDesign::Body"]
+
+
+def target_body(options):
+    for obj, _sub in options.get("objects") or []:
+        body = owner_body(obj)
+        if body is not None:
+            return body
+    return None
+
+
+def implementation(kind, options):
+    """'native' (FreeCAD's pattern features) or 'engine' (SciForge's PatternFeature)."""
+    if kind == "path":
+        return "engine"
+    kind_type = options["pattern_type"]
+    if kind_type == "faces":
+        return "engine"
+    if kind_type == "features" and not natively_patternable(_features(options)):
+        return "engine"
+    return "native"
+
+
+def check(kind, options):
+    """Raise NeedsPick / PatternError when the pattern cannot be built yet."""
+    ptype = options["pattern_type"]
+    if ptype == "features":
+        if not _features(options):
+            raise NeedsPick("Select the features to pattern: click them in the timeline.")
+    elif ptype == "faces":
+        if not _faces(options):
+            raise NeedsPick("Select the faces to pattern (all faces of a hole or a boss).")
+    elif ptype == "bodies":
+        bodies = _bodies(options)
+        if not bodies:
+            raise NeedsPick("Select the body to pattern.")
+        if len(bodies) > 1:
+            raise PatternError("Select one body: each body gets its own pattern.")
+        if bodies[0].Tip is None or bodies[0].Shape.isNull():
+            raise PatternError("%s has no solid to copy yet." % bodies[0].Label)
+    else:
+        raise PatternError("Unknown pattern type %r." % ptype)
+    if kind == "rectangular":
+        if options["direction"] is None:
+            raise NeedsPick("Select Direction 1: an edge, an axis or a flat face.")
+        _check_direction(options, "")
+        if options["direction2"] is not None:
+            _check_direction(options, "2")
+    elif kind == "circular":
+        if options["axis"] is None:
+            raise NeedsPick("Select the axis: an axis, an edge or a round face.")
+        axis_of(options["axis"])
+        if int(options["quantity"]) < 1:
+            raise PatternError("The quantity must be at least 1.")
+        if options["circular_type"] != "full":
+            angle = float(options["angle"])
+            if abs(angle) < 1e-9:
+                raise PatternError("The total angle must not be 0.")
+            if abs(angle) > 360.0 + 1e-9:
+                raise PatternError("The total angle can be at most 360 deg.")
+    elif kind == "mirror":
+        if options["plane"] is None:
+            raise NeedsPick("Select the mirror plane: a plane or a flat face.")
+        plane_of(options["plane"])
+    elif kind == "path":
+        if options["path"] is None:
+            raise NeedsPick("Select the path: an edge or a sketch curve.")
+        path_edges(options["path"])
+        if int(options["quantity"]) < 1:
+            raise PatternError("The quantity must be at least 1.")
+        if int(options["quantity"]) > 1 and abs(float(options["distance"])) < 1e-9:
+            raise PatternError("The distance must not be 0.")
+    else:
+        raise PatternError("Unknown pattern %r." % kind)
+
+
+def _check_direction(options, suffix):
+    direction_of(options["direction" + suffix])
+    quantity = int(options["quantity" + suffix])
+    if quantity < 1:
+        raise PatternError("The quantity must be at least 1.")
+    if quantity > 1 and abs(float(options["distance" + suffix])) < 1e-9:
+        raise PatternError("The distance must not be 0.")
+
+
+# -- building --------------------------------------------------------------------------------
+def build(kind, options, feature=None, name=None):
+    """Create the pattern, or update `feature` with new options. Returns the feature (a new
+    object when the change needs the other kind of feature: FreeCAD's or SciForge's)."""
+    options = with_defaults(options)
+    check(kind, options)
+    impl = implementation(kind, options)
+    body = target_body(options)
+    if body is None:
+        raise PatternError("The picked objects are not in a body.")
+    wanted = NATIVE[kind] if impl == "native" else ENGINE
+    if feature is not None and alive(feature):
+        same = feature.TypeId == wanted and kind_of(feature) == kind
+        if same and owner_body(feature) is body:
+            _update(feature, kind, options)
+            return feature
+    new = _create(body, kind, wanted, name or TITLES[kind].replace(" ", ""), feature)
+    try:
+        _update(new, kind, options)
+    except Exception:
+        _delete(new)
+        raise
+    if feature is not None and alive(feature):
+        label = feature.Label
+        was_tip = owner_body(feature) is not None and owner_body(feature).Tip is feature
+        _delete(feature)
+        new.Label = label
+        if was_tip:
+            body.Tip = new
+    return new
+
+
+def _create(body, kind, type_id, name, replacing=None):
+    doc = body.Document
+    if replacing is not None and alive(replacing) and owner_body(replacing) is body:
+        obj = doc.addObject(type_id, name)
+        body.insertObject(obj, replacing, False)
+    else:
+        obj = body.newObject(type_id, name)
+        body.Tip = obj  # newObject() does not move the Tip for pattern features
+    if type_id == ENGINE:
+        PatternFeature(obj)
+        _attach_view_provider(obj)
+    _mark(obj, kind)
+    if hasattr(obj, "Refine"):
+        obj.Refine = True  # Fusion never leaves seam faces
+    return obj
+
+
+def _mark(obj, kind):
+    if "SciForgeType" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyString", "SciForgeType", "Base", "", 4)  # hidden
+    obj.SciForgeType = SCIFORGE_TYPE[kind]
+    if META not in obj.PropertiesList:
+        obj.addProperty("App::PropertyString", META, "Base", "", 4)
+
+
+def _attach_view_provider(obj):
+    if not App.GuiUp:
+        return
+    try:
+        from .pattern_ui import ViewProviderPattern
+
+        ViewProviderPattern(obj.ViewObject)
+    except Exception:
+        pass
+
+
+def _delete(obj):
+    doc = obj.Document
+    body = owner_body(obj)
+    try:
+        if body is not None:
+            body.removeObject(obj)
+    except Exception:
+        pass
+    try:
+        doc.removeObject(obj.Name)
+    except Exception:
+        pass
+
+
+def show_tip(body):
+    tip = body.Tip if body is not None else None
+    if tip is None:
+        return
+    try:
+        if App.GuiUp and tip.ViewObject is not None:
+            tip.ViewObject.Visibility = True
+        else:
+            tip.Visibility = True
+    except Exception:
+        pass
+
+
+def remove(feature):
+    """Take a pattern out again (a dialog's preview that is cancelled or dropped)."""
+    if not alive(feature):
+        return
+    body = owner_body(feature)
+    was_tip = body is not None and body.Tip is feature
+    _delete(feature)
+    if was_tip:
+        show_tip(body)
+
+
+def load_meta(obj):
+    try:
+        return json.loads(getattr(obj, META, "") or "{}")
+    except Exception:
+        return {}
+
+
+def _save_meta(obj, meta):
+    if META not in obj.PropertiesList:
+        obj.addProperty("App::PropertyString", META, "Base", "", 4)
+    text = json.dumps(meta, sort_keys=True)
+    if getattr(obj, META) != text:
+        setattr(obj, META, text)
+
+
+def _link(ref):
+    obj, sub = ref
+    return (obj, [sub])
+
+
+def _set(obj, prop, value):
+    """Set a property only when it changes (no needless recompute of what follows)."""
+    current = getattr(obj, prop)
+    if hasattr(current, "Value"):
+        if abs(current.Value - float(value)) < 1e-12:
+            return
+    elif current == value:
+        return
+    setattr(obj, prop, value)
+
+
+def _set_link(obj, prop, ref):
+    value = _link(ref) if ref is not None else None
+    current = getattr(obj, prop)
+    if value is None:
+        if current is not None:
+            setattr(obj, prop, None)
+        return
+    if current is None or current[0] is not value[0] or list(current[1]) != value[1]:
+        setattr(obj, prop, value)
+
+
+def _update(obj, kind, options):
+    if obj.TypeId == ENGINE:
+        _update_engine(obj, kind, options)
+    else:
+        _update_native(obj, kind, options)
+    meta = {
+        "v": 1,
+        "kind": kind,
+        "pattern_type": options["pattern_type"],
+        "distribution": options["distribution"],
+        "direction_type": options["direction_type"],
+        "direction_type2": options["direction_type2"],
+        "circular_type": options["circular_type"],
+        "quantity": int(options["quantity"]),
+        "quantity2": int(options["quantity2"]),
+        "orientation": options["orientation"],
+        "expressions": {k: v for k, v in options["expressions"].items() if v},
+    }
+    _save_meta(obj, meta)
+
+
+# -- FreeCAD's pattern features ------------------------------------------------------------------
+def _update_native(obj, kind, options):
+    ptype = options["pattern_type"]
+    if ptype == "bodies":
+        _set(obj, "TransformMode", "Whole shape")
+        if list(obj.Originals):
+            obj.Originals = []
+        body = _bodies(options)[0]
+        if owner_body(obj) is not body:
+            raise PatternError("A body pattern must live in the body it copies.")
+    else:
+        _set(obj, "TransformMode", "Features")
+        wanted = _features(options)
+        if [o.Name for o in obj.Originals] != [o.Name for o in wanted]:
+            obj.Originals = wanted
+    if kind == "rectangular":
+        _native_direction(obj, options, "")
+        if options["direction2"] is not None:
+            _native_direction(obj, options, "2")
+        else:
+            _set_link(obj, "Direction2", None)
+            _set(obj, "Occurrences2", 1)
+            _set(obj, "Mode2", "Spacing")
+            _set_list(obj, "Spacings2", [])
+            _clear_expressions(obj, ("Length2", "Offset2", "Spacings2"))
+    elif kind == "circular":
+        _native_circular(obj, options)
+    elif kind == "mirror":
+        _set_link(obj, "MirrorPlane", options["plane"])
+
+
+def _set_list(obj, prop, values):
+    values = [float(v) for v in values]
+    current = list(getattr(obj, prop))
+    if len(current) != len(values) or any(abs(a - b) > 1e-12 for a, b in zip(current, values)):
+        setattr(obj, prop, values)
+
+
+def _clear_expressions(obj, props):
+    engine = dict(obj.ExpressionEngine)
+    for prop in props:
+        if prop in engine:
+            obj.setExpression(prop, None)
+
+
+def _formula(options, key, doc):
+    """The formula typed for a value field, in FreeCAD's expression syntax ('' if none)."""
+    from . import parameters, parameters_core
+
+    text = (options["expressions"].get(key) or "").strip()
+    if not text:
+        return ""
+    return parameters_core.to_freecad(text, parameters.user_names(doc))
+
+
+def _expr(obj, prop, expr):
+    engine = dict(obj.ExpressionEngine)
+    if expr:
+        if engine.get(prop) != expr:
+            obj.setExpression(prop, expr)
+    elif prop in engine:
+        obj.setExpression(prop, None)
+
+
+def _symmetric_list_expression(quantity, offset_prop):
+    """The Spacings walk as an expression of Offset, so the copies follow a parameter."""
+    terms = []
+    for term in core.symmetric_walk_terms(quantity):
+        if term == 1:
+            terms.append("%s.Value" % offset_prop)
+        else:
+            k = -term
+            terms.append(
+                "(%d * %s.Value == 1 ? %r : -%d * %s.Value)"
+                % (k, offset_prop, core.SENTINEL - core.NUDGE, k, offset_prop)
+            )
+    return "list(%s)" % "; ".join(terms)
+
+
+def _native_direction(obj, options, suffix):
+    ref = options["direction" + suffix]
+    _set_link(obj, "Direction" + suffix, ref)
+    quantity = max(1, int(options["quantity" + suffix]))
+    distance = float(options["distance" + suffix])
+    distribution = options["distribution"]
+    symmetric = options["direction_type" + suffix] == "symmetric"
+    formula = _formula(options, "distance" + suffix, obj.Document)
+    occurrences = core.instance_count(quantity, options["direction_type" + suffix])
+    length_prop, offset_prop = "Length" + suffix, "Offset" + suffix
+    spacings_prop = "Spacings" + suffix
+    if not symmetric:
+        mode = "Extent" if distribution == "extent" else "Spacing"
+        _set(obj, "Mode" + suffix, mode)
+        _set(obj, "Reversed" + suffix, distance < 0)
+        _set(obj, "Occurrences" + suffix, occurrences)
+        size = abs(distance)
+        wrapped = ("-(%s)" % formula if distance < 0 else formula) if formula else ""
+        if mode == "Extent":
+            _expr(obj, offset_prop, "")
+            _set(obj, length_prop, size)
+            _expr(obj, length_prop, wrapped)
+        else:
+            _expr(obj, length_prop, "")
+            _set(obj, offset_prop, size)
+            _expr(obj, offset_prop, wrapped)
+        _expr(obj, spacings_prop, "")
+        _set_list(obj, spacings_prop, [core.SENTINEL] * (occurrences - 1))
+        return
+    # Symmetric: a walk of gaps, 0, s, .. (n-1)s, then over to -(n-1)s and back up to -s.
+    step = abs(core.step_of(quantity, distance, distribution))
+    _set(obj, "Mode" + suffix, "Spacing")
+    _set(obj, "Reversed" + suffix, False)
+    _set(obj, "Occurrences" + suffix, occurrences)
+    _expr(obj, length_prop, "")
+    if quantity > 1:
+        _set(obj, offset_prop, step)
+    if formula and quantity > 1:
+        if distribution == "extent":
+            _expr(obj, offset_prop, "abs(%s) / %d" % (formula, quantity - 1))
+        else:
+            _expr(obj, offset_prop, "abs(%s)" % formula)
+    else:
+        _expr(obj, offset_prop, "")
+    gaps = [step * t for t in core.symmetric_walk_terms(quantity)]
+    if formula and quantity > 1:
+        _expr(obj, spacings_prop, _symmetric_list_expression(quantity, offset_prop))
+    else:
+        _expr(obj, spacings_prop, "")
+        _set_list(obj, spacings_prop, core.safe_walk(gaps))
+
+
+def _native_circular(obj, options):
+    ref = native_axis_ref(options["axis"])
+    _set_link(obj, "Axis", ref)
+    ctype = options["circular_type"]
+    quantity = max(1, int(options["quantity"]))
+    angle = float(options["angle"])
+    formula = _formula(options, "angle", obj.Document)
+    occurrences = core.instance_count(quantity, "symmetric" if ctype == "symmetric" else "one")
+    if ctype in ("full", "angle"):
+        _set(obj, "Mode", "Extent")
+        _set(obj, "Occurrences", occurrences)
+        if ctype == "full":
+            _set(obj, "Reversed", False)
+            _expr(obj, "Angle", "")
+            _set(obj, "Angle", 360.0)
+        else:
+            _set(obj, "Reversed", angle < 0)
+            _set(obj, "Angle", min(abs(angle), 360.0))
+            _expr(obj, "Angle", ("abs(%s)" % formula) if formula else "")
+        _expr(obj, "Offset", "")
+        _expr(obj, "Spacings", "")
+        _set_list(obj, "Spacings", [core.SENTINEL] * (occurrences - 1))
+        return
+    step = abs(angle) / (quantity - 1) if quantity > 1 else 0.0
+    _set(obj, "Mode", "Spacing")
+    _set(obj, "Reversed", False)
+    _set(obj, "Occurrences", occurrences)
+    _expr(obj, "Angle", "")
+    if quantity > 1:
+        _set(obj, "Offset", step)
+        _expr(obj, "Offset", ("abs(%s) / %d" % (formula, quantity - 1)) if formula else "")
+        if formula:
+            _expr(obj, "Spacings", _symmetric_list_expression(quantity, "Offset"))
+        else:
+            _expr(obj, "Spacings", "")
+            gaps = [step * t for t in core.symmetric_walk_terms(quantity)]
+            _set_list(obj, "Spacings", core.safe_walk(gaps))
+    else:
+        _expr(obj, "Offset", "")
+        _expr(obj, "Spacings", "")
+        _set_list(obj, "Spacings", [])
+
+
+# -- SciForge's own pattern feature ---------------------------------------------------------------
+ENUMS = {
+    "PatternType": ["Features", "Faces", "Bodies"],
+    "Distribution": ["Extent", "Spacing"],
+    "DirectionType": ["One Direction", "Symmetric"],
+    "DirectionType2": ["One Direction", "Symmetric"],
+    "CircularType": ["Full", "Angle", "Symmetric"],
+    "Orientation": ["Identical", "Path Direction"],
+}
+ENUM_VALUES = {
+    "PatternType": ["features", "faces", "bodies"],
+    "Distribution": ["extent", "spacing"],
+    "DirectionType": ["one", "symmetric"],
+    "DirectionType2": ["one", "symmetric"],
+    "CircularType": ["full", "angle", "symmetric"],
+    "Orientation": ["identical", "path"],
+}
+
+
+def _enum_set(obj, prop, value):
+    label = ENUMS[prop][ENUM_VALUES[prop].index(value)]
+    if getattr(obj, prop) != label:
+        setattr(obj, prop, label)
+
+
+def _enum_get(obj, prop):
+    try:
+        return ENUM_VALUES[prop][ENUMS[prop].index(getattr(obj, prop))]
+    except (ValueError, AttributeError):
+        return ENUM_VALUES[prop][0]
+
+
+class PatternFeature:
+    """A PartDesign feature that repeats faces, features FreeCAD's patterns cannot repeat,
+    or anything along a path. Its shape is the body before it with the copies joined or
+    cut. Saved files store "sciforge.pattern.PatternFeature": keep the name stable."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        def add(kind, name, doc):
+            if name not in obj.PropertiesList:
+                obj.addProperty(kind, name, "Pattern", doc)
+                return True
+            return False
+
+        for prop, labels in ENUMS.items():
+            if add("App::PropertyEnumeration", prop, "Dialog choice (Fusion's field)"):
+                setattr(obj, prop, labels)
+        add("App::PropertyLinkSub", "Faces", "The faces that are patterned")
+        add("App::PropertyLinkList", "Originals", "The features that are patterned")
+        add("App::PropertyLinkSub", "Direction", "Direction 1")
+        add("App::PropertyLinkSub", "Direction2", "Direction 2")
+        add("App::PropertyLinkSub", "Axis", "Axis of a circular pattern")
+        add("App::PropertyLinkSub", "MirrorPlane", "Mirror plane")
+        add("App::PropertyLinkSub", "Path", "Path of a pattern on path")
+        if add("App::PropertyInteger", "Quantity", "Instances (the original included)"):
+            obj.Quantity = 2
+        if add("App::PropertyInteger", "Quantity2", "Instances in direction 2"):
+            obj.Quantity2 = 1
+        add("App::PropertyDistance", "Distance", "Distance (extent or spacing)")
+        add("App::PropertyDistance", "Distance2", "Distance in direction 2")
+        if add("App::PropertyAngle", "Angle", "Total angle of a circular pattern"):
+            obj.Angle = 360.0
+        if add("App::PropertyBool", "Refine", "Merge faces that end up coplanar, like Fusion"):
+            obj.Refine = True
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        base = obj.BaseFeature
+        if base is None or base.Shape.isNull() or not base.Shape.Solids:
+            raise PatternError("A pattern needs a solid before it in the timeline.")
+        kind = kind_of(obj)
+        options = read_engine(obj)
+        tools = engine_tools(obj, options, base)
+        moves = placements(kind, options, tools)
+        obj.Shape = apply_tools(base.Shape, tools, moves, kind, refine=obj.Refine)
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _update_engine(obj, kind, options):
+    body = owner_body(obj)
+    base = obj.BaseFeature
+    if base is None and body is not None:
+        group = body_history(body)
+        if obj in group and group.index(obj) > 0:
+            obj.BaseFeature = group[group.index(obj) - 1]
+    ptype = options["pattern_type"]
+    _enum_set(obj, "PatternType", ptype)
+    if ptype == "faces":
+        faces = _faces(options)
+        owner = faces[0][0]
+        names = [sub for o, sub in faces if o is owner]
+        if len(names) != len(faces):
+            raise PatternError("Pick faces of one part.")
+        current = obj.Faces
+        if current is None or current[0] is not owner or list(current[1]) != names:
+            obj.Faces = (owner, names)
+    elif obj.Faces is not None:
+        obj.Faces = None
+    wanted = _features(options) if ptype == "features" else []
+    if [o.Name for o in obj.Originals] != [o.Name for o in wanted]:
+        obj.Originals = wanted
+    _enum_set(obj, "Distribution", options["distribution"])
+    _enum_set(obj, "DirectionType", options["direction_type"])
+    _enum_set(obj, "DirectionType2", options["direction_type2"])
+    _enum_set(obj, "CircularType", options["circular_type"])
+    _enum_set(obj, "Orientation", options["orientation"])
+    for prop, key in (
+        ("Direction", "direction"),
+        ("Direction2", "direction2"),
+        ("MirrorPlane", "plane"),
+        ("Path", "path"),
+    ):
+        _set_link(obj, prop, options[key] if kind in _USES[prop] else None)
+    _set_link(obj, "Axis", options["axis"] if kind == "circular" else None)
+    _set(obj, "Quantity", max(1, int(options["quantity"])))
+    _set(obj, "Quantity2", max(1, int(options["quantity2"])))
+    for prop, key in (("Distance", "distance"), ("Distance2", "distance2"), ("Angle", "angle")):
+        _set(obj, prop, float(options[key]))
+        _expr(obj, prop, _formula(options, key, obj.Document))
+
+
+_USES = {
+    "Direction": ("rectangular",),
+    "Direction2": ("rectangular",),
+    "MirrorPlane": ("mirror",),
+    "Path": ("path",),
+}
+
+
+def read_engine(obj):
+    """The options of a PatternFeature (values as FreeCAD has them now)."""
+    options = with_defaults({})
+    options["pattern_type"] = _enum_get(obj, "PatternType")
+    options["distribution"] = _enum_get(obj, "Distribution")
+    options["direction_type"] = _enum_get(obj, "DirectionType")
+    options["direction_type2"] = _enum_get(obj, "DirectionType2")
+    options["circular_type"] = _enum_get(obj, "CircularType")
+    options["orientation"] = _enum_get(obj, "Orientation")
+    for prop, key in (
+        ("Direction", "direction"),
+        ("Direction2", "direction2"),
+        ("Axis", "axis"),
+        ("MirrorPlane", "plane"),
+        ("Path", "path"),
+    ):
+        link = getattr(obj, prop)
+        options[key] = (link[0], (list(link[1]) or [""])[0]) if link else None
+    options["quantity"] = int(obj.Quantity)
+    options["quantity2"] = int(obj.Quantity2)
+    options["distance"] = obj.Distance.Value
+    options["distance2"] = obj.Distance2.Value
+    options["angle"] = obj.Angle.Value
+    if options["pattern_type"] == "faces" and obj.Faces:
+        options["objects"] = [(obj.Faces[0], sub) for sub in obj.Faces[1]]
+    elif options["pattern_type"] == "features":
+        options["objects"] = [(o, "") for o in obj.Originals]
+    else:
+        body = owner_body(obj)
+        options["objects"] = [(body, "")] if body is not None else []
+    return options
+
+
+# -- the copies ----------------------------------------------------------------------------------
+def placements(kind, options, tools=None):
+    """Body-coordinate transforms of the copies (the original's identity not included):
+    App.Placement for moves, ("mirror", point, normal) for the mirror."""
+    if kind == "rectangular":
+        _p, u1 = direction_of(options["direction"])
+        offsets1 = core.linear_offsets(
+            options["quantity"],
+            options["distance"],
+            options["distribution"],
+            options["direction_type"],
+        )
+        offsets2 = [0.0]
+        u2 = App.Vector()
+        if options["direction2"] is not None:
+            _p, u2 = direction_of(options["direction2"])
+            offsets2 = core.linear_offsets(
+                options["quantity2"],
+                options["distance2"],
+                options["distribution"],
+                options["direction_type2"],
+            )
+        moves = []
+        for a, b in core.grid(offsets1, offsets2)[1:]:
+            moves.append(App.Placement(u1 * a + u2 * b, App.Rotation()))
+        return moves
+    if kind == "circular":
+        point, axis = axis_of(options["axis"])
+        angles = core.circular_angles(
+            options["quantity"], options["angle"], options["circular_type"]
+        )
+        return [App.Placement(App.Vector(), App.Rotation(axis, a), point) for a in angles[1:]]
+    if kind == "mirror":
+        point, normal = plane_of(options["plane"])
+        return [("mirror", point, normal)]
+    if kind == "path":
+        return path_placements(options, tools)
+    raise PatternError("Unknown pattern %r." % kind)
+
+
+def _moved(shape, move):
+    if isinstance(move, tuple):
+        _tag, point, normal = move
+        return shape.mirror(point, normal)
+    copy = shape.copy()
+    copy.transformShape(move.toMatrix())
+    return copy
+
+
+def engine_tools(obj, options, base):
+    """[(solid, "add" | "cut")] in body coordinates: what each instance adds or removes."""
+    ptype = options["pattern_type"]
+    if ptype == "faces":
+        link = obj.Faces
+        if not link:
+            raise PatternError("Select the faces to pattern.")
+        owner, names = link[0], list(link[1])
+        shape = owner.Shape
+        faces = [_element(owner, n) for n in names]
+        # Faces picked on an earlier step: find them again on the shape this builds on.
+        if owner is not base:
+            faces = [_same_face(base.Shape, f) for f in faces]
+            shape = base.Shape
+        return [face_tool(shape, faces)]
+    if ptype == "bodies":
+        return [(base.Shape.copy(), "add")]
+    tools = []
+    for feature in obj.Originals:
+        tools += feature_tools(feature)
+    if not tools:
+        raise PatternError("Select the features to pattern.")
+    return tools
+
+
+def _same_face(shape, face):
+    for candidate in shape.Faces:
+        if (
+            abs(candidate.Area - face.Area) < 1e-6 * max(1.0, face.Area)
+            and (candidate.CenterOfMass - face.CenterOfMass).Length < 1e-6
+        ):
+            return candidate
+    raise PatternError("A picked face no longer exists after an earlier change. Pick it again.")
+
+
+def feature_tools(feature):
+    """What a feature adds or removes: its tool shape for extrudes, holes and the like, else
+    the difference it made to the part (fillets, chamfers, Press Pull...)."""
+    if is_add_sub(feature) and not _is_dress_up(feature):
+        try:
+            tool = feature.AddSubShape
+        except Exception:
+            tool = None
+        if tool is not None and not tool.isNull() and tool.Solids:
+            return [(tool.copy(), "cut" if is_subtractive(feature) else "add")]
+    before_obj = getattr(feature, "BaseFeature", None)
+    after = feature.Shape
+    if before_obj is None or before_obj.Shape.isNull():
+        return [(after.copy(), "add")]
+    before_shape = before_obj.Shape
+    tools = []
+    added = after.cut(before_shape)
+    if added.Solids and added.Volume > TOL:
+        tools.append((added, "add"))
+    removed = before_shape.cut(after)
+    if removed.Solids and removed.Volume > TOL:
+        tools.append((removed, "cut"))
+    if not tools:
+        raise PatternError(
+            "%s does not change the part, so there is nothing to repeat." % (feature.Label)
+        )
+    return tools
+
+
+def apply_tools(base_shape, tools, moves, kind, refine=True):
+    adds, cuts = [], []
+    for tool, how in tools:
+        for move in moves:
+            (adds if how == "add" else cuts).append(_moved(tool, move))
+    result = base_shape.copy()
+    if adds:
+        result = result.fuse(adds)
+    if cuts:
+        result = result.cut(cuts)
+    if refine:
+        try:
+            result = result.removeSplitter()
+        except Exception:
+            pass
+    if result.isNull() or not result.Solids:
+        raise PatternError("The pattern leaves no solid.")
+    solids = result.Solids
+    return solids[0] if len(solids) == 1 else Part.makeCompound(solids)
+
+
+# -- closing picked faces into a solid ------------------------------------------------------------
+def face_tool(shape, faces):
+    """(solid, "add" | "cut"): the solid that the picked faces of `shape` bound together with
+    the faces around them (a hole's wall gives the hole's cylinder; a boss's side and top
+    give the boss). "cut" when it is a hollow in the part, "add" when it is material."""
+    picked = list(faces)
+    boundary = []
+    for face in picked:
+        for edge in face.Edges:
+            hosts = [
+                f
+                for f in shape.ancestorsOfType(edge, Part.Face)
+                if not any(f.isSame(p) for p in picked)
+            ]
+            if hosts and not any(edge.isSame(b[0]) for b in boundary):
+                boundary.append((edge, hosts))
+    if not boundary:
+        raise PatternError(
+            "These faces are the whole part. Pick the faces of a hole, a pocket or a boss."
+        )
+    patches = []
+    for group in Part.sortEdges([e for e, _h in boundary]):
+        wire = Part.Wire(group)
+        if not wire.isClosed():
+            raise PatternError(_NOT_CLOSED)
+        hosts = None
+        for edge in group:
+            found = next(h for e, h in boundary if e.isSame(edge))
+            names = {_face_key(h) for h in found}
+            hosts = names if hosts is None else hosts & names
+        if not hosts:
+            raise PatternError(_NOT_CLOSED)
+        host = next(h for e, hs in boundary for h in hs if _face_key(h) in hosts)
+        patches.append(_patch(host, wire))
+    try:
+        shell = Part.Shell(picked + patches)
+        shell.sewShape()  # the patches get their own copies of the boundary edges
+        solid = Part.Solid(shell)
+        if solid.Volume < 0:
+            solid.reverse()
+    except Exception:
+        raise PatternError(_NOT_CLOSED)
+    if not shell.isClosed() or not solid.isValid() or abs(solid.Volume) < TOL:
+        raise PatternError(_NOT_CLOSED)
+    return solid, _hollow_or_material(shape, picked[0], solid)
+
+
+_NOT_CLOSED = (
+    "These faces do not close up into a feature. Pick every face of the hole, pocket or "
+    "boss (for a boss: its sides and its top)."
+)
+
+
+def _face_key(face):
+    return (round(face.Area, 9), tuple(round(c, 6) for c in face.CenterOfMass))
+
+
+def _patch(host, wire):
+    """The piece of `host`'s surface inside `wire` (where the feature meets the part)."""
+    if host.Surface.TypeId == "Part::GeomPlane":
+        try:
+            patch = Part.Face(wire)
+            if patch.isValid() and patch.Area > TOL:
+                return patch
+        except Exception:
+            pass
+    patch = Part.Face(host.Surface, wire)
+    patch.validate()
+    if not patch.isValid() or patch.Area < TOL:
+        raise PatternError(_NOT_CLOSED)
+    return patch
+
+
+def _hollow_or_material(shape, face, solid):
+    u0, u1, v0, v1 = face.ParameterRange
+    for fu, fv in ((0.5, 0.5), (0.3, 0.6), (0.7, 0.4)):
+        u, v = u0 + (u1 - u0) * fu, v0 + (v1 - v0) * fv
+        if not face.isInside(face.valueAt(u, v), 1e-6, True):
+            continue
+        point = face.valueAt(u, v)
+        normal = face.normalAt(u, v)
+        step = max(1e-3, min(0.05, solid.BoundBox.DiagonalLength * 1e-3))
+        if solid.isInside(point - normal * step, 1e-9, False):
+            return "add"
+        if solid.isInside(point + normal * step, 1e-9, False):
+            return "cut"
+    raise PatternError(_NOT_CLOSED)
+
+
+# -- pattern on path ----------------------------------------------------------------------------
+def path_edges(ref):
+    """The edges of a path pick, in order: one edge, or every edge of a sketch."""
+    obj, sub = ref
+    if sub.startswith("Edge"):
+        return [_element(obj, sub)]
+    if obj.TypeId == SKETCH and not sub:
+        edges = list(obj.Shape.Edges)
+        if not edges:
+            raise PatternError("%s has no curves to follow." % obj.Label)
+        groups = Part.sortEdges(edges)
+        if len(groups) != 1:
+            raise PatternError("The sketch has separate curves. Pick one edge as the path.")
+        return Part.Wire(groups[0]).OrderedEdges
+    raise PatternError("Pick an edge or a sketch curve as the path.")
+
+
+def _objects_center(options, tools):
+    if tools:
+        box = None
+        for tool, _how in tools:
+            box = tool.BoundBox if box is None else box.united(tool.BoundBox)
+        return box.Center
+    return App.Vector()
+
+
+class _Path:
+    """A path made of edges in order; positions are arc lengths from its start."""
+
+    def __init__(self, edges):
+        self.edges = edges
+        self.lengths = [e.Length for e in edges]
+        self.total = sum(self.lengths)
+
+    @staticmethod
+    def _flipped(edge):
+        return getattr(edge, "Orientation", "Forward") == "Reversed"
+
+    def locate(self, point):
+        """Arc length of the point of the path nearest to `point`."""
+        best = None
+        run = 0.0
+        vertex = Part.Vertex(point)
+        for edge, length in zip(self.edges, self.lengths):
+            dist, pairs, _info = edge.distToShape(vertex)
+            param = edge.Curve.parameter(pairs[0][0])
+            param = min(max(param, edge.FirstParameter), edge.LastParameter)
+            along = _length_between(edge, edge.FirstParameter, param)
+            if self._flipped(edge):
+                along = length - along
+            if best is None or dist < best[0] - 1e-9:
+                best = (dist, run + along)
+            run += length
+        return best[1]
+
+    def at(self, s):
+        """(point, unit tangent along the path) at arc length s from the start."""
+        if s < -1e-6 or s > self.total + 1e-6:
+            raise PatternError(
+                "The pattern runs off the end of the path. Make the distance shorter."
+            )
+        s = min(max(s, 0.0), self.total)
+        run = 0.0
+        last = len(self.edges) - 1
+        for i, (edge, length) in enumerate(zip(self.edges, self.lengths)):
+            if s <= run + length + 1e-9 or i == last:
+                local = min(max(s - run, 0.0), length)
+                flipped = self._flipped(edge)
+                param = edge.getParameterByLength(length - local if flipped else local)
+                tangent = _unit(edge.tangentAt(param))
+                return edge.valueAt(param), tangent * -1.0 if flipped else tangent
+            run += length
+        raise PatternError("The pattern runs off the end of the path.")
+
+
+def _length_between(edge, a, b):
+    if abs(b - a) < 1e-12:
+        return 0.0
+    lo, hi = min(a, b), max(a, b)
+    try:
+        return Part.Edge(edge.Curve, lo, hi).Length
+    except Exception:
+        return abs(b - a)
+
+
+def path_placements(options, tools):
+    path = _Path(path_edges(options["path"]))
+    center = _objects_center(options, tools)
+    start = path.locate(center)
+    offsets = core.linear_offsets(
+        options["quantity"], options["distance"], options["distribution"], options["direction_type"]
+    )
+    point0, tangent0 = path.at(start)
+    moves = []
+    for offset in offsets[1:]:
+        point, tangent = path.at(start + offset)
+        if options["orientation"] == "path":
+            turn = App.Rotation(tangent0, tangent)
+            moves.append(
+                App.Placement(point - point0, App.Rotation()).multiply(
+                    App.Placement(App.Vector(), turn, point0)
+                )
+            )
+        else:
+            moves.append(App.Placement(point - point0, App.Rotation()))
+    return moves
+
+
+# -- reading a pattern back into the dialog --------------------------------------------------------
+def read(feature):
+    """(kind, options) of an existing pattern or mirror feature."""
+    kind = kind_of(feature)
+    if kind is None:
+        raise PatternError("%s is not a pattern." % feature.Label)
+    meta = load_meta(feature)
+    if feature.TypeId == ENGINE:
+        options = read_engine(feature)
+    else:
+        options = _read_native(feature, kind, meta)
+    options["expressions"] = {
+        k: v for k, v in (meta.get("expressions") or {}).items() if _still_formula(feature, k)
+    }
+    return kind, options
+
+
+def _still_formula(feature, key):
+    props = {
+        "distance": ("Length", "Offset", "Distance"),
+        "distance2": ("Length2", "Offset2", "Distance2"),
+        "angle": ("Angle", "Offset"),
+    }.get(key, ())
+    engine = dict(feature.ExpressionEngine)
+    return any(p in engine for p in props)
+
+
+def _read_native(obj, kind, meta):
+    options = with_defaults({})
+    if obj.TransformMode == "Whole shape":
+        options["pattern_type"] = "bodies"
+        body = owner_body(obj)
+        options["objects"] = [(body, "")] if body is not None else []
+    else:
+        options["pattern_type"] = "features"
+        options["objects"] = [(o, "") for o in obj.Originals]
+    if kind == "rectangular":
+        _read_direction(obj, options, meta, "")
+        if obj.Direction2 is not None:
+            _read_direction(obj, options, meta, "2")
+        else:
+            options["direction2"] = None
+            options["quantity2"] = 1
+        if obj.Mode == "Spacing" and meta.get("direction_type", "one") == "one":
+            options["distribution"] = "spacing"
+        elif obj.Mode == "Extent":
+            options["distribution"] = "extent"
+        else:
+            options["distribution"] = meta.get("distribution", "extent")
+    elif kind == "circular":
+        link = obj.Axis
+        options["axis"] = (link[0], (list(link[1]) or [""])[0]) if link else None
+        occurrences = int(obj.Occurrences)
+        if obj.Mode == "Spacing" and meta.get("circular_type") == "symmetric":
+            quantity = (occurrences + 1) // 2
+            options["circular_type"] = "symmetric"
+            options["quantity"] = quantity
+            options["angle"] = obj.Offset.Value * (quantity - 1) if quantity > 1 else 90.0
+        elif obj.Mode == "Spacing":
+            options["circular_type"] = "angle"
+            options["quantity"] = occurrences
+            options["angle"] = obj.Offset.Value * max(occurrences - 1, 1)
+        else:
+            angle = obj.Angle.Value
+            full = abs(angle - 360.0) < 1e-9 and meta.get("circular_type", "full") == "full"
+            options["circular_type"] = "full" if full else "angle"
+            options["quantity"] = occurrences
+            options["angle"] = -angle if obj.Reversed else angle
+    elif kind == "mirror":
+        link = obj.MirrorPlane
+        options["plane"] = (link[0], (list(link[1]) or [""])[0]) if link else None
+    return options
+
+
+def _read_direction(obj, options, meta, suffix):
+    link = getattr(obj, "Direction" + suffix)
+    options["direction" + suffix] = (link[0], (list(link[1]) or [""])[0]) if link else None
+    occurrences = int(getattr(obj, "Occurrences" + suffix))
+    mode = getattr(obj, "Mode" + suffix)
+    dtype = meta.get("direction_type" + suffix, "one")
+    if mode == "Spacing" and dtype == "symmetric":
+        quantity = (occurrences + 1) // 2
+        step = getattr(obj, "Offset" + suffix).Value
+        options["direction_type" + suffix] = "symmetric"
+        options["quantity" + suffix] = quantity
+        if meta.get("distribution", "extent") == "extent":
+            options["distance" + suffix] = step * (quantity - 1)
+        else:
+            options["distance" + suffix] = step
+        return
+    options["direction_type" + suffix] = "one"
+    options["quantity" + suffix] = occurrences
+    value = getattr(obj, ("Length" if mode == "Extent" else "Offset") + suffix).Value
+    reversed_ = bool(getattr(obj, "Reversed" + suffix))
+    options["distance" + suffix] = -value if reversed_ else value
+
+
+# -- helpers for the dialogs ------------------------------------------------------------------------
+def objects_center(options, base=None):
+    """(centre, box) of what is patterned, body coordinates (where the drag arrows start).
+    A feature's tool is clipped to the part: a cut through all is as long as the part."""
+    box = None
+    for obj, sub in options.get("objects") or []:
+        try:
+            if obj.TypeId == "PartDesign::Body":
+                shape = obj.Shape.copy()
+                shape.transformShape(obj.getGlobalPlacement().inverse().toMatrix())
+                part = shape.BoundBox
+            elif sub:
+                shape = obj.Shape.getElement(sub)
+                part = shape.BoundBox
+            elif is_add_sub(obj) and not _is_dress_up(obj) and not obj.AddSubShape.isNull():
+                shape = obj.AddSubShape
+                part = obj.Shape.BoundBox
+            else:
+                shape = obj.Shape
+                part = shape.BoundBox
+        except Exception:
+            continue
+        found = shape.BoundBox
+        if found.intersect(part):
+            found = found.intersected(part)
+        box = found if box is None else box.united(found)
+    return (box.Center if box is not None else App.Vector()), box
+
+
+def feature_of_face(body, face, until=None):
+    """The step of `body` that made `face` (body coordinates): the last feature before `until`
+    whose tool shape has the face on its boundary. None if the face is from the first step
+    or cannot be told."""
+    point = face.CenterOfMass
+    try:
+        u0, u1, v0, v1 = face.ParameterRange
+        point = face.valueAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+        if not face.isInside(point, 1e-6, True):
+            point = face.CenterOfMass
+    except Exception:
+        pass
+    vertex = Part.Vertex(point)
+    found = None
+    for feature in body_history(body):
+        if until is not None and feature is until:
+            break
+        if kind_of(feature) is not None:
+            continue
+        tools = []
+        if is_add_sub(feature):
+            try:
+                if not feature.AddSubShape.isNull():
+                    tools.append(feature.AddSubShape)
+            except Exception:
+                pass
+        for tool in tools:
+            try:
+                if tool.distToShape(vertex)[0] < 1e-5 and _on_shell(feature.Shape, point):
+                    found = feature
+            except Exception:
+                continue
+    return found
+
+
+def _on_shell(shape, point):
+    try:
+        return shape.distToShape(Part.Vertex(point))[0] < 1e-5
+    except Exception:
+        return False
+
+
+def instance_offsets(kind, options):
+    """Body-coordinate offsets of every instance (for drawing markers and tests)."""
+    return placements(kind, with_defaults(options))
