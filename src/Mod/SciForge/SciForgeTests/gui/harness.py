@@ -199,6 +199,31 @@ def click_edge(point, modifiers=QtCore.Qt.NoModifier):
     return best is not None
 
 
+def ensure_also_selected(point):
+    """After a Ctrl+click meant to add the edge at `point` to the selection: if the click
+    replaced the selection instead, add that edge directly and say so. GitHub's runner
+    drops the Ctrl of synthesized clicks (it works on a desktop and in the local xvfb),
+    and the scenario is about what the command does with a two-edge selection."""
+    selected = Gui.Selection.getSelectionEx()
+    if sum(len(x.SubElementNames) for x in selected) >= 2:
+        return
+    tip = body().Tip if body() is not None else None
+    if tip is None:
+        return
+    import Part
+
+    probe = Part.Vertex(point)
+    for i, edge in enumerate(tip.Shape.Edges, start=1):
+        if edge.distToShape(probe)[0] < 1e-6:
+            Gui.Selection.addSelection(App.ActiveDocument.Name, tip.Name, "Edge%d" % i)
+            print(
+                "[SciForge] %s: Ctrl+click did not add Edge%d here; added directly"
+                % (state["name"], i),
+                flush=True,
+            )
+            return
+
+
 def click_empty():
     """Click on empty background (clears the selection, like in Fusion)."""
     widget = gl_widget()

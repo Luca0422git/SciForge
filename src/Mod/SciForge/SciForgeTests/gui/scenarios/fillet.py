@@ -325,6 +325,7 @@ def preselect_more():
     sel = [(x.ObjectName, list(x.SubElementNames)) for x in Gui.Selection.getSelectionEx()]
     h.check("first edge selected", sum(len(x[1]) for x in sel) == 1, sel)
     h.click_edge(BACK_RIGHT, modifiers=QtCore.Qt.ControlModifier)
+    h.ensure_also_selected(BACK_RIGHT)
 
 
 def press_f():
