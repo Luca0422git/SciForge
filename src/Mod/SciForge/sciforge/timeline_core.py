@@ -587,7 +587,7 @@ def plan_move(timeline, name, slot):
         if item.body is not None:
             body_orders.setdefault(item.body, []).append(item.name)
     body_orders = {b: tuple(v) for b, v in body_orders.items()}
-    keys = _keys_for(new_items)
+    keys = _keys_for(new_items, name)
     # Keep the marker between the same steps: the moving step is before it when it
     # lands left of where the marker was.
     before_marker = [i for i in items[: timeline.marker] if i.name != name]
@@ -608,13 +608,31 @@ def plan_move(timeline, name, slot):
     )
 
 
-def _keys_for(new_items):
+def _keys_for(new_items, moved=None):
     """Creation-order keys that make merge() give exactly ``new_items``' order (only
-    needed when steps of different bodies change places): keys must grow along the
-    row. Only steps out of order get a new key."""
+    needed when steps of different bodies change places). Prefer a new key for the
+    moved step alone; otherwise make keys grow along the row, changing only the steps
+    that are out of order."""
+    wanted = [i.name for i in new_items]
     rows = [{"name": i.name, "body": i.body, "key": i.key} for i in new_items]
-    if [r["name"] for r in merge(rows)] == [i.name for i in new_items]:
+    if [r["name"] for r in merge(rows)] == wanted:
         return {}
+    if moved in wanted:
+        k = wanted.index(moved)
+        lo = max([i.key for i in new_items[:k]], default=None)
+        hi = min([i.key for i in new_items[k + 1 :]], default=None)
+        if lo is None and hi is not None:
+            key = hi / 2.0
+        elif hi is None and lo is not None:
+            key = lo + 0.5
+        elif lo is not None and lo < hi:
+            key = (lo + hi) / 2.0
+        else:
+            key = None
+        if key is not None and key > 0:
+            trial = [dict(r, key=key) if r["name"] == moved else r for r in rows]
+            if [r["name"] for r in merge(trial)] == wanted:
+                return {moved: key}
     keys = [i.key for i in new_items]
     changed = {}
     prev = None

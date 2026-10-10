@@ -37,7 +37,8 @@ def tl():
     from sciforge import timeline_ui
 
     t = timeline_ui.widget()
-    t.refresh(force=True)
+    t.refresh()  # rebuilds only when the design changed
+    QtWidgets.QApplication.processEvents()  # new widgets get shown and laid out
     return t
 
 
@@ -633,6 +634,115 @@ def check_new_deleted():
     h.shot("4-end")
 
 
+# -- construction geometry ------------------------------------------------------------------------
+def offset_plane():
+    h.click_empty()
+    h.ribbon("Offset Plane")
+
+
+def pick_top_face():
+    h.fit()
+    h.click(V(20, 15, 10))
+
+
+def plane_ok():
+    h.task_button("OK")
+
+
+def check_construction():
+    t = tree()
+    folder = t.row("Construction")
+    h.check("Construction folder appears", folder is not None, t.labels())
+    planes = [o for o in App.ActiveDocument.Objects if o.TypeId == "PartDesign::Plane"]
+    h.check("one construction plane", len(planes) == 1, [o.Name for o in planes])
+    s["plane"] = planes[0].Name if planes else None
+    s["plane_label"] = planes[0].Label if planes else "?"
+    h.check("plane is the last step", tl().items()[-1].name == s["plane"], tl().titles())
+
+
+def plane_eye():
+    click_eye(s["plane_label"])
+
+
+def check_plane_eye():
+    obj = App.ActiveDocument.getObject(s["plane"])
+    s["plane_vis"] = obj.ViewObject.Visibility
+    click_eye(s["plane_label"])
+
+
+def check_plane_eye_back():
+    obj = App.ActiveDocument.getObject(s["plane"])
+    h.check("plane eye toggles", obj.ViewObject.Visibility != s["plane_vis"])
+    menu(s["plane_label"], "Find in Timeline")
+
+
+def check_found_in_timeline():
+    h.check(
+        "Find in Timeline selects the plane step", tl().selected() == [s["plane"]], tl().selected()
+    )
+
+
+def drag_plane_earlier():
+    """A plane on Extrude 1's top face may move before body 2's steps, not before Extrude 1."""
+    t = tl()
+    b = t.button(s["plane"])
+    target = [x for x in t._buttons if x.item.display == "Sketch 2"][0]
+    w.drag(b, w.center(b), target.mapToGlobal(QtCore.QPoint(1, target.height() // 2)))
+
+
+def check_plane_moved():
+    names = [i.name for i in tl().items()]
+    h.check(
+        "plane moved before body 2's sketch", names.index(s["plane"]) == 2, (names, tl().refusal())
+    )
+    h.check("bodies unchanged", near(vol("Body"), 12000) and near(vol(s["b2"]), 4000))
+
+
+def drag_plane_first():
+    t = tl()
+    b = t.button(s["plane"])
+    first = t._buttons[0]
+    w.drag(b, w.center(b), first.mapToGlobal(QtCore.QPoint(1, first.height() // 2)))
+
+
+def check_plane_refused():
+    reason = tl().refusal()
+    h.check("plane cannot go before the face it sits on", "uses Extrude 1" in reason, reason)
+    names = [i.name for i in tl().items()]
+    h.check("order unchanged", names.index(s["plane"]) == 2, names)
+
+
+def delete_plane():
+    menu(s["plane_label"], "Delete")
+
+
+def check_plane_deleted():
+    h.check("plane deleted", App.ActiveDocument.getObject(s["plane"]) is None)
+    h.check("Construction folder gone", tree().row("Construction") is None, tree().labels())
+    w.click(w.quick_access("Undo"))
+
+
+def check_plane_back():
+    h.check("Undo brings the plane back", App.ActiveDocument.getObject(s["plane"]) is not None)
+
+
+def show_all_sketches():
+    menu("Browser", "Show All Sketches")
+
+
+def check_sketches_shown():
+    sketches = [o for o in App.ActiveDocument.Objects if o.TypeId == "Sketcher::SketchObject"]
+    h.check("Show All Sketches", all(o.ViewObject.Visibility for o in sketches))
+    menu("Browser", "Hide All Sketches")
+
+
+def check_sketches_hidden():
+    sketches = [o for o in App.ActiveDocument.Objects if o.TypeId == "Sketcher::SketchObject"]
+    h.check("Hide All Sketches", not any(o.ViewObject.Visibility for o in sketches))
+    h.check("no pop-ups at the end", not h.popups(), h.popups())
+    h.shot("5-construction")
+
+
 h.run(
     "timeline_browser_2",
     [
@@ -722,5 +832,23 @@ h.run(
         finish_new,
         delete_new_sketch,
         check_new_deleted,
+        offset_plane,
+        pick_top_face,
+        plane_ok,
+        check_construction,
+        plane_eye,
+        check_plane_eye,
+        check_plane_eye_back,
+        check_found_in_timeline,
+        drag_plane_earlier,
+        check_plane_moved,
+        drag_plane_first,
+        check_plane_refused,
+        delete_plane,
+        check_plane_deleted,
+        check_plane_back,
+        show_all_sketches,
+        check_sketches_shown,
+        check_sketches_hidden,
     ],
 )
