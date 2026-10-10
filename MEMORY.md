@@ -116,6 +116,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `SciForgeTests/gui/journey_gui.py` driven by real mouse clicks/drags on the 3D view**, and a
   feature is not "done" until that passes. Click one step *after* the key that opens a task panel
   (the panel narrows the 3D view).
+- CI quirks (GitHub runner, xvfb + software GL): a click on an outline edge can land on the face
+  next to it (use `harness.click_edge`), and synthesized Ctrl+clicks lose their Ctrl there (use
+  `harness.ensure_also_selected` after a Ctrl+click that must add to the selection). Both work on
+  a desktop and in the local xvfb. Each CI round costs ~20 minutes of the private repo's minutes:
+  batch pushes.
 - **Trap: never keep a pivy handle to a FreeCAD-owned Coin node across time** (between timer
   ticks, until a dialog closes). FreeCAD deletes view-provider/edit nodes when it rebuilds a
   display or leaves sketch edit; writing to the stale handle segfaults (sketch_mode polygon
@@ -296,7 +301,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Parallel feature workflow (12 features, each in its own git worktree, branch `sf/<key>`):
   built and merged: extrude_presspull, sketch, timeline_browser, fillet. The full suite after the
   fillet merge found a reproducible FreeCAD crash (stale Coin node in sketch_mode, see Known
-  issues) and a unit failure (one bad import disabled all commands); both fixed. Then the org's monthly agent spend limit stopped all other agents.
+  issues) and a unit failure (one bad import disabled all commands); both fixed. CI green again
+  at run #28 (commit 4313045a): that quick update has all four features. Then the org's monthly agent spend limit stopped all other agents.
   NOT built yet: hole (WIP, untested, on branch `sf/hole`), revolve, patterns, shell_draft,
   bodies, inspect, primitives, sweep_loft. The QA ("break and fix") stage ran for none of them.
   The workflow script and its feature list are in `tools/sciforge/workflows/fusion_features.js`
