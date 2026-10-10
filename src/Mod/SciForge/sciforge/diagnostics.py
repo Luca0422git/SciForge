@@ -4,7 +4,7 @@ import sys
 
 import FreeCAD as App
 
-from . import __version__, registry
+from . import RECENT, __version__, registry
 
 
 def report():
@@ -36,6 +36,10 @@ def report():
         lines.extend("  - %s" % m for m in sorted(set(registry.MISSING)))
     else:
         lines.append("All configured commands were found.")
+    lines += ["", "Recent SciForge messages (newest last):"]
+    lines.extend("  " + m for m in RECENT[-60:])
+    if not RECENT:
+        lines.append("  (none)")
     return "\n".join(lines)
 
 
@@ -44,11 +48,25 @@ def show():
     App.Console.PrintMessage("[SciForge] diagnostics\n%s\n" % text)
     try:
         import FreeCADGui as Gui
-        from .compat import QtWidgets
+        from .compat import QtGui, QtWidgets
 
-        box = QtWidgets.QMessageBox(Gui.getMainWindow())
-        box.setWindowTitle("SciForge Diagnostics")
-        box.setText(text)
-        box.exec_()
+        dialog = QtWidgets.QDialog(Gui.getMainWindow())
+        dialog.setWindowTitle("SciForge Diagnostics")
+        dialog.resize(760, 520)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.addWidget(
+            QtWidgets.QLabel("Select all and copy this text when reporting a problem:")
+        )
+        box = QtWidgets.QPlainTextEdit(text)
+        box.setReadOnly(True)
+        box.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
+        layout.addWidget(box)
+        buttons = QtWidgets.QDialogButtonBox()
+        copy = buttons.addButton("Copy", QtWidgets.QDialogButtonBox.ActionRole)
+        copy.clicked.connect(lambda: QtWidgets.QApplication.clipboard().setText(text))
+        buttons.addButton(QtWidgets.QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
     except Exception:
         pass

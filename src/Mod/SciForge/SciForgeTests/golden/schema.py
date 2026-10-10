@@ -29,8 +29,19 @@ SOURCES = ("analytic", "baseline-freecad-1.1.4", "fusion")
 STEP_KEYS = {
     "sketch": ({"id", "plane", "geometry"}, {"offset", "comment"}),
     "extrude": (
-        {"id", "profile"},
-        {"distance", "distance2", "operation", "direction", "extent", "taper", "flip", "comment"},
+        {"id"},
+        {
+            "profile",
+            "face",
+            "distance",
+            "distance2",
+            "operation",
+            "direction",
+            "extent",
+            "taper",
+            "flip",
+            "comment",
+        },
     ),
     "revolve": ({"id", "profile", "axis"}, {"angle", "operation", "comment"}),
     "fillet": ({"id", "edges", "radius"}, {"comment"}),
@@ -201,9 +212,12 @@ def validate(model):
             if plane not in PLANES:
                 _fail(here, "'plane' must be one of %s" % (PLANES,))
             _check_geometry(here, step["geometry"])
-        if op in ("extrude", "revolve"):
+        if op == "extrude" and ("profile" in step) == ("face" in step):
+            _fail(here, "extrude needs exactly one of 'profile' (a sketch) or 'face' (a selector)")
+        if op == "revolve" or (op == "extrude" and "profile" in step):
             if seen.get(step["profile"]) != "sketch":
                 _fail(here, "'profile' must name an earlier sketch step, got %r" % step["profile"])
+        if op in ("extrude", "revolve"):
             if step.get("operation", "join") not in OPERATIONS:
                 _fail(here, "'operation' must be one of %s" % (OPERATIONS,))
         if op == "extrude":

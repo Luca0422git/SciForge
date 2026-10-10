@@ -14,6 +14,22 @@ from . import log, warn
 from .compat import QtCore, QtWidgets
 
 
+_OPEN = {"dialog": None}
+
+
+def current():
+    """The SciForge task dialog that is open now (it has finish()), or None."""
+    dialog = _OPEN["dialog"]
+    if dialog is None or getattr(dialog, "_closed", False) or not Gui.Control.activeDialog():
+        _OPEN["dialog"] = None
+        return None
+    return dialog
+
+
+def set_current(dialog):
+    _OPEN["dialog"] = dialog
+
+
 class DistanceField:
     def __init__(self, value=0.0, unit="mm", on_change=None):
         self.widget = Gui.UiLoader().createWidget("Gui::QuantitySpinBox")
@@ -50,7 +66,14 @@ class DistanceField:
 class ArrowDragger:
     """A 1D drag handle at `origin` pointing along `direction` (both App.Vector).
 
-    on_drag(distance) is called while dragging, on_release(distance) at the end."""
+    on_drag(distance) is called while dragging, on_release(distance) at the end.
+
+    The arrow is watched with a Qt timer instead of Coin dragger callbacks: Coin
+    calls those in the middle of its mouse handling, where rebuilding the part
+    (or swapping Extrude for Cut) changes the scene under its feet, and pivy runs
+    them without taking Python's lock. Both crashed FreeCAD on a drag."""
+
+    POLL_MS = 30
 
     def __init__(self, origin, direction, distance=0.0, size=8.0, on_drag=None, on_release=None):
         from pivy import coin
@@ -68,36 +91,50 @@ class ArrowDragger:
         self.dragger = coin.SoTranslate1Dragger()
         self.size = size
         self.dragger.translation.setValue(distance / size, 0, 0)
+        color = coin.SoMaterial()  # Fusion's manipulator blue instead of Coin's white
+        color.diffuseColor.setValue(0.30, 0.62, 0.95)
+        color.emissiveColor.setValue(0.10, 0.25, 0.45)
+        color.setOverride(True)
         self.root.addChild(place)
         self.root.addChild(scale)
+        self.root.addChild(color)
         self.root.addChild(self.dragger)
         self.on_drag = on_drag
         self.on_release = on_release
-        self.dragger.addMotionCallback(self._motion)
-        self.dragger.addFinishCallback(self._finish)
+        self._last = self.distance()
+        self._was_active = False
         self.view.getSceneGraph().addChild(self.root)
+        self._timer = QtCore.QTimer()
+        self._timer.setInterval(self.POLL_MS)
+        self._timer.timeout.connect(self._poll)
+        self._timer.start()
 
     def distance(self):
         return self.dragger.translation.getValue()[0] * self.size
 
     def set_distance(self, distance):
         self.dragger.translation.setValue(distance / self.size, 0, 0)
+        self._last = self.distance()
 
-    def _motion(self, *_):
-        if self.on_drag:
-            try:
-                self.on_drag(self.distance())
-            except Exception as exc:
-                warn("drag: %s" % exc)
-
-    def _finish(self, *_):
-        if self.on_release:
-            try:
-                self.on_release(self.distance())
-            except Exception as exc:
-                warn("drag: %s" % exc)
+    def _poll(self):
+        try:
+            active = bool(self.dragger.isActive.getValue())
+            value = self.distance()
+            if abs(value - self._last) > 1e-9:
+                self._last = value
+                if self.on_drag:
+                    self.on_drag(value)
+            if self._was_active and not active and self.on_release:
+                self.on_release(value)
+            self._was_active = active
+        except Exception as exc:
+            warn("drag: %s" % exc)
 
     def remove(self):
+        try:
+            self._timer.stop()
+        except Exception:
+            pass
         try:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
@@ -128,6 +165,7 @@ class Panel:
         self._timer.timeout.connect(self._recompute)
         doc.openTransaction(transaction)
         self._closed = False
+        set_current(self)
 
     def finish_layout(self):
         self.layout.addRow(self.message)
@@ -184,7 +222,14 @@ class Panel:
         self._close()
         return True
 
+    def finish(self):
+        """Another command is starting: keep this edit if it is valid, else drop it."""
+        if not self.accept():
+            self.reject()
+
     def _close(self):
+        if _OPEN["dialog"] is self:
+            _OPEN["dialog"] = None
         Gui.Control.closeDialog()
         try:
             if Gui.ActiveDocument is not None and Gui.ActiveDocument.getInEdit() is not None:

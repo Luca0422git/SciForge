@@ -9,7 +9,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, construct, log, ui_icon_path, warn
-from .compat import QtWidgets
+from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel
 
 ICONS = {
@@ -79,19 +79,23 @@ class ConstructPanel(Panel):
             "Select %d item(s) for %s (%d selected)." % (self.needed, self.title, len(self.refs))
         )
 
+    def _selection_changed(self):
+        if self.datum is not None or self._closed:
+            return
+        self.refs = _selected_refs()
+        if len(self.refs) >= self.needed:
+            self._unwatch()
+            self._create(self.refs[: self.needed])
+        else:
+            self._prompt()
+
     def _watch(self):
         panel = self
 
         class Observer:
             def addSelection(self, doc, obj, sub, pnt):
-                if panel.datum is not None:
-                    return
-                panel.refs = _selected_refs()
-                if len(panel.refs) >= panel.needed:
-                    panel._unwatch()
-                    panel._create(panel.refs[: panel.needed])
-                else:
-                    panel._prompt()
+                # Deferred: nothing is built inside FreeCAD's click handling.
+                QtCore.QTimer.singleShot(30, panel._selection_changed)
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
@@ -178,10 +182,12 @@ def _command_class(key):
             }
 
         def IsActive(self):
-            return App.ActiveDocument is not None and not Gui.Control.activeDialog()
+            return App.ActiveDocument is not None
 
         def Activated(self):
             try:
+                if not commands.finish_open_dialog():
+                    return
                 Gui.Control.showDialog(ConstructPanel(App.ActiveDocument, key))
                 log("%s started" % label)
             except Exception as exc:

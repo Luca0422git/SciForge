@@ -11,7 +11,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, log, presspull, presspull_core as core, ui_icon_path, warn
-from .compat import QtWidgets
+from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel
 
 
@@ -58,7 +58,7 @@ def restore_view_providers(doc):
 
 # -- selection helpers -----------------------------------------------------
 def _body_and_tip():
-    body = commands.active_body()
+    body = commands.find_body()
     if body is None:
         return None, None
     return body, body.Tip
@@ -211,11 +211,15 @@ class PressPullPanel(Panel):
 
         class Observer:
             def addSelection(self, doc, obj, sub, pnt):
-                if panel.target is None and panel._start_from_selection():
-                    panel._unwatch()
+                # Deferred: nothing is built inside FreeCAD's click handling.
+                QtCore.QTimer.singleShot(30, panel._selection_changed)
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
+
+    def _selection_changed(self):
+        if self.target is None and not self._closed and self._start_from_selection():
+            self._unwatch()
 
     def _unwatch(self):
         if self.observer is not None:
@@ -265,10 +269,12 @@ class PressPullCommand:
         }
 
     def IsActive(self):
-        return App.ActiveDocument is not None and not Gui.Control.activeDialog()
+        return App.ActiveDocument is not None
 
     def Activated(self):
         try:
+            if not commands.finish_open_dialog():
+                return
             doc = App.ActiveDocument
             Gui.Control.showDialog(PressPullPanel(doc))
             log("press pull started")

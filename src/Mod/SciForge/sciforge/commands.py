@@ -3,7 +3,7 @@
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import config, icon_path, registry, warn
+from . import config, icon_path, log, registry, warn
 
 
 def active_body():
@@ -14,17 +14,77 @@ def active_body():
         return None
 
 
-def ensure_body():
-    """Make sure a document and an active PartDesign body exist, like Fusion
-    quietly creating a component. Returns the body or None."""
-    doc = App.ActiveDocument or App.newDocument("Design")
+def find_body():
+    """The active body; else the body of the selection or the document's first body,
+    which is then made active (a reopened file has no active body)."""
     body = active_body()
     if body is not None:
         return body
-    existing = doc.findObjects("PartDesign::Body")
-    if existing:
-        Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", existing[0])
-        return existing[0]
+    doc = App.ActiveDocument
+    if doc is None:
+        return None
+    candidates = []
+    for sel in Gui.Selection.getSelectionEx():
+        parent = sel.Object.getParentGeoFeatureGroup()
+        if parent is not None and parent.TypeId == "PartDesign::Body":
+            candidates.append(parent)
+        elif sel.Object.TypeId == "PartDesign::Body":
+            candidates.append(sel.Object)
+    candidates += doc.findObjects("PartDesign::Body")
+    if not candidates:
+        return None
+    try:
+        Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", candidates[0])
+    except Exception as exc:
+        warn("could not activate %s: %s" % (candidates[0].Label, exc))
+    return candidates[0]
+
+
+def tell(msg):
+    """A short message next to the mouse pointer (and in the log), for when a command
+    cannot start: silence made it look like the keys and buttons were broken."""
+    log(msg)
+    try:
+        from .compat import QtGui, QtWidgets
+
+        QtWidgets.QToolTip.showText(QtGui.QCursor.pos(), msg, Gui.getMainWindow())
+    except Exception:
+        pass
+
+
+def finish_open_dialog():
+    """Fusion: starting a command ends the one in progress. SciForge dialogs are
+    finished (OK, or Cancel if OK is not possible) and a sketch being edited is
+    closed. Returns True when nothing is open any more."""
+    if not Gui.Control.activeDialog():
+        return True
+    from . import taskui
+
+    current = taskui.current()
+    try:
+        if current is not None:
+            current.finish()
+        elif Gui.ActiveDocument is not None and Gui.ActiveDocument.getInEdit() is not None:
+            Gui.ActiveDocument.resetEdit()
+            if App.ActiveDocument is not None:
+                App.ActiveDocument.recompute()
+    except Exception as exc:
+        warn("could not close the open dialog: %s" % exc)
+    if Gui.Control.activeDialog():
+        tell("Finish the open command first (OK or Cancel in the panel on the right).")
+        return False
+    return True
+
+
+def ensure_body():
+    """Make sure a document and an active PartDesign body exist, like Fusion
+    quietly creating a component. Returns the body or None."""
+    if App.ActiveDocument is None:
+        App.newDocument("Design")
+    doc = App.ActiveDocument
+    body = find_body()
+    if body is not None:
+        return body
     try:
         Gui.runCommand("PartDesign_Body")
     except Exception:
@@ -61,12 +121,17 @@ class NewDesign(_Command):
 
 class NewSketch(_Command):
     title = "Create Sketch"
-    tip = "Create a sketch on a plane or face (creates a body first if needed)"
+    tip = "Create a sketch: click an origin plane or a flat face (creates a body if needed)"
     icon = "sketch.svg"
 
     def Activated(self):
-        ensure_body()
-        Gui.runCommand("Sketcher_NewSketch")
+        try:
+            from . import sketch_ui
+
+            if finish_open_dialog():
+                sketch_ui.start()
+        except Exception as exc:
+            warn("Create Sketch failed to start: %s" % exc)
 
 
 class CommandSearch(_Command):

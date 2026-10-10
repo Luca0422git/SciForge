@@ -1,0 +1,18 @@
+{
+  "id": "extrude_face_cut",
+  "title": "Box 40x30x10, top face extruded 4 into the part (flip) as a cut",
+  "tags": ["extrude", "face-profile", "cut"],
+  "steps": [
+    {"op": "sketch", "id": "s1", "plane": "XY", "geometry": [{"rect": [0, 0, 40, 30], "name": "base"}]},
+    {"op": "extrude", "id": "e1", "profile": "s1", "distance": 10},
+    {"op": "extrude", "id": "e2", "face": {"normal": [0, 0, 1], "count": 1}, "distance": 4, "operation": "cut", "flip": true}
+  ],
+  "expect": {
+    "volume": 7200,
+    "area": 3240,
+    "faces": 6,
+    "bbox": [0, 0, 0, 40, 30, 6],
+    "source": "analytic",
+    "note": "Cutting 4 down from the top face leaves a 40x30x6 box. V = 40*30*6; A = 2(40*30 + 40*6 + 30*6)"
+  }
+}

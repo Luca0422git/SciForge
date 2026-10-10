@@ -44,13 +44,17 @@ SciForge module and checks:
 
 - **Unit tests**: the parts of SciForge that are plain logic (search ranking, timeline rules,
   golden-model format).
-- **Golden models**: 32 reference parts (bracket, enclosure, flange, holes, fillets, shells,
-  patterns, and "edit an early step" cases). Each is rebuilt step by step and its volume, area,
-  size and face count are compared with values worked out by hand. The report appears on the
-  run's summary page.
+- **Golden models**: 48 reference parts (bracket, enclosure, flange, holes, fillets, shells,
+  patterns, Press Pull, Extrude on a face, and "edit an early step" cases). Each is rebuilt step
+  by step and its volume, area, size and face count are compared with values worked out by hand.
+  The report appears on the run's summary page.
 - **GUI smoke test**: starts the real FreeCAD window on a virtual screen, switches to SciForge,
   checks toolbars, shortcuts and the timeline, and saves a screenshot (download
   `sciforge-test-output` from the run).
+- **GUI journey test**: uses SciForge the way a person does, with real mouse clicks and drags:
+  Create Sketch by clicking a plane, Extrude by clicking inside the profile and dragging the
+  arrow, Press Pull by clicking a face, a second sketch on a face, a cut, a face extrude.
+  Screenshots `journey-*.png` are in `sciforge-test-output`.
 
 ## Folder map
 

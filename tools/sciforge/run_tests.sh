@@ -88,32 +88,40 @@ sys.exit(0 if report.get("passed") else 1)
 EOF
 }
 
-run_gui() {
-    echo "== [SciForge] GUI smoke test"
-    need_freecad gui || return
-    if ! command -v xvfb-run >/dev/null; then
-        echo "xvfb-run not installed; skipping GUI smoke test" >&2
-        FAILED+=("gui (no xvfb-run)")
-        return
-    fi
-    rm -f "${OUT}/result.json"
+# run_gui_script NAME SCRIPT LOG RESULT: one GUI test in a real FreeCAD window.
+run_gui_script() {
+    local name="$1" script="$2" log="$3" result="$4"
+    rm -f "${OUT}/${result}"
     SCIFORGE_SMOKE_OUT="${OUT}" timeout 300 xvfb-run -a -s "-screen 0 1920x1200x24" \
-        "${FC_GUI[@]}" "${MODULE}/SciForgeTests/gui/smoke_gui.py" > "${OUT}/gui.log" 2>&1
-    grep -aoE "\[SciForge\] smoke .*" "${OUT}/gui.log"
+        "${FC_GUI[@]}" "${MODULE}/SciForgeTests/gui/${script}" > "${OUT}/${log}" 2>&1
+    grep -aoE "\[SciForge\] ${name} .*" "${OUT}/${log}"
     # A Python error that FreeCAD only printed (e.g. inside a Qt callback) is still a failure.
-    if grep -aq "Traceback (most recent call last)" "${OUT}/gui.log"; then
-        echo "Python errors in the GUI log:"
-        grep -a -A 6 "Traceback (most recent call last)" "${OUT}/gui.log" | head -40
-        FAILED+=("gui (Python errors in log)")
+    if grep -aq "Traceback (most recent call last)" "${OUT}/${log}"; then
+        echo "Python errors in ${log}:"
+        grep -a -A 6 "Traceback (most recent call last)" "${OUT}/${log}" | head -40
+        FAILED+=("gui ${name} (Python errors in log)")
     fi
-    python3 - "${OUT}/result.json" <<'EOF' || FAILED+=("gui")
+    python3 - "${OUT}/${result}" "${log}" <<'EOF' || FAILED+=("gui ${name}")
 import json, sys
 try:
     result = json.load(open(sys.argv[1]))
 except Exception as exc:
-    print("no GUI smoke result (FreeCAD may have crashed; see gui.log): %s" % exc); sys.exit(1)
+    print("no GUI result (FreeCAD may have crashed; see %s): %s" % (sys.argv[2], exc)); sys.exit(1)
 sys.exit(0 if result.get("passed") else 1)
 EOF
+}
+
+run_gui() {
+    echo "== [SciForge] GUI tests"
+    need_freecad gui || return
+    if ! command -v xvfb-run >/dev/null; then
+        echo "xvfb-run not installed; skipping GUI tests" >&2
+        FAILED+=("gui (no xvfb-run)")
+        return
+    fi
+    run_gui_script smoke smoke_gui.py gui.log result.json
+    # The journey uses SciForge like a person: real clicks and drags on the 3D view.
+    run_gui_script journey journey_gui.py journey.log journey-result.json
 }
 
 case "${ONLY}" in

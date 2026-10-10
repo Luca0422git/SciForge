@@ -1,0 +1,18 @@
+{
+  "id": "extrude_face_join",
+  "title": "Box 40x30x10, side face extruded 3 (Extrude on a picked face)",
+  "tags": ["extrude", "face-profile"],
+  "steps": [
+    {"op": "sketch", "id": "s1", "plane": "XY", "geometry": [{"rect": [0, 0, 40, 30], "name": "base"}]},
+    {"op": "extrude", "id": "e1", "profile": "s1", "distance": 10},
+    {"op": "extrude", "id": "e2", "face": {"normal": [1, 0, 0], "count": 1}, "distance": 3}
+  ],
+  "expect": {
+    "volume": 12900,
+    "area": 4040,
+    "faces": 6,
+    "bbox": [0, 0, 0, 43, 30, 10],
+    "source": "analytic",
+    "note": "The whole x=40 face grows 3 outward: a 43x30x10 box. V = 43*30*10; A = 2(43*30 + 43*10 + 30*10); refine merges the faces back to 6"
+  }
+}

@@ -100,6 +100,26 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 ## Known issues / findings
 
+- **Lesson (2026-10-10): green tests, unusable product.** Luca's first real session: Create Sketch
+  opened FreeCAD pop-ups, dragging the Extrude arrow crashed, Extrude ignored clicks on profiles
+  and faces, a stuck dialog made E/Q/Create Sketch silently do nothing. The smoke test called
+  SciForge code directly and never clicked. Rule now: **every interactive feature gets a step in
+  `SciForgeTests/gui/journey_gui.py` driven by real mouse clicks/drags on the 3D view**, and a
+  feature is not "done" until that passes. Click one step *after* the key that opens a task panel
+  (the panel narrows the 3D view).
+- **Trap: pivy dragger callbacks crash FreeCAD** (`addMotionCallback`/`addFinishCallback`): pivy
+  calls Python without the GIL (gdb: SIGSEGV in `SoDraggerPythonCB` -> `PyDict_New`), and doing a
+  recompute or Pad<->Pocket swap inside Coin's event traversal is unsafe anyway. `ArrowDragger`
+  polls the dragger with a QTimer instead. Use FreeCAD's `view.addEventCallback` (GIL-safe) for
+  mouse events; defer real work from selection observers/event callbacks with
+  `QTimer.singleShot`.
+- FreeCAD 1.1 draws origin planes small and fixed-size: SciForge draws its own big squares while
+  Create Sketch waits (`sketch_ui.PlanePicker`) and picks them by ray maths. From the isometric
+  view (camera +x -y +z) the XZ square is in front of XY for y > 0, as in Fusion.
+- Extrude profiles: sketches (click inside a shaded closed region, `profile_pick.py`) or a planar
+  body face `(feature, "FaceN")` as Pad/Pocket `Profile` (FreeCAD supports face profiles).
+  Distances are signed along the outward normal, so a cut into the part is negative (`flip`).
+
 - Prototype bug (fixed in `src/Mod/SciForge`): `package.xml` lacked `<subdirectory>./</subdirectory>`,
   so FreeCAD 1.1 looked for `Forge/InitGui.py` and silently skipped the add-on. It would never have
   appeared on Luca's machine.
@@ -193,10 +213,23 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   exists" (FreeCAD loads every Mod folder); told him to move it out. Then: "the icons are awesome,
   it really does feel like fusion". Asked him for the feedback list in Next steps 1.
 
+### 2026-10-10: Session 1, part 4 (Luca's first real use: "pretty but nothing works")
+- Reproduced in a real GUI with real mouse input: sketch pop-ups, arrow-drag crash (gdb), Extrude
+  not taking clicks, silent commands. Fixed: Fusion-style Create Sketch (`sketch_ui.py`, big
+  origin squares, click plane/face, no pop-ups), Extrude profile picking (`profile_pick.py`, click
+  inside the shaded profile) and face extrude, crash-free `ArrowDragger` (QTimer), blue arrow,
+  commands finish the open dialog instead of going silent (`commands.finish_open_dialog`),
+  `find_body` (reopened files), deferred selection handling, copyable Diagnostics with the last
+  200 SciForge messages. New GUI journey test (25 checks, real clicks/drags) + 2 golden models
+  (face extrude join/cut). Tests: 77 unit, 45 golden (+3 xfail), 70 smoke, 25 journey.
+
 ## Next steps (in order)
 
-1. Luca installs the quick update on his portable build and reports (screenshots, Report view).
-   Ask for: right-click marking menu screenshot (slot order), Press Pull and Extrude feel.
+1. Luca installs the quick update and redoes his session (sketch on a plane, extrude, press pull,
+   second sketch on a face). Ask for SciForge > Diagnostics text (now copyable, includes recent
+   messages) whenever something misbehaves, plus the right-click menu screenshot (slot order).
+   Then: next interactive gaps by journey test first (sketch dimensions on screen, Fillet/Hole/
+   Revolve dialogs with arrows, Move/Copy, selection filters, timeline reorder/suppress).
    Earlier: confirm the C++ build ran golden `plate_hole_grid` as PASS (patch #4).
 2. Luca launches the portable build on Windows and reports (Report view + Diagnostics).
 3. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).

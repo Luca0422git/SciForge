@@ -64,6 +64,11 @@ Unavailable items are greyed out. Separators group related commands.
 - Browser with Fusion's structure (browser_ui.py), marking menu (marking_menu.py), Press Pull,
   Extrude, Change Parameters, Construct presets, draggable timeline marker, ViewCube colours,
   3D Print.
+- Create Sketch: big origin plane squares light up under the mouse; click one or a flat face and
+  the sketch opens (sketch_ui.py). No attachment pop-ups.
+- Extrude: closed sketch profiles are shaded and light up under the mouse; click inside one, or
+  click a flat face of the part. Blue drag arrow.
+- Starting a command finishes the one in progress (as in Fusion) instead of doing nothing.
 
 ## Known gaps (next passes)
 
@@ -72,6 +77,9 @@ Unavailable items are greyed out. Separators group related commands.
 - Document tabs sit at the bottom of the view (FreeCAD); Fusion has them in the application bar.
 - Sketch Palette: FreeCAD's sketch task panel, restyled; Fusion's palette options differ.
 - Command dialogs appear in the Tasks dock on the right; Fusion shows floating dialogs.
+- Extrude picks a whole sketch (all its closed regions), not one region of it as Fusion can.
+- Origin plane squares are only drawn while Create Sketch waits; Fusion shows them on demand from
+  the browser too.
 - Timeline: no drag-to-reorder, suppress or groups yet.
 - Menu icons are 16 px (Fusion about 20 px); COMMENTS panel and "Unsaved" banner not done.
 - Orbit and Pan buttons on the navigation bar are hints only (the mouse does it).

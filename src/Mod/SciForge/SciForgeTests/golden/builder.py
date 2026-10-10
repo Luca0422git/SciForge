@@ -156,8 +156,16 @@ class Builder:
             "distance2": step.get("distance2", distance),
             "taper": step.get("taper", 0.0),
         }
+        if "face" in step:  # Fusion: pick a flat face of the part as the profile
+            tip = self.body.Tip
+            names = selectors.select(tip.Shape, step["face"], "faces")
+            if len(names) != 1:
+                raise BuildError("extrude %r: 'face' must select one face" % step["id"])
+            profile = (tip, names[0])
+        else:
+            profile = self.objects[step["profile"]]
         try:
-            feature = extrude.make(self.body, self.objects[step["profile"]], options, step["id"])
+            feature = extrude.make(self.body, profile, options, step["id"])
         except extrude.ExtrudeError as exc:
             raise BuildError("extrude %r: %s" % (step["id"], exc))
         self.objects[step["id"]] = feature

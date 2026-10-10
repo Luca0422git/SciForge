@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Extrude command (E) with Fusion's one-dialog workflow.
 
-Pick a sketch (select it, or the newest unused sketch of the active body is
-taken), then drag the arrow or type a distance. Dragging into existing
+Pick a profile like in Fusion: click inside a closed sketch shape (they are shaded
+blue and light up under the mouse), or click a flat face of the part. With a
+sketch or face already selected, or a sketch you just finished, it starts at
+once. Then drag the arrow or type a distance. Dragging into existing
 material switches the operation to Cut automatically, as Fusion does, unless
 you picked an operation yourself.
 """
@@ -10,7 +12,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, extrude, log, ui_icon_path, warn
-from .compat import QtWidgets
+from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel
 
 DIRECTION_LABELS = [
@@ -33,11 +35,37 @@ def _used_profiles(body):
     return used
 
 
-def pick_sketch(body):
-    """The selected sketch, else the newest sketch of the body no feature uses yet."""
+def selected_profile(body):
+    """The selected sketch, or a selected planar face of the body as (feature, "FaceN")."""
     for sel in Gui.Selection.getSelectionEx():
         if sel.Object.TypeId == "Sketcher::SketchObject":
             return sel.Object
+        for name in sel.SubElementNames:
+            obj, short = sel.Object, name
+            if "." in name:  # picked through the body: "Pad.Face6"
+                path, short = name.rsplit(".", 1)
+                inner = sel.Object.getSubObject(path + ".", retType=1)
+                obj = inner if inner is not None else obj
+            if obj.TypeId == "PartDesign::Body":
+                obj = obj.Tip
+            if not short.startswith("Face") or obj is None:
+                continue
+            if body is not None and obj.getParentGeoFeatureGroup() is not body:
+                continue
+            try:
+                face = obj.Shape.getElement(short)
+            except Exception:
+                continue
+            if face.Surface.TypeId == "Part::GeomPlane":
+                return (obj, short)
+    return None
+
+
+def pick_sketch(body):
+    """The selected sketch or face, else the newest sketch of the body no feature uses yet."""
+    picked = selected_profile(body)
+    if picked is not None:
+        return picked
     if body is None:
         return None
     used = _used_profiles(body)
@@ -59,17 +87,17 @@ class ExtrudePanel(Panel):
     title = "Extrude"
     icon = "extrude"
     last = None
+    auto_pick = True  # take the sketch just finished, like Fusion with a single profile
 
     def __init__(self, doc, feature=None):
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
-        self.body = (
-            commands.active_body() if feature is None else feature.getParentGeoFeatureGroup()
-        )
+        self.body = commands.find_body() if feature is None else feature.getParentGeoFeatureGroup()
         self.target = feature
         self.sketch = None
         self.dragger = None
         self.observer = None
+        self.picker = None
         self.user_picked_operation = feature is not None
         self.options = {
             "operation": "join",
@@ -86,7 +114,9 @@ class ExtrudePanel(Panel):
             tip = feature.BaseFeature
         self.base_shape = tip.Shape.copy() if tip is not None and not tip.Shape.isNull() else None
 
-        self.profile = QtWidgets.QLabel("Select a sketch to extrude")
+        self.profile = QtWidgets.QLabel(
+            "Click inside a sketch profile (shaded blue)\nor on a flat face of the part"
+        )
         self.layout.addRow("Profile", self.profile)
         self.direction = _combo(DIRECTION_LABELS, self.options["direction"])
         self.layout.addRow("Direction", self.direction)
@@ -108,10 +138,8 @@ class ExtrudePanel(Panel):
         self._update_visibility()
 
         if feature is not None:
-            self.sketch = (
-                feature.Profile[0] if isinstance(feature.Profile, tuple) else feature.Profile
-            )
-            self.profile.setText(self.sketch.Label)
+            self.sketch = extrude.profile_of(feature)
+            self.profile.setText(extrude.profile_label(self.sketch))
             if self.body is not None and self.body.Tip is not feature:
                 self.operation.setEnabled(False)
                 self.operation.setToolTip(
@@ -142,15 +170,17 @@ class ExtrudePanel(Panel):
         )
 
     # -- start -------------------------------------------------------------------
-    def _start(self):
+    def _start(self, sketch=None):
         if self.body is None:
             self.message.setText("Create a sketch first (Create Sketch).")
             return True
-        sketch = pick_sketch(self.body)
+        if sketch is None:
+            sketch = pick_sketch(self.body) if self.auto_pick else selected_profile(self.body)
         if sketch is None:
             return False
+        self._unwatch()
         self.sketch = sketch
-        self.profile.setText(sketch.Label)
+        self.profile.setText(extrude.profile_label(sketch))
         self._auto_operation()
         try:
             self.target = extrude.make(self.body, sketch, self.options)
@@ -162,27 +192,54 @@ class ExtrudePanel(Panel):
         return True
 
     def _watch_selection(self):
+        """Wait for a click: inside a shaded sketch profile, on a sketch line or a flat face.
+        Work is deferred to a Qt timer so nothing runs inside FreeCAD's click handling."""
+        from . import profile_pick
+
         panel = self
 
         class Observer:
             def addSelection(self, doc, obj, sub, pnt):
-                if panel.target is None and panel._start():
-                    panel._unwatch()
+                QtCore.QTimer.singleShot(30, panel._selection_changed)
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
+        try:
+            self.picker = profile_pick.ProfilePicker(
+                Gui.ActiveDocument.ActiveView,
+                profile_pick.candidate_sketches(self.body),
+                lambda sketch: QtCore.QTimer.singleShot(0, lambda: self._profile_clicked(sketch)),
+            )
+        except Exception as exc:
+            warn("profile shading unavailable: %s" % exc)
+
+    def _profile_clicked(self, sketch):
+        if self.target is None and not self._closed:
+            self._start(sketch)
+
+    def _selection_changed(self):
+        if self.target is not None or self._closed:
+            return
+        picked = selected_profile(self.body)
+        if picked is not None:
+            self._start(picked)
 
     def _unwatch(self):
         if self.observer is not None:
             Gui.Selection.removeObserver(self.observer)
             self.observer = None
+        if self.picker is not None:
+            self.picker.remove()
+            self.picker = None
 
     def _make_dragger(self):
         try:
-            placement = self.sketch.getGlobalPlacement()
-            normal = placement.Rotation.multVec(App.Vector(0, 0, 1))
-            center = self.sketch.Shape.BoundBox.Center
-            size = max(4.0, min(self.sketch.Shape.BoundBox.DiagonalLength * 0.15, 30.0))
+            center, normal = extrude.profile_frame(self.sketch)
+            if isinstance(self.sketch, tuple):
+                extent = self.sketch[0].Shape.getElement(self.sketch[1]).BoundBox
+            else:
+                extent = self.sketch.Shape.BoundBox
+            size = max(4.0, min(extent.DiagonalLength * 0.15, 30.0))
             self.dragger = ArrowDragger(
                 center,
                 normal,
@@ -250,7 +307,7 @@ class ExtrudePanel(Panel):
 
     def accept(self):
         if self.target is None:
-            self.message.setText("Select a sketch to extrude.")
+            self.message.setText("Pick a sketch profile or a flat face first.")
             return False
         return super().accept()
 
@@ -272,10 +329,12 @@ class ExtrudeCommand:
         }
 
     def IsActive(self):
-        return App.ActiveDocument is not None and not Gui.Control.activeDialog()
+        return App.ActiveDocument is not None
 
     def Activated(self):
         try:
+            if not commands.finish_open_dialog():
+                return
             Gui.Control.showDialog(ExtrudePanel(App.ActiveDocument))
             log("extrude started")
         except Exception as exc:

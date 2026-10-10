@@ -38,6 +38,19 @@ def ui_icon(name):
     return _ICON_CACHE[name]
 
 
+# The last SciForge messages, shown (copyable) in SciForge > Diagnostics: FreeCAD's
+# own error pop-ups fade away before they can be copied.
+RECENT = []
+RECENT_MAX = 200
+
+
+def _remember(kind, msg):
+    import time
+
+    RECENT.append("%s %s %s" % (time.strftime("%H:%M:%S"), kind, msg))
+    del RECENT[:-RECENT_MAX]
+
+
 def _console():
     try:
         import FreeCAD
@@ -48,6 +61,7 @@ def _console():
 
 
 def log(msg):
+    _remember("info", msg)
     console = _console()
     if console:
         console.PrintMessage("[SciForge] %s\n" % msg)
@@ -56,6 +70,7 @@ def log(msg):
 
 
 def warn(msg):
+    _remember("WARNING", msg)
     console = _console()
     if console:
         console.PrintWarning("[SciForge] %s\n" % msg)
