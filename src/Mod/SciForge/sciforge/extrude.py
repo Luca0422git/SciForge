@@ -75,6 +75,11 @@ class ExtrudeError(ValueError):
     """The extrude cannot be built as asked; the message says why and what to do."""
 
 
+class NeedsPick(ExtrudeError):
+    """A selection box (To Object, Start: Object) waits for its click: not a mistake, the
+    dialog shows it as a hint and keeps the last preview, like Fusion."""
+
+
 # -- profiles -------------------------------------------------------------------------
 def is_sketch(obj):
     return obj is not None and obj.isDerivedFrom("Sketcher::SketchObject")
@@ -342,13 +347,13 @@ def check_options(options):
         if options[extent] == "distance" and abs(float(options[distance])) < 1e-6:
             raise ExtrudeError("The distance%s must not be zero." % where)
         if options[extent] == "to_object" and options.get(target) is None:
-            raise ExtrudeError("Pick the face, plane or body to extrude to%s." % where)
+            raise NeedsPick("Click the face, plane or body to extrude to%s." % where)
         if abs(float(options[taper])) >= 89.9:
             raise ExtrudeError("The taper angle%s must be between -89.9 and 89.9 degrees." % where)
     if options["direction"] == "symmetric" and options["extent"] == "to_object":
         raise ExtrudeError("Symmetric extrudes go a distance or through all.")
     if options["start"] == "object" and options.get("start_object") is None:
-        raise ExtrudeError("Pick the face or plane the extrusion starts from.")
+        raise NeedsPick("Click the face or plane the extrusion starts from.")
 
 
 def feature_type(operation):
@@ -394,7 +399,7 @@ def start_offset_of(profiles, options):
         return float(options["start_offset"])
     if options["start"] == "object":
         if not options.get("start_object"):
-            raise ExtrudeError("Pick the face or plane the extrusion starts from.")
+            raise NeedsPick("Click the face or plane the extrusion starts from.")
         plane = _plane_of_ref(options["start_object"])
         if plane is None:
             raise ExtrudeError("Start from a flat face or a plane.")
@@ -951,6 +956,7 @@ def build(profiles, options, name="Extrude", feature=None):
         new.Label = label
     if before is None or was_tip:
         target.Tip = new
+        show_tip(target)
     return new
 
 
@@ -1025,11 +1031,28 @@ def _delete(obj):
         pass
 
 
+def show_tip(body):
+    """FreeCAD draws a body through its Tip feature, and a new feature hides the one before
+    it. A feature removed by code (FreeCAD's own Delete does this itself) left the new Tip
+    hidden: the whole part vanished from the view although it was still there."""
+    tip = body.Tip if body is not None else None
+    if tip is None:
+        return
+    try:
+        if App.GuiUp and tip.ViewObject is not None:
+            tip.ViewObject.Visibility = True
+        else:
+            tip.Visibility = True
+    except Exception:
+        pass
+
+
 def _remove(feature, keep_body=True):
     """Delete an extrude with its helpers (and the body it created, when asked)."""
     meta = load_meta(feature)
     doc = feature.Document
     body = owner_body(feature)
+    was_tip = body is not None and body.Tip is feature
     helpers = [doc.getObject(n) for n in meta.get("helpers", [])]
     _delete(feature)
     for helper in helpers:
@@ -1040,6 +1063,9 @@ def _remove(feature, keep_body=True):
         if not rest:
             body.removeObjectsFromDocument()
             doc.removeObject(body.Name)
+            return
+    if was_tip:
+        show_tip(body)
 
 
 def remove(feature):

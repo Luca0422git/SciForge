@@ -95,7 +95,34 @@ def hidden_by(shape, point, direction):
         return False
 
 
+def handle_at(view, position, radius=3):
+    """True if the front-most thing under the mouse is a drag handle (a Coin dragger: the
+    blue arrows, the taper disc). A press there drags the handle; it is not a pick."""
+    from pivy import coin
+
+    try:
+        viewer = view.getViewer()
+        manager = viewer.getSoRenderManager()
+        action = coin.SoRayPickAction(manager.getViewportRegion())
+        action.setPoint(coin.SbVec2s(int(position[0]), int(position[1])))
+        action.setRadius(radius)
+        action.apply(manager.getSceneGraph())
+        point = action.getPickedPoint()
+        if point is None:
+            return False
+        path = point.getPath()  # read now: the path dies with the action
+        dragger = coin.SoDragger.getClassTypeId()
+        return any(path.getNode(i).isOfType(dragger) for i in range(path.getLength()))
+    except Exception:
+        return False
+
+
 class ProfilePicker:
+    """Clicks pick on release, like FreeCAD's selection and Fusion: a press that starts a
+    drag (a drag handle in front of the region, or the view being turned) is no pick."""
+
+    CLICK_SLOP = 4  # pixels the mouse may move between press and release of a click
+
     def __init__(self, view, sketches, on_pick, occluder=None):
         from pivy import coin
 
@@ -106,6 +133,7 @@ class ProfilePicker:
         self.regions = []  # (sketch, sub, face, material)
         self.selected = set()  # {(sketch name, sub)}
         self.last_click = 0.0  # time of the last click that picked a region
+        self._press = None  # where the left button went down, unless that was on a handle
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -219,9 +247,22 @@ class ProfilePicker:
 
     def _button(self, info):
         try:
-            if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
+            if info.get("Button") != "BUTTON1":
                 return
-            hit = self.region_at(info["Position"], check_hidden=True)
+            position = tuple(info["Position"])
+            if info.get("State") == "DOWN":
+                # A press on a drag handle (it may sit right in front of a region) drags the
+                # handle; it must not drop or add the region behind it.
+                self._press = None if handle_at(self.view, position) else position
+                return
+            if info.get("State") != "UP":
+                return
+            press, self._press = self._press, None
+            if press is None:
+                return
+            if max(abs(position[0] - press[0]), abs(position[1] - press[1])) > self.CLICK_SLOP:
+                return  # a drag, not a click
+            hit = self.region_at(position, check_hidden=True)
             if hit is not None:
                 self.last_click = time.time()
                 self.on_pick(hit[0], hit[1])

@@ -128,6 +128,8 @@ class PressPullPanel(Panel):
         super().__init__(doc, "Press Pull" if feature is None else "Edit Press Pull")
         PressPullPanel.last = self
         self.escape = preview.EscapeCancels(self)
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
         self.body, self.tip = _body_and_tip()
         self.mode = None  # "faces" | "fillet" | "edit_blend"
         self.target = feature  # the feature being created or edited
@@ -227,12 +229,11 @@ class PressPullPanel(Panel):
 
     # -- starting --------------------------------------------------------------------------
     def _start_from_selection(self):
-        if self.body is None or self.tip is None or self.tip.Shape.isNull():
-            self.message.setText("Make a solid first (Create Sketch, then Extrude).")
-            return
         picks = _picks()
         if picks:
             self._take(picks)
+        elif self.body is None or self.tip is None or self.tip.Shape.isNull():
+            self.message.setText("Make a solid first (Create Sketch, then Extrude).")
         try:
             Gui.Selection.clearSelection()
         except Exception:
@@ -268,9 +269,22 @@ class PressPullPanel(Panel):
         except Exception as exc:
             warn("press pull on a sketch: %s" % exc)
 
+    def _follow_body(self, obj):
+        """The first pick decides the body (Fusion: Press Pull works on any body, not only
+        the active one); the feature goes into that body's timeline."""
+        if self.mode is not None or self.editing:
+            return
+        from . import extrude
+
+        body = extrude.owner_body(obj)
+        if body is None or body is self.body or body.Tip is None or body.Tip.Shape.isNull():
+            return
+        self.body, self.tip, self.base = body, body.Tip, None
+
     def _face_picked(self, obj, short, point):
         if self.mode == "edit_blend":
             return
+        self._follow_body(obj)
         if self.mode == "fillet":
             self.message.setText(
                 "This Press Pull rounds edges; click edges, or OK and start again."
@@ -309,6 +323,7 @@ class PressPullPanel(Panel):
             if self.mode == "faces":
                 self.message.setText("This Press Pull moves faces; click faces to add or drop.")
             return
+        self._follow_body(obj)
         base = self.base or self.tip
         if base is None:
             return
@@ -381,6 +396,9 @@ class PressPullPanel(Panel):
                 if self.base is not None:
                     body.Tip = self.base
             self.doc.removeObject(target.Name)
+            from . import extrude
+
+            extrude.show_tip(body)  # the part before it was hidden by the new feature
         except Exception as exc:
             warn("press pull: could not remove the preview: %s" % exc)
         self.field_label.setText("Distance")
@@ -458,10 +476,9 @@ class PressPullPanel(Panel):
                 self.body, self.tip = _body_and_tip()
             if self.picker is not None and self.picker.clicked_region_recently():
                 return  # the click was on a sketch area: Extrude takes over
-            if self.tip is None or self.tip.Shape.isNull():
+            self._take(picks)  # a face of any body, also when the active body is empty
+            if self.mode is None and (self.tip is None or self.tip.Shape.isNull()):
                 self.message.setText("Make a solid first (Create Sketch, then Extrude).")
-                return
-            self._take(picks)
             if self.mode is not None:
                 self._unshade()  # faces or edges chosen: sketch areas no longer apply
         except Exception as exc:
@@ -537,6 +554,8 @@ class PressPullPanel(Panel):
         self._unwatch()
         self._unshade()
         self.escape.remove()
+        self.undo_guard.remove()
+        self.enter.remove()
         self._remove_dragger()
         super().cleanup()
 

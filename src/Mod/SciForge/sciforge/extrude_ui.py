@@ -359,6 +359,8 @@ class ExtrudePanel(Panel):
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
         self.escape = preview.EscapeCancels(self)
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else extrude.owner_body(feature)
@@ -367,6 +369,7 @@ class ExtrudePanel(Panel):
         self.options["measurement"] = "half"  # Fusion's default for Symmetric
         self.user_picked_operation = feature is not None
         self.error = ""
+        self.waiting = ""  # the selection box that waits for a click, said as a hint
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
@@ -454,6 +457,10 @@ class ExtrudePanel(Panel):
         form.addRow(self.taper2_label, self.taper2.widget)
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
         form.addRow("Operation", self.operation)
+        self.info = QtWidgets.QLabel("")  # what the dialog waits for (not a problem)
+        self.info.setWordWrap(True)
+        self.info.setStyleSheet("color: #8cc4ff;")
+        form.addRow(self.info)
         self.finish_layout()
         for box in (self.start, self.direction, self.extent, self.extent2, self.measurement):
             box.currentIndexChanged.connect(self._typed)
@@ -516,6 +523,11 @@ class ExtrudePanel(Panel):
             (self.taper2_label, two),
         ):
             widget.setVisible(show)
+        # Fusion: a symmetric extrude goes a distance or through all, never to an object.
+        model = self.extent.model()
+        to_object = self.extent.findData("to_object")
+        if to_object >= 0 and hasattr(model, "item"):
+            model.item(to_object).setEnabled(not symmetric)
         # A taper only where it can be built (Distance; a cut's All; any Intersect).
         operation = self.operation.currentData()
         for field, ext in ((self.taper, extent), (self.taper2, extent2)):
@@ -663,6 +675,10 @@ class ExtrudePanel(Panel):
                 return
             ref = self._base_face(obj, short)
             if ref is None:
+                picked = self._picked_face_moved(obj, short)
+                if picked is not None:
+                    self._toggle(picked)  # the end of the preview: the face it came from
+                    return
                 self.message.setText("That face belongs to this extrude itself.")
                 return
             face = ref[0].Shape.getElement(ref[1])
@@ -724,6 +740,30 @@ class ExtrudePanel(Panel):
         name = profile_pick.face_name_in(base, face)
         return (base, name) if name else None
 
+    def _picked_face_moved(self, obj, short):
+        """The picked face profile whose extruded end was clicked (the preview covers the
+        picked face itself, so clicking "it" again lands on the end of the preview)."""
+        face = profile_pick.global_face(obj, short)
+        if face is None or face.Surface.TypeId != "Part::GeomPlane":
+            return None
+        normal = extrude.face_normal(face)
+        for ref in self.profiles:
+            if extrude.is_sketch(ref[0]):
+                continue
+            start = profile_pick.global_face(*ref)
+            if start is None:
+                continue
+            axis = extrude.face_normal(start)
+            if abs(abs(normal.dot(axis)) - 1.0) > 1e-6:
+                continue
+            shift = (face.CenterOfMass - start.CenterOfMass).dot(axis)
+            if abs(shift) < 1e-6:
+                continue
+            foot = extrude.interior_point(face) - axis * shift
+            if profile_pick.inside(start, foot):
+                return ref
+        return None
+
     def _source_body(self):
         if self.profiles:
             body = extrude.owner_body(self.profiles[0][0])
@@ -782,6 +822,8 @@ class ExtrudePanel(Panel):
                 self.schedule()
             self.message.setText("" if not self.editing else "Pick at least one profile.")
             self.error = "Pick at least one profile." if self.editing else ""
+            self.waiting = ""
+            self.info.setText("")
             return
         try:
             extrude.check_profiles(self.profiles)
@@ -944,12 +986,16 @@ class ExtrudePanel(Panel):
     def _apply(self):
         if not self.profiles:
             return
+        self.waiting = ""
         try:
             before = self.target
             self.target = extrude.build(self.profiles, self.options, feature=self.target)
             self.error = ""
             if before is None or self.target is not before:
                 self._geometry_changed = True
+        except extrude.NeedsPick as exc:
+            # A selection box waits for its click: the last preview stays, no warning.
+            self.error = self.waiting = str(exc)
         except extrude.ExtrudeError as exc:
             self.error = str(exc)
         except Exception as exc:
@@ -973,6 +1019,11 @@ class ExtrudePanel(Panel):
         return self.target
 
     def show_status(self):
+        waiting = getattr(self, "waiting", "")
+        self.info.setText(waiting)
+        if waiting:
+            self.message.setText("")
+            return
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
@@ -1116,6 +1167,7 @@ class ExtrudePanel(Panel):
             self.dirty = False
             self._apply()
         if self.error:
+            self.info.setText("")
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
@@ -1147,6 +1199,8 @@ class ExtrudePanel(Panel):
     def cleanup(self):
         self._unwatch()
         self.escape.remove()
+        self.undo_guard.remove()
+        self.enter.remove()
         self._remove_draggers()
         super().cleanup()
 
