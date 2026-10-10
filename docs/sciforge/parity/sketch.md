@@ -17,10 +17,12 @@ FreeCAD 1.1.4's Sketcher. Status: **first pass + QA pass, not yet signed off**.
 | Double-click a dimension to change it | Same (also radius/diameter); a driven dimension says it cannot be changed |
 | T trim, O offset (chain), X construction, P project, Include 3D Geometry, Mirror/patterns with nothing selected | Same (first pass). Offset keeps sharp corners |
 | A constraint tool clicked with a selection that does not fit (Parallel with one line) starts and waits for picks | Same (`sketch_tools_ui._Constraint`); FreeCAD alone only noted "Wrong selection" |
+| Fix/Unfix with curves selected fixes them where they are | Same: FreeCAD's Block on curves, Lock on points |
 | Sketch fillet: click a corner, type the radius | Same: the radius box opens on a new radius dimension |
-| Esc stops the tool, a second Esc clears the selection; Esc never leaves the sketch | Same, also with the keyboard in the side panel (after a palette click) |
+| Esc stops the tool, a second Esc clears the selection; Esc never leaves the sketch | Same, also with the keyboard in the side panel (after a palette click) or in FreeCAD's value field next to the pointer, right after typing a value |
 | E in a sketch: finishes it and starts Extrude with the profile | Same, also with a drawing tool still running |
 | M moves/copies sketch curves, Del deletes sketch curves, Ctrl+C/Ctrl+X/Ctrl+V copy/cut/paste (the copy hangs on the mouse) | Same (keys handled by the sketch view while a sketch is open) |
+| A tool's key (L, C, R, D, T...) switches tools at any time, also halfway through a shape | Same, also when FreeCAD's value field has the keyboard; after a value typed into the field, letters are a unit ("12 mm") |
 | Right click: the marking menu with sketch tools and Finish Sketch | Same (`sketch_marking.py`): Repeat, Delete, Line, Undo, Finish Sketch, Circle, Sketch Dimension, Rectangle; list: Redo, Trim, Offset, Project, Move/Copy, Normal/Construction, Fit, Look At |
 | SKETCH PALETTE: Linetype (construction), Look At, Sketch Grid, Snap, Slice, Show Profile/Points/Dimensions/Constraints/Projected Geometries | Same (`sketch_palette.py`). Linetype turns orange while new curves are construction (X with nothing selected), and every new sketch starts with normal lines. FreeCAD's constraint/element lists are hidden |
 | Closed areas shaded light blue (also where curves cross) | Same (`sketch_regions.py`) |

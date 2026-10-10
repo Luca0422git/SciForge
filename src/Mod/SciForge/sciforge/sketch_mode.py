@@ -92,9 +92,10 @@ PARAMS = [
     # "Sub shape not found: Sketch.?InternalFace1"...): FreeCAD's wording, nothing a
     # Fusion user can act on. SciForge says what matters next to the mouse
     # (commands.tell) or in its dialogs; the messages stay in FreeCAD's notification
-    # list and the Report view. Both settings: FreeCAD shows repeated messages again
-    # even with the first one off, the second one stops that.
-    (NOTIFICATIONS, "Bool", "NonIntrusiveNotificationsEnabled", False),
+    # list and the Report view. No balloon is ever open (MaxOpenNotifications 0). The
+    # "non-intrusive" setting must stay on: off, FreeCAD shows its user warnings ("Wrong
+    # selection"...) as blocking message boxes instead.
+    (NOTIFICATIONS, "Bool", "NonIntrusiveNotificationsEnabled", True),
     (NOTIFICATIONS, "Int", "MaxOpenNotifications", 0),
 ]
 
@@ -499,6 +500,34 @@ def find_node(root, name):
     return node, parent
 
 
+def view_widget(gl=None):
+    """The 3D view widget that has the keyboard (Gui::View3DInventorViewer): a real
+    keyboard sends its keys there, not to the OpenGL drawing area inside it (which gets
+    the mouse). Keys sent to the drawing area go on to it as well."""
+    gl = gl if gl is not None else gl_widget()
+    widget = gl
+    try:
+        while widget is not None:
+            if widget.metaObject().className() == "Gui::View3DInventorViewer":
+                return widget
+            widget = widget.parentWidget()
+    except Exception:
+        pass
+    return gl
+
+
+def _same(a, b):
+    """The same Qt object (Python wrappers of one widget are not always the same)."""
+    if a is None or b is None:
+        return False
+    try:
+        import shiboken6
+
+        return shiboken6.getCppPointer(a)[0] == shiboken6.getCppPointer(b)[0]
+    except Exception:
+        return a is b
+
+
 def _is_valid(widget):
     try:
         import shiboken6
@@ -586,8 +615,18 @@ class SketchSession:
         self._refresh.setInterval(120)
         self._refresh.timeout.connect(self._refreshed)
         self.filter = _ViewFilter(self)
+        self.keys = _KeyFilter(self)
+        self.viewer = view_widget(self.gl) if self.gl is not None else None
+        self._fields = []
+        self._typed = None  # the value field the user typed a value into
         if self.gl is not None:
             self.gl.installEventFilter(self.filter)
+        if self.viewer is not None:
+            self.viewer.installEventFilter(self.keys)
+        try:
+            QtWidgets.QApplication.instance().focusChanged.connect(self._focus_changed)
+        except Exception as exc:
+            warn("sketch mode: value fields: %s" % exc)
         for name in PALETTE_DEFAULTS:
             if name != "snap":
                 self.apply_option(name)
@@ -807,21 +846,100 @@ class SketchSession:
         except Exception:
             pass
 
+    def _focus_changed(self, old, new):
+        """A drawing tool's on-screen value field took the keyboard: Enter and Esc typed
+        there must work as in Fusion too (FreeCAD keeps those keys in the field)."""
+        try:
+            if self.closed or not isinstance(new, QtWidgets.QAbstractSpinBox):
+                return
+            if not self._is_field(new):
+                return
+            new.installEventFilter(self.keys)  # Qt keeps one copy; it runs first
+            self._fields = [f for f in self._fields if _is_valid(f) and not _same(f, new)]
+            self._fields.append(new)
+            if self._typed is not None and not _same(self._typed, new):
+                self._typed = None  # another field: nothing typed into it yet
+        except Exception as exc:
+            warn("sketch value field: %s" % exc)
+
+    def _is_field(self, widget):
+        """One of FreeCAD's on-screen value fields of this 3D view."""
+        try:
+            mdi = self.viewer.parentWidget() if self.viewer is not None else None
+            return mdi is not None and _same(widget.parentWidget(), mdi)
+        except Exception:
+            return False
+
+    def _focused_field(self):
+        widget = QtWidgets.QApplication.focusWidget()
+        if isinstance(widget, QtWidgets.QAbstractSpinBox) and self._is_field(widget):
+            return widget
+        return None
+
+    def field_key(self, field, event):
+        """A key typed into an on-screen value field of a drawing tool."""
+        key = event.key()
+        if key == QtCore.Qt.Key_Escape:
+            # Fusion: Esc stops the tool, also right after typing a value (FreeCAD keeps
+            # Esc in the field for two seconds after a digit, then resets the shape).
+            if not event.isAutoRepeat():
+                self.escape()
+            return True
+        if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+            if self._enter_follow or event.modifiers() & QtCore.Qt.ControlModifier:
+                return False
+            if not self._finishes_on_enter():
+                return False
+            self._accept_fields(field)
+            return True
+        if _is_value_key(event) or key in (QtCore.Qt.Key_Backspace, QtCore.Qt.Key_Delete):
+            self._typed = field  # the user is typing a value here
+            return False
+        mods = event.modifiers() & ~(QtCore.Qt.ShiftModifier | QtCore.Qt.KeypadModifier)
+        letter = event.text()[:1].isalpha() and mods == QtCore.Qt.NoModifier
+        if letter and not event.isAutoRepeat() and not _same(self._typed, field):
+            # Fusion: a tool's key switches tools at any time. FreeCAD would type the
+            # letter into the field for two seconds after any value or Enter (a unit);
+            # here only after a value typed into this field.
+            command = _sketch_key(event)
+            if command is not None:
+                QtCore.QTimer.singleShot(0, lambda: _run(command))
+                return True
+            name = _swallowed_shortcut(event)
+            if name is not None:
+                QtCore.QTimer.singleShot(0, lambda: _run_shortcut(name))
+                return True
+        return False
+
+    def _finishes_on_enter(self):
+        from . import recent
+
+        last = recent.last()
+        if last is None or last[0] not in ENTER_FINISHES:
+            return False
+        return self.gl is not None and self.gl.cursor().shape() != QtCore.Qt.ArrowCursor
+
+    def _accept_fields(self, field):
+        """FreeCAD's Ctrl+Enter in a value field: every field of the shape keeps what it
+        shows (the typed value, or where the pointer is) and the shape is drawn."""
+        self._enter_follow = True
+        try:
+            for kind in (QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease):
+                event = QtGui.QKeyEvent(kind, QtCore.Qt.Key_Return, QtCore.Qt.ControlModifier, "\r")
+                QtWidgets.QApplication.sendEvent(field, event)
+        finally:
+            self._enter_follow = False
+
     def enter_pressed(self):
         """Enter after typing a value while drawing. FreeCAD keeps the value and moves to
         the next on-screen field (the angle of a line, the height of a rectangle); Fusion
         draws the shape there, the pointer giving the rest. So when Enter did not finish
-        the shape, a second Enter is given for the user (Tab still goes to the next
-        field)."""
+        the shape, the fields are accepted as they are for the user (Tab still goes to
+        the next field). Enter typed in a field itself: field_key."""
         if self._enter_follow or self.closed:
             return
         try:
-            from . import recent
-
-            last = recent.last()
-            if last is None or last[0] not in ENTER_FINISHES:
-                return
-            if self.gl is None or self.gl.cursor().shape() == QtCore.Qt.ArrowCursor:
+            if not self._finishes_on_enter():
                 return
             count = len(self.sketch.Geometry)
             QtCore.QTimer.singleShot(0, lambda: self._finish_typed(count))
@@ -835,6 +953,10 @@ class SketchSession:
             if len(self.sketch.Geometry) != count:
                 return  # Enter finished the shape already
             if self.gl.cursor().shape() == QtCore.Qt.ArrowCursor:
+                return
+            field = self._focused_field()
+            if field is not None:
+                self._accept_fields(field)
                 return
             self._enter_follow = True
             try:
@@ -899,11 +1021,20 @@ class SketchSession:
                 part.remove()
             except Exception as exc:
                 warn("sketch mode: %s" % exc)
-        if self.gl is not None and _is_valid(self.gl):
-            try:
-                self.gl.removeEventFilter(self.filter)
-            except Exception:
-                pass
+        try:
+            QtWidgets.QApplication.instance().focusChanged.disconnect(self._focus_changed)
+        except Exception:
+            pass
+        hooked = [(self.gl, self.filter), (self.viewer, self.keys)]
+        hooked += [(field, self.keys) for field in self._fields]
+        for widget, event_filter in hooked:
+            if widget is not None and _is_valid(widget):
+                try:
+                    widget.removeEventFilter(event_filter)
+                except Exception:
+                    pass
+        self._fields = []
+        self._typed = None
         try:
             if self.palette is not None:
                 self.palette.remove()
@@ -912,9 +1043,71 @@ class SketchSession:
         self.palette = None
 
 
+class _KeyFilter(QtCore.QObject):
+    """Keys while a sketch is open. On the 3D view widget (where a real keyboard sends
+    them; keys aimed at the drawing area inside it arrive here too) and on FreeCAD's
+    on-screen value fields while a drawing tool runs (they take the keyboard, and FreeCAD
+    passes most other keys on to the view). Never blocks FreeCAD's own handling except
+    for the keys Fusion gives another meaning."""
+
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+
+    def eventFilter(self, obj, event):
+        try:
+            session = self.session
+            if session.closed:
+                return False
+            kind = event.type()
+            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
+                return False
+            if isinstance(obj, QtWidgets.QAbstractSpinBox):
+                if kind == QtCore.QEvent.KeyPress:
+                    return session.field_key(obj, event)
+                return False
+            if kind == QtCore.QEvent.ShortcutOverride:
+                # Typing a value: keys go into the value box / FreeCAD's on-screen fields,
+                # not to shortcuts (FreeCAD's 0-6 turn the view, M moves...).
+                if session.editor is not None or _is_value_key(event):
+                    event.accept()
+                    return True
+                if _sketch_key(event) is not None:
+                    event.accept()  # the key comes back as a KeyPress below
+                    return True
+                return False
+            key = event.key()
+            if session.editor is not None:
+                return session.editor.key(event)
+            command = _sketch_key(event)
+            if command is not None:
+                QtCore.QTimer.singleShot(0, lambda: _run(command))
+                return True
+            if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                from . import sketch_pick_ui
+
+                if sketch_pick_ui.on_enter():
+                    return True
+                session.enter_pressed()
+                return False
+            if key == QtCore.Qt.Key_Escape:
+                if not event.isAutoRepeat():
+                    # Right away (a Qt key event, not a Coin callback): a timer could
+                    # fire after the next key and stop the tool that key started.
+                    session.escape()
+                return False
+            name = _swallowed_shortcut(event)
+            if name is not None:
+                QtCore.QTimer.singleShot(0, lambda: _run_shortcut(name))
+                return True
+        except Exception as exc:
+            warn("sketch keys: %s" % exc)
+        return False
+
+
 class _ViewFilter(QtCore.QObject):
-    """Keys and mouse on the 3D view while a sketch is open. Never blocks FreeCAD's
-    own handling except for keys typed into SciForge's dimension box."""
+    """The mouse on the 3D view's drawing area while a sketch is open (keys: _KeyFilter).
+    Never blocks FreeCAD's own handling except for the right click (marking menu)."""
 
     def __init__(self, session):
         super().__init__()
@@ -927,34 +1120,7 @@ class _ViewFilter(QtCore.QObject):
             if session.closed:
                 return False
             kind = event.type()
-            if kind == QtCore.QEvent.ShortcutOverride:
-                # Typing a value: keys go into the value box / FreeCAD's on-screen fields,
-                # not to shortcuts (FreeCAD's 0-6 turn the view, M moves...).
-                if session.editor is not None or _is_value_key(event):
-                    event.accept()
-                    return True
-                if _sketch_key(event) is not None:
-                    event.accept()  # the key comes back as a KeyPress below
-                    return True
-            elif kind == QtCore.QEvent.KeyPress:
-                key = event.key()
-                if session.editor is not None:
-                    return session.editor.key(event)
-                command = _sketch_key(event)
-                if command is not None:
-                    QtCore.QTimer.singleShot(0, lambda: _run(command))
-                    return True
-                if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
-                    from . import sketch_pick_ui
-
-                    if sketch_pick_ui.on_enter():
-                        return True
-                    session.enter_pressed()
-                if key == QtCore.Qt.Key_Escape and not event.isAutoRepeat():
-                    # Right away (a Qt key event, not a Coin callback): a timer could
-                    # fire after the next key and stop the tool that key started.
-                    session.escape()
-            elif kind == QtCore.QEvent.MouseButtonPress:
+            if kind == QtCore.QEvent.MouseButtonPress:
                 session.last_press = event.position().toPoint()
                 if session.editor is not None and not session.editor.underMouse():
                     QtCore.QTimer.singleShot(0, lambda: session.close_editor(commit=True))
@@ -1005,6 +1171,45 @@ def _sketch_key(event):
         if event.key() == key and mods == wanted:
             return command
     return None
+
+
+def _swallowed_shortcut(event):
+    """A SciForge key (L, C, D...) that reached the 3D view as a plain key press. Qt runs
+    shortcuts before keys arrive, so this only happens when a drawing tool's value field
+    had the keyboard and FreeCAD passed the key on to the view: Fusion still switches to
+    that tool."""
+    if event.isAutoRepeat() or _is_value_key(event):
+        return None
+    if event.key() in (QtCore.Qt.Key_Shift, QtCore.Qt.Key_Control, QtCore.Qt.Key_Alt):
+        return None
+    try:
+        from . import shortcuts
+
+        mods = event.modifiers() & ~QtCore.Qt.KeypadModifier
+        combo = QtCore.QKeyCombination(mods, QtCore.Qt.Key(event.key()))
+        text = QtGui.QKeySequence(combo).toString(QtGui.QKeySequence.PortableText)
+        return shortcuts.bound_keys().get(shortcuts.normalise(text))
+    except Exception:
+        return None
+
+
+def _run_shortcut(name):
+    """What the shortcut itself does (shortcuts.py): the command, remembered for Repeat."""
+    try:
+        from . import recent
+
+        cmd = Gui.Command.get(name)
+        if cmd is None or (hasattr(cmd, "isActive") and not cmd.isActive()):
+            return
+        label = name
+        try:
+            label = (cmd.getInfo().get("menuText") or name).replace("&", "")
+        except Exception:
+            pass
+        recent.record(name, label)
+        Gui.runCommand(name)
+    except Exception as exc:
+        warn("%s: %s" % (name, exc))
 
 
 def _run(command):
@@ -1146,13 +1351,20 @@ class DimensionEditor(QtWidgets.QFrame):
             return ""
 
     def key(self, event):
-        """A key pressed on the 3D view while the box is open: it goes into the box."""
+        """A key pressed on the 3D view while the box is open: it goes into the box.
+        With the keyboard in the box itself, the keys the box does not use (Esc, arrows
+        up/down...) come here on their way up: never sent back to it (they would come
+        straight back here, again and again)."""
         key = event.key()
+        own = _is_valid(self.edit) and self.edit.hasFocus()
         if key == QtCore.Qt.Key_Escape:
             QtCore.QTimer.singleShot(0, lambda: self.session.close_editor(commit=False))
             return True
         if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
-            QtCore.QTimer.singleShot(0, lambda: self.finish(True))
+            if not own:  # in the box, Enter already finished it (returnPressed)
+                QtCore.QTimer.singleShot(0, lambda: self.finish(True))
+            return True
+        if own:
             return True
         if self._fresh and event.text():
             self.edit.selectAll()  # the first key replaces the shown value, as in Fusion

@@ -399,10 +399,20 @@ def tab():
 
 def key(k, modifiers=QtCore.Qt.NoModifier):
     """Press a key on the keyboard: it goes wherever the keyboard focus is (h.press puts
-    the focus on the 3D view first, which a real keyboard does not)."""
+    the focus on the 3D view first, which a real keyboard does not). k: a Qt.Key or a
+    letter. While a drawing tool runs, FreeCAD's on-screen value field has the focus."""
     target = QtWidgets.QApplication.focusWidget() or h.gl_widget()
-    QtTest.QTest.keyClick(target, k, modifiers)
+    if isinstance(k, str):
+        QtTest.QTest.keyClicks(target, k, modifiers)
+    else:
+        QtTest.QTest.keyClick(target, k, modifiers)
     QtWidgets.QApplication.processEvents()
+
+
+def focus_class():
+    """The C++ class of the widget with the keyboard focus (for checks)."""
+    widget = QtWidgets.QApplication.focusWidget()
+    return widget.metaObject().className() if widget is not None else ""
 
 
 def tooltip():
