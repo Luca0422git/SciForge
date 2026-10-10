@@ -52,19 +52,27 @@ def menu_item(group_title, label):
         return False
     done = {"clicked": False}
 
-    def click(step):
+    def click(step, tries=0):
         try:
             menu, action = path[step]
             if not menu.isVisible():
-                QtCore.QTimer.singleShot(150, lambda: click(step))
+                if tries == 3 and step > 0:
+                    # the submenu did not open from the pointer: the keyboard's Right
+                    # arrow opens the highlighted entry's submenu
+                    parent, parent_action = path[step - 1]
+                    parent.setActiveAction(parent_action)
+                    QtTest.QTest.keyClick(parent, QtCore.Qt.Key_Right)
+                if tries < 20:
+                    QtCore.QTimer.singleShot(150, lambda: click(step, tries + 1))
                 return
             rect = menu.actionGeometry(action)
             QtTest.QTest.mouseMove(menu, rect.center())
-            QtTest.QTest.mouseClick(menu, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, rect.center())
-            if step + 1 < len(path):
+            if action.menu() is not None:
+                # hovering opens a submenu (a click on it could close it again)
                 QtCore.QTimer.singleShot(400, lambda: click(step + 1))
-            else:
-                done["clicked"] = True
+                return
+            QtTest.QTest.mouseClick(menu, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, rect.center())
+            done["clicked"] = True
         except Exception as exc:
             h.check("Menu click %s" % label, False, exc)
             QtWidgets.QApplication.activePopupWidget() and QtWidgets.QApplication.activePopupWidget().close()
@@ -76,8 +84,12 @@ def menu_item(group_title, label):
             popup = QtWidgets.QApplication.activePopupWidget()
 
     QtCore.QTimer.singleShot(300, lambda: click(0))
-    QtCore.QTimer.singleShot(4000, safety)
+    guard = QtCore.QTimer()
+    guard.setSingleShot(True)
+    guard.timeout.connect(safety)
+    guard.start(4000)
     group.label.click()  # the menu runs its own loop until it closes
+    guard.stop()  # (a late guard would close the next menu)
     QtWidgets.QApplication.processEvents()
     h.check("Clicked %s > %s" % (group_title, label), done["clicked"])
     return done["clicked"]

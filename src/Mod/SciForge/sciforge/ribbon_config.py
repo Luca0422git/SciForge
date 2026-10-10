@@ -414,9 +414,9 @@ SKETCH_CREATE = group(
         item("Point", "Sketcher_CreatePoint", "sk_point"),
         item("Text", None, "sk_text"),
         SEP,
-        item("Mirror", "Sketcher_Symmetry", "sk_mirror"),
-        item("Circular Pattern", "Sketcher_Rotate", "sk_pattern_circ"),
-        item("Rectangular Pattern", "Sketcher_RectangularArray", "sk_pattern_rect"),
+        item("Mirror", "SciForge_SketchMirror", "sk_mirror"),
+        item("Circular Pattern", "SciForge_SketchCircularPattern", "sk_pattern_circ"),
+        item("Rectangular Pattern", "SciForge_SketchRectangularPattern", "sk_pattern_rect"),
         SEP,
         sub(
             "Project / Include",
@@ -441,8 +441,8 @@ SKETCH_MODIFY = group(
         item("Trim", "Sketcher_Trimming", "sk_trim", "T"),
         item("Extend", "Sketcher_Extend", "sk_extend"),
         item("Break", "Sketcher_Split", "sk_break"),
-        item("Sketch Scale", "Sketcher_Scale", "sk_scale"),
-        item("Move/Copy", "Sketcher_Translate", "sk_move", "M"),
+        item("Sketch Scale", "SciForge_SketchScale", "sk_scale"),
+        item("Move/Copy", "SciForge_SketchMove", "sk_move", "M"),
     ],
 )
 SKETCH_CONSTRAINTS = group(

@@ -159,7 +159,7 @@ class Palette(QtWidgets.QFrame):
             pass
 
 
-def _sketch_panel():
+def sketch_panel():
     """(panel widget whose layout holds the sketch sections, TaskView) or (None, None)."""
     main = Gui.getMainWindow()
     for widget in main.findChildren(QtWidgets.QWidget):
@@ -173,7 +173,7 @@ def _sketch_panel():
 def install(session):
     """Put the palette at the top of the open sketch's panel; None if the panel is not
     there (yet)."""
-    panel = _sketch_panel()
+    panel = sketch_panel()
     if panel is None:
         return None
     existing = panel.findChild(QtWidgets.QFrame, "SciForgeSketchPalette")

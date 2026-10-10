@@ -626,9 +626,11 @@ class SketchSession:
         if self.closed or editing_sketch() is not self.sketch:
             return
         try:
-            from . import sketch_tools_ui
+            from . import sketch_pick_ui, sketch_tools_ui
 
             sketch_tools_ui.stop_waiting()  # Offset waiting for a curve
+            sketch_pick_ui.stop_waiting()  # Mirror, patterns... waiting for curves
+            sketch_pick_ui.close_box()  # Rectangular Pattern panel: cancel
         except Exception:
             pass
         _state["polygon"] = None if not self.polygon.active else _state["polygon"]
@@ -668,6 +670,12 @@ class SketchSession:
         if self.closed:
             return
         self.closed = True
+        try:
+            from . import sketch_pick_ui
+
+            sketch_pick_ui.settle_box()
+        except Exception as exc:
+            warn("sketch mode: %s" % exc)
         try:
             self._refresh.stop()
         except Exception:
@@ -715,6 +723,11 @@ class _ViewFilter(QtCore.QObject):
                 key = event.key()
                 if session.editor is not None:
                     return session.editor.key(event)
+                if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                    from . import sketch_pick_ui
+
+                    if sketch_pick_ui.on_enter():
+                        return True
                 if key == QtCore.Qt.Key_Escape and not event.isAutoRepeat():
                     # Right away (a Qt key event, not a Coin callback): a timer could
                     # fire after the next key and stop the tool that key started.
@@ -1127,6 +1140,13 @@ def finish_sketch():
     if session is not None:
         session.close_editor(commit=True)
         session.polygon.stop()
+    try:
+        from . import sketch_pick_ui
+
+        sketch_pick_ui.stop_waiting()
+        sketch_pick_ui.close_box(accept=True)  # Fusion: finishing keeps the pattern
+    except Exception as exc:
+        warn("finish sketch: %s" % exc)
     _state["polygon"] = None
     label = sketch.Label
     commands.leave_edit()
