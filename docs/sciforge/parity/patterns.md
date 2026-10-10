@@ -38,7 +38,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | Circular: Axis (an axis, an edge, a round face's axis), Type Full / Angle / Symmetric, Quantity, Total Angle | Same. Angle: Quantity copies from the original to Total Angle (360 = Full). **Symmetric (assumed):** Quantity and Total Angle per side. Switching to Angle starts at 180 deg, Symmetric at 90 |
 | Pattern on Path: Path (an edge or sketch curve), Distance, Quantity, Distribution, Direction Type, Orientation Identical / Path Direction | Same. The copies start at the point of the path nearest to the objects; closed paths go round; Path Direction turns the copies with the path (about the path's plane). Running off an open path's end is said in the dialog |
 | Mirror: Objects, Mirror Plane (origin plane, flat face, construction plane), Operation for bodies | Same. The origin planes are the big squares of Create Sketch; a square in front of the part takes the click, the part takes it where it is in front |
-| Values take parameters and formulas | Same for the distances and the angle; a symmetric pattern's gaps are expressions of its spacing, so the copies follow a parameter change |
+| Values take parameters and formulas | Same for the distances, the angle and the quantities; a symmetric pattern's gaps are expressions of its spacing, so the copies follow a parameter change. A quantity that follows a parameter is rounded to a whole number; a pattern with one is built by SciForge's `PatternFeature` (FreeCAD's features cannot change their number of copies from a parameter); the arrows of the Quantity box make it a plain number again. A pattern of bodies takes a plain number (each copy is a body) |
 | Live preview of the copies | Same (FreeCAD's feature, recomputed 60 ms after a change) |
 | Blue arrows to drag the distances; a handle for the angle | One blue arrow per direction (Rectangular), one along the path (Path), a curved one for Total Angle (Circular, Angle/Symmetric, up to 180 deg by dragging; type larger angles). Drawn on top of the part |
 | Errors shown in the dialog, OK waits | Same; nothing is printed to the Report view while the dialog is open |
@@ -53,7 +53,6 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 |---|---|
 | Compute Option Optimized / Adjust | Copies are identical (FreeCAD repeats the feature's tool). Shown greyed |
 | Pattern Type Components | SciForge has no components yet |
-| Quantity from a parameter | The quantity is a whole-number box |
 | Faces: copies "heal" into different surroundings | The closed faces are copied as they are (a hole copied into a thicker area stays as deep as the original). Faces that do not close up with one face around each opening (a fillet's face) are refused with the reason |
 | A pattern of bodies whose references lie in another body with a moved placement | The references are read in the copied body's coordinates |
 | Pattern on Path: an explicit start point | The copies start at the point of the path nearest to the objects |
@@ -63,7 +62,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 
 - Scenarios (real clicks, keys, drags; any Report-view error fails them):
   `patterns_rect.py`, `patterns_circ.py`, `patterns_mirror.py`, `patterns_path.py`,
-  `patterns_suppress.py`, `patterns_qa.py` (wrong picks, Ctrl+Z in the dialog, type switch, timeline delete of a body
+  `patterns_suppress.py`, `patterns_params.py`, `patterns_qa.py` (wrong picks, Ctrl+Z in the dialog, type switch, timeline delete of a body
   pattern, save and reopen). Volumes and positions checked with hand-derived formulas.
 - Golden models (ops `rectangular_pattern`, `circular_pattern`, `path_pattern`,
   `fusion_mirror`, `pattern_edit` in `golden/pattern_ops.py`, the dialogs' code):
@@ -72,7 +71,8 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
   `mirror_body_join_face`, `mirror_body_new_body`, `mirror_faces_hole`, `mirror_fillet_feature`,
   `pattern_bodies_rect_new`, `pattern_path_bosses`, `pattern_path_circle_turned`,
   `pattern_symmetric_parameter`, `pattern_edit_quantity_fusion`, `pattern_rect_suppressed`,
-  `pattern_circ_suppressed_bodies`.
+  `pattern_circ_suppressed_bodies`, `pattern_sciforge_extrude`, `mirror_hole_and_its_pattern`,
+  `pattern_quantity_parameter`.
 - Unit tests: `SciForgeTests/unit/test_pattern_core.py`.
 
 ## Lessons for other dialogs

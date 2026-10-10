@@ -391,12 +391,20 @@ def target_body(options):
     return None
 
 
+def quantity_formulas(options):
+    """The quantity fields that follow a parameter or formula."""
+    exprs = options.get("expressions") or {}
+    return [k for k in ("quantity", "quantity2") if (exprs.get(k) or "").strip()]
+
+
 def implementation(kind, options):
     """'native' (FreeCAD's pattern features) or 'engine' (SciForge's PatternFeature)."""
     if kind == "path":
         return "engine"
     if options.get("suppressed") and kind != "mirror":
         return "engine"  # FreeCAD's pattern features cannot leave an instance out
+    if quantity_formulas(options) and kind != "mirror":
+        return "engine"  # a count that follows a parameter: SciForge's feature recounts
     kind_type = options["pattern_type"]
     if kind_type == "faces":
         return "engine"
@@ -408,6 +416,10 @@ def implementation(kind, options):
 def check(kind, options):
     """Raise NeedsPick / PatternError when the pattern cannot be built yet."""
     ptype = options["pattern_type"]
+    if ptype == "bodies" and quantity_formulas(options) and kind != "mirror":
+        raise PatternError(
+            "A pattern of bodies takes a plain number as its quantity (each copy is a body)."
+        )
     if ptype == "features":
         if not _features(options):
             raise NeedsPick("Select the features to pattern: click them in the timeline.")
@@ -952,7 +964,17 @@ def _update_engine(obj, kind, options):
     _set_link(obj, "Axis", options["axis"] if kind == "circular" else None)
     _set(obj, "Quantity", max(1, int(options["quantity"])))
     _set(obj, "Quantity2", max(1, int(options["quantity2"])))
-    for prop, key in (("Distance", "distance"), ("Distance2", "distance2"), ("Angle", "angle")):
+    for prop, key in (
+        ("Distance", "distance"),
+        ("Distance2", "distance2"),
+        ("Angle", "angle"),
+        ("Quantity", "quantity"),
+        ("Quantity2", "quantity2"),
+    ):
+        if key.startswith("quantity"):
+            formula = _formula(options, key, obj.Document)
+            _expr(obj, prop, "round(%s)" % formula if formula else "")
+            continue
         _set(obj, prop, float(options[key]))
         _expr(obj, prop, _formula(options, key, obj.Document))
     _set_suppressed(obj, options)
@@ -1405,6 +1427,8 @@ def _still_formula(feature, key):
         "distance": ("Length", "Offset", "Distance"),
         "distance2": ("Length2", "Offset2", "Distance2"),
         "angle": ("Angle", "Offset"),
+        "quantity": ("Quantity",),
+        "quantity2": ("Quantity2",),
     }.get(key, ())
     engine = dict(feature.ExpressionEngine)
     return any(p in engine for p in props)

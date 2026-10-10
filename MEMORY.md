@@ -332,8 +332,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     right angles after Direction 1; Mirror of a body defaults to New Body.
   - PartDesign features already own a `Suppressed` bool: a Python feature's own property of
     that name is silently not added (use another name: `SuppressedCopies`).
+  - Quantity fields take parameters/formulas (`pattern_ui.CountBox`): FreeCAD's pattern
+    features cannot change their copy count from an expression cleanly, so such a pattern is
+    built by `PatternFeature` (expression `round(...)` on its `Quantity`). The spin arrows
+    drop the formula (a plain number again). Bodies refuse a quantity formula.
+  - Theme (not patterns' file): an UNCHECKED QCheckBox indicator is practically invisible on
+    the dark task panel (the tick shows once checked). Affects Suppression and every other
+    dialog's check boxes: theme owner, give `QCheckBox::indicator` a visible border.
   - Not done (gaps, see the parity doc): Compute Option Optimized/Adjust,
-    Components, quantity from a parameter, face copies that heal into different
+    Components, face copies that heal into different
     surroundings, an explicit start point on a path. The timeline module has no entry for
     `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
     kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
@@ -458,10 +465,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Bodies), `pattern_ui.py` (Rectangular / Circular / Pattern on Path dialogs, origin-axis and
   front-plane pickers, highlight overlay, arrows, angle handle, editors, delete watch for body
   patterns), `mirror_ui.py` (Mirror). Ribbon: Pattern on Path enabled (one line).
+- Later the same day: Suppression (dots on the copies), Quantity from a parameter/formula,
+  SciForge's own extrude / a pattern step as mirror and pattern objects.
 - Tests: scenarios `patterns_rect`, `patterns_circ`, `patterns_mirror`, `patterns_path`,
-  `patterns_suppress`, `patterns_qa` (real input only); golden ops `rectangular_pattern`,
-  `circular_pattern`, `path_pattern`, `fusion_mirror`, `pattern_edit`
-  (`golden/pattern_ops.py`) + 16 models;
+  `patterns_suppress`, `patterns_params`, `patterns_qa` (real input only); golden ops
+  `rectangular_pattern`, `circular_pattern`, `path_pattern`, `fusion_mirror`, `pattern_edit`
+  (`golden/pattern_ops.py`) + 19 models;
   unit tests `test_pattern_core.py` (17).
 - Parity doc `docs/sciforge/parity/patterns.md` (assumptions to confirm with Luca, gaps).
 

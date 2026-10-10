@@ -25,7 +25,7 @@ import FreeCADGui as Gui
 from . import commands, log, pattern, preview, ui_icon_path, warn
 from . import hole_common as common
 from . import profile_pick
-from .compat import QtCore, QtWidgets
+from .compat import QtCore, QtGui, QtWidgets
 from .pattern_core import PatternError, default_distance
 from .taskui import ArrowDragger, DistanceField, Panel
 
@@ -462,6 +462,45 @@ class InstanceDots:
             pass
 
 
+class CountBox(QtWidgets.QSpinBox):
+    """The Quantity field: a whole number, or a parameter / formula typed over it (Fusion's
+    fields take both; preview.FormulaInput evaluates the text when the field is left)."""
+
+    def validate(self, text, pos):
+        return (QtGui.QValidator.Acceptable, text, pos)
+
+    on_step = None  # called before the arrows / wheel / Up-Down change the count
+
+    def valueFromText(self, text):
+        try:
+            return max(self.minimum(), min(self.maximum(), int(round(float(text)))))
+        except (TypeError, ValueError):
+            return self.value()  # a formula: FormulaInput puts its value in
+
+    def stepBy(self, steps):
+        # A count set with the arrows is a plain number again (no formula behind it).
+        if self.on_step is not None:
+            try:
+                self.on_step()
+            except Exception as exc:
+                warn("quantity step: %s" % exc)
+        super().stepBy(steps)
+
+
+class _CountAdapter:
+    """CountBox seen as a value field by preview.FormulaInput."""
+
+    def __init__(self, spin):
+        self.widget = spin
+
+    def set_value(self, value):
+        self.widget.blockSignals(True)
+        try:
+            self.widget.setValue(max(1, int(round(float(value)))))
+        finally:
+            self.widget.blockSignals(False)
+
+
 class ViewProviderPattern:
     """View provider of SciForge's own pattern feature (pattern.PatternFeature)."""
 
@@ -615,6 +654,11 @@ class PatternPanel(Panel):
         self.formula_inputs = [
             preview.FormulaInput(self, key, field) for key, field in self._value_fields().items()
         ]
+        for key in ("quantity", "quantity2"):
+            spin = getattr(self, key, None)
+            if spin is not None:  # a count can follow a parameter too (Fusion)
+                self.formula_inputs.append(preview.FormulaInput(self, key, _CountAdapter(spin)))
+                spin.on_step = lambda key=key: self._forget_formula(key)
         self.pattern_type.currentIndexChanged.connect(self._type_changed)
 
     def _value_fields(self):
@@ -637,7 +681,7 @@ class PatternPanel(Panel):
         return box
 
     def _quantity(self, value, on_change):
-        spin = QtWidgets.QSpinBox()
+        spin = CountBox()
         spin.setRange(1, 1000)
         spin.setValue(int(value))
         spin.valueChanged.connect(on_change)
@@ -777,7 +821,13 @@ class PatternPanel(Panel):
             options[key] = field.value()
 
     # -- formulas (preview.FormulaInput calls these) --------------------------------------------
-    NAMES = {"distance": "Distance", "distance2": "Distance (direction 2)", "angle": "Total Angle"}
+    NAMES = {
+        "distance": "Distance",
+        "distance2": "Distance (direction 2)",
+        "angle": "Total Angle",
+        "quantity": "Quantity",
+        "quantity2": "Quantity (direction 2)",
+    }
 
     def show_formulas(self):
         rows = [
@@ -787,6 +837,12 @@ class PatternPanel(Panel):
         ]
         self.formulas.setText("\n".join(rows))
 
+    def _forget_formula(self, key):
+        """Drop the formula of a field without rebuilding (the new value rebuilds)."""
+        if self.options["expressions"].pop(key, None) is not None:
+            self.formula_error = ""
+            self.show_formulas()
+
     def drop_formula(self, key):
         self.formula_error = ""
         if self.options["expressions"].pop(key, None) is not None:
@@ -795,11 +851,23 @@ class PatternPanel(Panel):
 
     def formula_typed(self, key, text, value):
         self.formula_error = ""
+        if key.startswith("quantity"):
+            problem = ""
+            if self.options["pattern_type"] == "bodies" and self.kind != "mirror":
+                problem = "A pattern of bodies takes a plain number as its quantity."
+            elif value < 0.5:
+                problem = "'%s' is less than 1: the quantity must be 1 or more." % text
+            if problem:
+                _CountAdapter(getattr(self, key)).set_value(self.options[key])  # as it was
+                self.formula_failed(key, problem)
+                return
         self.options["expressions"][key] = text
         handler = {
             "distance": self._distance_typed,
             "distance2": self._distance2_typed,
             "angle": self._angle_typed,
+            "quantity": self._typed,
+            "quantity2": self._typed,
         }.get(key)
         if handler is not None:
             handler(value)
