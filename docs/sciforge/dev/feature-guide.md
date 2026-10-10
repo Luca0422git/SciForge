@@ -78,7 +78,9 @@ Picking:
   `h.drag(...)`, `h.task_button("OK")`), then `h.check(...)` on the model (volume, faces, bbox,
   visibility). The harness fails the scenario on **any** Report-view error, SciForge warning or
   traceback, after every step. Click one step **after** the key/button that opened a task panel
-  (the panel narrows the 3D view). Call `h.fit()` before computing click points. Cover: the happy
+  (the panel narrows the 3D view). Call `h.fit()` before computing click points. Click edges
+  with `h.click_edge(point)` (it aims within a few pixels like a person does; the CI's software
+  renderer rounds differently and a plain click on an outline edge hit the face next to it). Cover: the happy
   path, editing the feature again (double-click it in the timeline, or `Gui.ActiveDocument.setEdit`
   if that is how the timeline does it), Cancel leaving the model unchanged, undo/redo, and the
   "nothing selected yet" start.

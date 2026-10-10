@@ -45,7 +45,7 @@ def waiting_for_picks():
 
 def click_front_edge():
     h.fit()
-    h.click(FRONT_TOP)
+    h.click_edge(FRONT_TOP)
 
 
 def front_edge_picked():
@@ -78,7 +78,7 @@ def radius_3_preview():
 
 
 def click_right_edge():
-    h.click(RIGHT_TOP)
+    h.click_edge(RIGHT_TOP)
 
 
 def two_edges():
@@ -91,7 +91,7 @@ def two_edges():
 
 
 def click_right_edge_again():
-    h.click(RIGHT_TOP)
+    h.click_edge(RIGHT_TOP)
 
 
 def right_edge_dropped():
@@ -316,8 +316,8 @@ def after_cancel():
 
 def preselect():
     h.fit()
-    h.click(BACK_TOP)
-    h.click(BACK_RIGHT, modifiers=QtCore.Qt.ControlModifier)
+    h.click_edge(BACK_TOP)
+    h.click_edge(BACK_RIGHT, modifiers=QtCore.Qt.ControlModifier)
 
 
 def press_f():
@@ -372,7 +372,7 @@ def undo_inside_start():
 
 def undo_inside_pick():
     h.fit()
-    h.click(RIGHT_TOP)
+    h.click_edge(RIGHT_TOP)
 
 
 def undo_inside_press():

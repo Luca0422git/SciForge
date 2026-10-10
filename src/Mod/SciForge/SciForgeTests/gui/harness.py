@@ -163,6 +163,42 @@ def click(point, modifiers=QtCore.Qt.NoModifier, button=QtCore.Qt.LeftButton):
     return hit
 
 
+def click_edge(point, modifiers=QtCore.Qt.NoModifier):
+    """Click an edge at a 3D point on it. Edges are a few pixels wide and renderers round
+    differently (the CI's software OpenGL picked the face next to an outline edge), so,
+    like a person aiming until the edge lights up, try the pixels around the point and
+    click the nearest one where an edge is under the mouse."""
+    widget = gl_widget()
+    ratio = widget.devicePixelRatioF()
+    centre = screen_point(point)
+    best = None
+    for radius in range(0, 7):
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                if max(abs(dx), abs(dy)) != radius:
+                    continue
+                qx, qy = centre.x() + dx, centre.y() + dy
+                info = view().getObjectInfo((qx * ratio, (widget.height() - qy) * ratio))
+                if info and str(info.get("Component", "")).startswith("Edge"):
+                    best = QtCore.QPoint(qx, qy)
+                    break
+            if best is not None:
+                break
+        if best is not None:
+            break
+    pos = best or centre
+    move(pos)
+    QtTest.QTest.mouseClick(widget, QtCore.Qt.LeftButton, modifiers, pos)
+    QtWidgets.QApplication.processEvents()
+    selected = [(s.ObjectName, s.SubElementNames) for s in Gui.Selection.getSelectionEx()]
+    state["last_click"] = "edge click %s (found: %s); selected: %s" % (
+        (pos.x(), pos.y()),
+        best is not None,
+        selected,
+    )
+    return best is not None
+
+
 def click_empty():
     """Click on empty background (clears the selection, like in Fusion)."""
     widget = gl_widget()

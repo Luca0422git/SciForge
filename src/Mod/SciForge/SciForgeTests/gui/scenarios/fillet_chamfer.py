@@ -82,7 +82,7 @@ def waiting():
 
 def click_edge():
     h.fit()
-    h.click(FRONT_TOP)
+    h.click_edge(FRONT_TOP)
 
 
 def equal_1():
@@ -286,8 +286,8 @@ def after_esc():
 
 def preselect():
     h.fit()
-    h.click(BACK_TOP)
-    h.click(BACK_RIGHT, modifiers=QtCore.Qt.ControlModifier)
+    h.click_edge(BACK_TOP)
+    h.click_edge(BACK_RIGHT, modifiers=QtCore.Qt.ControlModifier)
 
 
 def chamfer_with_selection():
