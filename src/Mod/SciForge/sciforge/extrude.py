@@ -325,12 +325,32 @@ def options_with_defaults(options):
 
 
 def taper_possible(options, extent):
-    """True if a taper can be built with this extent: PartDesign tapers Distance and a
-    cut's All (ThroughAll), SciForge's Intersect tapers every extent. FreeCAD's Pad and
-    Pocket ignore a taper up to an object, so the dialog does not offer it there."""
-    if extent == "distance" or options["operation"] == "intersect":
+    """True if a taper can be built with this extent. Always: what PartDesign's Pad and
+    Pocket cannot taper (up to an object, a join through All) SciForge's own extrude
+    feature builds (see own_feature_needed)."""
+    return True
+
+
+def native_taper(operation, extent):
+    """True if PartDesign tapers this extent itself: Distance, and a cut's All (ThroughAll).
+    FreeCAD's Pad and Pocket silently ignore a taper up to a face, and a Pad's UpToLast."""
+    return extent == "distance" or (extent == "all" and operation == "cut")
+
+
+def own_feature_needed(options):
+    """True when the extrude is SciForge's own feature instead of a Pad/Pocket: Intersect,
+    and tapers PartDesign cannot build (Fusion tapers every extent)."""
+    if options["operation"] == "intersect":
         return True
-    return extent == "all" and options["operation"] == "cut"
+    sides = [("extent", "taper")]
+    if options["direction"] == "two_sides":
+        sides.append(("extent2", "taper2"))
+    for extent, taper in sides:
+        if abs(float(options[taper])) > 1e-9 and not native_taper(
+            options["operation"], options[extent]
+        ):
+            return True
+    return False
 
 
 def check_options(options):
@@ -339,11 +359,6 @@ def check_options(options):
     if options["direction"] == "two_sides":
         sides.append(("extent2", "distance2", "extent_object2", "taper2", " (side two)"))
     for extent, distance, target, taper, where in sides:
-        if abs(float(options[taper])) > 1e-9 and not taper_possible(options, options[extent]):
-            raise ExtrudeError(
-                "A taper%s needs the Distance extent here (FreeCAD's extrude cannot taper up "
-                "to an object). Set the taper to 0 or use Distance." % where
-            )
         if options[extent] == "distance" and abs(float(options[distance])) < 1e-6:
             raise ExtrudeError("The distance%s must not be zero." % where)
         if options[extent] == "to_object" and options.get(target) is None:
@@ -356,13 +371,17 @@ def check_options(options):
         raise NeedsPick("Click the face or plane the extrusion starts from.")
 
 
-def feature_type(operation):
-    """FreeCAD type of the feature an operation builds."""
+def feature_type(operation, options=None):
+    """FreeCAD type of the feature an operation (with these options) builds."""
+    if operation == "intersect" or (options is not None and own_feature_needed(options)):
+        return INTERSECT_TYPE
     if operation == "cut":
         return "PartDesign::Pocket"
-    if operation == "intersect":
-        return INTERSECT_TYPE
     return "PartDesign::Pad"
+
+
+# The operation of SciForge's own extrude feature (its "Operation" property).
+OWN_OPERATIONS = {"intersect": "Intersect", "join": "Join", "new_body": "Join", "cut": "Cut"}
 
 
 def _ref_shape(ref):
@@ -490,9 +509,27 @@ def is_helper(obj):
 
 
 # -- the intersect feature -----------------------------------------------------------------
+def _set_enum(obj, prop, items):
+    """(Re)set an enumeration's choices, keeping its value (older files lack new ones)."""
+    try:
+        current = getattr(obj, prop)
+    except Exception:
+        current = None
+    try:
+        if list(obj.getEnumerationsOfProperty(prop) or []) == list(items):
+            return
+    except Exception:
+        pass
+    setattr(obj, prop, list(items))
+    if current in items:
+        setattr(obj, prop, current)
+
+
 class ExtrudeFeature:
-    """Extrude with operation Intersect: the body keeps what lies inside the extrusion.
-    Saved documents store "sciforge.extrude.ExtrudeFeature": keep the name stable."""
+    """SciForge's own extrude: Intersect (the body keeps what lies inside the extrusion),
+    and Join/Cut with a taper PartDesign cannot build (up to an object, a join through
+    All). Saved documents store "sciforge.extrude.ExtrudeFeature": keep the name stable;
+    files from before "Operation" existed are Intersect extrudes."""
 
     def __init__(self, obj):
         obj.Proxy = self
@@ -507,11 +544,13 @@ class ExtrudeFeature:
             return False
 
         add("App::PropertyLinkSubList", "Profiles", "The profiles that are extruded")
+        if add("App::PropertyEnumeration", "Operation", "Intersect, join or cut"):
+            obj.Operation = ["Intersect", "Join", "Cut"]
         if add("App::PropertyEnumeration", "SideType", "One side, two sides or symmetric"):
             obj.SideType = ["One side", "Two sides", "Symmetric"]
         for suffix in ("", "2"):
-            if add("App::PropertyEnumeration", "Type" + suffix, "How far the side goes"):
-                setattr(obj, "Type" + suffix, ["Length", "ThroughAll", "UpToFace"])
+            add("App::PropertyEnumeration", "Type" + suffix, "How far the side goes")
+            _set_enum(obj, "Type" + suffix, ["Length", "ThroughAll", "UpToFace", "UpToLast"])
             add("App::PropertyLength", "Length" + suffix, "Distance")
             add("App::PropertyAngle", "TaperAngle" + suffix, "Taper angle (+ widens)")
             add("App::PropertyLinkSub", "UpToFace" + suffix, "Face or plane where the side ends")
@@ -530,8 +569,13 @@ class ExtrudeFeature:
         from . import extrude_prism as prism
 
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise ExtrudeError("Intersect needs a solid before it in the timeline.")
+        has_base = base is not None and not base.Shape.isNull() and bool(base.Shape.Solids)
+        operation = getattr(obj, "Operation", "Intersect")
+        if not has_base and operation != "Join":
+            raise ExtrudeError(
+                "%s needs a solid before it in the timeline."
+                % ("Cut" if operation == "Cut" else "Intersect")
+            )
         faces = []
         for linked, subs in obj.Profiles:
             for sub in subs or [""]:
@@ -561,21 +605,30 @@ class ExtrudeFeature:
             "target2": target(obj.UpToFace2),
         }
         try:
-            tool = prism.build(faces, normal, spec, reach=[base.Shape])
-            result = base.Shape.common(tool)
+            tool = prism.build(faces, normal, spec, reach=[base.Shape] if has_base else [])
+            if operation == "Intersect":
+                result = base.Shape.common(tool)
+            elif operation == "Cut":
+                result = base.Shape.cut(tool)
+            else:
+                result = base.Shape.fuse(tool) if has_base else tool
             if obj.Refine:
                 result = result.removeSplitter()
         except prism.PrismError as exc:
             raise ExtrudeError(str(exc))
         if result.isNull() or not result.Solids or result.Volume < TOL:
+            if operation == "Cut":
+                raise ExtrudeError("This cut would remove the whole body.")
             raise ExtrudeError(
                 "The extrusion does not overlap the body, so Intersect would leave nothing."
             )
         if len(result.Solids) > 1:
             raise ExtrudeError(
-                "Intersect would leave %d separate pieces; a body holds one solid. "
-                "Change the profile or the distance." % len(result.Solids)
+                "%s would leave %d separate pieces; a body holds one solid. "
+                "Change the profile or the distance." % (operation, len(result.Solids))
             )
+        if operation == "Cut" and abs(result.Volume - base.Shape.Volume) < 1e-9:
+            raise ExtrudeError("The cut does not touch the body. Flip it or pick another object.")
         obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
 
     def dumps(self):
@@ -814,6 +867,7 @@ def _apply(feature, body, profiles, options, refs):
         direction
     ]
     if is_intersect(feature):
+        feature.Operation = OWN_OPERATIONS[options["operation"]]
         feature.SideType = side_type
         feature.Reversed = sign < 0
         feature.StartOffset = 0.0  # a start offset travels with the profile's binder
@@ -856,12 +910,16 @@ def _fp_side(feature, suffix, extent, length, taper, ref):
     if extent == "distance":
         setattr(feature, "Type" + suffix, "Length")
     elif extent == "all":
-        setattr(feature, "Type" + suffix, "ThroughAll")
+        # A join goes as far as the part reaches (Pad's UpToLast); a cut through it all.
+        join = getattr(feature, "Operation", "Intersect") == "Join"
+        setattr(feature, "Type" + suffix, "UpToLast" if join else "ThroughAll")
     else:
         obj, sub = ref
         if not sub and obj.TypeId not in PLANE_TYPES:
+            what = "A taper" if feature.Operation != "Intersect" else "Intersect"
             raise ExtrudeError(
-                "Intersect can go up to a flat face or a plane, not a whole body. " "Pick a face."
+                "%s can go up to a flat face or a plane, not a whole body. Pick a face of it."
+                % what
             )
         setattr(feature, "Type" + suffix, "UpToFace")
         setattr(feature, "UpToFace" + suffix, (obj, [sub] if sub else [""]))
@@ -908,7 +966,7 @@ def _structure(feature, profiles, options):
             target = None  # a new body
     else:
         target = src
-    return target, feature_type(op), src
+    return target, feature_type(op, options), src
 
 
 def build(profiles, options, name="Extrude", feature=None):
@@ -1135,8 +1193,9 @@ def read(feature):
     profiles = profiles_of(feature)
     options = dict(DEFAULTS)
     intersect = is_intersect(feature)
-    cut = feature.TypeId == "PartDesign::Pocket"
-    if intersect:
+    own = getattr(feature, "Operation", "Intersect") if intersect else None
+    cut = feature.TypeId == "PartDesign::Pocket" or own == "Cut"
+    if intersect and own == "Intersect":
         operation = "intersect"
     elif cut:
         operation = "cut"

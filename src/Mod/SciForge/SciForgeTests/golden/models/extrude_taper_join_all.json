@@ -1,0 +1,73 @@
+{
+  "id": "extrude_taper_join_all",
+  "title": "Tapered column from a sketch 30 up, Join with Extent All downwards, widening 10 degrees",
+  "tags": [
+    "extrude",
+    "all",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "rect": [
+            10,
+            10,
+            20,
+            20
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "extent": "through_all",
+      "distance": 1,
+      "flip": true,
+      "taper": 10
+    }
+  ],
+  "expect": {
+    "volume": 15742.25535634253,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      30
+    ],
+    "source": "analytic",
+    "note": "All for a join ends where the part ends that way (z = 0, like PartDesign's up to last). The column widens 10 degrees going down; inside the box it adds nothing (at z = 0 it is 20.58 square, still inside the 40 x 30 box), so the result equals extrude_taper_to_face: 12000 + the 20-tall frustum 10 -> 17.0531 = 3742.2554. Faces 11 as there. PartDesign's Pad ignores the taper for up to last, so SciForge builds it."
+  }
+}

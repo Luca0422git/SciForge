@@ -49,7 +49,10 @@ def edit_object(obj):
 
     if obj is None or not commands.finish_open_dialog():
         return
-    editor = EDITORS.get(type_key(obj))
+    try:
+        editor = EDITORS.get(type_key(obj))
+    except ReferenceError:
+        return  # it was the unfinished step of the dialog that was just cancelled
     try:
         if editor is not None:
             editor(obj)
