@@ -353,7 +353,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Tests: scenarios `hole`, `hole_sketch`, `hole_tapped`, `hole_thread`, `hole_thread_inside`, `hole_edges`
   (only real input; volumes hand-derived, incl. a slab check of FreeCAD's own modeled tapped
   thread), 16 golden models (`golden/hole_ops.py`: ops hole_at, hole_points, thread), unit
-  tests `test_thread_core.py`.
+  tests `test_thread_core.py`. Full suite on the branch: unit 134 OK, golden 99 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 26 scenarios PASS.
 - Gaps (honest list): no Taper Tapped (NPT) tap type; "To" works out the depth when the dialog
   applies (does not re-measure if that face moves later); clearance holes by thread size only
   (no fastener types); thread class is recorded, the modeled thread uses the basic profile;
