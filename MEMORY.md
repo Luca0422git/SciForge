@@ -479,6 +479,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   (`golden/pattern_ops.py`) + 19 models;
   unit tests `test_pattern_core.py` (17).
 - Parity doc `docs/sciforge/parity/patterns.md` (assumptions to confirm with Luca, gaps).
+- Full suite at the end: unit 153 OK; golden 121 pass + 1 xfail (`plate_hole_grid`, needs
+  core patch #4); smoke 70/70; journey 25/25; 39 of 40 scenarios PASS in the full run,
+  `sketch_draw` failed 3 checks ("circle diameter typed: 8" got r 4.97) while another
+  worktree's suite ran at the same time, and PASSES alone (86 checks): timing-sensitive,
+  sketch owner to look at.
 
 ## Next steps (in order)
 
