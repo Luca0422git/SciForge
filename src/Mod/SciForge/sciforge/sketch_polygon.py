@@ -49,9 +49,13 @@ def add_polygon(sketch, sides, center, point, circumscribed, construction=False)
     """Add the polygon to `sketch`; returns the geometry indices.
 
     Inscribed (FreeCAD's own polygon): n lines, then the construction circle through
-    the corners. Circumscribed: n lines, the construction circle touching the edges
-    (the across-flats size, the one to dimension), a construction line from the centre
-    to the middle of the first edge, then the circle through the corners.
+    the corners. Circumscribed: n lines, the circle through the corners, a construction
+    line from the centre to the middle of the first edge, then the construction circle
+    touching the edges (the across-flats size, the one to dimension) LAST: a size typed
+    in FreeCAD's on-screen field (the distance shown from the centre to the pointer,
+    which sits on the middle of an edge) becomes a Radius dimension of the last curve,
+    so it must be that circle (it went on the corner circle and the polygon came out
+    smaller than the one previewed).
 
     The corners stay on a circle in both, because equal sides on a circle is the
     only description of a regular polygon the solver handles at every size and
@@ -61,6 +65,8 @@ def add_polygon(sketch, sides, center, point, circumscribed, construction=False)
     this runs: the first click's to the centre of the LAST curve, the second click's
     to the end of the curve before it. The order above puts them on the centre and
     on the clicked point (a corner, or the middle of an edge).
+
+    Returns the geometry indices; circle_indices() tells which is which.
     """
     import Part
     import Sketcher
@@ -72,13 +78,13 @@ def add_polygon(sketch, sides, center, point, circumscribed, construction=False)
     normal = App.Vector(0, 0, 1)
     geometry = [Part.LineSegment(pts[i], pts[(i + 1) % sides]) for i in range(sides)]
     outer_radius = (pts[0] - center).Length
-    if circumscribed:
-        geometry.append(Part.Circle(center, normal, (point - center).Length))
-        geometry.append(Part.LineSegment(center, point))  # centre -> middle of edge 0
     geometry.append(Part.Circle(center, normal, outer_radius))
+    if circumscribed:
+        geometry.append(Part.LineSegment(center, point))  # centre -> middle of edge 0
+        geometry.append(Part.Circle(center, normal, (point - center).Length))
     ids = list(sketch.addGeometry(geometry, construction))
     lines = ids[:sides]
-    outer = ids[-1]
+    outer = ids[sides]
     for extra in ids[sides:]:
         sketch.setConstruction(extra, True)
     constraints = []
@@ -91,10 +97,17 @@ def add_polygon(sketch, sides, center, point, circumscribed, construction=False)
     for i in range(sides):
         constraints.append(Sketcher.Constraint("PointOnObject", lines[i], 2, outer))
     if circumscribed:
-        inner, helper = ids[sides], ids[sides + 1]
+        helper, inner = ids[sides + 1], ids[sides + 2]
         constraints.append(Sketcher.Constraint("Coincident", inner, 3, outer, 3))
         constraints.append(Sketcher.Constraint("Tangent", lines[0], inner))
         constraints.append(Sketcher.Constraint("Coincident", helper, 1, outer, 3))
         constraints.append(Sketcher.Constraint("Symmetric", lines[0], 1, lines[0], 2, helper, 2))
     sketch.addConstraint(constraints)
     return ids
+
+
+def circle_indices(ids, sides, circumscribed):
+    """(corner circle, edge circle or None) among the indices add_polygon returned."""
+    if circumscribed:
+        return ids[sides], ids[sides + 2]
+    return ids[sides], None

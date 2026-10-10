@@ -20,9 +20,13 @@ E  Right click in a sketch: the sketch's marking menu (Line, Finish Sketch... no
 F  X with nothing selected: new lines are construction (the palette shows it, a message
    says it); the next sketch starts with normal lines again.
 G  Sketch fillet: click a corner, the radius box opens, type 4.
+K  Typed sizes, Enter twice: Circumscribed Polygon, centre, type 10, Enter, Enter: the
+   hexagon is drawn around a circle of radius 10 (what the preview showed: the pointer
+   on the middle of an edge), across flats 20. E: the prism.
 
 Hand-derived volumes: A 40*25*10 = 10000; H 50*25*10 = 12500, 45*25*10 = 11250;
-D pi*10^2*10 = 3141.59...; G (30*20 - (4^2 - pi*4^2/4)) * 10 = 5965.66...
+D pi*10^2*10 = 3141.59...; G (30*20 - (4^2 - pi*4^2/4)) * 10 = 5965.66...;
+K hexagon with apothem 10: area 2*sqrt(3)*10^2, times 10 = 3464.10...
 """
 
 import math
@@ -863,6 +867,69 @@ def g_volume():
     h.shot("G-part")
 
 
+# == K: a polygon with a typed size ==================================================
+def k_new():
+    new_doc("SketchQA6")
+    h.ribbon("Create Sketch")
+
+
+def k_pick():
+    h.click(V(12, -8, 0))
+
+
+def k_polygon():
+    s["sk"] = h.in_sketch()
+    si.menu_item("CREATE", "Circumscribed Polygon")
+
+
+def k_centre():
+    si.click(V(0, 0, 0))
+
+
+def k_size():
+    si.move_towards(V(7, 0.4, 0), X)
+    si.type_text("10")
+
+
+def k_second_enter():
+    h.check("K: one Enter keeps the size, waits", not si.lines(s["sk"]), s["sk"].Geometry)
+    si.type_text("")
+
+
+def k_hexagon():
+    sk = s["sk"]
+    lines = si.lines(sk)
+    h.check("K: hexagon drawn", len(lines) == 6, sk.Geometry)
+    circles = si.circles(sk, construction=True)
+    if lines and circles:
+        centre = circles[0][1].Center
+        g = lines[0][1]
+        apothem = ((g.StartPoint + g.EndPoint) * 0.5 - centre).Length
+        h.check("K: drawn around a circle of radius 10", si.near(apothem, 10.0, 1e-6), apothem)
+        radius = [c for c in sk.Constraints if c.Type == "Radius"]
+        on_inner = radius and si.near(sk.Geometry[radius[0].First].Radius, 10.0, 1e-6)
+        h.check("K: the typed size is a dimension of that circle", on_inner, radius)
+    h.check("K: solves", sk.solve() == 0)
+    esc()
+    esc()
+    h.ribbon("Finish Sketch")
+
+
+def k_extrude():
+    h.fit()
+    h.press("e")
+
+
+def k_ok():
+    h.task_button("OK")
+
+
+def k_volume():
+    v = h.solid_volume()
+    expected = 2.0 * math.sqrt(3.0) * 100.0 * 10.0
+    h.check("K: hexagon prism, 20 across flats", si.near(v, expected, 1e-6), (v, expected))
+
+
 h.run(
     "sketch_qa",
     si.watched(
@@ -993,6 +1060,17 @@ h.run(
             g_extrude,
             g_ok,
             g_volume,
+            # K
+            k_new,
+            k_pick,
+            k_polygon,
+            k_centre,
+            k_size,
+            k_second_enter,
+            k_hexagon,
+            k_extrude,
+            k_ok,
+            k_volume,
         ]
     ),
 )

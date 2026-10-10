@@ -334,6 +334,16 @@ def dimension_label(sketch, index):
     """Global 3D point where a length dimension's text is drawn (FreeCAD puts it
     LabelDistance away from the measured points, at their middle)."""
     c = sketch.Constraints[index]
+    if c.Type in ("Radius", "Diameter"):
+        # beyond the circle at the angle LabelPosition (10: not set, 0 for a circle)
+        import math
+
+        g = sketch.Geometry[c.First]
+        angle = 0.0 if c.LabelPosition == 10 else c.LabelPosition
+        direction = App.Vector(math.cos(angle), math.sin(angle), 0)
+        return sketch.getGlobalPlacement().multVec(
+            g.Center + direction * (g.Radius + c.LabelDistance)
+        )
     if c.Second >= 0 or -2000 < c.Second < -2:  # -2000: no second element (a line's length)
         p1, p2 = _point(sketch, c.First, c.FirstPos), _point(sketch, c.Second, c.SecondPos)
     else:

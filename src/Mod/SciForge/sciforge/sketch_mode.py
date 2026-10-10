@@ -503,6 +503,53 @@ def _is_valid(widget):
             return False
 
 
+def label_point(sketch, index):
+    """Sketch point where FreeCAD draws the text of dimension `index` (lengths, radius,
+    diameter), or None. Lengths: LabelDistance off the middle of the measured points
+    (LabelPosition along them); radius/diameter: LabelDistance beyond the circle at the
+    angle LabelPosition (10 means 0), as FreeCAD's SoDatumLabel does."""
+    c = sketch.Constraints[index]
+    if c.Type in ("Radius", "Diameter"):
+        g = sketch.Geometry[c.First]
+        center, radius = getattr(g, "Center", None), getattr(g, "Radius", None)
+        if center is None or radius is None:
+            return None
+        angle = c.LabelPosition
+        if angle == 10:
+            if g.TypeId == "Part::GeomArcOfCircle":
+                angle = (g.FirstParameter + g.LastParameter) / 2.0
+            else:
+                angle = 0.0
+        direction = App.Vector(math.cos(angle), math.sin(angle), 0)
+        return center + direction * (radius + c.LabelDistance)
+    if c.Type not in ("Distance", "DistanceX", "DistanceY"):
+        return None
+
+    def point(geo, pos):
+        g = sketch.Geometry[geo]
+        return {1: g.StartPoint, 2: g.EndPoint}.get(pos, getattr(g, "Center", None))
+
+    if c.Second >= 0:
+        p1, p2 = point(c.First, c.FirstPos), point(c.Second, c.SecondPos)
+    elif c.First >= 0 and c.FirstPos == 0:
+        g = sketch.Geometry[c.First]
+        p1, p2 = g.StartPoint, g.EndPoint
+    else:
+        return None
+    if p1 is None or p2 is None:
+        return None
+    if c.Type == "DistanceX":
+        p2 = App.Vector(p2.x, p1.y, 0)
+    elif c.Type == "DistanceY":
+        p2 = App.Vector(p1.x, p2.y, 0)
+    direction = p2 - p1
+    if direction.Length < 1e-9:
+        return None
+    direction.normalize()
+    normal = App.Vector(-direction.y, direction.x, 0)
+    return (p1 + p2) * 0.5 + normal * c.LabelDistance + direction * c.LabelPosition
+
+
 # -- the open sketch -----------------------------------------------------------------
 class SketchSession:
     def __init__(self, sketch):
@@ -707,37 +754,12 @@ class SketchSession:
         self.editor = DimensionEditor(self, index, pos, centred)
 
     def label_pixel(self, index):
-        """Where a length dimension's text is on screen (view pixels), or None."""
+        """Where a dimension's text is on screen (view pixels), or None."""
         try:
-            sketch = self.sketch
-            c = sketch.Constraints[index]
-            if c.Type not in ("Distance", "DistanceX", "DistanceY"):
+            local = label_point(self.sketch, index)
+            if local is None:
                 return None
-
-            def point(geo, pos):
-                g = sketch.Geometry[geo]
-                return {1: g.StartPoint, 2: g.EndPoint}.get(pos, getattr(g, "Center", None))
-
-            if c.Second >= 0:
-                p1, p2 = point(c.First, c.FirstPos), point(c.Second, c.SecondPos)
-            elif c.First >= 0 and c.FirstPos == 0:
-                g = sketch.Geometry[c.First]
-                p1, p2 = g.StartPoint, g.EndPoint
-            else:
-                return None
-            if p1 is None or p2 is None:
-                return None
-            if c.Type == "DistanceX":
-                p2 = App.Vector(p2.x, p1.y, 0)
-            elif c.Type == "DistanceY":
-                p2 = App.Vector(p1.x, p2.y, 0)
-            direction = p2 - p1
-            if direction.Length < 1e-9:
-                return None
-            direction.normalize()
-            normal = App.Vector(-direction.y, direction.x, 0)
-            mid = (p1 + p2) * 0.5 + normal * c.LabelDistance + direction * c.LabelPosition
-            world = sketch.getGlobalPlacement().multVec(mid)
+            world = self.sketch.getGlobalPlacement().multVec(local)
             x, y = self.view.getPointOnViewport(world)
             ratio = self.gl.devicePixelRatioF()
             return QtCore.QPoint(int(x / ratio), int(self.gl.height() - y / ratio))
