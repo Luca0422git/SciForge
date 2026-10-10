@@ -626,3 +626,4 @@ def _slot(sketch, x1, y1, x2, y2, width):
 
 from . import sketch_ops  # noqa: E402,F401  (registers Builder.op_sketch_* steps)
 from . import hole_ops  # noqa: E402,F401  (registers op_hole_at, op_hole_points, op_thread)
+from . import revolve_ops  # noqa: E402,F401  (registers Builder.op_sf_revolve* steps)

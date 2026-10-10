@@ -1,0 +1,55 @@
+{
+  "id": "sf_revolve_cone",
+  "title": "Revolve dialog: right triangle about Z: a cone",
+  "tags": [
+    "revolve",
+    "fusion-revolve"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              0
+            ],
+            [
+              0,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z"
+    }
+  ],
+  "expect": {
+    "volume": 2094.3951023931954,
+    "area": 1016.640738463052,
+    "faces": 2,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "Cone r10 h20 (default angle 360): V = pi r^2 h / 3 = 2000 pi / 3; A = pi r^2 + pi r s, s = sqrt(10^2 + 20^2); faces: base and cone."
+  }
+}

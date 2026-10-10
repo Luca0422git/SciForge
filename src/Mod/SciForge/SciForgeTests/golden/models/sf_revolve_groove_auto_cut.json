@@ -1,0 +1,72 @@
+{
+  "id": "sf_revolve_groove_auto_cut",
+  "title": "Revolve dialog: profile inside a shaft turns into a Cut by itself (groove)",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "cut",
+    "auto-operation"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            8,
+            8,
+            10,
+            12
+          ],
+          "name": "g"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "g1",
+      "profile": "s2",
+      "axis": "Z",
+      "type": "full"
+    }
+  ],
+  "expect": {
+    "volume": 5830.795965062655,
+    "area": 2060.8847807549046,
+    "faces": 7,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "Operation auto: the revolved ring r8..10 z8..12 lies inside the shaft, so the dialog's choice is Cut. V = 2000 pi - pi(100-64)*4 = 1856 pi; A = 600 pi - outer band 2 pi 10*4 + groove floor 2 pi 8*4 + two walls 2*pi(100-64); faces: top, bottom, outer above and below, groove floor and its two walls."
+  }
+}

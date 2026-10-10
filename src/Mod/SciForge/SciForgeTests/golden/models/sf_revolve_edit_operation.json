@@ -1,0 +1,103 @@
+{
+  "id": "sf_revolve_edit_operation",
+  "title": "Revolve dialog: edit a groove to Join (nothing added) and back to Cut 180 degrees",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "edit",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            8,
+            8,
+            10,
+            12
+          ],
+          "name": "g"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "g1",
+      "profile": "s2",
+      "axis": "Z",
+      "type": "full"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 5830.795965062656,
+        "source": "analytic",
+        "note": "groove, see final"
+      }
+    },
+    {
+      "op": "sf_revolve_edit",
+      "target": "g1",
+      "set": {
+        "operation": "join"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 6283.185307179586,
+        "faces": 3,
+        "source": "analytic",
+        "note": "Join of a ring inside the shaft adds nothing: the plain cylinder"
+      }
+    },
+    {
+      "op": "sf_revolve_edit",
+      "target": "g1",
+      "set": {
+        "operation": "cut",
+        "type": "angle",
+        "angle": 180
+      }
+    }
+  ],
+  "expect": {
+    "volume": 6056.990636121121,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      20
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Editing swaps the Groove for a Revolution and back (the timeline keeps it): half the groove ring is cut at 180 degrees: V = 2000 pi - pi(100-64)*4/2 = 1928 pi."
+  }
+}

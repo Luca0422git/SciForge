@@ -62,6 +62,8 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `sketch` | `id`, `plane` (XY/XZ/YZ), `offset`, `geometry` | Create Sketch (on an offset plane) |
 | `extrude` | `id`, `profile`, `distance`, `operation` (join/cut/new_body), `direction` (one_side/symmetric/two_sides), `distance2`, `extent` (distance/through_all), `taper`, `flip` | Extrude |
 | `revolve` | `id`, `profile`, `axis` (X/Y/Z/sketch_h/sketch_v), `angle`, `operation` | Revolve |
+| `sf_revolve` | `id`, `profile` (+ `regions`) or `face`, `axis` (X/Y/Z, `{"sketch", "at"}`, `{"sketch", "construction"}`, `{"sketch", "axis": "H"/"V"}`, `{"edge": selector}`), `type` (angle/full), `direction` (one_side/two_sides/symmetric), `angle`, `angle2`, `operation` (auto = the dialog's own choice) | Revolve dialog (`sciforge/revolve.py`, details in `golden/revolve_ops.py`) |
+| `sf_revolve_edit` | `target`, `set` {revolve options} | double-click a revolve in the timeline and change it |
 | `fillet` | `id`, `edges` (selector), `radius` | Fillet |
 | `chamfer` | `id`, `edges`, `distance`, `distance2` or `angle` | Chamfer |
 | `blend_fillet` | `id`, `radius`, and `edges` / `faces` (every sharp edge around them) / `features` (step ids: the edges each made) | Fillet dialog (`sciforge/blend.py`, the F command's code) |

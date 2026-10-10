@@ -116,6 +116,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       or hole faces: size from the diameter, full/partial length (+ blue length arrow), cosmetic
       (dashed helix overlay, also for tapped holes) or modeled (own ISO 68-1 groove sweep,
       `thread_core.py`). 6 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
+- [x] Fusion-style Revolve (branch `sf/revolve`, `revolve.py` / `revolve_ui.py`): profile =
+      sketch areas or flat faces; axis = origin axis (drawn as long X/Y/Z lines to click),
+      sketch line, construction line (drawn dashed), straight part edge, construction axis;
+      Type Angle / Full; One Side / Two Sides / Symmetric (per side, like Fusion's API); blue
+      handle(s) dragged round the axis; Join / Cut / Intersect / New Body with auto Cut when
+      the revolve goes mostly into material (Revolution <-> Groove swap); timeline edit;
+      the interim "Revolve (Cut)" ribbon entry removed. 3 scenarios (`revolve_*.py`), 12
+      golden models (`sf_revolve_*`, ops `sf_revolve` / `sf_revolve_edit`). Gap: Type "To".
 
 ## Known issues / findings
 
@@ -297,6 +305,28 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
     clickable (compute what is in front); the disc at the bottom of a hole is only visible
     from the top.
+- **Coin draggers cannot be grabbed behind the part** (Coin gives a click to the nearest
+  object only). The revolve handle sat behind the preview solid at 90 degrees and could not
+  be dragged. `revolve_ui.AngleHandle` is drawn in an `SoAnnotation` (on top) and handles the
+  mouse itself: FreeCAD's `view.addEventCallback` only records the mouse, a QTimer applies
+  it (no pivy callbacks). Revit-style left drag does not move the camera, so this is safe.
+- Revolve facts (FreeCAD 1.1.4): a positive Angle turns right-handed about the reference's
+  own direction (origin axis = +X/+Y/+Z, edge = its curve direction, construction line =
+  start -> end), Reversed flips it. `Midplane` splits the whole angle; `TwoAngles` turns
+  Angle one way and Angle2 the other and **silently gives a wrong solid when the two add up
+  to more than 360** (SciForge refuses that in the dialog). `Groove` with `UpToFace` returns
+  an **empty solid without any error** (volume 0, both directions), so Fusion's Type "To"
+  is not offered. A disjoint Join is accepted (a body with two lumps, like Fusion's).
+- A feature may only link inside its own body ("go out of the allowed scope" error).
+  Profiles/edges from another body go through a hidden SubShapeBinder; a construction line,
+  construction axis or sketch axis of another body (no shape to bind) through
+  `revolve.AxisLink` (a hidden Part2DObjectPython with a global link that rebuilds the line
+  every recompute, so the revolve follows edits). Helpers carry `SciForgeTimeline = False`.
+- FreeCAD hides the previous tip when a feature is added and shows it again only when the
+  feature is deleted with its own command: after removing/moving a preview feature from
+  Python, show the body's Tip again (`revolve._show_tip`), or the body looks empty.
+- Scenario step names must not contain "error"/"failed"/"invalid": the harness reads the
+  step's own progress line in the Report view as an error.
 
 ## Questions waiting for Luca
 
@@ -409,6 +439,22 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `ExtrudeFeature`, property `Operation`); parameters and formulas typed in Extrude and
   Press Pull fields; Enter is OK over the 3D view; clicking the end of a preview drops the
   profile it came from; Symmetric no longer offers To Object. 3 golden models (tapers).
+### 2026-10-10: Revolve (branch `sf/revolve`)
+- Built Fusion's Revolve (see the Phase 1 checkbox): `sciforge/revolve.py` (Qt-free core, used
+  by the dialog and the golden builder), `sciforge/revolve_ui.py` (dialog, clickable origin
+  axes and construction lines, on-top angle handle, editors for Revolution / Groove /
+  SciForge::Revolve). Ribbon: one line removed ("Revolve (Cut)").
+- Tests: scenarios `revolve_basic` (nothing selected, Z axis click, Full/Angle, handle drag,
+  Symmetric, Two Sides, OK, undo/redo, timeline edit, auto-Cut groove, Cancel, Esc),
+  `revolve_axes` (sketch line axis, Join/Intersect/New Body, face + edge selected first,
+  auto Cut by direction, edit, undo/redo, construction line, angle error kept in the
+  dialog), `revolve_edit` (a FreeCAD-made revolve edited, side-two handle, Esc in an edit,
+  two profiles toggled, axis cleared and re-picked). 12 golden models `sf_revolve_*`
+  (cylinder, cone, torus, groove auto-cut, intersect, new body about a construction line,
+  the same following the line when it is moved, two sides, symmetric, sketch line axis,
+  face + edge, edit Groove <-> Revolution), schema unit tests `test_revolve_schema.py`.
+- Gap: Fusion's Type "To" (FreeCAD's Groove up to a face gives an empty solid, see Known
+  issues). Not checked by Luca yet.
 
 ## Next steps (in order)
 

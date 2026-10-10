@@ -1,0 +1,73 @@
+{
+  "id": "sf_revolve_intersect",
+  "title": "Revolve dialog: Intersect keeps the box inside a revolved cylinder",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "intersect"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            20
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s2",
+      "axis": "Z",
+      "type": "full",
+      "operation": "intersect"
+    }
+  ],
+  "expect": {
+    "volume": 3141.592653589793,
+    "area": 1256.6370614359173,
+    "faces": 3,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "Box 40x40x10 centred on Z intersected with the cylinder r10 h20: cylinder r10 h10: V = 1000 pi, A = 200 pi + 200 pi."
+  }
+}
