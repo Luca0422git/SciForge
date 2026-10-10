@@ -930,32 +930,83 @@ class _ViewFilter(QtCore.QObject):
 
 # Keys that mean something else in a sketch than on the part (Fusion): M moves/copies
 # sketch curves, Del deletes the selected sketch curves (whatever the part's Move/Delete
-# commands do). Only without Ctrl/Alt.
+# commands do), Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste sketch curves (FreeCAD's
+# own keys for them only work with its menu bar, which SciForge hides).
+NONE, CTRL = QtCore.Qt.NoModifier, QtCore.Qt.ControlModifier
 SKETCH_KEYS = {
-    QtCore.Qt.Key_M: "SciForge_SketchMove",
-    QtCore.Qt.Key_Delete: "Std_Delete",
+    (QtCore.Qt.Key_M, NONE): "SciForge_SketchMove",
+    (QtCore.Qt.Key_Delete, NONE): "Std_Delete",
+    (QtCore.Qt.Key_C, CTRL): "Sketcher_CopyClipboard",
+    (QtCore.Qt.Key_X, CTRL): "Sketcher_Cut",
+    (QtCore.Qt.Key_V, CTRL): "paste",
 }
 
 
 LABELS = {"SciForge_SketchMove": "Move/Copy"}
+NEEDS_CURVES = {"Sketcher_CopyClipboard": "Ctrl+C", "Sketcher_Cut": "Ctrl+X"}
 
 
 def _sketch_key(event):
-    mods = event.modifiers() & ~QtCore.Qt.KeypadModifier
-    if mods != QtCore.Qt.NoModifier or event.isAutoRepeat():
+    if event.isAutoRepeat():
         return None
-    return SKETCH_KEYS.get(event.key())
+    mods = event.modifiers() & ~QtCore.Qt.KeypadModifier
+    for (key, wanted), command in SKETCH_KEYS.items():
+        if event.key() == key and mods == wanted:
+            return command
+    return None
 
 
 def _run(command):
     try:
-        from . import recent
+        from . import commands, recent
 
+        if command == "paste":
+            paste()
+            return
+        if command in NEEDS_CURVES:
+            sketch = editing_sketch()
+            if sketch is None or not _selected_curves(sketch):
+                commands.tell("Select sketch curves first, then %s." % NEEDS_CURVES[command])
+                return
         if command in LABELS:
             recent.record(command, LABELS[command])
         Gui.runCommand(command)
     except Exception as exc:
         warn("%s: %s" % (command, exc))
+
+
+def _selected_curves(sketch):
+    from .sketch_tools_ui import selected_curves
+
+    return selected_curves(sketch)
+
+
+def paste():
+    """Ctrl+V in a sketch: FreeCAD pastes the copied curves on top of the originals;
+    Fusion then lets you place them. The pasted curves are selected and Move starts:
+    click a base point, then where they go (Esc leaves them where they are)."""
+    from . import commands
+
+    sketch = editing_sketch()
+    if sketch is None:
+        return
+    before = len(sketch.Geometry)
+    Gui.runCommand("Sketcher_Paste")
+    new = list(range(before, len(sketch.Geometry)))
+    if not new:
+        commands.tell("Nothing to paste: select sketch curves and press Ctrl+C first.")
+        return
+    Gui.Selection.clearSelection()
+    for index in new:
+        Gui.Selection.addSelection(sketch.Document.Name, sketch.Name, "Edge%d" % (index + 1))
+    def place():
+        _run("Sketcher_Translate")
+        # said once the tool's panel has settled (its start hid an earlier tip)
+        QtCore.QTimer.singleShot(
+            150, lambda: commands.tell("Pasted: click a base point, then where the copy goes.")
+        )
+
+    QtCore.QTimer.singleShot(0, place)
 
 
 VALUE_KEYS = {getattr(QtCore.Qt, "Key_%d" % d) for d in range(10)} | {

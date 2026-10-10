@@ -15,8 +15,10 @@ C  Esc in the middle: after the first rectangle corner, while Offset waits for a
    while Project runs. Nothing is drawn, the sketch stays open.
 D  Switching tools mid-way: L, one click, C (the half line goes), a circle typed 20 wide,
    E while the circle tool still runs: the sketch finishes and Extrude takes the circle.
-E  Right click in a sketch: the sketch's marking menu (Line, Finish Sketch... not Hole or
-   Press Pull). Del deletes one sketch line, Ctrl+Z brings it back, M moves sketch curves.
+E  Create Sketch, click the cylinder's curved side: refused with a reason (Fusion only
+   offers flat faces), then its top. Right click in a sketch: the sketch's marking menu
+   (Line, Finish Sketch... not Hole or Press Pull). Del deletes one sketch line, Ctrl+Z
+   brings it back; Ctrl+C, Ctrl+V pastes a copy to place; M moves sketch curves.
 F  X with nothing selected: new lines are construction (the palette shows it, a message
    says it); the next sketch starts with normal lines again.
 G  Sketch fillet: click a corner, the radius box opens, type 4.
@@ -605,6 +607,22 @@ def e_sketch():
     h.ribbon("Create Sketch")
 
 
+def e_side():
+    # the curved side of the cylinder, low on its front (the "wrong" face for a sketch)
+    a = -2.2
+    h.click(V(20 + 10 * math.cos(a), 15 + 10 * math.sin(a), 3))
+
+
+def e_side_refused():
+    import FreeCADGui as G
+
+    h.check("E: a curved face does not start a sketch", h.in_sketch() is None)
+    h.check("E: Create Sketch still waits", bool(G.Control.activeDialog()))
+    h.check("E: the curved face does not stay selected", not G.Selection.getSelectionEx())
+    h.check("E: the reason is next to the mouse", "flat face" in si.tooltip(), si.tooltip())
+    h.shot("E-curved-face")
+
+
 def e_top():
     h.click(V(20, 15, 10))  # the top of the cylinder
 
@@ -680,6 +698,30 @@ def e_deleted():
 def e_undone():
     h.check("E: Ctrl+Z in the sketch brings it back", len(s["sk"].Geometry) == s["geo"])
     h.check("E: still in the sketch", h.in_sketch() is s["sk"])
+    si.click(_side("top"))
+
+
+def e_copy():
+    h.check("E: the top line is selected", bool(Gui.Selection.getSelectionEx()))
+    h.press("c", QtCore.Qt.ControlModifier)
+
+
+def e_paste():
+    h.press("v", QtCore.Qt.ControlModifier)
+
+
+def e_pasted():
+    sk = s["sk"]
+    h.check("E: Ctrl+C, Ctrl+V pasted the line", len(sk.Geometry) == s["geo"] + 1, sk.Geometry)
+    h.check("E: the copy hangs on the mouse to be placed (Move runs)", si.drawing())
+    h.check("E: a message says what to do", "Pasted" in si.tooltip(), si.tooltip())
+    esc()
+    esc()
+    h.press("z", QtCore.Qt.ControlModifier)
+
+
+def e_paste_undone():
+    h.check("E: Ctrl+Z takes the paste back", len(s["sk"].Geometry) == s["geo"])
     si.click(_side("top"))
 
 
@@ -1017,6 +1059,8 @@ h.run(
             d_volume,
             # E
             e_sketch,
+            e_side,
+            e_side_refused,
             e_top,
             e_rect,
             e_rect_a,
@@ -1028,6 +1072,10 @@ h.run(
             e_del,
             e_deleted,
             e_undone,
+            e_copy,
+            e_paste,
+            e_pasted,
+            e_paste_undone,
             e_m,
             e_moving,
             e_right_again,

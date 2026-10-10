@@ -306,6 +306,11 @@ class SketchPicker:
         target = sketch_target()
         if target is not None:
             self._picked(target)
+        elif Gui.Selection.getSelectionEx():
+            # Fusion only offers flat faces and planes; a curved face or an edge is not
+            # taken (and does not stay selected), with the reason next to the mouse.
+            Gui.Selection.clearSelection()
+            commands.tell("A sketch goes on a flat face or a plane: click one of those.")
 
     def _picked(self, target):
         if self._closed:
