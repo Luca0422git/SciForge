@@ -145,17 +145,27 @@ class Builder:
         """SciForge's Fusion-style Extrude (sciforge/extrude.py), as the E command builds it."""
         from sciforge import extrude
 
-        if step.get("extent") == "through_all" and step.get("operation", "join") != "cut":
-            raise BuildError("'through_all' is only supported for cut extrudes")
         distance = step.get("distance", 1.0)
+        extents = {"through_all": "all", "to_object": "to_object"}
         options = {
             "operation": step.get("operation", "join"),
             "direction": step.get("direction", "one_side"),
-            "extent": "all" if step.get("extent") == "through_all" else "distance",
+            "extent": extents.get(step.get("extent"), "distance"),
             "distance": -distance if step.get("flip") else distance,
             "distance2": step.get("distance2", distance),
             "taper": step.get("taper", 0.0),
+            "extent2": extents.get(step.get("extent2"), "distance"),
+            "taper2": step.get("taper2", 0.0),
+            "measurement": step.get("measurement", "whole"),
+            "start": step.get("start", "profile"),
+            "start_offset": step.get("start_offset", 0.0),
         }
+        if "to" in step:
+            options["extent_object"] = self._extrude_ref(step, step["to"])
+        if "to2" in step:
+            options["extent_object2"] = self._extrude_ref(step, step["to2"])
+        if "start_from" in step:
+            options["start_object"] = self._extrude_ref(step, step["start_from"])
         if "face" in step:  # Fusion: pick a flat face of the part as the profile
             tip = self.body.Tip
             names = selectors.select(tip.Shape, step["face"], "faces")
@@ -163,15 +173,53 @@ class Builder:
                 raise BuildError("extrude %r: 'face' must select one face" % step["id"])
             profile = (tip, names[0])
         else:
-            profile = self.objects[step["profile"]]
+            sketches = [self.objects[step["profile"]]]
+            sketches += [self.objects[name] for name in step.get("more_profiles", [])]
+            if "regions" in step:  # Fusion: click inside sketch areas
+                profile = [self._region(step, sketches, point) for point in step["regions"]]
+            elif len(sketches) > 1:
+                profile = [(sketch, "") for sketch in sketches]
+            else:
+                profile = sketches[0]
         try:
             feature = extrude.make(self.body, profile, options, step["id"])
         except extrude.ExtrudeError as exc:
             raise BuildError("extrude %r: %s" % (step["id"], exc))
         self.objects[step["id"]] = feature
         self.ops[step["id"]] = "extrude"
+        body = extrude.owner_body(feature)
+        if body is not None and body is not self.body:
+            self.body = body  # Fusion: a new body becomes the one you work on
         self._recompute(step, feature)
         return feature
+
+    def _region(self, step, sketches, point):
+        """(sketch, "InternalFaceN") of the smallest sketch area containing the point
+        (sketch coordinates of the first sketch), as a click inside it picks."""
+        from sciforge import extrude
+
+        where = sketches[0].getGlobalPlacement().multVec(App.Vector(point[0], point[1], 0))
+        best = None
+        for sketch in sketches:
+            for sub, face in extrude.regions(sketch):
+                if face.isInside(where, 1e-6, True) and (best is None or face.Area < best[2]):
+                    best = (sketch, sub, face.Area)
+        if best is None:
+            raise BuildError("extrude %r: no sketch area contains %s" % (step["id"], point))
+        return (best[0], best[1])
+
+    def _extrude_ref(self, step, spec):
+        """An object picked in an Extrude field: an origin plane, a face of the part as it is
+        now (selector), or the solid made by an earlier step."""
+        if "plane" in spec:
+            return (self._origin(_PLANE_ROLE[spec["plane"]]), "")
+        if "face" in spec:
+            tip = self._tip()
+            names = selectors.select(tip.Shape, spec["face"], "faces")
+            if len(names) != 1:
+                raise BuildError("extrude %r: the face selector must pick one face" % step["id"])
+            return (tip, names[0])
+        return (self.objects[spec["step"]], "")
 
     def op_revolve(self, step):
         operation = step.get("operation", "join")

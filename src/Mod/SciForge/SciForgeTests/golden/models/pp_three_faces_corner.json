@@ -1,0 +1,81 @@
+{
+  "id": "pp_three_faces_corner",
+  "title": "Press Pull: top, right and back faces +2 meet in one corner",
+  "tags": [
+    "press-pull",
+    "multi-face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 2,
+      "faces": {
+        "any_of": [
+          {
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              1,
+              0,
+              0
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              0,
+              1,
+              0
+            ],
+            "count": 1
+          }
+        ],
+        "count": 3
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11088,
+    "area": 3384,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      42,
+      22,
+      12
+    ],
+    "source": "analytic",
+    "note": "Fusion extends all three so the corner fills: 42x22x12"
+  }
+}

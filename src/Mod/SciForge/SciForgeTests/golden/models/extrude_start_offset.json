@@ -1,0 +1,49 @@
+{
+  "id": "extrude_start_offset",
+  "title": "Extrude that starts 5 mm off the sketch plane",
+  "tags": [
+    "extrude",
+    "start-offset"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            10
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "start": "offset",
+      "start_offset": 5,
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 2000,
+    "area": 1000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      5,
+      20,
+      10,
+      15
+    ],
+    "source": "analytic",
+    "note": "Start offset 5, distance 10: z from 5 to 15. V = 20*10*10; A = 2*200 + 2(20+10)*10"
+  }
+}

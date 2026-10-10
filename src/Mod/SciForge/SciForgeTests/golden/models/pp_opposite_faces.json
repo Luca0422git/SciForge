@@ -1,0 +1,72 @@
+{
+  "id": "pp_opposite_faces",
+  "title": "Press Pull: top and bottom +2 together",
+  "tags": [
+    "press-pull",
+    "multi-face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 2,
+      "faces": {
+        "any_of": [
+          {
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              0,
+              0,
+              -1
+            ],
+            "count": 1
+          }
+        ],
+        "count": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11200,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      -2,
+      40,
+      20,
+      12
+    ],
+    "source": "analytic",
+    "note": "Each face moves 2 along its own outward normal: 40x20x14"
+  }
+}

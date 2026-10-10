@@ -22,7 +22,8 @@ See golden/README.md for every operation and option.
 """
 
 PLANES = ("XY", "XZ", "YZ")
-OPERATIONS = ("new_body", "join", "cut")
+OPERATIONS = ("new_body", "join", "cut", "intersect")
+EXTRUDE_EXTENTS = ("distance", "through_all", "to_object")
 SOURCES = ("analytic", "baseline-freecad-1.1.4", "fusion")
 
 # op -> (required keys, optional keys)
@@ -41,6 +42,17 @@ STEP_KEYS = {
             "taper",
             "flip",
             "comment",
+            # Fusion Extrude options (sciforge/extrude.py)
+            "regions",
+            "more_profiles",
+            "measurement",
+            "start",
+            "start_offset",
+            "start_from",
+            "to",
+            "extent2",
+            "taper2",
+            "to2",
         },
     ),
     "revolve": ({"id", "profile", "axis"}, {"angle", "operation", "comment"}),
@@ -155,6 +167,44 @@ def _check_geometry(where, geometry):
                 _fail(here, "'slot' takes [x1, y1, x2, y2, width]")
 
 
+def _check_ref(where, spec):
+    """An object a Fusion field picks: {"plane": "XY"}, {"face": selector} or {"step": id}."""
+    if not isinstance(spec, dict) or len(set(spec) & {"plane", "face", "step"}) != 1:
+        _fail(where, "must be {'plane': 'XY'}, {'face': selector} or {'step': id}")
+    if "plane" in spec and spec["plane"] not in PLANES:
+        _fail(where, "'plane' must be one of %s" % (PLANES,))
+
+
+def _check_extrude(where, step, seen):
+    """Extrude's Fusion options (sciforge/extrude.py)."""
+    for key in ("extent", "extent2"):
+        if step.get(key, "distance") not in EXTRUDE_EXTENTS:
+            _fail(where, "'%s' must be one of %s" % (key, EXTRUDE_EXTENTS))
+    if step.get("extent") == "to_object":
+        _check_ref(where + ".to", step.get("to"))
+    if step.get("extent2") == "to_object":
+        _check_ref(where + ".to2", step.get("to2"))
+    if step.get("measurement", "whole") not in ("half", "whole"):
+        _fail(where, "'measurement' must be 'half' or 'whole'")
+    start = step.get("start", "profile")
+    if start not in ("profile", "offset", "object"):
+        _fail(where, "'start' must be profile, offset or object")
+    if start == "offset":
+        _check_number(where + ".start_offset", step.get("start_offset"))
+    if start == "object":
+        _check_ref(where + ".start_from", step.get("start_from"))
+    for name in step.get("more_profiles", []):
+        if seen.get(name) != "sketch":
+            _fail(where, "'more_profiles' must name earlier sketch steps, got %r" % name)
+    regions = step.get("regions")
+    if regions is not None:
+        if "profile" not in step or not isinstance(regions, list) or not regions:
+            _fail(where, "'regions' is a list of [x, y] points inside the picked sketch areas")
+        for point in regions:
+            if not isinstance(point, list) or len(point) != 2:
+                _fail(where, "each region is an [x, y] point in sketch coordinates")
+
+
 def validate(model):
     """Raise ModelError if the model is malformed; return the model otherwise."""
     if not isinstance(model, dict):
@@ -221,9 +271,8 @@ def validate(model):
             if step.get("operation", "join") not in OPERATIONS:
                 _fail(here, "'operation' must be one of %s" % (OPERATIONS,))
         if op == "extrude":
+            _check_extrude(here, step, seen)
             extent = step.get("extent", "distance")
-            if extent not in ("distance", "through_all"):
-                _fail(here, "'extent' must be 'distance' or 'through_all'")
             if extent == "distance":
                 _check_number(here + ".distance", step.get("distance"), positive=True)
             if step.get("direction", "one_side") not in ("one_side", "symmetric", "two_sides"):

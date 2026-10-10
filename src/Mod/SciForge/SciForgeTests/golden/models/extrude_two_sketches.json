@@ -1,0 +1,88 @@
+{
+  "id": "extrude_two_sketches",
+  "title": "Two sketches picked together, joined to the box",
+  "tags": [
+    "extrude",
+    "multi-profile"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            10
+          ],
+          "name": "a"
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            25,
+            15,
+            35,
+            25
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "more_profiles": [
+        "s3"
+      ],
+      "distance": 5
+    }
+  ],
+  "expect": {
+    "volume": 13000,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "Two 10x10x5 blocks on the box: 12000 + 2*500"
+  }
+}

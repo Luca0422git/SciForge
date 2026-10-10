@@ -1,0 +1,49 @@
+{
+  "id": "extrude_symmetric_half",
+  "title": "Symmetric extrude, distance measured per side (Half Length)",
+  "tags": [
+    "extrude",
+    "symmetric"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            10
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "direction": "symmetric",
+      "measurement": "half",
+      "distance": 4
+    }
+  ],
+  "expect": {
+    "volume": 1600,
+    "area": 880,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      -4,
+      20,
+      10,
+      4
+    ],
+    "source": "analytic",
+    "note": "Half Length 4: 4 mm each side, z from -4 to 4. V = 20*10*8; A = 2*200 + 2(20+10)*8"
+  }
+}

@@ -304,3 +304,93 @@ def owning_fillet(body, face):
 
 def describe(distance):
     return "%+.3g mm" % distance if not math.isnan(distance) else "?"
+
+
+# -- picking faces while the preview shows the result --------------------------------------
+def moved_surface(face, distance):
+    """A face whose surface is `face`'s surface moved by `distance` (for matching clicks
+    on the preview), or None for surfaces that are not planes or cylinders."""
+    import Part
+
+    kind = type(face.Surface).__name__
+    try:
+        if kind == "Plane":
+            moved = face.copy()
+            moved.translate(face_normal(face) * distance)
+            return moved
+        if kind == "Cylinder":
+            surf = face.Surface
+            u0, u1, v0, v1 = face.ParameterRange
+            um, vm = (u0 + u1) / 2.0, (v0 + v1) / 2.0
+            point = face.valueAt(um, vm)
+            axis = surf.Axis
+            radial = point - (surf.Center + axis * axis.dot(point - surf.Center))
+            grows = face.normalAt(um, vm).dot(radial) > 0
+            radius = surf.Radius + (distance if grows else -distance)
+            if radius <= TOL:
+                return None
+            return Part.Cylinder(surf.Center, surf.Center + axis, radius).toShape()
+    except Exception:
+        return None
+    return None
+
+
+def match_pick(base, picked, point, selected=(), distance=0.0):
+    """Which face of `base` a click on `picked` (a face of the preview) means: the base face
+    on the same surface under the click point, else on the same surface, else a selected
+    face whose moved copy was clicked. Returns "FaceN" or None."""
+    for i, face in enumerate(base.Faces, start=1):
+        if same_face(face, picked):
+            return "Face%d" % i  # the very same face: the part before any change
+    candidates = []
+    for i, face in enumerate(base.Faces, start=1):
+        if _same_surface(face, picked):
+            candidates.append(("Face%d" % i, face))
+    if point is not None:
+        for name, face in candidates:
+            if _on_face(face, point, 1e-4):
+                return name
+    if candidates:
+        return candidates[0][0]
+    for name in selected:
+        try:
+            moved = moved_surface(base.getElement(name), distance)
+        except Exception:
+            moved = None
+        if moved is not None and _same_surface(moved, picked):
+            return name
+    return None
+
+
+def _normal_near(face, point):
+    u, v = face.Surface.parameter(point)
+    return face.normalAt(u, v)
+
+
+def tangent_chain(shape, names):
+    """The faces of `shape` reached from `names` across smooth (tangent) edges, like
+    Fusion's Tangent Chain: picking one face of a filleted run picks the whole run."""
+    faces = shape.Faces
+    index = {"Face%d" % i: face for i, face in enumerate(faces, start=1)}
+    found = list(names)
+    queue = list(names)
+    while queue:
+        name = queue.pop(0)
+        face = index[name]
+        for other_name, other in index.items():
+            if other_name in found:
+                continue
+            for edge in face.Edges:
+                if not any(edge.isSame(e) for e in other.Edges):
+                    continue
+                mid = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+                try:
+                    a = _normal_near(face, mid)
+                    b = _normal_near(other, mid)
+                except Exception:
+                    continue
+                if a.getAngle(b) < math.radians(1.0):
+                    found.append(other_name)
+                    queue.append(other_name)
+                    break
+    return found

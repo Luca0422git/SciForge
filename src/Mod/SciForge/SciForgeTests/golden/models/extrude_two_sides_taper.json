@@ -1,0 +1,50 @@
+{
+  "id": "extrude_two_sides_taper",
+  "title": "Two sides: 5 up straight, 3 down tapered -10 degrees",
+  "tags": [
+    "extrude",
+    "two-sides",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            10
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "direction": "two_sides",
+      "distance": 5,
+      "distance2": 3,
+      "taper2": -10
+    }
+  ],
+  "expect": {
+    "volume": 769.3804268210038,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      -3,
+      10,
+      10,
+      5
+    ],
+    "source": "analytic",
+    "note": "Side one: 10x10x5 box. Side two: frustum 3 deep, the square shrinks by 3*tan(10deg) per side (negative taper = inward, as Fusion). V = 500 + h/3(A1 + A2 + sqrt(A1*A2)) with A1=100, A2=s^2, s = 10 - 6 tan(10deg)"
+  }
+}

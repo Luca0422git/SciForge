@@ -1,0 +1,66 @@
+{
+  "id": "extrude_regions_both",
+  "title": "Ring and disc picked together give the full block",
+  "tags": [
+    "extrude",
+    "regions",
+    "multi-profile"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        },
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "regions": [
+        [
+          5,
+          5
+        ],
+        [
+          20,
+          15
+        ]
+      ],
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Both areas: 40x30x10 with no seam (refined). A = 2*1200 + 2(40+30)*10"
+  }
+}

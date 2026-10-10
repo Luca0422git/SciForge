@@ -66,7 +66,12 @@ class PressPullFeature:
                     "The face %s no longer exists (an earlier step changed the model). "
                     "Edit this Press Pull and select the face again." % name
                 )
-        obj.Shape = core.press_pull(base_obj.Shape, faces, obj.Distance.Value, refine=obj.Refine)
+        notes = []
+        obj.Shape = core.press_pull(
+            base_obj.Shape, faces, obj.Distance.Value, refine=obj.Refine, report=notes
+        )
+        # Shown by the dialog: e.g. neighbours that could not be extended.
+        self.note = " ".join(notes)
 
     # FreeCAD saves the proxy with the document; nothing extra to store.
     def dumps(self):

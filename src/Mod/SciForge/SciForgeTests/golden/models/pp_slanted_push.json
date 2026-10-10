@@ -1,0 +1,69 @@
+{
+  "id": "pp_slanted_push",
+  "title": "Press Pull: top of a trapezoid pushed -5, sloped sides trimmed",
+  "tags": [
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              10,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": -5,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 9750.0,
+    "faces": 6,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      15
+    ],
+    "source": "analytic",
+    "note": "Sides slope 10 in 20 (x = z/2): at z=15 the top is 25 wide. V = (40+25)/2*15*20"
+  }
+}

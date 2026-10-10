@@ -152,7 +152,7 @@ class AngleDragger:
         hints.vertexOrdering = coin.SoShapeHints.COUNTERCLOCKWISE
         hints.shapeType = coin.SoShapeHints.UNKNOWN_SHAPE_TYPE  # lit from both sides
         sep.addChild(hints)
-        span = min(0.6, 2.5 * width / max(radius, 1e-6))  # half the arc, radians
+        span = min(0.3, 1.6 * width / max(radius, 1e-6))  # half the arc, radians
         steps = 12
         points, index = [], []
         r_in, r_out = radius - width * 0.25, radius + width * 0.25
@@ -308,7 +308,14 @@ def selected_profiles(body):
                 hidden = False
             if obj.Name in used and hidden:
                 continue
-            found.append((obj, ""))
+            # A selected sketch with one closed area is that profile (Fusion picks a
+            # single profile by itself); with several, the user clicks the ones wanted.
+            try:
+                areas = extrude.regions(obj)
+            except Exception:
+                areas = []
+            if len(areas) == 1:
+                found.append((obj, areas[0][0]))
         elif short.startswith("Face"):
             try:
                 face = obj.Shape.getElement(short)
@@ -351,6 +358,7 @@ class ExtrudePanel(Panel):
     def __init__(self, doc, feature=None):
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
+        self.escape = preview.EscapeCancels(self)
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else extrude.owner_body(feature)
@@ -860,12 +868,11 @@ class ExtrudePanel(Panel):
             return
         base = self._base_feature()
         base_shape = base.Shape if base is not None and not base.Shape.isNull() else None
-        options = dict(self.options)
-        distance = options["distance"]
-        if options["extent"] == "all":
-            distance = (1.0 if distance >= 0 else -1.0) * (-1.0 if options.get("flip") else 1.0)
-        if options["direction"] == "symmetric":
-            distance = 1.0
+        options = extrude.options_with_defaults(self.options)
+        try:
+            distance = extrude._sign1(self.profiles, options)  # the side it goes to
+        except Exception:
+            distance = 1.0 if options["distance"] >= 0 else -1.0
         into = options["direction"] != "symmetric" and extrude.goes_into_material(
             base_shape, self.profiles, distance, options
         )
@@ -885,6 +892,18 @@ class ExtrudePanel(Panel):
         """Something changed: rebuild the preview shortly (coalesces drags)."""
         self._update_visibility()
         self._collect()
+        # Fusion: choosing "To Object" or "Start: Object" makes that selection box active.
+        for name, wanted in (
+            ("start_object", self.options["start"] == "object"),
+            ("extent_object", self.options["extent"] == "to_object"),
+            (
+                "extent_object2",
+                self.options["direction"] == "two_sides" and self.options["extent2"] == "to_object",
+            ),
+        ):
+            if wanted and self.options.get(name) is None and self.active != name:
+                self.activate(name)
+                new_geometry = True
         self._auto_operation()
         self.dirty = True
         if new_geometry:
@@ -1062,7 +1081,7 @@ class ExtrudePanel(Panel):
             along,
             self.options["taper"],
             max(abs(length), 1.0),
-            size * 0.35,
+            size * 0.3,
             on_drag=self._taper_dragged,
             on_release=self._taper_dragged,
         )
@@ -1110,6 +1129,7 @@ class ExtrudePanel(Panel):
 
     def cleanup(self):
         self._unwatch()
+        self.escape.remove()
         self._remove_draggers()
         super().cleanup()
 

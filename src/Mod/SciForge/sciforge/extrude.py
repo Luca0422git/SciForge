@@ -187,12 +187,16 @@ def interior_point(face):
     try:
         if face.isInside(center, 1e-6, True):
             return center
+        best = None
         u0, u1, v0, v1 = face.ParameterRange
-        for i in range(1, 10):
-            for j in range(1, 10):
-                p = face.valueAt(u0 + (u1 - u0) * i / 10.0, v0 + (v1 - v0) * j / 10.0)
+        for i in range(1, 20):
+            for j in range(1, 20):
+                p = face.valueAt(u0 + (u1 - u0) * i / 20.0, v0 + (v1 - v0) * j / 20.0)
                 if face.isInside(p, 1e-6, True):
-                    return p
+                    if best is None or (p - center).Length < (best - center).Length:
+                        best = p
+        if best is not None:
+            return best  # the inside point nearest the middle (a ring: next to the hole)
     except Exception:
         pass
     return center
@@ -343,6 +347,8 @@ def start_offset_of(profiles, options):
     if options["start"] == "offset":
         return float(options["start_offset"])
     if options["start"] == "object":
+        if not options.get("start_object"):
+            raise ExtrudeError("Pick the face or plane the extrusion starts from.")
         plane = _plane_of_ref(options["start_object"])
         if plane is None:
             raise ExtrudeError("Start from a flat face or a plane.")
@@ -916,7 +922,7 @@ def _update(feature, body, profiles, options):
         link = _direct_profile(profiles)
         fp_profiles = list(profiles)
     if is_intersect(feature):
-        feature.Profiles = [(obj, [sub] if sub else []) for obj, sub in fp_profiles]
+        feature.Profiles = [(obj, [sub]) for obj, sub in fp_profiles]  # "" = whole object
     else:
         feature.Profile = link
     refs = {}

@@ -1,0 +1,81 @@
+{
+  "id": "extrude_new_body",
+  "title": "New Body: a 10x10x5 block on the box is a separate body",
+  "tags": [
+    "extrude",
+    "new-body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12000,
+        "faces": 6,
+        "source": "analytic",
+        "note": "the box"
+      }
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            10
+          ],
+          "name": "n"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "n1",
+      "profile": "s2",
+      "distance": 5,
+      "operation": "new_body"
+    }
+  ],
+  "expect": {
+    "volume": 500,
+    "area": 400,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      10,
+      10,
+      10,
+      15
+    ],
+    "source": "analytic",
+    "note": "The new body alone (it becomes the active one): 10x10x5. A = 2*100 + 4*10*5. The box stays 12000 (check step)"
+  }
+}

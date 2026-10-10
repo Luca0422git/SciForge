@@ -49,6 +49,47 @@ def recompute(doc):
         doc.recompute()
 
 
+class EscapeCancels:
+    """Fusion: Esc cancels the command in progress, wherever the mouse is. FreeCAD's task
+    panel only sees Esc when it has the keyboard focus; this shortcut on the main
+    window catches it in the 3D view too. remove() when the dialog closes."""
+
+    def __init__(self, panel):
+        import FreeCADGui as Gui
+
+        from .compat import QtCore, QtGui
+
+        self.panel = panel
+        self.shortcut = QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key_Escape), Gui.getMainWindow()
+        )
+        self.shortcut.activated.connect(self._pressed)
+
+    def _pressed(self):
+        from .compat import QtCore
+
+        QtCore.QTimer.singleShot(0, self._cancel)
+
+    def _cancel(self):
+        try:
+            panel = self.panel
+            if panel is not None and not getattr(panel, "_closed", True):
+                panel.reject()
+        except Exception as exc:
+            from . import warn
+
+            warn("Esc: %s" % exc)
+
+    def remove(self):
+        try:
+            self.shortcut.setEnabled(False)
+            self.shortcut.setParent(None)
+            self.shortcut.deleteLater()
+        except Exception:
+            pass
+        self.panel = None
+
+
 def failure(obj):
     """The error text of a feature that failed to compute, or ''."""
     if obj is None:
