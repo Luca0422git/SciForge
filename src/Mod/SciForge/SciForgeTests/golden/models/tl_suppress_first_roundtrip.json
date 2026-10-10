@@ -1,0 +1,118 @@
+{
+  "id": "tl_suppress_first_roundtrip",
+  "title": "Suppress the first extrude (the fillet on it goes off too), then unsuppress",
+  "tags": [
+    "timeline",
+    "suppress",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 40
+          },
+          {
+            "axis": "y",
+            "value": 0
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "suppress",
+      "target": "e1"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 392.69908169872417,
+        "faces": 3,
+        "bbox": [
+          15,
+          10,
+          10,
+          25,
+          20,
+          15
+        ],
+        "source": "analytic",
+        "note": "Without the box only the boss cylinder r5 h5 is left (pi*25*5); the fillet on a box edge is suppressed with it, as in Fusion"
+      }
+    },
+    {
+      "op": "unsuppress",
+      "target": "e1"
+    }
+  ],
+  "expect": {
+    "volume": 12384.115008234621,
+    "faces": 9,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "Back as before: 40*30*10 - 2^2*(1-pi/4)*10 (r2 round on one 10 mm edge) + pi*5^2*5; 6 box faces + round + boss side + boss top"
+  }
+}

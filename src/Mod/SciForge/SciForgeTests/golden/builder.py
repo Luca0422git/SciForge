@@ -388,6 +388,56 @@ class Builder:
             )
         return target
 
+    # -- timeline (the same code as the timeline's menus and drags) ------------
+    def _step_name(self, step_id):
+        obj = self.objects.get(step_id)
+        if obj is None:
+            raise BuildError("step %r does not exist (deleted?)" % step_id)
+        return obj.Name
+
+    def op_suppress(self, step):
+        """Right-click a timeline step > Suppress Features."""
+        from sciforge import timeline_ops
+
+        timeline_ops.suppress(self.doc, self._step_name(step["target"]))
+
+    def op_unsuppress(self, step):
+        from sciforge import timeline_ops
+
+        timeline_ops.unsuppress(self.doc, self._step_name(step["target"]))
+
+    def op_delete(self, step):
+        """Right-click a timeline step > Delete."""
+        from sciforge import timeline_ops
+
+        timeline_ops.delete(self.doc, [self._step_name(step["target"])])
+        self.objects.pop(step["target"], None)
+
+    def op_move(self, step):
+        """Drag a timeline step before/after another one."""
+        from sciforge import timeline_ops
+
+        name = self._step_name(step["target"])
+        ref = step.get("before", step.get("after"))
+        names = timeline_ops.timeline(self.doc).names()
+        slot = names.index(self._step_name(ref)) + (0 if "before" in step else 1)
+        try:
+            timeline_ops.move(self.doc, name, slot)
+        except timeline_ops.TimelineError as exc:
+            raise BuildError("move %r: %s" % (step["target"], exc))
+
+    def op_roll(self, step):
+        """Drag the history marker after a step (or to the end)."""
+        from sciforge import timeline_core, timeline_ops
+
+        tl = timeline_ops.timeline(self.doc)
+        if step.get("end"):
+            tips = timeline_core.tips_for_count(tl, len(tl.items))
+        else:
+            tips = timeline_core.tips_for_item(tl, tl.names().index(self._step_name(step["after"])))
+        if tips:
+            timeline_ops.roll(self.doc, tips)
+
     def shape(self):
         return self.body.Shape
 

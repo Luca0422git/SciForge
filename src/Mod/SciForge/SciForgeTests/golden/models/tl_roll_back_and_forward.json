@@ -1,0 +1,76 @@
+{
+  "id": "tl_roll_back_and_forward",
+  "title": "Roll the history marker back, then to the end again",
+  "tags": [
+    "timeline",
+    "rollback"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "roll",
+      "after": "e1"
+    },
+    {
+      "op": "roll",
+      "end": true
+    }
+  ],
+  "expect": {
+    "volume": 12392.699081698724,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "40*30*10 + pi*5^2*5"
+  }
+}

@@ -61,6 +61,12 @@ STEP_KEYS = {
     "parameter": ({"name", "value"}, {"unit", "comment"}),
     "edit": ({"target"}, {"set", "constraint", "value", "expressions", "comment"}),
     "check": ({"expect"}, {"comment"}),
+    # Timeline (sciforge/timeline_ops.py): right-click a step / drag it / drag the marker.
+    "suppress": ({"target"}, {"comment"}),
+    "unsuppress": ({"target"}, {"comment"}),
+    "delete": ({"target"}, {"comment"}),
+    "move": ({"target"}, {"before", "after", "comment"}),
+    "roll": (set(), {"after", "end", "comment"}),
 }
 
 GEOMETRY_KINDS = ("rect", "center_rect", "circle", "polyline", "polygon", "slot")
@@ -256,6 +262,16 @@ def validate(model):
                 _fail(here, "edit needs 'set', 'constraint'+'value' or 'expressions'")
         if op == "check":
             _check_expect(here, step["expect"])
+        if op in ("suppress", "unsuppress", "delete", "move") and step["target"] not in seen:
+            _fail(here, "'target' names unknown step %r" % step["target"])
+        if op == "move":
+            refs = [k for k in ("before", "after") if k in step]
+            if len(refs) != 1 or step[refs[0]] not in seen:
+                _fail(here, "move needs one of 'before'/'after' naming an earlier step")
+        if op == "roll" and ("after" in step) == bool(step.get("end")):
+            _fail(here, "roll needs 'after' (a step id) or \"end\": true")
+        if op == "roll" and "after" in step and step["after"] not in seen:
+            _fail(here, "'after' names unknown step %r" % step["after"])
 
     _check_expect(where + ".expect", model["expect"])
     return model
