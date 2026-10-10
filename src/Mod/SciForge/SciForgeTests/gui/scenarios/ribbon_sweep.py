@@ -27,7 +27,6 @@ report = []
 # so the quick update can still be packaged. Remove an entry when it is fixed.
 KNOWN = {
     "Shell": "FreeCAD's Thickness with nothing selected; Fusion-style Shell (shell_draft) fixes it",
-    "Circumscribed Polygon": "FreeCAD's sides pop-up; Fusion-style polygon (sketch) fixes it",
 }
 
 
