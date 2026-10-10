@@ -244,6 +244,21 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - FreeCAD's Pad/Pocket silently ignore a taper up to a face and a Pad's up-to-last: the
     SciForge extrude feature (`ExtrudeFeature`, property `Operation`) builds those.
   - OpenCASCADE cannot offset a whole sphere ("no closed bounds"): Press Pull builds the shell.
+  - `doc.commitTransaction()`/`abortTransaction()` leave the step name opened by
+    `doc.openTransaction(name)` pending when nothing changed: the next change anywhere (even
+    right after an Undo) opens a step under that name and the Redo list is lost. Close it
+    with `App.closeActiveTransaction()` (`preview.end_transaction`). **`taskui.Panel` (shared)
+    still has this for every other dialog.**
+  - FreeCAD's Pad "up to shape" with a whole body fails ("please select faces") and an empty
+    face list silently extrudes nothing: hand over the faces facing the extrusion
+    (`extrude.facing_faces`).
+  - FreeCAD's number field (QuantitySpinBox) silently drops a parameter name; formulas typed
+    in Extrude/Press Pull fields go through `preview.FormulaInput` (expression on the feature).
+    FreeCAD's own ExpressionBinding made a field read-only once it had a formula.
+  - Not fixed (other owners): rolling the timeline marker (`timeline_ops._set_tips`) does
+    not hide/show features, so the 3D view shows the wrong step after a roll; a sketch made
+    on a face of another body goes into the active body (`sketch_ui.create_sketch`); the
+    marking menu has no OK/Cancel while a command is open (Fusion has).
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
     clickable (compute what is in front); the disc at the bottom of a hole is only visible
     from the top.
@@ -327,6 +342,21 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   session it can resume with resumeFromRunId "wf_4a2277cc-81f". (The fillet build agent never
   returned a report; its committed branch was merged as is.)
 - ribbon_sweep KNOWN list: only "Shell" left (shell_draft fixes it); remove when fixed.
+
+### 2026-10-10: QA of Extrude and Press Pull (branch `sf/extrude_presspull-qa`)
+- 7 new scenarios `extrude_presspull_qa*.py` (28 paths, real input only) found and fixed:
+  a press on the drag arrow dropped the sketch area behind it; after a New Body switch or
+  dropping the only pick the whole part vanished (hidden Tip); Ctrl+Z in a dialog left it
+  working on deleted objects; Ctrl+S saved a half-made preview; closing a design under a
+  dialog blocked every later command; clicks in another open design were taken as picks;
+  To Object a body extruded nothing; an unchanged dialog threw away the Redo list; a
+  double-click on the timeline icon of the step being made printed a ReferenceError
+  (one-line guard in `taskui.edit_object`); Press Pull only worked on the active body; a
+  ball's face could not be Press Pulled; "To Object" showed a warning while waiting.
+- New Fusion behaviour: taper with To Object / join through All (SciForge's
+  `ExtrudeFeature`, property `Operation`); parameters and formulas typed in Extrude and
+  Press Pull fields; Enter is OK over the 3D view; clicking the end of a preview drops the
+  profile it came from; Symmetric no longer offers To Object. 3 golden models (tapers).
 
 ## Next steps (in order)
 
