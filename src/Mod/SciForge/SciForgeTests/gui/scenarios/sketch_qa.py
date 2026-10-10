@@ -12,7 +12,8 @@ B  The dimension box refuses 0, a negative size, text and a mass, keeps the box 
    the reason, takes 6+4; a dimension on a size already set becomes a driven dimension
    (the sketch is not over-constrained).
 C  Esc in the middle: after the first rectangle corner, while Offset waits for a curve,
-   while Project runs. Nothing is drawn, the sketch stays open.
+   while Project runs, right after clicking a palette option. Nothing is drawn, the
+   sketch stays open.
 D  Switching tools mid-way: L, one click, C (the half line goes), a circle typed 20 wide,
    E while the circle tool still runs: the sketch finishes and Extrude takes the circle.
 E  Create Sketch, click the cylinder's curved side: refused with a reason (Fusion only
@@ -536,6 +537,24 @@ def c_project_stopped():
     h.check("C: Esc stops Project", not si.drawing())
     h.check("C: nothing projected", len(s["sk"].ExternalGeo) == s["ext"])
     h.check("C: still in the sketch", h.in_sketch() is s["sk"])
+    h.press("l")
+
+
+def c_palette_click():
+    # a palette option clicked while drawing, then Esc on the keyboard (wherever the
+    # keyboard is after that click)
+    si.palette_click("SciForgePalette_points")
+    si.palette_click("SciForgePalette_points")
+
+
+def c_esc_after_palette():
+    h.check("C: the line tool still runs after the palette clicks", si.drawing())
+    si.key(QtCore.Qt.Key_Escape)
+
+
+def c_palette_esc_done():
+    h.check("C: Esc after a palette click stops the tool", not si.drawing())
+    h.check("C: the sketch stays open", h.in_sketch() is s["sk"])
     h.ribbon("Finish Sketch")
 
 
@@ -1046,6 +1065,9 @@ h.run(
             c_click_after,
             c_project_running,
             c_project_stopped,
+            c_palette_click,
+            c_esc_after_palette,
+            c_palette_esc_done,
             # D
             d_new,
             d_pick,

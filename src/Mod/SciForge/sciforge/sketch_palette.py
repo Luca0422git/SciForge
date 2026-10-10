@@ -138,6 +138,15 @@ class Palette(QtWidgets.QFrame):
         row.addWidget(self.finish)
         outer.addLayout(row)
         self.hidden = []
+        # Clicking an option must not take the keyboard from the 3D view: with the focus
+        # on a check box, Esc (stop the tool) and Enter did nothing until the user
+        # clicked into the view again. Fusion's palette never keeps the keyboard.
+        for widget in self.findChildren(QtWidgets.QAbstractButton):
+            widget.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.construction.clicked.connect(lambda *_: self._view_focus())
+        self.look_at.clicked.connect(lambda *_: self._view_focus())
+        self.keys = _PanelKeys(session)
+        self.key_filtered = []
 
     def _tool_button(self, icon, tip):
         button = QtWidgets.QToolButton()
@@ -184,6 +193,17 @@ class Palette(QtWidgets.QFrame):
             sketch_mode.set_option(key, on)
         except Exception as exc:
             warn("sketch palette: %s" % exc)
+        self._view_focus()
+
+    def _view_focus(self):
+        """Give the keyboard back to the 3D view after a palette click (Esc, Enter and
+        typed values go there in Fusion)."""
+        try:
+            gl = self.session.gl
+            if gl is not None and not self.session.closed:
+                QtCore.QTimer.singleShot(0, gl.setFocus)
+        except Exception:
+            pass
 
     def _later(self, command):
         """Run a command after this click is done (Finish Sketch deletes this panel)."""
@@ -201,6 +221,12 @@ class Palette(QtWidgets.QFrame):
             self._mode_timer.stop()
         except Exception:
             pass
+        for widget in list(self.key_filtered):
+            try:
+                widget.removeEventFilter(self.keys)
+            except Exception:
+                pass
+        self.key_filtered = []
         for widget in self.hidden:
             try:
                 widget.setVisible(True)
@@ -212,6 +238,32 @@ class Palette(QtWidgets.QFrame):
             self.deleteLater()
         except Exception:
             pass
+
+
+class _PanelKeys(QtCore.QObject):
+    """Esc pressed while the keyboard is in the sketch's side panel (after a click on it):
+    Fusion stops the tool all the same; FreeCAD's panel ignored it."""
+
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+
+    def eventFilter(self, obj, event):
+        try:
+            if (
+                event.type() == QtCore.QEvent.KeyPress
+                and event.key() == QtCore.Qt.Key_Escape
+                and not event.isAutoRepeat()
+                and not self.session.closed
+            ):
+                self.session.escape()
+                gl = self.session.gl
+                if gl is not None:
+                    gl.setFocus()
+                return True
+        except Exception as exc:
+            warn("sketch panel Esc: %s" % exc)
+        return False
 
 
 def sketch_panel():
@@ -236,6 +288,15 @@ def install(session):
         return existing
     palette = Palette(session, panel)
     panel.layout().insertWidget(0, palette)
+    # Esc in the panel (the panel and the scroll area around it take the keyboard when
+    # clicked) stops the tool, as on the 3D view.
+    widget = panel
+    while widget is not None:
+        widget.installEventFilter(palette.keys)
+        palette.key_filtered.append(widget)
+        if isinstance(widget, QtWidgets.QScrollArea):
+            break
+        widget = widget.parentWidget()
     # FreeCAD's Close button: Finish Sketch is in the palette (and the ribbon). FreeCAD's
     # constraint and element lists: Fusion shows constraints as glyphs only.
     try:

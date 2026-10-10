@@ -394,8 +394,14 @@ def vnear(p, q, tol=1e-6):
 
 def tab():
     """Press Tab on the keyboard (next on-screen value field while drawing)."""
+    key(QtCore.Qt.Key_Tab)
+
+
+def key(k, modifiers=QtCore.Qt.NoModifier):
+    """Press a key on the keyboard: it goes wherever the keyboard focus is (h.press puts
+    the focus on the 3D view first, which a real keyboard does not)."""
     target = QtWidgets.QApplication.focusWidget() or h.gl_widget()
-    QtTest.QTest.keyClick(target, QtCore.Qt.Key_Tab)
+    QtTest.QTest.keyClick(target, k, modifiers)
     QtWidgets.QApplication.processEvents()
 
 
