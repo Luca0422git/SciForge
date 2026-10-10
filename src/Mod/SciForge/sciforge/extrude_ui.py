@@ -97,6 +97,57 @@ class SelectionField:
         self.button.setText(text or self.empty)
 
 
+class FormulaInput:
+    """Fusion's value fields take a parameter or a formula ("width", "width*2 + 5 mm"), and
+    the value then follows the parameter. FreeCAD's number field only takes numbers (it
+    silently put the old value back), so the text typed is caught here: evaluated for the
+    preview, kept in panel.options["expressions"] and stored on the feature as an
+    expression. A plain number typed (or a drag) removes the formula."""
+
+    def __init__(self, panel, key, field, on_value):
+        self.panel = panel
+        self.key = key
+        self.field = field
+        self.on_value = on_value
+        self.raw = None
+        edit = field.widget.findChild(QtWidgets.QLineEdit)
+        if edit is not None:
+            edit.textEdited.connect(self._edited)
+        field.widget.editingFinished.connect(self._finished)
+
+    def _edited(self, text):
+        self.raw = text
+
+    def _finished(self):
+        raw, self.raw = self.raw, None
+        if raw is None or self.panel._closed:
+            return
+        text = raw.strip().lstrip("=").strip()
+        try:
+            from . import parameters
+
+            if not text or parameters.is_plain_number(text):
+                self.panel.drop_formula(self.key)
+                return
+            value = extrude.evaluate(self.panel.doc, text)
+        except extrude.ExtrudeError as exc:
+            # Kept until the field gets a value again (a preview rebuild must not wipe it).
+            self.panel.formula_error = str(exc)
+            self.panel.message.setText("⚠ " + str(exc))
+            return
+        except Exception as exc:
+            warn("formula %r: %s" % (text, exc))
+            return
+        self.panel.formula_error = ""
+        self.panel.options["expressions"][self.key] = text
+        self.field.set_value(value)
+        try:
+            self.on_value(value)
+        except Exception as exc:
+            warn("formula %r: %s" % (text, exc))
+        self.panel.show_formulas()
+
+
 class AngleDragger:
     """Fusion's taper handle: a short curved blue arrow at the end of the extrusion that
     turns about the profile's edge (`pivot`, axis `axis`). At angle 0 it sits `radius`
@@ -370,6 +421,8 @@ class ExtrudePanel(Panel):
         self.user_picked_operation = feature is not None
         self.error = ""
         self.waiting = ""  # the selection box that waits for a click, said as a hint
+        self.formula_error = ""  # a formula typed in a field that is no value
+        self.options["expressions"] = {}  # formulas typed in value fields (FormulaInput)
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
@@ -461,7 +514,17 @@ class ExtrudePanel(Panel):
         self.info.setWordWrap(True)
         self.info.setStyleSheet("color: #8cc4ff;")
         form.addRow(self.info)
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        self.formula_inputs = [
+            FormulaInput(self, "distance", self.distance, self._distance_typed),
+            FormulaInput(self, "distance2", self.distance2, self._distance2_typed),
+            FormulaInput(self, "taper", self.taper, self._taper_typed),
+            FormulaInput(self, "taper2", self.taper2, self._typed),
+        ]
         for box in (self.start, self.direction, self.extent, self.extent2, self.measurement):
             box.currentIndexChanged.connect(self._typed)
         self.operation.activated.connect(self._operation_picked)
@@ -490,6 +553,7 @@ class ExtrudePanel(Panel):
         finally:
             self._quiet = False
         self._update_visibility()
+        self.show_formulas()
 
     def _update_visibility(self):
         start = self.start.currentData()
@@ -551,6 +615,31 @@ class ExtrudePanel(Panel):
             self._quiet = True
             _set_combo(self.extent, "distance")
             self._quiet = False
+
+    # -- formulas ----------------------------------------------------------------------------
+    FORMULA_NAMES = {
+        "distance": "Distance",
+        "distance2": "Distance (side two)",
+        "taper": "Taper Angle",
+        "taper2": "Taper Angle (side two)",
+    }
+
+    def show_formulas(self):
+        """Fusion shows the formula in the field; FreeCAD's number field cannot, so the values
+        that follow a parameter are listed under the fields."""
+        rows = [
+            "%s = %s" % (self.FORMULA_NAMES[k], v)
+            for k, v in sorted(self.options.get("expressions", {}).items())
+            if v
+        ]
+        self.formulas.setText("\n".join(rows))
+
+    def drop_formula(self, key):
+        """A plain number typed or a handle dragged: the value no longer follows a formula."""
+        self.formula_error = ""
+        if self.options.get("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            self._changed()
 
     # -- selection fields ------------------------------------------------------------------
     def activate(self, name):
@@ -875,6 +964,7 @@ class ExtrudePanel(Panel):
         return distance
 
     def _dragged(self, value):
+        self.drop_formula("distance")
         value = round(value, 2)
         if self.direction.currentData() == "symmetric":
             value = abs(value)
@@ -888,6 +978,7 @@ class ExtrudePanel(Panel):
         self._changed()
 
     def _dragged2(self, value):
+        self.drop_formula("distance2")
         self._quiet = True
         try:
             self.distance2.set_value(round(max(value, 0.0), 2))
@@ -908,6 +999,7 @@ class ExtrudePanel(Panel):
         self._changed(new_geometry=True)
 
     def _taper_dragged(self, value):
+        self.drop_formula("taper")
         value = max(-60.0, min(60.0, round(value, 1)))
         self._quiet = True
         try:
@@ -1017,6 +1109,9 @@ class ExtrudePanel(Panel):
     def show_status(self):
         waiting = getattr(self, "waiting", "")
         self.info.setText(waiting)
+        if self.formula_error:
+            self.message.setText("⚠ " + self.formula_error)
+            return
         if waiting:
             self.message.setText("")
             return

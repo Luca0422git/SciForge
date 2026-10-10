@@ -10,6 +10,9 @@ Path 22, Ctrl+S with the dialog open: the extrude is finished first (OK), then s
 Path 23, two designs open: a click in the other design is not a pick for the dialog.
 Path 24, the design closed under an open dialog (its tab closed, changes discarded):
          the dialog goes away quietly and the next command works.
+Path 27, parameters typed in the Extrude fields like in Fusion ("width", "-depth",
+         "width*2"): the extrude follows when the parameter changes; a plain number
+         typed later stops that.
 """
 import os
 import tempfile
@@ -307,6 +310,139 @@ def p24_done():
     h.shot("p24-end")
 
 
+# -- Path 27: parameters typed in the fields ------------------------------------------------
+def p27_new():
+    from sciforge import parameters
+
+    App.newDocument("QAFormulas")
+    s["f"] = App.ActiveDocument
+    # Change Parameters (its own dialog) made these two user parameters:
+    parameters.add_user(s["f"], "width", "mm", "25")
+    parameters.add_user(s["f"], "depth", "mm", "4")
+    s["f"].recompute()
+    h.fit()
+    h.ribbon("Create Sketch")
+
+
+def p27_pick():
+    h.click(V(12, -8, 0))
+
+
+def p27_draw():
+    sk = h.in_sketch()
+    h.check("sketch open", sk is not None)
+    if sk:
+        h.draw_rectangle(sk, 0, 0, 40, 30)
+
+
+def p27_finish():
+    h.ribbon("Finish Sketch")
+
+
+def p27_e():
+    h.fit()
+    h.press("e")
+
+
+def p27_type_width():
+    p = xpanel()
+    h.check("rectangle picked by itself", p.target is not None, p.message.text())
+    ui.type_into(p.distance.widget, "width")
+
+
+def p27_width():
+    p = xpanel()
+    h.check("'width' is 25 mm", near(p.distance.value(), 25.0), p.distance.value())
+    h.check("the preview is 25 tall", near(vol(s["f"]), 30000.0), vol(s["f"]))
+    h.check("the dialog shows the formula", "width" in p.formulas.text(), p.formulas.text())
+    h.check("no warning", "⚠" not in p.message.text(), p.message.text())
+    h.shot("p27-formula")
+    h.task_button("OK")
+
+
+def p27_change_width():
+    from sciforge import parameters
+
+    h.check("kept", not dialog_open() and near(vol(s["f"]), 30000.0), vol(s["f"]))
+    parameters.set_user(s["f"], "width", "30")  # in Change Parameters
+    s["f"].recompute()
+
+
+def p27_followed():
+    h.check("the extrude follows width = 30", near(vol(s["f"]), 36000.0), vol(s["f"]))
+    h.check("nothing in error", not broken(s["f"]), broken(s["f"]))
+    h.check("double-click Extrude 1", ui.double_click_timeline("Extrude 1"), ui.timeline_titles())
+
+
+def p27_editing():
+    p = xpanel()
+    h.check("editing", p is not None and p.editing and not p._closed)
+    if p is None or not p.editing:
+        return
+    h.check("the formula is back", "width" in p.formulas.text(), p.formulas.text())
+    h.check("its value 30", near(p.distance.value(), 30.0), p.distance.value())
+    ui.type_into(p.distance.widget, "width*2")
+
+
+def p27_double():
+    p = xpanel()
+    h.check("'width*2' is 60", near(p.distance.value(), 60.0), p.distance.value())
+    h.check("preview 60 tall", near(vol(s["f"]), 72000.0), vol(s["f"]))
+    ui.type_into(p.distance.widget, "widht")
+
+
+def p27_typo():
+    p = xpanel()
+    h.check("a typo is explained", "⚠" in p.message.text(), p.message.text())
+    h.check("the value stays", near(p.distance.value(), 60.0), p.distance.value())
+    ui.type_into(p.distance.widget, "12")
+
+
+def p27_plain():
+    p = xpanel()
+    h.check("a plain number drops the formula", p.formulas.text() == "", p.formulas.text())
+    h.check("12 tall", near(vol(s["f"]), 14400.0), vol(s["f"]))
+    h.task_button("OK")
+
+
+def p27_not_following():
+    from sciforge import parameters
+
+    parameters.set_user(s["f"], "width", "40")
+    s["f"].recompute()
+    h.check("a plain number does not follow width", near(vol(s["f"]), 14400.0), vol(s["f"]))
+    h.click_empty()
+    h.press("e")
+
+
+def p27_cut_pick():
+    h.fit()
+    h.click(V(30, 25, 12))
+
+
+def p27_cut_type():
+    p = xpanel()
+    h.check("face extrude on the top", p.target is not None, p.message.text())
+    ui.type_into(p.distance.widget, "-depth")
+
+
+def p27_cut():
+    p = xpanel()
+    h.check("into the part: Cut", p.operation.currentText() == "Cut", p.operation.currentText())
+    h.check("'-depth' cuts 4 deep", near(vol(s["f"]), 14400.0 - 4800.0), vol(s["f"]))
+    h.task_button("OK")
+
+
+def p27_cut_follows():
+    from sciforge import parameters
+
+    parameters.set_user(s["f"], "depth", "6")
+    s["f"].recompute()
+    h.check("the cut follows depth = 6", near(vol(s["f"]), 14400.0 - 7200.0), vol(s["f"]))
+    h.check("nothing in error", not broken(s["f"]), broken(s["f"]))
+    h.shot("p27-end")
+
+
 h.run(
     "extrude_presspull_qa5",
     [
@@ -340,5 +476,23 @@ h.run(
         p24_closed,
         p24_next,
         p24_done,
+        p27_new,
+        p27_pick,
+        p27_draw,
+        p27_finish,
+        p27_e,
+        p27_type_width,
+        p27_width,
+        p27_change_width,
+        p27_followed,
+        p27_editing,
+        p27_double,
+        p27_typo,
+        p27_plain,
+        p27_not_following,
+        p27_cut_pick,
+        p27_cut_type,
+        p27_cut,
+        p27_cut_follows,
     ],
 )

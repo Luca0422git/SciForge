@@ -22,6 +22,9 @@ Options (dict, see DEFAULTS):
   taper        degrees, positive widens (Fusion: outward)
   distance2 / extent2 / extent_object2 / taper2   the second side (two_sides)
   flip         extent "all": go against the profile normal
+  expressions  {"distance" | "distance2" | "taper" | "taper2": "width * 2"}: values typed as
+               a formula of parameters (Fusion's fields take "width", "width*2"); they
+               become expressions on the feature, so it follows the parameters
 
 What is built:
   join / cut     a PartDesign Pad / Pocket in the body the profile belongs to
@@ -925,6 +928,85 @@ def _fp_side(feature, suffix, extent, length, taper, ref):
         setattr(feature, "UpToFace" + suffix, (obj, [sub] if sub else [""]))
 
 
+# Dialog value -> the feature property that holds it (Pad, Pocket and SciForge's own).
+EXPRESSION_PROPS = {
+    "distance": "Length",
+    "distance2": "Length2",
+    "taper": "TaperAngle",
+    "taper2": "TaperAngle2",
+}
+
+
+def _expression_used(key, options):
+    two = options["direction"] == "two_sides"
+    if key == "distance":
+        return options["extent"] == "distance"
+    if key == "distance2":
+        return two and options["extent2"] == "distance"
+    if key == "taper2":
+        return two
+    return True
+
+
+def _wrap(key, expr, options):
+    """The property's expression for a dialog value's formula: a negative distance is a
+    reversed extrude of the positive length, a symmetric half length is half of it."""
+    if key != "distance":
+        return expr
+    if options["direction"] == "symmetric":
+        return "2 * (%s)" % expr if options["measurement"] == "half" else expr
+    return "-(%s)" % expr if float(options["distance"]) < 0 else expr
+
+
+def _unwrap(key, expr, options):
+    for head in ("2 * (", "-("):
+        if key == "distance" and expr.startswith(head) and expr.endswith(")"):
+            return expr[len(head) : -1]
+    return expr
+
+
+def _apply_expressions(feature, options):
+    """Formulas typed in the dialog become expressions on the feature's properties; a value
+    typed as a plain number (or dragged) removes the formula again."""
+    from . import parameters, parameters_core
+
+    typed = options.get("expressions") or {}
+    names = parameters.user_names(feature.Document)
+    engine = dict(feature.ExpressionEngine)
+    for key, prop in EXPRESSION_PROPS.items():
+        if prop not in feature.PropertiesList:
+            continue
+        text = (typed.get(key) or "").strip()
+        if text and _expression_used(key, options):
+            expr = _wrap(key, parameters_core.to_freecad(text, names), options)
+            if engine.get(prop) != expr:
+                feature.setExpression(prop, expr)
+        elif prop in engine:
+            feature.setExpression(prop, None)
+
+
+def evaluate(doc, text):
+    """Value of a formula typed in a field ("width * 2", "=width+5 mm"): a float in mm (or
+    degrees for an angle). Raises ExtrudeError with the reason when it is no value."""
+    from . import parameters, parameters_core
+
+    text = (text or "").strip().lstrip("=").strip()
+    expr = parameters_core.to_freecad(text, parameters.user_names(doc))
+    host = parameters.container(doc)
+    if host is None:
+        if not doc.Objects:
+            raise ExtrudeError("%s is not a value." % text)
+        host = doc.Objects[0]
+    try:
+        value = host.evalExpression(expr)
+    except Exception as exc:
+        raise ExtrudeError("'%s' is not a value here: %s" % (text, exc))
+    try:
+        return float(getattr(value, "Value", value))
+    except Exception:
+        raise ExtrudeError("'%s' is not a number." % text)
+
+
 def _hide_sketches(profiles):
     if not App.GuiUp:
         return
@@ -1057,6 +1139,7 @@ def _update(feature, body, profiles, options):
     meta["normal"] = list(body.getGlobalPlacement().Rotation.inverted().multVec(normal))
     _save_meta(feature, meta)  # the intersect feature reads the normal when it computes
     _apply(feature, body, profiles, options, refs)
+    _apply_expressions(feature, options)
     meta.update(
         {
             "v": 1,
@@ -1253,6 +1336,17 @@ def read(feature):
         options["distance"] = sign * length
     options["flip"] = False  # the sign of the distance already says which side
     options["distance2"] = feature.Length2.Value
+    try:
+        from . import parameters_core
+
+        engine = dict(feature.ExpressionEngine)
+        options["expressions"] = {
+            key: _unwrap(key, parameters_core.from_freecad(engine[prop]), options)
+            for key, prop in EXPRESSION_PROPS.items()
+            if prop in engine
+        }
+    except Exception:
+        options["expressions"] = {}
     return profiles, options
 
 
