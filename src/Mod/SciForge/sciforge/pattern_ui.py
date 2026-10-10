@@ -1726,5 +1726,5 @@ EDITORS = {
     "PartDesign::PolarPattern": edit,
     "SciForge::RectangularPattern": edit,
     "SciForge::CircularPattern": edit,
-    "SciForge::PathPattern": edit,
+    "SciForge::PatternOnPath": edit,
 }

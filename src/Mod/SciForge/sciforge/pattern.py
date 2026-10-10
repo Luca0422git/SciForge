@@ -47,7 +47,7 @@ KIND_OF_TYPE = {type_id: kind for kind, type_id in NATIVE.items()}
 SCIFORGE_TYPE = {
     "rectangular": "RectangularPattern",
     "circular": "CircularPattern",
-    "path": "PathPattern",
+    "path": "PatternOnPath",
     "mirror": "Mirror",
 }
 KIND_OF_SCIFORGE = {value: kind for kind, value in SCIFORGE_TYPE.items()}
