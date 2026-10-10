@@ -481,16 +481,20 @@ class BlendPanel(Panel):
             warn("%s: Delete key: %s" % (self.title, exc))
 
     def _key(self, info):
-        """Esc in the 3D view cancels, like in Fusion (FreeCAD only listens to Esc while the
-        task panel has the keyboard focus)."""
+        """Keys pressed over the 3D view, like in Fusion: Esc cancels, Enter is OK (FreeCAD
+        only listens to them while the task panel has the keyboard focus)."""
         try:
-            if info.get("Key") != "ESCAPE" or info.get("State") != "UP" or self._closed:
+            key = info.get("Key")
+            if info.get("State") != "UP" or self._closed:
                 return
             if QtWidgets.QApplication.mouseButtons() != QtCore.Qt.NoButton:
                 return  # never while an arrow is being dragged
-            QtCore.QTimer.singleShot(0, self._escape)
+            if key == "ESCAPE":
+                QtCore.QTimer.singleShot(0, self._escape)
+            elif key in ("RETURN", "PAD_ENTER", "ENTER"):
+                QtCore.QTimer.singleShot(0, self._enter)
         except Exception as exc:
-            warn("%s Esc: %s" % (self.title, exc))
+            warn("%s key: %s" % (self.title, exc))
 
     def _escape(self):
         try:
@@ -498,6 +502,14 @@ class BlendPanel(Panel):
                 self.reject()
         except Exception as exc:
             warn("%s could not cancel: %s" % (self.title, exc))
+
+    def _enter(self):
+        """OK; if the fillet cannot be made yet the dialog stays open and says why."""
+        try:
+            if not self._closed:
+                self.accept()
+        except Exception as exc:
+            warn("%s could not finish: %s" % (self.title, exc))
 
     # -- the picks ----------------------------------------------------------------------
     def _display_of(self, ref):

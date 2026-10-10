@@ -7,6 +7,7 @@ import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
+from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
@@ -48,10 +49,13 @@ def chain_picked():
 
 
 def ok():
-    h.task_button("OK")
+    """Click on empty canvas and press Enter: Enter over the 3D view finishes, like Fusion."""
+    h.click_empty()
+    h.press(QtCore.Qt.Key_Return)
 
 
 def after_ok():
+    h.check("Enter over the 3D view finished the dialog", not Gui.Control.activeDialog())
     v = h.solid_volume()
     h.check("slot outline rounded r 2", b.close(v, rounded(2)), (v, rounded(2)))
     h.check("10 faces", len(h.body().Shape.Faces) == 10, len(h.body().Shape.Faces))
