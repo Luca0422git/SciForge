@@ -355,7 +355,7 @@ class ExtrudePanel(Panel):
     last = None
     auto_pick = True  # take the single area of a sketch just finished, like Fusion
 
-    def __init__(self, doc, feature=None):
+    def __init__(self, doc, feature=None, profiles=None):
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
         self.escape = preview.EscapeCancels(self)
@@ -379,6 +379,8 @@ class ExtrudePanel(Panel):
             try:
                 self.profiles, read = extrude.read(feature)
                 self.options.update(read)
+                # A whole-sketch profile shows as its areas, each one can be dropped.
+                self.profiles = extrude.expand_whole(self.profiles)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()
@@ -388,7 +390,7 @@ class ExtrudePanel(Panel):
             self._refresh_profiles()
             self._make_draggers()
         else:
-            self._start()
+            self._start(profiles)
 
     # -- form -----------------------------------------------------------------------------
     def _build_form(self):
@@ -514,7 +516,16 @@ class ExtrudePanel(Panel):
             (self.taper2_label, two),
         ):
             widget.setVisible(show)
-        self.distance_label.setText("Distance" if not symmetric else "Distance")
+        # A taper only where it can be built (Distance; a cut's All; any Intersect).
+        operation = self.operation.currentData()
+        for field, ext in ((self.taper, extent), (self.taper2, extent2)):
+            possible = extrude.taper_possible({"operation": operation}, ext)
+            if not possible and abs(field.value()) > 1e-9:
+                field.set_value(0.0)  # shown: the field reads 0 while it is off
+            field.widget.setEnabled(possible)
+            field.widget.setToolTip(
+                "" if possible else "FreeCAD's extrude cannot taper up to an object; use Distance"
+            )
 
     def _collect(self):
         self.options["start"] = self.start.currentData()
@@ -556,11 +567,11 @@ class ExtrudePanel(Panel):
         self.activate(name)
 
     # -- start ----------------------------------------------------------------------------
-    def _start(self):
+    def _start(self, given=None):
         if self.body is None:
             self.message.setText("Create a sketch first (Create Sketch).")
             return
-        picked = selected_profiles(self.body)
+        picked = list(given) if given else selected_profiles(self.body)
         if not picked and self.auto_pick:
             single = newest_single_region(self.body)
             picked = [single] if single else []
@@ -571,6 +582,10 @@ class ExtrudePanel(Panel):
         if picked:
             self.profiles = picked
             self._profiles_changed()
+            # Started from a selection: the preview is there when the dialog appears (this
+            # runs in the command itself, not inside FreeCAD's click handling).
+            self._timer.stop()
+            self._recompute()
         else:
             self._refresh_profiles()
 
@@ -731,6 +746,8 @@ class ExtrudePanel(Panel):
         return tip
 
     def _toggle(self, ref):
+        if any(sub == "" and obj is ref[0] for obj, sub in self.profiles):
+            self.profiles = extrude.expand_whole(self.profiles)  # whole sketch -> its areas
         keys = [extrude.key(p) for p in self.profiles]
         if extrude.key(ref) in keys:
             self.profiles = [p for p in self.profiles if extrude.key(p) != extrude.key(ref)]
@@ -959,7 +976,7 @@ class ExtrudePanel(Panel):
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
-        text = preview.failure(self.target)
+        text = _plain(preview.failure(self.target))
         self.message.setText("⚠ " + text if text else "")
 
     # -- handles in the 3D view -----------------------------------------------------------------
@@ -1102,7 +1119,7 @@ class ExtrudePanel(Panel):
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
-        text = preview.failure(self.target)
+        text = _plain(preview.failure(self.target))
         if text:
             self.message.setText("⚠ " + text)
             return False
@@ -1132,6 +1149,34 @@ class ExtrudePanel(Panel):
         self.escape.remove()
         self._remove_draggers()
         super().cleanup()
+
+
+# FreeCAD's failure texts that talk about FreeCAD, said the way a Fusion user needs them.
+PLAIN = (
+    (
+        "multiple solids",
+        "This would make separate solids, and a body holds one solid. Pick profiles that "
+        "touch the part (or each other), or extrude them one at a time.",
+    ),
+    (
+        "parallel to extrusion",
+        "The object is parallel to the extrusion, so it cannot end there. Pick another face "
+        "or plane.",
+    ),
+    (
+        "Unable to reach",
+        "The extrusion does not reach that object in this direction. Pick another object or "
+        "flip the direction.",
+    ),
+    ("not a solid", "Nothing is left: the extrusion does not touch the body here."),
+)
+
+
+def _plain(text):
+    for needle, said in PLAIN:
+        if needle.lower() in (text or "").lower():
+            return said
+    return text
 
 
 def _is_dragging(handle):

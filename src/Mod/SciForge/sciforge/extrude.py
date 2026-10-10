@@ -83,11 +83,15 @@ def is_sketch(obj):
 def ensure_regions(sketch):
     """Turn on the sketch's regions (FreeCAD's MakeInternals): every closed area becomes
     an "InternalFaceN" that a Pad can use as its profile."""
+    from . import preview
+
     if not sketch.MakeInternals:
         sketch.MakeInternals = True
-        sketch.recompute()
+        with preview.quiet():  # a sketch FreeCAD cannot make areas from just has none
+            sketch.recompute()
     elif sketch.InternalShape.isNull() and not sketch.Shape.isNull():
-        sketch.recompute()
+        with preview.quiet():
+            sketch.recompute()
 
 
 def regions(sketch):
@@ -187,16 +191,25 @@ def interior_point(face):
     try:
         if face.isInside(center, 1e-6, True):
             return center
-        best = None
         u0, u1, v0, v1 = face.ParameterRange
-        for i in range(1, 20):
-            for j in range(1, 20):
-                p = face.valueAt(u0 + (u1 - u0) * i / 20.0, v0 + (v1 - v0) * j / 20.0)
+        n = 20
+        points, inside = {}, set()
+        for i in range(n + 1):
+            for j in range(n + 1):
+                p = face.valueAt(u0 + (u1 - u0) * i / float(n), v0 + (v1 - v0) * j / float(n))
+                points[(i, j)] = p
                 if face.isInside(p, 1e-6, True):
-                    if best is None or (p - center).Length < (best - center).Length:
-                        best = p
-        if best is not None:
-            return best  # the inside point nearest the middle (a ring: next to the hole)
+                    inside.add((i, j))
+        # Prefer a sample whose neighbours are inside too: clear of the edges.
+        deep = [
+            k
+            for k in inside
+            if all((k[0] + a, k[1] + b) in inside for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        ]
+        for pool in (deep, list(inside)):
+            if pool:
+                # the one nearest the middle (a ring: next to the hole)
+                return min((points[k] for k in pool), key=lambda p: (p - center).Length)
     except Exception:
         pass
     return center
@@ -254,6 +267,25 @@ def check_profiles(profiles):
     return profiles
 
 
+def expand_whole(profiles):
+    """Profiles with every "whole sketch" entry replaced by the sketch areas it covers
+    (holes stay out), so a dialog can show and toggle them one by one."""
+    found = []
+    for obj, sub in normalize(profiles):
+        if not (is_sketch(obj) and sub == ""):
+            found.append((obj, sub))
+            continue
+        try:
+            whole = [_to_global(f, obj) for f in _whole_sketch_faces(obj)]
+            for name, face in regions(obj):
+                point = interior_point(face)
+                if any(w.isInside(point, 1e-6, True) for w in whole):
+                    found.append((obj, name))
+        except Exception:
+            found.append((obj, sub))
+    return normalize(found)
+
+
 def profile_label(profiles):
     profiles = normalize(profiles)
     if not profiles:
@@ -287,12 +319,26 @@ def options_with_defaults(options):
     return merged
 
 
+def taper_possible(options, extent):
+    """True if a taper can be built with this extent: PartDesign tapers Distance and a
+    cut's All (ThroughAll), SciForge's Intersect tapers every extent. FreeCAD's Pad and
+    Pocket ignore a taper up to an object, so the dialog does not offer it there."""
+    if extent == "distance" or options["operation"] == "intersect":
+        return True
+    return extent == "all" and options["operation"] == "cut"
+
+
 def check_options(options):
     """Raise ExtrudeError for values Fusion's dialog would reject."""
     sides = [("extent", "distance", "extent_object", "taper", "")]
     if options["direction"] == "two_sides":
         sides.append(("extent2", "distance2", "extent_object2", "taper2", " (side two)"))
     for extent, distance, target, taper, where in sides:
+        if abs(float(options[taper])) > 1e-9 and not taper_possible(options, options[extent]):
+            raise ExtrudeError(
+                "A taper%s needs the Distance extent here (FreeCAD's extrude cannot taper up "
+                "to an object). Set the taper to 0 or use Distance." % where
+            )
         if options[extent] == "distance" and abs(float(options[distance])) < 1e-6:
             raise ExtrudeError("The distance%s must not be zero." % where)
         if options[extent] == "to_object" and options.get(target) is None:
@@ -892,11 +938,17 @@ def build(profiles, options, name="Extrude", feature=None):
     if type_id == INTERSECT_TYPE:
         ExtrudeFeature(new)
         _attach_view_provider(new)
-    if feature is not None:
-        new.Label = feature.Label
-        _remove(feature, keep_body=owner_body(feature) is target)
     _save_meta(new, {"created_body": created.Name if created is not None else None})
-    _update(new, target, profiles, options)
+    try:
+        _update(new, target, profiles, options)
+    except Exception:
+        # Nothing half-made stays behind; the old feature is still there, untouched.
+        _remove(new, keep_body=created is None or (feature is not None and before is not None))
+        raise
+    if feature is not None:
+        label = feature.Label
+        _remove(feature, keep_body=owner_body(feature) is target)
+        new.Label = label
     if before is None or was_tip:
         target.Tip = new
     return new

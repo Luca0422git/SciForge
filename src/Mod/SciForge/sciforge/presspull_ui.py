@@ -169,10 +169,52 @@ class PressPullPanel(Panel):
             self._make_dragger()
         else:
             self._start_from_selection()
+        self.picker = None
+        if self.mode is None:
+            self._shade_profiles()
         self._watch_selection()
 
     def feature(self):
         return self.target
+
+    def _shade_profiles(self):
+        """Visible sketch areas are shaded; clicking one starts Extrude on it (Fusion)."""
+        from . import profile_pick
+
+        sketches = []
+        for obj in profile_pick.candidate_sketches(self.body):
+            try:
+                if obj.ViewObject is not None and obj.ViewObject.Visibility:
+                    sketches.append(obj)
+            except Exception:
+                pass
+        if not sketches:
+            return
+        tip = self.tip
+
+        def occluder():
+            if tip is None or tip.Shape.isNull():
+                return None
+            from . import extrude
+
+            return extrude._to_global(tip.Shape, tip)
+
+        try:
+            self.picker = profile_pick.ProfilePicker(
+                Gui.ActiveDocument.ActiveView,
+                sketches,
+                lambda sketch, sub: QtCore.QTimer.singleShot(
+                    0, lambda: self._to_extrude(sketch, sub)
+                ),
+                occluder=occluder,
+            )
+        except Exception as exc:
+            warn("profile shading unavailable: %s" % exc)
+
+    def _unshade(self):
+        if getattr(self, "picker", None) is not None:
+            self.picker.remove()
+            self.picker = None
 
     # -- the selection box (SelectionField calls these) ------------------------------------
     def activate(self, name):
@@ -198,11 +240,33 @@ class PressPullPanel(Panel):
 
     def _take(self, picks):
         """Use clicked faces/edges: the first pick decides what Press Pull does."""
+        if self.mode is None:
+            for obj, short, _point in picks:
+                if obj.isDerivedFrom("Sketcher::SketchObject") and short.startswith("InternalFace"):
+                    # Fusion: Press Pull on a sketch profile is an Extrude.
+                    QtCore.QTimer.singleShot(0, lambda o=obj, s=short: self._to_extrude(o, s))
+                    return
         for obj, short, point in picks:
+            if obj.isDerivedFrom("Sketcher::SketchObject"):
+                continue  # sketch lines are not part of the solid
             if short.startswith("Face"):
                 self._face_picked(obj, short, point)
             elif short.startswith("Edge"):
                 self._edge_picked(obj, short)
+
+    def _to_extrude(self, sketch, short):
+        """Close Press Pull and start Extrude on the sketch (its clicked area, if any)."""
+        if self._closed:
+            return
+        try:
+            from .extrude_ui import ExtrudePanel
+
+            doc = self.doc
+            self.reject()
+            Gui.Control.showDialog(ExtrudePanel(doc, profiles=[(sketch, short)]))
+            log("press pull on a sketch area: extrude started")
+        except Exception as exc:
+            warn("press pull on a sketch: %s" % exc)
 
     def _face_picked(self, obj, short, point):
         if self.mode == "edit_blend":
@@ -392,10 +456,14 @@ class PressPullPanel(Panel):
             Gui.Selection.clearSelection()
             if self.body is None:
                 self.body, self.tip = _body_and_tip()
+            if self.picker is not None and self.picker.clicked_region_recently():
+                return  # the click was on a sketch area: Extrude takes over
             if self.tip is None or self.tip.Shape.isNull():
                 self.message.setText("Make a solid first (Create Sketch, then Extrude).")
                 return
             self._take(picks)
+            if self.mode is not None:
+                self._unshade()  # faces or edges chosen: sketch areas no longer apply
         except Exception as exc:
             warn("press pull pick: %s" % exc)
 
@@ -467,6 +535,7 @@ class PressPullPanel(Panel):
 
     def cleanup(self):
         self._unwatch()
+        self._unshade()
         self.escape.remove()
         self._remove_dragger()
         super().cleanup()

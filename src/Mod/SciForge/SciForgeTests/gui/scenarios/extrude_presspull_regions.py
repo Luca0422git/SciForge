@@ -271,13 +271,15 @@ def after_cancel():
 
 
 def second_extrude():
-    h.press("e")
-
-
-def second_pick():
+    # Select first, then the command (Fusion takes the selected face as the profile).
     h.fit()
     top = h.body().Shape.BoundBox.ZMax
     h.click(V(30, 25, top))
+
+
+def second_pick():
+    h.check("the top face is selected", len(Gui.Selection.getSelectionEx()) == 1)
+    h.press("e")
 
 
 def second_type():
