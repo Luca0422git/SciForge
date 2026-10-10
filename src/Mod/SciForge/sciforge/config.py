@@ -160,6 +160,9 @@ SHORTCUTS = {
     "Std_TransformManip": "M",
     "Std_Measure": "I",
     "Std_ViewFitAll": "F6",
+    # FreeCAD's own Ctrl+Z / Ctrl+Y live in the (hidden) menu bar and did nothing
+    "Std_Undo": "Ctrl+Z",
+    "Std_Redo": "Ctrl+Y",
 }
 
 # When SciForge has its own Fusion-style version of a command, the key runs that

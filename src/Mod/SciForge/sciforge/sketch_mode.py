@@ -305,6 +305,30 @@ def _start_named(doc_name, name):
         warn("sketch mode: could not prepare the sketch: %s" % exc)
 
 
+def repark_keys():
+    """FreeCAD makes the Sketcher's buttons only when a sketch is first opened, and
+    those come with the Sketcher's own one-letter keys (C coincident, T tangent, E
+    equal, P parallel...). Two owners of a key make Qt ignore both, so C and T did
+    nothing in a sketch. When that happens the Fusion keys are bound again, which
+    parks the new FreeCAD keys too (shortcuts.py gives them back when SciForge is off)."""
+    from . import shortcuts
+
+    keys = set(shortcuts.bound_keys())
+    if not keys:
+        return False
+    for name in Gui.listCommands():
+        try:
+            cmd = Gui.Command.get(name)
+            current_key = cmd.getShortcut() if cmd is not None else ""
+        except Exception:
+            continue
+        if current_key and shortcuts.normalise(current_key) in keys:
+            shortcuts.restore()
+            shortcuts.apply()
+            return True
+    return False
+
+
 def _start(sketch):
     session = current()
     if session is not None and session.sketch is sketch:
@@ -312,6 +336,10 @@ def _start(sketch):
     _end()
     if not _state["on"]:
         return
+    try:
+        repark_keys()
+    except Exception as exc:
+        warn("sketch keys: %s" % exc)
     try:
         _state["session"] = SketchSession(sketch)
         log("sketch %s: Fusion sketch mode on" % sketch.Label)
@@ -352,7 +380,9 @@ def gl_widget():
 
 
 def find_node(root, name):
-    """First Coin node called `name` under root (also inside switches), or None."""
+    """(node, its parent) for the first Coin node called `name` under root (also inside
+    switches), or (None, None). The search path dies with the search action, so only
+    the nodes (kept alive by the scene graph) are returned."""
     from pivy import coin
 
     action = coin.SoSearchAction()
@@ -361,9 +391,11 @@ def find_node(root, name):
     action.setSearchingAll(True)
     action.apply(root)
     path = action.getPath()
-    if path is None:
+    if path is None or path.getLength() < 2:
         return None, None
-    return path.getTail(), path
+    node = path.getTail()
+    parent = path.getNodeFromTail(1)
+    return node, parent
 
 
 def _is_valid(widget):
@@ -511,9 +543,52 @@ class SketchSession:
         if self.gl is None:
             return
         self.close_editor(commit=True)
-        if pos is None:
-            pos = self.last_press or self.gl.mapFromGlobal(QtGui.QCursor.pos())
-        self.editor = DimensionEditor(self, index, pos)
+        label = self.label_pixel(index)
+        if label is not None:
+            pos, centred = label, True  # over the dimension's text, like Fusion
+        else:
+            centred = False
+            if pos is None:
+                pos = self.last_press or self.gl.mapFromGlobal(QtGui.QCursor.pos())
+        self.editor = DimensionEditor(self, index, pos, centred)
+
+    def label_pixel(self, index):
+        """Where a length dimension's text is on screen (view pixels), or None."""
+        try:
+            sketch = self.sketch
+            c = sketch.Constraints[index]
+            if c.Type not in ("Distance", "DistanceX", "DistanceY"):
+                return None
+
+            def point(geo, pos):
+                g = sketch.Geometry[geo]
+                return {1: g.StartPoint, 2: g.EndPoint}.get(pos, getattr(g, "Center", None))
+
+            if c.Second >= 0:
+                p1, p2 = point(c.First, c.FirstPos), point(c.Second, c.SecondPos)
+            elif c.First >= 0 and c.FirstPos == 0:
+                g = sketch.Geometry[c.First]
+                p1, p2 = g.StartPoint, g.EndPoint
+            else:
+                return None
+            if p1 is None or p2 is None:
+                return None
+            if c.Type == "DistanceX":
+                p2 = App.Vector(p2.x, p1.y, 0)
+            elif c.Type == "DistanceY":
+                p2 = App.Vector(p1.x, p2.y, 0)
+            direction = p2 - p1
+            if direction.Length < 1e-9:
+                return None
+            direction.normalize()
+            normal = App.Vector(-direction.y, direction.x, 0)
+            mid = (p1 + p2) * 0.5 + normal * c.LabelDistance + direction * c.LabelPosition
+            world = sketch.getGlobalPlacement().multVec(mid)
+            x, y = self.view.getPointOnViewport(world)
+            ratio = self.gl.devicePixelRatioF()
+            return QtCore.QPoint(int(x / ratio), int(self.gl.height() - y / ratio))
+        except Exception:
+            return None
 
     def close_editor(self, commit=True):
         editor = self.editor
@@ -618,7 +693,9 @@ class _ViewFilter(QtCore.QObject):
                 if session.editor is not None:
                     return session.editor.key(event)
                 if key == QtCore.Qt.Key_Escape and not event.isAutoRepeat():
-                    QtCore.QTimer.singleShot(0, session.escape)
+                    # Right away (a Qt key event, not a Coin callback): a timer could
+                    # fire after the next key and stop the tool that key started.
+                    session.escape()
             elif kind == QtCore.QEvent.MouseButtonPress:
                 session.last_press = event.position().toPoint()
                 if session.editor is not None and not session.editor.underMouse():
@@ -650,7 +727,7 @@ class DimensionEditor(QtWidgets.QFrame):
     """Fusion's in-place dimension box: shows the measured value selected; type a
     value or an expression (=width*2), Enter keeps it, Esc keeps the measured one."""
 
-    def __init__(self, session, index, pos):
+    def __init__(self, session, index, pos, centred=False):
         super().__init__(session.gl)
         self.session = session
         self.sketch = session.sketch
@@ -678,8 +755,12 @@ class DimensionEditor(QtWidgets.QFrame):
         self.edit.selectAll()
         self.edit.returnPressed.connect(lambda: self.finish(True))
         self.adjustSize()
-        x = max(0, min(pos.x() + 12, session.gl.width() - self.width() - 4))
-        y = max(0, min(pos.y() - self.height() - 6, session.gl.height() - self.height() - 4))
+        if centred:
+            x, y = pos.x() - self.width() // 2, pos.y() - self.height() // 2
+        else:
+            x, y = pos.x() + 12, pos.y() - self.height() - 6
+        x = max(0, min(x, session.gl.width() - self.width() - 4))
+        y = max(0, min(y, session.gl.height() - self.height() - 4))
         self.move(x, y)
         self.show()
         self.raise_()
@@ -1092,12 +1173,11 @@ class PolygonPreview:
         from pivy import coin
 
         root = self.session.view.getSceneGraph()
-        coords, path = find_node(root, "EditCurvesCoordinate")
+        coords, parent = find_node(root, "EditCurvesCoordinate")
         style, _ = find_node(root, "EditCurvesDrawStyle")
-        if coords is None or style is None or path is None:
+        if coords is None or style is None or parent is None:
             return
         if self.node is None:
-            parent = path.getNodeFromTail(1)
             self.node = coin.SoSeparator()
             self.node.setName("SciForgePolygonPreview")
             self.draw_style = coin.SoDrawStyle()

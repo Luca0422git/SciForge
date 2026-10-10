@@ -45,8 +45,22 @@ def corners(center, point, sides, circumscribed):
 
 
 def add_polygon(sketch, sides, center, point, circumscribed, construction=False):
-    """Add the polygon to `sketch`; returns the geometry indices (n lines, then the
-    construction circle, the order FreeCAD's own tool uses)."""
+    """Add the polygon to `sketch`; returns the geometry indices.
+
+    Inscribed (FreeCAD's own polygon): n lines, then the construction circle through
+    the corners. Circumscribed: n lines, the construction circle touching the edges
+    (the across-flats size, the one to dimension), a construction line from the centre
+    to the middle of the first edge, then the circle through the corners.
+
+    The corners stay on a circle in both, because equal sides on a circle is the
+    only description of a regular polygon the solver handles at every size and
+    number of sides (equal sides touching a circle can lean over into a rhombus).
+
+    FreeCAD's polygon tool adds the constraints for what was under the mouse after
+    this runs: the first click's to the centre of the LAST curve, the second click's
+    to the end of the curve before it. The order above puts them on the centre and
+    on the clicked point (a corner, or the middle of an edge).
+    """
     import Part
     import Sketcher
 
@@ -54,22 +68,32 @@ def add_polygon(sketch, sides, center, point, circumscribed, construction=False)
     center = App.Vector(center.x, center.y, 0)
     point = App.Vector(point.x, point.y, 0)
     pts = corners(center, point, sides, circumscribed)
+    normal = App.Vector(0, 0, 1)
     geometry = [Part.LineSegment(pts[i], pts[(i + 1) % sides]) for i in range(sides)]
-    circle_radius = (point - center).Length
-    geometry.append(Part.Circle(center, App.Vector(0, 0, 1), circle_radius))
-    ids = sketch.addGeometry(geometry, construction)
-    sketch.setConstruction(ids[-1], True)
+    outer_radius = (pts[0] - center).Length
+    if circumscribed:
+        geometry.append(Part.Circle(center, normal, (point - center).Length))
+        geometry.append(Part.LineSegment(center, point))  # centre -> middle of edge 0
+    geometry.append(Part.Circle(center, normal, outer_radius))
+    ids = list(sketch.addGeometry(geometry, construction))
+    lines = ids[:sides]
+    outer = ids[-1]
+    for extra in ids[sides:]:
+        sketch.setConstruction(extra, True)
     constraints = []
     for i in range(sides):
-        constraints.append(Sketcher.Constraint("Coincident", ids[i], 2, ids[(i + 1) % sides], 1))
+        constraints.append(
+            Sketcher.Constraint("Coincident", lines[i], 2, lines[(i + 1) % sides], 1)
+        )
     for i in range(1, sides):
-        constraints.append(Sketcher.Constraint("Equal", ids[0], ids[i]))
+        constraints.append(Sketcher.Constraint("Equal", lines[0], lines[i]))
+    for i in range(sides):
+        constraints.append(Sketcher.Constraint("PointOnObject", lines[i], 2, outer))
     if circumscribed:
-        # every edge touches the circle: the circle is the across-flats size
-        for i in range(sides):
-            constraints.append(Sketcher.Constraint("Tangent", ids[i], ids[-1]))
-    else:
-        for i in range(sides):
-            constraints.append(Sketcher.Constraint("PointOnObject", ids[i], 2, ids[-1]))
+        inner, helper = ids[sides], ids[sides + 1]
+        constraints.append(Sketcher.Constraint("Coincident", inner, 3, outer, 3))
+        constraints.append(Sketcher.Constraint("Tangent", lines[0], inner))
+        constraints.append(Sketcher.Constraint("Coincident", helper, 1, outer, 3))
+        constraints.append(Sketcher.Constraint("Symmetric", lines[0], 1, lines[0], 2, helper, 2))
     sketch.addConstraint(constraints)
-    return list(ids)
+    return ids
