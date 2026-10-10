@@ -8,6 +8,10 @@ Path 26, Create Sketch on that sloped face, a circle, Extrude: the boss stands s
          the slope; its arrow and the taper handle sit on the slope; taper from the
          timeline; Press Pull the boss's end.
 
+Path 28, E and Q pressed while still drawing in a sketch (Fusion users do not press
+         Finish Sketch first): the sketch closes and Extrude starts on its profile; Q opens
+         Press Pull.
+
 Numbers by hand: the slope's outward normal is (2, 0, 1) / sqrt(5); moving the face by d
 along it widens the trapezoid by d * sqrt(5) / 2 at every height.
 """
@@ -247,6 +251,79 @@ def p26_done():
     h.shot("p26-end")
 
 
+# -- Path 28: E and Q while still in the sketch ----------------------------------------------
+def p28_new():
+    from PySide import QtCore  # noqa: F401
+
+    App.newDocument("QASketchKeys")
+    h.fit()
+    h.ribbon("Create Sketch")
+
+
+def p28_pick():
+    h.click(V(12, -8, 0))
+
+
+def p28_draw():
+    sk = h.in_sketch()
+    h.check("sketch open", sk is not None)
+    if sk:
+        h.draw_rectangle(sk, 0, 0, 40, 30)
+
+
+def p28_e():
+    h.press("e")
+
+
+def p28_extruding():
+    p = xpanel()
+    h.check("E in a sketch leaves it", h.in_sketch() is None)
+    h.check(
+        "and starts Extrude on its profile",
+        p is not None and not p._closed and p.target is not None,
+        p and p.message.text(),
+    )
+    h.task_button("OK")
+
+
+def p28_block():
+    h.check("block 12000", near(h.solid_volume(), 12000.0), h.solid_volume())
+    h.click_empty()
+    h.ribbon("Create Sketch")
+
+
+def p28_pick_top():
+    h.fit()
+    h.click(V(30, 25, 10))
+
+
+def p28_draw_top():
+    sk = h.in_sketch()
+    h.check("sketch on the top", sk is not None)
+    if sk:
+        ax, ay = h.to_sketch(sk, V(5, 5, 10))
+        bx, by = h.to_sketch(sk, V(15, 15, 10))
+        h.draw_rectangle(sk, min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))
+
+
+def p28_q():
+    h.press("q")
+
+
+def p28_press_pull():
+    from PySide import QtCore
+
+    p = ppanel()
+    h.check("Q in a sketch leaves it", h.in_sketch() is None)
+    h.check("and opens Press Pull", p is not None and not p._closed)
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def p28_done():
+    h.check("closed", not dialog_open())
+    h.check("nothing in error", not broken(), broken())
+
+
 h.run(
     "extrude_presspull_qa6",
     [
@@ -276,5 +353,16 @@ h.run(
         p26_pp_type,
         p26_pp_ok,
         p26_done,
+        p28_new,
+        p28_pick,
+        p28_draw,
+        p28_e,
+        p28_extruding,
+        p28_block,
+        p28_pick_top,
+        p28_draw_top,
+        p28_q,
+        p28_press_pull,
+        p28_done,
     ],
 )
