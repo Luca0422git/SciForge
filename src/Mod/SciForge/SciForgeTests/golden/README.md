@@ -64,6 +64,8 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `revolve` | `id`, `profile`, `axis` (X/Y/Z/sketch_h/sketch_v), `angle`, `operation` | Revolve |
 | `fillet` | `id`, `edges` (selector), `radius` | Fillet |
 | `chamfer` | `id`, `edges`, `distance`, `distance2` or `angle` | Chamfer |
+| `blend_fillet` | `id`, `radius`, and `edges` / `faces` (every sharp edge around them) / `features` (step ids: the edges each made) | Fillet dialog (`sciforge/blend.py`, the F command's code) |
+| `blend_chamfer` | `id`, `distance`, `chamfer_type` (equal/two/angle), `distance2`, `angle`, `flip`, and `edges` / `faces` / `features` | Chamfer dialog |
 | `shell` | `id`, `faces` (faces to remove), `thickness`, `direction` (inside/outside) | Shell |
 | `hole` | `id`, `sketch` (hole centres = its circles' centres), `diameter`, `depth` or `through_all`, `counterbore {diameter, depth}` or `countersink {diameter, angle}` | Hole |
 | `pattern_rect` | `id`, `features`, `direction`, `count`, `spacing`, optional second direction `direction2`, `count2`, `spacing2` | Rectangular Pattern |

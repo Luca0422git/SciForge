@@ -154,6 +154,13 @@ def type_into(widget, text):
     QtWidgets.QApplication.processEvents()
 
 
+def press_enter(widget):
+    """Enter in a field of the dialog (Fusion: Enter finishes the command)."""
+    widget.setFocus()
+    QtTest.QTest.keyClick(widget, QtCore.Qt.Key_Return)
+    QtWidgets.QApplication.processEvents()
+
+
 def choose(combo, label):
     """Pick an entry of a drop-down: click it open, move to the entry with the arrow keys
     and press Enter, as a person can."""

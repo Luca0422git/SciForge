@@ -321,10 +321,14 @@ def started_with_picks():
 
 
 def second_ok():
-    h.task_button("OK")
+    """Type the value and press Enter, as Fusion users do: Enter is OK."""
+    p = b.blend_panel()
+    if p:
+        b.press_enter(p.radius.widget)
 
 
 def after_second():
+    h.check("Enter finished the dialog", not Gui.Control.activeDialog())
     shape = h.body().Shape
     expect = s["v"] - (40 + 10) * b.spandrel(2) + b.corner(2)
     h.check(
