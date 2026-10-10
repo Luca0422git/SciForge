@@ -7,7 +7,7 @@ Kept outside scenarios/ because every file there is run as a scenario."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from PySide import QtCore, QtWidgets
+from PySide import QtCore, QtGui, QtWidgets
 from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
@@ -241,9 +241,31 @@ def browser_double_click(text):
     tree.scrollToItem(item)
     rect = tree.visualItemRect(item)
     pos = QtCore.QPoint(rect.left() + 60, rect.center().y())
-    QtTest.QTest.mouseDClick(tree.viewport(), QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pos)
-    QtWidgets.QApplication.processEvents()
+    double_click_widget(tree.viewport(), pos)
     return True
+
+
+def double_click_widget(widget, pos):
+    """The events a mouse sends for a double click: press, release, double-click,
+    release (QTest.mouseDClick skips some of them for item views)."""
+    left, none = QtCore.Qt.LeftButton, QtCore.Qt.NoModifier
+    QtTest.QTest.mousePress(widget, left, none, pos)
+    QtTest.QTest.mouseRelease(widget, left, none, pos)
+    global_pos = QtCore.QPointF(widget.mapToGlobal(pos))
+    event = QtGui.QMouseEvent(
+        QtCore.QEvent.MouseButtonDblClick, QtCore.QPointF(pos), global_pos, left, left, none
+    )
+    QtWidgets.QApplication.sendEvent(widget, event)
+    release = QtGui.QMouseEvent(
+        QtCore.QEvent.MouseButtonRelease,
+        QtCore.QPointF(pos),
+        global_pos,
+        left,
+        QtCore.Qt.NoButton,
+        none,
+    )
+    QtWidgets.QApplication.sendEvent(widget, release)
+    QtWidgets.QApplication.processEvents()
 
 
 def _point(sketch, geo, pos):

@@ -31,6 +31,29 @@ def sketch_edges(sketch, include_construction=False):
             edges.append(geometry.toShape())
         except Exception:
             continue
+    edges += _projected_edges(sketch)
+    return edges
+
+
+def _projected_edges(sketch):
+    """Projected part edges that are "defining" (Fusion: projected geometry makes
+    profiles; Include 3D Geometry and construction projections do not)."""
+    edges = []
+    try:
+        import Sketcher
+
+        external = list(sketch.ExternalGeo)[2:]  # the first two are the sketch axes
+    except Exception:
+        return edges
+    for geometry in external:
+        try:
+            if geometry.TypeId in TYPES_WITHOUT_AREA:
+                continue
+            if not Sketcher.ExternalGeometryFacade(geometry).testFlag("Defining"):
+                continue
+            edges.append(geometry.toShape())
+        except Exception:
+            continue
     return edges
 
 
