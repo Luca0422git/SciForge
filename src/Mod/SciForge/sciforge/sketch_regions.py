@@ -11,6 +11,7 @@ is a closed region.
 No Qt, no GUI: used by the sketch shading (sketch_mode.py), unit-checked by the golden
 runner through the same code.
 """
+
 import FreeCAD as App
 
 TOLERANCE = 1e-7

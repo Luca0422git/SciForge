@@ -4,6 +4,7 @@ harness.py: open a ribbon group's drop-down menu and click an entry (also inside
 submenu) with the mouse, click a widget of the sketch palette, read sketch results.
 
 Kept outside scenarios/ because every file there is run as a scenario."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 

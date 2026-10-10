@@ -9,6 +9,7 @@ Rows (Fusion's order): Linetype (construction), Look At, Sketch Grid, Snap, Slic
 Show Profile, Show Points, Show Dimensions, Show Constraints, Show Projected
 Geometries, 3D Sketch. Options are remembered between sessions (sketch_mode.option).
 """
+
 import FreeCADGui as Gui
 
 from . import sketch_mode, ui_icon, warn

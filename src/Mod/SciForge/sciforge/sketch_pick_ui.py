@@ -9,6 +9,7 @@ again), then the tool continues: FreeCAD's tool for the next pick (mirror line,
 centre, base point), or, for Rectangular Pattern, a panel at the top of the sketch
 panel with the quantity and spacing in both directions and a live preview.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 

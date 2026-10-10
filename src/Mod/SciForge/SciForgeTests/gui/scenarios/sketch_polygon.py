@@ -10,6 +10,7 @@ Second use of the same command works again. Finish, E: the hexagon prism.
 Hand-derived: a regular hexagon with across-flats 20 (apothem a = 10) has area
 2*sqrt(3)*a^2 = 346.410...; extruded 10 mm: V = 3464.10...
 """
+
 import math
 
 import FreeCAD as App

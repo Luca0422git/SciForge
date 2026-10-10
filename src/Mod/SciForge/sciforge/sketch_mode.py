@@ -24,6 +24,7 @@ Rules followed (docs/sciforge/dev/feature-guide.md): FreeCAD's Python event and
 observer hooks only schedule work with QTimer.singleShot; Coin nodes are only read and
 changed from Qt timers (never from pivy callbacks).
 """
+
 import math
 
 import FreeCAD as App

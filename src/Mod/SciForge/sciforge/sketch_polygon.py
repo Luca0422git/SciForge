@@ -11,6 +11,7 @@ both use this).
 Both are n lines with coincident ends, equal lengths and the construction circle,
 leaving exactly 4 degrees of freedom (centre x/y, size, rotation), like Fusion.
 """
+
 import math
 
 import FreeCAD as App

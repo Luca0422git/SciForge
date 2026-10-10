@@ -10,6 +10,7 @@
 
 Every command explains next to the mouse when it cannot start (no sketch open).
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 

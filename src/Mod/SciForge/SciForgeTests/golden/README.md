@@ -71,6 +71,8 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `mirror` | `id`, `features`, `plane` | Mirror |
 | `edit` | `target`, `set` {option: value} or `constraint` + `value` | double-click a timeline item and change it |
 | `check` | `expect` | measure the part at this point (before an edit, for example) |
+| `sketch_polygon` | `sketch`, `center`, `point` (middle of an edge, or a corner), `sides`, `circumscribed`, `diameter`, `name` | Circumscribed / Inscribed Polygon in a sketch (golden/sketch_ops.py) |
+| `sketch_trim` | `sketch`, `points` (one Trim click each) | Trim (T) in a sketch |
 
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).

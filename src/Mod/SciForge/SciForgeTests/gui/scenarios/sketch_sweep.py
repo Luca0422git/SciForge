@@ -4,6 +4,7 @@ its menu with the mouse, in a sketch that already has curves and with nothing
 selected (the ribbon sweep only tries an empty sketch). Each must start without a
 pop-up, without a FreeCAD notification balloon and without an error; Esc must then
 stop it and leave the sketch open. Writes sketch_sweep-report.json."""
+
 import json
 import os
 

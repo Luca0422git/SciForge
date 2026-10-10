@@ -1,0 +1,88 @@
+{
+  "id": "sketch_nut_trap_polygon",
+  "title": "Plate with a circumscribed hexagon (5.5 across flats) cut through, resized to 8",
+  "tags": [
+    "sketch",
+    "polygon",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -15,
+            -15,
+            15,
+            15
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "sketch_polygon",
+      "sketch": "s1",
+      "center": [
+        0,
+        0
+      ],
+      "point": [
+        0,
+        2.75
+      ],
+      "sides": 6,
+      "circumscribed": true,
+      "diameter": 5.5,
+      "name": "nut",
+      "comment": "Circumscribed Polygon: second click on the middle of an edge; D on its circle = size across flats"
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 4
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 3495.210926142083,
+        "faces": 12,
+        "bbox": [
+          -15,
+          -15,
+          0,
+          15,
+          15,
+          4
+        ],
+        "source": "analytic",
+        "note": "30 x 30 plate minus a hexagon with apothem a = 2.75 (area 2 sqrt3 a^2); V = 4 * (900 - 2 sqrt3 a^2)"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "s1",
+      "constraint": "nut.diameter",
+      "value": 8,
+      "comment": "the hexagon must stay regular at the new size"
+    }
+  ],
+  "expect": {
+    "volume": 3378.2974966311835,
+    "faces": 12,
+    "bbox": [
+      -15,
+      -15,
+      0,
+      15,
+      15,
+      4
+    ],
+    "source": "analytic",
+    "note": "a = 4: V = 4 * (900 - 2 sqrt3 * 16)"
+  }
+}

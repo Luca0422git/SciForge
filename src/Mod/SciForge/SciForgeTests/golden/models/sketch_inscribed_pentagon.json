@@ -1,0 +1,62 @@
+{
+  "id": "sketch_inscribed_pentagon",
+  "title": "Plate with an inscribed pentagon (corner radius 8) cut through",
+  "tags": [
+    "sketch",
+    "polygon"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "sketch_polygon",
+      "sketch": "s1",
+      "center": [
+        0,
+        0
+      ],
+      "point": [
+        0,
+        8
+      ],
+      "sides": 5,
+      "circumscribed": false,
+      "diameter": 16,
+      "comment": "Inscribed Polygon: second click on a corner; D on its circle = size across corners"
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 3
+    }
+  ],
+  "expect": {
+    "volume": 4343.492872178326,
+    "faces": 11,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      3
+    ],
+    "source": "analytic",
+    "note": "pentagon area (5/2) R^2 sin 72 deg with R = 8; V = 3 * (1600 - area)"
+  }
+}

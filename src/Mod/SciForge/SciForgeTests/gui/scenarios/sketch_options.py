@@ -9,6 +9,7 @@ Include 3D Geometry on a vertical edge adds a reference (not a profile). Look At
 turns the camera back to the sketch. Linetype turns the selected circle into
 construction. Every option ends as it started (they are remembered).
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore

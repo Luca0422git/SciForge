@@ -9,6 +9,7 @@ nothing changes. Ctrl+Z / Ctrl+Y. L: a vertical line; Mirror: click the first ci
 Enter, click the line: its mirror image appears. Circular Pattern: click a circle,
 Enter: FreeCAD's tool asks for the centre; Esc stops it, nothing changes.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
@@ -105,8 +106,10 @@ def pattern_preview():
 
 def pattern_done():
     sk = s["sk"]
-    centres = sorted((round(c.Center.x - s["c0"].x, 6), round(c.Center.y - s["c0"].y, 6))
-                     for _, c in si.circles(sk))
+    centres = sorted(
+        (round(c.Center.x - s["c0"].x, 6), round(c.Center.y - s["c0"].y, 6))
+        for _, c in si.circles(sk)
+    )
     expected = sorted((10.0 * i, 15.0 * j) for i in range(4) for j in range(2))
     h.check("4 x 2 circles 10 / 15 apart", centres == expected, centres)
     h.check("panel closed", _box() is None or not _box().isVisible())
@@ -131,7 +134,8 @@ def cancel_click():
     if box is not None:
         h.check("preview while open", len(s["sk"].Geometry) > s["count"])
         cancel = [
-            b for b in box.findChildren(QtWidgets.QPushButton)
+            b
+            for b in box.findChildren(QtWidgets.QPushButton)
             if b.text().replace("&", "") == "Cancel"
         ]
         from PySide6 import QtTest
@@ -187,7 +191,9 @@ def mirror_enter():
 
 
 def mirror_line():
-    h.check("Mirror waits for the mirror line", h.gl_widget().cursor().shape() != QtCore.Qt.ArrowCursor)
+    h.check(
+        "Mirror waits for the mirror line", h.gl_widget().cursor().shape() != QtCore.Qt.ArrowCursor
+    )
     si.click(V(30, 0, 0), V(0.5, 0.3, 0))
 
 
@@ -196,7 +202,9 @@ def mirrored():
     sk = s["sk"]
     target = V(2 * 30 - s["c0"].x, s["c0"].y, 0)
     hit = [c for _, c in si.circles(sk) if (c.Center - target).Length < 1e-6]
-    h.check("mirrored circle at the mirror image", len(hit) == 1, [c.Center for _, c in si.circles(sk)])
+    h.check(
+        "mirrored circle at the mirror image", len(hit) == 1, [c.Center for _, c in si.circles(sk)]
+    )
     s["count"] = len(sk.Geometry)
 
 
@@ -213,8 +221,10 @@ def circular_enter():
 
 
 def circular_running():
-    h.check("Circular Pattern runs with the picked circle",
-            h.gl_widget().cursor().shape() != QtCore.Qt.ArrowCursor)
+    h.check(
+        "Circular Pattern runs with the picked circle",
+        h.gl_widget().cursor().shape() != QtCore.Qt.ArrowCursor,
+    )
     h.press(QtCore.Qt.Key_Escape)
 
 

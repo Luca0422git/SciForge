@@ -1,0 +1,84 @@
+{
+  "id": "sketch_trim_union",
+  "title": "Circle and overlapping rectangle trimmed into one outline, extruded 10",
+  "tags": [
+    "sketch",
+    "trim"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "c"
+        },
+        {
+          "polyline": [
+            [
+              5,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              10
+            ],
+            [
+              5,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch_trim",
+      "sketch": "s1",
+      "points": [
+        [
+          7.5,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          8.660254037844387,
+          5.0
+        ]
+      ],
+      "comment": "T on the bottom edge inside the circle, the left edge inside the circle, then the circle's arc inside the rectangle"
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 5334.500228937604,
+    "faces": 7,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      30,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "union of the r10 disc and the 25 x 10 rectangle: 100 pi + 250 minus the overlap (half the segment beyond x = 5: 50 pi / 3 - 2.5 sqrt75); V = 10 * area"
+  }
+}

@@ -8,6 +8,7 @@ O with nothing selected waits; click the rectangle: its whole chain is offset, t
 X on a line makes it construction. Esc stops a tool without drawing; a second Esc
 clears the selection; the sketch stays open. Every step: no error, no pop-up.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore

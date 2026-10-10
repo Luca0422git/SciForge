@@ -484,3 +484,6 @@ def _slot(sketch, x1, y1, x2, y2, width):
             Part.Circle(_v(x1, y1), z, r), theta + math.pi / 2, theta + 3 * math.pi / 2
         )
     )
+
+
+from . import sketch_ops  # noqa: E402,F401  (registers Builder.op_sketch_* steps)
