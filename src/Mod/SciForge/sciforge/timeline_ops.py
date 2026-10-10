@@ -45,6 +45,8 @@ SUPPRESS_INFO = "SciForgeSuppressInfo"
 WARNING = "SciForgeWarning"
 GROUP = "SciForgeGroup"  # timeline group id of a step
 GROUP_NAME = "SciForgeGroupName"
+ROLLED_HIDDEN = "SciForgeRolledHidden"  # a shown sketch/plane hidden by the marker
+MARKER_NOTE = "SciForge.MarkerBefore"  # Document.Meta: the step right after the marker
 
 
 class TimelineError(RuntimeError):
@@ -90,11 +92,40 @@ class quiet:
         return False
 
 
+_settling = set()  # documents whose recompute is SciForge's own (already quiet and settled)
+
+
 def recompute(doc):
-    with quiet():
-        doc.recompute()
-        _pass_through_failures(doc)
-        _clear_empty_bodies(doc)
+    """doc.recompute() the Fusion way: quiet, then settle() (failed steps add nothing,
+    steps whose base changed keep their edges)."""
+    _settling.add(doc.Name)
+    try:
+        with quiet():
+            doc.recompute()
+            settle(doc)
+    finally:
+        _settling.discard(doc.Name)
+
+
+def settle(doc):
+    """What Fusion shows after any recompute, whoever started it (a feature dialog, an
+    undo, the timeline):
+
+    - a fillet/chamfer/shell/Press Pull whose base step changed (a step added at the
+      rolled-back marker, a step before it deleted) keeps its edges/faces: FreeCAD keeps
+      their old names on the new base, which are other edges or none (red);
+    - a step in error adds nothing and the steps after it build on what came before it;
+    - a body with nothing left shows nothing."""
+    _settling.add(doc.Name)
+    try:
+        with quiet():
+            if repair_references(doc):
+                doc.recompute()
+            _pass_through_failures(doc)
+            _clear_empty_bodies(doc)
+            remember_references(doc)
+    finally:
+        _settling.discard(doc.Name)
 
 
 def _is_solid_step(obj):
@@ -159,16 +190,24 @@ def _clear_empty_bodies(doc):
 
 
 class RecomputeGuard:
-    """Document observer: while a design has steps in error or suppressed (shown red
-    or greyed in the timeline), FreeCAD would print the same errors again on every
-    recompute, flooding the Report view. Mute it during those recomputes only."""
+    """Document observer.
 
-    def __init__(self):
+    - While a design has steps in error or suppressed (shown red or greyed in the
+      timeline), or a step whose base just changed (it is repaired right after),
+      FreeCAD would print errors on every recompute, flooding the Report view: mute it
+      during those recomputes only.
+    - After every recompute (a feature dialog's preview, an undo...), settle() the
+      design, deferred with ``defer`` (the GUI passes a Qt timer): nothing may change
+      the document inside FreeCAD's own recompute signal."""
+
+    def __init__(self, defer=None):
         self._active = {}
+        self.defer = defer
+        self._pending = set()
 
     def slotBeforeRecomputeDocument(self, doc):
         try:
-            if _has_known_problems(doc):
+            if doc.Name in _settling or _has_known_problems(doc) or references_pending(doc):
                 q = quiet()
                 q.__enter__()
                 self._active[doc.Name] = q
@@ -182,6 +221,44 @@ class RecomputeGuard:
                 q.__exit__(None, None, None)
             except Exception:
                 pass
+        try:
+            name = doc.Name
+            if self.defer is None or name in _settling or name in self._pending:
+                return
+            self._pending.add(name)
+            self.defer(lambda: self._settle(name))
+        except Exception:
+            pass
+
+    def slotDeletedDocument(self, doc):
+        try:
+            forget(doc.Name)
+        except Exception:
+            pass
+
+    def _settle(self, name):
+        self._pending.discard(name)
+        try:
+            doc = App.getDocument(name)
+        except Exception:
+            return  # closed meanwhile
+        try:
+            if _recomputing(doc):  # a long recompute runs Qt timers (MEMORY): later
+                self._pending.add(name)
+                self.defer(lambda: self._settle(name), 100)
+                return
+            settle(doc)
+        except Exception as exc:
+            from . import _remember
+
+            _remember("info", "timeline settle skipped: %s" % exc)
+
+
+def _recomputing(doc):
+    try:
+        return bool(doc.Recomputing)
+    except Exception:
+        return False
 
 
 def _has_known_problems(doc):
@@ -197,10 +274,12 @@ def _has_known_problems(doc):
 _guard = {"observer": None}
 
 
-def install_guard():
+def install_guard(defer=None):
     if _guard["observer"] is None:
-        _guard["observer"] = RecomputeGuard()
+        _guard["observer"] = RecomputeGuard(defer)
         App.addDocumentObserver(_guard["observer"])
+    elif defer is not None:
+        _guard["observer"].defer = defer
 
 
 def remove_guard():
@@ -421,7 +500,10 @@ def snapshot(doc, deps=True):
     only needed to reorder; the timeline's 0.4 s refresh leaves it out."""
     features = []
     for obj, body in steps(doc):
-        kind, reason = problem(obj)
+        off = is_suppressed(obj)
+        # A suppressed step is off, not broken: FreeCAD's complaints about it (its face
+        # went with what was suppressed) are not shown, like Fusion.
+        kind, reason = ("", "") if off else problem(obj)
         features.append(
             {
                 "name": obj.Name,
@@ -429,7 +511,7 @@ def snapshot(doc, deps=True):
                 "type_id": type_key(obj),
                 "body": body.Name if body is not None else None,
                 "key": _key(obj),
-                "suppressed": is_suppressed(obj),
+                "suppressed": off,
                 "error": reason if kind == "error" else "",
                 "warning": reason if kind == "warning" else "",
                 "deps": sorted(uses(obj)) if deps else [],
@@ -446,7 +528,29 @@ def snapshot(doc, deps=True):
 
 def timeline(doc, deps=True):
     features, tips = snapshot(doc, deps)
-    return core.build(features, tips)
+    return core.build(features, tips, marker_note(doc))
+
+
+def marker_note(doc):
+    """The step right after the marker when it stands before a sketch/plane (see
+    timeline_core), kept in the document so it is saved with it."""
+    try:
+        return doc.Meta.get(MARKER_NOTE, "")
+    except Exception:
+        return ""
+
+
+def _set_marker_note(doc, name):
+    try:
+        meta = dict(doc.Meta)
+        if name:
+            meta[MARKER_NOTE] = name
+        else:
+            meta.pop(MARKER_NOTE, None)
+        if meta != dict(doc.Meta):
+            doc.Meta = meta
+    except Exception:
+        pass
 
 
 # -- helpers for operations ------------------------------------------------------------
@@ -466,6 +570,37 @@ def _set_tips(doc, tips):
         if current is not tip:
             body.Tip = tip
             _show_only_tip(body, tip)
+    show_marker_state(doc)
+
+
+def show_marker_state(doc):
+    """In Fusion a sketch or construction plane after the history marker does not exist
+    yet, so it is not drawn. Those that were shown are hidden while the marker is before
+    them and shown again once it passes them."""
+    if not App.GuiUp:
+        return
+    try:
+        tl = timeline(doc, deps=False)
+    except Exception:
+        return
+    for item in tl.items:
+        if item.solid or item.body is None:
+            continue
+        obj = doc.getObject(item.name)
+        if obj is None or obj.ViewObject is None:
+            continue
+        try:
+            if item.state == "rolled_back":
+                if obj.ViewObject.Visibility:
+                    _add_prop(obj, "App::PropertyBool", ROLLED_HIDDEN, "Hidden by the marker")
+                    setattr(obj, ROLLED_HIDDEN, True)
+                    obj.ViewObject.Visibility = False
+            elif getattr(obj, ROLLED_HIDDEN, False):
+                setattr(obj, ROLLED_HIDDEN, False)
+                if not is_suppressed(obj):
+                    obj.ViewObject.Visibility = True
+        except Exception:
+            pass
 
 
 def _show_only_tip(body, tip):
@@ -508,12 +643,18 @@ def _label(doc, name):
 
 
 # -- history marker --------------------------------------------------------------------
-def roll(doc, tips, title="Roll History Marker"):
-    """Set the bodies' Tips (the history marker). One undo step."""
+def roll(doc, tips, title="Roll History Marker", before=None):
+    """Set the bodies' Tips (the history marker), one undo step; ``before``: the step
+    right after the marker when it stands before a sketch/plane."""
     if not tips:
-        return False
+        if (before or "") == marker_note(doc):
+            return False
+        _set_marker_note(doc, before)  # only sketches/planes change sides: no recompute
+        show_marker_state(doc)
+        return True
     _transaction(doc, title)
     try:
+        _set_marker_note(doc, before)
         _set_tips(doc, tips)
         recompute(doc)
     except Exception:
@@ -526,6 +667,23 @@ def roll(doc, tips, title="Roll History Marker"):
 def roll_to_end(doc):
     tl = timeline(doc)
     return roll(doc, core.tips_for_step(tl, "end"), "Roll History Marker to End")
+
+
+def current_tips(doc):
+    return {b.Name: (b.Tip.Name if b.Tip is not None else None) for b in bodies(doc)}
+
+
+def set_marker_untracked(doc, tips, before=None):
+    """Move the marker without an undo step: Fusion rolls to a step while it is edited
+    and back afterwards, and neither is something to undo (the edit itself is)."""
+    _set_marker_note(doc, before)
+    if not tips:
+        show_marker_state(doc)
+        return False
+    with quiet():
+        _set_tips(doc, tips)
+    recompute(doc)
+    return True
 
 
 # -- suppress --------------------------------------------------------------------------
@@ -664,8 +822,9 @@ def suppress(doc, names):
     _transaction(doc, "Suppress %s" % title)
     try:
         group = set(names) | dependents(doc, names)
-        for n in group:
-            _set_suppressed(doc.getObject(n), True)
+        with quiet():
+            for n in group:
+                _set_suppressed(doc.getObject(n), True)
         recompute(doc)
         # Steps that only break now (their edges were made by it) go off too.
         for _round in range(6):
@@ -674,8 +833,9 @@ def suppress(doc, names):
             if not newly:
                 break
             more = newly | dependents(doc, newly)
-            for n in more - group:
-                _set_suppressed(doc.getObject(n), True)
+            with quiet():
+                for n in more - group:
+                    _set_suppressed(doc.getObject(n), True)
             group |= more
             recompute(doc)
         info = json.dumps({"with": sorted(group - set(names)), "links": links})
@@ -709,11 +869,21 @@ def unsuppress(doc, names):
     title = ", ".join(_label(doc, n) for n in names[:3])
     _transaction(doc, "Unsuppress %s" % title)
     try:
-        for n in group:
-            _set_suppressed(doc.getObject(n), False)
+        # Solids first: a sketch put back on its face before that face exists again
+        # made FreeCAD print "subshape not found" (Report view and a pop-up balloon).
+        objs = [doc.getObject(n) for n in group]
+        with quiet():
+            for obj in objs:
+                if "Suppressed" in obj.PropertiesList:
+                    _set_suppressed(obj, False)
         recompute(doc)
         if _restore_links(doc, links):
             recompute(doc)
+        with quiet():
+            for obj in objs:
+                if "Suppressed" not in obj.PropertiesList:
+                    _set_suppressed(obj, False)
+        recompute(doc)
         for n in names:
             obj = doc.getObject(n)
             if SUPPRESS_INFO in obj.PropertiesList:
@@ -752,6 +922,7 @@ def delete(doc, names):
     tl = timeline(doc)
     at_end = tl.at_end
     title = ", ".join(_label(doc, n) for n in names[:3])
+    remember_references(doc)  # the steps after the gap keep their edges (settle)
     _transaction(doc, "Delete %s" % title)
     try:
         for obj, _body in steps(doc):
@@ -779,6 +950,7 @@ def delete(doc, names):
             doc.removeObject(n)
         if at_end:
             after = timeline(doc)
+            _set_marker_note(doc, None)
             _set_tips(doc, core.tips_for_count(after, len(after.items)))
         recompute(doc)
     except Exception:
@@ -888,6 +1060,7 @@ def move(doc, name, slot):
             _set_group(doc.getObject(n), gid, names.get(gid, ""))
         after = timeline(doc)
         if p.marker_at_end:
+            _set_marker_note(doc, None)
             tips = core.tips_for_count(after, len(after.items))
         else:
             tips = core.tips_for_count(after, p.marker_count)
@@ -967,21 +1140,158 @@ def _twin_name(shape, element, tol=1e-6):
         return None
     box = element.BoundBox
     for i, c in enumerate(candidates):
-        b = c.BoundBox
-        if (
-            abs(b.XMin - box.XMin) > tol
-            or abs(b.XMax - box.XMax) > tol
-            or abs(b.YMin - box.YMin) > tol
-            or abs(b.YMax - box.YMax) > tol
-            or abs(b.ZMin - box.ZMin) > tol
-            or abs(b.ZMax - box.ZMax) > tol
-        ):
+        if not _same_place(c, element, box, prefix, tol):
             continue
-        if prefix == "Edge" and abs(c.Length - element.Length) <= tol * 10:
-            return "Edge%d" % (i + 1)
-        if prefix == "Face" and abs(c.Area - element.Area) <= tol * 100:
-            return "Face%d" % (i + 1)
+        return "%s%d" % (prefix, i + 1)
     return None
+
+
+def _same_place(c, element, box, prefix, tol):
+    b = c.BoundBox
+    if (
+        abs(b.XMin - box.XMin) > tol
+        or abs(b.XMax - box.XMax) > tol
+        or abs(b.YMin - box.YMin) > tol
+        or abs(b.YMax - box.YMax) > tol
+        or abs(b.ZMin - box.ZMin) > tol
+        or abs(b.ZMax - box.ZMax) > tol
+    ):
+        return False
+    if prefix == "Edge":
+        return abs(c.Length - element.Length) <= tol * 10
+    return abs(c.Area - element.Area) <= tol * 100
+
+
+# -- keeping edge/face references when a step's base changes ------------------------------
+# {document name: {step name: ((base name, subs, base shape hash), property, [elements])}}:
+# the edges/faces each fillet, chamfer, shell, draft or Press Pull was last computed on,
+# as shapes. When its base step changes (a step added at the rolled-back marker, the step
+# before it deleted), FreeCAD keeps the old names on the new base: other edges, or none
+# ("Invalid edge link"). Fusion keeps the same edges; so does repair_references().
+_REFS = {}
+_TRIED = {}  # {document name: {step name: the last repair tried}}
+
+
+def forget(doc_name):
+    """A closed document: its remembered references must not apply to the next
+    document opened under the same name."""
+    _REFS.pop(doc_name, None)
+    _TRIED.pop(doc_name, None)
+
+
+def _ref_value(obj):
+    """(property, base, [subs]) of a step's edge/face reference on its own base, or None."""
+    base = getattr(obj, "BaseFeature", None)
+    if base is None:
+        return None
+    for prop in REBASE_PROPS:
+        if prop not in obj.PropertiesList:
+            continue
+        try:
+            value = getattr(obj, prop)
+        except Exception:
+            continue
+        if isinstance(value, tuple) and len(value) == 2 and hasattr(value[0], "Name"):
+            return prop, value[0], _subs_of(value)
+    return None
+
+
+def remember_references(doc):
+    """Record the edges/faces of every working step that picks them on its base."""
+    memo = _REFS.setdefault(doc.Name, {})
+    alive = set()
+    for body in bodies(doc):
+        for obj in body.Group:
+            if not _is_solid_step(obj):
+                continue
+            alive.add(obj.Name)
+            if is_suppressed(obj):
+                continue
+            state = list(getattr(obj, "State", []))
+            if "Invalid" in state or "Error" in state or "Touched" in state:
+                continue
+            ref = _ref_value(obj)
+            if ref is None:
+                continue
+            prop, linked, subs = ref
+            base = obj.BaseFeature
+            if linked is not base or not subs or any(s.startswith("?") for s in subs):
+                continue
+            try:
+                shape = base.Shape
+                if shape.isNull():
+                    continue
+                key = (base.Name, tuple(subs), shape.hashCode())
+            except Exception:
+                continue
+            old = memo.get(obj.Name)
+            if old is not None and old[0] == key:
+                continue
+            try:
+                elements = [shape.getElement(s).copy() for s in subs]
+            except Exception:
+                continue
+            memo[obj.Name] = (key, prop, elements)
+    for name in [n for n in memo if n not in alive]:
+        del memo[name]
+
+
+def references_pending(doc):
+    """True when a remembered step now sits on another base (repaired after the
+    recompute; the failure FreeCAD reports meanwhile is not the user's)."""
+    for name, (key, _prop, _elements) in _REFS.get(doc.Name, {}).items():
+        obj = doc.getObject(name)
+        base = getattr(obj, "BaseFeature", None) if obj is not None else None
+        if base is not None and base.Name != key[0]:
+            return True
+    return False
+
+
+def repair_references(doc):
+    """Point steps whose base changed (or whose references FreeCAD lost) at the same
+    edges/faces as before, found by geometry on their new base. True if any changed."""
+    changed = False
+    memo = _REFS.get(doc.Name, {})
+    for name, (key, prop, elements) in list(memo.items()):
+        obj = doc.getObject(name)
+        if obj is None or is_suppressed(obj):
+            continue
+        base = getattr(obj, "BaseFeature", None)
+        ref = _ref_value(obj)
+        if base is None or ref is None or ref[0] != prop:
+            continue
+        _prop, linked, subs = ref
+        state = list(getattr(obj, "State", []))
+        lost = any(s.startswith("?") for s in subs)
+        broken = "Invalid" in state or "Error" in state
+        moved = base.Name != key[0] or linked is not base
+        try:
+            shape = base.Shape
+            if shape.isNull():
+                continue
+            if not (lost or broken or moved) and shape.hashCode() == key[2]:
+                continue  # nothing changed under it
+            # The same edges/faces still there, by place and size? (When an edit
+            # really changed them, none is found and FreeCAD's naming decides.)
+            names = [_twin_name(shape, e) for e in elements]
+        except Exception:
+            continue
+        if None in names or (linked is base and list(names) == list(subs) and not broken):
+            continue
+        # Setting the same names again refreshes FreeCAD's internal element names (a
+        # stale one can fail although the short name is right), but once is enough: a
+        # step that still fails then fails for another reason (a radius too big...).
+        attempt = (base.Name, shape.hashCode(), tuple(names))
+        tried = _TRIED.setdefault(doc.Name, {})
+        if linked is base and list(names) == list(subs) and tried.get(name) == attempt:
+            continue
+        tried[name] = attempt
+        try:
+            setattr(obj, prop, (base, names))
+            changed = True
+        except Exception:
+            continue
+    return changed
 
 
 # -- groups ------------------------------------------------------------------------------

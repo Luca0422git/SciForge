@@ -188,6 +188,45 @@ class MarkerTests(unittest.TestCase):
         self.assertIsNone(core.tips_for_step(build(tip="Pad"), "prev"))
         self.assertIsNone(core.tips_for_step(build(tip="Pad"), "start"))
 
+    def test_marker_before_a_sketch(self):
+        """Fusion: the marker may stand before a sketch that follows the last active
+        solid step; that sketch is then rolled back too."""
+        tl = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
+        self.assertEqual(tl.marker, 2)
+        self.assertEqual(tl.before, "Sketch001")
+        self.assertEqual(tl.find("Sketch001").state, "rolled_back")
+        self.assertEqual(tl.find("Pad").state, "done")
+
+    def test_marker_note_that_does_not_fit_the_tips_is_ignored(self):
+        # After an undo the Tips moved on: the note no longer applies.
+        tl = core.build(one_body(), {"Body": "Fillet"}, "Sketch001")
+        self.assertTrue(tl.at_end)
+        self.assertEqual(tl.before, "")
+        # A solid step is never "before the marker" by note.
+        tl = core.build(one_body(), {"Body": "Pad"}, "Pad001")
+        self.assertEqual(tl.marker, 3)
+        self.assertEqual(tl.before, "")
+        self.assertEqual(core.build(one_body(), {"Body": "Pad"}, "Gone").marker, 3)
+
+    def test_drop_before_a_sketch(self):
+        tips, before = core.marker_for_slot(build(), 2)
+        self.assertEqual(tips, {"Body": "Pad"})
+        self.assertEqual(before, "Sketch001")
+        # Just before the next solid: the default spot, no note.
+        self.assertEqual(core.marker_for_slot(build(), 3), ({"Body": "Pad"}, None))
+        # Same Tips, only the side of the sketch changes.
+        rolled = core.build(one_body(), {"Body": "Pad"})
+        self.assertEqual(core.marker_for_slot(rolled, 2), (None, "Sketch001"))
+        noted = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
+        self.assertEqual(core.marker_for_slot(noted, 3), (None, None))
+        # Before the first solid still snaps after it (FreeCAD needs a Tip).
+        self.assertEqual(core.marker_for_slot(build(), 0), ({"Body": "Pad"}, None))
+
+    def test_marker_note_changes_the_signature(self):
+        a = core.build(one_body(), {"Body": "Pad"})
+        b = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
+        self.assertNotEqual(core.signature(a), core.signature(b))
+
 
 class MoveTests(unittest.TestCase):
     def test_fillet_can_move_earlier(self):

@@ -14,8 +14,11 @@ bodies' lists are merged by creation order (``key``), never changing the order
 inside a body, so the merged row is always a valid FreeCAD history.
 
 The history marker is FreeCAD's ``Body.Tip``: a step is active when it is at or
-before its body's Tip. Only solid steps can be a Tip, so the marker always sits
-just before the first rolled-back solid step (or at the end).
+before its body's Tip. Only solid steps can be a Tip, so by the Tips alone the marker
+sits just before the first rolled-back solid step (or at the end). Fusion's marker can
+also stand before a sketch or plane that comes after the last active solid step: the
+name of the step right after the marker (``marker_before``) says so; it is ignored when
+it does not fit the Tips (after an undo, say).
 """
 
 import re
@@ -225,6 +228,7 @@ class Timeline:
     items: tuple
     marker: int  # slot of the history marker: number of steps before it
     tips: dict  # body name -> tip name (or None)
+    before: str = ""  # the step right after the marker, when it stands before a sketch
 
     @property
     def at_end(self):
@@ -289,8 +293,9 @@ def _status(f):
     return "ok", ""
 
 
-def build(features, tips):
-    """The whole timeline. ``tips``: {body name: tip name or None}."""
+def build(features, tips, marker_before=None):
+    """The whole timeline. ``tips``: {body name: tip name or None}; ``marker_before``:
+    the step right after the marker when it stands before a sketch/plane (see above)."""
     rows = merge(features)
     kinds = [classify(f["type_id"]) for f in rows]
     # A step outside any body has no Tip: it never rolls back.
@@ -313,6 +318,13 @@ def build(features, tips):
             active[i] = seq.index(f["name"]) <= seq.index(tip)
     inactive = [i for i in active if not active[i]]
     marker = min(inactive) if inactive else len(rows)
+    before = ""
+    if marker_before:
+        names = [f["name"] for f in rows]
+        last_active = max([i for i in active if active[i]], default=-1)
+        k = names.index(marker_before) if marker_before in names else -1
+        if last_active < k < marker:  # only sketches/planes between: a valid spot
+            marker, before = k, marker_before
 
     counts = {}
     items = []
@@ -351,7 +363,7 @@ def build(features, tips):
                 group_name=f.get("group_name") or "",
             )
         )
-    return Timeline(tuple(items), marker, dict(tips))
+    return Timeline(tuple(items), marker, dict(tips), before)
 
 
 def tooltip(item):
@@ -375,6 +387,7 @@ def signature(timeline, extra=None):
     return (
         extra,
         timeline.marker,
+        timeline.before,
         tuple(
             (i.name, i.display, i.kind, i.state, i.suppressed, i.status, i.message, i.group)
             for i in timeline.items
@@ -506,6 +519,24 @@ def tips_for_slot(timeline, slot):
 def tips_for_item(timeline, index):
     """'Roll History Marker Here': the marker goes right after step ``index``."""
     return tips_for_slot(timeline, index + 1)
+
+
+def marker_for_slot(timeline, slot):
+    """(tips or None, marker_before or None) for the marker dropped after ``slot``
+    steps: the Tips for the solid steps before it, and the step right after it when it
+    stands before a sketch/plane that follows the last of those. tips is None when the
+    Tips stay as they are (only marker_before may change)."""
+    solids = _solid_indexes(timeline)
+    if not solids:
+        return None, None
+    count = max(1, len([i for i in solids if i < slot]))
+    last = solids[count - 1]
+    nxt = solids[count] if count < len(solids) else len(timeline.items)
+    before = timeline.items[slot].name if last < slot < nxt else None
+    tips = tips_for_count(timeline, count)
+    if count == active_count(timeline) and _consistent(timeline):
+        tips = None
+    return tips, before
 
 
 def tips_for_step(timeline, where):

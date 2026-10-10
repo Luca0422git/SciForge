@@ -44,11 +44,12 @@ def _objects(doc):
                 "sciforge_type": getattr(obj, "SciForgeType", ""),
             }
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
-                kind, reason = ops.problem(obj)
-                if kind:
-                    row[kind] = reason
                 if ops.is_suppressed(obj):
-                    row["warning"] = "Suppressed in the timeline"
+                    row["suppressed"] = True  # off, not broken: greyed, like Fusion
+                else:
+                    kind, reason = ops.problem(obj)
+                    if kind:
+                        row[kind] = reason
             rows.append(row)
         except Exception:
             continue
@@ -160,6 +161,11 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
             shifted.palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#ff8a80"))
         elif node["status"] == "warning":
             shifted.palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#f2c440"))
+        elif node["status"] == "suppressed":
+            shifted.palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#8a94a6"))
+            font = QtGui.QFont(shifted.font)
+            font.setStrikeOut(True)
+            shifted.font = font
         super().paint(painter, shifted, index)
 
     def sizeHint(self, option, index):
