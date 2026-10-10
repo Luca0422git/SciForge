@@ -69,6 +69,26 @@ def _set_combo(box, value):
             return
 
 
+def _safe(method):
+    """Dialog reactions (Qt slots) never let an exception out: it would print a traceback
+    in the Report view. It is logged (SciForge's Diagnostics) and shown in the dialog."""
+    import functools
+
+    @functools.wraps(method)
+    def wrapper(self, *args):
+        try:
+            return method(self, *args)
+        except Exception as exc:
+            warn("revolve: %s" % exc)
+            try:
+                self.message.setText("⚠ %s" % exc)
+            except Exception:
+                pass
+        return None
+
+    return wrapper
+
+
 class SelectionField:
     """Fusion's selection box: shows what is picked, blue while it waits for clicks in
     the 3D view (click it to make it the one), with an x to clear it."""
@@ -317,7 +337,8 @@ class AngleHandle:
                 return
             position = info["Position"]
             if info.get("State") == "DOWN":
-                if self.hit(position):
+                if self.hit(position) and time.time() - _GRAB["time"] > 0.05:
+                    _GRAB["time"] = time.time()  # one press moves one handle (they can meet)
                     self._drag = True
                     self._last_event = time.time()
                     self._last_pos = (float(position[0]), float(position[1]))
@@ -357,6 +378,9 @@ class AngleHandle:
 
     def _poll(self):
         try:
+            if Gui.ActiveDocument is None:
+                self._timer.stop()  # the document was closed under the dialog
+                return
             self._paint()
             pending = self._pending
             if pending is not None and abs(pending - self._value) > 1e-6:
@@ -387,6 +411,9 @@ class AngleHandle:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+
+
+_GRAB = {"time": 0.0}  # when a handle last took a press
 
 
 def _nearest_turn(raw, near):
@@ -1240,6 +1267,7 @@ class RevolvePanel(Panel):
         self._changed(new_geometry=True)
 
     # -- changes ------------------------------------------------------------------------------------
+    @_safe
     def _kind_changed(self, *_):
         if self._quiet:
             return
@@ -1262,6 +1290,7 @@ class RevolvePanel(Panel):
             self._quiet = False
         self._changed(new_geometry=True)
 
+    @_safe
     def _angle_typed(self, value):
         if self._quiet:
             return
@@ -1270,6 +1299,7 @@ class RevolvePanel(Panel):
             handle.set_angle(self._handle_angle(value))
         self._changed()
 
+    @_safe
     def _angle2_typed(self, value):
         if self._quiet:
             return
@@ -1278,6 +1308,7 @@ class RevolvePanel(Panel):
             handle.set_angle(-self._side_sign() * value)
         self._changed()
 
+    @_safe
     def _operation_picked(self, _index):
         self.user_picked_operation = True
         self._changed()
@@ -1291,6 +1322,7 @@ class RevolvePanel(Panel):
             return abs(value)
         return value
 
+    @_safe
     def _dragged(self, value):
         value = round(value, 1)
         if self.direction.currentData() == "symmetric":
@@ -1307,10 +1339,12 @@ class RevolvePanel(Panel):
             self._quiet = False
         self._changed()
 
+    @_safe
     def _released(self, value):
         self._dragged(value)
         self._changed(new_geometry=True)  # the arrow turns round when the side changes
 
+    @_safe
     def _dragged2(self, value):
         value = round(-self._side_sign() * value, 1)
         value = max(0.1, min(360.0 - abs(self.angle.value()), value))
@@ -1497,6 +1531,14 @@ class RevolvePanel(Panel):
 
     # -- OK / Cancel ----------------------------------------------------------------------------------
     def accept(self):
+        try:
+            return self._accept()
+        except Exception as exc:
+            warn("Revolve OK: %s" % exc)
+            self.message.setText("⚠ %s" % exc)
+            return False
+
+    def _accept(self):
         if self.target is None:
             if not self.profiles:
                 text = "Pick a profile first: click inside a sketch area or on a flat face."
@@ -1533,11 +1575,17 @@ class RevolvePanel(Panel):
         return True
 
     def reject(self):
-        self._timer.stop()
-        self.cleanup()
-        self.doc.abortTransaction()
-        preview.recompute(self.doc)
-        self._close()
+        try:
+            self._timer.stop()
+            self.cleanup()
+            self.doc.abortTransaction()
+            preview.recompute(self.doc)
+        except Exception as exc:
+            warn("Revolve Cancel: %s" % exc)
+        try:
+            self._close()
+        except Exception as exc:
+            warn("Revolve Cancel: %s" % exc)
         return True
 
     def cleanup(self):

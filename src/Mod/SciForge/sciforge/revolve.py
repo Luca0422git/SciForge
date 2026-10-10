@@ -649,23 +649,70 @@ def _binder(body, feature, sources, existing=None, role="RevolveProfile", label=
     return binder
 
 
-def _datum_axis(body, feature, axis, existing=None):
-    """A hidden construction axis in `body` placed on `axis` (global), for an axis that
-    cannot be bound into another body (a sketch's construction line)."""
-    datum = existing
-    if datum is None or datum.TypeId != "PartDesign::Line":
-        datum = body.Document.addObject("PartDesign::Line", "RevolveAxis")
-        body.insertObject(datum, feature, False)
-        _mark(datum, "RevolveAxis")
-    datum.Label = "%s axis" % feature.Label
-    point, direction = axis_line(axis)
-    inverse = body.getGlobalPlacement().inverse()
-    local_point = inverse.multVec(point)
-    local_dir = inverse.Rotation.multVec(direction)
-    datum.MapMode = "Deactivated"
-    datum.Placement = App.Placement(local_point, App.Rotation(Z, local_dir))
-    _hide(datum)
-    return datum
+class AxisLink:
+    """A hidden line in one body that follows an axis of another body: a sketch's
+    construction line or own axis, a construction axis, an origin axis. FreeCAD lets a
+    feature link only to things in its own body, and a SubShapeBinder can only copy what
+    has a shape (construction lines do not), so this reads the axis through a global link
+    every recompute: edit the construction line and the revolve follows.
+    Saved documents store "sciforge.revolve.AxisLink": keep the name stable."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        if "Source" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyLinkGlobal", "Source", "Axis", "The axis' object")
+        if "SourceSub" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", "SourceSub", "Axis", "Which axis of it")
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        import Part
+
+        if obj.Source is None:
+            raise RevolveError("The axis this revolve turns about is gone. Pick it again.")
+        ref = (obj.Source, obj.SourceSub)
+        point, direction = axis_line(ref)
+        length = 100.0
+        if is_sketch(obj.Source) and obj.SourceSub.startswith("Axis"):
+            start, end = _sketch_axis_points(obj.Source, obj.SourceSub)
+            length = max((end - start).Length, 1e-3)
+        body = owner_body(obj)
+        inverse = body.getGlobalPlacement().inverse() if body is not None else App.Placement()
+        a = inverse.multVec(point)
+        d = inverse.Rotation.multVec(direction)
+        obj.Shape = Part.LineSegment(a, a + d * length).toShape()
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _axis_link(body, feature, axis, existing=None):
+    """A hidden AxisLink in `body`, just before `feature`, following `axis`."""
+    link = existing
+    if link is None or not isinstance(getattr(link, "Proxy", None), AxisLink):
+        link = body.Document.addObject("Part::Part2DObjectPython", "RevolveAxis")
+        AxisLink(link)
+        body.insertObject(link, feature, False)
+        _mark(link, "RevolveAxis")
+    link.Label = "%s axis" % feature.Label
+    if link.Source is not axis[0]:
+        link.Source = axis[0]
+    if link.SourceSub != axis[1]:
+        link.SourceSub = axis[1]
+    _hide(link)
+    return link
 
 
 def _local_axis(body, feature, axis, helpers, old):
@@ -681,17 +728,19 @@ def _local_axis(body, feature, axis, helpers, old):
         if role in mine and _body_placement(obj).isSame(body.getGlobalPlacement(), 1e-9):
             return (mine[role], "")
     existing = old.pop(0) if old else None
-    if is_sketch(obj) and not sub.startswith("Edge"):
-        datum = _datum_axis(body, feature, axis, existing)
-        helpers.append(datum)
-        return (datum, "")
-    if obj.TypeId in ("PartDesign::Line", "Part::DatumLine"):
-        datum = _datum_axis(body, feature, axis, existing)
-        helpers.append(datum)
-        return (datum, "")
-    binder = _binder(body, feature, [axis], existing, role="RevolveAxis", label="axis")
-    helpers.append(binder)
-    return (binder, "Edge1")
+    if sub.startswith("Edge"):
+        if existing is not None and existing.TypeId != "PartDesign::SubShapeBinder":
+            _delete(existing)
+            existing = None
+        binder = _binder(body, feature, [axis], existing, role="RevolveAxis", label="axis")
+        helpers.append(binder)
+        return (binder, "Edge1")
+    if existing is not None and not isinstance(getattr(existing, "Proxy", None), AxisLink):
+        _delete(existing)
+        existing = None
+    link = _axis_link(body, feature, axis, existing)
+    helpers.append(link)
+    return (link, "Edge1")
 
 
 def _new_body(src_body):
@@ -802,6 +851,7 @@ def _update(feature, body, profiles, axis, options, hide=True):
     doc = feature.Document
     old = [doc.getObject(n) for n in meta.get("helpers", [])]
     old = [h for h in old if h is not None]
+    old_names = [h.Name for h in old]
     old_profile = [h for h in old if getattr(h, ROLE, "") == "RevolveProfile"]
     old_axis = [h for h in old if getattr(h, ROLE, "") == "RevolveAxis"]
     helpers = []
@@ -816,8 +866,9 @@ def _update(feature, body, profiles, axis, options, hide=True):
         fp_profiles = list(profiles)
     axis_link = _local_axis(body, feature, axis, helpers, old_axis)
     keep = {h.Name for h in helpers}
-    for helper in old:
-        if helper.Name not in keep:
+    for name in old_names:
+        helper = doc.getObject(name)
+        if name not in keep and helper is not None:
             _delete(helper)
     if is_intersect(feature):
         feature.Profiles = [(obj, [sub]) for obj, sub in fp_profiles]
@@ -993,6 +1044,8 @@ def axis_of(feature):
     if not link or link[0] is None:
         return None
     obj, sub = link[0], (link[1] or [""])[0]
+    if isinstance(getattr(obj, "Proxy", None), AxisLink) and obj.Source is not None:
+        return (obj.Source, obj.SourceSub)
     if obj.TypeId == "PartDesign::SubShapeBinder" and obj.Support:
         linked, subs = obj.Support[0]
         return (linked, (subs or [""])[0])
