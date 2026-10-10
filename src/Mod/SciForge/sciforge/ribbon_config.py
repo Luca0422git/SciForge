@@ -350,7 +350,7 @@ SKETCH_CREATE = group(
     "CREATE",
     ["Circle", "Line", "Spline", "2-Point Rectangle", "Mirror", "Sketch Dimension"],
     [
-        item("Line", "Sketcher_CreateLine", "sk_line", "L"),
+        item("Line", "SciForge_SketchLine", "sk_line", "L"),
         item("Midpoint Line", None, "sk_line"),
         sub(
             "Rectangle",
@@ -384,8 +384,8 @@ SKETCH_CREATE = group(
         sub(
             "Polygon",
             [
-                item("Circumscribed Polygon", "Sketcher_CreateRegularPolygon", "sk_polygon"),
-                item("Inscribed Polygon", "Sketcher_CreateRegularPolygon", "sk_polygon"),
+                item("Circumscribed Polygon", "SciForge_PolygonCircumscribed", "sk_polygon"),
+                item("Inscribed Polygon", "SciForge_PolygonInscribed", "sk_polygon"),
                 item("Edge Polygon", None, "sk_polygon"),
             ],
             "sk_polygon",
@@ -421,9 +421,9 @@ SKETCH_CREATE = group(
         sub(
             "Project / Include",
             [
-                item("Project", "Sketcher_Projection", "sk_project", "P"),
+                item("Project", "SciForge_SketchProject", "sk_project", "P"),
                 item("Intersect", "Sketcher_Intersection", "sk_intersect"),
-                item("Include 3D Geometry", None, "sk_project"),
+                item("Include 3D Geometry", "SciForge_SketchInclude3D", "sk_project"),
                 item("Project to Surface", None, "sk_project"),
             ],
         ),
@@ -437,7 +437,7 @@ SKETCH_MODIFY = group(
     [
         item("Fillet", "Sketcher_CreateFillet", "sk_fillet"),
         item("Chamfer", "Sketcher_CreateChamfer", "sk_chamfer"),
-        item("Offset", "Sketcher_Offset", "sk_offset", "O"),
+        item("Offset", "SciForge_SketchOffset", "sk_offset", "O"),
         item("Trim", "Sketcher_Trimming", "sk_trim", "T"),
         item("Extend", "Sketcher_Extend", "sk_extend"),
         item("Break", "Sketcher_Split", "sk_break"),
@@ -469,7 +469,7 @@ FINISH_SKETCH = group(
     "FINISH SKETCH",
     ["Finish Sketch"],
     [
-        item("Finish Sketch", "Sketcher_LeaveSketch", "finish_sketch"),
+        item("Finish Sketch", "SciForge_FinishSketch", "finish_sketch"),
         item("Toggle Construction", "Sketcher_ToggleConstruction", "sk_line", "X"),
     ],
 )

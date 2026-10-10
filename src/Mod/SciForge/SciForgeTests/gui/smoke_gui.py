@@ -25,7 +25,7 @@ OUT_DIR = os.environ.get("SCIFORGE_SMOKE_OUT") or App.getUserAppDataDir()
 EXPECTED_SHORTCUTS = {
     "SciForge_CommandSearch": "S",
     "SciForge_Extrude": "E",
-    "Sketcher_CreateLine": "L",
+    "SciForge_SketchLine": "L",  # Fusion's chained line (FreeCAD's polyline tool)
 }
 
 checks = []  # (name, ok, detail)

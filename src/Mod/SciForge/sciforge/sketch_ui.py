@@ -223,6 +223,22 @@ def open_sketch(sketch):
     log("sketch %s opened" % sketch.Label)
 
 
+def edit_sketch(sketch):
+    """Fusion: double-click a sketch in the browser or timeline to edit it. Its body is
+    made active first (a sketch of another body would otherwise open in the wrong one)."""
+    body = sketch.getParentGeoFeatureGroup()
+    if body is not None and body.TypeId == "PartDesign::Body":
+        try:
+            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+        except Exception as exc:
+            warn("could not activate %s: %s" % (body.Label, exc))
+    open_sketch(sketch)
+
+
+# Timeline / browser double-click (taskui.edit_object).
+EDITORS = {"Sketcher::SketchObject": edit_sketch}
+
+
 class SketchPicker:
     """The waiting state of Create Sketch (a task dialog with only Cancel)."""
 

@@ -170,4 +170,6 @@ PREFERRED = {
     "PartDesign_Hole": "SciForge_Hole",
     "Std_TransformManip": "SciForge_Move",
     "Std_Measure": "SciForge_Measure",
+    "Sketcher_CreateLine": "SciForge_SketchLine",
+    "Sketcher_Offset": "SciForge_SketchOffset",
 }
