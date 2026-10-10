@@ -1029,12 +1029,27 @@ class _BlendCommand:
             warn("%s could not start: %s" % (self.menu, exc))
 
 
+def _selected_body():
+    """The body the selected edges/faces belong to (it may not be the active one)."""
+    for sel in Gui.Selection.getSelectionEx():
+        parent = sel.Object.getParentGeoFeatureGroup()
+        if parent is not None and parent.TypeId == "PartDesign::Body":
+            return parent
+    return None
+
+
 def start(panel_class):
     """Run Fillet/Chamfer: with edges/faces already selected it starts with them."""
     selection = [(s.Object, list(s.SubElementNames)) for s in Gui.Selection.getSelectionEx()]
+    picked_body = _selected_body()
     if not commands.finish_open_dialog():
         return None
     doc = App.ActiveDocument
+    if picked_body is not None and picked_body is not commands.active_body():
+        try:  # Fusion rounds the edges you picked, whichever body they are on
+            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", picked_body)
+        except Exception as exc:
+            warn("could not activate %s: %s" % (picked_body.Label, exc))
     body = commands.find_body()
     base = solid_base(body)
     if base is None:

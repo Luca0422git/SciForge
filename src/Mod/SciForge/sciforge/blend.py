@@ -106,8 +106,9 @@ def face_name(shape, face):
     return "Face%d" % i if i else None
 
 
-def _into_face(face, point, tangent, normal):
-    """Unit direction from an edge point into `face`, across the edge, in the face's plane."""
+def _into_face_slow(face, point, tangent, normal):
+    """Direction into `face` found by testing points on both sides (classifies the point
+    against all the face's boundaries: slow on faces with many holes). Fallback only."""
     side = tangent.cross(normal)
     if side.Length < TOL:
         return None
@@ -121,25 +122,51 @@ def _into_face(face, point, tangent, normal):
                 return candidate
         except Exception:
             pass
-    toward = face.CenterOfMass - point  # fallback: towards the middle of the face
+    toward = face.CenterOfMass - point  # last resort: towards the middle of the face
     return side if toward.dot(side) >= 0 else -side
 
 
-def frame(shape, edge):
+def orientation_in(face, edge):
+    """ "Forward"/"Reversed": how `edge` runs in `face`'s boundary, or None."""
+    for candidate in face.Edges:
+        if candidate.isSame(edge):
+            return candidate.Orientation
+    return None
+
+
+def _into_face(face, point, tangent, normal, orientation):
+    """Unit direction from an edge point into `face`, across the edge, along the face.
+    OpenCASCADE orients every boundary edge so the face lies on its left, seen from the
+    outward normal: into = normal x (edge direction in that face)."""
+    if orientation not in ("Forward", "Reversed"):
+        return _into_face_slow(face, point, tangent, normal)
+    side = normal.cross(tangent if orientation == "Forward" else -tangent)
+    if side.Length < TOL:
+        return None
+    side.normalize()
+    return side
+
+
+def frame(shape, edge, faces=None, orientations=None):
     """Geometry at the middle of `edge`, or None if the edge cannot be blended:
     {"point", "tangent", "faces", "normals", "into", "convex", "gamma"}.
     gamma is the angle of the wedge the blend fills (the material for an outside
-    edge, the air for an inside corner): 90 degrees on a box."""
-    faces = faces_of(shape, edge)
+    edge, the air for an inside corner): 90 degrees on a box.
+    `faces` / `orientations`: the edge's faces and how it runs in each, if already known
+    (ShapeInfo keeps a map)."""
+    if faces is None:
+        faces = faces_of(shape, edge)
     if len(faces) != 2:
         return None
+    if orientations is None:
+        orientations = [orientation_in(face, edge) for face in faces]
     t = (edge.FirstParameter + edge.LastParameter) / 2.0
     point = edge.valueAt(t)
     tangent = edge.tangentAt(t)
     if tangent.Length < TOL:
         return None
     tangent.normalize()
-    normals, into = [], []
+    normals = []
     for face in faces:
         try:
             u, v = face.Surface.parameter(point)
@@ -149,14 +176,16 @@ def frame(shape, edge):
         if normal.Length < TOL:
             return None
         normal.normalize()
-        direction = _into_face(face, point, tangent, normal)
-        if direction is None:
-            return None
         normals.append(normal)
-        into.append(direction)
     phi = normals[0].getAngle(normals[1])
     if phi < SMOOTH:
         return None  # tangent faces: a smooth edge, nothing to round off
+    into = []
+    for face, normal, orientation in zip(faces, normals, orientations):
+        direction = _into_face(face, point, tangent, normal, orientation)
+        if direction is None:
+            return None
+        into.append(direction)
     return {
         "point": point,
         "tangent": tangent,
@@ -172,6 +201,13 @@ def is_sharp(shape, edge):
     return frame(shape, edge) is not None
 
 
+def _hash(shape):
+    try:
+        return shape.hashCode()
+    except Exception:
+        return 0
+
+
 class ShapeInfo:
     """Which edges of a shape can be blended, cached (the dialog asks on every mouse move)."""
 
@@ -182,11 +218,44 @@ class ShapeInfo:
         self._sharp = {}
         self._face_edges = {}
         self._chain = {}
+        self._edge_index = None
+        self._edge_faces = None
+
+    def edge_name(self, edge):
+        """ "EdgeN" of an edge of this shape; a hash lookup, so big parts stay fast."""
+        if self._edge_index is None:
+            self._edge_index = {}
+            for i, candidate in enumerate(self.edges, start=1):
+                self._edge_index.setdefault(_hash(candidate), []).append(i)
+        for i in self._edge_index.get(_hash(edge), []):
+            if self.edges[i - 1].isSame(edge):
+                return "Edge%d" % i
+        return edge_name(self.shape, edge)
+
+    def faces_of(self, name):
+        """The faces next to edge `name`, from a map built once for the whole shape (asking
+        OpenCASCADE per edge re-maps the shape each time: slow on big parts)."""
+        if self._edge_faces is None:
+            self._edge_faces = {}
+            for face in self.faces:
+                for edge in face.Edges:
+                    key = self.edge_name(edge)
+                    found = self._edge_faces.setdefault(key, [])
+                    if not any(face.isSame(f) for f, _o in found):
+                        found.append((face, edge.Orientation))
+        return [face for face, _o in self._edge_faces.get(name, [])]
+
+    def frame(self, name):
+        edge = element(self.shape, name)
+        if edge is None:
+            return None
+        self.faces_of(name)
+        sides = self._edge_faces.get(name, [])
+        return frame(self.shape, edge, [f for f, _o in sides], [o for _f, o in sides])
 
     def sharp(self, name):
         if name not in self._sharp:
-            edge = element(self.shape, name)
-            self._sharp[name] = edge is not None and is_sharp(self.shape, edge)
+            self._sharp[name] = self.frame(name) is not None
         return self._sharp[name]
 
     def face_edges(self, name):
@@ -195,12 +264,12 @@ class ShapeInfo:
             face = element(self.shape, name)
             sharp, smooth = [], False
             for edge in face.Edges if face is not None else []:
-                ename = edge_name(self.shape, edge)
+                ename = self.edge_name(edge)
                 if ename and self.sharp(ename):
                     if ename not in sharp:
                         sharp.append(ename)
                 elif ename:
-                    smooth = smooth or len(faces_of(self.shape, edge)) == 2
+                    smooth = smooth or len(self.faces_of(ename)) == 2
             self._face_edges[name] = (sharp, smooth)
         return self._face_edges[name]
 
@@ -251,7 +320,7 @@ def tangent_chain(info, name):
             for other in neighbours:
                 if other.isSame(current):
                     continue
-                other_name = edge_name(shape, other)
+                other_name = info.edge_name(other)
                 if not other_name or other_name in chain or not info.sharp(other_name):
                     continue
                 if abs(here.dot(_end_tangent(other, vertex))) > math.cos(math.radians(1.0)):
@@ -419,7 +488,7 @@ def reference_face(info, edge_name_, flip=False):
     """The face a chamfer measures Distance 1 on, like FreeCAD: the edge's first face, or
     its other face when flipped. Returns the index (0/1) into frame()["faces"]."""
     edge = element(info.shape, edge_name_)
-    data = frame(info.shape, edge) if edge is not None else None
+    data = info.frame(edge_name_) if edge is not None else None
     if data is None:
         return 0
     import Part
@@ -555,8 +624,7 @@ def arrow_spots(kind, info, refs, options, toward=None):
     if not names:
         return []
     first_face = refs[0] if refs and refs[0].startswith("Face") else None
-    edge = element(info.shape, names[0])
-    data = frame(info.shape, edge)
+    data = info.frame(names[0])
     if data is None:
         return []
 
