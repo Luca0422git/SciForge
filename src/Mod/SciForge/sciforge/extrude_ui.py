@@ -741,27 +741,28 @@ class ExtrudePanel(Panel):
         return (base, name) if name else None
 
     def _picked_face_moved(self, obj, short):
-        """The picked face profile whose extruded end was clicked (the preview covers the
-        picked face itself, so clicking "it" again lands on the end of the preview)."""
+        """The picked profile (a face or a sketch area) whose extruded end was clicked: the
+        preview covers the profile, so clicking "it" again lands on the end of the preview
+        (Fusion's preview cannot be picked; the click goes to the profile)."""
         face = profile_pick.global_face(obj, short)
         if face is None or face.Surface.TypeId != "Part::GeomPlane":
             return None
         normal = extrude.face_normal(face)
+        point = extrude.interior_point(face)
         for ref in self.profiles:
-            if extrude.is_sketch(ref[0]):
+            try:
+                starts = extrude.global_faces([ref])
+            except Exception:
                 continue
-            start = profile_pick.global_face(*ref)
-            if start is None:
-                continue
-            axis = extrude.face_normal(start)
-            if abs(abs(normal.dot(axis)) - 1.0) > 1e-6:
-                continue
-            shift = (face.CenterOfMass - start.CenterOfMass).dot(axis)
-            if abs(shift) < 1e-6:
-                continue
-            foot = extrude.interior_point(face) - axis * shift
-            if profile_pick.inside(start, foot):
-                return ref
+            for start in starts:
+                axis = extrude.face_normal(start)
+                if abs(abs(normal.dot(axis)) - 1.0) > 1e-6:
+                    continue
+                shift = (point - start.CenterOfMass).dot(axis)
+                if abs(shift) < 1e-6:
+                    continue
+                if profile_pick.inside(start, point - axis * shift):
+                    return ref
         return None
 
     def _source_body(self):

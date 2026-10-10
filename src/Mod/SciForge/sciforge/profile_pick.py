@@ -118,10 +118,8 @@ def handle_at(view, position, radius=3):
 
 
 class ProfilePicker:
-    """Clicks pick on release, like FreeCAD's selection and Fusion: a press that starts a
-    drag (a drag handle in front of the region, or the view being turned) is no pick."""
-
-    CLICK_SLOP = 4  # pixels the mouse may move between press and release of a click
+    """A press on a drag handle (an arrow in front of a region) drags the handle: it is no
+    pick of the region behind it."""
 
     def __init__(self, view, sketches, on_pick, occluder=None):
         from pivy import coin
@@ -133,7 +131,6 @@ class ProfilePicker:
         self.regions = []  # (sketch, sub, face, material)
         self.selected = set()  # {(sketch name, sub)}
         self.last_click = 0.0  # time of the last click that picked a region
-        self._press = None  # where the left button went down, unless that was on a handle
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -247,21 +244,12 @@ class ProfilePicker:
 
     def _button(self, info):
         try:
-            if info.get("Button") != "BUTTON1":
+            if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
                 return
+            # (On the press: FreeCAD's selection takes the release and stops it there.)
             position = tuple(info["Position"])
-            if info.get("State") == "DOWN":
-                # A press on a drag handle (it may sit right in front of a region) drags the
-                # handle; it must not drop or add the region behind it.
-                self._press = None if handle_at(self.view, position) else position
-                return
-            if info.get("State") != "UP":
-                return
-            press, self._press = self._press, None
-            if press is None:
-                return
-            if max(abs(position[0] - press[0]), abs(position[1] - press[1])) > self.CLICK_SLOP:
-                return  # a drag, not a click
+            if handle_at(self.view, position):
+                return  # a drag handle sits in front of the region: the press drags it
             hit = self.region_at(position, check_hidden=True)
             if hit is not None:
                 self.last_click = time.time()
