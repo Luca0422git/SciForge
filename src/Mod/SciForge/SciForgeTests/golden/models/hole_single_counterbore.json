@@ -1,0 +1,71 @@
+{
+  "id": "hole_single_counterbore",
+  "title": "Single Hole d5 x 6 with a counterbore d10 x 3",
+  "tags": [
+    "hole",
+    "single",
+    "counterbore"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "diameter": 5,
+      "depth": 6,
+      "drill_point": "flat",
+      "hole_type": "counterbore",
+      "cbore_diameter": 10,
+      "cbore_depth": 3
+    }
+  ],
+  "expect": {
+    "volume": 11705.475688725957,
+    "area": 3941.3716694115406,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 12000 - pi (5^2 3 + 2.5^2 3); area = 3800 - 25 pi + 2 pi 5 3 + pi (25 - 6.25) + 2 pi 2.5 3 + 6.25 pi = 3800 + 45 pi; faces = 6 + bore wall + bore floor + wall + bottom"
+  }
+}

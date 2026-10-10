@@ -1,0 +1,81 @@
+{
+  "id": "thread_shaft_partial",
+  "title": "Modeled M6x1 thread 8 long, 2 in from the end of the boss",
+  "tags": [
+    "thread",
+    "modeled",
+    "partial"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 12
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 3,
+        "count": 1
+      },
+      "modeled": true,
+      "full_length": false,
+      "length": 8,
+      "offset": 2
+    }
+  ],
+  "expect": {
+    "volume": 12296.754967913866,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      22
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the same groove over 8 mm: V = boss - 8 * 5.317129834"
+  }
+}

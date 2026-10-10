@@ -1,0 +1,75 @@
+{
+  "id": "thread_shaft_cosmetic",
+  "title": "Cosmetic M6 thread on a d6 x 12 boss",
+  "tags": [
+    "thread",
+    "cosmetic"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 12
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 3,
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12339.292006587697,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      22
+    ],
+    "source": "analytic",
+    "note": "a cosmetic thread is recorded and drawn only: V = 12000 + pi 3^2 12"
+  }
+}

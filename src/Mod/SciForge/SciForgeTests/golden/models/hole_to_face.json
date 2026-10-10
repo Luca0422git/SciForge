@@ -1,0 +1,77 @@
+{
+  "id": "hole_to_face",
+  "title": "Hole d6 from the top face To the bottom face",
+  "tags": [
+    "hole",
+    "single",
+    "to"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "diameter": 6,
+      "drill_point": "flat",
+      "extent": "to",
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "count": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11717.256661176918,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "the depth is worked out to reach the bottom face: 10; V = 12000 - pi 3^2 10"
+  }
+}

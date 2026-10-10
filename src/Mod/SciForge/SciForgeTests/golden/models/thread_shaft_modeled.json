@@ -1,0 +1,77 @@
+{
+  "id": "thread_shaft_modeled",
+  "title": "Modeled M6x1 thread over the whole d6 x 12 boss",
+  "tags": [
+    "thread",
+    "modeled"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 12
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 3,
+        "count": 1
+      },
+      "modeled": true
+    }
+  ],
+  "expect": {
+    "volume": 12275.486448576952,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      22
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "ISO 68-1 outside groove (P 1, H = sqrt3/2): P/4 wide at the root R - 5H/8, opening at 60 deg to 7P/8 at R = 3. Every slice across the axis loses (2 pi / P) * int r w(r) dr = 5.317129834; times 12 mm"
+  }
+}
