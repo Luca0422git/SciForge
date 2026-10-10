@@ -38,6 +38,7 @@ SKETCHER_GENERAL = SKETCHER + "/General"
 SNAP = SKETCHER + "/Snap"
 VIEW = "User parameter:BaseApp/Preferences/View"
 PALETTE_PARAMS = "User parameter:BaseApp/Preferences/Mod/SciForge/SketchPalette"
+NOTIFICATIONS = "User parameter:BaseApp/Preferences/NotificationArea"
 
 
 def _rgba(hex_color):
@@ -86,6 +87,15 @@ PARAMS = [
     (VIEW, "Unsigned", "NonDrivingConstrDimColor", _rgba(DRIVEN)),
     (VIEW, "Unsigned", "CursorTextColor", _rgba(WHITE)),
     (VIEW, "Unsigned", "CursorCrosshairColor", _rgba(WHITE)),
+    # FreeCAD's pop-up balloons at the bottom of the window ("Autoconstraints cause
+    # redundancy. Removing them" when a line from the origin along an axis snaps twice,
+    # "Sub shape not found: Sketch.?InternalFace1"...): FreeCAD's wording, nothing a
+    # Fusion user can act on. SciForge says what matters next to the mouse
+    # (commands.tell) or in its dialogs; the messages stay in FreeCAD's notification
+    # list and the Report view. Both settings: FreeCAD shows repeated messages again
+    # even with the first one off, the second one stops that.
+    (NOTIFICATIONS, "Bool", "NonIntrusiveNotificationsEnabled", False),
+    (NOTIFICATIONS, "Int", "MaxOpenNotifications", 0),
 ]
 
 # Sketch palette options (Fusion's defaults); remembered between sessions.
@@ -174,35 +184,6 @@ def normal_mode():
             Gui.runCommand("Sketcher_ToggleConstruction")
     except Exception as exc:
         warn("sketch line type: %s" % exc)
-
-
-NOTIFICATIONS = "User parameter:BaseApp/Preferences/NotificationArea"
-_balloons = {"saved": None}
-
-
-def quiet_balloons(on):
-    """FreeCAD's sketch tools talk through pop-up balloons at the bottom of the window
-    ("Autoconstraints cause redundancy. Removing them" when a line drawn from the origin
-    along an axis snaps twice, for example). Fusion shows nothing there. While a sketch
-    is open the balloons stay off; the messages still go to the notification list and the
-    Report view. The user's own setting comes back when the sketch closes."""
-    try:
-        group = App.ParamGet(NOTIFICATIONS)
-        name = "NonIntrusiveNotificationsEnabled"
-        if on and _balloons["saved"] is None:
-            existed = name in group.GetBools()
-            _balloons["saved"] = (existed, group.GetBool(name, True))
-            group.SetBool(name, False)
-        elif not on and _balloons["saved"] is not None:
-            existed, value = _balloons["saved"]
-            _balloons["saved"] = None
-            if existed:
-                group.SetBool(name, value)
-            else:
-                group.SetBool(name, True)  # FreeCAD's default (applies it at once)
-                group.RemBool(name)
-    except Exception as exc:
-        warn("sketch notifications: %s" % exc)
 
 
 def _set_param(path, kind, name, value):
@@ -555,7 +536,6 @@ class SketchSession:
                 self.apply_option(name)
         self._palette_tries = 0
         normal_mode()
-        quiet_balloons(True)
         QtCore.QTimer.singleShot(0, self._add_palette)
         self._refreshed()
 
@@ -831,7 +811,6 @@ class SketchSession:
             return
         self.closed = True
         self.line.stop()
-        quiet_balloons(False)
         try:
             from . import sketch_pick_ui
 

@@ -100,10 +100,25 @@ def _menu_class():
 def open_at(global_pos):
     """Show the sketch marking menu around global_pos; returns it (or None)."""
     try:
-        menu = _menu_class()(global_pos, Gui.getMainWindow())
+        main = Gui.getMainWindow()
+        menu = _menu_class()(global_pos, main)
+        _keep_inside(menu, main)
         menu.show()
         menu.raise_()
         return menu
     except Exception as exc:
         warn("sketch marking menu: %s" % exc)
         return None
+
+
+def _keep_inside(menu, main):
+    """A right click near the window's edge: move the menu so all of it shows."""
+    try:
+        area = main.frameGeometry()
+        rect = menu.frameGeometry()
+        dx = max(0, area.left() - rect.left()) - max(0, rect.right() - area.right())
+        dy = max(0, area.top() - rect.top()) - max(0, rect.bottom() - area.bottom())
+        if dx or dy:
+            menu.move(rect.left() + dx, rect.top() + dy)
+    except Exception as exc:
+        warn("sketch marking menu: %s" % exc)
