@@ -624,20 +624,26 @@ def _set_suppressed(obj, on):
             pass
 
 
-def suppress(doc, name):
-    """Suppress a step and, like Fusion, the steps that depend on it. Returns the
-    names suppressed with it."""
-    obj = doc.getObject(name)
-    if obj is None or not can_suppress(obj):
-        raise TimelineError("This step cannot be suppressed.")
-    if is_suppressed(obj):
+def _names(names):
+    return [names] if isinstance(names, str) else list(names)
+
+
+def suppress(doc, names):
+    """Suppress steps and, like Fusion, the steps that depend on them, as one undo
+    step. Returns the names suppressed with them."""
+    names = [n for n in _names(names) if doc.getObject(n) is not None]
+    for n in names:
+        if not can_suppress(doc.getObject(n)):
+            raise TimelineError("This step cannot be suppressed.")
+    names = [n for n in names if not is_suppressed(doc.getObject(n))]
+    if not names:
         return []
     links = _link_snapshot(doc)
     broken_before = _errors(doc)
-    title = _label(doc, name)
+    title = ", ".join(_label(doc, n) for n in names[:3])
     _transaction(doc, "Suppress %s" % title)
     try:
-        group = {name} | dependents(doc, [name])
+        group = set(names) | dependents(doc, names)
         for n in group:
             _set_suppressed(doc.getObject(n), True)
         recompute(doc)
@@ -652,49 +658,52 @@ def suppress(doc, name):
                 _set_suppressed(doc.getObject(n), True)
             group |= more
             recompute(doc)
-        _add_prop(obj, "App::PropertyString", SUPPRESS_INFO, "Suppressed together with this")
-        setattr(
-            obj,
-            SUPPRESS_INFO,
-            json.dumps({"with": sorted(group - {name}), "links": links}),
-        )
+        info = json.dumps({"with": sorted(group - set(names)), "links": links})
+        for n in names:
+            obj = doc.getObject(n)
+            _add_prop(obj, "App::PropertyString", SUPPRESS_INFO, "Suppressed together with this")
+            setattr(obj, SUPPRESS_INFO, info)
     except Exception:
         doc.abortTransaction()
         recompute(doc)
         raise
     doc.commitTransaction()
-    return sorted(group - {name})
+    return sorted(group - set(names))
 
 
-def unsuppress(doc, name):
-    """Turn a suppressed step back on, with the steps that went off with it."""
-    obj = doc.getObject(name)
-    if obj is None or not is_suppressed(obj):
+def unsuppress(doc, names):
+    """Turn suppressed steps back on, with the steps that went off with them."""
+    names = [n for n in _names(names) if doc.getObject(n) is not None]
+    names = [n for n in names if is_suppressed(doc.getObject(n))]
+    if not names:
         return []
-    try:
-        info = json.loads(getattr(obj, SUPPRESS_INFO, "") or "{}")
-    except ValueError:
-        info = {}
-    title = _label(doc, name)
+    group, links = list(names), {}
+    for n in names:
+        try:
+            info = json.loads(getattr(doc.getObject(n), SUPPRESS_INFO, "") or "{}")
+        except ValueError:
+            info = {}
+        group += [m for m in info.get("with", []) if m not in group and doc.getObject(m)]
+        for k, props in info.get("links", {}).items():
+            links.setdefault(k, {}).update({p: tuple(v) for p, v in props.items()})
+    title = ", ".join(_label(doc, n) for n in names[:3])
     _transaction(doc, "Unsuppress %s" % title)
     try:
-        group = [name] + [n for n in info.get("with", []) if doc.getObject(n) is not None]
         for n in group:
             _set_suppressed(doc.getObject(n), False)
         recompute(doc)
-        links = {
-            k: {p: tuple(v) for p, v in props.items()} for k, props in info.get("links", {}).items()
-        }
         if _restore_links(doc, links):
             recompute(doc)
-        if SUPPRESS_INFO in obj.PropertiesList:
-            setattr(obj, SUPPRESS_INFO, "")
+        for n in names:
+            obj = doc.getObject(n)
+            if SUPPRESS_INFO in obj.PropertiesList:
+                setattr(obj, SUPPRESS_INFO, "")
     except Exception:
         doc.abortTransaction()
         recompute(doc)
         raise
     doc.commitTransaction()
-    return group[1:]
+    return [n for n in group if n not in names]
 
 
 def toggle_suppress(doc, name):
@@ -1024,19 +1033,10 @@ def rename_group(doc, gid, text):
 
 def suppress_many(doc, names, on):
     """Suppress/unsuppress several steps (a group) as one undo step."""
-    title = "Suppress Features" if on else "Unsuppress Features"
-    _transaction(doc, title)
-    try:
-        for n in names:
-            obj = doc.getObject(n)
-            if obj is not None and can_suppress(obj) and is_suppressed(obj) != on:
-                _set_suppressed(obj, on)
-        recompute(doc)
-    except Exception:
-        doc.abortTransaction()
-        recompute(doc)
-        raise
-    doc.commitTransaction()
+    names = [n for n in names if doc.getObject(n) is not None]
+    if on:
+        return suppress(doc, [n for n in names if can_suppress(doc.getObject(n))])
+    return unsuppress(doc, names)
 
 
 # -- rename ------------------------------------------------------------------------------

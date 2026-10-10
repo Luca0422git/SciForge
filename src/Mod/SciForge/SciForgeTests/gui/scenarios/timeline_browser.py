@@ -28,7 +28,8 @@ def tl():
     from sciforge import timeline_ui
 
     widget = timeline_ui.widget()
-    widget.refresh(force=True)
+    widget.refresh()  # rebuilds only when the design changed
+    QtWidgets.QApplication.processEvents()  # new widgets get shown and laid out
     return widget
 
 
@@ -519,6 +520,94 @@ def second_unsuppress():
     menu("Boss", "Unsuppress Features")
 
 
+# -- groups ----------------------------------------------------------------------------------
+def header():
+    for widget, _left, _right in tl()._slots:
+        if widget.objectName().startswith("SciForgeGroup_"):
+            return widget
+    return None
+
+
+def group_menu(entry):
+    g = header()
+    ok = g is not None and w.right_click(g, w.center(g), entry)
+    h.check("group menu > %s" % entry, ok)
+
+
+def select_two():
+    s["sk2"] = step_button("Sketch 2").item.name
+    s["boss"] = step_button("Boss").item.name
+    w.click(step_button("Sketch 2"))
+    w.click(step_button("Boss"), modifiers=QtCore.Qt.ShiftModifier)
+
+
+def group_them():
+    h.check("Shift+click selects both", tl().selected() == [s["sk2"], s["boss"]], tl().selected())
+    menu("Boss", "Group Features")
+
+
+def check_group():
+    g = header()
+    h.check("one folder for the group", g is not None)
+    h.check("its steps are hidden while closed", tl().button(s["boss"]) is None)
+    h.check(
+        "timeline still knows all steps",
+        tl().titles() == ["Sketch 1", "Extrude 1", "Sketch 2", "Boss"],
+        tl().titles(),
+    )
+    h.check("part unchanged", near(volume(), s["full20"]), volume())
+    h.shot("8-group")
+
+
+def open_group():
+    w.click(header())
+
+
+def check_open():
+    h.check("click opens the group", tl().button(s["boss"]) is not None)
+    w.click(header())
+
+
+def check_closed():
+    h.check("click closes it again", tl().button(s["boss"]) is None)
+    group_menu("Rename")
+
+
+def type_group_name():
+    editor = tl().findChild(QtWidgets.QLineEdit, "SciForgeTimelineRename")
+    h.check("group name field", editor is not None)
+    if editor is not None:
+        w.key(editor, QtCore.Qt.Key_A, QtCore.Qt.ControlModifier)
+        w.type_text(editor, "Boss work")
+        w.key(editor, QtCore.Qt.Key_Return)
+
+
+def check_group_name():
+    g = header()
+    h.check("group renamed", g is not None and g.name == "Boss work", g and g.name)
+    group_menu("Suppress Features")
+
+
+def check_group_off():
+    h.check("suppressing the group removes the boss", near(volume(), BOX * 2), volume())
+    group_menu("Unsuppress Features")
+
+
+def check_group_on():
+    h.check("unsuppress brings it back", near(volume(), s["full20"]), volume())
+    group_menu("Ungroup")
+
+
+def check_ungrouped():
+    h.check("ungrouped: no folder", header() is None)
+    h.check("steps visible again", tl().button(s["boss"]) is not None)
+    w.click(w.quick_access("Undo"))
+
+
+def check_regrouped():
+    h.check("Undo brings the group back", header() is not None)
+
+
 def check_end_state():
     h.check("final part", near(volume(), s["full20"]), volume())
     h.check("no pop-ups", not h.popups(), h.popups())
@@ -601,6 +690,18 @@ h.run(
         check_find_window,
         second_suppress,
         second_unsuppress,
+        select_two,
+        group_them,
+        check_group,
+        open_group,
+        check_open,
+        check_closed,
+        type_group_name,
+        check_group_name,
+        check_group_off,
+        check_group_on,
+        check_ungrouped,
+        check_regrouped,
         check_end_state,
     ],
 )

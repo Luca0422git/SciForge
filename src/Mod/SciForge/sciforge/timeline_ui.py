@@ -41,6 +41,7 @@ STYLE = """
     border: 1px solid #63b3ff; }
 #SciForgeTimeline QFrame[role="marker"] { background: transparent; }
 #SciForgeTimeline QFrame[role="drop"] { background: #63b3ff; }
+#SciForgeTimeline QFrame[role="group_end"] { background: #8a94a6; border-radius: 1px; }
 #SciForgeTimeline QFrame[role="drop"][refused="true"] { background: #ff5c5c; }
 #SciForgeTimeline QLineEdit { background: #2a2a2a; border: 1px solid #63b3ff; padding: 1px 3px; }
 """
@@ -177,7 +178,7 @@ class _ItemButton(QtWidgets.QToolButton):
             if dragging:
                 self.timeline.end_drag(pos)
             else:
-                self.timeline.clicked(self.item.name, QtWidgets.QApplication.keyboardModifiers())
+                self.timeline.clicked(self.item.name, event.modifiers())
         except Exception as exc:
             warn("timeline: %s" % exc)
         event.accept()
@@ -253,6 +254,57 @@ class _UndoWatcher:
     slotUndoDocument = slotRedoDocument = _later
 
 
+class _GroupButton(QtWidgets.QToolButton):
+    """A timeline group: one folder for several steps. Click opens or closes it."""
+
+    def __init__(self, timeline, gid, name, members, opened):
+        super().__init__()
+        self.timeline = timeline
+        self.gid = gid
+        self.name = name
+        self.members = members
+        self.opened = opened
+        self.setObjectName("SciForgeGroup_" + gid)
+        self.setProperty("role", "step")
+        self.setIcon(ui_icon("folder"))
+        self.setIconSize(QtCore.QSize(ICON, ICON))
+        bad = [m for m in members if m.status == "error"]
+        warned = [m for m in members if m.status == "warning"]
+        self.setProperty("status", "error" if bad else ("warning" if warned else "ok"))
+        lines = [name, "%d steps: %s" % (len(members), ", ".join(m.display for m in members))]
+        lines.append("Click to %s the group" % ("close" if opened else "open"))
+        for m in bad + warned:
+            lines.append("%s: %s" % (m.display, m.message))
+        self.setToolTip("\n".join(lines))
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(
+            lambda pos: self.timeline._group_menu(self, self.mapToGlobal(pos))
+        )
+        self.clicked.connect(lambda: _later(self.timeline.toggle_group, self.gid))
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(QtGui.QColor("#e8e8e8"))
+        w, h = self.width(), self.height()
+        if self.opened:  # small triangle: open (down) or closed (right)
+            tri = [
+                QtCore.QPointF(w - 9, h - 7),
+                QtCore.QPointF(w - 3, h - 7),
+                QtCore.QPointF(w - 6, h - 3),
+            ]
+        else:
+            tri = [
+                QtCore.QPointF(w - 7, h - 9),
+                QtCore.QPointF(w - 7, h - 3),
+                QtCore.QPointF(w - 3, h - 6),
+            ]
+        painter.drawPolygon(QtGui.QPolygonF(tri))
+        painter.end()
+
+
 class TimelineWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -270,6 +322,8 @@ class TimelineWidget(QtWidgets.QWidget):
         self._editor = None
         self._pushing = False
         self._busy = 0  # a menu, a drag or a rename is in progress
+        self._open_groups = set()  # timeline groups shown open
+        self._slots = []
         self._undo_watch = None
         self._move_timeline = self._timeline
 
@@ -434,16 +488,43 @@ class TimelineWidget(QtWidgets.QWidget):
             self._row.addWidget(hint)
             self._row.addStretch(1)
             return
-        for i, item in enumerate(self._items):
-            if i == self._timeline.marker:
+        marker = self._timeline.marker
+        # (widget, slot left of it, slot right of it) for drops and the marker
+        self._slots = []
+        for seg in core.segments(self._timeline, self._open_groups):
+            if seg[0] == "step":
+                item = seg[1]
+                if item.index == marker:
+                    self._row.addWidget(self._make_marker())
+                self._add_step(item)
+                continue
+            _kind, gid, name, members, opened = seg
+            start, end = members[0].index, members[-1].index + 1
+            if start == marker:
                 self._row.addWidget(self._make_marker())
-            button = self._item_button(item)
-            self._buttons.append(button)
-            self._row.addWidget(button)
-        if self._timeline.marker >= len(self._items):
+            header = _GroupButton(self, gid, name, members, opened)
+            self._row.addWidget(header)
+            self._slots.append((header, start, start if opened else end))
+            if not opened:
+                continue
+            for item in members:
+                if item.index == marker and item.index != start:
+                    self._row.addWidget(self._make_marker())
+                self._add_step(item)
+            cap = QtWidgets.QFrame()
+            cap.setProperty("role", "group_end")
+            cap.setFixedSize(3, ICON + 4)
+            self._row.addWidget(cap)
+        if marker >= len(self._items):
             self._row.addWidget(self._make_marker())
         self._row.addStretch(1)
         self._update_selection_look()
+
+    def _add_step(self, item):
+        button = self._item_button(item)
+        self._buttons.append(button)
+        self._row.addWidget(button)
+        self._slots.append((button, item.index, item.index + 1))
 
     def _item_button(self, item):
         button = _ItemButton(self, item)
@@ -490,7 +571,11 @@ class TimelineWidget(QtWidgets.QWidget):
         self._update_selection_look()
 
     def select(self, names):
-        """Select steps (Find in Timeline from the browser)."""
+        """Select steps (Find in Timeline from the browser); their groups open."""
+        hidden = {i.group for i in self._items if i.name in names and i.group}
+        if hidden - self._open_groups:
+            self._open_groups |= hidden
+            self.refresh(force=True)
         self._selected = [n for n in names if self.button(n) is not None]
         self._push_selection()
         self._update_selection_look()
@@ -536,9 +621,12 @@ class TimelineWidget(QtWidgets.QWidget):
 
     # -- the history marker --------------------------------------------------------
     def _slot_at(self, global_pos):
-        return sum(
-            1 for b in self._buttons if b.mapToGlobal(b.rect().center()).x() < global_pos.x()
-        )
+        """Number of steps left of a screen point (a closed group counts all its steps)."""
+        slot = 0
+        for widget, _left, right in self._slots:
+            if widget.mapToGlobal(widget.rect().center()).x() < global_pos.x():
+                slot = max(slot, right)
+        return slot
 
     def drop_marker(self, global_pos):
         """Roll the design to where the marker was dropped."""
@@ -613,13 +701,12 @@ class TimelineWidget(QtWidgets.QWidget):
         button.setCursor(QtCore.Qt.ClosedHandCursor)
 
     def _drop_x(self, slot):
-        if not self._buttons:
+        if not self._slots:
             return 0
-        if slot >= len(self._buttons):
-            b = self._buttons[-1]
-            return b.geometry().right() + 2
-        b = self._buttons[slot]
-        return b.geometry().left() - 2
+        for widget, left, _right in self._slots:
+            if left >= slot:
+                return widget.geometry().left() - 2
+        return self._slots[-1][0].geometry().right() + 2
 
     def drag_to(self, global_pos):
         if self._drag is None:
@@ -782,6 +869,99 @@ class TimelineWidget(QtWidgets.QWidget):
             editor.on_commit = lambda _t: None
             editor.cancel()
 
+    # -- groups ------------------------------------------------------------------
+    def toggle_group(self, gid):
+        if gid in self._open_groups:
+            self._open_groups.discard(gid)
+        else:
+            self._open_groups.add(gid)
+        self.refresh(force=True)
+
+    def group_selected(self):
+        doc = _doc()
+        if doc is None or not _ready():
+            return
+        gid = ops.group(doc, list(self._selected))
+        self._open_groups.discard(gid)  # Fusion shows a new group closed
+        self.refresh(force=True)
+
+    def group_button(self, gid):
+        for widget, _l, _r in self._slots:
+            if isinstance(widget, _GroupButton) and widget.gid == gid:
+                return widget
+        return None
+
+    def ungroup(self, gid):
+        doc = _doc()
+        if doc is not None and _ready():
+            ops.ungroup(doc, gid)
+            self._open_groups.discard(gid)
+            self.refresh(force=True)
+
+    def rename_group(self, gid):
+        header = self.group_button(gid)
+        if header is None:
+            return
+        self._cancel_editor()
+        top_left = self.mapFromGlobal(header.mapToGlobal(QtCore.QPoint(0, 0)))
+        width = max(140, header.fontMetrics().horizontalAdvance(header.name) + 24)
+        x = max(0, min(top_left.x(), self.width() - width))
+        rect = QtCore.QRect(x, max(0, top_left.y()), width, header.height())
+        self._editor = InlineEditor(
+            self, rect, header.name, lambda t: self._group_renamed(gid, t), "SciForgeTimelineRename"
+        )
+
+    def _group_renamed(self, gid, text):
+        self._editor = None
+        doc = _doc()
+        try:
+            if doc is not None and text is not None:
+                ops.rename_group(doc, gid, text)
+        except Exception as exc:
+            warn("rename group: %s" % exc)
+        self.refresh(force=True)
+
+    def suppress_group(self, gid, on):
+        doc = _doc()
+        if doc is None or not _ready():
+            return
+        ops.suppress_many(doc, ops.group_members(doc, gid), on)
+        self.refresh(force=True)
+
+    def _group_menu(self, header, global_pos):
+        members = [i.name for i in header.members]
+        menu = QtWidgets.QMenu(self)
+        menu.setObjectName("SciForgeTimelineGroupMenu")
+        actions = {}
+        doc = _doc()
+        objs = [doc.getObject(n) for n in members] if doc else []
+        any_on = any(o is not None and not ops.is_suppressed(o) for o in objs)
+
+        def add(text, fn, enabled=True):
+            action = menu.addAction(text)
+            action.setEnabled(enabled)
+            actions[action] = fn
+
+        add(
+            "Collapse Group" if header.opened else "Expand Group",
+            lambda: self.toggle_group(header.gid),
+        )
+        menu.addSeparator()
+        add(
+            "Suppress Features" if any_on else "Unsuppress Features",
+            lambda: self.suppress_group(header.gid, any_on),
+        )
+        add("Rename", lambda: self.rename_group(header.gid))
+        add("Ungroup", lambda: self.ungroup(header.gid))
+        add("Delete", lambda: self.delete(members))
+        self._busy += 1
+        try:
+            chosen = menu.exec_(global_pos)
+        finally:
+            self._busy -= 1
+        if chosen in actions:
+            _later(actions[chosen])
+
     def find_in_browser(self, name):
         from . import browser_ui
 
@@ -858,6 +1038,10 @@ class TimelineWidget(QtWidgets.QWidget):
         menu.addSeparator()
         add("Find in Browser", lambda: self.find_in_browser(item.name), not many)
         add("Find in Window", lambda: self.find_in_window(item.name), not many)
+        if many:
+            menu.addSeparator()
+            ok, _reason = core.can_group(self._timeline, self._selected)
+            add("Group Features", self.group_selected, ok)
         self._busy += 1  # no rebuild under an open menu
         try:
             chosen = menu.exec_(global_pos)
