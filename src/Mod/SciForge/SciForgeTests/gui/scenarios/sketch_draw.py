@@ -244,6 +244,14 @@ def extrude_key():
     h.press("e")
 
 
+def extrude_pick_plate():
+    # Plate + hole are two profiles: like Fusion, Extrude waits for a pick. Click the
+    # plate (the ring), away from the hole.
+    h.fit()
+    x0, y0, x1, y1 = s["box"]
+    h.click(s["sk"].getGlobalPlacement().multVec(V(x0 + 3, y0 + 3, 0)))
+
+
 def extrude_ok():
     from sciforge import extrude_ui
 
@@ -364,6 +372,7 @@ h.run(
             finish_sketch,
             finished,
             extrude_key,
+            extrude_pick_plate,
             extrude_ok,
             extruded,
             undo,
