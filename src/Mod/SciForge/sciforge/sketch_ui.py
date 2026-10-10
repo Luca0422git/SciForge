@@ -239,6 +239,23 @@ def edit_sketch(sketch):
 EDITORS = {"Sketcher::SketchObject": edit_sketch}
 
 
+class _EscFilter(QtCore.QObject):
+    """Esc on the 3D view cancels Create Sketch while it waits (Fusion does)."""
+
+    def __init__(self, on_escape):
+        super().__init__()
+        self.on_escape = on_escape
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QtCore.QEvent.KeyPress and event.key() == QtCore.Qt.Key_Escape:
+                self.on_escape()
+                return True
+        except Exception as exc:
+            warn("Create Sketch Esc: %s" % exc)
+        return False
+
+
 class SketchPicker:
     """The waiting state of Create Sketch (a task dialog with only Cancel)."""
 
@@ -271,6 +288,16 @@ class SketchPicker:
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
+        self.esc = _EscFilter(lambda: QtCore.QTimer.singleShot(0, self.reject))
+        self.view_widget = None
+        try:
+            from . import sketch_mode
+
+            self.view_widget = sketch_mode.gl_widget()
+            if self.view_widget is not None:
+                self.view_widget.installEventFilter(self.esc)
+        except Exception as exc:
+            warn("Create Sketch: Esc unavailable: %s" % exc)
         taskui.set_current(self)
 
     def _selection_changed(self):
@@ -295,6 +322,12 @@ class SketchPicker:
 
     def _cleanup(self):
         self._closed = True
+        if self.view_widget is not None:
+            try:
+                self.view_widget.removeEventFilter(self.esc)
+            except Exception:
+                pass
+            self.view_widget = None
         if self.observer is not None:
             Gui.Selection.removeObserver(self.observer)
             self.observer = None
@@ -308,8 +341,11 @@ class SketchPicker:
         return getattr(buttons, "value", buttons)
 
     def reject(self):
+        if self._closed:
+            return True
         self._cleanup()
         Gui.Control.closeDialog()
+        log("Create Sketch cancelled")
         return True
 
     def accept(self):

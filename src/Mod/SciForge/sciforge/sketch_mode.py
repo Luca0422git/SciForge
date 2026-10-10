@@ -926,9 +926,11 @@ class ProfileShading:
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
         self.root.addChild(pick)
+        # Drawn a hair in front of the part's faces (FreeCAD pushes those back), so a
+        # sketch on a face shows its profiles; the sketch curves sit higher still.
         offset = coin.SoPolygonOffset()
-        offset.factor = 2.0
-        offset.units = 2.0
+        offset.factor = -1.0
+        offset.units = -1.0
         self.root.addChild(offset)
         hints = coin.SoShapeHints()
         hints.vertexOrdering = coin.SoShapeHints.UNKNOWN_ORDERING
