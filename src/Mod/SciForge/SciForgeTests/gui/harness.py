@@ -49,7 +49,9 @@ def check(name, ok, detail=""):
 
 
 def shot(label):
-    path = os.path.join(OUT_DIR, "%s-%s.png" % (state["name"], label))
+    # Only safe characters: GitHub refuses to upload artifacts with ':' '>' etc. in a name.
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", "%s-%s" % (state["name"], label)).strip("_")
+    path = os.path.join(OUT_DIR, safe + ".png")
     QtWidgets.QApplication.primaryScreen().grabWindow(0).save(path)
 
 
