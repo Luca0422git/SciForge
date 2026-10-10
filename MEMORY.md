@@ -426,7 +426,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   a real keyboard sends them to the viewer or FreeCAD's value field, see Known issues);
   `NonIntrusiveNotificationsEnabled` False turned FreeCAD warnings into blocking boxes;
   Up/Down in the dimension box recursed ~1000 deep; the notification check never looked.
-- Full suite on the branch: see the final commit message.
+- Full suite on the branch (no --only): unit 134 OK, golden 99 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 29 scenarios
+  PASS (2762 checks; sketch_qa 457, sketch_qa_keys 119, sketch_qa_part 104).
+- Left open: Fusion's angle typed relative to the previous line, tangent arc by dragging from
+  a line end, greyed sketch tools, Fusion's constraint glyph look; sketch_polygon failed once
+  ("second use") and never again; one see-through task panel screenshot (path F).
 
 ## Next steps (in order)
 
