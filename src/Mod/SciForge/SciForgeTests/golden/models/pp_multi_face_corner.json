@@ -67,6 +67,5 @@
     ],
     "source": "analytic",
     "note": "Fusion extends both faces so the corner fills: 42x20x12"
-  },
-  "xfail": "v1 offsets faces independently; the corner where they meet stays empty (needs per-face offset, outline 9.1)"
+  }
 }

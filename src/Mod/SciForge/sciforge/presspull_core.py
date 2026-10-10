@@ -7,14 +7,19 @@ What the selection means, as in Fusion's Press Pull:
   edges         -> fillet the edges, `distance` is the radius
   a fillet face -> edit that fillet's radius
 
-How faces are moved (v1): the slab of material between each face and its
-offset copy is built with OpenCASCADE's offset (BRepOffset, "fill" mode) and
-fused to / cut from the body. This is exact for faces whose neighbours meet
-them at right angles (boxes, pockets, holes, bosses: most printable parts).
-Known gap: where a neighbour is slanted, Fusion extends the neighbour, v1
-leaves a step. Multi-face edits that share an edge leave the corner unfilled.
-Both are tracked as xfail golden models (pp_*); the fix is a per-face offset
-in C++ (BRepOffset_MakeOffset::SetOffsetOnFace), outline 9.1.
+How faces are moved: the slab of material between each face and its offset
+copy (exact prisms for planes, rings for cylinders, OpenCASCADE's offset with
+fill for other surfaces) is fused to / cut from the body. Where a slab's side
+does not continue a face that stays put, it leaves a "step": a sloped
+neighbour, or the corner between two moved faces that share an edge. Fusion
+extends the neighbours instead; SciForge does the same by removing the step
+faces with OpenCASCADE's defeaturing (BRepAlgoAPI_Defeaturing), which extends
+the adjacent faces until they meet. Spike 9.1 compared the alternatives:
+BRepOffsetAPI_MakeOffsetShape (join Intersection) offsets every face of the
+solid and per-face values (SetOffsetOnFace) are not reachable from Python;
+LocOpe/BRepFeat need a profile; defeaturing works on the B-rep FreeCAD already
+has and gives exact planes (golden models pp_multi_face_corner and
+pp_slanted_neighbours).
 """
 import math
 
@@ -98,8 +103,15 @@ def _cylinder_slab(face, distance):
     return profile.revolve(center, axis, sweep)
 
 
-def press_pull(base, faces, distance, refine=True):
-    """New shape: `base` with `faces` (Part.Face objects of base) moved by `distance` mm."""
+def press_pull(base, faces, distance, refine=True, report=None):
+    """New shape: `base` with `faces` (Part.Face objects of base) moved by `distance` mm.
+
+    Like Fusion, the faces next to the moved ones are extended (or trimmed) to meet them:
+    a sloped side keeps its slope, two pulled faces that share an edge meet in a filled
+    corner. The slabs give the moved faces; where a slab's side does not merge with an
+    unmoved face it is a "step", and OpenCASCADE's defeaturing removes it by extending
+    the neighbours until they meet (BRepAlgoAPI_Defeaturing). `report`, a list, gets a
+    note when the neighbours could not be extended (the step then stays)."""
     if not faces:
         raise PressPullError("Select one or more faces to push or pull.")
     if abs(distance) < TOL:
@@ -112,8 +124,113 @@ def press_pull(base, faces, distance, refine=True):
             result = result.removeSplitter()
     except Exception as exc:
         raise PressPullError("The kernel could not combine the result: %s" % exc)
+    steps = step_faces(base, faces, slabs, result)
+    if steps:
+        healed = extend_neighbours(result, steps, refine)
+        if healed is not None:
+            result = healed
+        elif report is not None:
+            report.append(
+                "The faces next to the moved ones could not be extended to meet them; "
+                "the result keeps a step there."
+            )
     check_result(base, result, distance)
     return result
+
+
+def _same_surface(a, b, tol=1e-6):
+    """True if two faces lie on the same plane or the same cylinder."""
+    sa, sb = a.Surface, b.Surface
+    kind = type(sa).__name__
+    if kind != type(sb).__name__:
+        return False
+    if kind == "Plane":
+        na, nb = sa.Axis, sb.Axis
+        if abs(abs(na.dot(nb)) - 1.0) > tol:
+            return False
+        return abs((sb.Position - sa.Position).dot(na)) < 1e-5
+    if kind == "Cylinder":
+        if abs(sa.Radius - sb.Radius) > 1e-5:
+            return False
+        if abs(abs(sa.Axis.dot(sb.Axis)) - 1.0) > tol:
+            return False
+        offset = sb.Center - sa.Center
+        return (offset - sa.Axis * offset.dot(sa.Axis)).Length < 1e-5
+    return False
+
+
+def _parallel_surface(a, b, tol=1e-6):
+    """Parallel planes, or cylinders on the same axis (any radius): a face and its offset."""
+    sa, sb = a.Surface, b.Surface
+    kind = type(sa).__name__
+    if kind != type(sb).__name__:
+        return False
+    if kind == "Plane":
+        return abs(abs(sa.Axis.dot(sb.Axis)) - 1.0) < tol
+    if kind == "Cylinder":
+        if abs(abs(sa.Axis.dot(sb.Axis)) - 1.0) > tol:
+            return False
+        offset = sb.Center - sa.Center
+        return (offset - sa.Axis * offset.dot(sa.Axis)).Length < 1e-5
+    return _same_surface(a, b)
+
+
+def _on_face(face, point, tol=1e-5):
+    try:
+        return face.isInside(point, tol, True)
+    except Exception:
+        return False
+
+
+def step_faces(base, moved, slabs, result):
+    """Faces of `result` left by the side of a slab that does not continue a face which
+    stays where it is: they have to go (the neighbours are extended instead)."""
+    unmoved = [f for f in base.Faces if not any(f.isSame(m) or same_face(f, m) for m in moved)]
+    sides = []
+    for face, solid in zip(moved, slabs):
+        for side in solid.Faces:
+            if _parallel_surface(side, face):
+                continue  # the slab's bottom (the face itself) or its top (the moved face)
+            sides.append(side)
+    steps = []
+    for candidate in result.Faces:
+        if any(_same_surface(candidate, u) for u in unmoved):
+            continue
+        point = _inner_point(candidate)
+        for side in sides:
+            if _same_surface(candidate, side) and _on_face(side, point):
+                steps.append(candidate)
+                break
+    return steps
+
+
+def _inner_point(face):
+    center = face.CenterOfMass
+    if _on_face(face, center):
+        return center
+    u0, u1, v0, v1 = face.ParameterRange
+    for i in range(1, 8):
+        for j in range(1, 8):
+            p = face.valueAt(u0 + (u1 - u0) * i / 8.0, v0 + (v1 - v0) * j / 8.0)
+            if _on_face(face, p):
+                return p
+    return center
+
+
+def extend_neighbours(shape, steps, refine=True):
+    """`shape` without the step faces, its neighbours extended to close the gap
+    (OpenCASCADE defeaturing). None if that fails or gives an invalid solid."""
+    try:
+        healed = shape.defeaturing(steps)
+        if refine:
+            healed = healed.removeSplitter()
+    except Exception:
+        return None
+    if healed.isNull() or not healed.Solids or not healed.isValid():
+        return None
+    if len(healed.Solids) != len(shape.Solids):
+        return None
+    return healed
 
 
 def check_result(base, result, distance):

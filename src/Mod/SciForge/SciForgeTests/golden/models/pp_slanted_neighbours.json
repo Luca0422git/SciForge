@@ -57,6 +57,5 @@
     "faces": 6,
     "source": "analytic",
     "note": "Fusion extends the sloped faces: height 25, top width 15, area (40+15)/2*25"
-  },
-  "xfail": "v1 adds a straight slab (a step) instead of extending sloped neighbours (outline 9.1)"
+  }
 }

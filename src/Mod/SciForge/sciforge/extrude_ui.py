@@ -1,206 +1,574 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Extrude command (E) with Fusion's one-dialog workflow.
+"""Extrude command (E) with Fusion's dialog.
 
-Pick a profile like in Fusion: click inside a closed sketch shape (they are shaded
-blue and light up under the mouse), or click a flat face of the part. With a
-sketch or face already selected, or a sketch you just finished, it starts at
-once. Then drag the arrow or type a distance. Dragging into existing
-material switches the operation to Cut automatically, as Fusion does, unless
-you picked an operation yourself.
+Profiles: click inside closed sketch areas (they are shaded blue and light up under
+the mouse; a circle inside a rectangle gives the ring and the disc separately) or on
+flat faces of the part. Click more areas to add them, click a picked one again to
+drop it. A sketch or face selected before pressing E, or the one area of a sketch
+just finished, is taken at once.
+
+The fields follow Fusion's Extrude: Start (Profile Plane / Offset / Object), Direction
+(One Side / Two Sides / Symmetric), Extent (Distance / To Object / All), Taper Angle,
+Operation (Join / Cut / Intersect / New Body). The blue arrows in the 3D view set the
+distances, the blue disc the taper angle. Dragging into the part switches to Cut, as
+Fusion does, unless you picked the operation yourself. Problems are shown in the
+dialog, which then stays open.
 """
+import math
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, extrude, log, ui_icon_path, warn
+from . import commands, extrude, log, preview, profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel
 
+START_LABELS = [("Profile Plane", "profile"), ("Offset", "offset"), ("Object", "object")]
 DIRECTION_LABELS = [
     ("One Side", "one_side"),
     ("Two Sides", "two_sides"),
     ("Symmetric", "symmetric"),
 ]
-EXTENT_LABELS = [("Distance", "distance"), ("All", "all")]
-OPERATION_LABELS = [("Join", "join"), ("Cut", "cut"), ("New Body", "new_body")]
-
-
-def _used_profiles(body):
-    used = set()
-    for obj in body.Group:
-        profile = getattr(obj, "Profile", None)
-        if isinstance(profile, tuple) and profile:
-            profile = profile[0]
-        if profile is not None and hasattr(profile, "Name"):
-            used.add(profile.Name)
-    return used
-
-
-def selected_profile(body):
-    """The selected sketch, or a selected planar face of the body as (feature, "FaceN")."""
-    used = _used_profiles(body) if body is not None else set()
-    for sel in Gui.Selection.getSelectionEx():
-        if sel.Object.TypeId == "Sketcher::SketchObject":
-            sketch = sel.Object
-            # A sketch already extruded and hidden is a leftover selection, not a pick.
-            if sketch.Name in used and not sketch.ViewObject.Visibility:
-                continue
-            return sketch
-        for name in sel.SubElementNames:
-            obj, short = sel.Object, name
-            if "." in name:  # picked through the body: "Pad.Face6"
-                path, short = name.rsplit(".", 1)
-                inner = sel.Object.getSubObject(path + ".", retType=1)
-                obj = inner if inner is not None else obj
-            if obj.TypeId == "PartDesign::Body":
-                obj = obj.Tip
-            if not short.startswith("Face") or obj is None:
-                continue
-            if body is not None and obj.getParentGeoFeatureGroup() is not body:
-                continue
-            try:
-                face = obj.Shape.getElement(short)
-            except Exception:
-                continue
-            if face.Surface.TypeId == "Part::GeomPlane":
-                return (obj, short)
-    return None
-
-
-def pick_sketch(body):
-    """The selected sketch or face, else the newest sketch of the body no feature uses yet."""
-    picked = selected_profile(body)
-    if picked is not None:
-        return picked
-    if body is None:
-        return None
-    used = _used_profiles(body)
-    for obj in reversed(body.Group):
-        if obj.TypeId == "Sketcher::SketchObject" and obj.Name not in used:
-            return obj
-    return None
+EXTENT_LABELS = [("Distance", "distance"), ("To Object", "to_object"), ("All", "all")]
+MEASUREMENT_LABELS = [("Half Length", "half"), ("Whole Length", "whole")]
+OPERATION_LABELS = [
+    ("Join", "join"),
+    ("Cut", "cut"),
+    ("Intersect", "intersect"),
+    ("New Body", "new_body"),
+]
+ACTIVE_STYLE = "QPushButton { background: #1f6fbf; color: white; border: 1px solid #5aa0e6; }"
 
 
 def _combo(pairs, current):
     box = QtWidgets.QComboBox()
     for label, value in pairs:
         box.addItem(label, value)
-    box.setCurrentIndex([v for _, v in pairs].index(current))
+    values = [v for _, v in pairs]
+    box.setCurrentIndex(values.index(current) if current in values else 0)
     return box
 
 
+def _set_combo(box, value):
+    for i in range(box.count()):
+        if box.itemData(i) == value:
+            box.setCurrentIndex(i)
+            return
+
+
+class SelectionField:
+    """Fusion's selection box: shows what is picked, is blue while it takes the clicks in
+    the 3D view (click it to make it the one), and has an x to clear it."""
+
+    def __init__(self, panel, name, empty):
+        self.panel = panel
+        self.name = name
+        self.empty = empty
+        self.widget = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(self.widget)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.button = QtWidgets.QPushButton(empty)
+        self.button.setCheckable(True)
+        self.button.clicked.connect(self._clicked)
+        self.clear = QtWidgets.QToolButton()
+        self.clear.setText("✕")
+        self.clear.setToolTip("Clear")
+        self.clear.clicked.connect(self._cleared)
+        row.addWidget(self.button, 1)
+        row.addWidget(self.clear)
+
+    def _clicked(self, *_):
+        try:
+            self.panel.activate(self.name)
+        except Exception as exc:
+            warn("extrude field: %s" % exc)
+
+    def _cleared(self, *_):
+        try:
+            self.panel.clear_field(self.name)
+        except Exception as exc:
+            warn("extrude field: %s" % exc)
+
+    def set_active(self, active):
+        self.button.setChecked(active)
+        self.button.setStyleSheet(ACTIVE_STYLE if active else "")
+
+    def set_text(self, text):
+        self.button.setText(text or self.empty)
+
+
+class AngleDragger:
+    """Fusion's taper handle: a short curved blue arrow at the end of the extrusion that
+    turns about the profile's edge (`pivot`, axis `axis`). At angle 0 it sits `radius`
+    along `zero` (the extrusion direction); positive angles turn it to axis x zero, the
+    outward side. Watched with a Qt timer like taskui.ArrowDragger (Coin's dragger
+    callbacks run Python without its lock and crashed FreeCAD)."""
+
+    POLL_MS = 30
+
+    def __init__(self, pivot, axis, zero, angle, radius, width, on_drag=None, on_release=None):
+        from pivy import coin
+
+        self.view = Gui.ActiveDocument.ActiveView
+        self.pivot = App.Vector(pivot)
+        self.axis = App.Vector(axis).normalize()
+        self.zero = App.Vector(zero).normalize()
+        self.radius = radius
+        self.root = coin.SoSeparator()
+        place = coin.SoTransform()
+        place.translation.setValue(pivot.x, pivot.y, pivot.z)
+        x = self.zero
+        z = self.axis
+        y = z.cross(x)
+        matrix = App.Matrix(x.x, y.x, z.x, 0, x.y, y.y, z.y, 0, x.z, y.z, z.z, 0, 0, 0, 0, 1)
+        place.rotation.setValue(*App.Placement(matrix).Rotation.Q)
+        self.dragger = coin.SoRotateDiscDragger()
+        self.dragger.setPart("rotator", self._arc(coin, radius, width, (0.30, 0.62, 0.95)))
+        self.dragger.setPart("rotatorActive", self._arc(coin, radius, width, (0.55, 0.80, 1.0)))
+        self.dragger.setPart("feedback", coin.SoSeparator())
+        self.dragger.setPart("feedbackActive", coin.SoSeparator())
+        self.root.addChild(place)
+        self.root.addChild(self.dragger)
+        self.set_angle(angle)
+        self.on_drag = on_drag
+        self.on_release = on_release
+        self._last = self.angle()
+        self._was_active = False
+        self.view.getSceneGraph().addChild(self.root)
+        self._timer = QtCore.QTimer()
+        self._timer.setInterval(self.POLL_MS)
+        self._timer.timeout.connect(self._poll)
+        self._timer.start()
+
+    @staticmethod
+    def _arc(coin, radius, width, color):
+        """A flat curved band with an arrow head at each end, around local +X."""
+        sep = coin.SoSeparator()
+        material = coin.SoMaterial()
+        material.diffuseColor.setValue(*color)
+        material.emissiveColor.setValue(color[0] * 0.5, color[1] * 0.5, color[2] * 0.5)
+        sep.addChild(material)
+        hints = coin.SoShapeHints()
+        hints.vertexOrdering = coin.SoShapeHints.COUNTERCLOCKWISE
+        hints.shapeType = coin.SoShapeHints.UNKNOWN_SHAPE_TYPE  # lit from both sides
+        sep.addChild(hints)
+        span = min(0.6, 2.5 * width / max(radius, 1e-6))  # half the arc, radians
+        steps = 12
+        points, index = [], []
+        r_in, r_out = radius - width * 0.25, radius + width * 0.25
+        for i in range(steps + 1):
+            a = -span + 2.0 * span * i / steps
+            points.append((r_in * math.cos(a), r_in * math.sin(a), 0.0))
+            points.append((r_out * math.cos(a), r_out * math.sin(a), 0.0))
+        for i in range(steps):
+            a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2
+            index += [a, b, c, -1, a, c, d, -1]
+        for sign in (-1.0, 1.0):  # arrow heads, pointing along the arc
+            tip_angle = sign * (span + 1.2 * width / max(radius, 1e-6))
+            base_angle = sign * span
+            first = len(points)
+            points.append(
+                (
+                    (radius - width * 0.6) * math.cos(base_angle),
+                    (radius - width * 0.6) * math.sin(base_angle),
+                    0.0,
+                )
+            )
+            points.append(
+                (
+                    (radius + width * 0.6) * math.cos(base_angle),
+                    (radius + width * 0.6) * math.sin(base_angle),
+                    0.0,
+                )
+            )
+            points.append((radius * math.cos(tip_angle), radius * math.sin(tip_angle), 0.0))
+            index += [first, first + 1, first + 2, -1]
+        coords = coin.SoCoordinate3()
+        coords.point.setValues(0, len(points), points)
+        faces = coin.SoIndexedFaceSet()
+        faces.coordIndex.setValues(0, len(index), index)
+        sep.addChild(coords)
+        sep.addChild(faces)
+        return sep
+
+    def screen_points(self, degrees):
+        """(where the handle is now, where it is at `degrees`) in 3D, for tests and hints."""
+        out = self.zero.cross(self.axis) * -1.0  # local +Y: the outward side
+
+        def at(angle):
+            a = math.radians(angle)
+            return self.pivot + (self.zero * math.cos(a) + out * math.sin(a)) * self.radius
+
+        return at(self.angle()), at(degrees)
+
+    def angle(self):
+        q = self.dragger.rotation.getValue().getValue()  # (x, y, z, w) about local z
+        value = math.degrees(2.0 * math.atan2(q[2], q[3]))
+        if value > 180.0:
+            value -= 360.0
+        if value < -180.0:
+            value += 360.0
+        return value
+
+    def set_angle(self, degrees):
+        from pivy import coin
+
+        half = math.radians(degrees) / 2.0
+        self.dragger.rotation.setValue(coin.SbRotation(0, 0, math.sin(half), math.cos(half)))
+        self._last = degrees
+
+    def _poll(self):
+        try:
+            active = bool(self.dragger.isActive.getValue())
+            value = self.angle()
+            if abs(value - self._last) > 1e-6:
+                self._last = value
+                if self.on_drag:
+                    self.on_drag(value)
+            if self._was_active and not active and self.on_release:
+                self.on_release(value)
+            self._was_active = active
+        except Exception as exc:
+            warn("taper drag: %s" % exc)
+
+    def remove(self):
+        try:
+            self._timer.stop()
+        except Exception:
+            pass
+        try:
+            self.view.getSceneGraph().removeChild(self.root)
+        except Exception:
+            pass
+
+
+class ViewProviderExtrude:
+    """View provider of the Intersect extrude (a SciForge feature)."""
+
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+
+    def getIcon(self):
+        return ui_icon_path("extrude")
+
+    def setEdit(self, vobj, mode=0):
+        if mode != 0:
+            return None
+        edit(vobj.Object)
+        return True
+
+    def unsetEdit(self, vobj, mode=0):
+        return None
+
+    def doubleClicked(self, vobj):
+        edit(vobj.Object)
+        return True
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def restore_view_providers(doc):
+    for obj in doc.Objects:
+        if extrude.is_intersect(obj) and obj.ViewObject is not None:
+            if not isinstance(getattr(obj.ViewObject, "Proxy", None), ViewProviderExtrude):
+                ViewProviderExtrude(obj.ViewObject)
+
+
+# -- what is selected before the command starts ---------------------------------------------
+def _used_profiles(body):
+    """Names of sketches already used by an extrude (kept for older callers)."""
+    return profile_pick.used_sketches(body.Document) if body is not None else set()
+
+
+def selected_profiles(body):
+    """Profiles from the selection: a sketch (whole sketch), a sketch area, or flat faces."""
+    used = _used_profiles(body)
+    found = []
+    for obj, short in profile_pick.picks():
+        if extrude.is_sketch(obj):
+            if short.startswith("InternalFace"):
+                found.append((obj, short))
+                continue
+            if short.startswith(("Edge", "Vertex")):
+                continue
+            # A sketch already extruded and hidden is a leftover selection, not a pick.
+            try:
+                hidden = not obj.ViewObject.Visibility
+            except Exception:
+                hidden = False
+            if obj.Name in used and hidden:
+                continue
+            found.append((obj, ""))
+        elif short.startswith("Face"):
+            try:
+                face = obj.Shape.getElement(short)
+            except Exception:
+                continue
+            if face.Surface.TypeId == "Part::GeomPlane":
+                found.append((obj, short))
+    return found
+
+
+def selected_profile(body):
+    """First-version name: the first selected profile, or None."""
+    found = selected_profiles(body)
+    return found[0] if found else None
+
+
+def newest_single_region(body):
+    """The only area of the newest sketch no extrude uses yet (Fusion picks a sketch's
+    single profile by itself), or None."""
+    if body is None:
+        return None
+    used = _used_profiles(body)
+    for obj in reversed(body.Group):
+        if extrude.is_sketch(obj) and obj.Name not in used:
+            try:
+                found = extrude.regions(obj)
+            except Exception:
+                return None
+            return (obj, found[0][0]) if len(found) == 1 else None
+    return None
+
+
+# -- the dialog -------------------------------------------------------------------------------
 class ExtrudePanel(Panel):
     title = "Extrude"
     icon = "extrude"
     last = None
-    auto_pick = True  # take the sketch just finished, like Fusion with a single profile
+    auto_pick = True  # take the single area of a sketch just finished, like Fusion
 
     def __init__(self, doc, feature=None):
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
-        self.body = commands.find_body() if feature is None else feature.getParentGeoFeatureGroup()
         self.target = feature
-        self.sketch = None
-        self.dragger = None
-        self.observer = None
-        self.picker = None
+        self.editing = feature is not None
+        self.body = commands.find_body() if feature is None else extrude.owner_body(feature)
+        self.profiles = []
+        self.options = dict(extrude.DEFAULTS)
+        self.options["measurement"] = "half"  # Fusion's default for Symmetric
         self.user_picked_operation = feature is not None
-        self.options = {
-            "operation": "join",
-            "direction": "one_side",
-            "extent": "distance",
-            "distance": 10.0,
-            "distance2": 10.0,
-            "taper": 0.0,
-        }
+        self.error = ""
+        self.dirty = False
+        self._geometry_changed = False
+        self.active = "profiles"
+        self.draggers = {}
+        self.dragger = None  # the distance arrow (tests and older callers)
+        self.picker = None
+        self.observer = None
+        self._quiet = False
         if feature is not None:
-            self._read(feature)
-        tip = self.body.Tip if self.body is not None else None
+            try:
+                self.profiles, read = extrude.read(feature)
+                self.options.update(read)
+            except Exception as exc:
+                warn("could not read %s: %s" % (feature.Label, exc))
+        self._build_form()
+        self._show_options()
+        self._watch()
         if feature is not None:
-            tip = feature.BaseFeature
-        self.base_shape = tip.Shape.copy() if tip is not None and not tip.Shape.isNull() else None
+            self._refresh_profiles()
+            self._make_draggers()
+        else:
+            self._start()
 
-        self.profile = QtWidgets.QLabel(
-            "Click inside a sketch profile (shaded blue)\nor on a flat face of the part"
+    # -- form -----------------------------------------------------------------------------
+    def _build_form(self):
+        form = self.layout
+        self.fields = {
+            "profiles": SelectionField(self, "profiles", "Select profiles"),
+            "start_object": SelectionField(self, "start_object", "Select start face"),
+            "extent_object": SelectionField(self, "extent_object", "Select object"),
+            "extent_object2": SelectionField(self, "extent_object2", "Select object (side 2)"),
+        }
+        self.profile_hint = QtWidgets.QLabel(
+            "Click inside sketch areas (shaded blue) or on flat faces.\n"
+            "Click a picked one again to drop it."
         )
-        self.layout.addRow("Profile", self.profile)
+        self.profile_hint.setWordWrap(True)
+        form.addRow("Profiles", self.fields["profiles"].widget)
+        form.addRow(self.profile_hint)
+        self.profile = QtWidgets.QLabel("")  # what is picked, in words
+        form.addRow(self.profile)
+        self.start = _combo(START_LABELS, self.options["start"])
+        form.addRow("Start", self.start)
+        self.start_offset = DistanceField(self.options["start_offset"], on_change=self._typed)
+        self.start_offset_label = QtWidgets.QLabel("Offset")
+        form.addRow(self.start_offset_label, self.start_offset.widget)
+        self.start_object_label = QtWidgets.QLabel("Object")
+        form.addRow(self.start_object_label, self.fields["start_object"].widget)
         self.direction = _combo(DIRECTION_LABELS, self.options["direction"])
-        self.layout.addRow("Direction", self.direction)
+        form.addRow("Direction", self.direction)
+        self.side1_label = QtWidgets.QLabel("<b>Side One</b>")
+        form.addRow(self.side1_label)
         self.extent = _combo(EXTENT_LABELS, self.options["extent"])
-        self.layout.addRow("Extent", self.extent)
+        form.addRow("Extent Type", self.extent)
         self.distance = DistanceField(self.options["distance"], on_change=self._distance_typed)
-        self.layout.addRow("Distance", self.distance.widget)
-        self.distance2 = DistanceField(self.options["distance2"], on_change=self._changed)
-        self.distance2_label = QtWidgets.QLabel("Distance 2")
-        self.layout.addRow(self.distance2_label, self.distance2.widget)
-        self.taper = DistanceField(self.options["taper"], unit="deg", on_change=self._changed)
-        self.layout.addRow("Taper Angle", self.taper.widget)
+        self.distance_label = QtWidgets.QLabel("Distance")
+        form.addRow(self.distance_label, self.distance.widget)
+        self.extent_object_label = QtWidgets.QLabel("Object")
+        form.addRow(self.extent_object_label, self.fields["extent_object"].widget)
+        self.flip = QtWidgets.QPushButton("Flip")
+        self.flip.setCheckable(True)
+        self.flip.setToolTip("Go the other way")
+        self.flip.clicked.connect(self._flipped)
+        self.flip_label = QtWidgets.QLabel("Direction")
+        form.addRow(self.flip_label, self.flip)
+        self.measurement = _combo(MEASUREMENT_LABELS, self.options["measurement"])
+        self.measurement_label = QtWidgets.QLabel("Measurement")
+        form.addRow(self.measurement_label, self.measurement)
+        self.taper = DistanceField(self.options["taper"], unit="deg", on_change=self._taper_typed)
+        form.addRow("Taper Angle", self.taper.widget)
+        self.side2_label = QtWidgets.QLabel("<b>Side Two</b>")
+        form.addRow(self.side2_label)
+        self.extent2 = _combo(EXTENT_LABELS, self.options["extent2"])
+        self.extent2_label = QtWidgets.QLabel("Extent Type")
+        form.addRow(self.extent2_label, self.extent2)
+        self.distance2 = DistanceField(self.options["distance2"], on_change=self._distance2_typed)
+        self.distance2_label = QtWidgets.QLabel("Distance")
+        form.addRow(self.distance2_label, self.distance2.widget)
+        self.extent_object2_label = QtWidgets.QLabel("Object")
+        form.addRow(self.extent_object2_label, self.fields["extent_object2"].widget)
+        self.taper2 = DistanceField(self.options["taper2"], unit="deg", on_change=self._typed)
+        self.taper2_label = QtWidgets.QLabel("Taper Angle")
+        form.addRow(self.taper2_label, self.taper2.widget)
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
-        self.layout.addRow("Operation", self.operation)
+        form.addRow("Operation", self.operation)
         self.finish_layout()
-        self.direction.currentIndexChanged.connect(self._changed)
-        self.extent.currentIndexChanged.connect(self._changed)
+        for box in (self.start, self.direction, self.extent, self.extent2, self.measurement):
+            box.currentIndexChanged.connect(self._typed)
         self.operation.activated.connect(self._operation_picked)
+        if self.editing:
+            self.active = "profiles"
+        self._show_active()
+
+    def _show_options(self):
+        """Put self.options into the widgets (without reacting to it)."""
+        self._quiet = True
+        try:
+            _set_combo(self.start, self.options["start"])
+            _set_combo(self.direction, self.options["direction"])
+            _set_combo(self.extent, self.options["extent"])
+            _set_combo(self.extent2, self.options["extent2"])
+            _set_combo(self.measurement, self.options["measurement"])
+            _set_combo(self.operation, self.options["operation"])
+            self.start_offset.set_value(self.options["start_offset"])
+            self.distance.set_value(self.options["distance"])
+            self.distance2.set_value(self.options["distance2"])
+            self.taper.set_value(self.options["taper"])
+            self.taper2.set_value(self.options["taper2"])
+            self.flip.setChecked(bool(self.options.get("flip")))
+            for name in ("start_object", "extent_object", "extent_object2"):
+                self.fields[name].set_text(_ref_text(self.options.get(name)))
+        finally:
+            self._quiet = False
         self._update_visibility()
 
-        if feature is not None:
-            self.sketch = extrude.profile_of(feature)
-            self.profile.setText(extrude.profile_label(self.sketch))
-            if self.body is not None and self.body.Tip is not feature:
-                self.operation.setEnabled(False)
-                self.operation.setToolTip(
-                    "Join/Cut can only be changed on the last step of the "
-                    "timeline for now. Roll the timeline marker here first."
-                )
-            self._make_dragger()
-        elif not self._start():
-            self._watch_selection()
+    def _update_visibility(self):
+        start = self.start.currentData()
+        direction = self.direction.currentData()
+        extent = self.extent.currentData()
+        extent2 = self.extent2.currentData()
+        two = direction == "two_sides"
+        symmetric = direction == "symmetric"
+        for widget, show in (
+            (self.start_offset.widget, start == "offset"),
+            (self.start_offset_label, start == "offset"),
+            (self.fields["start_object"].widget, start == "object"),
+            (self.start_object_label, start == "object"),
+            (self.side1_label, two),
+            (self.distance.widget, extent == "distance"),
+            (self.distance_label, extent == "distance"),
+            (self.fields["extent_object"].widget, extent == "to_object"),
+            (self.extent_object_label, extent == "to_object"),
+            (self.flip, extent == "all" and not symmetric),
+            (self.flip_label, extent == "all" and not symmetric),
+            (self.measurement, symmetric),
+            (self.measurement_label, symmetric),
+            (self.side2_label, two),
+            (self.extent2, two),
+            (self.extent2_label, two),
+            (self.distance2.widget, two and extent2 == "distance"),
+            (self.distance2_label, two and extent2 == "distance"),
+            (self.fields["extent_object2"].widget, two and extent2 == "to_object"),
+            (self.extent_object2_label, two and extent2 == "to_object"),
+            (self.taper2.widget, two),
+            (self.taper2_label, two),
+        ):
+            widget.setVisible(show)
+        self.distance_label.setText("Distance" if not symmetric else "Distance")
 
-    def feature(self):
-        return self.target
+    def _collect(self):
+        self.options["start"] = self.start.currentData()
+        self.options["start_offset"] = self.start_offset.value()
+        self.options["direction"] = self.direction.currentData()
+        self.options["extent"] = self.extent.currentData()
+        self.options["distance"] = self.distance.value()
+        self.options["measurement"] = self.measurement.currentData()
+        self.options["taper"] = self.taper.value()
+        self.options["extent2"] = self.extent2.currentData()
+        self.options["distance2"] = self.distance2.value()
+        self.options["taper2"] = self.taper2.value()
+        self.options["operation"] = self.operation.currentData()
+        self.options["flip"] = self.flip.isChecked()
+        if self.options["direction"] == "symmetric" and self.options["extent"] == "to_object":
+            self.options["extent"] = "distance"
+            self._quiet = True
+            _set_combo(self.extent, "distance")
+            self._quiet = False
 
-    def _read(self, feature):
-        cut = feature.TypeId == "PartDesign::Pocket"
-        sign = 1.0 if (feature.Reversed if cut else not feature.Reversed) else -1.0
-        self.options.update(
-            {
-                "operation": "cut" if cut else "join",
-                "direction": {"Symmetric": "symmetric", "Two sides": "two_sides"}.get(
-                    feature.SideType, "one_side"
-                ),
-                "extent": "all" if feature.Type in ("ThroughAll", "UpToLast") else "distance",
-                "distance": sign * feature.Length.Value,
-                "distance2": feature.Length2.Value,
-                "taper": feature.TaperAngle.Value,
-            }
-        )
+    # -- selection fields ------------------------------------------------------------------
+    def activate(self, name):
+        """Make this selection box the one that takes clicks in the 3D view."""
+        self.active = name
+        self._show_active()
 
-    # -- start -------------------------------------------------------------------
-    def _start(self, sketch=None):
+    def _show_active(self):
+        for name, field in self.fields.items():
+            field.set_active(name == self.active)
+
+    def clear_field(self, name):
+        if name == "profiles":
+            self.profiles = []
+            self._profiles_changed()
+        else:
+            self.options[name] = None
+            self.fields[name].set_text("")
+            self._changed()
+        self.activate(name)
+
+    # -- start ----------------------------------------------------------------------------
+    def _start(self):
         if self.body is None:
             self.message.setText("Create a sketch first (Create Sketch).")
-            return True
-        if sketch is None:
-            sketch = pick_sketch(self.body) if self.auto_pick else selected_profile(self.body)
-        if sketch is None:
-            return False
-        self._unwatch()
-        self.sketch = sketch
-        self.profile.setText(extrude.profile_label(sketch))
-        self._auto_operation()
+            return
+        picked = selected_profiles(self.body)
+        if not picked and self.auto_pick:
+            single = newest_single_region(self.body)
+            picked = [single] if single else []
         try:
-            self.target = extrude.make(self.body, sketch, self.options)
-        except extrude.ExtrudeError as exc:
-            self.message.setText(str(exc))
-            return True
-        self._make_dragger()
-        self.schedule()
-        return True
+            Gui.Selection.clearSelection()
+        except Exception:
+            pass
+        if picked:
+            self.profiles = picked
+            self._profiles_changed()
+        else:
+            self._refresh_profiles()
 
-    def _watch_selection(self):
-        """Wait for a click: inside a shaded sketch profile, on a sketch line or a flat face.
-        Work is deferred to a Qt timer so nothing runs inside FreeCAD's click handling."""
-        from . import profile_pick
-
+    def _watch(self):
+        """Wait for clicks: inside a shaded sketch area, on a face, plane or body. Work is
+        deferred to a Qt timer so nothing runs inside FreeCAD's click handling."""
         panel = self
 
         class Observer:
@@ -209,25 +577,25 @@ class ExtrudePanel(Panel):
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
+        extra = [obj for obj, _ in self.profiles if extrude.is_sketch(obj)]
         try:
             self.picker = profile_pick.ProfilePicker(
                 Gui.ActiveDocument.ActiveView,
-                profile_pick.candidate_sketches(self.body),
-                lambda sketch: QtCore.QTimer.singleShot(0, lambda: self._profile_clicked(sketch)),
+                profile_pick.candidate_sketches(self.body, extra),
+                lambda sketch, sub: QtCore.QTimer.singleShot(
+                    0, lambda: self._region_clicked(sketch, sub)
+                ),
+                occluder=self._occluder,
             )
         except Exception as exc:
             warn("profile shading unavailable: %s" % exc)
 
-    def _profile_clicked(self, sketch):
-        if self.target is None and not self._closed:
-            self._start(sketch)
-
-    def _selection_changed(self):
-        if self.target is not None or self._closed:
-            return
-        picked = selected_profile(self.body)
-        if picked is not None:
-            self._start(picked)
+    def _occluder(self):
+        """The part as it was before this extrude (global): it hides regions behind it."""
+        base = self._base_feature()
+        if base is None or base.Shape.isNull():
+            return None
+        return extrude._to_global(base.Shape, base)
 
     def _unwatch(self):
         if self.observer is not None:
@@ -237,99 +605,540 @@ class ExtrudePanel(Panel):
             self.picker.remove()
             self.picker = None
 
-    def _make_dragger(self):
-        try:
-            center, normal = extrude.profile_frame(self.sketch)
-            if isinstance(self.sketch, tuple):
-                extent = self.sketch[0].Shape.getElement(self.sketch[1]).BoundBox
-            else:
-                extent = self.sketch.Shape.BoundBox
-            size = max(4.0, min(extent.DiagonalLength * 0.15, 30.0))
-            self.dragger = ArrowDragger(
-                center,
-                normal,
-                self.options["distance"],
-                size,
-                on_drag=self._dragged,
-                on_release=self._dragged,
-            )
-        except Exception as exc:
-            warn("extrude arrow unavailable: %s" % exc)
-
-    # -- changes -----------------------------------------------------------------
-    def _collect(self):
-        self.options["direction"] = self.direction.currentData()
-        self.options["extent"] = self.extent.currentData()
-        self.options["distance"] = self.distance.value()
-        self.options["distance2"] = self.distance2.value()
-        self.options["taper"] = self.taper.value()
-        self.options["operation"] = self.operation.currentData()
-
-    def _auto_operation(self):
-        """Fusion: extruding into material becomes a cut, out of it a join."""
-        if self.user_picked_operation:
+    # -- picks ------------------------------------------------------------------------------
+    def _region_clicked(self, sketch, sub):
+        if self._closed:
             return
-        into = extrude.goes_into_material(self.base_shape, self.sketch, self.options["distance"])
-        wanted = "cut" if into else ("join" if self.base_shape is not None else "new_body")
-        if wanted == "new_body":
-            wanted = "join"  # the first solid: Fusion says New Body; same result here
-        self.options["operation"] = wanted
-        self.operation.setCurrentIndex([v for _, v in OPERATION_LABELS].index(wanted))
+        try:
+            if self.active != "profiles":
+                return
+            self._toggle((sketch, sub))
+        except Exception as exc:
+            warn("extrude pick: %s" % exc)
+
+    def _selection_changed(self):
+        if self._closed:
+            return
+        try:
+            picks = profile_pick.picks()
+            if not picks:
+                return
+            Gui.Selection.clearSelection()
+            recent = self.picker is not None and self.picker.clicked_region_recently()
+            for obj, short in picks:
+                self._picked(obj, short, recent)
+        except Exception as exc:
+            warn("extrude pick: %s" % exc)
+
+    def _picked(self, obj, short, region_clicked):
+        if self.active == "profiles":
+            if extrude.is_sketch(obj):
+                if short.startswith("InternalFace") and not region_clicked:
+                    self._toggle((obj, short))
+                return  # sketch lines: the shaded areas are the profiles
+            if region_clicked or not short.startswith("Face"):
+                return
+            ref = self._base_face(obj, short)
+            if ref is None:
+                self.message.setText("That face belongs to this extrude itself.")
+                return
+            face = ref[0].Shape.getElement(ref[1])
+            if face.Surface.TypeId != "Part::GeomPlane":
+                self.message.setText("Only flat faces can be extruded. Pick a flat face.")
+                return
+            self._toggle(ref)
+            return
+        ref = self._object_ref(obj, short)
+        if ref is None:
+            return
+        self.options[self.active] = ref
+        self.fields[self.active].set_text(_ref_text(ref))
+        self.activate("profiles")
+        self._changed()
+
+    def _object_ref(self, obj, short):
+        """A pick for Start / To Object: a plane, a face or a whole body."""
+        if obj.TypeId in extrude.PLANE_TYPES:
+            return (obj, "")
+        if extrude.is_sketch(obj):
+            self.message.setText("Pick a face, a plane or a body.")
+            return None
+        if short.startswith("Face"):
+            ref = self._base_face(obj, short)
+            if ref is None:
+                self.message.setText("That face belongs to this extrude itself.")
+                return None
+            if self.active == "start_object":
+                face = ref[0].Shape.getElement(ref[1])
+                if face.Surface.TypeId != "Part::GeomPlane":
+                    self.message.setText("The extrude can start from a flat face or a plane.")
+                    return None
+            return ref
+        if self.active == "start_object":
+            self.message.setText("Pick a flat face or a plane to start from.")
+            return None
+        body = extrude.owner_body(obj)
+        if short == "" and body is not None:
+            if body is extrude.owner_body(self.target) or body is self._source_body():
+                self.message.setText("Pick a face of this body, a plane, or another body.")
+                return None
+            return (body.Tip, "") if body.Tip is not None else None
+        self.message.setText("Pick a face, a plane or a body.")
+        return None
+
+    def _base_face(self, obj, short):
+        """(feature, "FaceN") as it was before this extrude: a face clicked on the preview
+        is looked up on the part before the extrude. None if only the extrude has it."""
+        base = self._base_feature()
+        body = extrude.owner_body(obj)
+        ours = self.target is not None and (obj is self.target or extrude.is_helper(obj))
+        later = base is not None and body is extrude.owner_body(base) and obj is not base
+        if not ours and not later:
+            return (obj, short)
+        face = profile_pick.global_face(obj, short)
+        if face is None or base is None:
+            return None
+        name = profile_pick.face_name_in(base, face)
+        return (base, name) if name else None
+
+    def _source_body(self):
+        if self.profiles:
+            body = extrude.owner_body(self.profiles[0][0])
+            if body is not None:
+                return body
+        return self.body
+
+    def _base_feature(self):
+        """The body's solid feature just before this extrude."""
+        if self.target is not None:
+            body = extrude.owner_body(self.target)
+            if body is self._source_body():
+                return self.target.BaseFeature
+        body = self._source_body()
+        if body is None:
+            return None
+        tip = body.Tip
+        if tip is not None and tip is self.target:
+            return tip.BaseFeature
+        return tip
+
+    def _toggle(self, ref):
+        keys = [extrude.key(p) for p in self.profiles]
+        if extrude.key(ref) in keys:
+            self.profiles = [p for p in self.profiles if extrude.key(p) != extrude.key(ref)]
+        else:
+            self.profiles = self.profiles + [ref]
+        self._profiles_changed()
+
+    def _refresh_profiles(self):
+        """Show the picked profiles (field text, blue areas, highlighted faces)."""
+        count = len(self.profiles)
+        self.fields["profiles"].set_text("%d selected" % count if count else "")
+        self.profile.setText(extrude.profile_label(self.profiles) if count else "")
+        if self.picker is not None:
+            self.picker.set_selected(
+                [extrude.key(p) for p in self.profiles if extrude.is_sketch(p[0])]
+            )
+            faces = []
+            for obj, sub in self.profiles:
+                if not extrude.is_sketch(obj):
+                    face = profile_pick.global_face(obj, sub)
+                    if face is not None:
+                        faces.append(face)
+            self.picker.show_faces(faces)
+
+    def _profiles_changed(self):
+        self._refresh_profiles()
+        if not self.profiles:
+            if self.target is not None and not self.editing:
+                extrude.remove(self.target)
+                self.target = None
+                self._remove_draggers()
+                self.schedule()
+            self.message.setText("" if not self.editing else "Pick at least one profile.")
+            self.error = "Pick at least one profile." if self.editing else ""
+            return
+        try:
+            extrude.check_profiles(self.profiles)
+        except extrude.ExtrudeError as exc:
+            self.error = str(exc)
+            self.message.setText("⚠ " + self.error)
+            return
+        self._changed(new_geometry=True)
+
+    # -- changes ----------------------------------------------------------------------------
+    def _typed(self, *_):
+        if not self._quiet:
+            self._changed()
+
+    def _distance_typed(self, value):
+        if self._quiet:
+            return
+        arrow = self.draggers.get("distance")
+        if arrow is not None:
+            arrow.set_distance(self._arrow_value(value))
+        self._changed()
+
+    def _distance2_typed(self, value):
+        if self._quiet:
+            return
+        arrow = self.draggers.get("distance2")
+        if arrow is not None:
+            arrow.set_distance(value)
+        self._changed()
+
+    def _taper_typed(self, value):
+        if self._quiet:
+            return
+        disc = self.draggers.get("taper")
+        if disc is not None:
+            disc.set_angle(value)
+        self._changed()
+
+    def _flipped(self, *_):
+        self._changed(new_geometry=True)
 
     def _operation_picked(self, _index):
         self.user_picked_operation = True
         self._changed()
 
-    def _distance_typed(self, value):
-        if self.dragger:
-            self.dragger.set_distance(value)
-        self._changed()
+    def _arrow_value(self, distance):
+        """Where the arrow sits for a distance (the symmetric whole length is split)."""
+        if (
+            self.direction.currentData() == "symmetric"
+            and self.measurement.currentData() == "whole"
+        ):
+            return distance / 2.0
+        return distance
 
     def _dragged(self, value):
         value = round(value, 2)
-        self.distance.set_value(value)
+        if self.direction.currentData() == "symmetric":
+            value = abs(value)
+            if self.measurement.currentData() == "whole":
+                value *= 2.0
+        self._quiet = True
+        try:
+            self.distance.set_value(value)
+        finally:
+            self._quiet = False
         self._changed()
 
-    def _update_visibility(self):
-        two = self.direction.currentData() == "two_sides"
-        self.distance2.widget.setVisible(two)
-        self.distance2_label.setVisible(two)
-        self.distance.widget.setEnabled(self.extent.currentData() == "distance")
+    def _dragged2(self, value):
+        self._quiet = True
+        try:
+            self.distance2.set_value(round(max(value, 0.0), 2))
+        finally:
+            self._quiet = False
+        self._changed()
 
-    def _changed(self, *_):
-        self._update_visibility()
-        if self.target is None:
+    def _offset_dragged(self, value):
+        self._quiet = True
+        try:
+            self.start_offset.set_value(round(value, 2))
+        finally:
+            self._quiet = False
+        self._changed()
+
+    def _offset_released(self, value):
+        self._offset_dragged(value)
+        self._changed(new_geometry=True)
+
+    def _taper_dragged(self, value):
+        value = max(-60.0, min(60.0, round(value, 1)))
+        self._quiet = True
+        try:
+            self.taper.set_value(value)
+        finally:
+            self._quiet = False
+        self._changed()
+
+    def _auto_operation(self):
+        """Fusion: extruding into material becomes a cut, out of it a join (or a new body
+        when there is no solid yet)."""
+        if self.user_picked_operation or not self.profiles:
             return
+        base = self._base_feature()
+        base_shape = base.Shape if base is not None and not base.Shape.isNull() else None
+        options = dict(self.options)
+        distance = options["distance"]
+        if options["extent"] == "all":
+            distance = (1.0 if distance >= 0 else -1.0) * (-1.0 if options.get("flip") else 1.0)
+        if options["direction"] == "symmetric":
+            distance = 1.0
+        into = options["direction"] != "symmetric" and extrude.goes_into_material(
+            base_shape, self.profiles, distance, options
+        )
+        if into:
+            wanted = "cut"
+        elif base_shape is not None and base_shape.Solids:
+            wanted = "join"
+        else:
+            wanted = "new_body"
+        if wanted != self.options["operation"]:
+            self.options["operation"] = wanted
+            self._quiet = True
+            _set_combo(self.operation, wanted)
+            self._quiet = False
+
+    def _changed(self, new_geometry=False):
+        """Something changed: rebuild the preview shortly (coalesces drags)."""
+        self._update_visibility()
         self._collect()
         self._auto_operation()
-        self._collect()
-        try:
-            self.target = extrude.switch(self.body, self.target, self.options)
-        except Exception as exc:
-            self.message.setText(str(exc))
-            return
+        self.dirty = True
+        if new_geometry:
+            self._geometry_changed = True
         self.schedule()
 
+    def _recompute(self):
+        """Apply the dialog's values to the document and rebuild the preview."""
+        try:
+            if self.dirty:
+                self.dirty = False
+                self._apply()
+            preview.recompute(self.doc)
+            self.show_status()
+            if self._geometry_changed or self._handles_moved():
+                self._geometry_changed = False
+                self._make_draggers()
+        except Exception as exc:
+            self.message.setText("⚠ %s" % exc)
+
+    def _apply(self):
+        if not self.profiles:
+            return
+        try:
+            before = self.target
+            self.target = extrude.build(self.profiles, self.options, feature=self.target)
+            self.error = ""
+            if before is None or self.target is not before:
+                self._geometry_changed = True
+        except extrude.ExtrudeError as exc:
+            self.error = str(exc)
+        except Exception as exc:
+            self.error = "This extrude cannot be built: %s" % exc
+        if self.error and self.options["operation"] != self._feature_operation():
+            # Show the operation that is really in place.
+            self.options["operation"] = self._feature_operation()
+            self._quiet = True
+            _set_combo(self.operation, self.options["operation"])
+            self._quiet = False
+
+    def _feature_operation(self):
+        if self.target is None:
+            return self.options["operation"]
+        try:
+            return extrude.read(self.target)[1]["operation"]
+        except Exception:
+            return self.options["operation"]
+
+    def feature(self):
+        return self.target
+
+    def show_status(self):
+        if self.error:
+            self.message.setText("⚠ " + self.error)
+            return
+        text = preview.failure(self.target)
+        self.message.setText("⚠ " + text if text else "")
+
+    # -- handles in the 3D view -----------------------------------------------------------------
+    def _remove_draggers(self):
+        for handle in self.draggers.values():
+            try:
+                handle.remove()
+            except Exception:
+                pass
+        self.draggers = {}
+        self.dragger = None
+
+    def _handles_moved(self):
+        """True when the handles no longer match the values (the taper arrow sits at the
+        end of the extrusion; the second arrow and the taper come and go with options)."""
+        if any(_is_dragging(h) for h in self.draggers.values()):
+            return False
+        wanted = set()
+        if self.target is not None and self.profiles:
+            if self.options["start"] == "offset":
+                wanted.add("offset")
+            if self.options["extent"] == "distance":
+                wanted.update(("distance", "taper"))
+            if self.options["direction"] == "two_sides" and self.options["extent2"] == "distance":
+                wanted.add("distance2")
+        if wanted != set(self.draggers):
+            return True
+        taper = self.draggers.get("taper")
+        if taper is not None:
+            length = self._arrow_value(self.options["distance"])
+            sign = 1.0 if length >= 0 else -1.0
+            moved = abs(taper.radius - max(abs(length), 1.0)) > 1e-6
+            return moved or getattr(taper, "sign", sign) != sign
+        return False
+
+    def _make_draggers(self):
+        """Blue arrows for the distances (and the start offset), a curved one for the taper."""
+        if self._closed:
+            return
+        active = [h for h in self.draggers.values() if _is_dragging(h)]
+        if active:
+            return  # never pull a handle from under the mouse
+        self._remove_draggers()
+        if not self.profiles or self.target is None:
+            return
+        try:
+            point, normal = extrude.profile_frame(self.profiles)
+            faces = extrude.global_faces(self.profiles)
+            box = faces[0].BoundBox
+            for face in faces[1:]:
+                box.add(face.BoundBox)
+            size = max(4.0, min(box.DiagonalLength * 0.15, 30.0))
+            options = self.options
+            offset = 0.0
+            if options["start"] != "profile":
+                try:
+                    offset = extrude.start_offset_of(self.profiles, options)
+                except extrude.ExtrudeError:
+                    offset = 0.0
+            start = point + normal * offset
+            if options["start"] == "offset":
+                self.draggers["offset"] = ArrowDragger(
+                    point,
+                    normal,
+                    options["start_offset"],
+                    size * 0.7,
+                    on_drag=self._offset_dragged,
+                    on_release=self._offset_released,
+                )
+            if options["extent"] == "distance":
+                self.dragger = self.draggers["distance"] = ArrowDragger(
+                    start,
+                    normal,
+                    self._arrow_value(options["distance"]),
+                    size,
+                    on_drag=self._dragged,
+                    on_release=self._dragged,
+                )
+            if options["direction"] == "two_sides" and options["extent2"] == "distance":
+                self.draggers["distance2"] = ArrowDragger(
+                    start,
+                    normal * -1.0,
+                    options["distance2"],
+                    size,
+                    on_drag=self._dragged2,
+                    on_release=self._dragged2,
+                )
+            self._make_taper_handle(faces, start, normal, size)
+        except Exception as exc:
+            warn("extrude handles unavailable: %s" % exc)
+
+    def _make_taper_handle(self, faces, start, normal, size):
+        """The taper disc sits on the profile's edge, turning outward from the normal."""
+        if self.options["extent"] != "distance":
+            return
+        view = Gui.ActiveDocument.ActiveView
+        look = App.Vector(view.getViewDirection())
+        outward = look.cross(normal)
+        if outward.Length < 1e-6:
+            outward = normal.cross(App.Vector(1, 0, 0))
+            if outward.Length < 1e-6:
+                outward = normal.cross(App.Vector(0, 1, 0))
+        outward.normalize()
+        reach = 0.0
+        for face in faces:
+            for edge in face.Edges:
+                for p in edge.discretize(24):
+                    reach = max(reach, (p - start).dot(outward))
+        if reach <= 0:
+            reach = faces[0].BoundBox.DiagonalLength / 2.0
+        length = self._arrow_value(self.options["distance"])
+        sign = 1.0 if length >= 0 else -1.0
+        pivot = start + outward * reach
+        along = normal * sign
+        self.taper_length = abs(length)
+        self.draggers["taper"] = AngleDragger(
+            pivot,
+            along.cross(outward),
+            along,
+            self.options["taper"],
+            max(abs(length), 1.0),
+            size * 0.35,
+            on_drag=self._taper_dragged,
+            on_release=self._taper_dragged,
+        )
+        self.draggers["taper"].sign = sign
+
+    # -- OK / Cancel ----------------------------------------------------------------------------
     def accept(self):
         if self.target is None:
-            self.message.setText("Pick a sketch profile or a flat face first.")
+            self.message.setText(
+                "⚠ Pick a profile first: click inside a sketch area or on a flat face."
+            )
             return False
-        return super().accept()
+        self._timer.stop()
+        if self.dirty:
+            self.dirty = False
+            self._apply()
+        if self.error:
+            self.message.setText("⚠ " + self.error)
+            return False
+        preview.recompute(self.doc)
+        text = preview.failure(self.target)
+        if text:
+            self.message.setText("⚠ " + text)
+            return False
+        feature = self.target
+        self.cleanup()
+        self.doc.commitTransaction()
+        self._close()
+        new_body = extrude.owner_body(feature)
+        if new_body is not None and new_body is not self.body:
+            try:
+                Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", new_body)
+            except Exception as exc:
+                warn("could not activate %s: %s" % (new_body.Label, exc))
+        log("%s done" % self.title)
+        return True
+
+    def reject(self):
+        self._timer.stop()
+        self.cleanup()
+        self.doc.abortTransaction()
+        preview.recompute(self.doc)
+        self._close()
+        return True
 
     def cleanup(self):
         self._unwatch()
-        if self.dragger is not None:
-            self.dragger.remove()
-            self.dragger = None
+        self._remove_draggers()
         super().cleanup()
+
+
+def _is_dragging(handle):
+    try:
+        return bool(handle.dragger.isActive.getValue())
+    except Exception:
+        return False
+
+
+def _ref_text(ref):
+    if not ref:
+        return ""
+    obj, sub = ref
+    if obj.TypeId in extrude.PLANE_TYPES:
+        return obj.Label
+    if sub:
+        return "%s of %s" % (sub.rstrip("0123456789") or sub, obj.Label)
+    body = extrude.owner_body(obj)
+    return body.Label if body is not None else obj.Label
 
 
 class ExtrudeCommand:
     def GetResources(self):
         return {
             "MenuText": "Extrude",
-            "ToolTip": "Extrude a sketch: join, cut or new body, one side, "
-            "two sides or symmetric, with a live preview (E)",
+            "ToolTip": "Extrude sketch areas or flat faces: join, cut, intersect or new body, "
+            "one side, two sides or symmetric, with a live preview (E)",
             "Pixmap": ui_icon_path("extrude"),
         }
 
@@ -347,8 +1156,15 @@ class ExtrudeCommand:
 
 
 def edit(feature):
-    """Open the Extrude dialog on an existing Pad/Pocket (timeline double-click)."""
-    Gui.Control.showDialog(ExtrudePanel(feature.Document, feature=feature))
+    """Open the Extrude dialog on an existing extrude (timeline double-click)."""
+    try:
+        if Gui.Control.activeDialog():
+            if not commands.finish_open_dialog():
+                return
+        Gui.Control.showDialog(ExtrudePanel(feature.Document, feature=feature))
+    except Exception as exc:
+        warn("could not edit %s: %s" % (feature.Label, exc))
 
 
-EDITORS = {"PartDesign::Pad": edit, "PartDesign::Pocket": edit}
+COMMANDS = {}  # SciForge_Extrude is registered by commands.py
+EDITORS = {"PartDesign::Pad": edit, "PartDesign::Pocket": edit, "SciForge::Extrude": edit}
