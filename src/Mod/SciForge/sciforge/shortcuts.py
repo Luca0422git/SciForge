@@ -42,7 +42,17 @@ def current_map():
 
 
 def normalise(key):
-    return (key or "").replace(" ", "").upper()
+    """Comparable form of a key: "Del" and "Delete", "ctrl+z" and "Ctrl+Z" are the same key."""
+    text = (key or "").replace(" ", "")
+    try:
+        from .compat import QtGui
+
+        portable = QtGui.QKeySequence(text).toString(QtGui.QKeySequence.PortableText)
+        if isinstance(portable, str) and portable:
+            text = portable
+    except Exception:
+        pass
+    return text.upper()
 
 
 def bound_keys():

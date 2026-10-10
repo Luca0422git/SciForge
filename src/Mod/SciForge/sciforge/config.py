@@ -160,6 +160,14 @@ SHORTCUTS = {
     "Std_TransformManip": "M",
     "Std_Measure": "I",
     "Std_ViewFitAll": "F6",
+    # FreeCAD only honours its own Ctrl+Z etc. while its menu bar is visible, and
+    # SciForge hides the menu bar: without these, undo/redo/save/delete keys did nothing.
+    "Std_Undo": "Ctrl+Z",
+    "Std_Redo": "Ctrl+Y",
+    "Std_Save": "Ctrl+S",
+    "Std_New": "Ctrl+N",
+    "Std_Open": "Ctrl+O",
+    "Std_Delete": "Del",
 }
 
 # When SciForge has its own Fusion-style version of a command, the key runs that
@@ -170,4 +178,5 @@ PREFERRED = {
     "PartDesign_Hole": "SciForge_Hole",
     "Std_TransformManip": "SciForge_Move",
     "Std_Measure": "SciForge_Measure",
+    "Std_Delete": "SciForge_Delete",
 }
