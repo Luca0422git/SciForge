@@ -227,40 +227,38 @@ FORGE_COMMANDS = {
 def _feature_commands():
     """Commands implemented in their own modules (imported lazily: they need the GUI).
 
-    Besides the modules listed here, every sciforge/*_ui.py module that defines a
-    module-level COMMANDS = {"SciForge_Name": CommandClass, ...} is registered
-    automatically, so a new feature only adds its own file."""
+    Every sciforge/*_ui.py module that defines a module-level
+    COMMANDS = {"SciForge_Name": CommandClass, ...} (and optionally EDITORS) is registered
+    automatically, so a new feature only adds its own file. Each module is loaded on its
+    own: one that fails to import is reported and skipped, it never takes the other
+    commands down with it."""
     import importlib
     import os
 
-    from .extrude_ui import ExtrudeCommand
-    from .parameters_ui import ChangeParametersCommand
-    from .presspull_ui import PressPullCommand
+    from . import taskui
 
-    from .construct_ui import command_classes
-    from .make3d_ui import PrintCommand
-
-    found = {
-        **command_classes(),
-        "SciForge_PressPull": PressPullCommand,
-        "SciForge_Extrude": ExtrudeCommand,
-        "SciForge_ChangeParameters": ChangeParametersCommand,
-        "SciForge_3DPrint": PrintCommand,
+    # Older modules that expose their commands differently.
+    legacy = {
+        "extrude_ui": lambda m: {"SciForge_Extrude": m.ExtrudeCommand},
+        "presspull_ui": lambda m: {"SciForge_PressPull": m.PressPullCommand},
+        "parameters_ui": lambda m: {"SciForge_ChangeParameters": m.ChangeParametersCommand},
+        "construct_ui": lambda m: m.command_classes(),
+        "make3d_ui": lambda m: {"SciForge_3DPrint": m.PrintCommand},
     }
+    found = {}
     here = os.path.dirname(os.path.abspath(__file__))
     for filename in sorted(os.listdir(here)):
         if not filename.endswith("_ui.py"):
             continue
+        name = filename[:-3]
         try:
-            module = importlib.import_module("." + filename[:-3], __package__)
+            module = importlib.import_module("." + name, __package__)
+            if name in legacy:
+                found.update(legacy[name](module))
+            found.update(getattr(module, "COMMANDS", {}))
+            taskui.EDITORS.update(getattr(module, "EDITORS", {}))
         except Exception as exc:
             warn("could not load %s: %s" % (filename, exc))
-            continue
-        for name, cls in getattr(module, "COMMANDS", {}).items():
-            found[name] = cls
-        from . import taskui
-
-        taskui.EDITORS.update(getattr(module, "EDITORS", {}))
     return found
 
 

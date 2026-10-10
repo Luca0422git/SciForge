@@ -1180,7 +1180,6 @@ class PolygonPreview:
         self.session = session
         self.active = False
         self.node = None
-        self.style = None
         self.saved = None
         self._timer = QtCore.QTimer()
         self._timer.setInterval(self.POLL_MS)
@@ -1223,6 +1222,12 @@ class PolygonPreview:
         style, _ = find_node(root, "EditCurvesDrawStyle")
         if coords is None or style is None or parent is None:
             return
+        # FreeCAD's edit nodes are looked up fresh on every poll and never kept: FreeCAD
+        # deletes them when the sketch closes, and touching a deleted node crashes FreeCAD.
+        if self.node is not None:
+            mine, _ = find_node(root, "SciForgePolygonPreview")
+            if mine is None:  # FreeCAD rebuilt its edit scene: our overlay went with it
+                self.node = None
         if self.node is None:
             self.node = coin.SoSeparator()
             self.node.setName("SciForgePolygonPreview")
@@ -1235,20 +1240,18 @@ class PolygonPreview:
             self.node.addChild(self.coords)
             self.node.addChild(self.lines)
             parent.addChild(self.node)
-            self.parent = parent
-        if self.style is None:
-            self.style = style
+        if self.saved is None:
             self.saved = style.style.getValue()
         self.draw_style.lineWidth = style.lineWidth.getValue()
         points = [tuple(v.getValue()) for v in coords.point.getValues(0)]
         if len(points) < 6:
             self.coords.point.setNum(0)
             self.lines.numVertices.setNum(0)
-            if self.style.style.getValue() != self.saved:
-                self.style.style = self.saved
+            if style.style.getValue() != self.saved:
+                style.style = self.saved
             return
-        if self.style.style.getValue() != coin.SoDrawStyle.INVISIBLE:
-            self.style.style = coin.SoDrawStyle.INVISIBLE
+        if style.style.getValue() != coin.SoDrawStyle.INVISIBLE:
+            style.style = coin.SoDrawStyle.INVISIBLE
         sides = len(points) // 2
         cx = sum(p[0] for p in points) / len(points)
         cy = sum(p[1] for p in points) / len(points)
@@ -1269,18 +1272,21 @@ class PolygonPreview:
     def stop(self):
         self._timer.stop()
         self.active = False
-        try:
-            if self.style is not None and self.saved is not None:
-                self.style.style = self.saved
-        except Exception:
-            pass
-        try:
-            if self.node is not None:
-                self.parent.removeChild(self.node)
-        except Exception:
-            pass
+        # Only while the sketch is still open: once it has closed, FreeCAD has deleted its
+        # edit nodes (with our overlay under them), and writing to a deleted node crashed
+        # FreeCAD (found by the ribbon sweep scenario, faulthandler stack in MEMORY.md).
+        if editing_sketch() is self.session.sketch:
+            try:
+                root = self.session.view.getSceneGraph()
+                style, _ = find_node(root, "EditCurvesDrawStyle")
+                if style is not None and self.saved is not None:
+                    style.style = self.saved
+                mine, parent = find_node(root, "SciForgePolygonPreview")
+                if mine is not None and parent is not None:
+                    parent.removeChild(mine)
+            except Exception:
+                pass
         self.node = None
-        self.style = None
         self.saved = None
 
     def remove(self):

@@ -193,6 +193,10 @@ class _Looks:
     def __init__(self):
         self.saved = []  # (node, field name, old value or values)
         self.tags = set()
+        # The nodes belong to FreeCAD's view providers, which may delete them (e.g. when a
+        # recompute rebuilds a part's display). A Coin reference keeps each one alive until
+        # restore(): writing to a deleted node crashes FreeCAD.
+        self.held = []
 
     def done(self, tag):
         """True if `tag` was applied already (and marks it applied)."""
@@ -202,6 +206,9 @@ class _Looks:
         return False
 
     def set(self, node, field, value):
+        if not any(node is n for n in self.held):
+            node.ref()
+            self.held.append(node)
         fld = getattr(node, field)
         if hasattr(fld, "getNum"):  # a multi-value field (per-face colours)
             old = [fld[i] for i in range(fld.getNum())]
@@ -221,6 +228,12 @@ class _Looks:
                     fld.setValue(old)
             except Exception:
                 pass
+        for node in self.held:
+            try:
+                node.unref()
+            except Exception:
+                pass
+        self.held = []
         self.saved = []
         self.tags = set()
 
