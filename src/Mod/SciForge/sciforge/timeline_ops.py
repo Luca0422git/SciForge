@@ -1296,12 +1296,15 @@ def repair_references(doc):
         lost = any(s.startswith("?") for s in subs)
         broken = "Invalid" in state or "Error" in state
         moved = base.Name != key[0] or linked is not base
+        if not moved and [s.lstrip("?") for s in subs] != list(key[1]):
+            continue  # other edges/faces were picked since (a dialog): those count
         try:
             shape = base.Shape
             if shape.isNull():
                 continue
-            if not (lost or broken or moved) and shape.hashCode() == key[2]:
-                continue  # nothing changed under it
+            base_changed = moved or shape.hashCode() != key[2]
+            if not (lost or moved or (broken and base_changed)):
+                continue  # nothing changed under it (a too-big radius is not ours to fix)
             # The same edges/faces still there, by place and size? (When an edit
             # really changed them, none is found and FreeCAD's naming decides.)
             names = [_twin_name(shape, e) for e in elements]

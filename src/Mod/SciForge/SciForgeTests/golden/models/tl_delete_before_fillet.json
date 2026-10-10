@@ -1,0 +1,107 @@
+{
+  "id": "tl_delete_before_fillet",
+  "title": "Box, hole, round on a box edge; delete the hole: the round stays on its edge",
+  "tags": [
+    "timeline",
+    "delete",
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "y",
+            "value": 0
+          },
+          {
+            "axis": "z",
+            "value": 10
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11180.265542746143,
+        "source": "analytic",
+        "note": "40*30*10 - pi*5^2*10 - 40*2^2*(1-pi/4)"
+      }
+    },
+    {
+      "op": "delete",
+      "target": "e2"
+    }
+  ],
+  "expect": {
+    "volume": 11965.663706143592,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "FreeCAD re-links the round to the box with the hole's edge name (Invalid edge link); SciForge finds the same edge again: 40*30*10 - 40*2^2*(1-pi/4); box 6 faces + the round"
+  }
+}
