@@ -462,8 +462,31 @@ class SketchSession:
         already while it follows the mouse, so only a committed one counts."""
         grew = count > self.constraint_count
         self.constraint_count = count
+        if kind == "commit":
+            QtCore.QTimer.singleShot(0, self._repair)
         if kind == "commit" and grew:
             QtCore.QTimer.singleShot(0, lambda: self._new_dimension(count - 1))
+
+    def _repair(self):
+        """FreeCAD's trim can leave an invalid constraint behind (sketch_fix.py)."""
+        if self.closed:
+            return
+        try:
+            from . import sketch_fix
+
+            if not sketch_fix.bad_coincidences(self.sketch):
+                return
+            self.doc.openTransaction("Repair Trim")
+            try:
+                fixed = sketch_fix.repair(self.sketch)
+                self.sketch.solve()
+            except Exception:
+                self.doc.abortTransaction()
+                raise
+            self.doc.commitTransaction()
+            log("repaired %d constraint(s) FreeCAD's trim made invalid" % fixed)
+        except Exception as exc:
+            warn("could not repair the sketch: %s" % exc)
 
     def _new_dimension(self, index):
         if self.closed or self.editor is not None:

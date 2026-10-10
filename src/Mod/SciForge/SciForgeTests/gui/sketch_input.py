@@ -83,6 +83,62 @@ def menu_item(group_title, label):
     return done["clicked"]
 
 
+def notifications():
+    """Messages FreeCAD put in its notification area (shown to the user as a pop-up
+    balloon; they do not reach the Report view the harness watches)."""
+    found = []
+    for widget in Gui.getMainWindow().findChildren(QtWidgets.QPushButton):
+        if widget.metaObject().className() != "Gui::NotificationArea":
+            continue
+        menu = widget.menu()
+        if menu is None:
+            continue
+        for action in menu.actions():
+            tree = getattr(action, "defaultWidget", lambda: None)()
+            if isinstance(tree, QtWidgets.QTreeWidget):
+                for i in range(tree.topLevelItemCount()):
+                    item = tree.topLevelItem(i)
+                    found.append(" | ".join(item.text(c) for c in range(item.columnCount())))
+    return found
+
+
+_seen = {"count": None}
+
+
+def check_notifications(where):
+    msgs = notifications()
+    if _seen["count"] is None:
+        _seen["count"] = 0
+    fresh = msgs[: len(msgs) - _seen["count"]] if len(msgs) > _seen["count"] else []
+    _seen["count"] = len(msgs)
+    return h.check("No FreeCAD notification (pop-up balloon) after %s" % where, not fresh, fresh)
+
+
+def watched(steps):
+    """The steps, each also checking FreeCAD's notification balloons of the step before
+    (the harness only reads the Report view), plus a last check at the end."""
+    wrapped = []
+    previous = ["start"]
+    for step in steps:
+
+        def run(step=step):
+            check_notifications(previous[0])
+            previous[0] = step.__name__
+            step()
+
+        run.__name__ = step.__name__
+        for attr in ("wait_ms",):
+            if hasattr(step, attr):
+                setattr(run, attr, getattr(step, attr))
+        wrapped.append(run)
+
+    def notifications_at_the_end():
+        check_notifications(previous[0])
+
+    wrapped.append(notifications_at_the_end)
+    return wrapped
+
+
 def palette():
     from sciforge import sketch_mode
 

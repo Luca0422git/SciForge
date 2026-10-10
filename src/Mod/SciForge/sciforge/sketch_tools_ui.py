@@ -125,17 +125,45 @@ def selected_curves(sketch):
     return ids
 
 
+_last = {"offset": []}
+
+
+def last_offset():
+    """Geometry indices the last Offset was started with (for tests and diagnostics)."""
+    return list(_last["offset"])
+
+
 def run_offset(sketch, ids):
     """Select the whole chain of the picked curves and start FreeCAD's offset tool
     (drag or type the distance, click to place)."""
     from . import sketch_regions
 
     chain = sketch_regions.connected_chain(sketch, ids)
+    _last["offset"] = list(chain)
     Gui.Selection.clearSelection()
     for index in chain:
         Gui.Selection.addSelection(sketch.Document.Name, sketch.Name, "Edge%d" % (index + 1))
     Gui.runCommand("Sketcher_Offset")
+    QtCore.QTimer.singleShot(0, _sharp_corners)
     log("offset: %d curve(s); move the mouse or type the distance, then click" % len(chain))
+
+
+def _sharp_corners():
+    """Fusion's offset keeps corners sharp; FreeCAD's tool starts in "Arc" mode (round
+    corners). Pick its "Intersection" mode in the tool's own panel."""
+    from .compat import QtWidgets
+
+    try:
+        for widget in Gui.getMainWindow().findChildren(QtWidgets.QWidget):
+            if widget.metaObject().className() != "SketcherGui::TaskSketcherTool":
+                continue
+            for box in widget.findChildren(QtWidgets.QComboBox):
+                texts = [box.itemText(i) for i in range(box.count())]
+                if "Intersection" in texts and box.currentText() != "Intersection":
+                    box.setCurrentIndex(texts.index("Intersection"))
+                    return
+    except Exception as exc:
+        warn("offset corners: %s" % exc)
 
 
 class _WaitForCurve:

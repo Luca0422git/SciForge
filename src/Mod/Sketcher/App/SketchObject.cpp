@@ -3279,11 +3279,18 @@ std::unique_ptr<Constraint> getNewConstraintAtTrimCut(
     newConstr->First = cutGeoId;
     newConstr->FirstPos = cutPosId;
     newConstr->Second = cuttingGeoId;
-    if (isPointAtPosition(obj, cuttingGeoId, PointPos::start, cutPointVec)) {
+    // SCIFORGE: a full circle/ellipse has no start or end point for the solver, but
+    // getPoint() returns its 0-degree point for them. Trimming a curve exactly there
+    // (e.g. a line through the centre of a circle) made a "Coincident with the circle's
+    // start" constraint: "Sketcher constraint number N is malformed!". Only open curves
+    // get the end-point coincidence.
+    const Part::Geometry* cuttingGeo = obj->getGeometry(cuttingGeoId);
+    const bool cuttingHasEnds = !cuttingGeo || !SketchObject::isClosedCurve(cuttingGeo);
+    if (cuttingHasEnds && isPointAtPosition(obj, cuttingGeoId, PointPos::start, cutPointVec)) {
         newConstr->Type = Sketcher::Coincident;
         newConstr->SecondPos = PointPos::start;
     }
-    else if (isPointAtPosition(obj, cuttingGeoId, PointPos::end, cutPointVec)) {
+    else if (cuttingHasEnds && isPointAtPosition(obj, cuttingGeoId, PointPos::end, cutPointVec)) {
         newConstr->Type = Sketcher::Coincident;
         newConstr->SecondPos = PointPos::end;
     }
