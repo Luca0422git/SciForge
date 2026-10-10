@@ -45,12 +45,12 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | OK / Enter, Cancel / Esc, one undo step, Ctrl+Z in the dialog cancels it | Same |
 | Double-click in the timeline edits it | Same (all four kinds, every Pattern Type) |
 | Deleting a pattern of bodies deletes its bodies | Same (they go a moment later, as their own undo step) |
+| Suppression: a dot on every copy, click one to leave that copy out | Same for Rectangular, Circular and Path patterns (dots drawn over the part; a left-out copy's dot turns grey; clicking it again puts the copy back; unticking Suppression makes every copy again). FreeCAD's pattern features cannot leave a copy out, so a pattern with suppressed copies is built by SciForge's `PatternFeature` (same result otherwise); a pattern of bodies simply makes fewer bodies |
 
 ## Known gaps (never faked: shown greyed with the reason, or listed here)
 
 | Fusion option | Why not yet |
 |---|---|
-| Suppression (click instance dots to skip copies) | Not built: FreeCAD's pattern features have no per-instance switch; needs SciForge's own feature for every pattern. The box is greyed |
 | Compute Option Optimized / Adjust | Copies are identical (FreeCAD repeats the feature's tool). Shown greyed |
 | Pattern Type Components | SciForge has no components yet |
 | Quantity from a parameter | The quantity is a whole-number box |
@@ -63,7 +63,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 
 - Scenarios (real clicks, keys, drags; any Report-view error fails them):
   `patterns_rect.py`, `patterns_circ.py`, `patterns_mirror.py`, `patterns_path.py`,
-  `patterns_qa.py` (wrong picks, Ctrl+Z in the dialog, type switch, timeline delete of a body
+  `patterns_suppress.py`, `patterns_qa.py` (wrong picks, Ctrl+Z in the dialog, type switch, timeline delete of a body
   pattern, save and reopen). Volumes and positions checked with hand-derived formulas.
 - Golden models (ops `rectangular_pattern`, `circular_pattern`, `path_pattern`,
   `fusion_mirror`, `pattern_edit` in `golden/pattern_ops.py`, the dialogs' code):
@@ -71,7 +71,8 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
   `pattern_circ_faces_bolt_circle`, `pattern_circ_symmetric_holes`, `mirror_features_yz_fusion`,
   `mirror_body_join_face`, `mirror_body_new_body`, `mirror_faces_hole`, `mirror_fillet_feature`,
   `pattern_bodies_rect_new`, `pattern_path_bosses`, `pattern_path_circle_turned`,
-  `pattern_symmetric_parameter`, `pattern_edit_quantity_fusion`.
+  `pattern_symmetric_parameter`, `pattern_edit_quantity_fusion`, `pattern_rect_suppressed`,
+  `pattern_circ_suppressed_bodies`.
 - Unit tests: `SciForgeTests/unit/test_pattern_core.py`.
 
 ## Lessons for other dialogs
@@ -87,3 +88,5 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 - A click on an overlay drawn over the part also selects the part on release: remember the
   overlay click and ignore the selection that follows (`OVERLAY_CLICK_S`).
 - Keep the word "error" out of scenario step names: the harness reads it in the log line.
+- PartDesign features already have a `Suppressed` (bool) property: a Python feature adding its
+  own `Suppressed` list silently keeps the bool (SciForge uses `SuppressedCopies`).

@@ -86,6 +86,7 @@ DEFAULTS = {
     # pattern on path
     "path": None,
     "orientation": "identical",  # or "path": copies turn with the path
+    "suppressed": [],  # Suppression: copies (index among the copies) that are not made
     "expressions": {},  # value field key -> formula typed in the dialog
 }
 
@@ -100,6 +101,7 @@ def with_defaults(options):
     merged.update(options or {})
     merged["expressions"] = dict(merged.get("expressions") or {})
     merged["objects"] = list(merged.get("objects") or [])
+    merged["suppressed"] = sorted({int(i) for i in (merged.get("suppressed") or [])})
     return merged
 
 
@@ -141,10 +143,6 @@ def kind_of(obj):
 
 def is_pattern(obj):
     return kind_of(obj) is not None
-
-
-def is_engine(obj):
-    return obj is not None and obj.TypeId == ENGINE and kind_of(obj) is not None
 
 
 def is_solid_feature(obj):
@@ -397,6 +395,8 @@ def implementation(kind, options):
     """'native' (FreeCAD's pattern features) or 'engine' (SciForge's PatternFeature)."""
     if kind == "path":
         return "engine"
+    if options.get("suppressed") and kind != "mirror":
+        return "engine"  # FreeCAD's pattern features cannot leave an instance out
     kind_type = options["pattern_type"]
     if kind_type == "faces":
         return "engine"
@@ -887,6 +887,7 @@ class PatternFeature:
             obj.Angle = 360.0
         if add("App::PropertyBool", "Refine", "Merge faces that end up coplanar, like Fusion"):
             obj.Refine = True
+        add("App::PropertyIntegerList", "SuppressedCopies", "Copies left out (Suppression)")
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
@@ -898,7 +899,9 @@ class PatternFeature:
         kind = kind_of(obj)
         options = read_engine(obj)
         tools = engine_tools(obj, options, base)
-        moves = placements(kind, options, tools)
+        # A path pattern starts where the dialog's arrow is: nearest the objects' centre.
+        center = objects_center(options)[0] if kind == "path" else None
+        moves = placements(kind, options, tools, center)
         obj.Shape = apply_tools(base.Shape, tools, moves, kind, refine=obj.Refine)
 
     def dumps(self):
@@ -952,6 +955,13 @@ def _update_engine(obj, kind, options):
     for prop, key in (("Distance", "distance"), ("Distance2", "distance2"), ("Angle", "angle")):
         _set(obj, prop, float(options[key]))
         _expr(obj, prop, _formula(options, key, obj.Document))
+    _set_suppressed(obj, options)
+
+
+def _set_suppressed(obj, options):
+    wanted = [int(i) for i in options.get("suppressed") or []]
+    if list(obj.SuppressedCopies) != wanted:
+        obj.SuppressedCopies = wanted
 
 
 _USES = {
@@ -985,6 +995,7 @@ def read_engine(obj):
     options["distance"] = obj.Distance.Value
     options["distance2"] = obj.Distance2.Value
     options["angle"] = obj.Angle.Value
+    options["suppressed"] = list(getattr(obj, "SuppressedCopies", []) or [])
     if options["pattern_type"] == "faces" and obj.Faces:
         options["objects"] = [(obj.Faces[0], sub) for sub in obj.Faces[1]]
     elif options["pattern_type"] == "features":
@@ -996,9 +1007,17 @@ def read_engine(obj):
 
 
 # -- the copies ----------------------------------------------------------------------------------
-def placements(kind, options, tools=None):
-    """Body-coordinate transforms of the copies (the original's identity not included):
-    App.Placement for moves, ("mirror", point, normal) for the mirror."""
+def placements(kind, options, tools=None, center=None):
+    """Body-coordinate transforms of the copies that are made (the original's identity not
+    included, suppressed copies left out): App.Placement for moves, ("mirror", point, normal)
+    for the mirror."""
+    moves = all_placements(kind, options, tools, center)
+    skip = set(options.get("suppressed") or []) if kind != "mirror" else set()
+    return [move for i, move in enumerate(moves) if i not in skip]
+
+
+def all_placements(kind, options, tools=None, center=None):
+    """Every copy's transform, suppressed ones included (Suppression shows them as dots)."""
     if kind == "rectangular":
         _p, u1 = direction_of(options["direction"])
         offsets1 = core.linear_offsets(
@@ -1031,7 +1050,7 @@ def placements(kind, options, tools=None):
         point, normal = plane_of(options["plane"])
         return [("mirror", point, normal)]
     if kind == "path":
-        return path_placements(options, tools)
+        return path_placements(options, tools, center)
     raise PatternError("Unknown pattern %r." % kind)
 
 
@@ -1319,9 +1338,10 @@ def _length_between(edge, a, b):
         return abs(b - a)
 
 
-def path_placements(options, tools):
+def path_placements(options, tools, center=None):
     path = _Path(path_edges(options["path"]))
-    center = _objects_center(options, tools)
+    if center is None:
+        center = _objects_center(options, tools)
     start = path.locate(center)
     offsets = core.linear_offsets(
         options["quantity"], options["distance"], options["distribution"], options["direction_type"]
@@ -1531,11 +1551,6 @@ def _on_shell(shape, point):
         return False
 
 
-def instance_offsets(kind, options):
-    """Body-coordinate offsets of every instance (for drawing markers and tests)."""
-    return placements(kind, with_defaults(options))
-
-
 # -- Bodies: the copies are new bodies (Fusion) ------------------------------------------------------
 # A pattern of a body (or a mirror with Operation New Body) makes one new body per copy, like
 # Fusion. The pattern itself is a top-level SciForge feature (the timeline step) that knows the
@@ -1623,6 +1638,7 @@ class BodyPatternFeature:
         add("App::PropertyDistance", "Distance2", "Distance in direction 2")
         if add("App::PropertyAngle", "Angle", "Total angle of a circular pattern"):
             obj.Angle = 360.0
+        add("App::PropertyIntegerList", "SuppressedCopies", "Copies left out (Suppression)")
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
@@ -1697,6 +1713,7 @@ def read_body_pattern(obj):
     options["distance"] = obj.Distance.Value
     options["distance2"] = obj.Distance2.Value
     options["angle"] = obj.Angle.Value
+    options["suppressed"] = list(getattr(obj, "SuppressedCopies", []) or [])
     options["objects"] = [(obj.Source, "")] if obj.Source is not None else []
     return options
 
@@ -1710,7 +1727,8 @@ def body_copy_shapes(definition):
     place = source.getGlobalPlacement()
     local = shape.copy()
     local.transformShape(place.inverse().toMatrix(), True)
-    moves = placements(kind, options, [(local, "add")])
+    center = local.BoundBox.Center if kind == "path" else None
+    moves = placements(kind, options, [(local, "add")], center)
     copies = []
     for move in moves:
         if isinstance(move, tuple):
@@ -1760,6 +1778,7 @@ def _set_body_props(obj, kind, options):
     for prop, key in (("Distance", "distance"), ("Distance2", "distance2"), ("Angle", "angle")):
         _set(obj, prop, float(options[key]))
         _expr(obj, prop, _formula(options, key, obj.Document))
+    _set_suppressed(obj, options)
 
 
 def _build_body_copies(kind, options, feature, name=None):

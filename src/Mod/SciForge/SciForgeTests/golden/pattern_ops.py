@@ -12,7 +12,8 @@ What is patterned (exactly one):
   {"op": "rectangular_pattern", "id": "p1", <what>, "direction": "X" | {"edge": sel} |
    {"face": sel}, "quantity": 3, "distance": 40, "distribution": "extent" | "spacing",
    "direction_type": "one" | "symmetric", "direction2": ..., "quantity2", "distance2",
-   "direction_type2", "expressions": {"distance": "gap"}}
+   "direction_type2", "expressions": {"distance": "gap"}, "suppressed": [2]}
+      ("suppressed": copies left out, by their index among the copies, Suppression)
 
   {"op": "circular_pattern", "id": "p1", <what>, "axis": "Z" | {"edge": sel} | {"face": sel},
    "quantity": 6, "type": "full" | "angle" | "symmetric", "angle": 90}
@@ -43,6 +44,7 @@ VALUE_KEYS = (
     "angle",
     "orientation",
     "operation",
+    "suppressed",
 )
 
 

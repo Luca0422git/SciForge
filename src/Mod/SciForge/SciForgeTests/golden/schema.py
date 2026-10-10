@@ -398,7 +398,7 @@ STEP_KEYS["thread"] = (
 # Fusion-style Rectangular / Circular Pattern, Pattern on Path and Mirror (golden/pattern_ops.py;
 # sciforge/pattern.py, the same code as their dialogs). What is patterned: one of "features"
 # (step ids), "faces" (a selector) or "body": true.
-_PATTERN_WHAT = {"features", "faces", "body", "expressions", "comment"}
+_PATTERN_WHAT = {"features", "faces", "body", "expressions", "suppressed", "comment"}
 STEP_KEYS["rectangular_pattern"] = (
     {"id", "direction"},
     _PATTERN_WHAT

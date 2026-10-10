@@ -122,9 +122,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       `PatternFeature` closes the faces into the hole or boss they bound) / Bodies (one new body
       per copy; Mirror: New Body or Join). Quantity, Distance, Extent/Spacing, One Direction/
       Symmetric per direction, Direction 2 offered at right angles, Full/Angle/Symmetric,
-      Identical/Path Direction; origin axes and planes drawn to click; blue arrows and a curved
-      angle handle; parameters/formulas; live preview; errors in the dialog; timeline edit.
-      Spec + gaps: `docs/sciforge/parity/patterns.md`. 5 scenarios (`patterns*.py`), 14 golden
+      Identical/Path Direction, Suppression (click the dot on a copy); origin axes and planes
+      drawn to click; blue arrows and a curved angle handle; parameters/formulas; live preview;
+      errors in the dialog; timeline edit.
+      Spec + gaps: `docs/sciforge/parity/patterns.md`. 6 scenarios (`patterns*.py`), 16 golden
       models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
       `SciForge_PatternOnPath` (was greyed).
 
@@ -329,7 +330,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - **To confirm with Luca:** Fusion's Symmetric (rectangular and circular) is implemented as
     "quantity and distance/angle per side, the original shared"; Direction 2 is offered at
     right angles after Direction 1; Mirror of a body defaults to New Body.
-  - Not done (gaps, see the parity doc): Suppression, Compute Option Optimized/Adjust,
+  - PartDesign features already own a `Suppressed` bool: a Python feature's own property of
+    that name is silently not added (use another name: `SuppressedCopies`).
+  - Not done (gaps, see the parity doc): Compute Option Optimized/Adjust,
     Components, quantity from a parameter, face copies that heal into different
     surroundings, an explicit start point on a path. The timeline module has no entry for
     `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
@@ -456,8 +459,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   front-plane pickers, highlight overlay, arrows, angle handle, editors, delete watch for body
   patterns), `mirror_ui.py` (Mirror). Ribbon: Pattern on Path enabled (one line).
 - Tests: scenarios `patterns_rect`, `patterns_circ`, `patterns_mirror`, `patterns_path`,
-  `patterns_qa` (real input only); golden ops `rectangular_pattern`, `circular_pattern`,
-  `path_pattern`, `fusion_mirror`, `pattern_edit` (`golden/pattern_ops.py`) + 14 models;
+  `patterns_suppress`, `patterns_qa` (real input only); golden ops `rectangular_pattern`,
+  `circular_pattern`, `path_pattern`, `fusion_mirror`, `pattern_edit`
+  (`golden/pattern_ops.py`) + 16 models;
   unit tests `test_pattern_core.py` (17).
 - Parity doc `docs/sciforge/parity/patterns.md` (assumptions to confirm with Luca, gaps).
 

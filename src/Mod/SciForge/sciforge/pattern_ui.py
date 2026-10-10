@@ -390,6 +390,78 @@ def front_planes():
     return FrontPlanePicker
 
 
+class InstanceDots:
+    """Fusion's Suppression: a dot on every copy. Click a dot to leave that copy out (the dot
+    turns grey) or to put it back: on_toggle(index). Drawn over the part, not selectable."""
+
+    ON = (0.30, 0.62, 0.95)
+    OFF = (0.55, 0.55, 0.55)
+
+    def __init__(self, view, points, suppressed, on_toggle, radius):
+        from pivy import coin
+
+        self.view = view
+        self.points = list(points)
+        self.on_toggle = on_toggle
+        self.root = coin.SoSeparator()
+        pick = coin.SoPickStyle()
+        pick.style = coin.SoPickStyle.UNPICKABLE
+        self.root.addChild(pick)
+        common.on_top(self.root)
+        for i, point in enumerate(self.points):
+            sep = coin.SoSeparator()
+            material = coin.SoMaterial()
+            color = self.OFF if i in suppressed else self.ON
+            material.diffuseColor.setValue(*color)
+            material.emissiveColor.setValue(*[c * 0.6 for c in color])
+            move = coin.SoTranslation()
+            move.translation.setValue(point.x, point.y, point.z)
+            ball = coin.SoSphere()
+            ball.radius = radius
+            sep.addChild(material)
+            sep.addChild(move)
+            sep.addChild(ball)
+            self.root.addChild(sep)
+        view.getSceneGraph().addChild(self.root)
+        self.callback = view.addEventCallback("SoMouseButtonEvent", self._button)
+
+    def dot_at(self, position, reach=10.0):
+        best = None
+        px, py = float(position[0]), float(position[1])
+        for i, point in enumerate(self.points):
+            try:
+                x, y = self.view.getPointOnViewport(point)
+            except Exception:
+                continue
+            dist = math.hypot(x - px, y - py)
+            if dist <= reach and (best is None or dist < best[1]):
+                best = (i, dist)
+        return best[0] if best else None
+
+    def _button(self, info):
+        try:
+            if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
+                return
+            position = tuple(info["Position"])
+            if profile_pick.handle_at(self.view, position):
+                return
+            index = self.dot_at(position)
+            if index is not None:
+                self.on_toggle(index)  # the panel defers the work
+        except Exception as exc:
+            warn("suppression dot: %s" % exc)
+
+    def remove(self):
+        try:
+            self.view.removeEventCallback("SoMouseButtonEvent", self.callback)
+        except Exception:
+            pass
+        try:
+            self.view.getSceneGraph().removeChild(self.root)
+        except Exception:
+            pass
+
+
 class ViewProviderPattern:
     """View provider of SciForge's own pattern feature (pattern.PatternFeature)."""
 
@@ -457,6 +529,7 @@ class PatternPanel(Panel):
         self._quiet = False
         self._syncing = False
         self.handles = {}
+        self.dots = None
         self.marks = None
         self.axis_picker = None
         self.plane_picker = None
@@ -492,6 +565,7 @@ class PatternPanel(Panel):
         else:
             self._refresh()
             self._make_handles()
+            self._update_dots()
         self._show_active()
 
     # -- form ---------------------------------------------------------------------------------
@@ -554,8 +628,11 @@ class PatternPanel(Panel):
 
     def _suppression(self):
         box = QtWidgets.QCheckBox()
-        box.setEnabled(False)
-        box.setToolTip("Not available in SciForge yet: every instance is made.")
+        box.setChecked(bool(self.options.get("suppressed")))
+        box.setToolTip(
+            "Show a dot on every copy: click a dot to leave that copy out, again to put it back"
+        )
+        box.toggled.connect(self._suppression_toggled)
         self.layout.addRow("Suppression", box)
         return box
 
@@ -648,6 +725,10 @@ class PatternPanel(Panel):
                     common.set_combo(box, self.options[name])
             if getattr(self, "circular_type", None) is not None:
                 common.set_combo(self.circular_type, self.options["circular_type"])
+            if getattr(self, "suppression", None) is not None:
+                self.suppression.blockSignals(True)
+                self.suppression.setChecked(bool(self.options.get("suppressed")))
+                self.suppression.blockSignals(False)
             for name in ("quantity", "quantity2"):
                 spin = getattr(self, name, None)
                 if spin is not None:
@@ -1167,6 +1248,67 @@ class PatternPanel(Panel):
         self._update_visibility()
         self._changed(new_geometry=True)
 
+    def _suppression_toggled(self, on):
+        """Fusion: Suppression on shows the dots; off makes every copy again."""
+        if self._quiet or self._closed:
+            return
+        try:
+            if not on and self.options.get("suppressed"):
+                self.options["suppressed"] = []
+                self._changed(new_geometry=True)
+            self._update_dots()
+        except Exception as exc:
+            warn("%s suppression: %s" % (self.title, exc))
+
+    def _dot_clicked(self, index):
+        """A suppression dot was pressed (inside FreeCAD's mouse handling: work comes later)."""
+        self._overlay_time = time.time()
+        if not self._closed:
+            QtCore.QTimer.singleShot(0, lambda: self._toggle_instance(index))
+
+    def _toggle_instance(self, index):
+        if self._closed:
+            return
+        try:
+            suppressed = set(self.options.get("suppressed") or [])
+            suppressed ^= {index}
+            self.options["suppressed"] = sorted(suppressed)
+            self._changed(new_geometry=True)
+            self._update_dots()
+        except Exception as exc:
+            warn("%s suppression: %s" % (self.title, exc))
+
+    def _instance_points(self):
+        """Global position of every copy (suppressed ones too), at the objects' centre."""
+        center, box = pattern.objects_center(self.options)
+        moves = pattern.all_placements(self.kind, self.options, center=center)
+        if box is not None:  # on top of what is patterned, like the arrows
+            center = App.Vector(center.x, center.y, box.ZMax)
+        return [pattern.to_global(self.body, move.multVec(center)) for move in moves]
+
+    def _update_dots(self):
+        if self.dots is not None:
+            self.dots.remove()
+            self.dots = None
+        box = getattr(self, "suppression", None)
+        if box is None or not box.isChecked() or self._closed or self.body is None:
+            return
+        if not self.options["objects"] or self.error or self.waiting:
+            return
+        try:
+            points = self._instance_points()
+            count = len(points)
+            kept = [i for i in self.options.get("suppressed") or [] if i < count]
+            if kept != list(self.options.get("suppressed") or []):
+                self.options["suppressed"] = kept  # fewer copies now
+            _center, objects_box = pattern.objects_center(self.options)
+            radius = max(0.6, self._arrow_size(objects_box) * 0.12)
+            self.dots = InstanceDots(self.view, points, set(kept), self._dot_clicked, radius)
+        except PatternError:
+            return
+        except Exception as exc:
+            warn("%s suppression dots unavailable: %s" % (self.title, exc))
+
     def _circular_type_changed(self, *_):
         if self._quiet:
             return
@@ -1273,6 +1415,7 @@ class PatternPanel(Panel):
             if self._geometry_changed or self._handles_stale():
                 self._geometry_changed = False
                 self._make_handles()
+            self._update_dots()
         except Exception as exc:
             self.message.setText("⚠ %s" % exc)
 
@@ -1581,6 +1724,9 @@ class PatternPanel(Panel):
             except Exception:
                 pass
         self._remove_handles()
+        if self.dots is not None:
+            self.dots.remove()
+            self.dots = None
         if self.marks is not None:
             self.marks.remove()
             self.marks = None
