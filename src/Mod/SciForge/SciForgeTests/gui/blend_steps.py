@@ -38,7 +38,10 @@ def close(a, b, tol=1e-6):
 
 
 # -- making the box with real input (like Luca: sketch, rectangle, Finish, E, OK) --------
-def box_steps(name):
+def box_steps(name, height=10, profile=None):
+    """Steps that make a 40 x 30 box `height` high (or extrude `profile(sketch)`) with real
+    input: Create Sketch, click XY, draw, Finish Sketch, E, type the distance, OK."""
+
     def new_design():
         Gui.activateWorkbench("SciForgeWorkbench")
         App.newDocument(name)
@@ -52,7 +55,10 @@ def box_steps(name):
         sk = h.in_sketch()
         h.check("sketch open on XY", sk is not None)
         if sk:
-            h.draw_rectangle(sk, 0, 0, 40, 30)
+            if profile is None:
+                h.draw_rectangle(sk, 0, 0, 40, 30)
+            else:
+                profile(sk)
 
     def finish_sketch():
         h.ribbon("Finish Sketch")
@@ -67,14 +73,17 @@ def box_steps(name):
         if panel is not None:
             field = getattr(getattr(panel, "distance", None), "widget", None)
         if field is not None:
-            type_into(field, "10")
+            type_into(field, "%g" % height)
 
     def extrude_ok():
         h.task_button("OK")
 
     def box_made():
         v = h.solid_volume()
-        h.check("box 40 x 30 x 10 made (V = 12000)", close(v, BOX), v)
+        if profile is None:
+            h.check("box 40 x 30 x %g made" % height, close(v, 1200.0 * height), v)
+        else:
+            h.check("part made", v > 1.0, v)
         h.fit()
 
     return [
@@ -87,6 +96,37 @@ def box_steps(name):
         extrude_ok,
         box_made,
     ]
+
+
+def draw_slot(sketch, x1, y1, x2, y2, width):
+    """A straight slot (two lines, two half circles), like the golden builder's."""
+    import Part
+
+    r = width / 2.0
+    z = V(0, 0, 1)
+    sketch.addGeometry(Part.LineSegment(V(x1, y1 - r, 0), V(x2, y2 - r, 0)))
+    sketch.addGeometry(Part.ArcOfCircle(Part.Circle(V(x2, y2, 0), z, r), -math.pi / 2, math.pi / 2))
+    sketch.addGeometry(Part.LineSegment(V(x2, y2 + r, 0), V(x1, y1 + r, 0)))
+    sketch.addGeometry(
+        Part.ArcOfCircle(Part.Circle(V(x1, y1, 0), z, r), math.pi / 2, 3 * math.pi / 2)
+    )
+    App.ActiveDocument.recompute()
+
+
+def xbar(r):
+    """Centroid of the round's cross-section, measured from either face (Pappus)."""
+    return r * (5.0 / 6.0 - math.pi / 4.0) / (1.0 - math.pi / 4.0)
+
+
+def task_spinboxes():
+    """The number fields of the open task panel, top to bottom."""
+    main = Gui.getMainWindow()
+    found = [
+        w
+        for w in main.findChildren(QtWidgets.QAbstractSpinBox)
+        if w.isVisible() and w.metaObject().className() == "Gui::QuantitySpinBox"
+    ]
+    return sorted(found, key=lambda w: w.mapToGlobal(QtCore.QPoint(0, 0)).y())
 
 
 # -- the dialog --------------------------------------------------------------------------
