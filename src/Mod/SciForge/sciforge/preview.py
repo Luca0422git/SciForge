@@ -90,6 +90,84 @@ class EscapeCancels:
         self.panel = None
 
 
+class FormulaInput:
+    """Fusion's value fields take a parameter or a formula ("width", "width*2 + 5 mm"), and
+    the value then follows the parameter. FreeCAD's number field only takes numbers (it
+    silently put the old value back), so the text typed in `field` (a taskui.DistanceField)
+    is caught here and handed to the panel:
+
+      panel.formula_typed(key, text, value)   a formula, already evaluated (field shows value)
+      panel.formula_cleared(key)              a plain number typed: no formula any more
+      panel.formula_failed(key, message)      no value (a typo, wrong units...)
+    """
+
+    def __init__(self, panel, key, field):
+        from .compat import QtWidgets
+
+        self.panel = panel
+        self.key = key
+        self.field = field
+        self.raw = None
+        edit = field.widget.findChild(QtWidgets.QLineEdit)
+        if edit is not None:
+            edit.textEdited.connect(self._edited)
+        field.widget.editingFinished.connect(self._finished)
+
+    def _edited(self, text):
+        self.raw = text
+
+    def _finished(self):
+        raw, self.raw = self.raw, None
+        panel = self.panel
+        if raw is None or getattr(panel, "_closed", True):
+            return
+        text = raw.strip().lstrip("=").strip()
+        try:
+            from . import extrude, parameters
+
+            if not text or parameters.is_plain_number(text):
+                panel.formula_cleared(self.key)
+                return
+            try:
+                value = extrude.evaluate(panel.doc, text)
+            except extrude.ExtrudeError as exc:
+                panel.formula_failed(self.key, str(exc))
+                return
+            self.field.set_value(value)
+            panel.formula_typed(self.key, text, value)
+        except Exception as exc:
+            from . import warn
+
+            warn("formula %r: %s" % (text, exc))
+
+
+def set_formula(obj, prop, text):
+    """Put a formula typed in a dialog (bare parameter names) on obj.prop as an expression,
+    or remove the expression when `text` is empty."""
+    from . import parameters, parameters_core
+
+    if obj is None or prop not in obj.PropertiesList:
+        return
+    engine = dict(obj.ExpressionEngine)
+    if text:
+        expr = parameters_core.to_freecad(text, parameters.user_names(obj.Document))
+        if engine.get(prop) != expr:
+            obj.setExpression(prop, expr)
+    elif prop in engine:
+        obj.setExpression(prop, None)
+
+
+def formula_of(obj, prop):
+    """The formula (bare parameter names) driving obj.prop, or ''."""
+    from . import parameters_core
+
+    try:
+        expr = dict(obj.ExpressionEngine).get(prop, "")
+    except Exception:
+        return ""
+    return parameters_core.from_freecad(expr) if expr else ""
+
+
 class EnterFinishes:
     """Fusion: Enter finishes the command (OK), also with the mouse over the 3D view.
     FreeCAD's task panel only sees Enter while one of its fields has the keyboard focus

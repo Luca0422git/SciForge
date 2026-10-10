@@ -12,7 +12,7 @@ Path 24, the design closed under an open dialog (its tab closed, changes discard
          the dialog goes away quietly and the next command works.
 Path 27, parameters typed in the Extrude fields like in Fusion ("width", "-depth",
          "width*2"): the extrude follows when the parameter changes; a plain number
-         typed later stops that.
+         typed later stops that. The same in Press Pull ("width/10").
 """
 import os
 import tempfile
@@ -443,6 +443,65 @@ def p27_cut_follows():
     h.shot("p27-end")
 
 
+def p27_pp():
+    h.click_empty()
+    h.press("q")
+
+
+def p27_pp_pick():
+    h.fit()
+    h.click(V(30, 25, 6))
+
+
+def p27_pp_type():
+    p = ppanel()
+    h.check("Press Pull took the top", p.target is not None and len(p.names) == 1, p.message.text())
+    ui.type_into(p.field.widget, "width/10")
+
+
+def p27_pp_formula():
+    p = ppanel()
+    h.check("'width/10' is 4", near(p.field.value(), 4.0), p.field.value())
+    h.check("Press Pull shows its formula", "width/10" in p.formula_label.text())
+    h.check("top up 4", near(vol(s["f"]), 7200.0 + 4800.0), vol(s["f"]))
+    h.task_button("OK")
+
+
+def p27_pp_follows():
+    from sciforge import parameters
+
+    parameters.set_user(s["f"], "width", "50")
+    s["f"].recompute()
+    h.check("Press Pull follows width = 50 (5)", near(vol(s["f"]), 7200.0 + 6000.0), vol(s["f"]))
+    h.check("double-click Press Pull 1", ui.double_click_timeline("Press Pull 1"))
+
+
+def p27_pp_edit():
+    p = ppanel()
+    h.check("editing Press Pull", p is not None and p.editing and not p._closed)
+    if p is None or not p.editing:
+        return
+    shown = p.formula_label.text().replace(" ", "")
+    h.check("its formula is back", "width/10" in shown, p.formula_label.text())
+    ui.type_into(p.field.widget, "3")
+
+
+def p27_pp_plain():
+    p = ppanel()
+    h.check("a number typed over the formula wins", near(vol(s["f"]), 7200.0 + 3600.0), vol(s["f"]))
+    h.check("formula gone", p.formula_label.text() == "", p.formula_label.text())
+    h.task_button("OK")
+
+
+def p27_pp_done():
+    from sciforge import parameters
+
+    parameters.set_user(s["f"], "width", "60")
+    s["f"].recompute()
+    h.check("no longer follows width", near(vol(s["f"]), 7200.0 + 3600.0), vol(s["f"]))
+    h.check("nothing in error", not broken(s["f"]), broken(s["f"]))
+
+
 h.run(
     "extrude_presspull_qa5",
     [
@@ -494,5 +553,13 @@ h.run(
         p27_cut_type,
         p27_cut,
         p27_cut_follows,
+        p27_pp,
+        p27_pp_pick,
+        p27_pp_type,
+        p27_pp_formula,
+        p27_pp_follows,
+        p27_pp_edit,
+        p27_pp_plain,
+        p27_pp_done,
     ],
 )

@@ -97,57 +97,6 @@ class SelectionField:
         self.button.setText(text or self.empty)
 
 
-class FormulaInput:
-    """Fusion's value fields take a parameter or a formula ("width", "width*2 + 5 mm"), and
-    the value then follows the parameter. FreeCAD's number field only takes numbers (it
-    silently put the old value back), so the text typed is caught here: evaluated for the
-    preview, kept in panel.options["expressions"] and stored on the feature as an
-    expression. A plain number typed (or a drag) removes the formula."""
-
-    def __init__(self, panel, key, field, on_value):
-        self.panel = panel
-        self.key = key
-        self.field = field
-        self.on_value = on_value
-        self.raw = None
-        edit = field.widget.findChild(QtWidgets.QLineEdit)
-        if edit is not None:
-            edit.textEdited.connect(self._edited)
-        field.widget.editingFinished.connect(self._finished)
-
-    def _edited(self, text):
-        self.raw = text
-
-    def _finished(self):
-        raw, self.raw = self.raw, None
-        if raw is None or self.panel._closed:
-            return
-        text = raw.strip().lstrip("=").strip()
-        try:
-            from . import parameters
-
-            if not text or parameters.is_plain_number(text):
-                self.panel.drop_formula(self.key)
-                return
-            value = extrude.evaluate(self.panel.doc, text)
-        except extrude.ExtrudeError as exc:
-            # Kept until the field gets a value again (a preview rebuild must not wipe it).
-            self.panel.formula_error = str(exc)
-            self.panel.message.setText("⚠ " + str(exc))
-            return
-        except Exception as exc:
-            warn("formula %r: %s" % (text, exc))
-            return
-        self.panel.formula_error = ""
-        self.panel.options["expressions"][self.key] = text
-        self.field.set_value(value)
-        try:
-            self.on_value(value)
-        except Exception as exc:
-            warn("formula %r: %s" % (text, exc))
-        self.panel.show_formulas()
-
-
 class AngleDragger:
     """Fusion's taper handle: a short curved blue arrow at the end of the extrusion that
     turns about the profile's edge (`pivot`, axis `axis`). At angle 0 it sits `radius`
@@ -520,10 +469,13 @@ class ExtrudePanel(Panel):
         form.addRow(self.formulas)
         self.finish_layout()
         self.formula_inputs = [
-            FormulaInput(self, "distance", self.distance, self._distance_typed),
-            FormulaInput(self, "distance2", self.distance2, self._distance2_typed),
-            FormulaInput(self, "taper", self.taper, self._taper_typed),
-            FormulaInput(self, "taper2", self.taper2, self._typed),
+            preview.FormulaInput(self, key, field)
+            for key, field in (
+                ("distance", self.distance),
+                ("distance2", self.distance2),
+                ("taper", self.taper),
+                ("taper2", self.taper2),
+            )
         ]
         for box in (self.start, self.direction, self.extent, self.extent2, self.measurement):
             box.currentIndexChanged.connect(self._typed)
@@ -640,6 +592,26 @@ class ExtrudePanel(Panel):
         if self.options.get("expressions", {}).pop(key, None) is not None:
             self.show_formulas()
             self._changed()
+
+    # preview.FormulaInput calls these three.
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options["expressions"][key] = text
+        handler = {
+            "distance": self._distance_typed,
+            "distance2": self._distance2_typed,
+            "taper": self._taper_typed,
+        }.get(key, self._typed)
+        handler(value)
+        self.show_formulas()
+
+    def formula_cleared(self, key):
+        self.drop_formula(key)
+
+    def formula_failed(self, key, text):
+        # Kept until the field gets a value again (a preview rebuild must not wipe it).
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
 
     # -- selection fields ------------------------------------------------------------------
     def activate(self, name):

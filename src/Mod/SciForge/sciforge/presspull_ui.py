@@ -158,7 +158,15 @@ class PressPullPanel(Panel):
         self.field_label = QtWidgets.QLabel("Distance")
         self.field = DistanceField(0.0, on_change=self._typed)
         self.layout.addRow(self.field_label, self.field.widget)
+        self.formula = ""  # the value as a formula of parameters ("wall * 2"), or ""
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setWordWrap(True)
+        self.formula_label.setStyleSheet("color: #b8c7d9;")
+        self.layout.addRow(self.formula_label)
         self.finish_layout()
+        # Fusion: a parameter or formula typed in the field; a number typed over it wins.
+        # (FreeCAD's own expression binding made the field read-only once a formula was set.)
+        self.formula_input = preview.FormulaInput(self, "value", self.field)
 
         if feature is not None:
             self.mode = "faces"
@@ -166,7 +174,7 @@ class PressPullPanel(Panel):
             self.base = feature.BaseFeature
             self.names = list(feature.Faces[1]) if feature.Faces else []
             self.field.set_value(feature.Distance.Value)
-            self.field.bind(feature, "Distance")
+            self._show_formula(preview.formula_of(feature, "Distance"))
             self._describe()
             self._make_dragger()
         else:
@@ -365,7 +373,7 @@ class PressPullPanel(Panel):
         if self.mode == "faces":
             if self.target is None:
                 self.target = presspull.make(self.body, self.base, self.names, self.field.value())
-                self.field.bind(self.target, "Distance")
+                self._apply_formula()
             else:
                 self.target.Faces = (self.base, list(self.names))
             self._describe()
@@ -379,7 +387,7 @@ class PressPullPanel(Panel):
                 self.target = fillet
                 self.field_label.setText("Fillet radius")
                 self.field.set_value(1.0)
-                self.field.bind(fillet, "Radius")
+                self._show_formula("")
             self.target.Base = (self.base, list(self.names))
             self.what.setText("%d edge(s): fillet" % len(self.names))
         self.schedule()
@@ -411,7 +419,7 @@ class PressPullPanel(Panel):
         self.prop = prop
         self.field_label.setText("Fillet radius" if prop == "Radius" else "Chamfer distance")
         self.field.set_value(getattr(blend, prop).Value)
-        self.field.bind(blend, prop)
+        self._show_formula(preview.formula_of(blend, prop))
         self.what.setText("Editing %s (it stays one step in the timeline)" % blend.Label)
         self.selection_field.set_text(blend.Label)
 
@@ -505,9 +513,49 @@ class PressPullPanel(Panel):
         self.schedule()
 
     def _dragged(self, value):
+        self.formula_cleared("value")  # a drag gives a plain number
         value = round(value, 2)
         self.field.set_value(value)
         self._typed(value)
+
+    # -- formulas (preview.FormulaInput calls the first three) --------------------------------
+    def formula_typed(self, key, text, value):
+        self.error = ""
+        self._show_formula(text)
+        self._typed(value)
+        self._apply_formula()
+
+    def formula_cleared(self, key):
+        if self.formula:
+            self._show_formula("")
+            self._apply_formula()
+            self._typed(self.field.value())  # the number typed, not the formula's last value
+
+    def formula_failed(self, key, text):
+        self.message.setText("⚠ " + text)
+
+    def _show_formula(self, text):
+        self.formula = text or ""
+        name = self.field_label.text()
+        self.formula_label.setText("%s = %s" % (name, self.formula) if self.formula else "")
+
+    def _value_property(self):
+        if self.mode == "faces":
+            return "Distance"
+        if self.mode == "fillet":
+            return "Radius"
+        if self.mode == "edit_blend":
+            return self.prop
+        return None
+
+    def _apply_formula(self):
+        prop = self._value_property()
+        if self.target is None or prop is None:
+            return
+        try:
+            preview.set_formula(self.target, prop, self.formula)
+        except Exception as exc:
+            self.message.setText("⚠ %s" % exc)
 
     def _recompute(self):
         try:
