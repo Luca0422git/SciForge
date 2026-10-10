@@ -1251,6 +1251,19 @@ class _Path:
         self.edges = edges
         self.lengths = [e.Length for e in edges]
         self.total = sum(self.lengths)
+        try:
+            self.closed = Part.Wire(edges).isClosed()
+        except Exception:
+            self.closed = False
+        self.normal = None  # the plane of a flat path (copies turn about it)
+        try:
+            plane = (
+                Part.Wire(edges).findPlane() if not _is_line(edges[0]) or len(edges) > 1 else None
+            )
+            if plane is not None:
+                self.normal = _unit(plane.Axis)
+        except Exception:
+            self.normal = None
 
     @staticmethod
     def _flipped(edge):
@@ -1274,7 +1287,10 @@ class _Path:
         return best[1]
 
     def at(self, s):
-        """(point, unit tangent along the path) at arc length s from the start."""
+        """(point, unit tangent along the path) at arc length s from the start. A closed path
+        (a circle, a closed sketch) goes round and round."""
+        if self.closed and self.total > 0:
+            s = s % self.total
         if s < -1e-6 or s > self.total + 1e-6:
             raise PatternError(
                 "The pattern runs off the end of the path. Make the distance shorter."
@@ -1315,7 +1331,7 @@ def path_placements(options, tools):
     for offset in offsets[1:]:
         point, tangent = path.at(start + offset)
         if options["orientation"] == "path":
-            turn = App.Rotation(tangent0, tangent)
+            turn = _turn(tangent0, tangent, path.normal)
             moves.append(
                 App.Placement(point - point0, App.Rotation()).multiply(
                     App.Placement(App.Vector(), turn, point0)
@@ -1324,6 +1340,23 @@ def path_placements(options, tools):
         else:
             moves.append(App.Placement(point - point0, App.Rotation()))
     return moves
+
+
+def _turn(t0, t1, normal):
+    """The rotation that turns the path's direction t0 into t1: about the plane of a flat path
+    (so a copy half way round a circle is turned, not flipped over), else the shortest one."""
+    if normal is None:
+        return App.Rotation(t0, t1)
+    import math
+
+    a = t0 - normal * t0.dot(normal)
+    b = t1 - normal * t1.dot(normal)
+    if a.Length < 1e-12 or b.Length < 1e-12:
+        return App.Rotation(t0, t1)
+    a.normalize()
+    b.normalize()
+    angle = math.degrees(math.atan2(a.cross(b).dot(normal), a.dot(b)))
+    return App.Rotation(normal, angle)
 
 
 # -- reading a pattern back into the dialog --------------------------------------------------------
