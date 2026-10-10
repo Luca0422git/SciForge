@@ -41,8 +41,10 @@ def op_sketch_polygon(self, step):
     point = App.Vector(step["point"][0], step["point"][1], 0)
     ids = sketch_polygon.add_polygon(sketch, step["sides"], center, point, circumscribed)
     if "diameter" in step:
-        # circumscribed: lines, inner circle, helper line, outer circle; inscribed: lines, circle
-        circle = ids[step["sides"]] if circumscribed else ids[-1]
+        # the circle to dimension: the one touching the edges (circumscribed) or the
+        # one through the corners (inscribed)
+        corner, edge = sketch_polygon.circle_indices(ids, step["sides"], circumscribed)
+        circle = edge if circumscribed else corner
         index = sketch.addConstraint(
             Sketcher.Constraint("Diameter", circle, float(step["diameter"]))
         )

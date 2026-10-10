@@ -107,6 +107,17 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Include 3D Geometry, Mirror / patterns / scale / move starting with nothing selected,
       Rectangular Pattern panel, double-click a sketch in browser/timeline to edit it.
       7 scenarios (`sketch_*.py`), 3 golden models (`sketch_*`), core patch #7 (trim)
+- [x] Sketch QA pass (branch `sf/sketch-qa`): L takes typed length/angle and chains lines
+      (`sketch_line.py`), dimension box refuses 0/negative/text, redundant dimension -> driven,
+      sketch fillet radius box, right-click sketch marking menu (`sketch_marking.py`), M / Del /
+      Ctrl+C/X/V on sketch curves, construction mode shown in the palette, palette keeps no
+      keyboard focus, one Ctrl+Z after Finish Sketch, curved faces refused by Create Sketch,
+      typed circumscribed polygon size fixed, FreeCAD balloons off, one Enter after a typed
+      value draws the line/rectangle/polygon, constraint tools with an unfitting selection
+      start and wait for picks (`SciForge_Sketch<Constraint>` in the ribbon), sketch keys
+      work with a real keyboard (in the view and in FreeCAD's value fields). Spec:
+      `parity/sketch.md`. Scenarios `sketch_qa.py` (12 paths), `sketch_qa_part.py`,
+      `sketch_qa_keys.py`
 - [x] Hole (H) and Thread, Fusion-style (branch `sf/hole`): Single Hole where you click a face
       (flat or curved; hidden helper sketch "Hole N Sketch", X/Y fields, two edge references with
       distances, draggable blue centre dot), From Sketch points/circle centres (auto-flip into
@@ -327,6 +338,47 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Python, show the body's Tip again (`revolve._show_tip`), or the body looks empty.
 - Scenario step names must not contain "error"/"failed"/"invalid": the harness reads the
   step's own progress line in the Report view as an error.
+- **Trap (sketch QA): the scenarios' FreeCAD-notification check never looked.**
+  `Gui::NotificationArea` has no Q_OBJECT, so Qt calls it "QPushButton" (the class-name test
+  never matched), its list is a widget the menu's action *creates* (not `defaultWidget()`), new
+  messages sit aside until the menu opens (`aboutToShow`), and items compute their text per
+  column. `sketch_input.notifications()` now handles all four; steps can declare expected
+  messages (`step.notes_ok`), `QUIET` lists harmless ones ("Autoconstraints cause redundancy").
+- FreeCAD's balloons are off while SciForge is on (`MaxOpenNotifications` 0). Messages still
+  go to its list and the Report view; SciForge says what matters via `commands.tell`.
+  **Trap: never set `NonIntrusiveNotificationsEnabled` to False**: FreeCAD then shows its user
+  warnings ("Wrong selection"...) as *blocking message boxes* (`Gui/Notifications.h`); it hung
+  sketch_qa. SciForge sets it True.
+- **Trap (keys): a real keyboard sends keys to the focus widget, not to the GL drawing area.**
+  That is `Gui::View3DInventorViewer` (the GL widget's parent; `h.press` sends to the GL widget
+  and the key bubbles up to it), or, while a drawing tool runs, FreeCAD's on-screen value field
+  (`Gui::QuantitySpinBox`, a child of the MDI view). FreeCAD's `DrawSketchKeyboardManager`
+  keeps digits, Enter, Esc... in that field (for 2 s after a digit or Enter) and passes other
+  keys to the viewer. SciForge's sketch keys sit on the viewer (`_KeyFilter`) and on each value
+  field when it gets the focus (`SketchSession._focus_changed`): Enter there sends FreeCAD's own
+  Ctrl+Enter (accept all fields), Esc stops the tool, a tool letter switches tools unless a
+  value was typed into that field (then letters are a unit, "12 mm"). Tests that mean "the
+  keyboard" use `si.key` / `si.type_text` (focus widget); `sketch_qa_keys.py` covers it.
+- FreeCAD's sketch finds what is under the pointer when it redraws after a mouse move: a test
+  press in the same instant as the move selected nothing on a busy machine. `si.click` rests
+  80 ms on the spot first. A dimension-placing click on (or within a few pixels of) another
+  curve or an axis picks that curve instead (made `sketch_draw` fail 1 run in 4).
+- Sketcher_LeaveSketch records its recompute as a separate undo step ("Sketch recompute"):
+  `sketch_mode._merge_recompute_step` undoes/redoes it together with the step before it.
+- A dimension added on an already-set size stays *driving* in FreeCAD (sketch over-constrained,
+  red). `RedundantConstraints`/`ConflictingConstraints` are 1-based; SciForge makes it driven.
+- FreeCAD's polygon tool puts a typed size on the LAST curve as a Radius: SciForge's
+  circumscribed polygon now ends with the circle touching the edges (`circle_indices()`).
+- New-style Sketcher tools take typed values (on-screen fields) but the line tool draws one
+  line per two clicks; `sketch_line.LineChain` clicks the end of each new line for the user
+  (synthetic Qt mouse events on the GL widget, from a timer after FreeCAD's commit).
+- Palette widgets must not take keyboard focus (Esc went to a check box and did nothing);
+  Esc in the sketch's side panel is forwarded to `SketchSession.escape`.
+- Construction mode (Toggle Construction with nothing selected) lives only in C++; it shows on
+  the command's icon, so `sketch_mode.construction_mode()` compares that icon with
+  `Gui.getIcon("Sketcher_ToggleConstruction_Constr")`. Every new sketch starts in normal mode.
+- Unexplained: in one sketch_qa screenshot (path F) the task panel was drawn see-through (3D
+  view visible behind the palette); not reproduced alone. Probably FreeCAD's overlay dock.
 
 ## Questions waiting for Luca
 
@@ -455,6 +507,25 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   face + edge, edit Groove <-> Revolution), schema unit tests `test_revolve_schema.py`.
 - Gap: Fusion's Type "To" (FreeCAD's Groove up to a face gives an empty solid, see Known
   issues). Not checked by Luca yet.
+
+### 2026-10-10: Sketch QA (branch `sf/sketch-qa`)
+- Broke the merged sketch workspace on purpose with 3 new scenarios (only real input):
+  `sketch_qa.py` (12 paths: typed lines, timeline edits, undo/redo, save/reopen, broken
+  profile, bad values, Esc everywhere, tool switching, marking menu, Del/M/Ctrl+C/V,
+  construction, fillet, polygon, constraint tools), `sketch_qa_part.py` (multi-feature part
+  with Press Pull and sketch edits), `sketch_qa_keys.py` (keys sent where a real keyboard
+  sends them). About 30 bugs fixed; the list with how each was found is in the branch's
+  commits and `parity/sketch.md`.
+- Biggest finds: every SciForge sketch key only worked in tests (keys went to the GL widget;
+  a real keyboard sends them to the viewer or FreeCAD's value field, see Known issues);
+  `NonIntrusiveNotificationsEnabled` False turned FreeCAD warnings into blocking boxes;
+  Up/Down in the dimension box recursed ~1000 deep; the notification check never looked.
+- Full suite on the branch (no --only): unit 134 OK, golden 99 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 29 scenarios
+  PASS (2762 checks; sketch_qa 457, sketch_qa_keys 119, sketch_qa_part 104).
+- Left open: Fusion's angle typed relative to the previous line, tangent arc by dragging from
+  a line end, greyed sketch tools, Fusion's constraint glyph look; sketch_polygon failed once
+  ("second use") and never again; one see-through task panel screenshot (path F).
 
 ## Next steps (in order)
 

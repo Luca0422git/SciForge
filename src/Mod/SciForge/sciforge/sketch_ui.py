@@ -9,6 +9,7 @@ click is matched to them geometrically (nearest square along the mouse ray).
 If a plane or flat face is already selected, the sketch opens on it at once.
 Esc / Cancel leaves without creating anything.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -293,7 +294,7 @@ class SketchPicker:
         try:
             from . import sketch_mode
 
-            self.view_widget = sketch_mode.gl_widget()
+            self.view_widget = sketch_mode.view_widget()  # where the keyboard goes
             if self.view_widget is not None:
                 self.view_widget.installEventFilter(self.esc)
         except Exception as exc:
@@ -306,6 +307,11 @@ class SketchPicker:
         target = sketch_target()
         if target is not None:
             self._picked(target)
+        elif Gui.Selection.getSelectionEx():
+            # Fusion only offers flat faces and planes; a curved face or an edge is not
+            # taken (and does not stay selected), with the reason next to the mouse.
+            Gui.Selection.clearSelection()
+            commands.tell("A sketch goes on a flat face or a plane: click one of those.")
 
     def _picked(self, target):
         if self._closed:
