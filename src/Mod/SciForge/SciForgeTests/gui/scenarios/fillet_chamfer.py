@@ -287,6 +287,13 @@ def after_esc():
 def preselect():
     h.fit()
     h.click_edge(BACK_TOP)
+
+
+# A separate step: a person's second click comes a moment later. Two clicks in the same
+# instant can be merged by Qt (the CI kept only one of the two edges).
+def preselect_more():
+    sel = [(x.ObjectName, list(x.SubElementNames)) for x in Gui.Selection.getSelectionEx()]
+    h.check("first edge selected", sum(len(x[1]) for x in sel) == 1, sel)
     h.click_edge(BACK_RIGHT, modifiers=QtCore.Qt.ControlModifier)
 
 
@@ -351,6 +358,7 @@ h.run(
         esc_press,
         after_esc,
         preselect,
+        preselect_more,
         chamfer_with_selection,
         started,
         after_second,
