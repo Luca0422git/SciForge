@@ -297,6 +297,7 @@ class BlendPanel(Panel):
         self.view = None
         self._keys = None
         self._watch = None
+        self._held = []  # QShortcuts switched off while the dialog is open
         self._doc_name = doc.Name
         self._bound = False
         self._events = QtCore.QTimer()
@@ -411,6 +412,7 @@ class BlendPanel(Panel):
             self._keys = self.view.addEventCallback("SoKeyboardEvent", self._key)
         except Exception as exc:
             warn("%s: Esc key unavailable: %s" % (self.title, exc))
+        self._hold_delete(True)
         self._sync()
         self._refs_changed()
         if self.target is not None:
@@ -456,6 +458,27 @@ class BlendPanel(Panel):
             QtCore.QTimer.singleShot(0, Gui.Control.closeDialog)
         except Exception:
             pass
+
+    def _hold_delete(self, hold):
+        """The picks are a real FreeCAD selection: the Delete key would try to delete the part
+        they belong to (with a pop-up), and FreeCAD's delete step would also close this
+        dialog's own undo step, so Cancel could no longer take the fillet away. While the
+        dialog is open the key does nothing (typing in a field still works)."""
+        try:
+            if hold:
+                from . import shortcuts
+
+                for key in ("Del", "Backspace"):
+                    entry = shortcuts._bound.get(shortcuts.normalise(key))
+                    if entry is not None and entry[1].isEnabled():
+                        entry[1].setEnabled(False)
+                        self._held.append(entry[1])
+            else:
+                for shortcut in self._held:
+                    shortcut.setEnabled(True)
+                self._held = []
+        except Exception as exc:
+            warn("%s: Delete key: %s" % (self.title, exc))
 
     def _key(self, info):
         """Esc in the 3D view cancels, like in Fusion (FreeCAD only listens to Esc while the
@@ -857,6 +880,7 @@ class BlendPanel(Panel):
             except Exception:
                 pass
             self.observer = None
+        self._hold_delete(False)
         if self._watch is not None:
             try:
                 App.removeDocumentObserver(self._watch)

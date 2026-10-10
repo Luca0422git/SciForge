@@ -273,6 +273,21 @@ def cancel_pick_face():
     h.click(TOP_FACE)
 
 
+def press_delete():
+    s["refs"] = list(b.blend_panel().refs) if b.blend_panel() else None
+    b.press_guarded(QtCore.Qt.Key_Delete)
+
+
+def delete_did_nothing():
+    p = b.blend_panel()
+    h.check("Delete inside the dialog opens no pop-up", not b.POPUPS, b.POPUPS)
+    h.check(
+        "Delete inside the dialog deletes nothing and keeps the picks",
+        p is not None and p.refs == s["refs"] and App.ActiveDocument.getObject("Extrude"),
+        p and p.refs,
+    )
+
+
 def cancel_preview():
     p = b.blend_panel()
     h.check(
@@ -427,6 +442,8 @@ h.run(
         after_edit,
         cancel_start,
         cancel_pick_face,
+        press_delete,
+        delete_did_nothing,
         cancel_preview,
         after_cancel,
         preselect,

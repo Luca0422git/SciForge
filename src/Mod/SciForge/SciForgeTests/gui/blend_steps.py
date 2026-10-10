@@ -154,6 +154,24 @@ def type_into(widget, text):
     QtWidgets.QApplication.processEvents()
 
 
+POPUPS = []  # pop-ups seen by press_guarded (and closed so the test does not hang)
+
+
+def press_guarded(key, modifiers=QtCore.Qt.NoModifier):
+    """Press a key that must not open a pop-up; if one opens anyway it is recorded in
+    POPUPS and closed, so the scenario fails instead of hanging on a modal dialog."""
+
+    def look():
+        found = h.popups()
+        if found:
+            POPUPS.extend(found)
+            h.shot("popup")
+            h.close_popups()
+
+    QtCore.QTimer.singleShot(600, look)
+    h.press(key, modifiers)
+
+
 def press_enter(widget):
     """Enter in a field of the dialog (Fusion: Enter finishes the command)."""
     widget.setFocus()
