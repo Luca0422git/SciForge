@@ -111,6 +111,15 @@ PALETTE_DEFAULTS = {
 }
 
 DIMENSIONAL = ("Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle")
+# Tools where Enter after one typed value draws the shape (the pointer gives the rest).
+ENTER_FINISHES = {
+    "SciForge_SketchLine",
+    "Sketcher_CreateLine",
+    "Sketcher_CreateRectangle",
+    "Sketcher_CreateRectangle_Center",
+    "SciForge_PolygonCircumscribed",
+    "SciForge_PolygonInscribed",
+}
 # Commands after which a new dimension gets the in-place value box.
 DIMENSION_COMMANDS = {
     "Sketcher_Dimension",
@@ -564,6 +573,7 @@ class SketchSession:
         self.editor = None
         self.palette = None
         self.last_press = None
+        self._enter_follow = False
         self.shading = ProfileShading(self)
         self.display = DisplayOptions(self)
         self.polygon = PolygonPreview(self)
@@ -797,6 +807,46 @@ class SketchSession:
         except Exception:
             pass
 
+    def enter_pressed(self):
+        """Enter after typing a value while drawing. FreeCAD keeps the value and moves to
+        the next on-screen field (the angle of a line, the height of a rectangle); Fusion
+        draws the shape there, the pointer giving the rest. So when Enter did not finish
+        the shape, a second Enter is given for the user (Tab still goes to the next
+        field)."""
+        if self._enter_follow or self.closed:
+            return
+        try:
+            from . import recent
+
+            last = recent.last()
+            if last is None or last[0] not in ENTER_FINISHES:
+                return
+            if self.gl is None or self.gl.cursor().shape() == QtCore.Qt.ArrowCursor:
+                return
+            count = len(self.sketch.Geometry)
+            QtCore.QTimer.singleShot(0, lambda: self._finish_typed(count))
+        except Exception as exc:
+            warn("sketch Enter: %s" % exc)
+
+    def _finish_typed(self, count):
+        if self.closed or self.gl is None or not _is_valid(self.gl):
+            return
+        try:
+            if len(self.sketch.Geometry) != count:
+                return  # Enter finished the shape already
+            if self.gl.cursor().shape() == QtCore.Qt.ArrowCursor:
+                return
+            self._enter_follow = True
+            try:
+                mods = QtCore.Qt.NoModifier
+                for kind in (QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease):
+                    event = QtGui.QKeyEvent(kind, QtCore.Qt.Key_Return, mods, "\r")
+                    QtWidgets.QApplication.sendEvent(self.gl, event)
+            finally:
+                self._enter_follow = False
+        except Exception as exc:
+            warn("sketch Enter: %s" % exc)
+
     def double_clicked(self, pos):
         """A double click on a dimension edits it in place (no FreeCAD pop-up)."""
         try:
@@ -899,6 +949,7 @@ class _ViewFilter(QtCore.QObject):
 
                     if sketch_pick_ui.on_enter():
                         return True
+                    session.enter_pressed()
                 if key == QtCore.Qt.Key_Escape and not event.isAutoRepeat():
                     # Right away (a Qt key event, not a Coin callback): a timer could
                     # fire after the next key and stop the tool that key started.
@@ -999,6 +1050,7 @@ def paste():
     Gui.Selection.clearSelection()
     for index in new:
         Gui.Selection.addSelection(sketch.Document.Name, sketch.Name, "Edge%d" % (index + 1))
+
     def place():
         _run("Sketcher_Translate")
         # said once the tool's panel has settled (its start hid an earlier tip)

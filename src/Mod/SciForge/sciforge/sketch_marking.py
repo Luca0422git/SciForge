@@ -108,6 +108,11 @@ def open_at(global_pos):
         return menu
     except Exception as exc:
         warn("sketch marking menu: %s" % exc)
+    try:  # the part menu rather than nothing
+        from . import marking_menu
+
+        return marking_menu.open_at(global_pos)
+    except Exception:
         return None
 
 

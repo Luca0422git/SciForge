@@ -23,9 +23,12 @@ E  Create Sketch, click the cylinder's curved side: refused with a reason (Fusio
 F  X with nothing selected: new lines are construction (the palette shows it, a message
    says it); the next sketch starts with normal lines again.
 G  Sketch fillet: click a corner, the radius box opens, type 4.
-K  Typed sizes, Enter twice: Circumscribed Polygon, centre, type 10, Enter, Enter: the
+L  Parallel clicked with only one line selected: FreeCAD would just complain; like Fusion
+   the tool starts and waits for the two lines. Fix/Unfix on a selected line fixes it.
+K  Typed sizes and one Enter (Fusion): Circumscribed Polygon, centre, type 10, Enter: the
    hexagon is drawn around a circle of radius 10 (what the preview showed: the pointer
-   on the middle of an edge), across flats 20. E: the prism.
+   on the middle of an edge), across flats 20. L, click, type 15, Enter: a 15 mm line
+   towards the pointer. E: the prism.
 
 Hand-derived volumes: A 40*25*10 = 10000; H 50*25*10 = 12500, 45*25*10 = 11250;
 D pi*10^2*10 = 3141.59...; G (30*20 - (4^2 - pi*4^2/4)) * 10 = 5965.66...;
@@ -952,9 +955,12 @@ def k_size():
     si.type_text("10")
 
 
-def k_second_enter():
-    h.check("K: one Enter keeps the size, waits", not si.lines(s["sk"]), s["sk"].Geometry)
-    si.type_text("")
+def k_one_enter():
+    h.check(
+        "K: typed size + one Enter draws the polygon (Fusion)",
+        len(si.lines(s["sk"])) == 6,
+        s["sk"].Geometry,
+    )
 
 
 def k_hexagon():
@@ -973,6 +979,30 @@ def k_hexagon():
     h.check("K: solves", sk.solve() == 0)
     esc()
     esc()
+    h.press("l")
+
+
+def k_line_first():
+    si.click(V(20, -20, 0))
+
+
+def k_line_typed():
+    si.move_towards(V(26, -19.6, 0), X)
+    si.type_text("15")  # a length and Enter, no angle
+
+
+def k_line_check():
+    sk = s["sk"]
+    lines = si.lines(sk)[6:]
+    h.check("K: L, a length and one Enter draws the line (Fusion)", len(lines) == 1, sk.Geometry)
+    if lines:
+        g = lines[0][1]
+        h.check("K: 15 long", si.near(length(g), 15.0, 1e-6), g)
+        h.check("K: from the click, towards the pointer", si.vnear(g.StartPoint, V(20, -20, 0)), g)
+        h.check("K: pointing +X like the pointer", g.EndPoint.x > g.StartPoint.x + 14, g)
+    h.check("K: the line tool goes on from its end", si.drawing())
+    esc()
+    esc()
     h.ribbon("Finish Sketch")
 
 
@@ -989,6 +1019,101 @@ def k_volume():
     v = h.solid_volume()
     expected = 2.0 * math.sqrt(3.0) * 100.0 * 10.0
     h.check("K: hexagon prism, 20 across flats", si.near(v, expected, 1e-6), (v, expected))
+
+
+# == L: a constraint started with a selection that does not fit ======================
+def l_new():
+    new_doc("SketchQA7")
+    h.ribbon("Create Sketch")
+
+
+def l_pick():
+    h.click(V(12, -8, 0))
+
+
+def l_line():
+    s["sk"] = h.in_sketch()
+    h.press("l")
+
+
+def l_a1():
+    si.click(V(0, 0, 0))
+
+
+def l_a2():
+    si.click(V(20, 6, 0))
+
+
+def l_line2():
+    esc()
+    h.press("l")
+
+
+def l_b1():
+    si.click(V(0, 14, 0))
+
+
+def l_b2():
+    si.click(V(20, 24, 0))
+
+
+def l_select_one():
+    esc()
+    esc()
+    lines = si.lines(s["sk"])
+    h.check("L: two slanted lines", len(lines) == 2, s["sk"].Geometry)
+    s["mids"] = [(g.StartPoint + g.EndPoint) * 0.5 for _, g in lines]
+    s["count"] = len(s["sk"].Constraints)
+    si.click(s["mids"][0])
+
+
+def l_parallel():
+    h.check("L: one line selected", bool(Gui.Selection.getSelectionEx()))
+    h.ribbon("Parallel")
+
+
+# FreeCAD notes that one line is not enough before SciForge starts the pick mode.
+l_parallel.notes_ok = ("Select at least two lines", "Wrong selection")
+
+
+def l_waits():
+    h.check("L: Parallel with one line selected starts and waits", si.drawing())
+    h.check("L: says what to do", "click what to constrain" in si.tooltip(), si.tooltip())
+    h.check("L: no constraint yet", len(s["sk"].Constraints) == s["count"])
+    si.click(s["mids"][0])
+
+
+def l_second():
+    si.click(s["mids"][1])
+
+
+def l_done():
+    sk = s["sk"]
+    parallel = [c for c in sk.Constraints if c.Type == "Parallel"]
+    h.check("L: the two picked lines are parallel now", len(parallel) == 1, sk.Constraints)
+    a, b = [g for _, g in si.lines(sk)]
+    da, db = a.EndPoint - a.StartPoint, b.EndPoint - b.StartPoint
+    cross = abs(da.x * db.y - da.y * db.x) / (da.Length * db.Length)
+    h.check("L: and really parallel", cross < 1e-9, cross)
+    esc()
+    esc()
+    si.click(s["mids"][1])
+
+
+def l_fix():
+    h.check("L: a line selected for Fix", bool(Gui.Selection.getSelectionEx()))
+    s["count"] = len(s["sk"].Constraints)
+    h.ribbon("Fix/Unfix")
+
+
+def l_fixed():
+    sk = s["sk"]
+    new = [c.Type for c in sk.Constraints[s["count"] :]]
+    h.check("L: Fix on a selected line fixes the whole line (Block)", new == ["Block"], new)
+    h.check("L: still solves", sk.solve() == 0)
+    esc()
+    esc()
+    h.ribbon("Finish Sketch")
 
 
 h.run(
@@ -1136,11 +1261,30 @@ h.run(
             k_polygon,
             k_centre,
             k_size,
-            k_second_enter,
+            k_one_enter,
             k_hexagon,
+            k_line_first,
+            k_line_typed,
+            k_line_check,
             k_extrude,
             k_ok,
             k_volume,
+            # L
+            l_new,
+            l_pick,
+            l_line,
+            l_a1,
+            l_a2,
+            l_line2,
+            l_b1,
+            l_b2,
+            l_select_one,
+            l_parallel,
+            l_waits,
+            l_second,
+            l_done,
+            l_fix,
+            l_fixed,
         ]
     ),
 )

@@ -107,6 +107,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Include 3D Geometry, Mirror / patterns / scale / move starting with nothing selected,
       Rectangular Pattern panel, double-click a sketch in browser/timeline to edit it.
       7 scenarios (`sketch_*.py`), 3 golden models (`sketch_*`), core patch #7 (trim)
+- [x] Sketch QA pass (branch `sf/sketch-qa`): L takes typed length/angle and chains lines
+      (`sketch_line.py`), dimension box refuses 0/negative/text, redundant dimension -> driven,
+      sketch fillet radius box, right-click sketch marking menu (`sketch_marking.py`), M / Del /
+      Ctrl+C/X/V on sketch curves, construction mode shown in the palette, palette keeps no
+      keyboard focus, one Ctrl+Z after Finish Sketch, curved faces refused by Create Sketch,
+      typed circumscribed polygon size fixed, FreeCAD balloons off, one Enter after a typed
+      value draws the line/rectangle/polygon, constraint tools with an unfitting selection
+      start and wait for picks (`SciForge_Sketch<Constraint>` in the ribbon). Spec:
+      `parity/sketch.md`. Scenarios `sketch_qa.py` (12 paths), `sketch_qa_part.py`
 - [x] Hole (H) and Thread, Fusion-style (branch `sf/hole`): Single Hole where you click a face
       (flat or curved; hidden helper sketch "Hole N Sketch", X/Y fields, two edge references with
       distances, draggable blue centre dot), From Sketch points/circle centres (auto-flip into
@@ -263,6 +272,36 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Single Hole helper sketches are listed in the browser's Sketches folder as "Hole N Sketch"
   (hidden); double-clicking one, or timeline "Edit Profile Sketch" on the hole, opens the Hole
   dialog (`SciForgeType = "HoleSketch"` + `hole_ui.EDITORS`).
+- **Trap (sketch QA): the scenarios' FreeCAD-notification check never looked.**
+  `Gui::NotificationArea` has no Q_OBJECT, so Qt calls it "QPushButton" (the class-name test
+  never matched), its list is a widget the menu's action *creates* (not `defaultWidget()`), new
+  messages sit aside until the menu opens (`aboutToShow`), and items compute their text per
+  column. `sketch_input.notifications()` now handles all four; steps can declare expected
+  messages (`step.notes_ok`), `QUIET` lists harmless ones ("Autoconstraints cause redundancy").
+- FreeCAD's balloons are off while SciForge is on (`NonIntrusiveNotificationsEnabled` False
+  and `MaxOpenNotifications` 0: FreeCAD shows a *repeated* message even with the first off).
+  Messages still go to its list and the Report view; SciForge says what matters via
+  `commands.tell`.
+- FreeCAD's sketch finds what is under the pointer when it redraws after a mouse move: a test
+  press in the same instant as the move selected nothing on a busy machine. `si.click` rests
+  80 ms on the spot first. A dimension-placing click on (or within a few pixels of) another
+  curve or an axis picks that curve instead (made `sketch_draw` fail 1 run in 4).
+- Sketcher_LeaveSketch records its recompute as a separate undo step ("Sketch recompute"):
+  `sketch_mode._merge_recompute_step` undoes/redoes it together with the step before it.
+- A dimension added on an already-set size stays *driving* in FreeCAD (sketch over-constrained,
+  red). `RedundantConstraints`/`ConflictingConstraints` are 1-based; SciForge makes it driven.
+- FreeCAD's polygon tool puts a typed size on the LAST curve as a Radius: SciForge's
+  circumscribed polygon now ends with the circle touching the edges (`circle_indices()`).
+- New-style Sketcher tools take typed values (on-screen fields) but the line tool draws one
+  line per two clicks; `sketch_line.LineChain` clicks the end of each new line for the user
+  (synthetic Qt mouse events on the GL widget, from a timer after FreeCAD's commit).
+- Palette widgets must not take keyboard focus (Esc went to a check box and did nothing);
+  Esc in the sketch's side panel is forwarded to `SketchSession.escape`.
+- Construction mode (Toggle Construction with nothing selected) lives only in C++; it shows on
+  the command's icon, so `sketch_mode.construction_mode()` compares that icon with
+  `Gui.getIcon("Sketcher_ToggleConstruction_Constr")`. Every new sketch starts in normal mode.
+- Unexplained: in one sketch_qa screenshot (path F) the task panel was drawn see-through (3D
+  view visible behind the palette); not reproduced alone. Probably FreeCAD's overlay dock.
 
 ## Questions waiting for Luca
 

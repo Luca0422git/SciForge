@@ -291,7 +291,8 @@ def install(session):
     # Esc in the panel (the panel and the scroll area around it take the keyboard when
     # clicked) stops the tool, as on the 3D view.
     widget = panel
-    while widget is not None:
+    main = Gui.getMainWindow()
+    while widget is not None and widget is not main:
         widget.installEventFilter(palette.keys)
         palette.key_filtered.append(widget)
         if isinstance(widget, QtWidgets.QScrollArea):

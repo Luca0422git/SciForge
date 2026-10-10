@@ -287,7 +287,120 @@ class SketchInclude3D(_SketchCommand):
         commands.tell("Include 3D Geometry: click edges or points of the part. Esc when done.")
 
 
+# -- constraints ---------------------------------------------------------------------
+class _Constraint(_SketchCommand):
+    """A CONSTRAINTS tool the Fusion way. FreeCAD's constraint commands use what is
+    selected; when that does not fit (one line selected for Parallel...) they only show a
+    "Wrong selection" note and do nothing. Fusion starts the tool and waits for picks:
+    here the selection is dropped and FreeCAD's tool starts in its pick mode."""
+
+    freecad = ""
+
+    def command_for(self, sketch):
+        return self.freecad
+
+    def run(self):
+        sketch = _in_sketch(self.title)
+        if sketch is None:
+            return
+        had_selection = bool(Gui.Selection.getSelectionEx())
+        before = len(sketch.Constraints)
+        Gui.runCommand(self.command_for(sketch))
+        if len(sketch.Constraints) != before or not had_selection or _tool_running():
+            return
+        Gui.Selection.clearSelection()
+        Gui.runCommand(self.freecad)
+        commands.tell("%s: click what to constrain." % self.title)
+
+
+class _Fix(_Constraint):
+    """Fusion's Fix/Unfix also fixes whole curves: selected curves get FreeCAD's Block
+    (the curve stays where it is); points get Lock."""
+
+    def command_for(self, sketch):
+        names = [
+            n.rsplit(".", 1)[-1]
+            for sel in Gui.Selection.getSelectionEx()
+            if sel.Object is sketch
+            for n in sel.SubElementNames
+        ]
+        if names and all(n.startswith("Edge") for n in names):
+            return "Sketcher_ConstrainBlock"
+        return self.freecad
+
+
+def _tool_running():
+    gl = sketch_mode.gl_widget()
+    try:
+        return gl is not None and gl.cursor().shape() != QtCore.Qt.ArrowCursor
+    except Exception:
+        return False
+
+
+def _constraint(title, freecad, icon, tip):
+    return type(
+        "Constraint_" + freecad,
+        (_Constraint,),
+        {"title": title, "freecad": freecad, "icon": icon, "tip": tip},
+    )
+
+
+CONSTRAINTS = {
+    "SciForge_SketchCoincident": _constraint(
+        "Coincident",
+        "Sketcher_ConstrainCoincidentUnified",
+        "c_coincident",
+        "Make points meet, or put a point on a curve: click them",
+    ),
+    "SciForge_SketchFix": type(
+        "Constraint_Fix",
+        (_Fix,),
+        {
+            "title": "Fix/Unfix",
+            "freecad": "Sketcher_ConstrainLock",
+            "icon": "c_fix",
+            "tip": "Fix curves or points where they are: select them, or click points",
+        },
+    ),
+    "SciForge_SketchParallel": _constraint(
+        "Parallel", "Sketcher_ConstrainParallel", "c_parallel", "Make lines parallel: click them"
+    ),
+    "SciForge_SketchPerpendicular": _constraint(
+        "Perpendicular",
+        "Sketcher_ConstrainPerpendicular",
+        "c_perpendicular",
+        "Make two curves perpendicular: click them",
+    ),
+    "SciForge_SketchHorizontalVertical": _constraint(
+        "Horizontal/Vertical",
+        "Sketcher_ConstrainHorVer",
+        "c_horizontal",
+        "Make lines horizontal or vertical: click them",
+    ),
+    "SciForge_SketchTangent": _constraint(
+        "Tangent", "Sketcher_ConstrainTangent", "c_tangent", "Make two curves tangent: click them"
+    ),
+    "SciForge_SketchEqual": _constraint(
+        "Equal", "Sketcher_ConstrainEqual", "c_equal", "Make curves the same size: click them"
+    ),
+    "SciForge_SketchSymmetry": _constraint(
+        "Symmetry",
+        "Sketcher_ConstrainSymmetric",
+        "c_symmetric",
+        "Make two points symmetric about a line or point: click them",
+    ),
+}
+
+
 COMMANDS = {
+    "SciForge_SketchCoincident": CONSTRAINTS["SciForge_SketchCoincident"],
+    "SciForge_SketchFix": CONSTRAINTS["SciForge_SketchFix"],
+    "SciForge_SketchParallel": CONSTRAINTS["SciForge_SketchParallel"],
+    "SciForge_SketchPerpendicular": CONSTRAINTS["SciForge_SketchPerpendicular"],
+    "SciForge_SketchHorizontalVertical": CONSTRAINTS["SciForge_SketchHorizontalVertical"],
+    "SciForge_SketchTangent": CONSTRAINTS["SciForge_SketchTangent"],
+    "SciForge_SketchEqual": CONSTRAINTS["SciForge_SketchEqual"],
+    "SciForge_SketchSymmetry": CONSTRAINTS["SciForge_SketchSymmetry"],
     "SciForge_FinishSketch": FinishSketch,
     "SciForge_SketchLine": SketchLine,
     "SciForge_PolygonCircumscribed": PolygonCircumscribed,
