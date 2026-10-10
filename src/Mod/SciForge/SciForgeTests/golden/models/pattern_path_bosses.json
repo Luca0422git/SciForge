@@ -1,0 +1,107 @@
+{
+  "id": "pattern_path_bosses",
+  "title": "Box 40x30x10, a boss r2x4 repeated 4 times over 30 mm of a sketch line",
+  "tags": [
+    "pattern",
+    "path",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "box"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            6,
+            6,
+            2
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "b1",
+      "profile": "s2",
+      "distance": 4
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "polyline": [
+            [
+              6,
+              6
+            ],
+            [
+              34,
+              24
+            ],
+            [
+              34,
+              6
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "path_pattern",
+      "id": "p1",
+      "features": [
+        "b1"
+      ],
+      "path": {
+        "sketch": "s3",
+        "edge": 1
+      },
+      "quantity": 4,
+      "distance": 30
+    }
+  ],
+  "expect": {
+    "volume": 12201.061929829746,
+    "area": 4001.061929829747,
+    "faces": 14,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      14
+    ],
+    "source": "analytic",
+    "note": "The path is the line (6,6)-(34,24) (length 33.29); bosses at 0, 10, 20, 30 mm along it, all on the top face. V = 12000 + 4*pi*2^2*4; A = box 3800 + 4*(2pi*2*4)."
+  }
+}

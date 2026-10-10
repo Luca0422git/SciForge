@@ -1,0 +1,60 @@
+{
+  "id": "pattern_bodies_rect_new",
+  "title": "A 20x10x5 body patterned along X (Spacing 30, Quantity 3): two new bodies",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "bodies",
+    "new-body",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            10
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "body": true,
+      "direction": "X",
+      "quantity": 3,
+      "distance": 30,
+      "distribution": "spacing"
+    }
+  ],
+  "expect": {
+    "volume": 3000,
+    "area": 2100,
+    "faces": 18,
+    "solids": 3,
+    "bbox": [
+      0,
+      0,
+      0,
+      80,
+      10,
+      5
+    ],
+    "source": "analytic",
+    "note": "Measured over every body: copies at x 30 and 60. V = 3*20*10*5; A = 3*(2*200 + 2*100 + 2*50)."
+  }
+}

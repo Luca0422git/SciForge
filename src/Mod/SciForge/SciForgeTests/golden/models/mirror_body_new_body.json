@@ -1,0 +1,87 @@
+{
+  "id": "mirror_body_new_body",
+  "title": "Plate with a boss mirrored as a body across its right face, Operation New Body",
+  "tags": [
+    "mirror",
+    "bodies",
+    "new-body",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            5,
+            3
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 6
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "body": true,
+      "plane": {
+        "face": {
+          "normal": [
+            1,
+            0,
+            0
+          ],
+          "count": 1
+        }
+      },
+      "operation": "new_body"
+    }
+  ],
+  "expect": {
+    "volume": 24339.292006587697,
+    "faces": 16,
+    "solids": 2,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      60,
+      15,
+      16
+    ],
+    "source": "analytic",
+    "note": "Measured over every body: the original and a new body, its mirror image (x 20 to 60). Each body: 6 box faces + 2 boss faces. V = 2*(12000 + pi*9*6)."
+  }
+}
