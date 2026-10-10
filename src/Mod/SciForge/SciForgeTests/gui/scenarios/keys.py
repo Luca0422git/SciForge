@@ -66,6 +66,31 @@ def after_redo():
     h.check("Ctrl+Y redoes it", abs(v - s["v"]) < 1e-6, (v, s["v"]))
 
 
+def undo_again():
+    h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
+
+
+def open_offset_plane():
+    h.check("undone again", h.solid_volume() < 1, h.solid_volume())
+    h.ribbon("Offset Plane")  # a dialog built on taskui.Panel
+
+
+def cancel_without_change():
+    h.task_button("Cancel")
+
+
+def redo_after_cancel():
+    # Redo still works after a dialog was opened and cancelled without a change. (The
+    # pending-undo-step fix in taskui._end_transaction came from the extrude QA, which hit it
+    # in its own dialogs; this path does not reproduce that case, it only guards Redo.)
+    h.press(QtCore.Qt.Key_Y, QtCore.Qt.ControlModifier)
+
+
+def after_redo_after_cancel():
+    v = h.solid_volume()
+    h.check("Ctrl+Y still redoes after a cancelled dialog", abs(v - s["v"]) < 1e-6, (v, s["v"]))
+
+
 h.run(
     "keys",
     [
@@ -80,5 +105,10 @@ h.run(
         after_undo,
         redo,
         after_redo,
+        undo_again,
+        open_offset_plane,
+        cancel_without_change,
+        redo_after_cancel,
+        after_redo_after_cancel,
     ],
 )

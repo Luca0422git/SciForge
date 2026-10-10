@@ -173,6 +173,21 @@ class ArrowDragger:
             pass
 
 
+def _end_transaction(doc, abort=False):
+    """Close a dialog's undo step. doc.commitTransaction()/abortTransaction() only close a
+    step that holds changes: a dialog OK'd or cancelled without a change left its step name
+    pending, and the next change anywhere opened a step under that name and threw away the
+    Redo list. The pending name is closed too (same as preview.end_transaction)."""
+    if abort:
+        doc.abortTransaction()
+    else:
+        doc.commitTransaction()
+    try:
+        App.closeActiveTransaction(abort)
+    except Exception:
+        pass
+
+
 class Panel:
     """Base for SciForge task dialogs. Subclasses fill self.layout and implement apply()."""
 
@@ -241,7 +256,7 @@ class Panel:
             self.show_status()
             return False  # stay open, like Fusion's dialog with an error
         self.cleanup()
-        self.doc.commitTransaction()
+        _end_transaction(self.doc)
         self._close()
         log("%s done" % self.title)
         return True
@@ -249,7 +264,7 @@ class Panel:
     def reject(self):
         self._timer.stop()
         self.cleanup()
-        self.doc.abortTransaction()
+        _end_transaction(self.doc, abort=True)
         self.doc.recompute()
         self._close()
         return True
