@@ -143,13 +143,19 @@ class EnterFinishes:
 
 
 class UndoCancels:
-    """Ctrl+Z while a feature dialog is open: the step being made is what gets undone, so
-    the dialog is cancelled (its preview removed) instead of FreeCAD committing the
-    unfinished preview and undoing it under the open dialog, which left a dialog working
-    on deleted objects. Ctrl+Y does nothing while the dialog is open (there is nothing to
-    redo inside a command). Text fields keep Ctrl+Z for their own typing. Undo from the
-    toolbar still reaches FreeCAD: then the dialog closes as cancelled.
-    remove() when the dialog closes."""
+    """Keys and document events that would pull the document from under an open dialog.
+
+    Ctrl+Z: the step being made is what gets undone, so the dialog is cancelled (its
+      preview removed). Before, FreeCAD committed the unfinished preview and undid it under
+      the open dialog, which then worked on deleted objects. Text fields keep Ctrl+Z.
+    Ctrl+Y: nothing to redo inside a command; ignored while the dialog is open.
+    Ctrl+S, Ctrl+N, Ctrl+O: like starting any other command, the open dialog is finished
+      first (OK if possible, else cancelled), so a file never holds a half-made preview.
+    Undo/Redo from the toolbar still reach FreeCAD: the dialog then closes as cancelled.
+    The document closed under the dialog: the dialog closes (it was left working on a
+    deleted document). remove() when the dialog closes."""
+
+    FINISH_FIRST = {"S": "Std_Save", "N": "Std_New", "O": "Std_Open"}
 
     def __init__(self, panel):
         from .compat import QtCore, QtWidgets
@@ -171,6 +177,9 @@ class UndoCancels:
             def slotRedoDocument(self, doc):
                 guard._undone(doc)
 
+            def slotDeletedDocument(self, doc):
+                guard._document_gone(doc)
+
         self.watch = DocWatch()
         App.addDocumentObserver(self.watch)
 
@@ -188,7 +197,15 @@ class UndoCancels:
                 mods & (QtCore.Qt.ShiftModifier | QtCore.Qt.AltModifier)
             ):
                 return False
-            if event.key() not in (QtCore.Qt.Key_Z, QtCore.Qt.Key_Y):
+            keys = {
+                QtCore.Qt.Key_Z: "Z",
+                QtCore.Qt.Key_Y: "Y",
+                QtCore.Qt.Key_S: "S",
+                QtCore.Qt.Key_N: "N",
+                QtCore.Qt.Key_O: "O",
+            }
+            key = keys.get(event.key())
+            if key is None:
                 return False
             focus = QtWidgets.QApplication.focusWidget()
             editors = (
@@ -197,12 +214,15 @@ class UndoCancels:
                 QtWidgets.QTextEdit,
                 QtWidgets.QPlainTextEdit,
             )
-            if isinstance(focus, editors):
-                return False  # undo of the typing in the field
-            event.accept()  # ShortcutOverride accepted: the Ctrl+Z shortcut does not fire
-            if kind == QtCore.QEvent.KeyPress and event.key() == QtCore.Qt.Key_Z:
-                if not event.isAutoRepeat():
+            if key in ("Z", "Y") and isinstance(focus, editors):
+                return False  # undo/redo of the typing in the field
+            event.accept()  # ShortcutOverride accepted: SciForge's own shortcut does not fire
+            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
+                if key == "Z":
                     QtCore.QTimer.singleShot(0, self._cancel)
+                elif key in self.FINISH_FIRST:
+                    command = self.FINISH_FIRST[key]
+                    QtCore.QTimer.singleShot(0, lambda: self._finish_then(command))
             return True
         except Exception:
             return False
@@ -216,6 +236,19 @@ class UndoCancels:
             from . import warn
 
             warn("Ctrl+Z in a dialog: %s" % exc)
+
+    def _finish_then(self, command):
+        import FreeCADGui as Gui
+
+        try:
+            panel = self.panel
+            if panel is not None and not getattr(panel, "_closed", True):
+                panel.finish()
+            Gui.runCommand(command)
+        except Exception as exc:
+            from . import warn
+
+            warn("%s with a dialog open: %s" % (command, exc))
 
     def _undone(self, doc):
         """Undo/redo reached the document anyway (toolbar): the preview is gone, close."""
@@ -249,6 +282,31 @@ class UndoCancels:
 
             warn("undo in a dialog: %s" % exc)
 
+    def _document_gone(self, doc):
+        """The dialog's document is being closed: drop the dialog without touching it."""
+        try:
+            panel = self.panel
+            if panel is None or getattr(panel, "_closed", True):
+                return
+            if doc.Name != panel.doc.Name:
+                return
+            panel._timer.stop()
+            panel.target = None
+            try:
+                panel.cleanup()
+            except Exception:
+                pass
+            from . import taskui
+            from .compat import QtCore
+
+            if taskui._OPEN["dialog"] is panel:
+                taskui._OPEN["dialog"] = None
+            QtCore.QTimer.singleShot(0, _close_task_panel)
+        except Exception as exc:
+            from . import warn
+
+            warn("document closed under a dialog: %s" % exc)
+
     def remove(self):
         from .compat import QtWidgets
 
@@ -261,6 +319,16 @@ class UndoCancels:
         except Exception:
             pass
         self.panel = None
+
+
+def _close_task_panel():
+    import FreeCADGui as Gui
+
+    try:
+        if Gui.Control.activeDialog():
+            Gui.Control.closeDialog()
+    except Exception:
+        pass
 
 
 def failure(obj):

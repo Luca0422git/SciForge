@@ -468,7 +468,8 @@ class PressPullPanel(Panel):
         if self._closed:
             return
         try:
-            picks = _picks()
+            # Only this design's objects: a click in another open document is not a pick.
+            picks = [pk for pk in _picks() if pk[0].Document.Name == self.doc.Name]
             if not picks:
                 return
             Gui.Selection.clearSelection()
