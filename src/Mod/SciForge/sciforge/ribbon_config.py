@@ -60,7 +60,7 @@ SOLID_CREATE = group(
         item("Emboss", None, "emboss"),
         SEP,
         item("Hole", ("SciForge_Hole", "PartDesign_Hole"), "hole", "H"),
-        item("Thread", None, "thread"),
+        item("Thread", "SciForge_Thread", "thread"),
         SEP,
         item("Box", ("SciForge_Box", "PartDesign_CompPrimitiveAdditive#0"), "box"),
         item("Cylinder", ("SciForge_Cylinder", "PartDesign_CompPrimitiveAdditive#1"), "cylinder"),
