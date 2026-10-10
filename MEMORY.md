@@ -116,6 +116,17 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       or hole faces: size from the diameter, full/partial length (+ blue length arrow), cosmetic
       (dashed helix overlay, also for tapped holes) or modeled (own ISO 68-1 groove sweep,
       `thread_core.py`). 6 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
+- [x] Rectangular Pattern, Circular Pattern, Pattern on Path, Mirror, Fusion-style (branch
+      `sf/patterns`): Pattern Type Features (FreeCAD's LinearPattern/PolarPattern/Mirrored,
+      dress-ups included; a face click takes the feature that made it) / Faces (SciForge's
+      `PatternFeature` closes the faces into the hole or boss they bound) / Bodies (one new body
+      per copy; Mirror: New Body or Join). Quantity, Distance, Extent/Spacing, One Direction/
+      Symmetric per direction, Direction 2 offered at right angles, Full/Angle/Symmetric,
+      Identical/Path Direction; origin axes and planes drawn to click; blue arrows and a curved
+      angle handle; parameters/formulas; live preview; errors in the dialog; timeline edit.
+      Spec + gaps: `docs/sciforge/parity/patterns.md`. 5 scenarios (`patterns*.py`), 14 golden
+      models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
+      `SciForge_PatternOnPath` (was greyed).
 
 ## Known issues / findings
 
@@ -297,6 +308,33 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
     clickable (compute what is in front); the disc at the bottom of a hole is only visible
     from the top.
+- **Patterns findings (branch `sf/patterns`)**:
+  - FreeCAD's LinearPattern/PolarPattern read a spacing of exactly -1 as "use Offset"; a
+    symmetric pattern is a walk of gaps (0, s, .. then a jump back) that must never contain -1
+    (moved by a nanometre). List properties take a whole-list expression
+    (`list(Offset.Value; ...)`), not per-element ones: that keeps symmetric copies following a
+    parameter.
+  - FreeCAD 1.1 bodies allow several solids (`Body.AllowCompound` is on by default), and its
+    pattern features repeat dress-ups (fillets) too.
+  - A PartDesign body takes its BaseFeature's shape without the shape's placement: bake the
+    placement in (`shape.transformShape(matrix, True)`), or the copy lands on the original.
+  - A top-level `Part::FeaturePython` linking into a body needs `App::PropertyLink(Sub)Global`,
+    else "Link(s) ... go out of the allowed scope" is printed.
+  - An overlay drawn over the part (origin axes/planes) gets the press, but FreeCAD still
+    selects the part on the release: remember the overlay click and ignore that selection.
+  - `sketch_ui.PlanePicker` leaves every click over the part to the part (fine for Create
+    Sketch); pattern_ui subclasses it so a square in front of the part wins (Mirror Plane).
+  - Harness trap: a scenario step whose name contains "error" fails the step (the harness
+    reads its own "step: ..." log line in the Report view).
+  - **To confirm with Luca:** Fusion's Symmetric (rectangular and circular) is implemented as
+    "quantity and distance/angle per side, the original shared"; Direction 2 is offered at
+    right angles after Direction 1; Mirror of a body defaults to New Body.
+  - Not done (gaps, see the parity doc): Suppression, Compute Option Optimized/Adjust,
+    Components, quantity from a parameter, face copies that heal into different
+    surroundings, an explicit start point on a path. The timeline module has no entry for
+    `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
+    kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
+    `"PatternOnPath"` to it in `KIND_BY_SCIFORGE_TYPE`.
 
 ## Questions waiting for Luca
 
@@ -409,6 +447,19 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `ExtrudeFeature`, property `Operation`); parameters and formulas typed in Extrude and
   Press Pull fields; Enter is OK over the 3D view; clicking the end of a preview drops the
   profile it came from; Symmetric no longer offers To Object. 3 golden models (tapers).
+
+### 2026-10-10: Patterns and Mirror (branch `sf/patterns`)
+- New: `pattern_core.py` (where copies go, pure), `pattern.py` (document side: FreeCAD's
+  pattern features with both spacing lists written, symmetric gap walks, SciForge's
+  `PatternFeature` for faces / paths / anything FreeCAD cannot repeat, new-body copies for
+  Bodies), `pattern_ui.py` (Rectangular / Circular / Pattern on Path dialogs, origin-axis and
+  front-plane pickers, highlight overlay, arrows, angle handle, editors, delete watch for body
+  patterns), `mirror_ui.py` (Mirror). Ribbon: Pattern on Path enabled (one line).
+- Tests: scenarios `patterns_rect`, `patterns_circ`, `patterns_mirror`, `patterns_path`,
+  `patterns_qa` (real input only); golden ops `rectangular_pattern`, `circular_pattern`,
+  `path_pattern`, `fusion_mirror`, `pattern_edit` (`golden/pattern_ops.py`) + 14 models;
+  unit tests `test_pattern_core.py` (17).
+- Parity doc `docs/sciforge/parity/patterns.md` (assumptions to confirm with Luca, gaps).
 
 ## Next steps (in order)
 
