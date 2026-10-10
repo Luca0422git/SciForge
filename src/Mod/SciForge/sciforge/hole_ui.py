@@ -252,6 +252,7 @@ class HolePanel(Panel):
             if self.options["placement"] == "sketch":
                 self.sketch, self.subs = hole.picked_targets(feature)
                 self.active = "points"
+                self._show_sketch()
         self._build_form()
         self._show_options()
         self._watch()
@@ -261,6 +262,27 @@ class HolePanel(Panel):
             self._make_draggers()
         else:
             self._start(selection)
+
+    def _show_sketch(self):
+        """Editing a From Sketch hole: its (hidden) sketch shows while the dialog is open, so
+        its points can be clicked, like in Fusion."""
+        self._shown_sketch = None
+        try:
+            vobj = self.sketch.ViewObject if self.sketch is not None else None
+            if vobj is not None and not vobj.Visibility:
+                vobj.Visibility = True
+                self._shown_sketch = self.sketch
+        except Exception:
+            self._shown_sketch = None
+
+    def _hide_shown_sketch(self):
+        sketch = getattr(self, "_shown_sketch", None)
+        self._shown_sketch = None
+        try:
+            if common.alive(sketch) and sketch.ViewObject is not None:
+                sketch.ViewObject.Visibility = False
+        except Exception:
+            pass
 
     # -- form -----------------------------------------------------------------------------
     def _build_form(self):
@@ -436,6 +458,8 @@ class HolePanel(Panel):
         threaded = tap != "simple"
         refs = hole.references(self.target) if self.target is not None and single else []
         placed = self.target is not None and single
+        # Through all: the hole has no bottom, so no drill point angle.
+        angled = self.drill_point.currentData() == "angle" and extent != "all"
         for widget, show in (
             (self.fields["face"].widget, single),
             (self.face_label, single),
@@ -477,10 +501,11 @@ class HolePanel(Panel):
             (self.csink_diameter_label, kind == "countersink"),
             (self.csink_angle.widget, kind == "countersink"),
             (self.csink_angle_label, kind == "countersink"),
-            (self.drill_angle.widget, self.drill_point.currentData() == "angle"),
-            (self.drill_angle_label, self.drill_point.currentData() == "angle"),
+            (self.drill_angle.widget, angled),
+            (self.drill_angle_label, angled),
         ):
             widget.setVisible(show)
+        self.standard_label.setText("Standard" if tap == "clearance" else "Thread Type")
         for i in range(2):
             self.ref_fields[i].widget.setVisible(i < len(refs))
             self.ref_labels[i].setVisible(i < len(refs))
@@ -544,7 +569,8 @@ class HolePanel(Panel):
         if not name or not _is_solid_feature(obj):
             return False
         if name.startswith("Face"):
-            return True
+            # From Sketch takes sketch points only (a face under a point must not win).
+            return self.placement.currentData() == "single" or self.active == "to"
         if name.startswith("Edge"):
             if self.active == "to" or self.placement.currentData() != "single":
                 return False
@@ -1328,6 +1354,7 @@ class HolePanel(Panel):
         return True
 
     def cleanup(self):
+        self._hide_shown_sketch()
         self._unwatch()
         self.escape.remove()
         self._remove_draggers()

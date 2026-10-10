@@ -87,6 +87,12 @@ def centre_of(feature):
     return spots[0][0] if spots else None
 
 
+def centres_all(feature):
+    from sciforge import hole
+
+    return [c for c, _d in hole.centres(feature)] if feature is not None else []
+
+
 def centres_dir(feature):
     from sciforge import hole
 
