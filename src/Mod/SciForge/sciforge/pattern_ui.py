@@ -1058,8 +1058,13 @@ class PatternPanel(Panel):
         obj, short = ref
         if obj.TypeId == "PartDesign::Body" and short:
             obj = obj.Tip
+        if obj.TypeId in pattern.LINE_TYPES + pattern.PLANE_TYPES:
+            short = ""  # a datum axis or plane is used whole, wherever it was clicked
         if short.startswith("Vertex"):
             self.message.setText("⚠ Pick an edge, a face or an axis, not a point.")
+            return
+        if obj.TypeId == "PartDesign::Body" and not short:
+            self.message.setText("⚠ Pick an edge, a face, an axis or a plane, not a whole body.")
             return
         ref = self._base_ref(obj, short)
         if ref is None:
@@ -1714,6 +1719,55 @@ def edit(feature):
             Gui.Control.showDialog(PatternPanel(feature.Document, kind=kind, feature=feature))
     except Exception as exc:
         warn("could not edit %s: %s" % (feature.Label, exc))
+
+
+class _DeleteWatch:
+    """Deleting a pattern of bodies (the timeline's Delete) also deletes the bodies it made, as
+    in Fusion. The copies are removed a moment later, as their own undo step: nothing is
+    removed inside FreeCAD's delete."""
+
+    def slotDeletedObject(self, obj):
+        try:
+            if pattern.is_body_pattern(obj):
+                name = obj.Document.Name
+                QtCore.QTimer.singleShot(0, lambda: _remove_orphans(name))
+        except Exception:
+            pass
+
+
+def _remove_orphans(doc_name):
+    try:
+        if doc_name not in App.listDocuments():
+            return
+        doc = App.getDocument(doc_name)
+        if not pattern.orphan_copies(doc):
+            return  # an undo took the copies away with their pattern
+        doc.openTransaction("Delete pattern copies")
+        try:
+            pattern.remove_orphans(doc)
+        except Exception:
+            doc.abortTransaction()
+            raise
+        doc.commitTransaction()
+        preview.recompute(doc)
+        log("copies of a deleted pattern removed")
+    except Exception as exc:
+        warn("could not remove the copies of a deleted pattern: %s" % exc)
+
+
+_WATCH = {"observer": None}
+
+
+def install_delete_watch():
+    if _WATCH["observer"] is None:
+        _WATCH["observer"] = _DeleteWatch()
+        App.addDocumentObserver(_WATCH["observer"])
+
+
+try:
+    install_delete_watch()
+except Exception as _exc:  # never let an import fail the commands
+    warn("pattern delete watch unavailable: %s" % _exc)
 
 
 COMMANDS = {

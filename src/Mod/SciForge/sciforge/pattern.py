@@ -1626,10 +1626,12 @@ class BodyCopyFeature:
     def execute(self, obj):
         definition = obj.Pattern
         if definition is None:
-            raise PatternError("This copy has lost its pattern.")
+            # The pattern step was deleted: the copy keeps its shape (pattern_ui removes such
+            # orphans right after a delete, as Fusion deletes the copies with the pattern).
+            return
         copies = body_copy_shapes(definition)
         if obj.Index >= len(copies):
-            raise PatternError("The pattern has fewer copies now.")
+            return  # about to be removed by the pattern (fewer copies now)
         obj.Shape = copies[obj.Index]
 
     def dumps(self):
@@ -1821,6 +1823,19 @@ def _remove_body_copies(definition):
         definition.Document.removeObject(definition.Name)
     except Exception:
         pass
+
+
+def orphan_copies(doc):
+    """Copies whose pattern step was deleted."""
+    return [o for o in doc.Objects if is_body_copy(o) and o.Pattern is None]
+
+
+def remove_orphans(doc):
+    """Remove the copies (and their bodies) of deleted patterns. True if any were found."""
+    found = orphan_copies(doc)
+    for copy in found:
+        _remove_copy(copy)
+    return bool(found)
 
 
 def copy_bodies(definition):
