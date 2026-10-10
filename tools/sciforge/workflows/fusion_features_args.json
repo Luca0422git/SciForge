@@ -1,0 +1,146 @@
+{
+ "scratch": "<scratchpad dir containing fc/ (FreeCAD 1.1.4 AppImage unpacked) and venv/ (black)>",
+ "features": [
+  {
+   "key": "extrude_presspull",
+   "title": "Extrude and Press Pull: complete and harden",
+   "owns": [
+    "sciforge/extrude.py",
+    "sciforge/extrude_ui.py",
+    "sciforge/presspull.py",
+    "sciforge/presspull_core.py",
+    "sciforge/presspull_ui.py",
+    "sciforge/profile_pick.py"
+   ],
+   "spec": "Fusion EXTRUDE (E) and PRESS PULL (Q), complete. Extrude: select several profiles (click more regions; click again to unselect); pick individual REGIONS of a sketch (a circle inside a rectangle gives the ring and the disc as separate regions), not the whole sketch - research how FreeCAD 1.1 Pad/Pocket can use a sub-region (Profile sub-elements of a sketch face set, a hidden helper face feature, or a SciForge FeaturePython), choose what keeps editing from the timeline and parametric updates working. Start: Profile Plane / Offset (distance) / From Object. Direction: One Side / Two Sides / Symmetric. Extent: Distance / To Object (pick a face or body: PartDesign UpToFace/UpToShape) / All. Taper Angle with an angular handle. Operation: Join / Cut / Intersect / New Body, auto Cut when dragged into material unless chosen. New Body creates a new PartDesign::Body (the profile reaches it through a SubShapeBinder or similar) and the new body becomes the active one; Join/Cut/Intersect then act on the body the profile's sketch belongs to (Fusion's Objects To Cut can be simplified to the active body). Editing an extrude from the timeline (double click) must offer every option again. Press Pull: multi-face edits like Fusion (offset faces with neighbours extended), sloped neighbours, the corner case: the xfail golden models pp_multi_face_corner and pp_slanted_neighbours (spike 9.1 in docs/sciforge/feature-outline.md) - research OCC BRepOffsetAPI_MakeOffsetShape (join type Intersection), BRepOffset_MakeSimpleOffset, LocOpe, BRepAlgoAPI_Defeaturing; bring them to PASS if at all possible (remove their xfail markers when they pass). Existing scenarios journey/luca_session must keep passing."
+  },
+  {
+   "key": "sketch",
+   "title": "Sketch workspace parity",
+   "owns": [
+    "sciforge/sketch_ui.py",
+    "sciforge/shell.py (sketch-mode parts only)",
+    "sciforge/sketch_palette.py (new)"
+   ],
+   "spec": "Fusion SKETCH workspace. Every SKETCH tab command must work from the ribbon and its key without errors or pop-ups. Today 'Circumscribed Polygon' opens FreeCAD's 'Create Regular Polygon' pop-up asking for the number of sides: make it Fusion-like (draw with 6 sides by default, change the count in the dialog/palette or an on-screen field, no modal pop-up). Keys while sketching: L line, R 2-point rectangle, C center circle, D sketch dimension, T trim, X toggle construction, O offset, P project, E extrude (finishes the sketch and starts Extrude with the profile), Esc stops the current tool, a second Esc clears the selection. FINISH SKETCH (ribbon button) always works, also with a tool active (commands.leave_edit). On entering a sketch the camera turns to look at it (Fusion's auto Look At); finishing returns to the previous camera. SKETCH PALETTE panel (Fusion's right-side palette): Look At, Sketch Grid, Snap, Slice, Show Profile, Show Points, Show Dimensions, Show Constraints, Show Projected Geometries, Construction toggle; map to FreeCAD sketcher view parameters/commands and restyle FreeCAD's sketcher task panel so it reads like Fusion's palette. Closed regions shaded light blue inside the sketch (profiles) like Fusion. PROJECT (P) body edges/faces into a sketch on a face; INCLUDE 3D GEOMETRY. Drawing with the mouse must produce correct geometry and constraints: scenarios that draw a line chain by clicks, a 2-point rectangle with two clicks, a circle by centre + radius click, a dimension (D) by clicking a line and typing a value, trim (T) by clicking a segment, offset (O). These are FreeCAD sketcher tools driven by mouse events on the 3D view: drive them with real mouse events and verify the sketch Geometry/Constraints afterwards. Double-clicking a sketch in the browser or timeline edits it; editing a sketch that features depend on and finishing updates the part with no errors. Sketch on a face of the part, then Finish Sketch, must never error."
+  },
+  {
+   "key": "timeline_browser",
+   "title": "Timeline and Browser parity",
+   "owns": [
+    "sciforge/timeline_core.py",
+    "sciforge/timeline_ui.py",
+    "sciforge/browser_core.py",
+    "sciforge/browser_ui.py",
+    "SciForgeTests/unit/test_timeline_core.py",
+    "SciForgeTests/unit/test_browser_core.py"
+   ],
+   "spec": "Fusion TIMELINE and BROWSER. Timeline: one timeline for the whole design (all bodies, sketches, construction geometry and features in creation order, not only the active body), icons per feature, drag a feature left/right to reorder (PartDesign: move inside body Group and keep BaseFeature chain valid; refuse impossible moves with a red marker/tooltip like Fusion), drag the history marker to roll back (exists: keep working), right-click menu: Edit Feature, Edit Profile Sketch, Suppress/Unsuppress (check FreeCAD 1.1's PartDesign 'Suppressed' property; else implement), Roll History Marker Here, Delete (Fusion: deleting a feature keeps later features working where possible), Rename, Find in Browser, Create Group optional. Double-click edits through taskui.edit_object (feature modules register EDITORS). Features with errors/warnings shown red/yellow with the reason as tooltip, instead of errors flooding the Report view. Browser: document node with Document Settings > Units, Named Views, Origin (planes and axes with eye toggles), Bodies folder listing every body (eye toggle, rename, activate, delete, the active body marked), Sketches folder (eye toggles, edit), Construction folder, Analysis folder placeholder; selection syncs both ways with the 3D view; right-click menus like Fusion's. Every action works with the mouse in scenarios, no errors."
+  },
+  {
+   "key": "fillet",
+   "title": "Fillet and Chamfer",
+   "owns": [
+    "sciforge/fillet_ui.py (new)",
+    "sciforge/blend.py (new)"
+   ],
+   "spec": "Fusion FILLET (F) and CHAMFER. Fillet dialog: Type Fillet; selection of edges (click edges in the 3D view, several; clicking a face adds all its edges; clicking a feature in the timeline/browser could add its edges - optional), Tangent Chain on by default (adds tangent-continuous edges), Radius field plus a blue drag arrow on the first selected edge, Radius Type Constant, live preview, Corner Type optional; pressing F with edges already selected starts immediately; deselect an edge by clicking it again. Chamfer: Chamfer Type Equal Distance / Two Distances / Distance and Angle, same selection, distance arrow, flip direction for two distances. Built on PartDesign::Fillet / PartDesign::Chamfer with Refine on. Impossible radius: dialog shows the error and OK refuses; nothing in the Report view. Edit via timeline double-click (EDITORS for PartDesign::Fillet/Chamfer) with the edges shown and editable. Press Pull already creates fillets from edges and edits fillet radius (presspull_core.owning_fillet) - stay compatible with that."
+  },
+  {
+   "key": "hole",
+   "title": "Hole and Thread",
+   "owns": [
+    "sciforge/hole_ui.py (new)",
+    "sciforge/hole.py (new)",
+    "sciforge/thread_ui.py (new)",
+    "sciforge/thread.py (new)"
+   ],
+   "spec": "Fusion HOLE (H) and THREAD. Hole: Placement 'Single Hole': click a face and the hole goes where you clicked (then fine-tune with X/Y offsets in the face plane in the dialog, or reference two edges with distances like Fusion if feasible); 'From Sketch (multiple holes)': pick sketch points / circle centres. Hole Type Simple / Counterbore / Countersink with diameter, depth, counterbore diameter/depth, countersink diameter/angle; Extent Distance / To (face) / All; Drill Point Flat / Angle (118 deg); Hole Tap Type Simple / Clearance / Tapped with standard sizes (ISO metric, UNC) where FreeCAD's Hole supports them, Modeled option. Blue arrow drags depth. Under the hood: an auto-created hidden sketch on the clicked face with points (or circles) at the picked positions + PartDesign::Hole, all one undo step; the helper sketch is named after the hole and editing the hole moves the point. Thread: select a cylindrical face (hole or shaft) -> Thread Type ISO metric / UNC, size from the diameter, pitch, length full/partial, Modeled checkbox: cosmetic (recorded and shown, e.g. a texture/colour or a dashed helper) vs modeled (real thread geometry, e.g. PartDesign::SubtractiveHelix/AdditiveHelix with a thread profile, or Hole's ModelThread for holes). Edit via timeline."
+  },
+  {
+   "key": "revolve",
+   "title": "Revolve",
+   "owns": [
+    "sciforge/revolve_ui.py (new)",
+    "sciforge/revolve.py (new)"
+   ],
+   "spec": "Fusion REVOLVE. Profile: click inside a closed region (profile_pick) or a planar face. Axis: click an origin axis (show X/Y/Z axes as clickable lines while picking, like sketch_ui's plane squares), a sketch line, a straight model edge, or a construction axis. Type: Angle / Full; Angle field plus an angular drag handle (taskui.ArrowDragger is linear: build a tangential arrow whose drag maps to an angle, polled with a QTimer, no pivy callbacks). Direction: One Side / Two Sides / Symmetric. Operation: Join / Cut / Intersect / New Body, auto Cut when revolving into material, by swapping PartDesign::Revolution <-> PartDesign::Groove like extrude.switch. Remove the interim 'Revolve (Cut)' entry from sciforge/ribbon_config.py (one line). Edit via timeline double-click (EDITORS for PartDesign::Revolution and PartDesign::Groove). Golden models for revolved solids (cylinder, cone, ring, groove) with analytic volumes."
+  },
+  {
+   "key": "patterns",
+   "title": "Rectangular Pattern, Circular Pattern, Mirror",
+   "owns": [
+    "sciforge/pattern_ui.py (new)",
+    "sciforge/pattern.py (new)",
+    "sciforge/mirror_ui.py (new)"
+   ],
+   "spec": "Fusion RECTANGULAR PATTERN, CIRCULAR PATTERN, MIRROR (+ PATTERN ON PATH if feasible). Rectangular: Pattern Type Features / Faces / Bodies (Features and Faces at least, via PartDesign::LinearPattern / MultiTransform; Bodies if feasible), Objects (click features in the timeline/browser or faces in the view), Direction 1 (click an edge or axis), Quantity, Distance, Distribution Extent/Spacing, Direction Type One Direction/Symmetric, Direction 2 likewise; two blue arrows to drag the distances; live preview of the copies; MultiTransform for two directions. Core patch #4 changes LinearPattern.Spacings2's default in C++, but on stock 1.1.4 (and in documents) set spacings explicitly so two-direction patterns never stack. Circular: Objects, Axis (origin axis click / edge / cylindrical face's axis), Quantity, Type Full / Angle / Symmetric, Total Angle. Mirror: Objects + Mirror Plane (origin plane via a plane overlay like sketch_ui.PlanePicker, a planar face, a construction plane); PartDesign::Mirrored. Edit via timeline. Golden models: patterned holes/bosses with analytic volumes."
+  },
+  {
+   "key": "shell_draft",
+   "title": "Shell, Draft, Scale",
+   "owns": [
+    "sciforge/shell_ui.py (new)",
+    "sciforge/draft_ui.py (new)",
+    "sciforge/scale.py (new)",
+    "sciforge/scale_ui.py (new)"
+   ],
+   "spec": "Fusion SHELL, DRAFT, SCALE. Shell: select faces to remove (click; click again removes), Inside Thickness / Outside Thickness fields with arrow, Direction Inside / Outside / Both, Tangent Chain; nothing selected = hollow closed shell (Fusion allows selecting the body). PartDesign::Thickness (Mode, Join, Reversed, Intersection). Fix the known baseline failure: pressing Shell with nothing selected today prints '<Exception> Base feature's TopoShape is invalid' - it must instead wait in the dialog for a pick. Draft: Pull Direction (pick a plane or planar face), Faces (pick), Angle field (+ flip), Tangent Chain; PartDesign::Draft. Scale: Fusion scales bodies about a point, Uniform or Non Uniform (X/Y/Z factors); implement as a SciForge PartDesign::FeaturePython in the body (like presspull.PressPullFeature) with Scale Factor(s) and a point (origin default, or a picked vertex), live preview. Edit via timeline. Golden models with analytic volumes (shelled box, drafted box, scaled box)."
+  },
+  {
+   "key": "bodies",
+   "title": "Bodies: Combine, Split Body, Move/Copy, Delete, Appearance, Physical Material",
+   "owns": [
+    "sciforge/bodies.py (new)",
+    "sciforge/combine_ui.py (new)",
+    "sciforge/split_ui.py (new)",
+    "sciforge/move_ui.py (new)",
+    "sciforge/move.py (new)",
+    "sciforge/delete_ui.py (new)",
+    "sciforge/appearance_ui.py (new)",
+    "sciforge/material_ui.py (new)"
+   ],
+   "spec": "Fusion multi-body tools. COMBINE: Target Body, Tool Bodies, Operation Join/Cut/Intersect, New Body option, Keep Tools; via PartDesign::Boolean or Part booleans (choose what keeps timeline editing working). SPLIT BODY: body to split + splitting tool (origin plane, construction plane, planar face, or body), Extend Splitting Tool; result two bodies. MOVE/COPY (M): Move Object Bodies; Move Type Free Move (on-screen triad: 3 arrows + 3 rotation handles, polled with QTimer, no pivy callbacks), Translate XYZ, Rotate (axis + angle), Point to Point; typed X/Y/Z distances and angles; Create Copy option; recorded in the timeline (a SciForge feature or recorded placement change) with edit-from-timeline and undo working. DELETE (Del): delete the selected feature / body / sketch like Fusion: dependants keep working when possible (relink BaseFeature, re-route the Tip), otherwise they are flagged in the timeline - never a cascade of FreeCAD errors in the Report view. APPEARANCE: assign a colour/appearance to a body or face from a small Fusion-like library (steel, aluminium, glossy plastics in several colours, rubber) plus a custom colour; drag-and-drop optional. PHYSICAL MATERIAL: assign a material with density to a body (FreeCAD Materials ShapeMaterial if available), shown in the browser and used for mass in Inspect. Provide bodies.py helpers (list_bodies(doc), new_body(doc, label), active_body handling) that other features can call. Extrude's 'New Body' operation is implemented by the extrude_presspull agent inside extrude.py: do not edit extrude*.py; make your tools work with any number of PartDesign bodies."
+  },
+  {
+   "key": "inspect",
+   "title": "Inspect (Measure, Section Analysis, Center of Mass, Interference) and Construct audit",
+   "owns": [
+    "sciforge/measure_ui.py (new)",
+    "sciforge/measure.py (new)",
+    "sciforge/section_ui.py (new)",
+    "sciforge/com_ui.py (new)",
+    "sciforge/interference_ui.py (new)",
+    "sciforge/construct.py",
+    "sciforge/construct_ui.py"
+   ],
+   "spec": "Fusion INSPECT and CONSTRUCT. MEASURE (I): Fusion's measure panel: select one or two entities (faces, edges, vertices, bodies) and read distance (minimum), angle, area, length, volume, position, delta X/Y/Z; selection filter; precision setting; results update with each pick; uses Part shape maths (distToShape etc.), not FreeCAD's measure dialog. SECTION ANALYSIS: pick an origin/construction plane or a planar face, drag an arrow to offset, flip, live cut view (clipping or a cut display), listed in the browser's Analysis folder with show/hide (coordinate with nothing: store analyses in your own document group/property). CENTER OF MASS: show a marker at the selected body's centre of mass with its coordinates. INTERFERENCE: select bodies -> report overlapping volumes and show them. CONSTRUCT audit: drive every CONSTRUCT command (Offset Plane with a drag arrow, Plane at Angle, Tangent Plane, Midplane, Plane Through Two Edges, Plane Through Three Points, Plane Along Path, Axis Through Cylinder/Cone/Torus, Axis Perpendicular to Face, Axis Through Two Planes, Axis Through Two Points, Axis Through Edge, Point at Vertex, Point Through Two Edges, Point Through Three Planes, Point at Center, Point at Edge and Plane, Point Along Path) with real clicks and fix every error and pop-up; construction geometry usable by Create Sketch (sketch on a construction plane) and by other commands."
+  },
+  {
+   "key": "primitives",
+   "title": "Box, Cylinder, Sphere, Torus, Coil, Pipe",
+   "owns": [
+    "sciforge/primitives_ui.py (new)",
+    "sciforge/primitives.py (new)",
+    "sciforge/coil_ui.py (new)",
+    "sciforge/coil.py (new)",
+    "sciforge/pipe_ui.py (new)",
+    "sciforge/pipe.py (new)"
+   ],
+   "spec": "Fusion BOX, CYLINDER, SPHERE, TORUS, COIL, PIPE (SOLID > CREATE). Box: pick a plane or planar face (sketch_ui-style plane squares), click two corners on that plane (mouse ray onto the plane, live rubber band), then drag the height arrow; dialog Length/Width/Height, Operation Join/Cut/Intersect/New Body (auto cut into material). Cylinder: plane, centre click, radius by mouse, height arrow; Sphere: plane, centre, diameter; Torus: plane, centre, inner/outer diameters, position. Coil: plane, centre, Type Revolution and Height / Revolution and Pitch / Height and Pitch / Spiral, diameter, revolutions, height, angle, section Circular / Square / Triangle (external/internal), section size/position, operation; PartDesign::AdditiveHelix/SubtractiveHelix with an auto profile sketch. Pipe: select a path (sketch edges / model edges), section Circular/Square/Triangular, size, Hollow + thickness, operation; PartDesign::AdditivePipe with an auto profile. Prefer PartDesign Additive/Subtractive primitives attached with AttachmentOffset. Edit via timeline. Golden models with analytic volumes."
+  },
+  {
+   "key": "sweep_loft",
+   "title": "Sweep, Loft, Rib, Web",
+   "owns": [
+    "sciforge/sweep_ui.py (new)",
+    "sciforge/sweep.py (new)",
+    "sciforge/loft_ui.py (new)",
+    "sciforge/loft.py (new)",
+    "sciforge/rib_ui.py (new)",
+    "sciforge/rib.py (new)"
+   ],
+   "spec": "Fusion SWEEP, LOFT, RIB, WEB. Sweep: Type Single Path / Path + Guide Rail; Profile (click inside a profile region or a planar face), Path (click sketch or model edges; tangent chain), Distance 0..1, Orientation Perpendicular/Parallel, Taper Angle, Twist Angle, Operation Join/Cut/Intersect/New Body (PartDesign::AdditivePipe/SubtractivePipe). Loft: Profiles list (click profiles / planar faces / points in order; reorder; remove), Guide Type Rails / Centerline, Closed, Tangent Edges Merge, Operation (PartDesign::AdditiveLoft/SubtractiveLoft). Rib: select an open sketch curve, Thickness Options Symmetric/One Side, Thickness, Depth Options To Next/Depth, flip; Web: same for networks of open curves. FreeCAD has no rib/web feature: implement as a SciForge PartDesign::FeaturePython (thicken the curve into a face in the sketch plane, extrude it to the next face / by depth, fuse) if feasible; otherwise known_gaps with the reason. Edit via timeline. Golden models (swept tube along a path, loft between a square and a circle with known volume formula where analytic)."
+  }
+ ]
+}

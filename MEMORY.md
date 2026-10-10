@@ -275,20 +275,39 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Rectangle, 2-Point/Tangent circles, Tangent Arc, Midpoint Line, Overall/Center Point Slot,
   Conic, Text, Project to Surface, 3D Sketch), M in a sketch still runs the part Move.
 
+### 2026-10-10: Session 1, part 5 ("make it all work"; parallel feature agents)
+- Luca's 2nd report: second extrude made the part disappear (leftover selection re-used the
+  first sketch -> auto Cut; fixed: dialogs clear the selection, used+hidden sketches never taken
+  from a stale selection), Finish Sketch crash (resetEdit with a sketch tool active -> FreeCAD
+  segfault; fixed in Python via `commands.leave_edit` + core patch #6), face normals flipped
+  twice (fixed), Ctrl+Z/Y/S/N/O/Del dead because the menu bar is hidden (now bound in
+  `config.SHORTCUTS`).
+- Test infrastructure: `SciForgeTests/gui/harness.py` (real clicks/keys/ribbon buttons; ANY
+  Report-view error fails), scenarios in `SciForgeTests/gui/scenarios/` (luca_session,
+  ribbon_sweep = every SOLID/SKETCH command, keys), `run_tests.sh --only scenarios /
+  --scenario NAME`. Rules for feature work: `docs/sciforge/dev/feature-guide.md`.
+- Parallel feature workflow (12 features, each in its own git worktree, branch `sf/<key>`):
+  built and merged: extrude_presspull, sketch, timeline_browser (full suite green locally), and
+  fillet (merged from its committed branch; its full-suite run was still going when this was written). Then the org's monthly agent spend limit stopped all other agents.
+  NOT built yet: hole (WIP, untested, on branch `sf/hole`), revolve, patterns, shell_draft,
+  bodies, inspect, primitives, sweep_loft. The QA ("break and fix") stage ran for none of them.
+  The workflow script and its feature list are in `tools/sciforge/workflows/fusion_features.js`
+  and `fusion_features_args.json` (set "scratch"; drop the features already merged). In the same
+  session it can resume with resumeFromRunId "wf_4a2277cc-81f". (The fillet build agent never
+  returned a report; its committed branch was merged as is.)
+- ribbon_sweep KNOWN list: only "Shell" left (shell_draft fixes it); remove when fixed.
+
 ## Next steps (in order)
 
-1. Luca installs the quick update and redoes his session (sketch on a plane, extrude, press pull,
-   second sketch on a face). Ask for SciForge > Diagnostics text (now copyable, includes recent
-   messages) whenever something misbehaves, plus the right-click menu screenshot (slot order).
-   Then: next interactive gaps by journey test first (sketch dimensions on screen, Fillet/Hole/
-   Revolve dialogs with arrows, Move/Copy, selection filters, timeline reorder/suppress).
-   Earlier: confirm the C++ build ran golden `plate_hole_grid` as PASS (patch #4).
-2. Luca launches the portable build on Windows and reports (Report view + Diagnostics).
-3. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
-4. Spike 9.1 (Press/Pull): research OCC `BRepOffsetAPI_MakeOffsetShape`, `LocOpe`,
-   `BRepAlgoAPI_Defeaturing`, `BRepOffset_MakeSimpleOffset`, face replacement; write
-   feasibility report + first 40 Press/Pull golden cases (needs new ops in the builder).
+1. Finish the feature workflow (see session log, part 5): hole (continue `sf/hole` WIP), revolve,
+   patterns, shell_draft, bodies, inspect, primitives, sweep_loft; then the QA stage for all 12
+   (including the 4 already merged). Merge each only after the full suite passes locally.
+2. Luca installs the newest green quick update and redoes his session; ask for the copyable
+   SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
+   screenshot (slot order).
+3. Full Windows build to get core patches #4, #6, #7 compiled (CI `sciforge-build.yml`); check
+   golden `plate_hole_grid` PASS there.
+4. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
 5. Spike 9.2 (Fillets): 100+ case benchmark from real part workflows, success-rate metric.
 6. Branding pass (app name, icons, user-data folder, installer) so CI can ship an installer.
-7. Grow golden models toward 100 (gear, bottle loft+shell, sweep pipe, snap-fit, hinge, threads)
-   once the builder supports loft/sweep/thread.
+7. Grow golden models toward 100 (gear, bottle loft+shell, sweep pipe, snap-fit, hinge, threads).
