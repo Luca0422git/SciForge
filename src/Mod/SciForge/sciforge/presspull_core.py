@@ -47,6 +47,8 @@ def slab(face, distance):
             solid = face.extrude(face_normal(face) * distance)
         elif kind == "Cylinder":
             solid = _cylinder_slab(face, distance)
+        elif kind == "Sphere" and _whole_sphere(face):
+            solid = _sphere_slab(face, distance)
         else:
             solid = face.makeOffsetShape(distance, TOL, False, False, 0, 0, True)
     except PressPullError:
@@ -103,6 +105,36 @@ def _cylinder_slab(face, distance):
     return profile.revolve(center, axis, sweep)
 
 
+def _whole_sphere(face):
+    """True for a full sphere (a ball): OpenCASCADE cannot offset it ("no closed bounds")."""
+    radius = face.Surface.Radius
+    return abs(face.Area - 4.0 * math.pi * radius * radius) < 1e-6 * max(1.0, face.Area)
+
+
+def _sphere_slab(face, distance):
+    """The shell between a ball's sphere and the sphere `distance` further out (or in)."""
+    import Part
+
+    surf = face.Surface
+    center = surf.Center
+    radius = surf.Radius
+    point = face.valueAt(*_middle(face))
+    outward_grows = face.normalAt(*_middle(face)).dot(point - center) > 0
+    new_radius = radius + distance if outward_grows else radius - distance
+    if new_radius <= TOL:
+        raise PressPullError(
+            "Pushing this ball by %g mm would shrink its radius (%g mm) to nothing. "
+            "Use a distance smaller than the radius." % (distance, radius)
+        )
+    r_in, r_out = sorted((radius, new_radius))
+    return Part.makeSphere(r_out, center).cut(Part.makeSphere(r_in, center))
+
+
+def _middle(face):
+    u0, u1, v0, v1 = face.ParameterRange
+    return (u0 + u1) / 2.0, (v0 + v1) / 2.0
+
+
 def press_pull(base, faces, distance, refine=True, report=None):
     """New shape: `base` with `faces` (Part.Face objects of base) moved by `distance` mm.
 
@@ -156,6 +188,8 @@ def _same_surface(a, b, tol=1e-6):
             return False
         offset = sb.Center - sa.Center
         return (offset - sa.Axis * offset.dot(sa.Axis)).Length < 1e-5
+    if kind == "Sphere":
+        return abs(sa.Radius - sb.Radius) < 1e-5 and (sb.Center - sa.Center).Length < 1e-5
     return False
 
 
@@ -172,6 +206,8 @@ def _parallel_surface(a, b, tol=1e-6):
             return False
         offset = sb.Center - sa.Center
         return (offset - sa.Axis * offset.dot(sa.Axis)).Length < 1e-5
+    if kind == "Sphere":
+        return (sb.Center - sa.Center).Length < 1e-5
     return _same_surface(a, b)
 
 
@@ -330,6 +366,13 @@ def moved_surface(face, distance):
             if radius <= TOL:
                 return None
             return Part.Cylinder(surf.Center, surf.Center + axis, radius).toShape()
+        if kind == "Sphere":
+            u, v = _middle(face)
+            grows = face.normalAt(u, v).dot(face.valueAt(u, v) - face.Surface.Center) > 0
+            radius = face.Surface.Radius + (distance if grows else -distance)
+            if radius <= TOL:
+                return None
+            return Part.makeSphere(radius, face.Surface.Center)
     except Exception:
         return None
     return None

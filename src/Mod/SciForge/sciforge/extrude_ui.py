@@ -359,6 +359,8 @@ class ExtrudePanel(Panel):
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
         self.escape = preview.EscapeCancels(self)
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else extrude.owner_body(feature)
@@ -367,6 +369,9 @@ class ExtrudePanel(Panel):
         self.options["measurement"] = "half"  # Fusion's default for Symmetric
         self.user_picked_operation = feature is not None
         self.error = ""
+        self.waiting = ""  # the selection box that waits for a click, said as a hint
+        self.formula_error = ""  # a formula typed in a field that is no value
+        self.options["expressions"] = {}  # formulas typed in value fields (FormulaInput)
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
@@ -454,7 +459,24 @@ class ExtrudePanel(Panel):
         form.addRow(self.taper2_label, self.taper2.widget)
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
         form.addRow("Operation", self.operation)
+        self.info = QtWidgets.QLabel("")  # what the dialog waits for (not a problem)
+        self.info.setWordWrap(True)
+        self.info.setStyleSheet("color: #8cc4ff;")
+        form.addRow(self.info)
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        self.formula_inputs = [
+            preview.FormulaInput(self, key, field)
+            for key, field in (
+                ("distance", self.distance),
+                ("distance2", self.distance2),
+                ("taper", self.taper),
+                ("taper2", self.taper2),
+            )
+        ]
         for box in (self.start, self.direction, self.extent, self.extent2, self.measurement):
             box.currentIndexChanged.connect(self._typed)
         self.operation.activated.connect(self._operation_picked)
@@ -483,6 +505,7 @@ class ExtrudePanel(Panel):
         finally:
             self._quiet = False
         self._update_visibility()
+        self.show_formulas()
 
     def _update_visibility(self):
         start = self.start.currentData()
@@ -516,16 +539,15 @@ class ExtrudePanel(Panel):
             (self.taper2_label, two),
         ):
             widget.setVisible(show)
-        # A taper only where it can be built (Distance; a cut's All; any Intersect).
-        operation = self.operation.currentData()
-        for field, ext in ((self.taper, extent), (self.taper2, extent2)):
-            possible = extrude.taper_possible({"operation": operation}, ext)
-            if not possible and abs(field.value()) > 1e-9:
-                field.set_value(0.0)  # shown: the field reads 0 while it is off
-            field.widget.setEnabled(possible)
-            field.widget.setToolTip(
-                "" if possible else "FreeCAD's extrude cannot taper up to an object; use Distance"
-            )
+        # Fusion: a symmetric extrude goes a distance or through all, never to an object.
+        model = self.extent.model()
+        to_object = self.extent.findData("to_object")
+        if to_object >= 0 and hasattr(model, "item"):
+            model.item(to_object).setEnabled(not symmetric)
+        # Every extent takes a taper, like Fusion (what PartDesign cannot taper, SciForge's
+        # own extrude feature builds).
+        for field in (self.taper, self.taper2):
+            field.widget.setEnabled(True)
 
     def _collect(self):
         self.options["start"] = self.start.currentData()
@@ -545,6 +567,51 @@ class ExtrudePanel(Panel):
             self._quiet = True
             _set_combo(self.extent, "distance")
             self._quiet = False
+
+    # -- formulas ----------------------------------------------------------------------------
+    FORMULA_NAMES = {
+        "distance": "Distance",
+        "distance2": "Distance (side two)",
+        "taper": "Taper Angle",
+        "taper2": "Taper Angle (side two)",
+    }
+
+    def show_formulas(self):
+        """Fusion shows the formula in the field; FreeCAD's number field cannot, so the values
+        that follow a parameter are listed under the fields."""
+        rows = [
+            "%s = %s" % (self.FORMULA_NAMES[k], v)
+            for k, v in sorted(self.options.get("expressions", {}).items())
+            if v
+        ]
+        self.formulas.setText("\n".join(rows))
+
+    def drop_formula(self, key):
+        """A plain number typed or a handle dragged: the value no longer follows a formula."""
+        self.formula_error = ""
+        if self.options.get("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            self._changed()
+
+    # preview.FormulaInput calls these three.
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options["expressions"][key] = text
+        handler = {
+            "distance": self._distance_typed,
+            "distance2": self._distance2_typed,
+            "taper": self._taper_typed,
+        }.get(key, self._typed)
+        handler(value)
+        self.show_formulas()
+
+    def formula_cleared(self, key):
+        self.drop_formula(key)
+
+    def formula_failed(self, key, text):
+        # Kept until the field gets a value again (a preview rebuild must not wipe it).
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
 
     # -- selection fields ------------------------------------------------------------------
     def activate(self, name):
@@ -643,7 +710,8 @@ class ExtrudePanel(Panel):
         if self._closed:
             return
         try:
-            picks = profile_pick.picks()
+            # Only this design's objects: a click in another open document is not a pick.
+            picks = [pk for pk in profile_pick.picks() if pk[0].Document.Name == self.doc.Name]
             if not picks:
                 return
             Gui.Selection.clearSelection()
@@ -663,6 +731,10 @@ class ExtrudePanel(Panel):
                 return
             ref = self._base_face(obj, short)
             if ref is None:
+                picked = self._picked_face_moved(obj, short)
+                if picked is not None:
+                    self._toggle(picked)  # the end of the preview: the face it came from
+                    return
                 self.message.setText("That face belongs to this extrude itself.")
                 return
             face = ref[0].Shape.getElement(ref[1])
@@ -724,6 +796,31 @@ class ExtrudePanel(Panel):
         name = profile_pick.face_name_in(base, face)
         return (base, name) if name else None
 
+    def _picked_face_moved(self, obj, short):
+        """The picked profile (a face or a sketch area) whose extruded end was clicked: the
+        preview covers the profile, so clicking "it" again lands on the end of the preview
+        (Fusion's preview cannot be picked; the click goes to the profile)."""
+        face = profile_pick.global_face(obj, short)
+        if face is None or face.Surface.TypeId != "Part::GeomPlane":
+            return None
+        normal = extrude.face_normal(face)
+        point = extrude.interior_point(face)
+        for ref in self.profiles:
+            try:
+                starts = extrude.global_faces([ref])
+            except Exception:
+                continue
+            for start in starts:
+                axis = extrude.face_normal(start)
+                if abs(abs(normal.dot(axis)) - 1.0) > 1e-6:
+                    continue
+                shift = (point - start.CenterOfMass).dot(axis)
+                if abs(shift) < 1e-6:
+                    continue
+                if profile_pick.inside(start, point - axis * shift):
+                    return ref
+        return None
+
     def _source_body(self):
         if self.profiles:
             body = extrude.owner_body(self.profiles[0][0])
@@ -782,6 +879,8 @@ class ExtrudePanel(Panel):
                 self.schedule()
             self.message.setText("" if not self.editing else "Pick at least one profile.")
             self.error = "Pick at least one profile." if self.editing else ""
+            self.waiting = ""
+            self.info.setText("")
             return
         try:
             extrude.check_profiles(self.profiles)
@@ -837,6 +936,7 @@ class ExtrudePanel(Panel):
         return distance
 
     def _dragged(self, value):
+        self.drop_formula("distance")
         value = round(value, 2)
         if self.direction.currentData() == "symmetric":
             value = abs(value)
@@ -850,6 +950,7 @@ class ExtrudePanel(Panel):
         self._changed()
 
     def _dragged2(self, value):
+        self.drop_formula("distance2")
         self._quiet = True
         try:
             self.distance2.set_value(round(max(value, 0.0), 2))
@@ -870,6 +971,7 @@ class ExtrudePanel(Panel):
         self._changed(new_geometry=True)
 
     def _taper_dragged(self, value):
+        self.drop_formula("taper")
         value = max(-60.0, min(60.0, round(value, 1)))
         self._quiet = True
         try:
@@ -944,12 +1046,16 @@ class ExtrudePanel(Panel):
     def _apply(self):
         if not self.profiles:
             return
+        self.waiting = ""
         try:
             before = self.target
             self.target = extrude.build(self.profiles, self.options, feature=self.target)
             self.error = ""
             if before is None or self.target is not before:
                 self._geometry_changed = True
+        except extrude.NeedsPick as exc:
+            # A selection box waits for its click: the last preview stays, no warning.
+            self.error = self.waiting = str(exc)
         except extrude.ExtrudeError as exc:
             self.error = str(exc)
         except Exception as exc:
@@ -973,6 +1079,14 @@ class ExtrudePanel(Panel):
         return self.target
 
     def show_status(self):
+        waiting = getattr(self, "waiting", "")
+        self.info.setText(waiting)
+        if self.formula_error:
+            self.message.setText("⚠ " + self.formula_error)
+            return
+        if waiting:
+            self.message.setText("")
+            return
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
@@ -1111,11 +1225,15 @@ class ExtrudePanel(Panel):
                 "⚠ Pick a profile first: click inside a sketch area or on a flat face."
             )
             return False
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
+            return False
         self._timer.stop()
         if self.dirty:
             self.dirty = False
             self._apply()
         if self.error:
+            self.info.setText("")
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
@@ -1125,7 +1243,7 @@ class ExtrudePanel(Panel):
             return False
         feature = self.target
         self.cleanup()
-        self.doc.commitTransaction()
+        preview.end_transaction(self.doc)
         self._close()
         new_body = extrude.owner_body(feature)
         if new_body is not None and new_body is not self.body:
@@ -1139,7 +1257,7 @@ class ExtrudePanel(Panel):
     def reject(self):
         self._timer.stop()
         self.cleanup()
-        self.doc.abortTransaction()
+        preview.end_transaction(self.doc, abort=True)
         preview.recompute(self.doc)
         self._close()
         return True
@@ -1147,6 +1265,8 @@ class ExtrudePanel(Panel):
     def cleanup(self):
         self._unwatch()
         self.escape.remove()
+        self.undo_guard.remove()
+        self.enter.remove()
         self._remove_draggers()
         super().cleanup()
 

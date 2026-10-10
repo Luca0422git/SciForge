@@ -263,6 +263,40 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Single Hole helper sketches are listed in the browser's Sketches folder as "Hole N Sketch"
   (hidden); double-clicking one, or timeline "Edit Profile Sketch" on the hole, opens the Hole
   dialog (`SciForgeType = "HoleSketch"` + `hole_ui.EDITORS`).
+- **Extrude/Press Pull QA findings (branch `sf/extrude_presspull-qa`)**, rules for every dialog:
+  - FreeCAD's selection takes the left-button *release* and stops it there
+    (`SoFCUnifiedSelection` sets handled): a `view.addEventCallback` never sees the release of
+    a click that selected something. Pick on the press, and skip presses on a drag handle
+    (`profile_pick.handle_at`, a Coin ray pick that finds an `SoDragger`), or a press on an
+    arrow drops the sketch area behind it.
+  - FreeCAD draws a body through its Tip, and a new feature hides the one before it. Code that
+    removes a feature (not FreeCAD's Delete) must show the new Tip again
+    (`extrude.show_tip`), or the whole part vanishes from the view.
+  - Ctrl+Z with a dialog open made FreeCAD commit the preview and undo it under the dialog;
+    Ctrl+S saved the half-made preview; closing the design left a dialog on a deleted document
+    that blocked every later command. `preview.UndoCancels(panel)` handles all of these (and
+    other designs' clicks are filtered out of picks). Use it in every feature dialog.
+  - FreeCAD's Pad/Pocket silently ignore a taper up to a face and a Pad's up-to-last: the
+    SciForge extrude feature (`ExtrudeFeature`, property `Operation`) builds those.
+  - OpenCASCADE cannot offset a whole sphere ("no closed bounds"): Press Pull builds the shell.
+  - `doc.commitTransaction()`/`abortTransaction()` leave the step name opened by
+    `doc.openTransaction(name)` pending when nothing changed: the next change anywhere (even
+    right after an Undo) opens a step under that name and the Redo list is lost. Close it
+    with `App.closeActiveTransaction()` (`preview.end_transaction`). **`taskui.Panel` (shared)
+    still has this for every other dialog.**
+  - FreeCAD's Pad "up to shape" with a whole body fails ("please select faces") and an empty
+    face list silently extrudes nothing: hand over the faces facing the extrusion
+    (`extrude.facing_faces`).
+  - FreeCAD's number field (QuantitySpinBox) silently drops a parameter name; formulas typed
+    in Extrude/Press Pull fields go through `preview.FormulaInput` (expression on the feature).
+    FreeCAD's own ExpressionBinding made a field read-only once it had a formula.
+  - Not fixed (other owners): rolling the timeline marker (`timeline_ops._set_tips`) does
+    not hide/show features, so the 3D view shows the wrong step after a roll; a sketch made
+    on a face of another body goes into the active body (`sketch_ui.create_sketch`); the
+    marking menu has no OK/Cancel while a command is open (Fusion has).
+  - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
+    clickable (compute what is in front); the disc at the bottom of a hole is only visible
+    from the top.
 
 ## Questions waiting for Luca
 
@@ -361,6 +395,20 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   cosmetic threads are a dashed helix, not a texture; a hole on a curved face keeps its spot
   (helper sketch placed in the body, not attached to the face); depth is measured to the
   drill point's shoulder (Fusion's default to confirm with Luca).
+### 2026-10-10: QA of Extrude and Press Pull (branch `sf/extrude_presspull-qa`)
+- 7 new scenarios `extrude_presspull_qa*.py` (28 paths, real input only) found and fixed:
+  a press on the drag arrow dropped the sketch area behind it; after a New Body switch or
+  dropping the only pick the whole part vanished (hidden Tip); Ctrl+Z in a dialog left it
+  working on deleted objects; Ctrl+S saved a half-made preview; closing a design under a
+  dialog blocked every later command; clicks in another open design were taken as picks;
+  To Object a body extruded nothing; an unchanged dialog threw away the Redo list; a
+  double-click on the timeline icon of the step being made printed a ReferenceError
+  (one-line guard in `taskui.edit_object`); Press Pull only worked on the active body; a
+  ball's face could not be Press Pulled; "To Object" showed a warning while waiting.
+- New Fusion behaviour: taper with To Object / join through All (SciForge's
+  `ExtrudeFeature`, property `Operation`); parameters and formulas typed in Extrude and
+  Press Pull fields; Enter is OK over the 3D view; clicking the end of a preview drops the
+  profile it came from; Symmetric no longer offers To Object. 3 golden models (tapers).
 
 ## Next steps (in order)
 

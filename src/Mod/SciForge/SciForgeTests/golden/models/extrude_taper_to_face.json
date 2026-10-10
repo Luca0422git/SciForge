@@ -1,0 +1,81 @@
+{
+  "id": "extrude_taper_to_face",
+  "title": "Tapered column from a sketch 30 up, down To Object (the box top), widening 10 degrees",
+  "tags": [
+    "extrude",
+    "to-object",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "rect": [
+            10,
+            10,
+            20,
+            20
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "extent": "to_object",
+      "taper": 10,
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 15742.25535634253,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      30
+    ],
+    "source": "analytic",
+    "note": "Box 40x30x10 = 12000. Column 20 tall from z=30 to the box top; it widens by 20*tan(10 deg) = 3.5265 per side going down: 10x10 at the top, b = 17.0531 square at z=10. Frustum V = h/3 (a^2 + b^2 + a b) = 20/3 (100 + 290.807 + 170.531) = 3742.2554. FreeCAD's Pad ignores a taper up to a face (it gave 14000), so SciForge builds it. Faces: box 6 (its top keeps the footprint as a hole) + 4 sloped sides + the column top = 11."
+  }
+}

@@ -22,6 +22,9 @@ Options (dict, see DEFAULTS):
   taper        degrees, positive widens (Fusion: outward)
   distance2 / extent2 / extent_object2 / taper2   the second side (two_sides)
   flip         extent "all": go against the profile normal
+  expressions  {"distance" | "distance2" | "taper" | "taper2": "width * 2"}: values typed as
+               a formula of parameters (Fusion's fields take "width", "width*2"); they
+               become expressions on the feature, so it follows the parameters
 
 What is built:
   join / cut     a PartDesign Pad / Pocket in the body the profile belongs to
@@ -73,6 +76,11 @@ TOL = 1e-7
 
 class ExtrudeError(ValueError):
     """The extrude cannot be built as asked; the message says why and what to do."""
+
+
+class NeedsPick(ExtrudeError):
+    """A selection box (To Object, Start: Object) waits for its click: not a mistake, the
+    dialog shows it as a hint and keeps the last preview, like Fusion."""
 
 
 # -- profiles -------------------------------------------------------------------------
@@ -320,12 +328,32 @@ def options_with_defaults(options):
 
 
 def taper_possible(options, extent):
-    """True if a taper can be built with this extent: PartDesign tapers Distance and a
-    cut's All (ThroughAll), SciForge's Intersect tapers every extent. FreeCAD's Pad and
-    Pocket ignore a taper up to an object, so the dialog does not offer it there."""
-    if extent == "distance" or options["operation"] == "intersect":
+    """True if a taper can be built with this extent. Always: what PartDesign's Pad and
+    Pocket cannot taper (up to an object, a join through All) SciForge's own extrude
+    feature builds (see own_feature_needed)."""
+    return True
+
+
+def native_taper(operation, extent):
+    """True if PartDesign tapers this extent itself: Distance, and a cut's All (ThroughAll).
+    FreeCAD's Pad and Pocket silently ignore a taper up to a face, and a Pad's UpToLast."""
+    return extent == "distance" or (extent == "all" and operation == "cut")
+
+
+def own_feature_needed(options):
+    """True when the extrude is SciForge's own feature instead of a Pad/Pocket: Intersect,
+    and tapers PartDesign cannot build (Fusion tapers every extent)."""
+    if options["operation"] == "intersect":
         return True
-    return extent == "all" and options["operation"] == "cut"
+    sides = [("extent", "taper")]
+    if options["direction"] == "two_sides":
+        sides.append(("extent2", "taper2"))
+    for extent, taper in sides:
+        if abs(float(options[taper])) > 1e-9 and not native_taper(
+            options["operation"], options[extent]
+        ):
+            return True
+    return False
 
 
 def check_options(options):
@@ -334,30 +362,29 @@ def check_options(options):
     if options["direction"] == "two_sides":
         sides.append(("extent2", "distance2", "extent_object2", "taper2", " (side two)"))
     for extent, distance, target, taper, where in sides:
-        if abs(float(options[taper])) > 1e-9 and not taper_possible(options, options[extent]):
-            raise ExtrudeError(
-                "A taper%s needs the Distance extent here (FreeCAD's extrude cannot taper up "
-                "to an object). Set the taper to 0 or use Distance." % where
-            )
         if options[extent] == "distance" and abs(float(options[distance])) < 1e-6:
             raise ExtrudeError("The distance%s must not be zero." % where)
         if options[extent] == "to_object" and options.get(target) is None:
-            raise ExtrudeError("Pick the face, plane or body to extrude to%s." % where)
+            raise NeedsPick("Click the face, plane or body to extrude to%s." % where)
         if abs(float(options[taper])) >= 89.9:
             raise ExtrudeError("The taper angle%s must be between -89.9 and 89.9 degrees." % where)
     if options["direction"] == "symmetric" and options["extent"] == "to_object":
         raise ExtrudeError("Symmetric extrudes go a distance or through all.")
     if options["start"] == "object" and options.get("start_object") is None:
-        raise ExtrudeError("Pick the face or plane the extrusion starts from.")
+        raise NeedsPick("Click the face or plane the extrusion starts from.")
 
 
-def feature_type(operation):
-    """FreeCAD type of the feature an operation builds."""
+def feature_type(operation, options=None):
+    """FreeCAD type of the feature an operation (with these options) builds."""
+    if operation == "intersect" or (options is not None and own_feature_needed(options)):
+        return INTERSECT_TYPE
     if operation == "cut":
         return "PartDesign::Pocket"
-    if operation == "intersect":
-        return INTERSECT_TYPE
     return "PartDesign::Pad"
+
+
+# The operation of SciForge's own extrude feature (its "Operation" property).
+OWN_OPERATIONS = {"intersect": "Intersect", "join": "Join", "new_body": "Join", "cut": "Cut"}
 
 
 def _ref_shape(ref):
@@ -394,7 +421,7 @@ def start_offset_of(profiles, options):
         return float(options["start_offset"])
     if options["start"] == "object":
         if not options.get("start_object"):
-            raise ExtrudeError("Pick the face or plane the extrusion starts from.")
+            raise NeedsPick("Click the face or plane the extrusion starts from.")
         plane = _plane_of_ref(options["start_object"])
         if plane is None:
             raise ExtrudeError("Start from a flat face or a plane.")
@@ -485,9 +512,27 @@ def is_helper(obj):
 
 
 # -- the intersect feature -----------------------------------------------------------------
+def _set_enum(obj, prop, items):
+    """(Re)set an enumeration's choices, keeping its value (older files lack new ones)."""
+    try:
+        current = getattr(obj, prop)
+    except Exception:
+        current = None
+    try:
+        if list(obj.getEnumerationsOfProperty(prop) or []) == list(items):
+            return
+    except Exception:
+        pass
+    setattr(obj, prop, list(items))
+    if current in items:
+        setattr(obj, prop, current)
+
+
 class ExtrudeFeature:
-    """Extrude with operation Intersect: the body keeps what lies inside the extrusion.
-    Saved documents store "sciforge.extrude.ExtrudeFeature": keep the name stable."""
+    """SciForge's own extrude: Intersect (the body keeps what lies inside the extrusion),
+    and Join/Cut with a taper PartDesign cannot build (up to an object, a join through
+    All). Saved documents store "sciforge.extrude.ExtrudeFeature": keep the name stable;
+    files from before "Operation" existed are Intersect extrudes."""
 
     def __init__(self, obj):
         obj.Proxy = self
@@ -502,11 +547,13 @@ class ExtrudeFeature:
             return False
 
         add("App::PropertyLinkSubList", "Profiles", "The profiles that are extruded")
+        if add("App::PropertyEnumeration", "Operation", "Intersect, join or cut"):
+            obj.Operation = ["Intersect", "Join", "Cut"]
         if add("App::PropertyEnumeration", "SideType", "One side, two sides or symmetric"):
             obj.SideType = ["One side", "Two sides", "Symmetric"]
         for suffix in ("", "2"):
-            if add("App::PropertyEnumeration", "Type" + suffix, "How far the side goes"):
-                setattr(obj, "Type" + suffix, ["Length", "ThroughAll", "UpToFace"])
+            add("App::PropertyEnumeration", "Type" + suffix, "How far the side goes")
+            _set_enum(obj, "Type" + suffix, ["Length", "ThroughAll", "UpToFace", "UpToLast"])
             add("App::PropertyLength", "Length" + suffix, "Distance")
             add("App::PropertyAngle", "TaperAngle" + suffix, "Taper angle (+ widens)")
             add("App::PropertyLinkSub", "UpToFace" + suffix, "Face or plane where the side ends")
@@ -525,8 +572,13 @@ class ExtrudeFeature:
         from . import extrude_prism as prism
 
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise ExtrudeError("Intersect needs a solid before it in the timeline.")
+        has_base = base is not None and not base.Shape.isNull() and bool(base.Shape.Solids)
+        operation = getattr(obj, "Operation", "Intersect")
+        if not has_base and operation != "Join":
+            raise ExtrudeError(
+                "%s needs a solid before it in the timeline."
+                % ("Cut" if operation == "Cut" else "Intersect")
+            )
         faces = []
         for linked, subs in obj.Profiles:
             for sub in subs or [""]:
@@ -556,21 +608,30 @@ class ExtrudeFeature:
             "target2": target(obj.UpToFace2),
         }
         try:
-            tool = prism.build(faces, normal, spec, reach=[base.Shape])
-            result = base.Shape.common(tool)
+            tool = prism.build(faces, normal, spec, reach=[base.Shape] if has_base else [])
+            if operation == "Intersect":
+                result = base.Shape.common(tool)
+            elif operation == "Cut":
+                result = base.Shape.cut(tool)
+            else:
+                result = base.Shape.fuse(tool) if has_base else tool
             if obj.Refine:
                 result = result.removeSplitter()
         except prism.PrismError as exc:
             raise ExtrudeError(str(exc))
         if result.isNull() or not result.Solids or result.Volume < TOL:
+            if operation == "Cut":
+                raise ExtrudeError("This cut would remove the whole body.")
             raise ExtrudeError(
                 "The extrusion does not overlap the body, so Intersect would leave nothing."
             )
         if len(result.Solids) > 1:
             raise ExtrudeError(
-                "Intersect would leave %d separate pieces; a body holds one solid. "
-                "Change the profile or the distance." % len(result.Solids)
+                "%s would leave %d separate pieces; a body holds one solid. "
+                "Change the profile or the distance." % (operation, len(result.Solids))
             )
+        if operation == "Cut" and abs(result.Volume - base.Shape.Volume) < 1e-9:
+            raise ExtrudeError("The cut does not touch the body. Flip it or pick another object.")
         obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
 
     def dumps(self):
@@ -776,7 +837,22 @@ def _native_normal(feature):
     return normal
 
 
-def _side_props(feature, suffix, extent, length, taper, ref, cut):
+def facing_faces(shape, toward):
+    """Names of the faces of `shape` an extrusion going `toward` runs into: those facing back
+    at it. FreeCAD's "up to shape" fails on a whole body ("Unable to reach the selected
+    shape, please select faces", and an empty face list silently extrudes nothing), so a
+    body picked as Fusion's To Object is handed over as these faces."""
+    names = []
+    for i, face in enumerate(shape.Faces, start=1):
+        try:
+            if face_normal(face).dot(toward) < -1e-6:
+                names.append("Face%d" % i)
+        except Exception:
+            continue
+    return names
+
+
+def _side_props(feature, suffix, extent, length, taper, ref, cut, toward=None):
     setattr(feature, "TaperAngle" + suffix, float(taper))
     if extent == "distance":
         setattr(feature, "Type" + suffix, "Length")
@@ -787,8 +863,14 @@ def _side_props(feature, suffix, extent, length, taper, ref, cut):
         obj, sub = ref
         is_shape = not sub and obj.TypeId not in PLANE_TYPES
         if is_shape and "UpToShape" + suffix in feature.PropertiesList:
+            names = facing_faces(obj.Shape, toward) if toward is not None else []
+            if not names:
+                raise ExtrudeError(
+                    "Nothing of %s faces the extrusion in this direction. Flip it, or pick a "
+                    "face of it." % obj.Label
+                )
             setattr(feature, "Type" + suffix, "UpToShape")
-            setattr(feature, "UpToShape" + suffix, [(obj, [])])
+            setattr(feature, "UpToShape" + suffix, [(obj, names)])
         else:
             setattr(feature, "Type" + suffix, "UpToFace")
             setattr(feature, "UpToFace" + suffix, (obj, [sub] if sub else [""]))
@@ -809,6 +891,7 @@ def _apply(feature, body, profiles, options, refs):
         direction
     ]
     if is_intersect(feature):
+        feature.Operation = OWN_OPERATIONS[options["operation"]]
         feature.SideType = side_type
         feature.Reversed = sign < 0
         feature.StartOffset = 0.0  # a start offset travels with the profile's binder
@@ -826,7 +909,8 @@ def _apply(feature, body, profiles, options, refs):
         return
     cut = feature.TypeId == "PartDesign::Pocket"
     feature.SideType = side_type
-    _side_props(feature, "", options["extent"], length, options["taper"], refs.get(1), cut)
+    toward = want * sign  # body coordinates, like a binder's shape
+    _side_props(feature, "", options["extent"], length, options["taper"], refs.get(1), cut, toward)
     if direction == "two_sides":
         _side_props(
             feature,
@@ -836,6 +920,7 @@ def _apply(feature, body, profiles, options, refs):
             options["taper2"],
             refs.get(2),
             cut,
+            toward * -1.0,
         )
     native = _native_normal(feature)
     feature.Reversed = (want * sign).dot(native) < 0
@@ -851,15 +936,98 @@ def _fp_side(feature, suffix, extent, length, taper, ref):
     if extent == "distance":
         setattr(feature, "Type" + suffix, "Length")
     elif extent == "all":
-        setattr(feature, "Type" + suffix, "ThroughAll")
+        # A join goes as far as the part reaches (Pad's UpToLast); a cut through it all.
+        join = getattr(feature, "Operation", "Intersect") == "Join"
+        setattr(feature, "Type" + suffix, "UpToLast" if join else "ThroughAll")
     else:
         obj, sub = ref
         if not sub and obj.TypeId not in PLANE_TYPES:
+            what = "A taper" if feature.Operation != "Intersect" else "Intersect"
             raise ExtrudeError(
-                "Intersect can go up to a flat face or a plane, not a whole body. " "Pick a face."
+                "%s can go up to a flat face or a plane, not a whole body. Pick a face of it."
+                % what
             )
         setattr(feature, "Type" + suffix, "UpToFace")
         setattr(feature, "UpToFace" + suffix, (obj, [sub] if sub else [""]))
+
+
+# Dialog value -> the feature property that holds it (Pad, Pocket and SciForge's own).
+EXPRESSION_PROPS = {
+    "distance": "Length",
+    "distance2": "Length2",
+    "taper": "TaperAngle",
+    "taper2": "TaperAngle2",
+}
+
+
+def _expression_used(key, options):
+    two = options["direction"] == "two_sides"
+    if key == "distance":
+        return options["extent"] == "distance"
+    if key == "distance2":
+        return two and options["extent2"] == "distance"
+    if key == "taper2":
+        return two
+    return True
+
+
+def _wrap(key, expr, options):
+    """The property's expression for a dialog value's formula: a negative distance is a
+    reversed extrude of the positive length, a symmetric half length is half of it."""
+    if key != "distance":
+        return expr
+    if options["direction"] == "symmetric":
+        return "2 * (%s)" % expr if options["measurement"] == "half" else expr
+    return "-(%s)" % expr if float(options["distance"]) < 0 else expr
+
+
+def _unwrap(key, expr, options):
+    for head in ("2 * (", "-("):
+        if key == "distance" and expr.startswith(head) and expr.endswith(")"):
+            return expr[len(head) : -1]
+    return expr
+
+
+def _apply_expressions(feature, options):
+    """Formulas typed in the dialog become expressions on the feature's properties; a value
+    typed as a plain number (or dragged) removes the formula again."""
+    from . import parameters, parameters_core
+
+    typed = options.get("expressions") or {}
+    names = parameters.user_names(feature.Document)
+    engine = dict(feature.ExpressionEngine)
+    for key, prop in EXPRESSION_PROPS.items():
+        if prop not in feature.PropertiesList:
+            continue
+        text = (typed.get(key) or "").strip()
+        if text and _expression_used(key, options):
+            expr = _wrap(key, parameters_core.to_freecad(text, names), options)
+            if engine.get(prop) != expr:
+                feature.setExpression(prop, expr)
+        elif prop in engine:
+            feature.setExpression(prop, None)
+
+
+def evaluate(doc, text):
+    """Value of a formula typed in a field ("width * 2", "=width+5 mm"): a float in mm (or
+    degrees for an angle). Raises ExtrudeError with the reason when it is no value."""
+    from . import parameters, parameters_core
+
+    text = (text or "").strip().lstrip("=").strip()
+    expr = parameters_core.to_freecad(text, parameters.user_names(doc))
+    host = parameters.container(doc)
+    if host is None:
+        if not doc.Objects:
+            raise ExtrudeError("%s is not a value." % text)
+        host = doc.Objects[0]
+    try:
+        value = host.evalExpression(expr)
+    except Exception as exc:
+        raise ExtrudeError("'%s' is not a value here: %s" % (text, exc))
+    try:
+        return float(getattr(value, "Value", value))
+    except Exception:
+        raise ExtrudeError("'%s' is not a number." % text)
 
 
 def _hide_sketches(profiles):
@@ -903,7 +1071,7 @@ def _structure(feature, profiles, options):
             target = None  # a new body
     else:
         target = src
-    return target, feature_type(op), src
+    return target, feature_type(op, options), src
 
 
 def build(profiles, options, name="Extrude", feature=None):
@@ -923,8 +1091,10 @@ def build(profiles, options, name="Extrude", feature=None):
         blocking = dependents(feature)
         if blocking:
             raise ExtrudeError(
-                "%s is used by %s, so its operation cannot change here. Make a new extrude "
-                "instead." % (feature.Label, ", ".join(o.Label for o in blocking))
+                "%s is used by %s, and this change needs a new kind of extrude (another "
+                "operation or body, or a taper FreeCAD's extrude cannot make), so it cannot be "
+                "made here. Make a new extrude instead."
+                % (feature.Label, ", ".join(o.Label for o in blocking))
             )
     old_meta = load_meta(feature) if feature is not None else {}
     created = None
@@ -951,6 +1121,7 @@ def build(profiles, options, name="Extrude", feature=None):
         new.Label = label
     if before is None or was_tip:
         target.Tip = new
+        show_tip(target)
     return new
 
 
@@ -991,6 +1162,7 @@ def _update(feature, body, profiles, options):
     meta["normal"] = list(body.getGlobalPlacement().Rotation.inverted().multVec(normal))
     _save_meta(feature, meta)  # the intersect feature reads the normal when it computes
     _apply(feature, body, profiles, options, refs)
+    _apply_expressions(feature, options)
     meta.update(
         {
             "v": 1,
@@ -1025,11 +1197,28 @@ def _delete(obj):
         pass
 
 
+def show_tip(body):
+    """FreeCAD draws a body through its Tip feature, and a new feature hides the one before
+    it. A feature removed by code (FreeCAD's own Delete does this itself) left the new Tip
+    hidden: the whole part vanished from the view although it was still there."""
+    tip = body.Tip if body is not None else None
+    if tip is None:
+        return
+    try:
+        if App.GuiUp and tip.ViewObject is not None:
+            tip.ViewObject.Visibility = True
+        else:
+            tip.Visibility = True
+    except Exception:
+        pass
+
+
 def _remove(feature, keep_body=True):
     """Delete an extrude with its helpers (and the body it created, when asked)."""
     meta = load_meta(feature)
     doc = feature.Document
     body = owner_body(feature)
+    was_tip = body is not None and body.Tip is feature
     helpers = [doc.getObject(n) for n in meta.get("helpers", [])]
     _delete(feature)
     for helper in helpers:
@@ -1040,6 +1229,9 @@ def _remove(feature, keep_body=True):
         if not rest:
             body.removeObjectsFromDocument()
             doc.removeObject(body.Name)
+            return
+    if was_tip:
+        show_tip(body)
 
 
 def remove(feature):
@@ -1109,8 +1301,9 @@ def read(feature):
     profiles = profiles_of(feature)
     options = dict(DEFAULTS)
     intersect = is_intersect(feature)
-    cut = feature.TypeId == "PartDesign::Pocket"
-    if intersect:
+    own = getattr(feature, "Operation", "Intersect") if intersect else None
+    cut = feature.TypeId == "PartDesign::Pocket" or own == "Cut"
+    if intersect and own == "Intersect":
         operation = "intersect"
     elif cut:
         operation = "cut"
@@ -1166,6 +1359,17 @@ def read(feature):
         options["distance"] = sign * length
     options["flip"] = False  # the sign of the distance already says which side
     options["distance2"] = feature.Length2.Value
+    try:
+        from . import parameters_core
+
+        engine = dict(feature.ExpressionEngine)
+        options["expressions"] = {
+            key: _unwrap(key, parameters_core.from_freecad(engine[prop]), options)
+            for key, prop in EXPRESSION_PROPS.items()
+            if prop in engine
+        }
+    except Exception:
+        options["expressions"] = {}
     return profiles, options
 
 

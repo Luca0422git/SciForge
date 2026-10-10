@@ -92,23 +92,77 @@ def _beyond(target, start, direction, size):
     return square.extrude(normal * size)
 
 
+def farthest(shapes, start, direction):
+    """How far along `direction` (from `start`) the shapes reach: where a join through All
+    ends (the part's last point that way, like PartDesign's "up to last")."""
+    best = 0.0
+    for shape in shapes:
+        if shape is None or shape.isNull():
+            continue
+        points = [v.Point for v in shape.Vertexes]
+        try:
+            points += list(shape.tessellate(0.05)[0])
+        except Exception:
+            pass
+        for point in points:
+            best = max(best, (App.Vector(point) - start).dot(direction))
+    return best
+
+
 def side(faces, direction, method, length, taper, target=None, reach=()):
-    """The prism of one side: method "Length" | "ThroughAll" | "UpToFace"."""
+    """The prism of one side: method "Length" | "ThroughAll" | "UpToFace" | "UpToLast"."""
     direction = App.Vector(direction).normalize()
     start = faces[0].CenterOfMass
     if method == "Length":
         if length < TOL:
             raise PrismError("The distance must not be zero.")
         run = length
-    else:
-        run = big_length(list(reach) + list(faces) + ([target] if target else []), start)
-    pieces = [tapered(face, direction * run, taper) for face in faces]
-    prism = pieces[0] if len(pieces) == 1 else pieces[0].fuse(pieces[1:])
-    if method == "UpToFace":
+    elif method == "UpToLast":
+        run = farthest(reach, start, direction)
+        if run < TOL:
+            raise PrismError(
+                "The part does not go on past the profile this way, so All reaches nothing. "
+                "Flip the direction or use Distance."
+            )
+    elif method == "UpToFace":
         if target is None:
             raise PrismError("Pick the face or plane the extrusion goes to.")
+        run, exact = _run_to_plane(faces, direction, target)
+    else:
+        run = big_length(list(reach) + list(faces), start)
+    pieces = [tapered(face, direction * run, taper) for face in faces]
+    prism = pieces[0] if len(pieces) == 1 else pieces[0].fuse(pieces[1:])
+    if method == "UpToFace" and not exact:
         prism = prism.cut(_beyond(target, start, direction, run * 4.0))
     return prism
+
+
+def _run_to_plane(faces, direction, target):
+    """(length, exact) to reach the target's plane from the profile along `direction`.
+    A plane parallel to the profile is reached exactly (no trimming, so a taper ends
+    right there); an inclined one is passed a little and the prism trimmed by it. The
+    target's own size never matters (an origin plane is endless)."""
+    point, normal = _plane_of(target)
+    normal = App.Vector(normal).normalize()
+    denom = direction.dot(normal)
+    if abs(denom) < 1e-9:
+        raise PrismError("The object is parallel to the extrusion direction; it cannot end there.")
+    points = []
+    for face in faces:
+        points += [v.Point for v in face.Vertexes]
+        try:
+            points += list(face.tessellate(0.05)[0])
+        except Exception:
+            pass
+        points.append(face.CenterOfMass)
+    runs = [(point - App.Vector(p)).dot(normal) / denom for p in points]
+    if max(runs) < TOL:
+        raise PrismError(
+            "The object is behind the profile in this direction. Pick another one or flip."
+        )
+    if abs(abs(denom) - 1.0) < 1e-9 and max(runs) - min(runs) < 1e-7:
+        return max(runs), True
+    return max(runs) * 1.05 + 1.0, False
 
 
 def build(faces, normal, spec, reach=()):
