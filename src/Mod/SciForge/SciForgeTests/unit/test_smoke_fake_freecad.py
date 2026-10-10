@@ -188,7 +188,8 @@ class SmokeTest(unittest.TestCase):
         wb.Activated()
         import sciforge.shortcuts as shortcuts
 
-        self.assertEqual(shortcuts.bound_keys().get("F"), "PartDesign_Fillet")
+        # F runs SciForge's Fusion-style Fillet (config.PREFERRED), not FreeCAD's.
+        self.assertEqual(shortcuts.bound_keys().get("F"), "SciForge_Fillet")
         self.assertEqual(shortcuts.bound_keys().get("F6"), "Std_ViewFitAll")
         self.assertEqual(self.commands["Sketcher_Trimming"].shortcut, "", "clashing key parked")
 
@@ -197,7 +198,7 @@ class SmokeTest(unittest.TestCase):
         import sciforge.shell as shell
 
         shell.on_workbench("SketcherWorkbench")
-        self.assertEqual(shortcuts.bound_keys().get("F"), "PartDesign_Fillet")
+        self.assertEqual(shortcuts.bound_keys().get("F"), "SciForge_Fillet")
         # ... any other workbench turns it off and gives the keys back.
         shell.on_workbench("PartDesignWorkbench")
         self.assertEqual(shortcuts.bound_keys(), {})

@@ -1,0 +1,61 @@
+{
+  "id": "blend_chamfer_top_face",
+  "title": "Chamfer dialog: click the top face of a 40x30x10 box, equal distance 2",
+  "tags": [
+    "chamfer",
+    "blend",
+    "face-pick"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_chamfer",
+      "id": "c1",
+      "distance": 2.0,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11730.666666666666,
+    "area": 3629.352380466497,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 12000 - d^2/2 * 140 + 4 d^3/3 (two chamfers at a box corner overlap by d^3/3). Each chamfer face is a trapezoid d*sqrt2 high with sides L and L-2d"
+  }
+}

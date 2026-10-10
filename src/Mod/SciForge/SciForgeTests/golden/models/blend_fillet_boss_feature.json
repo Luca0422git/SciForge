@@ -1,0 +1,78 @@
+{
+  "id": "blend_fillet_boss_feature",
+  "title": "Fillet dialog: click the boss extrude in the timeline, radius 1 (top and foot rounded)",
+  "tags": [
+    "fillet",
+    "blend",
+    "feature-pick",
+    "concave"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5.0
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 1.0,
+      "features": [
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 6393.301452809602,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Pappus: the top round removes r^2(1-pi/4) * 2 pi (R - x), the foot round adds r^2(1-pi/4) * 2 pi (R + x), x = r(5/6-pi/4)/(1-pi/4) the centroid of the cross-section"
+  }
+}

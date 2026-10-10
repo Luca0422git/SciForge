@@ -1,0 +1,80 @@
+{
+  "id": "blend_fillet_presspull_radius",
+  "title": "Fillet dialog r1 on a vertical edge, then Press Pull on its round face: r5",
+  "tags": [
+    "fillet",
+    "blend",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 5,
+      "fillet_face": {
+        "type": "cylinder",
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11946.349540849362,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "The dialog's fillet stays one PartDesign::Fillet, so Press Pull edits it: 12000 - 10 * 25 (1-pi/4)"
+  }
+}

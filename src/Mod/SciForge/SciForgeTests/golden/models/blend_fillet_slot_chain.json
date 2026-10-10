@@ -1,0 +1,66 @@
+{
+  "id": "blend_fillet_slot_chain",
+  "title": "Slot 30 long, 10 wide, 10 high: Fillet one straight top edge r2, the tangent chain rounds the whole top outline",
+  "tags": [
+    "fillet",
+    "blend",
+    "tangent-chain"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "slot": [
+            10,
+            15,
+            30,
+            15,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 2.0,
+      "edges": {
+        "type": "line",
+        "at": [
+          {
+            "axis": "z",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2726.5036918518485,
+    "faces": 10,
+    "bbox": [
+      5,
+      10,
+      0,
+      35,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Straight parts lose r^2(1-pi/4) * 2*20; the two half-circle ends (radius 5) lose r^2(1-pi/4) * 2 pi (5 - x) by Pappus, x = r(5/6-pi/4)/(1-pi/4)"
+  }
+}

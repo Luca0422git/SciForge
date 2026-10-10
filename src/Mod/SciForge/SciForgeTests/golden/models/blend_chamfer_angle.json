@@ -1,0 +1,72 @@
+{
+  "id": "blend_chamfer_angle",
+  "title": "Chamfer dialog: Distance and Angle, 3 mm at 30 degrees on the front top edge",
+  "tags": [
+    "chamfer",
+    "blend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_chamfer",
+      "id": "c1",
+      "chamfer_type": "angle",
+      "distance": 3,
+      "angle": 30,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "z",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "min"
+          }
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11896.076951545867,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Legs 3 and 3 tan(30): removes 40 * 3 * 3 tan30 / 2"
+  }
+}
