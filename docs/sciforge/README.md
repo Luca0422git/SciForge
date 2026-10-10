@@ -20,10 +20,10 @@ You never need to compile anything yourself. GitHub builds it:
 The portable build does not install anything and does not touch an installed FreeCAD.
 Until the branding pass, it does share FreeCAD 1.1's settings folder.
 
-About cost: the repository is private, and GitHub gives private repositories a limited number of
-free build minutes per month (Windows minutes count double). One full build uses a large share
-of it, so builds are started by hand rather than on every change. The small automatic test run
-(**SciForge tests**) takes a few minutes and runs on every push.
+About cost: the repository is public (since 2026-10-10), and GitHub's standard build machines are
+free for public repositories, so builds cost nothing. A full build still takes a few hours, so it
+is started by hand (or by a `sciforge-v*` tag) rather than on every change. The automatic test
+run (**SciForge tests**) takes about 20 minutes and runs on every push.
 
 ## Getting updates without rebuilding (most of the time)
 

@@ -25,10 +25,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - **Fork base:** FreeCAD tag `1.1.4` (commit `4fd3bf320d`), full upstream history kept so future
   FreeCAD releases can be merged (`git remote add upstream https://github.com/FreeCAD/FreeCAD.git`,
   then `git fetch upstream refs/tags/1.1.X:refs/tags/1.1.X` and merge the tag).
-- **Repo:** `github.com/Luca0422git/SciForge`, **private**. Private repos get a limited monthly
-  budget of GitHub Actions minutes (Windows minutes count double), so full C++ builds run only
-  when started by hand (Actions tab → "SciForge build" → Run workflow). Cheap tests run on
-  every push.
+- **Repo:** `github.com/Luca0422git/SciForge`, **public** since 2026-10-10 (was private). Standard
+  GitHub Actions runners are free for public repos, so pushing and full builds cost nothing; full
+  C++ builds still take hours, so they run when started by hand (Actions tab → "SciForge build" →
+  Run workflow) or by a `sciforge-v*` tag. Tests run on every push (~20 min).
 - **History is 2.4 GB**: GitHub rejects a single push over 2 GB, so the initial import was
   pushed in 5 fast-forward stages. Normal pushes are small and unaffected.
 - **License:** LGPL-2.1-or-later (inherited from FreeCAD). Keep FreeCAD copyright notices.
@@ -49,6 +49,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 | 2026-10-09 | Golden models are JSON step lists run by a small interpreter in real FreeCAD | Same file runs in CI (headless) and can later be compared with Fusion reference metrics |
 | 2026-10-09 | No SHEET METAL, PLASTIC or MANAGE tabs (Luca: "not for now") | Not used; out of scope |
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
+| 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
 
 ## Status by phase (outline section 10)
 
@@ -119,8 +120,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - CI quirks (GitHub runner, xvfb + software GL): a click on an outline edge can land on the face
   next to it (use `harness.click_edge`), and synthesized Ctrl+clicks lose their Ctrl there (use
   `harness.ensure_also_selected` after a Ctrl+click that must add to the selection). Both work on
-  a desktop and in the local xvfb. Each CI round costs ~20 minutes of the private repo's minutes:
-  batch pushes.
+  a desktop and in the local xvfb. A CI round takes ~20 minutes (free: the repo is public).
 - **Trap: never keep a pivy handle to a FreeCAD-owned Coin node across time** (between timer
   ticks, until a dialog closes). FreeCAD deletes view-provider/edit nodes when it rebuilds a
   display or leaves sketch edit; writing to the stale handle segfaults (sketch_mode polygon
@@ -233,8 +233,6 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 
 (See outline section 12. Also:)
-- OK to make the repo public at some point? Public repos get unlimited free Actions minutes,
-  which matters a lot for C++ builds. Otherwise a self-hosted runner on the NAS is the route.
 
 ## Session log
 

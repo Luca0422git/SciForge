@@ -5,8 +5,8 @@
 # Then the golden models run on the freshly built SciForge (not stock FreeCAD).
 #
 # Started by hand: GitHub > Actions > "SciForge build" > Run workflow. It is not run on
-# every push because a build takes hours of runner time (Windows minutes count double on
-# a private repository). Pushing a tag named sciforge-v* also starts it.
+# every push because a build takes hours (free on this public repository, but slow).
+# Pushing a tag named sciforge-v* also starts it.
 #
 # Packaging reuses FreeCAD's own pipeline (package/rattler-build). Until the branding
 # pass lands, the Windows installer is not built: it would install as "FreeCAD" and could
