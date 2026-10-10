@@ -1,0 +1,74 @@
+{
+  "id": "blend_chamfer_two_flip",
+  "title": "Chamfer dialog: Two Distances 2 and 4 on the front top edge, flipped",
+  "tags": [
+    "chamfer",
+    "blend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_chamfer",
+      "id": "c1",
+      "chamfer_type": "two",
+      "distance": 2,
+      "distance2": 4,
+      "flip": true,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "z",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "min"
+          }
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11840.0,
+    "area": 3730.885438199983,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Legs 2 and 4: removes 40*2*4/2; area loses a 2- and a 4-wide strip and two triangles, gains a 40 x sqrt(20) face (same for both flip states)"
+  }
+}

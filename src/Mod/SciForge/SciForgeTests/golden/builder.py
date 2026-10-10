@@ -391,6 +391,46 @@ class Builder:
     def shape(self):
         return self.body.Shape
 
+    def op_blend_fillet(self, step):
+        """Fusion's Fillet dialog (sciforge/blend.py, exactly what the F command builds)."""
+        return self._blend(step, "fillet", {"radius": step["radius"]})
+
+    def op_blend_chamfer(self, step):
+        """Fusion's Chamfer dialog: equal / two distances (+ flip) / distance and angle."""
+        options = {
+            "chamfer_type": step.get("chamfer_type", "equal"),
+            "distance": step["distance"],
+            "distance2": step.get("distance2", step["distance"]),
+            "angle": step.get("angle", 45.0),
+            "flip": bool(step.get("flip", False)),
+        }
+        return self._blend(step, "chamfer", options)
+
+    def _blend(self, step, kind, options):
+        from sciforge import blend
+
+        base = self._tip()
+        info = blend.ShapeInfo(base.Shape)
+        refs = []
+        for key, what in (("edges", "edges"), ("faces", "faces")):
+            if key in step:
+                refs += selectors.select(base.Shape, step[key], what)
+        for name in step.get("features", []):
+            if name not in self.objects:
+                raise BuildError("%s %r: unknown feature %r" % (kind, step["id"], name))
+            refs += blend.feature_edges(self.objects[name], info)
+        if not refs:
+            raise BuildError("%s %r: nothing picked" % (kind, step["id"]))
+        try:
+            blend.trial(kind, info, refs, options)  # the dialog refuses what fails here
+            feature = blend.make(self.body, base, refs, kind, options, step["id"])
+        except blend.BlendError as exc:
+            raise BuildError("%s %r: %s" % (kind, step["id"], exc))
+        self.objects[step["id"]] = feature
+        self.ops[step["id"]] = kind  # "edit" steps then use the fillet/chamfer option names
+        self._recompute(step, feature)
+        return feature
+
 
 # -- sketch geometry with Fusion-like dimensions --------------------------
 def _v(x, y):

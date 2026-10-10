@@ -1,0 +1,110 @@
+{
+  "id": "blend_fillet_edit_radius",
+  "title": "Fillet two top edges meeting at a corner r2, then edit the fillet to r3",
+  "tags": [
+    "fillet",
+    "blend",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "any_of": [
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "x",
+                "value": "max"
+              }
+            ],
+            "count": 1
+          }
+        ],
+        "count": 2
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11940.678448470258,
+        "source": "analytic",
+        "note": "r2 before the edit"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "f1",
+      "set": {
+        "radius": 3
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11867.38934211693,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Edges 40 and 30 long meeting at a corner: 12000 - 70 r^2(1-pi/4) + r^3(5/3-pi/2)"
+  }
+}

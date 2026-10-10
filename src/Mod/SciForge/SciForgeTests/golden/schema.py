@@ -63,6 +63,14 @@ STEP_KEYS = {
     "check": ({"expect"}, {"comment"}),
 }
 
+# Fusion-style Fillet / Chamfer (sciforge/blend.py, the same code as the F and Chamfer dialogs):
+# pick edges, faces (every sharp edge around them) or features (the edges a step made).
+STEP_KEYS["blend_fillet"] = ({"id", "radius"}, {"edges", "faces", "features", "comment"})
+STEP_KEYS["blend_chamfer"] = (
+    {"id", "distance"},
+    {"chamfer_type", "distance2", "angle", "flip", "edges", "faces", "features", "comment"},
+)
+
 GEOMETRY_KINDS = ("rect", "center_rect", "circle", "polyline", "polygon", "slot")
 EXPECT_KEYS = {
     "volume",

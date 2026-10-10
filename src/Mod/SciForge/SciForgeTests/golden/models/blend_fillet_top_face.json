@@ -1,0 +1,61 @@
+{
+  "id": "blend_fillet_top_face",
+  "title": "Fillet dialog: click the top face of a 40x30x10 box, radius 2 (its 4 edges round)",
+  "tags": [
+    "fillet",
+    "blend",
+    "face-pick"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 2.0,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11882.89082237847,
+    "area": 3677.5574890451344,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 12000 - r^2(1-pi/4)*140 + 4 r^3(5/3-pi/2) (corner overlap of two rounds, third edge sharp). Area: top (40-2r)(30-2r), sides 140(10-r), bottom 1200, each round L*r*pi/2 - r^2(pi-2) (both ends mitered at a = b)."
+  }
+}
