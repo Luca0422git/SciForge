@@ -962,6 +962,8 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def rename(self, name):
         """Fusion: the name becomes editable in place; Enter keeps it, Esc cancels."""
+        if not _ready():  # a rename is an undo step: never inside a command's own step
+            return
         button = self.button(name)
         if button is None:
             return
@@ -1022,6 +1024,8 @@ class TimelineWidget(QtWidgets.QWidget):
             self.refresh(force=True)
 
     def rename_group(self, gid):
+        if not _ready():
+            return
         header = self.group_button(gid)
         if header is None:
             return
@@ -1092,7 +1096,7 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def find_in_window(self, name):
         obj = self._object(name)
-        if obj is None:
+        if obj is None or not _ready():  # the selection it makes is not a pick
             return
         target = obj
         visible = getattr(obj.ViewObject, "Visibility", False) if obj.ViewObject else False
@@ -1123,7 +1127,11 @@ class TimelineWidget(QtWidgets.QWidget):
         item = button.item
         if item.name not in self._selected:
             self._selected = [item.name]
-            self._push_selection()
+            # A right-click is not a pick: with a command waiting for picks (Fillet
+            # takes whole features) it would have used this step. The command ends
+            # when a menu entry runs (_ready).
+            if not _command_open():
+                self._push_selection()
             self._update_selection_look()
         obj = self._object(item.name)
         if obj is None:

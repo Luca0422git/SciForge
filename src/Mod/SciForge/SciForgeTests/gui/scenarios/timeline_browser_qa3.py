@@ -67,7 +67,7 @@ def p12_sketch():
 
 
 def p12_pick_xy():
-    h.click(V(-30, -25, 0))
+    h.click(V(-15, -12, 0))  # inside the origin squares, clear of the box
 
 
 def p12_draw():
@@ -177,11 +177,18 @@ def p13_rolled():
 def p13_end():
     h.check("body 2 back", t.near(t.volume(body2()), BOX2), t.volume(body2()))
     h.check("body 1 still hidden at the end", not t.shown(t.doc().getObject("Body")))
+    row = t.tree().row(s["l1"])
+    node = row.data(1, QtCore.Qt.UserRole) if row is not None else None
+    s["eye_before"] = (row.text(1) if row else None, node and node["visible"])
     t.click_eye(s["l1"])
 
 
 def p13_shown():
-    h.check("eye shows body 1 again", t.shown(t.doc().getObject("Body")))
+    h.check(
+        "eye shows body 1 again",
+        t.shown(t.doc().getObject("Body")),
+        (s.get("eye_before"), t.labels()),
+    )
 
 
 # -- Path 14: Esc while dragging a step ------------------------------------------------------
@@ -214,16 +221,9 @@ def p14_drag_esc():
         QtWidgets.QApplication.processEvents()
     QtTest.QTest.keyClick(src, QtCore.Qt.Key_Escape)
     QtWidgets.QApplication.processEvents()
-    local = src.mapFromGlobal(end)
-    release = QtGui.QMouseEvent(
-        QtCore.QEvent.MouseButtonRelease,
-        QtCore.QPointF(local),
-        QtCore.QPointF(end),
-        QtCore.Qt.LeftButton,
-        QtCore.Qt.NoButton,
-        QtCore.Qt.NoModifier,
+    QtTest.QTest.mouseRelease(
+        src, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, src.mapFromGlobal(end)
     )
-    QtWidgets.QApplication.sendEvent(src, release)
     QtWidgets.QApplication.processEvents()
 
 
@@ -364,7 +364,11 @@ def p17_renamed():
 
 def p17_deleted():
     h.check("Delete key removes body 2", body2() is None)
-    h.check("its steps left the timeline", t.titles() == ["Sketch 1", "Extrude 1"], t.titles())
+    h.check(
+        "its steps left the timeline (the sketch is body 1's)",
+        t.titles() == ["Sketch 1", "Extrude 1", "Sketch 2"],
+        t.titles(),
+    )
     h.check("body 1 untouched", t.near(t.volume("Body"), BOX1), t.volume("Body"))
     t.ctrl("z")
 
@@ -392,6 +396,7 @@ def p17_group_delete():
 
 def p17_group_gone():
     h.check("the group's steps are deleted", t.titles() == ["Sketch 1", "Extrude 1"], t.titles())
+    h.check("no helper left behind", len(t.doc().getObject(s["b2"]).Group) == 0, body2().Group)
     h.check("body 2 empty", t.volume(body2()) < 1e-6, t.volume(body2()))
     t.ctrl("z")
 

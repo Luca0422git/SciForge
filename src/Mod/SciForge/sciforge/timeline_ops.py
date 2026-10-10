@@ -43,6 +43,7 @@ RANK = "SciForgeRank"  # creation-order key after a move between bodies
 SUPPRESSED = "SciForgeSuppressed"  # sketches/datums: FreeCAD cannot suppress them
 SUPPRESS_INFO = "SciForgeSuppressInfo"
 WARNING = "SciForgeWarning"
+ROLE = "SciForgeRole"  # set on helpers made for a step (extrude.py, revolve.py, hole.py)
 GROUP = "SciForgeGroup"  # timeline group id of a step
 GROUP_NAME = "SciForgeGroupName"
 ROLLED_HIDDEN = "SciForgeRolledHidden"  # a shown sketch/plane hidden by the marker
@@ -314,8 +315,14 @@ def body_of(obj):
     return None
 
 
+def is_helper(obj):
+    """An object SciForge made for a step (an extrude's profile binder, a revolve's
+    axis link, a Single Hole's sketch...): never a step of its own in Fusion."""
+    return bool(getattr(obj, ROLE, "")) or getattr(obj, "SciForgeTimeline", True) is False
+
+
 def _is_step(obj):
-    if obj.TypeId in NOT_STEPS or getattr(obj, "SciForgeTimeline", True) is False:
+    if obj.TypeId in NOT_STEPS or is_helper(obj):
         return False
     kind = getattr(obj, "SciForgeType", "")
     if "Analysis" in kind or "Section" in kind:
@@ -939,6 +946,7 @@ def delete(doc, names):
             )
         order = [n for n in tl.names() if n in gone]
         order += [n for n in names if n not in order]
+        helpers = _helpers_of(doc, order, gone)
         for n in reversed(order):
             obj = doc.getObject(n)
             if obj is None:
@@ -948,6 +956,13 @@ def delete(doc, names):
             if body is not None and obj in body.Group:
                 body.removeObject(obj)
             doc.removeObject(n)
+        for obj in helpers:  # nothing uses them any more (they were never steps)
+            if doc.getObject(obj.Name) is None:
+                continue
+            body = body_of(obj)
+            if body is not None and obj in body.Group:
+                body.removeObject(obj)
+            doc.removeObject(obj.Name)
         if at_end:
             after = timeline(doc)
             _set_marker_note(doc, None)
@@ -1008,11 +1023,27 @@ def profile_sketch(obj):
     return None
 
 
+def _helpers_of(doc, names, gone):
+    """Helpers made for the steps ``names`` that nothing else uses."""
+    found = []
+    for n in names:
+        obj = doc.getObject(n)
+        if obj is None:
+            continue
+        for o in obj.OutList:
+            if not is_helper(o) or o.Name in gone or o in found:
+                continue
+            users = [u for u in o.InList if u.TypeId not in NOT_STEPS and u.Name not in gone]
+            if not users:
+                found.append(o)
+    return found
+
+
 def _show_profile_again(doc, obj, gone):
     if not App.GuiUp:
         return
     sketch = profile_sketch(obj)
-    if sketch is None or sketch.Name in gone or sketch.ViewObject is None:
+    if sketch is None or sketch.Name in gone or sketch.ViewObject is None or is_helper(sketch):
         return
     others = [
         o
