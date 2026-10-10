@@ -392,9 +392,21 @@ def p27_double():
 
 
 def p27_typo():
+    from PySide6 import QtTest
+
     p = xpanel()
     h.check("a typo is explained", "⚠" in p.message.text(), p.message.text())
     h.check("the value stays", near(p.distance.value(), 60.0), p.distance.value())
+    # Enter right after the typo, as a hurried user does: the dialog must not close.
+    ui.type_into(p.distance.widget, "widht")
+    p.distance.widget.setFocus()
+    QtTest.QTest.keyClick(p.distance.widget, QtCore.Qt.Key_Return)
+
+
+def p27_typo_enter():
+    p = xpanel()
+    h.check("Enter after a typo keeps the dialog open", dialog_open() and not p._closed)
+    h.check("and still says why", "⚠" in p.message.text(), p.message.text())
     ui.type_into(p.distance.widget, "12")
 
 
@@ -547,6 +559,7 @@ h.run(
         p27_editing,
         p27_double,
         p27_typo,
+        p27_typo_enter,
         p27_plain,
         p27_not_following,
         p27_cut_pick,

@@ -1225,6 +1225,9 @@ class ExtrudePanel(Panel):
                 "⚠ Pick a profile first: click inside a sketch area or on a flat face."
             )
             return False
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
+            return False
         self._timer.stop()
         if self.dirty:
             self.dirty = False

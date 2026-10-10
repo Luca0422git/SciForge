@@ -159,6 +159,7 @@ class PressPullPanel(Panel):
         self.field = DistanceField(0.0, on_change=self._typed)
         self.layout.addRow(self.field_label, self.field.widget)
         self.formula = ""  # the value as a formula of parameters ("wall * 2"), or ""
+        self.formula_error = ""  # a formula typed that is no value (OK waits)
         self.formula_label = QtWidgets.QLabel("")
         self.formula_label.setWordWrap(True)
         self.formula_label.setStyleSheet("color: #b8c7d9;")
@@ -521,17 +522,20 @@ class PressPullPanel(Panel):
     # -- formulas (preview.FormulaInput calls the first three) --------------------------------
     def formula_typed(self, key, text, value):
         self.error = ""
+        self.formula_error = ""
         self._show_formula(text)
         self._typed(value)
         self._apply_formula()
 
     def formula_cleared(self, key):
+        self.formula_error = ""
         if self.formula:
             self._show_formula("")
             self._apply_formula()
             self._typed(self.field.value())  # the number typed, not the formula's last value
 
     def formula_failed(self, key, text):
+        self.formula_error = text
         self.message.setText("⚠ " + text)
 
     def _show_formula(self, text):
@@ -565,6 +569,9 @@ class PressPullPanel(Panel):
             self.message.setText("⚠ %s" % exc)
 
     def show_status(self):
+        if self.formula_error:  # stays until the field gets a value again
+            self.message.setText("⚠ " + self.formula_error)
+            return
         text = preview.failure(self.target)
         if text:
             self.message.setText("⚠ " + text)
@@ -575,6 +582,9 @@ class PressPullPanel(Panel):
     def accept(self):
         if self.target is None:
             self.message.setText("⚠ Nothing selected yet: click faces or edges of the part.")
+            return False
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
             return False
         if self.mode in ("faces", "fillet") and not self.names:
             self.message.setText("⚠ Pick at least one face or edge.")
