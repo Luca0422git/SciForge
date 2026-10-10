@@ -596,7 +596,7 @@ class PressPullPanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         self.cleanup()
-        self.doc.commitTransaction()
+        preview.end_transaction(self.doc)
         self._close()
         log("%s done" % self.title)
         return True
@@ -604,7 +604,7 @@ class PressPullPanel(Panel):
     def reject(self):
         self._timer.stop()
         self.cleanup()
-        self.doc.abortTransaction()
+        preview.end_transaction(self.doc, abort=True)
         preview.recompute(self.doc)
         self._close()
         return True

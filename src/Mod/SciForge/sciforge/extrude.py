@@ -837,7 +837,22 @@ def _native_normal(feature):
     return normal
 
 
-def _side_props(feature, suffix, extent, length, taper, ref, cut):
+def facing_faces(shape, toward):
+    """Names of the faces of `shape` an extrusion going `toward` runs into: those facing back
+    at it. FreeCAD's "up to shape" fails on a whole body ("Unable to reach the selected
+    shape, please select faces", and an empty face list silently extrudes nothing), so a
+    body picked as Fusion's To Object is handed over as these faces."""
+    names = []
+    for i, face in enumerate(shape.Faces, start=1):
+        try:
+            if face_normal(face).dot(toward) < -1e-6:
+                names.append("Face%d" % i)
+        except Exception:
+            continue
+    return names
+
+
+def _side_props(feature, suffix, extent, length, taper, ref, cut, toward=None):
     setattr(feature, "TaperAngle" + suffix, float(taper))
     if extent == "distance":
         setattr(feature, "Type" + suffix, "Length")
@@ -848,8 +863,14 @@ def _side_props(feature, suffix, extent, length, taper, ref, cut):
         obj, sub = ref
         is_shape = not sub and obj.TypeId not in PLANE_TYPES
         if is_shape and "UpToShape" + suffix in feature.PropertiesList:
+            names = facing_faces(obj.Shape, toward) if toward is not None else []
+            if not names:
+                raise ExtrudeError(
+                    "Nothing of %s faces the extrusion in this direction. Flip it, or pick a "
+                    "face of it." % obj.Label
+                )
             setattr(feature, "Type" + suffix, "UpToShape")
-            setattr(feature, "UpToShape" + suffix, [(obj, [])])
+            setattr(feature, "UpToShape" + suffix, [(obj, names)])
         else:
             setattr(feature, "Type" + suffix, "UpToFace")
             setattr(feature, "UpToFace" + suffix, (obj, [sub] if sub else [""]))
@@ -888,7 +909,8 @@ def _apply(feature, body, profiles, options, refs):
         return
     cut = feature.TypeId == "PartDesign::Pocket"
     feature.SideType = side_type
-    _side_props(feature, "", options["extent"], length, options["taper"], refs.get(1), cut)
+    toward = want * sign  # body coordinates, like a binder's shape
+    _side_props(feature, "", options["extent"], length, options["taper"], refs.get(1), cut, toward)
     if direction == "two_sides":
         _side_props(
             feature,
@@ -898,6 +920,7 @@ def _apply(feature, body, profiles, options, refs):
             options["taper2"],
             refs.get(2),
             cut,
+            toward * -1.0,
         )
     native = _native_normal(feature)
     feature.Reversed = (want * sign).dot(native) < 0

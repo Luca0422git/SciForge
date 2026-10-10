@@ -1243,7 +1243,7 @@ class ExtrudePanel(Panel):
             return False
         feature = self.target
         self.cleanup()
-        self.doc.commitTransaction()
+        preview.end_transaction(self.doc)
         self._close()
         new_body = extrude.owner_body(feature)
         if new_body is not None and new_body is not self.body:
@@ -1257,7 +1257,7 @@ class ExtrudePanel(Panel):
     def reject(self):
         self._timer.stop()
         self.cleanup()
-        self.doc.abortTransaction()
+        preview.end_transaction(self.doc, abort=True)
         preview.recompute(self.doc)
         self._close()
         return True

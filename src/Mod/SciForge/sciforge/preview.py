@@ -43,6 +43,21 @@ def quiet():
                 pass
 
 
+def end_transaction(doc, abort=False):
+    """Close the dialog's undo step. FreeCAD's doc.commitTransaction()/abortTransaction()
+    only close a step that holds changes; a dialog OK'd or cancelled without any change
+    left its name pending, and the next change anywhere (even right after an Undo) opened a
+    step under that name and threw away the Redo list. The pending name is closed too."""
+    if abort:
+        doc.abortTransaction()
+    else:
+        doc.commitTransaction()
+    try:
+        App.closeActiveTransaction(abort)
+    except Exception:
+        pass
+
+
 def recompute(doc):
     """doc.recompute() without FreeCAD's failure messages in the Report view."""
     with quiet():
@@ -350,6 +365,10 @@ class UndoCancels:
                 return
             panel.target = None  # deleted by the undo
             panel.cleanup()
+            try:
+                App.closeActiveTransaction(True)  # the dialog's pending step name
+            except Exception:
+                pass
             panel._close()
             recompute(panel.doc)
             from . import log
