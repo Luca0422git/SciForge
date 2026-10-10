@@ -285,6 +285,45 @@ def merge(features):
         heads[body] += 1
 
 
+def label_number(label, name):
+    """The creation number FreeCAD's default label carries: "Extrude" 1, "Extrude001" 2,
+    ... (None for a label the user typed). FreeCAD numbers labels as things are made and
+    keeps a label when SciForge rebuilds a step as another kind (an extrude turned into a
+    cut), so it is stable when steps move, are inserted at the marker or are deleted."""
+    if not is_default_label(label, name):
+        return None
+    m = re.search(r"(\d+)$", label or "")
+    if m is None:
+        return 1
+    if len(m.group(1)) < 3:
+        return None  # "Sketch2": not FreeCAD's own numbering
+    return int(m.group(1)) + 1
+
+
+def _numbers(rows, kinds):
+    """Fusion's step numbers ("Extrude 3"): given when a step is made, they never change
+    when steps are reordered, inserted earlier or deleted. Taken from the default label;
+    a step without one (renamed, or two kinds of label that clash such as Pad and Extrude)
+    gets the lowest free number, in timeline order."""
+    bases = [title_base(f["type_id"], k) for f, k in zip(rows, kinds)]
+    numbers = [None] * len(rows)
+    used = {}
+    for i, f in enumerate(rows):
+        n = label_number(f.get("label", f["name"]), f["name"])
+        if n is not None and n not in used.setdefault(bases[i], set()):
+            numbers[i] = n
+            used[bases[i]].add(n)
+    for i in range(len(rows)):
+        if numbers[i] is None:
+            taken = used.setdefault(bases[i], set())
+            n = 1
+            while n in taken:
+                n += 1
+            numbers[i] = n
+            taken.add(n)
+    return numbers
+
+
 def _status(f):
     if f.get("error"):
         return "error", f["error"]
@@ -326,13 +365,12 @@ def build(features, tips, marker_before=None):
         if last_active < k < marker:  # only sketches/planes between: a valid spot
             marker, before = k, marker_before
 
-    counts = {}
+    numbers = _numbers(rows, kinds)
     items = []
     for i, f in enumerate(rows):
         kind = kinds[i]
         base = title_base(f["type_id"], kind)
-        counts[base] = counts.get(base, 0) + 1
-        title = "%s %d" % (base, counts[base])
+        title = "%s %d" % (base, numbers[i])
         label = f.get("label", f["name"])
         display = title if is_default_label(label, f["name"]) else label
         if solid[i]:

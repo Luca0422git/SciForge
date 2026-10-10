@@ -71,6 +71,45 @@ class BuildTests(unittest.TestCase):
             ["Sketch 1", "Extrude 1", "Sketch 2", "Extrude 2", "Fillet 1"],
         )
 
+    def test_numbers_stay_when_steps_move_or_go(self):
+        """Fusion names a step when it is made: moving it, adding a step before it or
+        deleting an earlier one never renames it."""
+        rows = one_body()
+        moved = [rows[0], rows[1], rows[4], rows[2], rows[3]]  # fillet before the boss
+        self.assertEqual(
+            [i.display for i in core.build(moved, {"Body": "Pad001"}).items],
+            ["Sketch 1", "Extrude 1", "Fillet 1", "Sketch 2", "Extrude 2"],
+        )
+        # A third extrude inserted at the marker, before the second one.
+        inserted = rows[:2] + [feat("Sketch002", SKETCH, 6), feat("Pad002", PAD, 7)] + rows[2:]
+        titles = [i.display for i in core.build(inserted, {"Body": "Fillet"}).items]
+        self.assertEqual(titles[2:5], ["Sketch 3", "Extrude 3", "Sketch 2"])
+        # The first extrude deleted: the second keeps its number.
+        gone = [r for r in rows if r["name"] != "Pad"]
+        self.assertIn("Extrude 2", [i.display for i in core.build(gone, {"Body": "Fillet"}).items])
+
+    def test_a_step_rebuilt_as_another_kind_keeps_its_number(self):
+        # SciForge's extrude turned into a cut is a new object that keeps the old label.
+        rows = [
+            feat("Sketch", SKETCH, 1),
+            feat("Extrude002", "PartDesign::Pocket", 9, label="Extrude"),
+            feat("Sketch001", SKETCH, 3),
+            feat("Extrude001", PAD, 4),
+        ]
+        titles = [i.display for i in core.build(rows, {"Body": "Extrude001"}).items]
+        self.assertEqual(titles, ["Sketch 1", "Extrude 1", "Sketch 2", "Extrude 2"])
+
+    def test_clashing_labels_get_free_numbers(self):
+        rows = one_body()
+        rows[3] = feat("Extrude", PAD, 4, label="Extrude")  # Pad and Extrude: both "1"
+        titles = [i.display for i in core.build(rows, {"Body": "Fillet"}).items]
+        self.assertEqual(titles.count("Extrude 1"), 1, titles)
+        self.assertIn("Extrude 2", titles)
+        self.assertEqual(core.label_number("Sketch2", "Sketch005"), None)
+        self.assertEqual(core.label_number("Sketch", "Sketch"), 1)
+        self.assertEqual(core.label_number("Sketch004", "Sketch004"), 5)
+        self.assertIsNone(core.label_number("Base plate", "Pad"))
+
     def test_renamed_step_shows_its_name(self):
         rows = one_body()
         rows[3]["label"] = "Boss"

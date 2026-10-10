@@ -304,6 +304,26 @@ class _UndoWatcher:
     slotUndoDocument = slotRedoDocument = _later
 
 
+class _WheelScroll(QtCore.QObject):
+    """The mouse wheel scrolls the timeline sideways (it has no vertical scroll)."""
+
+    def __init__(self, scroll):
+        super().__init__(scroll)
+        self.scroll = scroll
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QtCore.QEvent.Wheel:
+                delta = event.angleDelta()
+                step = delta.y() if abs(delta.y()) >= abs(delta.x()) else delta.x()
+                bar = self.scroll.horizontalScrollBar()
+                bar.setValue(bar.value() - step)
+                return True
+        except Exception:
+            pass
+        return False
+
+
 class _GroupButton(QtWidgets.QToolButton):
     """A timeline group: one folder for several steps. Click opens or closes it."""
 
@@ -396,7 +416,15 @@ class TimelineWidget(QtWidgets.QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         self._scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self._scroll.setFixedHeight(ICON + 14)
+        # A long design scrolls sideways: a thin bar under the icons (it covered their
+        # lower half) and the mouse wheel.
+        self._scroll.setFixedHeight(ICON + 22)
+        self._scroll.horizontalScrollBar().setStyleSheet("QScrollBar:horizontal { height: 6px; }")
+        self._wheel = _WheelScroll(self._scroll)
+        self._scroll.viewport().installEventFilter(self._wheel)
+        self._shown_end = None  # (steps, marker) last scrolled into view
+        self._follow = 0  # rebuilds whose marker is still to be scrolled into view
+        self._scroll.horizontalScrollBar().rangeChanged.connect(self._range_changed)
         self._inner = QtWidgets.QWidget()
         self._row = QtWidgets.QHBoxLayout(self._inner)
         self._row.setContentsMargins(0, 0, 0, 0)
@@ -570,6 +598,30 @@ class TimelineWidget(QtWidgets.QWidget):
             self._row.addWidget(self._make_marker())
         self._row.addStretch(1)
         self._update_selection_look()
+        # Fusion keeps the history marker in view: a new step (or a marker move) on a
+        # long design showed the start of the row with the new step off-screen.
+        where = (len(self._items), marker)
+        if where != self._shown_end:
+            self._shown_end = where
+            # Once the new row is laid out (its width changes the scroll range).
+            self._follow += 1
+            QtCore.QTimer.singleShot(60, self._marker_into_view)
+            QtCore.QTimer.singleShot(1500, self._stop_following)
+
+    def _stop_following(self):
+        self._follow = max(0, self._follow - 1)
+
+    def _range_changed(self, *_args):
+        if self._follow:
+            self._marker_into_view()
+
+    def _marker_into_view(self):
+        try:
+            marker = self.marker()
+            if marker is not None:
+                self._scroll.ensureWidgetVisible(marker, 60, 0)
+        except RuntimeError:
+            pass  # rebuilt meanwhile
 
     def _add_step(self, item):
         button = self._item_button(item)
@@ -1112,16 +1164,27 @@ class TimelineWidget(QtWidgets.QWidget):
         menu.setObjectName("SciForgeTimelineSettings")
         to_end = menu.addAction("Roll History Marker to End")
         to_end.setEnabled(not self._timeline.at_end)
-        hide = menu.addAction("Hide Timeline")
+        # No "Hide Timeline" (Fusion has none): with the menu bar hidden a beginner could
+        # not get it back.
+        groups = {i.group for i in self._items if i.group}
+        menu.addSeparator()
+        expand = menu.addAction("Expand All Groups")
+        expand.setEnabled(bool(groups - self._open_groups))
+        collapse = menu.addAction("Collapse All Groups")
+        collapse.setEnabled(bool(groups & self._open_groups))
         self._busy += 1
         try:
             chosen = menu.exec_(QtGui.QCursor.pos())
         finally:
             self._busy -= 1
-        if chosen is hide:
-            hide_timeline()
-        elif chosen is to_end:
+        if chosen is to_end:
             _later(self.roll_to_end)
+        elif chosen is expand:
+            self._open_groups |= groups
+            _later(self.refresh, True)
+        elif chosen is collapse:
+            self._open_groups -= groups
+            _later(self.refresh, True)
 
     def _menu(self, button, global_pos):
         item = button.item
