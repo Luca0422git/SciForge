@@ -85,7 +85,41 @@ def radial_made():
     v = h.solid_volume()
     expect = BOSS - radial_hole_volume()
     h.check("radial hole d2 x 3 into the boss", hs.close(v, expect, 1e-6), (v, expect))
+    p = hs.hole_panel()
+    h.check(
+        "no X / Y on a curved face (the dot moves the hole on it)",
+        p and not p.pos_x.widget.isVisible(),
+    )
     h.shot("1-radial")
+    dot = p.draggers.get("centre") if p else None
+    if dot is None:
+        h.check("centre point to drag", False)
+        return
+    s["start"] = hs.centre_of(p.target)
+    start = dot.point()
+    h.drag(h.screen_point(start), h.screen_point(start + V(0, 0, 2)))
+
+
+def radial_dragged():
+    p = hs.hole_panel()
+    c = hs.centre_of(p.target) if p else None
+    h.check(
+        "dragging the dot up the boss moves the hole up",
+        c is not None and c.z > s["start"].z + 1.0,
+        (s["start"], c),
+    )
+    radial_in = V(-math.cos(ANGLE), -math.sin(ANGLE), 0)
+    h.check(
+        "still square to the round face",
+        hs.vnear(hs.centres_dir(p.target), radial_in, 1e-6) if p else False,
+        p and hs.centres_dir(p.target),
+    )
+    h.check(
+        "still on the face", c is not None and abs(math.hypot(c.x - 20, c.y - 15) - 3) < 1e-6, c
+    )
+    v = h.solid_volume()
+    expect = BOSS - radial_hole_volume()
+    h.check("the same radial hole further up", hs.close(v, expect, 1e-6), (v, expect))
     h.task_button("OK")
 
 
@@ -216,6 +250,7 @@ h.run(
         click_boss_side,
         radial,
         radial_made,
+        radial_dragged,
         after_radial,
         through_hole,
         click_plate,

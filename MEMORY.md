@@ -107,6 +107,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Include 3D Geometry, Mirror / patterns / scale / move starting with nothing selected,
       Rectangular Pattern panel, double-click a sketch in browser/timeline to edit it.
       7 scenarios (`sketch_*.py`), 3 golden models (`sketch_*`), core patch #7 (trim)
+- [x] Hole (H) and Thread, Fusion-style (branch `sf/hole`): Single Hole where you click a face
+      (flat or curved; hidden helper sketch "Hole N Sketch", X/Y fields, two edge references with
+      distances, draggable blue centre dot), From Sketch points/circle centres (auto-flip into
+      the part), Extents Distance/To/All, Simple/Counterbore/Countersink, Tap Type Simple/
+      Clearance (ISO 273 / ASME B18.2.8 fits)/Tapped (ISO metric, UNC/UNF/UNEF, class, hand,
+      Modeled, tap depth), Flat/Angle drill point, blue depth + diameter arrows. Thread on shaft
+      or hole faces: size from the diameter, full/partial length (+ blue length arrow), cosmetic
+      (dashed helix overlay, also for tapped holes) or modeled (own ISO 68-1 groove sweep,
+      `thread_core.py`). 5 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
 
 ## Known issues / findings
 
@@ -228,6 +237,32 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   release, DblClick, release by hand: `sketch_input.double_click_widget`); clicks in fast
   succession on the 3D view merge (one click per scenario step); a Coin search path dies with
   its action (keep node + parent, never the path: SIGSEGV otherwise).
+- **Trap: a Gui document observer (`Gui.addDocumentObserver`) crashes FreeCAD** when its
+  `slotChangedObject(vp, prop)` reads `vp.Object` while FreeCAD is still building that view
+  provider (SIGSEGV in `ViewProviderDocumentObjectPy::getObject`). Use an App observer
+  (`App.addDocumentObserver`, gets the document object; `Visibility` mirrors the eye).
+- **Trap: long recomputes run other Qt timers.** While a recompute takes more than about a
+  second (modeled threads), FreeCAD's progress bar processes events and swallows keys/clicks;
+  timers (a scenario's next step, a dialog's preview timer) fire *inside* the recompute.
+  Dialogs check `doc.Recomputing` and retry later; scenario steps after a slow recompute set
+  `wait_ms`, like a person waiting for the busy cursor.
+- QCheckBox only toggles when the click is on its box or text: `hole_steps.click_checkbox`
+  clicks the box (a centre click on a wide form row does nothing).
+- A click on a curved face reports a point on the drawn facets, up to ~0.1 mm inside the true
+  surface: look faces up with a tolerance (`hole.base_face_at`) and snap the point onto the
+  face (`hole.snap_to_face`); use the clicked face's own name when it is the base feature's.
+- OpenCASCADE `makePipeShell`'s default tolerance (1e-4) makes a swept thread ~0.02 % off in
+  volume; `thread._sweep` uses `Part.BRepOffsetAPI.MakePipeShell` with tolerance 1e-6 (same
+  speed) and matches the hand formula to ~1e-8.
+- FreeCAD Hole quirk: `updateDiameterParam` skips thread size index 0 (`threadSize > 0`), so
+  `ThreadDiameter` is stale for M1x0.25 / #1 / #0 ... (the hole itself is right). Worth
+  reporting upstream.
+- Timeline Delete shows a deleted feature's profile sketch again (`timeline_ops._show_profile_
+  again`). For a Single Hole that is its hidden helper sketch: `hole_ui._HelperGuard` hides it
+  again; the next Single Hole removes such orphan sketches inside its own undo step.
+- Single Hole helper sketches are listed in the browser's Sketches folder as "Hole N Sketch"
+  (hidden); double-clicking one, or timeline "Edit Profile Sketch" on the hole, opens the Hole
+  dialog (`SciForgeType = "HoleSketch"` + `hole_ui.EDITORS`).
 
 ## Questions waiting for Luca
 
@@ -309,11 +344,29 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   returned a report; its committed branch was merged as is.)
 - ribbon_sweep KNOWN list: only "Shell" left (shell_draft fixes it); remove when fixed.
 
+### 2026-10-10: Hole and Thread (branch `sf/hole`)
+- Continued the parked WIP patch (applied, reviewed, mostly rewritten; patch removed). New:
+  `hole.py` / `hole_ui.py` (Fusion Hole), `thread.py` / `thread_ui.py` / `thread_core.py`
+  (Thread, cosmetic overlay), `thread_tables.py` (ISO / ANSI sizes, checked row by row against
+  FreeCAD 1.1.4's Hole), `hole_common.py` (selection boxes, selection gate, undo watch).
+  Ribbon: Thread now runs `SciForge_Thread` (was greyed).
+- Tests: scenarios `hole`, `hole_sketch`, `hole_tapped`, `hole_thread`, `hole_thread_inside`
+  (only real input; volumes hand-derived, incl. a slab check of FreeCAD's own modeled tapped
+  thread), 16 golden models (`golden/hole_ops.py`: ops hole_at, hole_points, thread), unit
+  tests `test_thread_core.py`.
+- Gaps (honest list): no Taper Tapped (NPT) tap type; "To" works out the depth when the dialog
+  applies (does not re-measure if that face moves later); clearance holes by thread size only
+  (no fastener types); thread class is recorded, the modeled thread uses the basic profile;
+  cosmetic threads are a dashed helix, not a texture; a hole on a curved face keeps its spot
+  (helper sketch placed in the body, not attached to the face); depth is measured to the
+  drill point's shoulder (Fusion's default to confirm with Luca).
+
 ## Next steps (in order)
 
-1. Finish the feature workflow (see session log, part 5): hole (continue `sf/hole` WIP), revolve,
-   patterns, shell_draft, bodies, inspect, primitives, sweep_loft; then the QA stage for all 12
-   (including the 4 already merged). Merge each only after the full suite passes locally.
+1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
+   inspect, primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
+   then the QA stage for all 12 (including the 4 already merged). Merge each only after the full
+   suite passes locally.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).

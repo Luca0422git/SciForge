@@ -448,6 +448,18 @@ def placed_face(hole):
     return _ref_load(hole.Document, load_meta(hole).get("face"))
 
 
+def on_flat_face(hole):
+    """True when a Single Hole sits on a flat face (its point moves in the face's plane);
+    False on a curved face, where moving it means placing it again on the face."""
+    spot = placed_face(hole)
+    if spot is None:
+        return True
+    try:
+        return spot[0].Shape.getElement(spot[1]).Surface.TypeId == "Part::GeomPlane"
+    except Exception:
+        return True
+
+
 def references(hole):
     """[((obj, "EdgeN"), distance), ...] of a Single Hole."""
     sketch = helper_sketch(hole)

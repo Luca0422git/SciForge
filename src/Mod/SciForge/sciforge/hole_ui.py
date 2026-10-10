@@ -457,7 +457,8 @@ class HolePanel(Panel):
         single = placement == "single"
         threaded = tap != "simple"
         refs = hole.references(self.target) if self.target is not None and single else []
-        placed = self.target is not None and single
+        # X / Y move the point in the face's plane: only for a hole on a flat face.
+        placed = self.target is not None and single and hole.on_flat_face(self.target)
         # Through all: the hole has no bottom, so no drill point angle.
         angled = self.drill_point.currentData() == "angle" and extent != "all"
         for widget, show in (
@@ -1258,7 +1259,10 @@ class HolePanel(Panel):
         if self.target is None:
             return
         try:
-            hole.move_to(self.target, (round(xy[0], 3), round(xy[1], 3)))
+            if hole.on_flat_face(self.target):
+                hole.move_to(self.target, (round(xy[0], 3), round(xy[1], 3)))
+            else:
+                self._centre_on_curved_face()
         except Exception as exc:
             self.message.setText("⚠ %s" % exc)
             return
@@ -1267,6 +1271,17 @@ class HolePanel(Panel):
 
     def _centre_released(self, xy):
         self._centre_dragged(xy)
+
+    def _centre_on_curved_face(self):
+        """On a curved face the dot moves on the plane touching the face where the hole was;
+        the hole is placed again where the face is under the dot, square to it there."""
+        dot = self.draggers.get("centre")
+        spot = hole.placed_face(self.target)
+        if dot is None or spot is None:
+            return
+        point = hole.to_local(self.body, dot.point())
+        refs = [(r, None) for r, _d in hole.references(self.target)]
+        hole.set_position(self.target, spot[0], spot[1], point, refs)
 
     def _depth_dragged(self, value):
         base = self.depth_base if self.depth_base is not None else self.depth.value()
