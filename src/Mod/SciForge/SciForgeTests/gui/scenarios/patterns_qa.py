@@ -7,8 +7,9 @@
 3. Ctrl+Z while the preview is shown: the dialog ends and the model is as before.
 4. Pattern Type changed after a preview: the objects are cleared and the preview goes;
    the hole's wall picked as a face instead previews a copy. Cancel.
-5. A Rectangular Pattern made (OK), then a pattern of the body (two new bodies), then
-   that step deleted from the timeline's right-click menu: its bodies go with it.
+5. A Rectangular Pattern made by clicking the hole's wall (the feature that made it is
+   taken, Pattern Type Features), then a pattern of the body (two new bodies), then that
+   step deleted from the timeline's right-click menu: its bodies go with it.
 6. Saved, closed and opened again: the patterns rebuild without an error and open in
    their dialog from the timeline.
 
@@ -176,10 +177,21 @@ def make_start():
 
 
 def make_pick():
-    ps.timeline_click("Extrude 2")
+    # Pattern Type Features, a click on the hole's wall in the view: Fusion takes the
+    # feature that made the face.
+    h.fit()
+    h.click(V(8 - R * 0.7071, 8 + R * 0.7071, 8.5))
 
 
 def make_box():
+    p = ps.panel()
+    objs = p.options["objects"] if p else []
+    h.check(
+        "a face click picks the feature that made it",
+        len(objs) == 1 and objs[0][1] == "" and objs[0][0].TypeId == "PartDesign::Pocket",
+        objs,
+    )
+    h.check("the objects list says Extrude 2", p and "Extrude 2" in p.objects_label.text())
     ps.click_box("direction")
 
 
