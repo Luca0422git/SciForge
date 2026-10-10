@@ -101,21 +101,50 @@ def notifications():
     balloon; they do not reach the Report view the harness watches)."""
     found = []
     for widget in Gui.getMainWindow().findChildren(QtWidgets.QPushButton):
-        if widget.metaObject().className() != "Gui::NotificationArea":
-            continue
+        # Gui::NotificationArea has no Q_OBJECT of its own, so Qt names it "QPushButton"
+        # (looking for its class name never found it: every check passed without looking).
+        # It is the push button whose menu holds the message list.
         menu = widget.menu()
-        if menu is None:
+        if menu is None or not menu.findChildren(QtWidgets.QTreeWidget):
             continue
-        for action in menu.actions():
-            tree = getattr(action, "defaultWidget", lambda: None)()
-            if isinstance(tree, QtWidgets.QTreeWidget):
+        # FreeCAD keeps new messages aside and moves them into its list only while its menu
+        # is open (aboutToShow); aboutToHide moves them aside again. Without this the list
+        # read here never had the new messages, and every check passed.
+        try:
+            menu.aboutToShow.emit()
+        except Exception:
+            pass
+        try:
+            # The list is made by the menu's widget action (createWidget, not a default
+            # widget: looking for defaultWidget() never found it, so nothing was ever read).
+            for tree in menu.findChildren(QtWidgets.QTreeWidget):
                 for i in range(tree.topLevelItemCount()):
                     item = tree.topLevelItem(i)
-                    found.append(" | ".join(item.text(c) for c in range(item.columnCount())))
+                    # FreeCAD's items compute their text (data()): ask per column of the list
+                    texts = [item.text(c) for c in range(tree.columnCount())]
+                    found.append(" | ".join(t for t in texts if t) or "(message)")
+        finally:
+            try:
+                menu.aboutToHide.emit()
+            except Exception:
+                pass
     return found
 
 
+def balloons():
+    """Texts of FreeCAD's pop-up balloons on screen now."""
+    return [
+        w.text()
+        for w in QtWidgets.QApplication.topLevelWidgets()
+        if w.isVisible() and w.metaObject().className() == "Gui::NotificationLabel"
+    ]
+
+
 _seen = {"count": None}
+
+# FreeCAD messages that are not a problem and never pop up while SciForge sketches
+# (sketch_mode.quiet_balloons): a snap that duplicated another one was dropped.
+QUIET = ("Autoconstraints cause redundancy",)
 
 
 def check_notifications(where):
@@ -124,7 +153,10 @@ def check_notifications(where):
         _seen["count"] = 0
     fresh = msgs[: len(msgs) - _seen["count"]] if len(msgs) > _seen["count"] else []
     _seen["count"] = len(msgs)
-    return h.check("No FreeCAD notification (pop-up balloon) after %s" % where, not fresh, fresh)
+    fresh = [m for m in fresh if not any(q in m for q in QUIET)]
+    shown = balloons()
+    ok = h.check("No FreeCAD notification after %s" % where, not fresh, fresh)
+    return h.check("No pop-up balloon after %s" % where, not shown, shown) and ok
 
 
 def watched(steps):

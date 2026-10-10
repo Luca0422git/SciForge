@@ -64,16 +64,21 @@ class FinishSketch(_SketchCommand):
 class SketchLine(_SketchCommand):
     title = "Line"
     tip = (
-        "Lines joined end to end: click point after point; Esc (or a click on the "
-        "start point) ends the chain (L)"
+        "Lines joined end to end: click point after point, or type the length, Tab, the "
+        "angle, Enter. A click on the first point closes the shape; Esc stops (L)"
     )
     icon = "sk_line"
 
     def run(self):
         if _in_sketch(self.title) is None:
             return
-        # Fusion's Line keeps going from the last point: FreeCAD's polyline tool
-        Gui.runCommand("Sketcher_CreatePolyline")
+        session = sketch_mode.current()
+        if session is None:
+            Gui.runCommand("Sketcher_CreateLine")
+            return
+        # Fusion's Line keeps going from the last point and takes typed values: FreeCAD's
+        # line tool (length/angle fields) joined end to end by sketch_line.LineChain.
+        session.line.start()
 
 
 class _Polygon(_SketchCommand):

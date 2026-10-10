@@ -50,6 +50,8 @@ BLUE = "#5cb3ff"  # curves that can still move (under-constrained)
 WHITE = "#f0f0f0"  # fully constrained curves, dimension text
 ORANGE = "#f5a142"  # construction
 PURPLE = "#c084fc"  # projected / included geometry
+GLYPH = "#9fe0a8"  # constraint symbols
+DRIVEN = "#9fb4cc"  # driven (reference) dimensions
 
 # (group, kind, name, value) set while SciForge is on; old values come back in disable().
 PARAMS = [
@@ -77,6 +79,11 @@ PARAMS = [
     (VIEW, "Unsigned", "ExternalColor", _rgba(PURPLE)),
     (VIEW, "Unsigned", "ExternalDefiningColor", _rgba(PURPLE)),
     (VIEW, "Unsigned", "ConstrainedDimColor", _rgba(WHITE)),
+    # constraint glyphs: FreeCAD draws them red, which reads as an error; Fusion's are
+    # quiet light symbols. Driven (reference) dimensions: FreeCAD's dark blue is
+    # unreadable on the dark background.
+    (VIEW, "Unsigned", "ConstrainedIcoColor", _rgba(GLYPH)),
+    (VIEW, "Unsigned", "NonDrivingConstrDimColor", _rgba(DRIVEN)),
     (VIEW, "Unsigned", "CursorTextColor", _rgba(WHITE)),
     (VIEW, "Unsigned", "CursorCrosshairColor", _rgba(WHITE)),
 ]
@@ -139,6 +146,63 @@ def set_option(name, value):
     session = current()
     if session is not None:
         session.apply_option(name)
+
+
+def construction_mode():
+    """True while FreeCAD draws new curves as construction curves (its Toggle
+    Construction run with nothing selected). FreeCAD keeps that mode only in C++; its
+    button icon shows it, so the icon is compared with the construction icon."""
+    try:
+        cmd = Gui.Command.get("Sketcher_ToggleConstruction")
+        actions = cmd.getAction() if cmd is not None else []
+        if not actions:
+            return False
+        constr = Gui.getIcon("Sketcher_ToggleConstruction_Constr")
+        if constr is None:
+            return False
+        shown = actions[0].icon().pixmap(16, 16).toImage()
+        return shown == constr.pixmap(16, 16).toImage()
+    except Exception:
+        return False
+
+
+def normal_mode():
+    """Back to normal curves (Fusion starts every sketch with normal lines; FreeCAD keeps
+    construction mode from the last sketch)."""
+    try:
+        if construction_mode() and not Gui.Selection.getSelectionEx():
+            Gui.runCommand("Sketcher_ToggleConstruction")
+    except Exception as exc:
+        warn("sketch line type: %s" % exc)
+
+
+NOTIFICATIONS = "User parameter:BaseApp/Preferences/NotificationArea"
+_balloons = {"saved": None}
+
+
+def quiet_balloons(on):
+    """FreeCAD's sketch tools talk through pop-up balloons at the bottom of the window
+    ("Autoconstraints cause redundancy. Removing them" when a line drawn from the origin
+    along an axis snaps twice, for example). Fusion shows nothing there. While a sketch
+    is open the balloons stay off; the messages still go to the notification list and the
+    Report view. The user's own setting comes back when the sketch closes."""
+    try:
+        group = App.ParamGet(NOTIFICATIONS)
+        name = "NonIntrusiveNotificationsEnabled"
+        if on and _balloons["saved"] is None:
+            existed = name in group.GetBools()
+            _balloons["saved"] = (existed, group.GetBool(name, True))
+            group.SetBool(name, False)
+        elif not on and _balloons["saved"] is not None:
+            existed, value = _balloons["saved"]
+            _balloons["saved"] = None
+            if existed:
+                group.SetBool(name, value)
+            else:
+                group.SetBool(name, True)  # FreeCAD's default (applies it at once)
+                group.RemBool(name)
+    except Exception as exc:
+        warn("sketch notifications: %s" % exc)
 
 
 def _set_param(path, kind, name, value):
@@ -291,9 +355,55 @@ class _AppObserver:
 
     def slotUndoDocument(self, doc):
         self._settled(doc, "undo")
+        _merge_recompute_step(doc, undo=True)
 
     def slotRedoDocument(self, doc):
         self._settled(doc, "redo")
+        _merge_recompute_step(doc, undo=False)
+
+
+# FreeCAD records the recompute it runs when a sketch is closed as an undo step of its
+# own ("Sketch recompute", ViewProviderSketch::unsetEdit). The first Ctrl+Z after Finish
+# Sketch then seemed to do nothing, or showed the part half rebuilt (with a broken
+# profile: only the features after it). In Fusion one Ctrl+Z takes back the last sketch
+# change with its effect on the part, so that step is undone/redone together with the
+# sketch change before it.
+RECOMPUTE_STEP = "Sketch recompute"
+_merging = {"busy": False}
+
+
+def _merge_recompute_step(doc, undo):
+    if _merging["busy"]:
+        return
+    try:
+        if undo:
+            # the step just undone is first in the redo list
+            go_on = bool(doc.RedoNames) and doc.RedoNames[0] == RECOMPUTE_STEP and doc.UndoNames
+        else:
+            # the step just redone is first in the undo list; the recompute that came
+            # with it is next in the redo list
+            go_on = bool(doc.RedoNames) and doc.RedoNames[0] == RECOMPUTE_STEP
+    except Exception:
+        return
+    if go_on:
+        name = doc.Name
+        QtCore.QTimer.singleShot(0, lambda: _one_more_step(name, undo))
+
+
+def _one_more_step(doc_name, undo):
+    _merging["busy"] = True
+    try:
+        doc = App.getDocument(doc_name)
+        if undo and doc.UndoNames:
+            doc.undo()
+        elif not undo and doc.RedoNames:
+            doc.redo()
+        if doc.isTouched() or any("Touched" in o.State for o in doc.Objects):
+            doc.recompute()
+    except Exception as exc:
+        warn("undo: %s" % exc)
+    finally:
+        _merging["busy"] = False
 
 
 def _start_named(doc_name, name):
@@ -429,6 +539,10 @@ class SketchSession:
         self.shading = ProfileShading(self)
         self.display = DisplayOptions(self)
         self.polygon = PolygonPreview(self)
+        from .sketch_line import LineChain
+
+        self.line = LineChain(self)
+        self.fillet_watch = FilletRadius(self)
         self._refresh = QtCore.QTimer()
         self._refresh.setSingleShot(True)
         self._refresh.setInterval(120)
@@ -440,6 +554,8 @@ class SketchSession:
             if name != "snap":
                 self.apply_option(name)
         self._palette_tries = 0
+        normal_mode()
+        quiet_balloons(True)
         QtCore.QTimer.singleShot(0, self._add_palette)
         self._refreshed()
 
@@ -465,6 +581,8 @@ class SketchSession:
         self.constraint_count = count
         if kind == "commit":
             QtCore.QTimer.singleShot(0, self._repair)
+            self.line.committed()
+            self.fillet_watch.committed()
         if kind == "commit" and grew:
             QtCore.QTimer.singleShot(0, lambda: self._new_dimension(count - 1))
 
@@ -503,9 +621,41 @@ class SketchSession:
                 return
             c = constraints[index]
             if c.Type in DIMENSIONAL and c.Driving:
+                if self._make_driven_if_redundant(index):
+                    return
                 self.edit_dimension(index)
         except Exception as exc:
             warn("dimension box: %s" % exc)
+
+    def _make_driven_if_redundant(self, index):
+        """A dimension on a size the other dimensions/constraints already set would
+        over-constrain the sketch (FreeCAD keeps it and the sketch turns red). Fusion
+        offers a driven dimension instead: that is what it becomes here, without asking.
+        True when it was made driven."""
+        sketch = self.sketch
+        try:
+            sketch.solve()
+            bad = set(sketch.RedundantConstraints) | set(sketch.ConflictingConstraints)
+        except Exception:
+            return False
+        if index + 1 not in bad:  # FreeCAD numbers them from 1
+            return False
+        doc = self.doc
+        doc.openTransaction("Driven Dimension")
+        try:
+            sketch.setDriving(index, False)
+            sketch.solve()
+        except Exception:
+            doc.abortTransaction()
+            raise
+        doc.commitTransaction()
+        from . import commands
+
+        commands.tell(
+            "That size is already set by other dimensions: added as a driven dimension "
+            "(it shows the size, it does not change it)."
+        )
+        return True
 
     # -- palette options -----------------------------------------------------------------
     def apply_option(self, name):
@@ -626,6 +776,7 @@ class SketchSession:
         FreeCAD has already handled the key (and reset a half-drawn shape)."""
         if self.closed or editing_sketch() is not self.sketch:
             return
+        self.line.stop()
         try:
             from . import sketch_pick_ui, sketch_tools_ui
 
@@ -663,6 +814,14 @@ class SketchSession:
                 except Exception:
                     continue
                 if c.Type in DIMENSIONAL:
+                    if not c.Driving:
+                        from . import commands
+
+                        commands.tell(
+                            "A driven dimension only shows the size: change the dimensions "
+                            "that set it."
+                        )
+                        return True
                     QtCore.QTimer.singleShot(0, lambda: self.edit_dimension(index, pos))
                     return True
         return False
@@ -671,6 +830,8 @@ class SketchSession:
         if self.closed:
             return
         self.closed = True
+        self.line.stop()
+        quiet_balloons(False)
         try:
             from . import sketch_pick_ui
 
@@ -707,6 +868,7 @@ class _ViewFilter(QtCore.QObject):
     def __init__(self, session):
         super().__init__()
         self.session = session
+        self.right_pressed = None
 
     def eventFilter(self, obj, event):
         try:
@@ -720,10 +882,17 @@ class _ViewFilter(QtCore.QObject):
                 if session.editor is not None or _is_value_key(event):
                     event.accept()
                     return True
+                if _sketch_key(event) is not None:
+                    event.accept()  # the key comes back as a KeyPress below
+                    return True
             elif kind == QtCore.QEvent.KeyPress:
                 key = event.key()
                 if session.editor is not None:
                     return session.editor.key(event)
+                command = _sketch_key(event)
+                if command is not None:
+                    QtCore.QTimer.singleShot(0, lambda: _run(command))
+                    return True
                 if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
                     from . import sketch_pick_ui
 
@@ -737,12 +906,55 @@ class _ViewFilter(QtCore.QObject):
                 session.last_press = event.position().toPoint()
                 if session.editor is not None and not session.editor.underMouse():
                     QtCore.QTimer.singleShot(0, lambda: session.close_editor(commit=True))
+                if event.button() == QtCore.Qt.RightButton:
+                    # Fusion: a right click in a sketch opens the sketch's marking menu
+                    self.right_pressed = event.globalPosition().toPoint()
+                    return True
+            elif kind == QtCore.QEvent.MouseButtonRelease:
+                if event.button() == QtCore.Qt.RightButton and self.right_pressed is not None:
+                    start, self.right_pressed = self.right_pressed, None
+                    pos = event.globalPosition().toPoint()
+                    if (pos - start).manhattanLength() <= 6:
+                        from . import sketch_marking
+
+                        QtCore.QTimer.singleShot(0, lambda: sketch_marking.open_at(pos))
+                    return True
             elif kind == QtCore.QEvent.MouseButtonDblClick:
                 if event.button() == QtCore.Qt.LeftButton:
                     return session.double_clicked(event.position().toPoint())
         except Exception as exc:
             warn("sketch view: %s" % exc)
         return False
+
+
+# Keys that mean something else in a sketch than on the part (Fusion): M moves/copies
+# sketch curves, Del deletes the selected sketch curves (whatever the part's Move/Delete
+# commands do). Only without Ctrl/Alt.
+SKETCH_KEYS = {
+    QtCore.Qt.Key_M: "SciForge_SketchMove",
+    QtCore.Qt.Key_Delete: "Std_Delete",
+}
+
+
+LABELS = {"SciForge_SketchMove": "Move/Copy"}
+
+
+def _sketch_key(event):
+    mods = event.modifiers() & ~QtCore.Qt.KeypadModifier
+    if mods != QtCore.Qt.NoModifier or event.isAutoRepeat():
+        return None
+    return SKETCH_KEYS.get(event.key())
+
+
+def _run(command):
+    try:
+        from . import recent
+
+        if command in LABELS:
+            recent.record(command, LABELS[command])
+        Gui.runCommand(command)
+    except Exception as exc:
+        warn("%s: %s" % (command, exc))
 
 
 VALUE_KEYS = {getattr(QtCore.Qt, "Key_%d" % d) for d in range(10)} | {
@@ -848,13 +1060,37 @@ class DimensionEditor(QtWidgets.QFrame):
         return True
 
     def _value(self, text):
-        """Parse the typed text: (quantity or None, expression or None)."""
+        """Parse the typed text: (quantity or None, expression or None). Raises
+        ValueError with a message for the box when the value is not possible."""
         text = text.strip()
         if text.startswith("="):
             return None, text[1:].strip()
-        q = App.Units.Quantity(text)
-        if q.Unit == App.Units.Quantity(1.0).Unit:  # a bare number
-            q = App.Units.Quantity("%r deg" % q.Value if self.is_angle() else "%r mm" % q.Value)
+        try:
+            q = App.Units.Quantity(text)
+        except Exception:
+            raise ValueError("Not a value: %s" % text)
+        angle = self.is_angle()
+        if q.Unit == App.Units.Quantity(1.0).Unit:  # a bare number (or 10+5*2)
+            q = App.Units.Quantity("%r deg" % q.Value if angle else "%r mm" % q.Value)
+        wanted = App.Units.Quantity("1 deg" if angle else "1 mm").Unit
+        if q.Unit != wanted:
+            raise ValueError(
+                "Type %s, e.g. %s" % (("an angle", "30") if angle else ("a length", "25"))
+            )
+        value = q.getValueAs("deg" if angle else "mm").Value
+        # Fusion refuses sizes of 0 or less: a dimension of 0 collapses the curve (FreeCAD's
+        # solver then fails and the sketch breaks).
+        if value <= 1e-7:
+            raise ValueError("The value must be more than 0.")
+        if angle and value >= 360.0:
+            raise ValueError("The angle must be less than 360 deg.")
+        try:
+            current = self.sketch.getDatum(self.index).Value
+        except Exception:
+            current = 1.0
+        if current < 0 and self._constraint().Type in ("DistanceX", "DistanceY", "Angle"):
+            # FreeCAD keeps the direction in the sign; the user types the size.
+            q = App.Units.Quantity("%r %s" % (-value, "deg" if angle else "mm"))
         return q, None
 
     def finish(self, commit):
@@ -885,8 +1121,13 @@ class DimensionEditor(QtWidgets.QFrame):
         doc = self.sketch.Document
         try:
             q, expression = self._value(text)
-        except Exception:
-            self._error("Not a value: %s" % text)
+        except Exception as exc:
+            self._error(str(exc) if isinstance(exc, ValueError) else "Not a value: %s" % text)
+            return False
+        if not self._constraint().Driving:
+            self._error(
+                "A driven dimension only shows the size: change the dimensions that set it."
+            )
             return False
         doc.openTransaction("Edit Dimension")
         try:
@@ -896,14 +1137,14 @@ class DimensionEditor(QtWidgets.QFrame):
             else:
                 self.sketch.setDatum(self.index, q)
             if self.sketch.solve() != 0:
-                raise ValueError("that value conflicts with the other dimensions/constraints")
+                raise ValueError(CONFLICT)
         except Exception as exc:
             doc.abortTransaction()
             try:
                 self.sketch.solve()
             except Exception:
                 pass
-            self._error(_short(exc))
+            self._error(_plain(exc))
             return False
         doc.commitTransaction()
         log("dimension set to %s" % text.strip())
@@ -920,6 +1161,78 @@ class DimensionEditor(QtWidgets.QFrame):
 def _short(exc):
     text = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
     return text[:160]
+
+
+CONFLICT = "That value does not fit the other dimensions and constraints of the sketch."
+
+# FreeCAD's solver texts, said the way a Fusion user needs them.
+PLAIN = (
+    ("conflicting", CONFLICT),
+    ("Negative datum", "The value must be more than 0."),
+    ("is invalid", "That value is not possible here."),
+    ("redundant", "That size is already set by other dimensions."),
+)
+
+
+def _plain(exc):
+    text = _short(exc)
+    for needle, said in PLAIN:
+        if needle.lower() in text.lower():
+            return said
+    return text
+
+
+# -- sketch fillet radius -------------------------------------------------------------------
+FILLET_COMMANDS = ("Sketcher_CreateFillet", "Sketcher_CompCreateFillets")
+
+
+class FilletRadius:
+    """Fusion's sketch fillet asks for the radius. FreeCAD's fillet tool rounds the
+    clicked corner with a radius taken from the mouse; the new arc then gets a radius
+    dimension and the value box opens on it (type 5, Enter)."""
+
+    def __init__(self, session):
+        self.session = session
+        self.seen = len(session.sketch.Geometry)
+
+    def committed(self):
+        QtCore.QTimer.singleShot(0, self._check)
+
+    def _check(self):
+        session = self.session
+        if session.closed:
+            return
+        try:
+            import Sketcher
+
+            from . import recent
+
+            sketch = session.sketch
+            count = len(sketch.Geometry)
+            new = list(range(self.seen, count))
+            self.seen = count
+            last = recent.last()
+            if not new or last is None or last[0] not in FILLET_COMMANDS:
+                return
+            arcs = [i for i in new if sketch.Geometry[i].TypeId == "Part::GeomArcOfCircle"]
+            if len(arcs) != 1 or session.editor is not None:
+                return
+            arc = arcs[0]
+            doc = session.doc
+            doc.openTransaction("Fillet Radius")
+            try:
+                index = sketch.addConstraint(
+                    Sketcher.Constraint("Radius", arc, sketch.Geometry[arc].Radius)
+                )
+                sketch.solve()
+            except Exception:
+                doc.abortTransaction()
+                raise
+            doc.commitTransaction()
+            if not session._make_driven_if_redundant(index):
+                session.edit_dimension(index)
+        except Exception as exc:
+            warn("fillet radius: %s" % exc)
 
 
 # -- profile shading ----------------------------------------------------------------------
@@ -1156,7 +1469,31 @@ def finish_sketch():
     except Exception:
         pass
     log("sketch %s finished" % label)
+    _tell_broken_features(sketch)
     return True
+
+
+def _tell_broken_features(sketch):
+    """Features built on the sketch that could not be rebuilt after the edit (a profile
+    left open, a projected edge gone): say so next to the mouse instead of leaving the
+    part silently unchanged (Fusion marks them in the timeline and shows a message)."""
+    try:
+        broken = []
+        for obj in sketch.Document.Objects:
+            if obj is sketch or sketch not in obj.OutListRecursive:
+                continue
+            state = list(obj.State)
+            if "Invalid" in state or "Error" in state:
+                broken.append(obj.Label)
+        if broken:
+            from . import commands
+
+            commands.tell(
+                "%s cannot be rebuilt from %s any more (its profile is open or gone). "
+                "Edit the sketch again, or press Ctrl+Z." % (", ".join(broken), sketch.Label)
+            )
+    except Exception as exc:
+        warn("finish sketch: %s" % exc)
 
 
 def start_polygon(circumscribed):

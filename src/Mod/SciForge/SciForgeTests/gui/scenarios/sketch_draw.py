@@ -197,7 +197,10 @@ def circle_dim_pick():
 
 
 def circle_dim_place():
-    si.click(s["centre"] + V(9, 9, 0))
+    # away from every other curve: a placing click that lands on a line (the top line
+    # is 1 mm from centre + (9, 9)) picks that line instead (Fusion does the same), which
+    # made this step fail on some runs
+    si.click(s["centre"] + V(9, -3, 0))
 
 
 def circle_dim_type():

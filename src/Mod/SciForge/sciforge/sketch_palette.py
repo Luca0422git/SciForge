@@ -12,7 +12,7 @@ Geometries, 3D Sketch. Options are remembered between sessions (sketch_mode.opti
 
 import FreeCADGui as Gui
 
-from . import sketch_mode, ui_icon, warn
+from . import sketch_mode, ui_icon, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 
 ROWS = [
@@ -40,7 +40,21 @@ STYLE = """
 #SciForgeSketchPalette QToolButton[role="option"] { background: #4a5568; border: 1px solid #56606f;
     border-radius: 2px; padding: 2px; }
 #SciForgeSketchPalette QToolButton[role="option"]:hover { background: #56647a; }
+#SciForgeSketchPalette QToolButton[role="option"]:checked { background: #f5a142;
+    border: 1px solid #ffc27a; }
+#SciForgeSketchPalette QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid #8a94a3;
+    border-radius: 2px; background: #2b313b; }
+#SciForgeSketchPalette QCheckBox::indicator:hover { border-color: #3fa9f5; }
+#SciForgeSketchPalette QCheckBox::indicator:checked { background: #3fa9f5; border-color: #3fa9f5;
+    image: url(CHECK); }
+#SciForgeSketchPalette QCheckBox::indicator:disabled { background: #3b4453; border-color: #5d6778; }
 """
+
+STYLE = STYLE.replace("CHECK", ui_icon_path("palette_check").replace("\\", "/"))
+
+# FreeCAD's sketch panel sections Fusion has no equivalent of (it shows constraints as
+# glyphs on the curves, not as lists): hidden while the palette is there.
+HIDDEN_SECTIONS = ("SketcherGui::TaskSketcherConstraints", "SketcherGui::TaskSketcherElements")
 
 
 class Palette(QtWidgets.QFrame):
@@ -74,11 +88,19 @@ class Palette(QtWidgets.QFrame):
         self.construction = self._tool_button(
             "sk_line",
             "Construction (X): turn the selected curves into construction "
-            "curves, or draw new curves as construction",
+            "curves, or (nothing selected) draw new curves as construction. "
+            "Orange while new curves are construction.",
         )
         self.construction.setObjectName("SciForgePaletteConstruction")
-        self.construction.clicked.connect(lambda: self._later("Sketcher_ToggleConstruction"))
+        self.construction.setCheckable(True)
+        self.construction.setChecked(sketch_mode.construction_mode())
+        self.construction.clicked.connect(self._construction_clicked)
         form.addRow("Linetype", self.construction)
+        self._mode = self.construction.isChecked()
+        self._mode_timer = QtCore.QTimer(self)
+        self._mode_timer.setInterval(300)
+        self._mode_timer.timeout.connect(self._refresh_mode)
+        self._mode_timer.start()
 
         self.look_at = self._tool_button("nav_lookat", "Look straight at the sketch")
         self.look_at.setObjectName("SciForgePaletteLookAt")
@@ -129,6 +151,34 @@ class Palette(QtWidgets.QFrame):
         self.body.setVisible(open_)
         self.section.setText(("▾ " if open_ else "▸ ") + "Options")
 
+    def _construction_clicked(self, *_):
+        # the button shows the drawing mode; FreeCAD's command decides (selected curves
+        # are toggled, else the mode), the timer below shows the result
+        self.construction.setChecked(self._mode)
+        self._later("Sketcher_ToggleConstruction")
+
+    def _refresh_mode(self):
+        """Show whether new curves are drawn as construction (X with nothing selected
+        switches that on: without this it was invisible until the next curve came out
+        orange and made no profile)."""
+        try:
+            mode = sketch_mode.construction_mode()
+            if self.construction.isChecked() != mode:
+                self.construction.setChecked(mode)
+            if mode != self._mode:
+                self._mode = mode
+                from . import commands
+
+                commands.tell(
+                    "New curves are construction curves (orange, no profiles). "
+                    "X again (or Linetype in the palette) for normal curves."
+                    if mode
+                    else "New curves are normal curves again."
+                )
+        except Exception as exc:
+            self._mode_timer.stop()
+            warn("sketch palette: %s" % exc)
+
     def _toggled(self, key, on):
         try:
             sketch_mode.set_option(key, on)
@@ -147,6 +197,10 @@ class Palette(QtWidgets.QFrame):
         QtCore.QTimer.singleShot(0, run)
 
     def remove(self):
+        try:
+            self._mode_timer.stop()
+        except Exception:
+            pass
         for widget in self.hidden:
             try:
                 widget.setVisible(True)
@@ -182,10 +236,12 @@ def install(session):
         return existing
     palette = Palette(session, panel)
     panel.layout().insertWidget(0, palette)
-    # FreeCAD's Close button: Finish Sketch is in the palette (and the ribbon).
+    # FreeCAD's Close button: Finish Sketch is in the palette (and the ribbon). FreeCAD's
+    # constraint and element lists: Fusion shows constraints as glyphs only.
     try:
         for control in Gui.getMainWindow().findChildren(QtWidgets.QWidget):
-            if control.metaObject().className() == "Gui::TaskView::TaskEditControl":
+            name = control.metaObject().className()
+            if name == "Gui::TaskView::TaskEditControl" or name in HIDDEN_SECTIONS:
                 if control.isVisible():
                     control.setVisible(False)
                     palette.hidden.append(control)
