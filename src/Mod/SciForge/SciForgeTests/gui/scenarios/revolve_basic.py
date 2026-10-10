@@ -20,11 +20,11 @@ import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore, QtGui, QtWidgets
-from PySide6 import QtTest
+from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import revolve_input as ri
 
 V = App.Vector
 PI = math.pi
@@ -34,46 +34,18 @@ s = {}
 
 
 def panel():
-    from sciforge import revolve_ui
-
-    p = revolve_ui.RevolvePanel.last
-    return p if p is not None and not p._closed else None
+    return ri.panel()
 
 
 def near(a, b, tol=1e-6):
-    return abs(a - b) <= tol * max(1.0, abs(b))
+    return ri.near(a, b, tol)
 
 
 def bbox():
-    b = h.body().Shape.optimalBoundingBox(False, False)
-    return [round(v, 4) for v in (b.XMin, b.YMin, b.ZMin, b.XMax, b.YMax, b.ZMax)]
+    return ri.bbox(h.body().Shape)
 
 
-def drag_handle(handle, target, steps=24):
-    """Drag the arrow's ball round the axis to `target` degrees, along the circle, as a
-    hand does (press, move in small steps, release)."""
-    widget = h.gl_widget()
-    start = handle.angle()
-    points = [
-        h.screen_point(handle.point_at(start + (target - start) * i / float(steps)))
-        for i in range(steps + 1)
-    ]
-    h.move(points[0])
-    QtTest.QTest.mousePress(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, points[0])
-    for p in points[1:]:
-        pos = QtCore.QPointF(p)
-        event = QtGui.QMouseEvent(
-            QtCore.QEvent.MouseMove,
-            pos,
-            QtCore.QPointF(widget.mapToGlobal(p)),
-            QtCore.Qt.NoButton,
-            QtCore.Qt.LeftButton,
-            QtCore.Qt.NoModifier,
-        )
-        QtWidgets.QApplication.sendEvent(widget, event)
-        QtWidgets.QApplication.processEvents()
-    QtTest.QTest.mouseRelease(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, points[-1])
-    QtWidgets.QApplication.processEvents()
+drag_handle = ri.drag_handle
 
 
 # -- the sketch ---------------------------------------------------------------------------------
@@ -377,6 +349,7 @@ def groove_preview():
 def cancelled():
     h.check("Cancel closes the dialog", not Gui.Control.activeDialog())
     h.check("Cancel leaves the shaft unchanged", near(h.solid_volume(), CYL), h.solid_volume())
+    h.check("the shaft is shown", ri.shown(h.body()))
     h.check(
         "no Groove left",
         not [o for o in App.ActiveDocument.Objects if o.TypeId == "PartDesign::Groove"],

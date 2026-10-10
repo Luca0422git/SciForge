@@ -51,7 +51,7 @@ AXIS_COLORS = {
 AXIS_HOVER = (0.55, 0.80, 1.0)
 AXIS_PICKED = (0.12, 0.53, 0.90)
 PICK_PIXELS = 8.0  # how near a drawn axis a click must be (viewport pixels)
-ON_LINE_PIXELS = 2.5  # this near, the drawn axis wins over an edge under the mouse
+ON_LINE_PIXELS = 4.0  # this near, the drawn axis wins over what else is under the mouse
 
 
 def _combo(pairs, current):
@@ -402,13 +402,14 @@ class AxisPicker:
     a click is matched to them by distance on screen. Drawn on top of the part so an axis
     inside it can still be seen and clicked."""
 
-    def __init__(self, view, lines, on_pick, blocked=None):
+    def __init__(self, view, lines, on_pick, blocked=None, competing=None):
         from pivy import coin
 
         self.coin = coin
         self.view = view
         self.on_pick = on_pick
         self.blocked = blocked  # (position) -> True when another handle takes the click
+        self.competing = competing  # (position) -> True when something else is there
         self.lines = []  # [ref, kind, start, end, switch, material, style]
         self.root = coin.SoAnnotation()
         pick = coin.SoPickStyle()
@@ -507,9 +508,9 @@ class AxisPicker:
         self._paint_all()
 
     def line_at(self, position):
-        """The line (as in self.lines) within a few pixels of the mouse, or None. A real
-        edge right under the mouse (a sketch line, an edge of the part) wins over a drawn
-        axis that is only near it: that edge is what the person aims at."""
+        """The line (as in self.lines) within a few pixels of the mouse, or None. Right
+        on a drawn axis, the axis wins; only near it, whatever else is under the mouse
+        (a profile area, a sketch line, the part) wins: that is what the person aims at."""
         try:
             px, py = float(position[0]), float(position[1])
         except Exception:
@@ -533,16 +534,9 @@ class AxisPicker:
                 best = (distance, line)
         if best is None:
             return None
-        if best[0] > ON_LINE_PIXELS and self._edge_under(position):
+        if best[0] > ON_LINE_PIXELS and self.competing is not None and self.competing(position):
             return None
         return best[1]
-
-    def _edge_under(self, position):
-        try:
-            info = self.view.getObjectInfo((int(position[0]), int(position[1])))
-        except Exception:
-            return False
-        return bool(info and str(info.get("Component", "")).startswith("Edge"))
 
     def _moved(self, info):
         try:
@@ -901,6 +895,7 @@ class RevolvePanel(Panel):
                 revolve.overlay_lines(self.body, sketches, self._axis_length(sketches)),
                 self._axis_clicked,
                 blocked=self._handle_at,
+                competing=self._something_else_at,
             )
         except Exception as exc:
             warn("axis lines unavailable: %s" % exc)
@@ -945,16 +940,35 @@ class RevolvePanel(Panel):
         return max(40.0, 1.4 * reach)
 
     def _line_under_mouse(self, position):
-        """True if a click at `position` is meant for a line (an axis), not an area."""
+        """True if a click at `position` is meant for a line (an axis), not an area: a
+        handle, a drawn axis, or a sketch line under the mouse. (An edge of the part does
+        not count: inside an area, the area is what the person clicks.)"""
         if self._handle_at(position):
             return True
         if self.axes is not None and self.axes.line_at(position) is not None:
             return True
         try:
-            info = Gui.ActiveDocument.ActiveView.getObjectInfo(tuple(position))
+            info = Gui.ActiveDocument.ActiveView.getObjectInfo((int(position[0]), int(position[1])))
         except Exception:
             info = None
-        return bool(info and str(info.get("Component", "")).startswith("Edge"))
+        if not info or not str(info.get("Component", "")).startswith("Edge"):
+            return False
+        obj = self.doc.getObject(str(info.get("Object", "")))
+        return extrude.is_sketch(obj)
+
+    def _something_else_at(self, position):
+        """True if a profile area or anything of the model is under the mouse."""
+        if self.picker is not None:
+            try:
+                if self.picker.region_at(position) is not None:
+                    return True
+            except Exception:
+                pass
+        try:
+            info = Gui.ActiveDocument.ActiveView.getObjectInfo((int(position[0]), int(position[1])))
+        except Exception:
+            info = None
+        return bool(info and info.get("Object"))
 
     def _handle_at(self, position):
         return any(handle.hit(position) for handle in self.handles.values())
@@ -1013,6 +1027,8 @@ class RevolvePanel(Panel):
     def _picked(self, obj, short, region_clicked, axis_clicked):
         if axis_clicked:
             return  # the click went to an axis line drawn by the dialog
+        if region_clicked:
+            return  # the click went to a profile area (FreeCAD picked what is under it)
         if _is_axis_pick(obj, short):
             ref = (obj, short)
             if short.startswith("Edge") and not extrude.is_sketch(obj):
@@ -1025,17 +1041,15 @@ class RevolvePanel(Panel):
             self._set_axis(ref)
             return
         if extrude.is_sketch(obj):
-            if short.startswith("InternalFace") and not region_clicked:
+            if short.startswith("InternalFace"):
                 self._toggle((obj, short))
-            elif short == "" and not region_clicked:
+            elif short == "":
                 try:
                     areas = extrude.regions(obj)
                 except Exception:
                     areas = []
                 if len(areas) == 1:
                     self._toggle((obj, areas[0][0]))
-            return
-        if region_clicked:
             return
         if short.startswith("Face"):
             ref = self._base_face(obj, short)

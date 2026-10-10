@@ -773,8 +773,11 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
         raise
     if feature is not None:
         label = feature.Label
-        _remove(feature, keep_body=owner_body(feature) is target)
+        old_body = owner_body(feature)
+        _remove(feature, keep_body=old_body is target)
         new.Label = label
+        if old_body is not None and old_body is not target:
+            _show_tip(old_body)
     if before is None or was_tip:
         target.Tip = new
     return new
@@ -909,7 +912,25 @@ def _remove(feature, keep_body=True):
 
 
 def remove(feature):
+    body = owner_body(feature)
     _remove(feature, keep_body=False)
+    _show_tip(body)
+
+
+def _show_tip(body):
+    """Show the body's solid again after its last feature went away: FreeCAD hid the
+    feature before it when that one was added, and only shows it again when the
+    feature is deleted with its own command."""
+    if not App.GuiUp or body is None:
+        return
+    try:
+        if body.Document.getObject(body.Name) is None:
+            return
+        tip = body.Tip
+        if tip is not None and tip.ViewObject is not None and not tip.ViewObject.Visibility:
+            tip.ViewObject.Visibility = True
+    except Exception:
+        pass
 
 
 def make(profiles, axis, options, name="Revolve"):

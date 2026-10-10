@@ -32,6 +32,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import revolve_input as ri
 
 V = App.Vector
 PI = math.pi
@@ -180,6 +181,8 @@ def new_body():
         other and other[0].Shape.Volume,
     )
     h.check("the box is untouched", near(volume(), BOX), volume())
+    h.check("the box is still shown", ri.shown(box_body()))
+    h.check("the new body is shown", other and ri.shown(other[0]))
     h.shot("2-new-body")
     h.check("choose Join", ui.choose(p.operation, "Join"))
 
@@ -187,6 +190,7 @@ def new_body():
 def back_to_join():
     h.check("back to one body", len(bodies()) == 1, [b.Label for b in bodies()])
     h.check("join again", near(volume(), BOX + 6000 * PI), volume())
+    h.check("join shown", ri.shown(box_body()))
     h.task_button("Cancel")
 
 
@@ -194,6 +198,7 @@ def cancelled():
     h.check("Cancel closes the dialog", not Gui.Control.activeDialog())
     h.check("Cancel: the box as it was", near(volume(), BOX), volume())
     h.check("Cancel: one body", len(bodies()) == 1)
+    h.check("Cancel: the box is shown", ri.shown(box_body()))
     h.check(
         "Cancel: no revolve left",
         not [o for o in App.ActiveDocument.Objects if o.TypeId.startswith("PartDesign::Revol")],
