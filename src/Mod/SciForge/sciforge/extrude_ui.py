@@ -528,16 +528,10 @@ class ExtrudePanel(Panel):
         to_object = self.extent.findData("to_object")
         if to_object >= 0 and hasattr(model, "item"):
             model.item(to_object).setEnabled(not symmetric)
-        # A taper only where it can be built (Distance; a cut's All; any Intersect).
-        operation = self.operation.currentData()
-        for field, ext in ((self.taper, extent), (self.taper2, extent2)):
-            possible = extrude.taper_possible({"operation": operation}, ext)
-            if not possible and abs(field.value()) > 1e-9:
-                field.set_value(0.0)  # shown: the field reads 0 while it is off
-            field.widget.setEnabled(possible)
-            field.widget.setToolTip(
-                "" if possible else "FreeCAD's extrude cannot taper up to an object; use Distance"
-            )
+        # Every extent takes a taper, like Fusion (what PartDesign cannot taper, SciForge's
+        # own extrude feature builds).
+        for field in (self.taper, self.taper2):
+            field.widget.setEnabled(True)
 
     def _collect(self):
         self.options["start"] = self.start.currentData()

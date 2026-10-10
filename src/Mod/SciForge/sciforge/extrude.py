@@ -986,8 +986,10 @@ def build(profiles, options, name="Extrude", feature=None):
         blocking = dependents(feature)
         if blocking:
             raise ExtrudeError(
-                "%s is used by %s, so its operation cannot change here. Make a new extrude "
-                "instead." % (feature.Label, ", ".join(o.Label for o in blocking))
+                "%s is used by %s, and this change needs a new kind of extrude (another "
+                "operation or body, or a taper FreeCAD's extrude cannot make), so it cannot be "
+                "made here. Make a new extrude instead."
+                % (feature.Label, ", ".join(o.Label for o in blocking))
             )
     old_meta = load_meta(feature) if feature is not None else {}
     created = None

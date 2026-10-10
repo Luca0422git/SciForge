@@ -228,6 +228,25 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   release, DblClick, release by hand: `sketch_input.double_click_widget`); clicks in fast
   succession on the 3D view merge (one click per scenario step); a Coin search path dies with
   its action (keep node + parent, never the path: SIGSEGV otherwise).
+- **Extrude/Press Pull QA findings (branch `sf/extrude_presspull-qa`)**, rules for every dialog:
+  - FreeCAD's selection takes the left-button *release* and stops it there
+    (`SoFCUnifiedSelection` sets handled): a `view.addEventCallback` never sees the release of
+    a click that selected something. Pick on the press, and skip presses on a drag handle
+    (`profile_pick.handle_at`, a Coin ray pick that finds an `SoDragger`), or a press on an
+    arrow drops the sketch area behind it.
+  - FreeCAD draws a body through its Tip, and a new feature hides the one before it. Code that
+    removes a feature (not FreeCAD's Delete) must show the new Tip again
+    (`extrude.show_tip`), or the whole part vanishes from the view.
+  - Ctrl+Z with a dialog open made FreeCAD commit the preview and undo it under the dialog;
+    Ctrl+S saved the half-made preview; closing the design left a dialog on a deleted document
+    that blocked every later command. `preview.UndoCancels(panel)` handles all of these (and
+    other designs' clicks are filtered out of picks). Use it in every feature dialog.
+  - FreeCAD's Pad/Pocket silently ignore a taper up to a face and a Pad's up-to-last: the
+    SciForge extrude feature (`ExtrudeFeature`, property `Operation`) builds those.
+  - OpenCASCADE cannot offset a whole sphere ("no closed bounds"): Press Pull builds the shell.
+  - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
+    clickable (compute what is in front); the disc at the bottom of a hole is only visible
+    from the top.
 
 ## Questions waiting for Luca
 
