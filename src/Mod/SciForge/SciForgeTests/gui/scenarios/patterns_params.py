@@ -8,8 +8,9 @@
 3. n becomes 4: the pattern follows (x = 8, 16, 24, 32).
 4. Edit from the timeline: the formulas are shown. Type "n - 4" in Quantity: the dialog
    says why (less than 1) and nothing changes. Press the Up arrow in Quantity: 5, a plain
-   number again (the formula is gone). OK: FreeCAD's LinearPattern (Distance still
-   follows gap); n = 2 no longer changes it.
+   number again (the formula is gone). Type 9000: too many, the dialog says so and OK
+   waits; type 5 again. OK: FreeCAD's LinearPattern (Distance still follows gap); n = 2 no
+   longer changes it.
 5. A Pattern of bodies refuses a quantity formula (each copy is a body).
 
 Hand-derived: box 12000; a through hole r 2 removes pi 2^2 10.
@@ -145,6 +146,27 @@ def stepped():
         centres(),
     )
     h.shot("2-stepped")
+    ps.type_quantity(p.quantity, 9000)
+
+
+def too_many():
+    p = ps.panel()
+    text = p.message.text()
+    h.check("the dialog says 9000 is too many", "9000" in text and "too many" in text, text)
+    h.check("still five holes", len(centres()) == 5, centres())
+    h.task_button("OK")
+
+
+def ok_waits():
+    p = ps.panel()
+    h.check("OK waits while the quantity is refused", p is not None and not p._closed)
+    if p is not None:
+        ps.type_quantity(p.quantity, 5)
+
+
+def five_again():
+    p = ps.panel()
+    h.check("the complaint is gone", not p.message.text().startswith("⚠"), p.message.text())
     h.task_button("OK")
 
 
@@ -223,6 +245,9 @@ h.run(
         edit_open,
         too_few,
         stepped,
+        too_many,
+        ok_waits,
+        five_again,
         after_edit,
         n_no_longer,
         bodies_start,

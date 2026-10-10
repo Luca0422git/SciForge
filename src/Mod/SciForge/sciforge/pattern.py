@@ -413,6 +413,19 @@ def implementation(kind, options):
     return "native"
 
 
+def total_instances(kind, options):
+    """How many instances the pattern has, the original included."""
+    if kind == "mirror":
+        return 2
+    if kind == "circular":
+        kind_of = "symmetric" if options["circular_type"] == "symmetric" else "one"
+        return core.instance_count(options["quantity"], kind_of)
+    total = core.instance_count(options["quantity"], options["direction_type"])
+    if kind == "rectangular" and options.get("direction2") is not None:
+        total *= core.instance_count(options["quantity2"], options["direction_type2"])
+    return total
+
+
 def check(kind, options):
     """Raise NeedsPick / PatternError when the pattern cannot be built yet."""
     ptype = options["pattern_type"]
@@ -436,6 +449,7 @@ def check(kind, options):
             raise PatternError("%s has no solid to copy yet." % bodies[0].Label)
     else:
         raise PatternError("Unknown pattern type %r." % ptype)
+    core.check_total(total_instances(kind, options))
     if kind == "rectangular":
         if options["direction"] is None:
             raise NeedsPick("Select Direction 1: an edge, an axis or a flat face.")
@@ -1040,6 +1054,7 @@ def placements(kind, options, tools=None, center=None):
 
 def all_placements(kind, options, tools=None, center=None):
     """Every copy's transform, suppressed ones included (Suppression shows them as dots)."""
+    core.check_total(total_instances(kind, options))
     if kind == "rectangular":
         _p, u1 = direction_of(options["direction"])
         offsets1 = core.linear_offsets(

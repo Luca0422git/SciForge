@@ -462,6 +462,23 @@ class InstanceDots:
             pass
 
 
+def _TurnDragger(*args, **kwargs):
+    """extrude_ui.AngleDragger (the taper handle, -180..180 deg) that keeps counting past half
+    a turn, so Total Angle can be dragged up to a full 360 deg as in Fusion."""
+    from .extrude_ui import AngleDragger
+
+    class TurnDragger(AngleDragger):
+        def angle(self):
+            raw = AngleDragger.angle(self)
+            last = getattr(self, "_last", None)
+            if last is None:
+                return raw
+            step = (raw - last + 180.0) % 360.0 - 180.0  # the short way from the last reading
+            return max(-360.0, min(360.0, last + step))
+
+    return TurnDragger(*args, **kwargs)
+
+
 class CountBox(QtWidgets.QSpinBox):
     """The Quantity field: a whole number, or a parameter / formula typed over it (Fusion's
     fields take both; preview.FormulaInput evaluates the text when the field is left)."""
@@ -470,6 +487,12 @@ class CountBox(QtWidgets.QSpinBox):
         return (QtGui.QValidator.Acceptable, text, pos)
 
     on_step = None  # called before the arrows / wheel / Up-Down change the count
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        # The count is taken when the field is left (Tab / Enter / a click elsewhere), not at
+        # every key: typing 1000 must not build 1, 10 and 100 copies on the way.
+        self.setKeyboardTracking(False)
 
     def valueFromText(self, text):
         try:
@@ -682,7 +705,7 @@ class PatternPanel(Panel):
 
     def _quantity(self, value, on_change):
         spin = CountBox()
-        spin.setRange(1, 1000)
+        spin.setRange(1, 99999)  # too many is refused with the reason (pattern.check)
         spin.setValue(int(value))
         spin.valueChanged.connect(on_change)
         return spin
@@ -1711,8 +1734,6 @@ class PatternPanel(Panel):
                 self.handles["distance"].origin = origin
                 self.handles["distance"].direction = direction
             elif self.kind == "circular":
-                from .extrude_ui import AngleDragger
-
                 point, axis = pattern.axis_of(self.options["axis"])
                 offset = center - point
                 radial = offset - axis * offset.dot(axis)
@@ -1723,8 +1744,8 @@ class PatternPanel(Panel):
                 radius = max(radial.Length, 5.0)
                 radial.normalize()
                 pivot = point + axis * offset.dot(axis)
-                angle = max(-180.0, min(180.0, float(self.options["angle"])))
-                self.handles["angle"] = AngleDragger(
+                angle = max(-360.0, min(360.0, float(self.options["angle"])))
+                self.handles["angle"] = _TurnDragger(
                     pattern.to_global(self.body, pivot),
                     pattern.to_global(self.body, vector=axis),
                     pattern.to_global(self.body, vector=radial),

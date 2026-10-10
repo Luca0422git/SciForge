@@ -18,6 +18,8 @@ Circular pattern:
 
 SENTINEL = -1.0  # FreeCAD's pattern features read a spacing of exactly -1 as "use Offset"
 NUDGE = 1e-9  # mm or degrees: far below the kernel's tolerance (1e-7 mm)
+MAX_INSTANCES = 2500  # 50 x 50 holes take ~20 s to build; a typo like "n*1000" must not
+# freeze SciForge for many minutes
 
 
 class PatternError(ValueError):
@@ -90,6 +92,14 @@ def symmetric_walk_terms(quantity):
 def instance_count(quantity, direction_type="one"):
     quantity = max(1, int(quantity))
     return 2 * quantity - 1 if direction_type == "symmetric" else quantity
+
+
+def check_total(total):
+    """Refuse a pattern with more instances than SciForge makes at once."""
+    if int(total) > MAX_INSTANCES:
+        raise PatternError(
+            "%d instances is too many for one pattern (at most %d)." % (int(total), MAX_INSTANCES)
+        )
 
 
 def grid(offsets1, offsets2):

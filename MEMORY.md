@@ -336,6 +336,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     features cannot change their copy count from an expression cleanly, so such a pattern is
     built by `PatternFeature` (expression `round(...)` on its `Quantity`). The spin arrows
     drop the formula (a plain number again). Bodies refuse a quantity formula.
+  - A pattern has at most 2500 instances (`pattern_core.MAX_INSTANCES`, checked in
+    `pattern.check` and when the copies are computed): measured here, a LinearPattern of
+    50 x 40 holes took 14 s, 30 x 30 4 s; 5000 overlapping holes hung a scenario. The
+    Quantity box has keyboard tracking off (typing 900 must not build 9 and 90 on the way).
+  - The Total Angle handle counts on past 180 deg (`pattern_ui._TurnDragger` unwraps
+    extrude_ui.AngleDragger's -180..180 reading against the last one); drag up to 360.
   - Theme (not patterns' file): an UNCHECKED QCheckBox indicator is practically invisible on
     the dark task panel (the tick shows once checked). Affects Suppression and every other
     dialog's check boxes: theme owner, give `QCheckBox::indicator` a visible border.

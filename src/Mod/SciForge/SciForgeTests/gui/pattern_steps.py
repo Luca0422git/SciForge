@@ -12,7 +12,7 @@ import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore, QtWidgets
+from PySide import QtCore, QtGui, QtWidgets
 from PySide6 import QtTest
 
 from SciForgeTests.gui import blend_steps as b
@@ -124,6 +124,33 @@ def drag_arrow(key, along):
     tip = handle.origin + handle.direction * handle.distance()
     h.drag(h.screen_point(tip), h.screen_point(tip + handle.direction * along))
     return handle
+
+
+def drag_turn(handle, start, end, step=5.0):
+    """Drag a curved angle handle round its arc from `start` to `end` degrees, the way a hand
+    follows it (a straight drag across the centre would not turn it past half a turn)."""
+    widget = h.gl_widget()
+    count = max(1, int(abs(end - start) / step))
+    pixels = [
+        h.screen_point(handle.screen_points(start + (end - start) * i / count)[1])
+        for i in range(count + 1)
+    ]
+    h.move(pixels[0])
+    QtTest.QTest.mousePress(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pixels[0])
+    for pixel in pixels[1:]:
+        pos = QtCore.QPointF(pixel)
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.MouseMove,
+            pos,
+            QtCore.QPointF(widget.mapToGlobal(pixel)),
+            QtCore.Qt.NoButton,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.NoModifier,
+        )
+        QtWidgets.QApplication.sendEvent(widget, event)
+        QtWidgets.QApplication.processEvents()
+    QtTest.QTest.mouseRelease(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pixels[-1])
+    QtWidgets.QApplication.processEvents()
 
 
 def circle_centres(shape, radius, z=None):

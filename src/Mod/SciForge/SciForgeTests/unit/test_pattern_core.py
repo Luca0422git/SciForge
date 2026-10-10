@@ -95,5 +95,15 @@ class DefaultTests(unittest.TestCase):
         self.assertEqual(core.default_distance(4.0, 3), 2 * core.default_distance(4.0, 2))
 
 
+class LimitTests(unittest.TestCase):
+    def test_a_big_grid_is_fine(self):
+        core.check_total(50 * 50)
+
+    def test_too_many_instances_are_refused_with_the_count(self):
+        with self.assertRaises(core.PatternError) as caught:
+            core.check_total(1000 * 1000)
+        self.assertIn("1000000", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

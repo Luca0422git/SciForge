@@ -6,7 +6,8 @@
    the timeline, click the Axis box, click the origin Z axis drawn over the view: Full,
    Quantity 3 (holes at 0, 120, 240 degrees).
 3. Quantity 6. Type Angle (Total Angle starts at 180): 6 holes from 0 to 180 degrees.
-   Total Angle 90, Quantity 3: 0, 45, 90. Drag the blue curved handle to about 120.
+   Total Angle 90, Quantity 3: 0, 45, 90. Drag the blue curved handle to about 120, then
+   on round past half a turn to about 200 (holes at 0, 100, 200).
 4. Type Symmetric, Quantity 2, Total Angle 60: holes at 0 and +-60. OK (FreeCAD's
    PolarPattern). Ctrl+Z / Ctrl+Y.
 5. Double-click in the timeline: Symmetric / 2 / 60 shown; Full, Quantity 4; OK.
@@ -171,6 +172,27 @@ def dragged():
         same_points(centres(), holes_at(0, angle / 2.0, angle), tol=0.05),
         (centres(), angle),
     )
+
+
+def drag_past_half():
+    p = ps.panel()
+    handle = p.handles.get("angle")
+    if not h.check("curved handle still there", handle is not None):
+        return
+    ps.drag_turn(handle, handle.angle(), 200.0)
+
+
+def past_half():
+    p = ps.panel()
+    angle = p.angle_field.value()
+    h.check("the handle turns on past 180", 185 < angle < 215, angle)
+    h.check(
+        "the holes follow past half a turn",
+        same_points(centres(), holes_at(0, angle / 2.0, angle), tol=0.05),
+        (centres(), angle),
+    )
+    h.check("no complaint", not p.message.text().startswith("⚠"), p.message.text())
+    h.shot("3b-past-half")
 
 
 def choose_symmetric():
@@ -338,6 +360,8 @@ h.run(
         three_in_90,
         drag_handle,
         dragged,
+        drag_past_half,
+        past_half,
         choose_symmetric,
         symmetric_values,
         symmetric_angle,
