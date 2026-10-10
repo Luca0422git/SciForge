@@ -398,8 +398,11 @@ def _check_revolve_axis(here, axis, seen):
     if seen.get(axis.get("sketch")) != "sketch":
         _fail(here, "the axis 'sketch' must name an earlier sketch step")
     kinds = [k for k in ("at", "construction", "axis") if k in axis]
-    if len(kinds) != 1 or set(axis) != {"sketch", kinds[0]}:
+    extra = {"name"} if kinds == ["construction"] else set()
+    if len(kinds) != 1 or not {"sketch", kinds[0]} <= set(axis) <= {"sketch", kinds[0]} | extra:
         _fail(here, "a sketch axis needs exactly one of 'at', 'construction', 'axis'")
+    if "name" in axis and not isinstance(axis["name"], str):
+        _fail(here, "a construction line's 'name' is a string")
     if "axis" in axis and axis["axis"] not in ("H", "V"):
         _fail(here, "a sketch's own axis is 'H' or 'V'")
     if "at" in axis and (not isinstance(axis["at"], list) or len(axis["at"]) != 2):

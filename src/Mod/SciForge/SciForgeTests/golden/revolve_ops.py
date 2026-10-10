@@ -13,6 +13,8 @@ imported.
                 {"sketch": id, "at": [x, y]}          the sketch line through that point
                 {"sketch": id, "construction": [[x1, y1], [x2, y2]]}
                                                       draw a construction line, use it
+                                                      ("name": n makes it vertical with a
+                                                      dimension "n.x" an edit can change)
                 {"sketch": id, "axis": "H" | "V"}     the sketch's own axis
                 {"edge": selector}                    a straight edge of the part
       type      angle (default) | full
@@ -76,7 +78,19 @@ def _axis(builder, step):
         return (sketch, {"H": "H_Axis", "V": "V_Axis"}[spec["axis"]])
     if "construction" in spec:
         (x1, y1), (x2, y2) = spec["construction"]
-        sketch.addGeometry(Part.LineSegment(App.Vector(x1, y1, 0), App.Vector(x2, y2, 0)), True)
+        geo = sketch.addGeometry(
+            Part.LineSegment(App.Vector(x1, y1, 0), App.Vector(x2, y2, 0)), True
+        )
+        if "name" in spec:  # a vertical line dimensioned from the origin: "<name>.x"
+            import Sketcher
+
+            if abs(x1 - x2) > 1e-9:
+                raise BuildError(
+                    "sf_revolve %r: a named construction line is vertical" % step["id"]
+                )
+            sketch.addConstraint(Sketcher.Constraint("Vertical", geo))
+            index = sketch.addConstraint(Sketcher.Constraint("DistanceX", -1, 1, geo, 1, x1))
+            sketch.renameConstraint(index, spec["name"] + ".x")
         builder.doc.recompute()
         name = revolve.construction_lines(sketch)[-1][0]
         return (sketch, name)

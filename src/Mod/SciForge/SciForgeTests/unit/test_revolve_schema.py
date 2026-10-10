@@ -43,6 +43,7 @@ class RevolveSchemaTests(unittest.TestCase):
             "X",
             {"sketch": "s1", "at": [10, 5]},
             {"sketch": "s1", "construction": [[30, 0], [30, 10]]},
+            {"sketch": "s1", "construction": [[30, 0], [30, 10]], "name": "c"},
             {"sketch": "s1", "axis": "V"},
             {"edge": {"type": "line", "count": 1}},
         ):
@@ -57,6 +58,8 @@ class RevolveSchemaTests(unittest.TestCase):
             {"sketch": "s1", "axis": "Q"},
             {"sketch": "s1", "construction": [[0, 0]]},
             {"edge": {}, "sketch": "s1"},
+            {"sketch": "s1", "at": [0, 0], "name": "c"},
+            {"sketch": "s1", "construction": [[30, 0], [30, 10]], "name": 3},
             5,
         ):
             with self.assertRaises(schema.ModelError, msg=str(axis)):

@@ -1,0 +1,102 @@
+{
+  "id": "sf_revolve_construction_follows",
+  "title": "Revolve dialog: a new body follows when the construction line it turns about moves",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "new-body",
+    "construction-line",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            60,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s2",
+      "axis": {
+        "sketch": "s2",
+        "construction": [
+          [
+            70,
+            -5
+          ],
+          [
+            70,
+            15
+          ]
+        ],
+        "name": "c"
+      },
+      "type": "full",
+      "operation": "new_body"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 4712.38898038469,
+        "source": "analytic",
+        "note": "washer r10..20 h5 about x = 70"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "s2",
+      "constraint": "c.x",
+      "value": 80
+    }
+  ],
+  "expect": {
+    "volume": 7853.981633974482,
+    "area": 4712.38898038469,
+    "faces": 4,
+    "solids": 1,
+    "bbox": [
+      50,
+      -30,
+      0,
+      110,
+      30,
+      5
+    ],
+    "source": "analytic",
+    "note": "The construction line belongs to the first body's sketch; the new body's revolve reads it through SciForge's axis link, so moving it to x = 80 turns the washer into r 20..30: V = pi(30^2-20^2)*5 = 2500 pi; A = 2*500 pi + 2 pi 30*5 + 2 pi 20*5; bbox x 80-30 .. 80+30."
+  }
+}

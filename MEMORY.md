@@ -113,7 +113,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Type Angle / Full; One Side / Two Sides / Symmetric (per side, like Fusion's API); blue
       handle(s) dragged round the axis; Join / Cut / Intersect / New Body with auto Cut when
       the revolve goes mostly into material (Revolution <-> Groove swap); timeline edit;
-      the interim "Revolve (Cut)" ribbon entry removed. 3 scenarios (`revolve_*.py`), 11
+      the interim "Revolve (Cut)" ribbon entry removed. 3 scenarios (`revolve_*.py`), 12
       golden models (`sf_revolve_*`, ops `sf_revolve` / `sf_revolve_edit`). Gap: Type "To".
 
 ## Known issues / findings
@@ -349,10 +349,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `revolve_axes` (sketch line axis, Join/Intersect/New Body, face + edge selected first,
   auto Cut by direction, edit, undo/redo, construction line, angle error kept in the
   dialog), `revolve_edit` (a FreeCAD-made revolve edited, side-two handle, Esc in an edit,
-  two profiles toggled, axis cleared and re-picked). 11 golden models `sf_revolve_*`
+  two profiles toggled, axis cleared and re-picked). 12 golden models `sf_revolve_*`
   (cylinder, cone, torus, groove auto-cut, intersect, new body about a construction line,
-  two sides, symmetric, sketch line axis, face + edge, edit Groove <-> Revolution), schema
-  unit tests `test_revolve_schema.py`.
+  the same following the line when it is moved, two sides, symmetric, sketch line axis,
+  face + edge, edit Groove <-> Revolution), schema unit tests `test_revolve_schema.py`.
 - Gap: Fusion's Type "To" (FreeCAD's Groove up to a face gives an empty solid, see Known
   issues). Not checked by Luca yet.
 
