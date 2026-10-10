@@ -82,6 +82,7 @@ DEFAULTS = {
     "angle": 360.0,
     # mirror
     "plane": None,
+    "operation": "new_body",  # Mirror of a body: "new_body" or "join"
     # pattern on path
     "path": None,
     "orientation": "identical",  # or "path": copies turn with the path
@@ -472,6 +473,11 @@ def build(kind, options, feature=None, name=None):
     object when the change needs the other kind of feature: FreeCAD's or SciForge's)."""
     options = with_defaults(options)
     check(kind, options)
+    if makes_bodies(kind, options):
+        return _build_body_copies(kind, options, feature, name)
+    if feature is not None and is_body_pattern(feature):
+        remove(feature)  # the copies were new bodies; now they join the body
+        feature = None
     impl = implementation(kind, options)
     body = target_body(options)
     if body is None:
@@ -564,6 +570,9 @@ def show_tip(body):
 def remove(feature):
     """Take a pattern out again (a dialog's preview that is cancelled or dropped)."""
     if not alive(feature):
+        return
+    if is_body_pattern(feature):
+        _remove_body_copies(feature)
         return
     body = owner_body(feature)
     was_tip = body is not None and body.Tip is feature
@@ -1324,10 +1333,14 @@ def read(feature):
     if kind is None:
         raise PatternError("%s is not a pattern." % feature.Label)
     meta = load_meta(feature)
-    if feature.TypeId == ENGINE:
+    if is_body_pattern(feature):
+        options = read_body_pattern(feature)
+    elif feature.TypeId == ENGINE:
         options = read_engine(feature)
     else:
         options = _read_native(feature, kind, meta)
+        if kind == "mirror" and options["pattern_type"] == "bodies":
+            options["operation"] = "join"
     options["expressions"] = {
         k: v for k, v in (meta.get("expressions") or {}).items() if _still_formula(feature, k)
     }
@@ -1488,3 +1501,328 @@ def _on_shell(shape, point):
 def instance_offsets(kind, options):
     """Body-coordinate offsets of every instance (for drawing markers and tests)."""
     return placements(kind, with_defaults(options))
+
+
+# -- Bodies: the copies are new bodies (Fusion) ------------------------------------------------------
+# A pattern of a body (or a mirror with Operation New Body) makes one new body per copy, like
+# Fusion. The pattern itself is a top-level SciForge feature (the timeline step) that knows the
+# source body and the pattern's values; every copy is a small feature (BodyCopyFeature) that a
+# new PartDesign body takes as its base feature, so the copies follow the source body and the
+# pattern when either changes, and more features can be added to each copy's body.
+COPY = "Part::FeaturePython"
+BODY_PROPS = (
+    ("Direction", "direction", ("rectangular",)),
+    ("Direction2", "direction2", ("rectangular",)),
+    ("Axis", "axis", ("circular",)),
+    ("MirrorPlane", "plane", ("mirror",)),
+    ("Path", "path", ("path",)),
+)
+BODY_ENUMS = (
+    ("Distribution", "distribution"),
+    ("DirectionType", "direction_type"),
+    ("DirectionType2", "direction_type2"),
+    ("CircularType", "circular_type"),
+    ("Orientation", "orientation"),
+)
+
+
+def makes_bodies(kind, options):
+    if options["pattern_type"] != "bodies":
+        return False
+    return kind != "mirror" or options.get("operation", "new_body") == "new_body"
+
+
+def is_body_pattern(obj):
+    return (
+        obj is not None
+        and obj.TypeId == COPY
+        and kind_of(obj) is not None
+        and isinstance(getattr(obj, "Proxy", None), BodyPatternFeature)
+    )
+
+
+def is_body_copy(obj):
+    return obj is not None and isinstance(getattr(obj, "Proxy", None), BodyCopyFeature)
+
+
+def feature_body(feature):
+    """The body a pattern works on (for a pattern of bodies: the body it copies)."""
+    if is_body_pattern(feature):
+        return feature.Source
+    return owner_body(feature)
+
+
+def base_of(feature):
+    """The step a pattern builds on (for a pattern of bodies: the end of the copied body)."""
+    if is_body_pattern(feature):
+        source = feature.Source
+        return source.Tip if source is not None else None
+    return getattr(feature, "BaseFeature", None)
+
+
+class BodyPatternFeature:
+    """The step of a pattern of bodies. Saved as "sciforge.pattern.BodyPatternFeature"."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        def add(kind, name, doc):
+            if name not in obj.PropertiesList:
+                obj.addProperty(kind, name, "Pattern", doc)
+                return True
+            return False
+
+        for prop, _key in BODY_ENUMS:
+            if add("App::PropertyEnumeration", prop, "Dialog choice (Fusion's field)"):
+                setattr(obj, prop, ENUMS[prop])
+        # Global links: the references sit inside the copied body, this feature outside it.
+        add("App::PropertyLinkGlobal", "Source", "The body that is copied")
+        for prop, _key, _kinds in BODY_PROPS:
+            add("App::PropertyLinkSubGlobal", prop, prop)
+        if add("App::PropertyInteger", "Quantity", "Instances (the original included)"):
+            obj.Quantity = 2
+        if add("App::PropertyInteger", "Quantity2", "Instances in direction 2"):
+            obj.Quantity2 = 1
+        add("App::PropertyDistance", "Distance", "Distance (extent or spacing)")
+        add("App::PropertyDistance", "Distance2", "Distance in direction 2")
+        if add("App::PropertyAngle", "Angle", "Total angle of a circular pattern"):
+            obj.Angle = 360.0
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        source = obj.Source
+        if source is None or source.Shape.isNull() or not source.Shape.Solids:
+            raise PatternError("The body to copy has no solid.")
+        copies = body_copy_shapes(obj)
+        obj.Shape = Part.makeCompound(copies) if copies else Part.Shape()
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+class BodyCopyFeature:
+    """One copy of a pattern of bodies: the base feature of a new body.
+    Saved as "sciforge.pattern.BodyCopyFeature"."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        if "Pattern" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyLink", "Pattern", "Pattern", "The pattern")
+        if "Index" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyInteger", "Index", "Pattern", "Which copy")
+        _hide_from_timeline(obj)
+
+    def execute(self, obj):
+        definition = obj.Pattern
+        if definition is None:
+            raise PatternError("This copy has lost its pattern.")
+        copies = body_copy_shapes(definition)
+        if obj.Index >= len(copies):
+            raise PatternError("The pattern has fewer copies now.")
+        obj.Shape = copies[obj.Index]
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _hide_from_timeline(obj):
+    if "SciForgeTimeline" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyBool", "SciForgeTimeline", "Base", "", 4)
+    obj.SciForgeTimeline = False
+
+
+def read_body_pattern(obj):
+    options = with_defaults({})
+    options["pattern_type"] = "bodies"
+    options["operation"] = "new_body"
+    for prop, key in BODY_ENUMS:
+        options[key] = _enum_get(obj, prop)
+    for prop, key, _kinds in BODY_PROPS:
+        link = getattr(obj, prop)
+        options[key] = (link[0], (list(link[1]) or [""])[0]) if link else None
+    options["quantity"] = int(obj.Quantity)
+    options["quantity2"] = int(obj.Quantity2)
+    options["distance"] = obj.Distance.Value
+    options["distance2"] = obj.Distance2.Value
+    options["angle"] = obj.Angle.Value
+    options["objects"] = [(obj.Source, "")] if obj.Source is not None else []
+    return options
+
+
+def body_copy_shapes(definition):
+    """The copies of a pattern of bodies, in global coordinates (the original not included)."""
+    kind = kind_of(definition)
+    options = read_body_pattern(definition)
+    source = definition.Source
+    shape = _baked(source.Shape)  # global: the body's placement is included
+    place = source.getGlobalPlacement()
+    local = shape.copy()
+    local.transformShape(place.inverse().toMatrix(), True)
+    moves = placements(kind, options, [(local, "add")])
+    copies = []
+    for move in moves:
+        if isinstance(move, tuple):
+            _tag, point, normal = move
+            copies.append(shape.mirror(place.multVec(point), place.Rotation.multVec(normal)))
+        else:
+            whole = place.multiply(move).multiply(place.inverse())
+            copy = shape.copy()
+            copy.transformShape(whole.toMatrix(), True)
+            copies.append(copy)
+    return copies
+
+
+def _baked(shape):
+    """A copy of `shape` with its placement built into the geometry: a body takes the shape of
+    its base feature without the placement (the copy landed on top of the original)."""
+    place = shape.Placement
+    out = shape.copy()
+    if not place.isIdentity():
+        out.Placement = App.Placement()
+        out.transformShape(place.toMatrix(), True)
+    return out
+
+
+def _copies_of(definition):
+    found = [o for o in definition.InList if is_body_copy(o)]
+    return sorted(found, key=lambda o: o.Index)
+
+
+def _body_of_copy(copy):
+    for obj in copy.InList:
+        if obj.TypeId == "PartDesign::Body" and obj.BaseFeature is copy:
+            return obj
+    return None
+
+
+def _set_body_props(obj, kind, options):
+    source = _bodies(options)[0]
+    if obj.Source is not source:
+        obj.Source = source
+    for prop, key, kinds in BODY_PROPS:
+        _set_link(obj, prop, options[key] if kind in kinds else None)
+    for prop, key in BODY_ENUMS:
+        _enum_set(obj, prop, options[key])
+    _set(obj, "Quantity", max(1, int(options["quantity"])))
+    _set(obj, "Quantity2", max(1, int(options["quantity2"])))
+    for prop, key in (("Distance", "distance"), ("Distance2", "distance2"), ("Angle", "angle")):
+        _set(obj, prop, float(options[key]))
+        _expr(obj, prop, _formula(options, key, obj.Document))
+
+
+def _build_body_copies(kind, options, feature, name=None):
+    source = _bodies(options)[0]
+    doc = source.Document
+    label = None
+    if feature is not None and alive(feature):
+        if not (is_body_pattern(feature) and kind_of(feature) == kind):
+            label = feature.Label
+            remove(feature)
+            feature = None
+    else:
+        feature = None
+    if feature is None:
+        feature = doc.addObject(COPY, name or TITLES[kind].replace(" ", ""))
+        BodyPatternFeature(feature)
+        _mark(feature, kind)
+        if label:
+            feature.Label = label
+        if App.GuiUp:
+            try:
+                from .pattern_ui import ViewProviderPattern
+
+                ViewProviderPattern(feature.ViewObject)
+                feature.ViewObject.Visibility = False
+            except Exception:
+                pass
+    _set_body_props(feature, kind, options)
+    _save_meta(
+        feature,
+        {
+            "v": 1,
+            "kind": kind,
+            "pattern_type": "bodies",
+            "operation": "new_body",
+            "expressions": {k: v for k, v in options["expressions"].items() if v},
+        },
+    )
+    count = len(body_copy_shapes(feature))
+    copies = _copies_of(feature)
+    for copy in copies[count:]:
+        _remove_copy(copy)
+    for index in range(len(copies), count):
+        _new_copy(feature, index, source)
+    return feature
+
+
+def _new_copy(definition, index, source):
+    doc = definition.Document
+    copy = doc.addObject(COPY, "BodyCopy")
+    BodyCopyFeature(copy)
+    copy.Pattern = definition
+    copy.Index = index
+    body = doc.addObject("PartDesign::Body", "Body")
+    container = source.getParentGeoFeatureGroup()
+    if container is not None and hasattr(container, "addObject"):
+        container.addObject(body)
+    count = len([o for o in doc.Objects if o.TypeId == "PartDesign::Body"])
+    body.Label = "Body%d" % count
+    body.BaseFeature = copy
+    for obj in body.Group:
+        if obj.TypeId == "PartDesign::FeatureBase":
+            _hide_from_timeline(obj)  # the copy belongs to the pattern's step
+    if App.GuiUp:
+        try:
+            copy.ViewObject.Visibility = False
+        except Exception:
+            pass
+    return body
+
+
+def _remove_copy(copy):
+    doc = copy.Document
+    body = _body_of_copy(copy)
+    if body is not None:
+        try:
+            body.removeObjectsFromDocument()
+        except Exception:
+            pass
+        try:
+            doc.removeObject(body.Name)
+        except Exception:
+            pass
+    try:
+        doc.removeObject(copy.Name)
+    except Exception:
+        pass
+
+
+def _remove_body_copies(definition):
+    for copy in _copies_of(definition):
+        _remove_copy(copy)
+    try:
+        definition.Document.removeObject(definition.Name)
+    except Exception:
+        pass
+
+
+def copy_bodies(definition):
+    """The new bodies a pattern of bodies made, in order."""
+    return [b for b in (_body_of_copy(c) for c in _copies_of(definition)) if b is not None]

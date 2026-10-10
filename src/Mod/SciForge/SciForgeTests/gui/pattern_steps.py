@@ -203,3 +203,55 @@ def make_cut(name, at, r, depth=10.0, click=None):
     for step in steps:
         step.__name__ = "%s_%s" % (name, step.__name__)
     return steps
+
+
+def make_boss(name, at, r, height, click, top=10.0):
+    """Steps: Create Sketch on the top face (clicked at `click`), a circle, Finish Sketch, E,
+    the height, OK: a round boss on the top."""
+    state = {}
+
+    def sketch_on_top():
+        h.fit()
+        h.ribbon("Create Sketch")
+
+    def click_top():
+        h.click(click)
+
+    def draw_circle():
+        sk = h.in_sketch()
+        h.check("sketch open on the top face", sk is not None)
+        if sk is not None:
+            x, y = h.to_sketch(sk, V(at[0], at[1], top))
+            h.draw_circle(sk, x, y, r)
+
+    def finish():
+        h.ribbon("Finish Sketch")
+
+    def extrude():
+        state["v"] = h.solid_volume()
+        h.fit()
+        h.press("e")
+
+    def distance():
+        p = b.active_panel()
+        field = getattr(getattr(p, "distance", None), "widget", None)
+        if field is not None:
+            b.type_into(field, "%g" % height)
+
+    def ok():
+        h.task_button("OK")
+
+    def boss_made():
+        v = h.solid_volume()
+        expect = state["v"] + math.pi * r * r * height
+        h.check("boss r %g x %g at %s" % (r, height, at), close(v, expect), (v, expect))
+        h.fit()
+
+    steps = [sketch_on_top, click_top, draw_circle, finish, extrude, distance, ok, boss_made]
+    for step in steps:
+        step.__name__ = "%s_%s" % (name, step.__name__)
+    return steps
+
+
+def bodies():
+    return App.ActiveDocument.findObjects("PartDesign::Body")

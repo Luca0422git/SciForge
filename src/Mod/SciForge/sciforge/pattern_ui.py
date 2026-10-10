@@ -39,6 +39,7 @@ DISTRIBUTIONS = [("Extent", "extent"), ("Spacing", "spacing")]
 DIRECTION_TYPES = [("One Direction", "one"), ("Symmetric", "symmetric")]
 CIRCULAR_TYPES = [("Full", "full"), ("Angle", "angle"), ("Symmetric", "symmetric")]
 ORIENTATIONS = [("Identical", "identical"), ("Path Direction", "path")]
+OPERATIONS = [("Join", "join"), ("New Body", "new_body")]
 COMPUTE = [("Identical", "identical"), ("Optimized", "optimized"), ("Adjust", "adjust")]
 AXES = ("X_Axis", "Y_Axis", "Z_Axis")
 AXIS_COLORS = {
@@ -317,6 +318,78 @@ class AxisPicker:
             pass
 
 
+def _part_depth(view, position):
+    """Distance along the mouse ray to the part under the mouse, or None."""
+    try:
+        info = view.getObjectInfo(tuple(position))
+    except Exception:
+        return None
+    if not info or not str(info.get("Component", "")).startswith(("Face", "Edge", "Vertex")):
+        return None
+    origin, direction = profile_pick.mouse_ray(view, position)
+    return (App.Vector(info["x"], info["y"], info["z"]) - origin).dot(direction)
+
+
+def front_planes():
+    """sketch_ui.PlanePicker (the three big origin squares) that also takes a click on a
+    square in front of the part, like Fusion (the original leaves any click over the part to
+    the part, which suits Create Sketch but made the Mirror Plane unpickable from most
+    views). Made on demand: sketch_ui is imported only when the box waits."""
+    from .sketch_ui import PlanePicker
+
+    class FrontPlanePicker(PlanePicker):
+        def front_plane_at(self, position):
+            best = None
+            for role in self.objects:
+                base, normal, u, v = self._frame(role)
+                hit = profile_pick.ray_plane(self.view, position, base, normal)
+                if hit is None:
+                    continue
+                point, t = hit
+                local = point - base
+                half = self.size / 2.0
+                if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
+                    if best is None or t < best[1]:
+                        best = (role, t)
+            if best is None:
+                return None
+            depth = _part_depth(self.view, position)
+            if depth is not None and depth < best[1]:
+                return None  # the part is in front of the square: the click is the part's
+            return best[0]
+
+        def _moved(self, info):
+            try:
+                role = self.front_plane_at(info["Position"])
+                material = self.materials.get(role)
+                if material is not self.hovered:
+                    from .sketch_ui import HOVER, IDLE
+
+                    for m, look in ((self.hovered, IDLE), (material, HOVER)):
+                        if m is not None:
+                            m.diffuseColor.setValue(*look[0])
+                            m.emissiveColor.setValue(*[c * 0.5 for c in look[0]])
+                            m.transparency.setValue(look[1])
+                    self.hovered = material
+            except Exception as exc:
+                warn("plane hover: %s" % exc)
+
+        def _button(self, info):
+            try:
+                if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
+                    return
+                position = tuple(info["Position"])
+                if profile_pick.handle_at(self.view, position):
+                    return
+                role = self.front_plane_at(position)
+                if role is not None:
+                    self.on_pick(self.objects[role])
+            except Exception as exc:
+                warn("plane pick: %s" % exc)
+
+    return FrontPlanePicker
+
+
 class ViewProviderPattern:
     """View provider of SciForge's own pattern feature (pattern.PatternFeature)."""
 
@@ -393,8 +466,8 @@ class PatternPanel(Panel):
         self.view = Gui.ActiveDocument.ActiveView
         self.options = pattern.with_defaults({"quantity": 3 if self.kind == "circular" else 2})
         if feature is not None:
-            self.body = pattern.owner_body(feature)
-            self.base = feature.BaseFeature
+            self.body = pattern.feature_body(feature)
+            self.base = pattern.base_of(feature)
             try:
                 _kind, read = pattern.read(feature)
                 self.options.update(read)
@@ -553,13 +626,23 @@ class PatternPanel(Panel):
                 box.currentIndexChanged.connect(self._typed)
         elif self.kind == "mirror":
             self._selection("plane", "Select", "Mirror Plane")
+            self.operation = _combo(OPERATIONS, self.options["operation"])
+            self.operation_label = QtWidgets.QLabel("Operation")
+            form.addRow(self.operation_label, self.operation)
+            self.operation.currentIndexChanged.connect(self._typed)
 
     def _show_options(self):
         """Put self.options into the widgets (without reacting)."""
         self._quiet = True
         try:
             common.set_combo(self.pattern_type, self.options["pattern_type"])
-            for name in ("distribution", "direction_type", "direction_type2", "orientation"):
+            for name in (
+                "distribution",
+                "direction_type",
+                "direction_type2",
+                "orientation",
+                "operation",
+            ):
                 box = getattr(self, name, None)
                 if box is not None:
                     common.set_combo(box, self.options[name])
@@ -585,11 +668,21 @@ class PatternPanel(Panel):
             full = self.circular_type.currentData() == "full"
             self.angle_field.widget.setVisible(not full)
             self.angle_label.setVisible(not full)
+        if self.kind == "mirror":
+            bodies = self.options["pattern_type"] == "bodies"
+            self.operation.setVisible(bodies)
+            self.operation_label.setVisible(bodies)
 
     def _collect(self):
         options = self.options
         options["pattern_type"] = self.pattern_type.currentData()
-        for name in ("distribution", "direction_type", "direction_type2", "orientation"):
+        for name in (
+            "distribution",
+            "direction_type",
+            "direction_type2",
+            "orientation",
+            "operation",
+        ):
             box = getattr(self, name, None)
             if box is not None:
                 options[name] = box.currentData()
@@ -674,9 +767,7 @@ class PatternPanel(Panel):
             self.axis_picker = None
         if wants_planes and self.plane_picker is None and self.body is not None:
             try:
-                from .sketch_ui import PlanePicker
-
-                self.plane_picker = PlanePicker(self.view, self.body, self._plane_clicked)
+                self.plane_picker = front_planes()(self.view, self.body, self._plane_clicked)
             except Exception as exc:
                 warn("%s: origin planes unavailable: %s" % (self.title, exc))
         elif not wants_planes and self.plane_picker is not None:
@@ -782,7 +873,9 @@ class PatternPanel(Panel):
             return "Click the features to repeat in the timeline (or a face they made)."
         if ptype == "faces":
             return "Click the faces to repeat: every face of a hole, a pocket or a boss."
-        return "Click the body to repeat."
+        if self.kind == "mirror":
+            return "Click the body to mirror (on the part, or in the browser)."
+        return "Click the body to repeat: each copy becomes a new body."
 
     # -- watching clicks ----------------------------------------------------------------------------
     def _watch(self):
@@ -1232,7 +1325,8 @@ class PatternPanel(Panel):
         count = len(objects)
         self.fields["objects"].set_text("%d selected" % count if count else "")
         names = []
-        titles = self._titles() if objects else {}
+        refs = [self.options.get(n) for n in ("direction", "direction2", "axis", "plane", "path")]
+        titles = self._titles() if objects or any(refs) else {}
         for obj, sub in objects:
             title = titles.get(obj.Name, obj.Label)
             text = title if not sub else "%s of %s" % (sub.rstrip("0123456789"), title)
@@ -1241,8 +1335,19 @@ class PatternPanel(Panel):
         self.objects_label.setText(", ".join(names[:6]) + (" ..." if len(names) > 6 else ""))
         for name in ("direction", "direction2", "axis", "plane", "path"):
             if name in self.fields:
-                self.fields[name].set_text(pattern.ref_label(self.options.get(name)))
+                self.fields[name].set_text(self._ref_text(self.options.get(name), titles))
         self._show_marks()
+
+    @staticmethod
+    def _ref_text(ref, titles):
+        """A picked reference as the user knows it: "X Axis", "Edge of Extrude 1"."""
+        text = pattern.ref_label(ref)
+        if not ref or not ref[1] or not pattern.alive(ref[0]):
+            return text
+        title = titles.get(ref[0].Name)
+        if title:
+            return "%s of %s" % (ref[1].rstrip("0123456789") or ref[1], title)
+        return text
 
     def _titles(self):
         """{object name: its title in the timeline} ("Extrude 2"), as the user knows them."""
@@ -1259,7 +1364,11 @@ class PatternPanel(Panel):
             return
         faces, lines = [], []
         try:
-            for obj, sub in self.options["objects"]:
+            picked = list(self.options["objects"])
+            plane = self.options.get("plane")
+            if plane is not None and plane[1].startswith("Face"):
+                picked.append(plane)  # a flat face picked as the mirror plane is shown too
+            for obj, sub in picked:
                 if sub.startswith("Face"):
                     face = profile_pick.global_face(obj, sub)
                     if face is not None:
