@@ -1,0 +1,61 @@
+{
+  "id": "sf_shell_outside_rounded",
+  "title": "Box, Shell Outside 1 mm (top taken away), Shell Type Rounded",
+  "tags": [
+    "shell",
+    "sciforge-shell"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "direction": "outside",
+      "outside": 1,
+      "shell_type": "rounded"
+    }
+  ],
+  "expect": {
+    "volume": 2743.466064514,
+    "faces": 23,
+    "bbox": [
+      -1,
+      -1,
+      -1,
+      41,
+      31,
+      10
+    ],
+    "source": "analytic",
+    "note": "slabs ab*r + 2(a+b)c*r = 1200 + 1400; quarter rounds pi r^2/4 along the 4 bottom edges (140) and 4 upright edges (40); 4 ball corners (1/8 sphere each) = 2600 + (35 + 10 + 2/3) pi; faces: bottom, 4 sides, 8 rounds, 4 corners, rim, 5 inside"
+  }
+}

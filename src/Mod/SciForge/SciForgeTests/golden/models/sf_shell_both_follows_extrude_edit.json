@@ -1,0 +1,77 @@
+{
+  "id": "sf_shell_both_follows_extrude_edit",
+  "title": "Shell Both on the top face, then the extrude edited 10 -> 20",
+  "tags": [
+    "shell",
+    "sciforge-shell",
+    "reference-stability",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "direction": "both",
+      "inside": 2,
+      "outside": 1
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 7296,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "distance": 20
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11376,
+    "faces": 11,
+    "bbox": [
+      -1,
+      -1,
+      -1,
+      41,
+      31,
+      20
+    ],
+    "source": "analytic",
+    "note": "the shell keeps taking away the (moved) top face: V = 42*32*21 - 36*26*18"
+  }
+}

@@ -111,7 +111,7 @@ SOLID_MODIFY = group(
         SEP,
         item("Shell", ("SciForge_Shell", "PartDesign_Thickness"), "shell"),
         item("Draft", ("SciForge_Draft", "PartDesign_Draft"), "draft"),
-        item("Scale", None, "scale"),
+        item("Scale", "SciForge_Scale", "scale"),
         item("Combine", ("SciForge_Combine", "PartDesign_Boolean"), "combine"),
         item("Offset Face", "SciForge_PressPull", "offset_face"),
         item("Replace Face", None, "replace_face"),

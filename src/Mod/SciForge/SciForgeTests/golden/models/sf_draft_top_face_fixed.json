@@ -1,0 +1,98 @@
+{
+  "id": "sf_draft_top_face_fixed",
+  "title": "Box, Draft: the top face is the fixed plane (pull up), the 4 sides 5 degrees",
+  "tags": [
+    "draft",
+    "sciforge-draft"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "faces": {
+        "any_of": [
+          {
+            "normal": [
+              1,
+              0,
+              0
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              -1,
+              0,
+              0
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              0,
+              1,
+              0
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              0,
+              -1,
+              0
+            ],
+            "count": 1
+          }
+        ],
+        "count": 4
+      },
+      "angle": 5
+    }
+  ],
+  "expect": {
+    "volume": 12622.626333009,
+    "faces": 6,
+    "bbox": [
+      -0.874886635,
+      -0.874886635,
+      0,
+      40.874886635,
+      30.874886635,
+      10
+    ],
+    "source": "analytic",
+    "note": "pivot at the top, narrower toward the top = wider toward the bottom: A(z) = (40 + 2 (10 - z) tan5)(30 + 2 (10 - z) tan5), same prismatoid formula"
+  }
+}

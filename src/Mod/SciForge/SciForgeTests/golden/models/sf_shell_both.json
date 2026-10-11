@@ -1,0 +1,61 @@
+{
+  "id": "sf_shell_both",
+  "title": "Box, Shell Both: 2 mm inside, 1 mm outside (top taken away)",
+  "tags": [
+    "shell",
+    "sciforge-shell"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "direction": "both",
+      "inside": 2,
+      "outside": 1
+    }
+  ],
+  "expect": {
+    "volume": 7296,
+    "faces": 11,
+    "bbox": [
+      -1,
+      -1,
+      -1,
+      41,
+      31,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 42*32*11 - 36*26*8: wall from 2 mm in to 1 mm out of the box surface"
+  }
+}

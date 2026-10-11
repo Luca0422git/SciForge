@@ -1,0 +1,55 @@
+{
+  "id": "sf_shell_hollow_both",
+  "title": "Box, Shell on the body, Both: 2 mm inside, 1 mm outside",
+  "tags": [
+    "shell",
+    "sciforge-shell",
+    "hollow"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "body": true,
+      "direction": "both",
+      "inside": 2,
+      "outside": 1
+    }
+  ],
+  "expect": {
+    "volume": 10512,
+    "faces": 12,
+    "bbox": [
+      -1,
+      -1,
+      -1,
+      41,
+      31,
+      11
+    ],
+    "source": "analytic",
+    "note": "V = 42*32*12 - 36*26*6"
+  }
+}

@@ -149,6 +149,18 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Spec + gaps: `docs/sciforge/parity/patterns.md`. 6 scenarios (`patterns*.py`), 16 golden
       models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
       `SciForge_PatternOnPath` (was greyed).
+- [x] Fusion-style Shell, Draft, Scale (branch `sf/shell_draft`; spec + gaps in
+      `docs/sciforge/parity/shell-draft-scale.md`). Shell (`shelling.py` / `shell_ui.py`):
+      faces to take away or the body (hollow), Inside / Outside Thickness, Direction Inside /
+      Outside / Both, Shell Type Sharp / Rounded, Tangent Chain, blue arrows, too-thick walls
+      explained with the thickest that fits; FreeCAD's Thickness where it can, SciForge's
+      `ShellFeature` for hollow/Both (swapped in place). Draft (`drafting.py` / `draft_ui.py`):
+      Fixed Plane (origin squares or a flat face), pull arrow + Flip, faces, Tangent Chain,
+      angle field + curved handle, on FreeCAD's Draft. Scale (`scale.py` / `scale_ui.py`):
+      SciForge's `ScaleFeature` in the body, Uniform / Non Uniform about the origin or a
+      corner, arrows that move with the part. Shared dialog base `pickpanel.py`. Ribbon: Scale
+      now runs `SciForge_Scale` (was greyed). 6 scenarios (`shell_draft*.py`), 20 golden models
+      (`sf_shell_*`, `sf_draft_*`, `sf_scale_*`), unit tests `test_shell_draft_core.py`.
 
 ## Known issues / findings
 
@@ -476,6 +488,35 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - Not fixed (extrude owner): while rolled back before a fillet, Extrude cannot switch to
     Cut ("... is used by Fillet": `extrude.dependents()` counts the fillet's `Base`, which only
     follows the history chain; skip it when it is the `BaseFeature`).
+- **Shell / Draft / Scale findings (branch `sf/shell_draft`)**:
+  - FreeCAD's `PartDesign::Thickness` with no faces just copies the part (it cannot hollow a
+    closed body) and has one thickness (no Both): SciForge's `ShellFeature` does those
+    (offset inward + cut; two thick solids fused). Join "Intersection" = Fusion's sharp
+    corners, "Arc" = rounded.
+  - **OpenCASCADE's thick solid gives wrong parts without complaint** when the wall is too
+    thick: the plain solid back (box 10 high, wall 16), or an invalid solid sticking out of
+    the part (wall 20). `shelling._check` refuses those (valid, one solid, inside the part's
+    box, something hollowed) and the dialog bisects for the thickest wall that fits.
+  - `PartDesign::Draft` pulls along the neutral plane's own axis (a box's bottom face has axis
+    +Z, not its outward -Z) and passes `Reversed` on as "retry": a face it cannot tilt is
+    skipped with only a Report-view line, and many failures have an empty status string; a
+    new Draft that fails has a null Shape (`isValid()` raises). `drafting.check` /
+    `undrafted` catch these. Fusion's pull direction is out of a picked face.
+  - `Shape.transformShape(matrix)` silently ignores a non-uniform scale; `transformGeometry`
+    does it but turns faces into NURBS: exact (ellipse error 1e-15), yet FreeCAD's volume of
+    curved NURBS faces is ~1 % off. A sketch still attaches to a flat NURBS face.
+  - FreeCAD's naming loses a Pad's corner vertex when the Pad's length changes (the link
+    becomes `?Vertex6`, "missing element reference" in the log); SciForge uses the same
+    number then (`scale.plain_name`).
+  - **A selection gate also filters `Gui.Selection.addSelection` from code**: a dialog that
+    re-selects its own picks must allow them in its gate, or (pickpanel) read back what was
+    really selected; otherwise the next click looked like "that pick was clicked away".
+  - **FreeCAD's task box takes its height when it opens and does not grow** when a label's
+    minimum height is raised later: a 3-line error was cut off. `pickpanel` reserves room
+    for the message at layout time (the Fillet dialog has the same cut-off for its hint).
+  - Draggers inside a see-through part cannot be grabbed (Coin gives the click to the part's
+    face in front): the Draft handle sits on the face's continuation outside the part, the
+    Scale arrow keeps a gap from the corner it sits on (the corner stays clickable).
 
 ## Questions waiting for Luca
 
@@ -556,6 +597,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   session it can resume with resumeFromRunId "wf_4a2277cc-81f". (The fillet build agent never
   returned a report; its committed branch was merged as is.)
 - ribbon_sweep KNOWN list: only "Shell" left (shell_draft fixes it); remove when fixed.
+  (Done on `sf/shell_draft`: the list is empty.)
 
 ### 2026-10-10: Hole and Thread (branch `sf/hole`)
 - Continued the parked WIP patch (applied, reviewed, mostly rewritten; patch removed). New:
@@ -664,6 +706,29 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   (shared smoke test).
 - Trap: the timeline's height sets the 3D view's size; 8 px more moved where a scenario's
   click lands (sketch_polygon's snap) - keep the dock height.
+### 2026-10-11: Shell, Draft, Scale (branch `sf/shell_draft`)
+- Built Fusion's Shell, Draft and Scale (see the Phase 1 checkbox and Known issues). New
+  modules: `shelling.py` / `shell_ui.py`, `drafting.py` / `draft_ui.py`, `scale.py` /
+  `scale_ui.py`, shared dialog base `pickpanel.py` (picking with toggling clicks, see-through
+  "before" part + solid preview, Esc/Enter/Ctrl+Z guards, Delete held). Shared edits: one
+  ribbon line (Scale -> `SciForge_Scale`), ribbon_sweep `KNOWN` emptied (Shell fixed),
+  append-only golden ops (`schema.py`, one import line in `builder.py`).
+- Tests (only real input): `shell_draft` (nothing selected, picks/drops, typed value, arrow
+  drag, Both / Outside / Rounded, too thick + hint, OK, undo/redo, timeline edit to Both,
+  Cancel, Esc), `shell_draft_hollow` (body picked in the browser, preselected face + Enter,
+  second shell on the result, Ctrl+Z inside, editing the first of two shells, a parameter
+  formula, save/reopen), `shell_draft_draft` (origin square, faces, handle, flip, refused
+  face, too steep, edit, Cancel, Esc, second draft with a preselected face),
+  `shell_draft_scale` (body click, arrow drag, corner point, Non Uniform, factor 0, edit,
+  Cancel, Esc, preselected body + Enter, save/reopen), `shell_draft_qa` (rounded block:
+  tangent runs, a second body followed by Draft and Shell). 20 golden models, unit tests.
+- Full suite on the branch (no --only): unit 149 OK, golden 134 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 45 scenarios
+  PASS (3847 checks).
+- Gaps: Draft Parting Line / Two Sides / Symmetric (greyed: FreeCAD's Draft cannot split
+  faces), Scale of sketches/components, several bodies in one step, Change Parameters does
+  not list SciForge's own Shell (hollow/Both) and Scale values (`parameters.py` knows only
+  Press Pull among SciForge's features). Not checked by Luca yet.
 
 ## Next steps (in order)
 

@@ -1,0 +1,56 @@
+{
+  "id": "sf_scale_about_corner",
+  "title": "Box scaled 0.5 about its corner (40, 30, 10)",
+  "tags": [
+    "scale",
+    "sciforge-scale"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_scale",
+      "id": "sc1",
+      "factor": 0.5,
+      "point": [
+        40,
+        30,
+        10
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 1500,
+    "faces": 6,
+    "bbox": [
+      20,
+      15,
+      5,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 12000 / 8; corners c -> p + (c - p) / 2"
+  }
+}

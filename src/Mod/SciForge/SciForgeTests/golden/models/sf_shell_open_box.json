@@ -1,0 +1,60 @@
+{
+  "id": "sf_shell_open_box",
+  "title": "Box 40x30x10, Shell: top face taken away, 2 mm inside",
+  "tags": [
+    "shell",
+    "sciforge-shell"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "inside": 2
+    }
+  ],
+  "expect": {
+    "volume": 4512,
+    "faces": 11,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 40*30*10 - 36*26*8; faces: 5 outside + 5 inside + the rim"
+  }
+}

@@ -25,9 +25,7 @@ INTENDED = {
 report = []
 # Known problems that a feature branch is fixing right now: reported, not failed,
 # so the quick update can still be packaged. Remove an entry when it is fixed.
-KNOWN = {
-    "Shell": "FreeCAD's Thickness with nothing selected; Fusion-style Shell (shell_draft) fixes it",
-}
+KNOWN = {}
 
 
 def setup():

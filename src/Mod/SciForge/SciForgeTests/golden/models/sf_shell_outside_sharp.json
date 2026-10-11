@@ -1,0 +1,60 @@
+{
+  "id": "sf_shell_outside_sharp",
+  "title": "Box, Shell Outside 1 mm (top taken away), sharp corners",
+  "tags": [
+    "shell",
+    "sciforge-shell"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "direction": "outside",
+      "outside": 1
+    }
+  ],
+  "expect": {
+    "volume": 2784,
+    "faces": 11,
+    "bbox": [
+      -1,
+      -1,
+      -1,
+      41,
+      31,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 42*32*11 - 40*30*10: the wall wraps the box, which stays empty"
+  }
+}

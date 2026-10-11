@@ -1,0 +1,97 @@
+{
+  "id": "sf_draft_then_shell",
+  "title": "Box, Draft the 4 sides 2 degrees about XY, then Shell 1.5 mm with the top taken away",
+  "tags": [
+    "draft",
+    "shell",
+    "sciforge-draft",
+    "sciforge-shell",
+    "enclosure"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "any_of": [
+          {
+            "normal": [
+              1,
+              0,
+              0
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              -1,
+              0,
+              0
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              0,
+              1,
+              0
+            ],
+            "count": 1
+          },
+          {
+            "normal": [
+              0,
+              -1,
+              0
+            ],
+            "count": 1
+          }
+        ],
+        "count": 4
+      },
+      "angle": 2
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "inside": 1.5
+    }
+  ],
+  "expect": {
+    "volume": 3483.506698845,
+    "faces": 11,
+    "source": "analytic",
+    "note": "outer prismatoid A(z) = (40 - 2z tan2)(30 - 2z tan2); the inside walls are the sides moved 1.5 mm along their tilted normals (1.5 / cos2 across), the floor at z = 1.5: cavity A(z) = (40 - 2z tan2 - 3/cos2)(30 - 2z tan2 - 3/cos2) for z = 1.5 .. 10 (prismatoid)"
+  }
+}

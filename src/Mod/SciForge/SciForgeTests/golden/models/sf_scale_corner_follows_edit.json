@@ -1,0 +1,80 @@
+{
+  "id": "sf_scale_corner_follows_edit",
+  "title": "Box scaled 0.5 about its top corner, then the extrude edited 10 -> 20",
+  "tags": [
+    "scale",
+    "sciforge-scale",
+    "reference-stability",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_scale",
+      "id": "sc1",
+      "factor": 0.5,
+      "point": [
+        40,
+        30,
+        10
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1500,
+        "bbox": [
+          20,
+          15,
+          5,
+          40,
+          30,
+          10
+        ],
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "distance": 20
+      }
+    }
+  ],
+  "expect": {
+    "volume": 3000,
+    "faces": 6,
+    "bbox": [
+      20,
+      15,
+      10,
+      40,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "the scale point is the part's corner, so it moves to (40, 30, 20): V = 24000 / 8, box from (20, 15, 10)"
+  }
+}
