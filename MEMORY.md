@@ -96,7 +96,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - [x] Timeline marker drag + playback; ViewCube colours; 3D Print (3MF/STL) export
 - [ ] Unified Revolve / Hole / Fillet dialogs Fusion-style (FreeCAD's dialogs used meanwhile)
 - [ ] ViewCube shape, doc tabs in the app bar, floating command dialogs (Sketch Palette: done)
-- [ ] Timeline: reorder by drag, suppress, groups (7.3)
+- [x] Timeline: reorder by drag, suppress, groups (7.3); QA pass done (branch
+      `sf/timeline_browser-qa`, 4 QA scenarios, spec `docs/sciforge/parity/timeline-browser.md`)
 - [ ] Sketcher parity (7.5): inference, glyphs, Fusion dimension tool feel (needs captures)
 - [x] Sketch workspace, first parity pass (branch `sf/sketch`): Fusion keys in sketches (L R C D T
       X O P E, Esc / Esc), on-screen dimension box (type the value, Enter; double-click a
@@ -327,6 +328,31 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Python, show the body's Tip again (`revolve._show_tip`), or the body looks empty.
 - Scenario step names must not contain "error"/"failed"/"invalid": the harness reads the
   step's own progress line in the Report view as an error.
+- **Timeline/browser QA findings (branch `sf/timeline_browser-qa`)**, rules for everyone:
+  - `Document.openTransaction` **commits the undo step that is open** (FreeCAD's
+    `setActiveTransaction` commits every document's). Anything that opens an undo step while
+    a command dialog is open (timeline/browser actions, playback) committed the dialog's
+    preview, and Cancel could no longer remove it. End the open command first
+    (`commands.finish_open_dialog()`), or do not change the document.
+  - A step inserted before a fillet/chamfer/shell (marker rolled back) or the step before it
+    deleted: FreeCAD re-links its `Base` to the new base with the old edge names ("Invalid
+    edge link", or silently other edges). `timeline_ops.settle()` (after every recompute,
+    via the timeline's document observer) finds the same edges again by place and size.
+  - A failed PartDesign step keeps its old shape and FreeCAD skips the body, so the 3D view
+    showed geometry that no longer existed after an edit in any dialog; `settle()` passes the
+    base shape through (Fusion: a red step adds nothing).
+  - Setting a sketch's `MapMode` attaches at once and prints "PositionBySupport: subshape not
+    found" (Report view + balloon) when the face is not there yet; the harness's word list
+    misses that line (`timeline_input.MORE_ERRORS` catches it).
+  - A right-click on a timeline step/browser row selected it, and a command waiting for picks
+    (Fillet takes whole features) used it. Right-clicks no longer pick while a command is open.
+  - SciForge helpers (objects with `SciForgeRole`, or `SciForgeTimeline = False`) are not
+    timeline steps; extrude.py's profile binders lacked the flag and showed as steps.
+  - Test input: release a drag with `QTest.mouseRelease` (through the window); a release
+    sent with `sendEvent` left the button "down" and the next click went to the dragged widget.
+  - Not fixed (extrude owner): while rolled back before a fillet, Extrude cannot switch to
+    Cut ("... is used by Fillet": `extrude.dependents()` counts the fillet's `Base`, which only
+    follows the history chain; skip it when it is the `BaseFeature`).
 
 ## Questions waiting for Luca
 
@@ -455,6 +481,24 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   face + edge, edit Groove <-> Revolution), schema unit tests `test_revolve_schema.py`.
 - Gap: Fusion's Type "To" (FreeCAD's Groove up to a face gives an empty solid, see Known
   issues). Not checked by Luca yet.
+
+### 2026-10-11: QA of the timeline and browser (branch `sf/timeline_browser-qa`)
+- 4 new scenarios `timeline_browser_qa*.py` (24 paths, real input only; balloons and the extra
+  Report-view words watched) found and fixed: an edit that broke a later step left the old
+  shape on screen; a step added at the rolled-back marker or deleted before a fillet broke the
+  fillet; editing a step after the marker showed nothing (now rolls to it and back); Play kept
+  rolling under an opened dialog (committed its preview); Unsuppress printed "subshape not
+  found"; suppressed steps showed yellow; Suppress greyed for several steps; the marker could
+  not stand before a sketch (now saved in the document) and sketches after it stayed drawn;
+  step numbers changed when steps moved (now by creation order: FreeCAD's label numbers
+  also count cancelled previews, so they are not usable); an extrude's binder showed as a step; a right-click
+  during Fillet made a fillet; rename/activate/find opened undo steps inside a command; two
+  origins after reopening; Esc did not drop a drag; long timelines hid the marker; "Hide
+  Timeline" had no way back. 2 golden models (`tl_delete_before_fillet`,
+  `tl_insert_before_fillet`), unit tests for the marker, numbering, origin, suppressed rows.
+- Left for others: Extrude cannot switch to Cut while rolled back before a fillet (extrude),
+  the floating empty "Tasks" header over the 3D view (shell), browser vs timeline names
+  (shared smoke test), no hover highlight of a step's faces yet.
 
 ## Next steps (in order)
 

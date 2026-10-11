@@ -286,41 +286,44 @@ def merge(features):
 
 
 def label_number(label, name):
-    """The creation number FreeCAD's default label carries: "Extrude" 1, "Extrude001" 2,
-    ... (None for a label the user typed). FreeCAD numbers labels as things are made and
-    keeps a label when SciForge rebuilds a step as another kind (an extrude turned into a
-    cut), so it is stable when steps move, are inserted at the marker or are deleted."""
+    """The number of FreeCAD's default label ("Extrude" 0, "Extrude003" 3), None for a
+    label the user typed. Only its order counts: FreeCAD counts every object it ever
+    made (cancelled previews too), but within one kind of label the numbers follow the
+    order the steps were made in, and SciForge keeps a step's label when it rebuilds it
+    as another kind (an extrude turned into a cut: a new object)."""
     if not is_default_label(label, name):
         return None
     m = re.search(r"(\d+)$", label or "")
-    if m is None:
-        return 1
-    if len(m.group(1)) < 3:
-        return None  # "Sketch2": not FreeCAD's own numbering
-    return int(m.group(1)) + 1
+    return int(m.group(1)) if m else 0
 
 
 def _numbers(rows, kinds):
-    """Fusion's step numbers ("Extrude 3"): given when a step is made, they never change
-    when steps are reordered, inserted earlier or deleted. Taken from the default label;
-    a step without one (renamed, or two kinds of label that clash such as Pad and Extrude)
-    gets the lowest free number, in timeline order."""
+    """Fusion's step numbers ("Extrude 3"): steps of a kind are numbered in the order
+    they were made (``created``: FreeCAD's object ID), so moving a step or adding one at
+    the rolled-back marker renames nothing. A step rebuilt as another kind is a new
+    object; among default labels of one kind the label order decides (it is kept)."""
     bases = [title_base(f["type_id"], k) for f, k in zip(rows, kinds)]
-    numbers = [None] * len(rows)
-    used = {}
-    for i, f in enumerate(rows):
-        n = label_number(f.get("label", f["name"]), f["name"])
-        if n is not None and n not in used.setdefault(bases[i], set()):
-            numbers[i] = n
-            used[bases[i]].add(n)
+    groups = {}
     for i in range(len(rows)):
-        if numbers[i] is None:
-            taken = used.setdefault(bases[i], set())
-            n = 1
-            while n in taken:
-                n += 1
-            numbers[i] = n
-            taken.add(n)
+        groups.setdefault(bases[i], []).append(i)
+    numbers = [0] * len(rows)
+    for members in groups.values():
+        order = sorted(
+            members, key=lambda i: (float(rows[i].get("created", rows[i].get("key", 0))), i)
+        )
+        stems = {}
+        for pos, i in enumerate(order):
+            label = rows[i].get("label", rows[i]["name"])
+            n = label_number(label, rows[i]["name"])
+            if n is not None:
+                stems.setdefault(_strip(label), []).append((pos, n, i))
+        for entries in stems.values():
+            positions = [pos for pos, _n, _i in entries]
+            by_label = sorted(entries, key=lambda e: (e[1], e[0]))
+            for pos, (_p, _n, i) in zip(positions, by_label):
+                order[pos] = i
+        for rank, i in enumerate(order, 1):
+            numbers[i] = rank
     return numbers
 
 

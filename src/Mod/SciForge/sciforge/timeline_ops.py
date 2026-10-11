@@ -518,6 +518,7 @@ def snapshot(doc, deps=True):
                 "type_id": type_key(obj),
                 "body": body.Name if body is not None else None,
                 "key": _key(obj),
+                "created": float(obj.ID),
                 "suppressed": off,
                 "error": reason if kind == "error" else "",
                 "warning": reason if kind == "warning" else "",

@@ -71,9 +71,9 @@ class BuildTests(unittest.TestCase):
             ["Sketch 1", "Extrude 1", "Sketch 2", "Extrude 2", "Fillet 1"],
         )
 
-    def test_numbers_stay_when_steps_move_or_go(self):
-        """Fusion names a step when it is made: moving it, adding a step before it or
-        deleting an earlier one never renames it."""
+    def test_numbers_stay_when_steps_move(self):
+        """Fusion names a step when it is made: moving it or adding a step before it
+        never renames it."""
         rows = one_body()
         moved = [rows[0], rows[1], rows[4], rows[2], rows[3]]  # fillet before the boss
         self.assertEqual(
@@ -84,9 +84,13 @@ class BuildTests(unittest.TestCase):
         inserted = rows[:2] + [feat("Sketch002", SKETCH, 6), feat("Pad002", PAD, 7)] + rows[2:]
         titles = [i.display for i in core.build(inserted, {"Body": "Fillet"}).items]
         self.assertEqual(titles[2:5], ["Sketch 3", "Extrude 3", "Sketch 2"])
-        # The first extrude deleted: the second keeps its number.
+        # Numbers count the steps that exist (FreeCAD also counts cancelled previews).
         gone = [r for r in rows if r["name"] != "Pad"]
-        self.assertIn("Extrude 2", [i.display for i in core.build(gone, {"Body": "Fillet"}).items])
+        self.assertIn("Extrude 1", [i.display for i in core.build(gone, {"Body": "Fillet"}).items])
+        skipped = [dict(r) for r in rows]
+        skipped[3].update(name="Pad004", label="Pad004")  # four previews were cancelled
+        titles = [i.display for i in core.build(skipped, {"Body": "Fillet"}).items]
+        self.assertEqual(titles[3], "Extrude 2")
 
     def test_a_step_rebuilt_as_another_kind_keeps_its_number(self):
         # SciForge's extrude turned into a cut is a new object that keeps the old label.
@@ -105,10 +109,15 @@ class BuildTests(unittest.TestCase):
         titles = [i.display for i in core.build(rows, {"Body": "Fillet"}).items]
         self.assertEqual(titles.count("Extrude 1"), 1, titles)
         self.assertIn("Extrude 2", titles)
-        self.assertEqual(core.label_number("Sketch2", "Sketch005"), None)
-        self.assertEqual(core.label_number("Sketch", "Sketch"), 1)
-        self.assertEqual(core.label_number("Sketch004", "Sketch004"), 5)
+        self.assertEqual(core.label_number("Sketch", "Sketch"), 0)
+        self.assertEqual(core.label_number("Sketch004", "Sketch004"), 4)
         self.assertIsNone(core.label_number("Base plate", "Pad"))
+
+    def test_renamed_step_keeps_its_place_in_the_count(self):
+        rows = one_body()
+        rows[1]["label"] = "Base"
+        tl = core.build(rows, {"Body": "Fillet"})
+        self.assertEqual([tl.items[1].title, tl.items[3].title], ["Extrude 1", "Extrude 2"])
 
     def test_renamed_step_shows_its_name(self):
         rows = one_body()

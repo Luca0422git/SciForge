@@ -4,8 +4,11 @@ Implemented in `src/Mod/SciForge/sciforge/`: `timeline_core.py` (layout logic, u
 `timeline_ops.py` (what the timeline does to the document, also used by the golden-model
 builder), `timeline_ui.py`, `browser_core.py`, `browser_ui.py`, `inline_edit.py`.
 Tests: `SciForgeTests/unit/test_timeline_core.py`, `test_browser_core.py`, golden models
-`tl_*.json`, GUI scenarios `timeline_browser.py` and `timeline_browser_2.py` (real mouse and
-keyboard input only). Status: **first full pass, not yet signed off by Luca.**
+`tl_*.json`, GUI scenarios `timeline_browser.py`, `timeline_browser_2.py`, `timeline_roll_view.py`
+and the QA scenarios `timeline_browser_qa.py` .. `timeline_browser_qa4.py` (24 paths a Fusion
+user takes, real mouse and keyboard input only, real-input helpers in
+`SciForgeTests/gui/timeline_input.py`). Status: **first full pass + QA pass, not yet signed off
+by Luca.**
 
 ## Timeline
 
@@ -23,12 +26,23 @@ keyboard input only). Status: **first full pass, not yet signed off by Luca.**
 | Rename | In place (Enter keeps, Esc cancels, F2) | `Label`; a renamed step shows its own name, others "Extrude 2". |
 | Groups | Group Features / Expand / Collapse / Rename / Ungroup / Suppress / Delete | `SciForgeGroup` / `SciForgeGroupName` on each member (undo works). Dragging a step out of its group takes it out; dropping it between two grouped steps puts it in. |
 | Undo/Redo | Every action is one undo step; after Undo/Redo the design is recomputed so no stale red steps remain | |
+| Step names never change ("Extrude 3" stays Extrude 3 when moved or when a step is added before it) | Same, but deleting an earlier step renumbers the later ones of that kind | Steps of a kind are numbered in the order they were made (FreeCAD's object `ID`; FreeCAD's label numbers also count cancelled previews). A step SciForge rebuilds as another kind (extrude -> cut) is a new object: among default labels of one kind the label order decides, and the label is kept. |
+| The marker can stand anywhere, also just before a sketch (that sketch is then not drawn) | Same, except before the first solid step (gap below) | The Tips say which solids are active; `Document.Meta["SciForge.MarkerBefore"]` names the sketch/plane right after the marker (ignored when it no longer fits the Tips, e.g. after an undo). Sketches/planes after the marker are hidden and shown again when it passes them (`SciForgeRolledHidden`). |
+| Edit a step after the marker (double-click, Edit Profile Sketch) | The design rolls to the step while its dialog/sketch is open, then the marker goes back | Not an undo step (the edit is). |
+| A step added while rolled back goes in at the marker; the steps after it keep working | Same | A fillet/chamfer/shell/draft/Press Pull whose base step changes (a step added before it, the step before it deleted, suppressed) gets FreeCAD's old edge names on a new shape ("Invalid edge link", or silently other edges): SciForge remembers the edges/faces each step was computed on and finds them again by place and size (`timeline_ops.repair_references`). |
+| An edit that breaks a later step (box made lower than a fillet's radius) | The later step goes red, adds nothing, the steps after it still build; nothing in the Report view | `timeline_ops.settle()` runs after every recompute (feature dialogs, undo...), deferred by the timeline's document observer. |
+| Play | Animates the history; starting a command stops it | Rolling the design under an open dialog committed the dialog's preview (FreeCAD commits the open undo step when another one opens). |
+| Esc while dragging a step or the marker | Drops the drag | |
+| Long designs | The timeline keeps the marker in view; mouse wheel and a thin bar scroll it | |
+| Right-click while a command waits for picks | Not a pick; the menu entry ends the command first | A right-click selected the step and Fillet took it as "all edges of this feature". |
 
 ## Browser
 
 Order: Document Settings (Units), Named Views, Analysis (once there is one), Origin, Bodies,
 Sketches, Construction. Folders appear once they have something in them. Each row: expand
-arrow, eye, icon, name. Features are not listed (they are in the timeline).
+arrow, eye, icon, name. Features are not listed (they are in the timeline). One origin (the
+active body's, else the first body's; FreeCAD gives every body its own). Suppressed sketches
+and planes are greyed and struck through, not shown as warnings.
 
 - Eye: shows/hides; a folder's eye does all of its rows. Origin planes/axes show what is really
   on screen (FreeCAD shows them through their Origin); turning one on alone hides the others.
@@ -50,6 +64,13 @@ arrow, eye, icon, name. Features are not listed (they are in the timeline).
 
 - The marker cannot go before the first solid step (FreeCAD needs a Tip to show a body; the
   shared smoke test also expects the snap). Fusion lets you roll to an empty design.
+- Extrude while rolled back before a fillet/chamfer: the Extrude dialog cannot switch to Cut
+  ("... is used by Fillet"), because `extrude.dependents()` counts the fillet's `Base`, which
+  only follows the history chain (owner: extrude; fix: skip `Base` when it is the step's
+  `BaseFeature`, as `timeline_ops.uses()` does). A Join works.
+- The browser shows FreeCAD's labels ("Sketch001") where the timeline says "Sketch 2" (the
+  shared smoke test looks the browser row up by the label "Sketch").
+- Groups cannot be dragged as a whole yet (their steps can).
 - Steps outside any body (plain Part features) are shown in the timeline but never rolled back.
 - No hover highlight of a step's faces from the timeline yet (Fusion highlights them).
 - Saved named views are stored in the document's `Meta`, which Undo does not cover.
@@ -79,4 +100,13 @@ arrow, eye, icon, name. Features are not listed (they are in the timeline).
 - Qt test input: a `QMenu` ignores a click that comes without mouse movement since it opened;
   `QTest.mouseDClick` sends only the double-click event (send press/release first); widgets
   added to a visible layout are hidden until the event loop runs. `widget_input.py` handles
-  all three.
+  all three. A drag's release must go through `QTest.mouseRelease` (the window): released with
+  `sendEvent`, Qt kept the button "down" and the next click anywhere went to the dragged widget.
+  Qt 6 does not pass a synthetic wheel event on to the parent: send it to the scroll viewport.
+- Inserting a step before a dress-up (rolled-back marker) or deleting the step before it
+  re-links the dress-up's `Base` to the new base with the old element names: "Invalid edge
+  link" (or other edges). `Document.openTransaction` commits the transaction that is open (in
+  every document): a timeline/browser action that opens an undo step while a command dialog
+  is open must end that command first. Setting `MapMode` attaches at once and prints
+  "PositionBySupport: subshape not found" (Report view and a pop-up balloon) if the face is not
+  back yet: unsuppress solids, recompute, then sketches.
