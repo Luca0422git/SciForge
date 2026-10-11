@@ -1,0 +1,58 @@
+{
+  "id": "bodies_move_free",
+  "title": "Free Move: Z Angle 90 about the middle of the body and X Distance 10",
+  "tags": [
+    "bodies",
+    "move",
+    "free"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "free",
+      "rz": 90,
+      "dx": 10
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      15,
+      -5,
+      0,
+      45,
+      35,
+      10
+    ],
+    "source": "analytic",
+    "note": "Turned about (20, 15, 5): x 5..35, y -5..35; then +10 in x."
+  }
+}

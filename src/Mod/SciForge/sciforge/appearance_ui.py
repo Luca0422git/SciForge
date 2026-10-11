@@ -45,6 +45,26 @@ def swatch_icon(look):
     return QtGui.QIcon(pixmap)
 
 
+class _EnterTakes(QtCore.QObject):
+    """Event filter: Enter / Return in a field runs `action` and goes no further."""
+
+    def __init__(self, action):
+        super().__init__()
+        self.action = action
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QtCore.QEvent.KeyPress and event.key() in (
+                QtCore.Qt.Key_Return,
+                QtCore.Qt.Key_Enter,
+            ):
+                self.action()
+                return True
+        except Exception as exc:
+            warn("colour field: %s" % exc)
+        return False
+
+
 class AppearancePanel(BodyPanel):
     title = "Appearance"
     icon = "appearance"
@@ -71,10 +91,10 @@ class AppearancePanel(BodyPanel):
     def build_form(self):
         self.apply_to, _ = self.combo("Apply To", APPLY_TO, "bodies", self._apply_to_changed)
         self.layout.addRow(QtWidgets.QLabel("<b>In This Design</b>"))
-        self.design = self._list(rows=2)
+        self.design = self._list(rows=1)
         self.layout.addRow(self.design)
         self.layout.addRow(QtWidgets.QLabel("<b>Library</b>"))
-        self.library = self._list(rows=6)
+        self.library = self._list(rows=4)
         for look in appearance.library():
             self._add(self.library, look)
         self.layout.addRow(self.library)
@@ -85,8 +105,11 @@ class AppearancePanel(BodyPanel):
         self.hex = QtWidgets.QLineEdit("#808080")
         self.hex.setMaxLength(7)
         self.hex.setToolTip("Type a colour as #RRGGBB, then Enter")
-        self.hex.returnPressed.connect(lambda: self._guarded(self._hex_typed))
         self.hex.editingFinished.connect(lambda: self._guarded(self._hex_typed))
+        # Enter in the colour field takes the colour; it must not reach the task panel,
+        # which would take it as OK and close the dialog.
+        self._enter_filter = _EnterTakes(lambda: self._guarded(self._hex_typed))
+        self.hex.installEventFilter(self._enter_filter)
         self.preview_swatch = QtWidgets.QLabel()
         self.preview_swatch.setFixedSize(SWATCH, SWATCH)
         self.use_custom = QtWidgets.QPushButton("Use")

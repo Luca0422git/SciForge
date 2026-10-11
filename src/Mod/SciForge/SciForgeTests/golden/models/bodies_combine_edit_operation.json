@@ -1,0 +1,95 @@
+{
+  "id": "bodies_combine_edit_operation",
+  "title": "Combine Join edited to Cut from the timeline",
+  "tags": [
+    "bodies",
+    "combine",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            70,
+            30
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "combine",
+      "id": "c1",
+      "target": "e1",
+      "tools": [
+        "e2"
+      ],
+      "operation": "join"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 21000,
+        "source": "analytic",
+        "note": "joined"
+      }
+    },
+    {
+      "op": "body_tool_edit",
+      "target": "c1",
+      "set": {
+        "operation": "cut"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 9000,
+    "area": 3000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      30,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "as bodies_combine_cut"
+  }
+}

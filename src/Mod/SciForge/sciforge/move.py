@@ -440,7 +440,21 @@ def axis_of(obj, sub):
     axis), a round face (its axis). Design coordinates, or None."""
     if obj is None:
         return None
-    if obj.TypeId in ("App::Line", "PartDesign::Line", "Part::DatumLine") and not sub:
+    if obj.TypeId == "App::Line" and not sub:
+        place = obj.getGlobalPlacement()  # an origin axis runs along its own X
+        return place.Base, place.Rotation.multVec(App.Vector(1, 0, 0))
+    if obj.TypeId in ("PartDesign::Line", "Part::DatumLine") and not sub:
+        edges = obj.Shape.Edges if not obj.Shape.isNull() else []
+        if edges:
+            edge = edges[0].copy()
+            try:
+                parent = obj.getParentGeoFeatureGroup()
+                if parent is not None:
+                    edge.transformShape(parent.getGlobalPlacement().toMatrix(), True)
+            except Exception:
+                pass
+            start = edge.valueAt(edge.FirstParameter)
+            return start, edge.tangentAt(edge.FirstParameter).normalize()
         place = obj.getGlobalPlacement()
         return place.Base, place.Rotation.multVec(App.Vector(0, 0, 1))
     try:

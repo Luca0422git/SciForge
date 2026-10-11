@@ -67,6 +67,7 @@ class Triad:
         self._hover = None
         self._painted = None
         self._drag = None  # (kind, index)
+        self._drag_center = None
         self._start = None  # value at the press (mm along the axis / angle vector)
         self._pending = None
         self._last_angle = 0.0
@@ -231,24 +232,29 @@ class Triad:
         denom = 1.0 - b * b
         if denom < 0.02:
             return None
-        w0 = self.center - point
+        w0 = self._origin() - point
         return (b * direction.dot(w0) - axis.dot(w0)) / denom
 
     def _angle(self, position, index):
         """Angle (degrees) of the mouse about axis `index` in its plane, or None edge-on."""
         axis = AXES[index]
         u, v = self._frame(index)
-        hit = profile_pick.ray_plane(self.view, tuple(position), self.center, axis)
+        hit = profile_pick.ray_plane(self.view, tuple(position), self._origin(), axis)
         if hit is None:
             return None
         point, _t = hit
-        w = point - self.center
+        w = point - self._origin()
         if w.Length < 1e-9:
             return None
         _, direction = profile_pick.mouse_ray(self.view, tuple(position))
         if abs(direction.dot(axis)) < 0.15:
             return None
         return math.degrees(math.atan2(w.dot(v), w.dot(u)))
+
+    def _origin(self):
+        """Where the manipulator was when the drag began: it follows the bodies while they
+        move, but the drag is measured from where the hand took it."""
+        return self._drag_center if self._drag_center is not None else self.center
 
     def _button(self, info):
         try:
@@ -259,6 +265,7 @@ class Triad:
                 handle = self.handle_at(position)
                 if handle is None:
                     return
+                self._drag_center = App.Vector(self.center)
                 kind, index = handle
                 start = (
                     self._along(position, index) if kind == "move" else self._angle(position, index)
@@ -275,6 +282,9 @@ class Triad:
                 self._last_event = time.time()
         except Exception as exc:
             warn("move handle: %s" % exc)
+
+    def _drag_done(self):
+        self._drag_center = None
 
     def _moved(self, info):
         try:
@@ -317,6 +327,7 @@ class Triad:
                 self.on_drag(*pending)
             if self._released and self._drag is None:
                 self._released = False
+                self._drag_done()
                 if self.on_release:
                     self.on_release()
         except Exception as exc:

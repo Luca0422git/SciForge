@@ -1,0 +1,99 @@
+{
+  "id": "bodies_combine_follows_tool",
+  "title": "Combine Cut follows an edit of the tool body's extrude (blind hole becomes a through hole)",
+  "tags": [
+    "bodies",
+    "combine",
+    "edit",
+    "keep-tools"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "s2c"
+        }
+      ],
+      "offset": -5
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "combine",
+      "id": "c1",
+      "target": "e1",
+      "tools": [
+        "e2"
+      ],
+      "operation": "cut",
+      "keep_tools": true
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11607.300918301276,
+        "faces": 8,
+        "source": "analytic",
+        "note": "cylinder z -5..5 cuts a blind hole 5 deep from the bottom: 12000 - 25 pi * 5; faces: 6 + wall + the hole's flat end"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "e2",
+      "set": {
+        "distance": 20
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11214.601836602551,
+    "area": 3957.07963267949,
+    "faces": 7,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Tool now z -5..15: a through hole, as in bodies_combine_cut_cylinder."
+  }
+}

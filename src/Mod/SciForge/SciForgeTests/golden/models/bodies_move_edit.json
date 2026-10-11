@@ -1,0 +1,65 @@
+{
+  "id": "bodies_move_edit",
+  "title": "A Move edited from the timeline",
+  "tags": [
+    "bodies",
+    "move",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "translate",
+      "dx": 10
+    },
+    {
+      "op": "body_tool_edit",
+      "target": "m1",
+      "set": {
+        "dx": 0,
+        "dz": 30
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      30,
+      40,
+      30,
+      40
+    ],
+    "source": "analytic",
+    "note": "now 30 up"
+  }
+}

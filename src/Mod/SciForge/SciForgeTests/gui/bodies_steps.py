@@ -200,3 +200,49 @@ def menu(group, label):
 
 def no_popups(where):
     h.check("no pop-up after %s" % where, not h.popups(), h.popups())
+
+
+def browser():
+    from sciforge import browser_ui
+
+    tree = browser_ui.widget()
+    if tree is not None:
+        tree.refresh()
+    return tree
+
+
+def click_browser_row(label, modifiers=QtCore.Qt.NoModifier):
+    """Click a row of the browser (a body, a sketch) on its name, as a person does."""
+    from SciForgeTests.gui import widget_input as w
+
+    tree = browser()
+    item = tree.row(label) if tree is not None else None
+    if h.check("browser row %r" % label, item is not None, tree.labels() if tree else None):
+        w.click(tree.viewport(), tree.label_point(item), modifiers)
+
+
+def click_timeline(obj):
+    """Click a step's icon in the timeline (it is selected, like in Fusion)."""
+    from sciforge import timeline_ui
+    from SciForgeTests.gui import widget_input as w
+
+    widget = timeline_ui.widget()
+    widget.refresh(force=True)
+    QtWidgets.QApplication.processEvents()
+    for button in widget._buttons:
+        if button.item.name == obj.Name:
+            w.click(button)
+            return True
+    h.check("timeline shows %s" % obj.Name, False, b.timeline_titles())
+    return False
+
+
+def selected_names():
+    return [x.ObjectName for x in Gui.Selection.getSelectionEx()]
+
+
+def timeline_status(obj):
+    """("error" | "warning" | "", reason) the timeline shows for a step."""
+    from sciforge import timeline_ops
+
+    return timeline_ops.problem(obj)
