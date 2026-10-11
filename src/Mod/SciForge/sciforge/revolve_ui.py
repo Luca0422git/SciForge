@@ -132,6 +132,96 @@ class SelectionField:
         self.button.setText(text or self.empty)
 
 
+class TypeOverView:
+    """Fusion: with a command open, a number typed while the mouse is over the 3D view goes
+    into the command's value (its box next to the handle) and Enter finishes. FreeCAD
+    took those digits as its view keys (0 isometric, 1 front, 2 top ...): the view jumped
+    and the number was lost, so Enter then made the old angle. Digits, a minus sign and a
+    decimal point typed while the 3D view has the keyboard now go into the dialog's value
+    field (`panel.typing_field()`), replacing its text like Fusion's box; the next keys
+    follow there, and Enter there is OK. remove() when the dialog closes."""
+
+    KEYS = set("0123456789-.,")
+
+    def __init__(self, panel):
+        self.panel = panel
+        guard = self
+
+        class KeyFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                return guard._filter(event)
+
+        self.filter = KeyFilter()
+        QtWidgets.QApplication.instance().installEventFilter(self.filter)
+
+    @staticmethod
+    def _on_view(widget):
+        while widget is not None:
+            name = widget.metaObject().className()
+            if name in ("Gui::View3DInventorViewer", "QOpenGLWidget", "Gui::View3DInventor"):
+                return True
+            if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox)):
+                return False
+            widget = widget.parentWidget()
+        return False
+
+    def _filter(self, event):
+        from .compat import QtGui
+
+        try:
+            kind = event.type()
+            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
+                return False
+            if self.panel is None or getattr(self.panel, "_closed", True):
+                return False
+            if not isinstance(event, QtGui.QKeyEvent):
+                return False
+            mods = event.modifiers()
+            if mods & (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier | QtCore.Qt.MetaModifier):
+                return False
+            text = event.text()
+            if not text or text not in self.KEYS:
+                return False
+            if not self._on_view(QtWidgets.QApplication.focusWidget()):
+                return False
+            field = self.panel.typing_field()
+            if field is None:
+                return False
+            event.accept()  # ShortcutOverride accepted: FreeCAD's view key does not fire
+            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
+                key, typed = event.key(), text
+                QtCore.QTimer.singleShot(0, lambda: self._type(field, key, typed))
+            return True
+        except Exception:
+            return False
+
+    def _type(self, field, key, text):
+        from .compat import QtGui
+
+        try:
+            if self.panel is None or getattr(self.panel, "_closed", True):
+                return
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is None:
+                return
+            field.widget.setFocus()
+            edit.selectAll()
+            # Sent as a key press, so the field reacts as to a person's typing.
+            press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, press)
+            release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, release)
+        except Exception as exc:
+            warn("revolve typing: %s" % exc)
+
+    def remove(self):
+        try:
+            QtWidgets.QApplication.instance().removeEventFilter(self.filter)
+        except Exception:
+            pass
+        self.panel = None
+
+
 # -- the angle handle ----------------------------------------------------------------------------
 class AngleHandle:
     """Fusion's revolve manipulator: a blue ball with an arrow next to the part that
@@ -765,6 +855,7 @@ class RevolvePanel(Panel):
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
+        self.typing = TypeOverView(self)
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else revolve.owner_body(feature)
@@ -777,6 +868,7 @@ class RevolvePanel(Panel):
         self.user_picked_operation = feature is not None
         self.error = ""
         self.formula_error = ""  # a formula typed in a field that is no value
+        self._last_handle = "angle"  # the handle dragged last (typed numbers go to its value)
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
@@ -914,6 +1006,16 @@ class RevolvePanel(Panel):
             (self.angle2_label, two and not full),
         ):
             widget.setVisible(show)
+
+    def typing_field(self):
+        """The value field a number typed over the 3D view goes to (Fusion's box next to
+        the handle), or None: the side-two angle right after its handle was dragged, else
+        the angle; none for a full turn."""
+        if self._closed or self.type.currentData() == "full":
+            return None
+        if self._last_handle == "angle2" and self.angle2.widget.isVisible():
+            return self.angle2
+        return self.angle if self.angle.widget.isVisible() else None
 
     def _collect(self):
         self.options["type"] = self.type.currentData()
@@ -1469,6 +1571,7 @@ class RevolvePanel(Panel):
 
     @_safe
     def _dragged(self, value):
+        self._last_handle = "angle"
         value = round(value, 1)
         if self.direction.currentData() == "symmetric":
             value = min(abs(value), 180.0)
@@ -1492,6 +1595,7 @@ class RevolvePanel(Panel):
 
     @_safe
     def _dragged2(self, value):
+        self._last_handle = "angle2"
         value = round(-self._side_sign() * value, 1)
         value = max(0.1, min(360.0 - abs(self.angle.value()), value))
         self._quiet = True
@@ -1782,7 +1886,7 @@ class RevolvePanel(Panel):
 
     def cleanup(self):
         self._unwatch()
-        for guard in (self.escape, self.undo_guard, self.enter):
+        for guard in (self.escape, self.undo_guard, self.enter, self.typing):
             try:
                 guard.remove()
             except Exception:

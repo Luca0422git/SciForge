@@ -1,0 +1,147 @@
+{
+  "id": "sf_revolve_face_profile_follows",
+  "title": "Revolve dialog: a face profile is found again after an earlier revolve changes it",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "face-profile",
+    "edge-axis",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            5,
+            6,
+            11,
+            10
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s2",
+      "axis": {
+        "edge": {
+          "type": "line",
+          "parallel": [
+            1,
+            0,
+            0
+          ],
+          "at": [
+            {
+              "axis": "y",
+              "value": 0
+            },
+            {
+              "axis": "z",
+              "value": 10
+            }
+          ],
+          "count": 1
+        }
+      },
+      "type": "full",
+      "operation": "join"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12226.194671058465,
+        "source": "analytic",
+        "note": "a round bar r4, 6 long, about the top front edge: three quarters stick out of the block, 12000 + 72 pi"
+      }
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r2",
+      "face": {
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "count": 1
+      },
+      "axis": {
+        "edge": {
+          "type": "line",
+          "parallel": [
+            1,
+            0,
+            0
+          ],
+          "at": [
+            {
+              "axis": "y",
+              "value": 0
+            },
+            {
+              "axis": "z",
+              "value": 0
+            }
+          ],
+          "count": 1
+        }
+      },
+      "direction": "symmetric",
+      "angle": 90,
+      "operation": "join"
+    },
+    {
+      "op": "sf_revolve_edit",
+      "target": "r1",
+      "set": {
+        "operation": "cut",
+        "type": "angle",
+        "direction": "symmetric",
+        "angle": 45
+      }
+    }
+  ],
+  "expect": {
+    "volume": 14802.300647002096,
+    "solids": 1,
+    "bbox": [
+      0,
+      -10,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "After the edit r1 cuts an eighth of the bar (45 degrees each way about the top front edge, only the half inside the block removes material): 12000 - 12 pi, and the front face loses the 6 x 4 rectangle (area 376, centroid 1808/376 above the bottom edge). r2 is that front face, found again although FreeCAD renamed the merged face: symmetric 90 about the bottom front edge, the half inside the block adds nothing, the half in front adds 376 * (1808/376) * pi/2 = 904 pi (Pappus). V = 12000 + 892 pi."
+  }
+}

@@ -487,7 +487,7 @@ def _mark(obj, role):
 
 
 def is_helper(obj):
-    return getattr(obj, ROLE, "") in ("RevolveProfile", "RevolveAxis")
+    return getattr(obj, ROLE, "") in ("RevolveProfile", "RevolveAxis", "RevolveFace")
 
 
 def is_intersect(obj):
@@ -704,6 +704,195 @@ class AxisLink:
     __setstate__ = loads
 
 
+class FaceLink:
+    """A hidden copy of the flat faces of the part that a revolve turns (faces picked as
+    its profile). FreeCAD names faces by number, and it loses a name when an earlier step
+    changes the faces around it: the revolve then failed ("missing element reference",
+    "Select a profile"). Fusion keeps the face. This finds each face again by where it
+    was: the face on the same plane that holds the same inside point; else the face of
+    that name if it still faces the same way (it moved, e.g. the part got taller); else
+    the face facing that way nearest to where it was. It remembers each face as found.
+    Saved documents store "sciforge.revolve.FaceLink": keep the name stable."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        if "Sources" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyLinkListGlobal", "Sources", "Profile", "The steps the faces are of"
+            )
+        if "Faces" not in obj.PropertiesList:
+            # Output: remembering where a face was found does not ask for a recompute
+            obj.addProperty("App::PropertyString", "Faces", "Profile", "Where each face is", 16)
+            obj.setEditorMode("Faces", 2)
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        import Part
+
+        entries = _face_entries(obj)
+        if not entries:
+            raise RevolveError("Select a profile to revolve.")
+        body = owner_body(obj)
+        here = body.getGlobalPlacement() if body is not None else App.Placement()
+        faces, changed = [], False
+        for entry in entries:
+            src = obj.Document.getObject(entry.get("obj", ""))
+            if src is None or src.Shape.isNull():
+                raise RevolveError(
+                    "The part the profile face was on is gone. Edit the revolve and pick the "
+                    "profile again."
+                )
+            found = _find_face(src.Shape, entry)
+            if found is None:
+                raise RevolveError(
+                    "The profile face is gone from the part. Edit the revolve and pick the "
+                    "profile again."
+                )
+            face, fresh = found
+            if fresh != entry:
+                entry.clear()
+                entry.update(fresh)
+                changed = True
+            move = here.inverse().multiply(_body_placement(src))
+            if not move.isIdentity():
+                face = face.copy()
+                face.transformShape(move.toMatrix())
+            faces.append(face)
+        obj.Shape = faces[0] if len(faces) == 1 else Part.makeCompound(faces)
+        if changed:
+            obj.Faces = json.dumps(entries, sort_keys=True)
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _face_entries(link):
+    try:
+        data = json.loads(getattr(link, "Faces", "") or "[]")
+        return [e for e in data if isinstance(e, dict)]
+    except Exception:
+        return []
+
+
+def _vec(values):
+    return App.Vector(*[float(v) for v in values])
+
+
+def _face_entry(obj, sub, face):
+    """What FaceLink remembers of a face (coordinates of its own body)."""
+    normal = extrude.face_normal(face)
+    point = extrude.interior_point(face)
+    center = face.CenterOfMass
+    return {
+        "obj": obj.Name,
+        "sub": sub,
+        "point": [point.x, point.y, point.z],
+        "normal": [normal.x, normal.y, normal.z],
+        "center": [center.x, center.y, center.z],
+        "area": face.Area,
+    }
+
+
+def _find_face(shape, entry):
+    """(face, fresh entry) of the remembered face in `shape`, or None."""
+    point, normal = _vec(entry["point"]), _vec(entry["normal"])
+    size = max(1.0, shape.BoundBox.DiagonalLength)
+    tol = 1e-7 * size
+
+    def facing(face):
+        try:
+            return face.Surface.TypeId == "Part::GeomPlane" and (
+                extrude.face_normal(face).dot(normal) > 1.0 - 1e-9
+            )
+        except Exception:
+            return False
+
+    def holds(face):
+        if abs((point - face.Vertexes[0].Point).dot(normal)) > tol * 10:
+            return False
+        try:
+            return face.isInside(point, tol * 10, True)
+        except Exception:
+            return False
+
+    faces = list(shape.Faces)
+    sub = entry.get("sub", "")
+    named = None
+    if sub.startswith("Face") and sub[4:].isdigit() and 0 < int(sub[4:]) <= len(faces):
+        named = int(sub[4:])
+    pick = None
+    if named is not None and facing(faces[named - 1]) and holds(faces[named - 1]):
+        pick = named  # unchanged
+    if pick is None:
+        for i, face in enumerate(faces, start=1):
+            if facing(face) and holds(face):
+                pick = i  # the same place under another name
+                break
+    if pick is None and named is not None and facing(faces[named - 1]):
+        pick = named  # the face moved (the part around it changed size)
+    if pick is None:
+        center = _vec(entry.get("center", entry["point"]))
+        near = [
+            (i, (face.CenterOfMass - center).Length)
+            for i, face in enumerate(faces, start=1)
+            if facing(face)
+        ]
+        if near:
+            pick = min(near, key=lambda x: x[1])[0]
+    if pick is None:
+        return None
+    face = faces[pick - 1]
+    fresh = _face_entry(_Named(entry["obj"]), "Face%d" % pick, face)
+    return face, fresh
+
+
+class _Named:
+    def __init__(self, name):
+        self.Name = name
+
+
+def _face_link(body, feature, picks, existing=None):
+    """A hidden FaceLink in `body`, just before `feature`, holding the picked faces."""
+    link = existing
+    if link is None or not isinstance(getattr(link, "Proxy", None), FaceLink):
+        link = body.Document.addObject("Part::Part2DObjectPython", "RevolveFace")
+        FaceLink(link)
+        body.insertObject(link, feature, False)
+        _mark(link, "RevolveFace")
+    link.Label = "%s profile" % feature.Label
+    entries = []
+    for obj, sub in picks:
+        try:
+            face = obj.Shape.getElement(sub)
+        except Exception:
+            raise RevolveError("That face is gone. Pick the profile again.")
+        entries.append(_face_entry(obj, sub, face))
+    sources = []
+    for obj, _sub in picks:
+        if obj not in sources:
+            sources.append(obj)
+    text = json.dumps(entries, sort_keys=True)
+    if list(link.Sources) != sources:
+        link.Sources = sources
+    if link.Faces != text:
+        link.Faces = text
+        link.touch()
+    _hide(link)
+    return link
+
+
 def _axis_link(body, feature, axis, existing=None):
     """A hidden AxisLink in `body`, just before `feature`, following `axis`."""
     link = existing
@@ -802,10 +991,12 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
         if owner_body(feature) is target and same:
             _update(feature, target, profiles, axis, options, hide)
             return feature
-        blocking = [o for o in extrude.dependents(feature) if not is_helper(o)]
-        if blocking:
+        moving = target is None or owner_body(feature) is not target
+        blocking = [o for o in _users(feature) if not is_helper(o)]
+        if blocking and moving:
+            # A step in this body may not link to another body's faces (FreeCAD).
             raise RevolveError(
-                "%s is used by %s, so its operation cannot change here. Make a new revolve "
+                "%s is used by %s, so it cannot become a new body. Make a new revolve "
                 "instead." % (feature.Label, ", ".join(o.Label for o in blocking))
             )
     old_meta = load_meta(feature) if feature is not None else {}
@@ -829,6 +1020,15 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
     if feature is not None:
         label = feature.Label
         old_body = owner_body(feature)
+        users = _users(feature)
+        if users:
+            # Fusion: later steps keep their faces/edges when Join becomes Cut (a sketch on
+            # its face, another revolve about its edge): point them at the new step.
+            try:
+                new.recompute()
+            except Exception:
+                pass
+            _relink_users(feature, new, users)
         _remove(feature, keep_body=old_body is target)
         new.Label = label
         if old_body is not None and old_body is not target:
@@ -836,6 +1036,123 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
     if before is None or was_tip:
         target.Tip = new
     return new
+
+
+def _users(feature):
+    """Objects that link to `feature` other than its own helpers, its body and the step
+    after it through its history (BaseFeature: FreeCAD moves that one itself)."""
+    own = set(load_meta(feature).get("helpers", []))
+    found = []
+    for obj in feature.InList:
+        if obj.TypeId in ("PartDesign::Body", "App::Part") or obj.Name in own:
+            continue
+        if isinstance(getattr(obj, "Proxy", None), FaceLink):
+            found.append(obj)
+            continue
+        if extrude._links_to(obj, feature, ("BaseFeature",)):
+            found.append(obj)
+    return found
+
+
+def _same_element(shape, element, kind):
+    """Name of the element of `shape` that is `element` by geometry (same place and
+    size), or None."""
+    size = max(1.0, shape.BoundBox.DiagonalLength)
+    tol = 1e-6 * size
+    if kind == "Vertex":
+        items = shape.Vertexes
+    elif kind == "Edge":
+        items = shape.Edges
+    elif kind == "Face":
+        items = shape.Faces
+    else:
+        return None
+    for i, item in enumerate(items, start=1):
+        try:
+            if kind == "Vertex":
+                same = (item.Point - element.Point).Length < tol
+            elif kind == "Edge":
+                same = (
+                    abs(item.Length - element.Length) < tol
+                    and (item.CenterOfMass - element.CenterOfMass).Length < tol
+                    and len(item.Vertexes) == len(element.Vertexes)
+                    and all(
+                        min((v.Point - w.Point).Length for w in item.Vertexes) < tol
+                        for v in element.Vertexes
+                    )
+                )
+            else:
+                same = (
+                    item.Surface.TypeId == element.Surface.TypeId
+                    and abs(item.Area - element.Area) < tol * size
+                    and (item.CenterOfMass - element.CenterOfMass).Length < tol
+                )
+        except Exception:
+            same = False
+        if same:
+            return "%s%d" % (kind, i)
+    return None
+
+
+def _map_subs(old, new, subs):
+    """The element names of `old` in `subs` as names of `new` (found by geometry; a name
+    with no twin is kept, FreeCAD's naming decides then)."""
+    out = []
+    for sub in subs:
+        name = (sub or "").lstrip("?")
+        kind = name.rstrip("0123456789")
+        mapped = None
+        if kind in ("Vertex", "Edge", "Face"):
+            try:
+                mapped = _same_element(new.Shape, old.Shape.getElement(name), kind)
+            except Exception:
+                mapped = None
+        out.append(mapped or sub)
+    return out
+
+
+def _relink_users(old, new, users):
+    """Point every link of `users` to `old` (and its faces/edges) at `new`."""
+    for obj in users:
+        try:
+            if isinstance(getattr(obj, "Proxy", None), FaceLink):
+                entries = _face_entries(obj)
+                for entry in entries:
+                    if entry.get("obj") == old.Name:
+                        entry["obj"] = new.Name
+                obj.Faces = json.dumps(entries, sort_keys=True)
+                obj.Sources = [new if s is old else s for s in obj.Sources]
+                obj.touch()
+                continue
+            for prop in obj.PropertiesList:
+                if prop == "BaseFeature":
+                    continue
+                kind = obj.getTypeIdOfProperty(prop)
+                if "Link" not in kind or "Hidden" in kind:
+                    continue
+                value = getattr(obj, prop)
+                swapped, changed = _swap_links(value, old, new, "Sub" in kind)
+                if changed:
+                    setattr(obj, prop, swapped)
+        except Exception:
+            pass  # the user step then shows FreeCAD's own complaint, like any lost link
+
+
+def _swap_links(value, old, new, with_subs):
+    if value is old:
+        return new, True
+    if isinstance(value, tuple) and len(value) == 2 and value[0] is old and with_subs:
+        subs = value[1]
+        subs = [subs] if isinstance(subs, str) else list(subs)
+        return (new, _map_subs(old, new, subs)), True
+    if isinstance(value, list):
+        out, changed = [], False
+        for item in value:
+            swapped, did = _swap_links(item, old, new, with_subs)
+            out.append(swapped)
+            changed = changed or did
+        return out, changed
+    return value, False
 
 
 def _needs_binder(body, profiles):
@@ -860,16 +1177,25 @@ def _update(feature, body, profiles, axis, options, hide=True):
     old_names = [h.Name for h in old]
     old_profile = [h for h in old if getattr(h, ROLE, "") == "RevolveProfile"]
     old_axis = [h for h in old if getattr(h, ROLE, "") == "RevolveAxis"]
+    old_faces = [h for h in old if getattr(h, ROLE, "") == "RevolveFace"]
     helpers = []
-    if _needs_binder(body, profiles):
+    # Faces of the part go through a FaceLink (found again by place when FreeCAD loses
+    # their names); sketch areas are linked as they are.
+    direct = [(obj, sub) for obj, sub in profiles if is_sketch(obj)]
+    picks = [(obj, sub) for obj, sub in profiles if not is_sketch(obj)]
+    if picks:
+        faces = _face_link(body, feature, picks, old_faces[0] if old_faces else None)
+        helpers.append(faces)
+        direct.append((faces, ""))
+    if _needs_binder(body, direct):
         existing = old_profile[0] if old_profile else None
-        binder = _binder(body, feature, profiles, existing)
+        binder = _binder(body, feature, direct, existing)
         helpers.append(binder)
         link = binder
         fp_profiles = [(binder, "")]
     else:
-        link = _direct_profile(profiles)
-        fp_profiles = list(profiles)
+        link = _direct_profile(direct)
+        fp_profiles = list(direct)
     axis_link = _local_axis(body, feature, axis, helpers, old_axis)
     keep = {h.Name for h in helpers}
     for name in old_names:
@@ -1121,6 +1447,14 @@ def profiles_of(feature):
         if obj is not None:
             found.append((obj, sub))
     if found:
+        # Faces of the part: as the FaceLink found them last (their names may have moved)
+        links = [doc.getObject(n) for n in meta.get("helpers", [])]
+        links = [h for h in links if h is not None and getattr(h, ROLE, "") == "RevolveFace"]
+        if links:
+            faces = [
+                (doc.getObject(e.get("obj", "")), e.get("sub", "")) for e in _face_entries(links[0])
+            ]
+            found = [p for p in found if is_sketch(p[0])] + [f for f in faces if f[0] is not None]
         return found
     if is_intersect(feature):
         links = [(obj, (subs or [""])[0]) for obj, subs in feature.Profiles]
@@ -1133,7 +1467,14 @@ def profiles_of(feature):
             return []
         links = [(obj, s) for s in subs] if subs else [(obj, "")]
     for obj, sub in links:
-        if getattr(obj, ROLE, "") == "RevolveProfile" or obj.TypeId == "PartDesign::SubShapeBinder":
+        if getattr(obj, ROLE, "") == "RevolveFace":
+            for e in _face_entries(obj):
+                linked = doc.getObject(e.get("obj", ""))
+                if linked is not None:
+                    found.append((linked, e.get("sub", "")))
+        elif (
+            getattr(obj, ROLE, "") == "RevolveProfile" or obj.TypeId == "PartDesign::SubShapeBinder"
+        ):
             for linked, linked_subs in obj.Support:
                 for s in linked_subs or [""]:
                     found.append((linked, s))
