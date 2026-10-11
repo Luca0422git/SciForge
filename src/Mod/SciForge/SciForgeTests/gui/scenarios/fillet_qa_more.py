@@ -10,8 +10,14 @@ Path 17, two bodies: an edge of the body that is not active selected, then F: th
          goes into that body; an edge of the other body clicked in the dialog is not picked.
 Path 18, keys in the radius box: Esc while typing cancels the command; a sum typed and
          Enter finishes it.
-Path 19, the drop-every-pick button (x), then Ctrl+Z / Ctrl+Y around an edit made from the
-         timeline, and Delete from the timeline with Ctrl+Z.
+Path 19, the drop-every-pick button (x: the preview step goes away, the body measures the
+         part as it was), Ctrl+Z inside an edit made from the timeline, and Delete from the
+         timeline with Ctrl+Z.
+Path 20, F and Chamfer in an empty design: no dialog, no pop-up, nothing made.
+Path 21, a fillet on a Press Pull step, then the Press Pull edited from the timeline: the
+         fillet follows.
+Path 22, the design closed while the Fillet dialog is open: nothing is left behind and F
+         works in the next design.
 
 Numbers by hand: 40 x 30 x 10 box (see blend_steps), a second 20 x 20 x 10 box.
 """
@@ -467,6 +473,114 @@ def p20_chamfer_said():
     b.no_popups("Chamfer in an empty design")
     objs = [o.Name for o in App.ActiveDocument.Objects]
     h.check("P20 nothing was made", not objs, objs)
+    App.closeDocument(App.ActiveDocument.Name)
+
+
+# -- Path 21: a fillet on a Press Pull, then the Press Pull edited ---------------------------
+def p21_top():
+    h.fit()
+    h.click_empty()
+    h.click(V(20, 15, 10))
+
+
+def p21_q():
+    sel = [(x.ObjectName, list(x.SubElementNames)) for x in Gui.Selection.getSelectionEx()]
+    h.check("P21 the top face selected", len(sel) == 1 and sel[0][1], sel)
+    h.press("q")
+
+
+def p21_pull():
+    fields = b.task_spinboxes()
+    if h.check("P21 Press Pull shows a size field", fields, fields):
+        ui.type_into(fields[0], "2")
+
+
+def p21_pull_ok():
+    h.task_button("OK")
+
+
+def p21_f():
+    h.check("P21 pulled up 2", b.close(h.solid_volume(), 1200.0 * 12), h.solid_volume())
+    h.fit()
+    h.click_empty()
+    h.press("f")
+
+
+def p21_pick():
+    h.fit()
+    h.click_edge(V(20, 0, 12))
+
+
+def p21_ok():
+    p = b.blend_panel()
+    h.check(
+        "P21 the top edge of the Press Pull picked", p is not None and len(p.refs) == 1, picks()
+    )
+    h.task_button("OK")
+
+
+def p21_edit_pull():
+    v = 1200.0 * 12 - 40 * b.spandrel(1)
+    h.check("P21 fillet on the pulled part", b.close(h.solid_volume(), v), h.solid_volume())
+    h.fit()
+    b.timeline_double_click("Press Pull 1")
+
+
+def p21_pull_more():
+    fields = b.task_spinboxes()
+    if h.check("P21 editing Press Pull 1", fields and dialog_open(), fields):
+        ui.type_into(fields[0], "4")
+
+
+def p21_pull_more_ok():
+    h.task_button("OK")
+
+
+def p21_followed():
+    v = 1200.0 * 14 - 40 * b.spandrel(1)
+    h.check(
+        "P21 the fillet follows the taller part", b.close(h.solid_volume(), v), h.solid_volume()
+    )
+    bad = [o.Name for o in App.ActiveDocument.Objects if "Invalid" in o.State]
+    h.check("P21 nothing broken", not bad, bad)
+    h.shot("p21-pulled")
+
+
+# -- Path 22: the design closed while the Fillet dialog is open -------------------------------
+def p22_f():
+    s["closing"] = App.ActiveDocument.Name
+    h.click_empty()
+    h.press("f")
+
+
+def p22_pick():
+    h.fit()
+    h.click_edge(V(40, 15, 14))
+
+
+def p22_close():
+    p = b.blend_panel()
+    h.check("P22 picked", p is not None and len(p.refs) == 1, picks())
+    App.closeDocument(s["closing"])
+
+
+def p22_closed():
+    h.check("P22 no dialog left on the closed design", not dialog_open())
+    h.check("P22 the panel let go", b.blend_panel() is None)
+    b.no_popups("closing the design under the Fillet dialog")
+    h.check("P22 another design is active", App.ActiveDocument is not None)
+    h.fit()
+    h.press("f")
+
+
+def p22_next_f():
+    p = b.blend_panel()
+    h.check("P22 F works in the design still open", p is not None and dialog_open())
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def p22_done():
+    h.check("P22 Esc closed it", not dialog_open())
 
 
 h.run(
@@ -531,5 +645,25 @@ h.run(
         p20_empty,
         p20_f_said,
         p20_chamfer_said,
+    ]
+    + b.box_steps("FilletPull")
+    + [
+        p21_top,
+        p21_q,
+        p21_pull,
+        p21_pull_ok,
+        p21_f,
+        p21_pick,
+        p21_ok,
+        p21_edit_pull,
+        p21_pull_more,
+        p21_pull_more_ok,
+        p21_followed,
+        p22_f,
+        p22_pick,
+        p22_close,
+        p22_closed,
+        p22_next_f,
+        p22_done,
     ],
 )
