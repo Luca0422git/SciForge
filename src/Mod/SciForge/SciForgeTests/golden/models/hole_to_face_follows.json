@@ -1,0 +1,94 @@
+{
+  "id": "hole_to_face_follows",
+  "title": "Hole d6 from the top face To the bottom face; the plate made thicker afterwards",
+  "tags": [
+    "hole",
+    "single",
+    "to",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "diameter": 6,
+      "drill_point": "flat",
+      "extent": "to",
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "count": 1
+        }
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11717.256661176918,
+        "faces": 7,
+        "source": "analytic",
+        "note": "the hole runs to the bottom face: 10 deep; V = 12000 - 9 pi 10"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "distance": 16
+      }
+    }
+  ],
+  "expect": {
+    "volume": 18747.61065788307,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      16
+    ],
+    "source": "analytic",
+    "note": "Fusion's To keeps the hole ending on its face: the top moves up 6 with the hole's point, the hole still reaches the bottom (16 deep); V = 40 30 16 - 9 pi 16. With a fixed depth of 10 it would stop 6 above the bottom (V = 19200 - 90 pi)"
+  }
+}

@@ -4,7 +4,8 @@
 1. An empty design: H and CREATE > Thread open their dialogs, say a solid is needed, a click
    on the empty view does nothing; Esc. No error anywhere.
 2. A box: H, click the top face (a preview), then Ctrl+Z with the dialog still open: the
-   dialog ends and the unfinished hole goes; Ctrl+Y brings it back as a normal step.
+   dialog ends and the unfinished hole goes (cancelled, like every SciForge dialog), Ctrl+Y
+   brings nothing back; the hole is made again.
 3. A second body (a block made with New Body): clicking its face in the Hole dialog drills the
    hole in that body, which becomes the active one.
 """
@@ -93,9 +94,27 @@ def after_undo_inside():
     h.press(QtCore.Qt.Key_Y, QtCore.Qt.ControlModifier)
 
 
+def after_ctrl_y():
+    """Ctrl+Z in a dialog cancels the step being made (every SciForge dialog does, see
+    preview.UndoCancels): there is nothing to bring back."""
+    h.check("Ctrl+Y brings no cancelled hole back", not hs.holes(), hs.holes())
+    h.check("the box is as it was", hs.close(h.solid_volume(), s["v"]), h.solid_volume())
+    h.ribbon("Hole")
+
+
+def again_click():
+    h.click(V(20, 15, 10))
+
+
+def again_ok():
+    p = hs.hole_panel()
+    h.check("the hole is made again", p is not None and p.target is not None, hs.message(p))
+    h.task_button("OK")
+
+
 def after_redo():
     hl = hs.holes()
-    h.check("Ctrl+Y brings the hole back as a step", len(hl) == 1, hl)
+    h.check("one hole made", len(hl) == 1, hl)
     h.check(
         "a valid solid with the hole",
         h.body().Shape.isValid() and h.solid_volume() < s["v"] - 1.0,
@@ -210,6 +229,9 @@ h.run(
         click_top,
         undo_inside,
         after_undo_inside,
+        after_ctrl_y,
+        again_click,
+        again_ok,
         after_redo,
         block_sketch,
         block_plane,

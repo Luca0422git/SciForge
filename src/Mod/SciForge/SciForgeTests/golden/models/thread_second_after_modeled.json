@@ -1,0 +1,104 @@
+{
+  "id": "thread_second_after_modeled",
+  "title": "Two cosmetic threads on one boss; the first made Modeled afterwards: the second stays",
+  "tags": [
+    "thread",
+    "modeled",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 12
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 5,
+        "count": 1
+      },
+      "full_length": false,
+      "length": 4,
+      "offset": 2
+    },
+    {
+      "op": "thread",
+      "id": "t2",
+      "faces": {
+        "type": "cylinder",
+        "radius": 5,
+        "count": 1
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12942.477796076939,
+        "source": "analytic",
+        "note": "cosmetic threads change nothing: 12000 + pi 25 12"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "t1",
+      "set": {
+        "modeled": true
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12888.884653017984,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      22
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the first thread cut for real (M10x1.5, 4 long): the boss's face the second thread sat on is split, FreeCAD loses its name, and the second (cosmetic) thread finds its cylinder again by place instead of failing; V = 12000 + pi 25 12 - 4 * 13.398285765 (thread_core.removed_volume(5, 1.5, False, 5, 4))"
+  }
+}

@@ -80,6 +80,21 @@ DEFAULTS = {
     "modeled": False,
     "full_tap": True,
     "tap_depth": 8.0,
+    "expressions": {},  # value field -> formula typed in it ("holedepth * 2"), see FORMULAS
+}
+
+# Value fields that take a parameter or a formula (Fusion: every value field does), and the
+# PartDesign::Hole property the formula drives. A formula only drives its property while the
+# field is in use (a counterbore's diameter does nothing on a countersink).
+FORMULAS = {
+    "depth": "Depth",
+    "diameter": "Diameter",
+    "cbore_diameter": "HoleCutDiameter",
+    "cbore_depth": "HoleCutDepth",
+    "csink_diameter": "HoleCutDiameter",
+    "csink_angle": "HoleCutCountersinkAngle",
+    "drill_angle": "DrillPointAngle",
+    "tap_depth": "ThreadDepth",
 }
 
 
@@ -90,6 +105,7 @@ class HoleError(ValueError):
 def options_with_defaults(options):
     merged = dict(DEFAULTS)
     merged.update({k: v for k, v in (options or {}).items() if v is not None or k == "to"})
+    merged["expressions"] = dict(merged.get("expressions") or {})
     return merged
 
 
@@ -337,15 +353,78 @@ def _origin_plane(body, role="XY_Plane"):
     raise HoleError("The body has no %s." % role)
 
 
+def _history(feature):
+    """The steps before `feature` in its body, newest first (its BaseFeature chain)."""
+    seen = set()
+    obj = getattr(feature, "BaseFeature", None)
+    while obj is not None and obj.Name not in seen:
+        seen.add(obj.Name)
+        yield obj
+        obj = getattr(obj, "BaseFeature", None)
+
+
+def earliest_face(base, face_name, point):
+    """(step, 'FaceN'): the earliest step in `base`'s history that already has the flat face
+    `face_name` of `base` where `point` (body coordinates) is: the step that made the face,
+    not the hole drilled in it just before. A hole hangs its sketch (and its To target) on
+    that step, so suppressing, deleting or editing an unrelated earlier hole leaves it alone,
+    as in Fusion; a step that moved the face (Press Pull, a taller extrude) stops the search."""
+    try:
+        face = base.Shape.getElement(face_name)
+    except Exception:
+        return base, face_name
+    if face.Surface.TypeId != "Part::GeomPlane":
+        return base, face_name
+    normal = face_normal_at(face, point)
+    best = (base, face_name)
+    for obj in _history(base):
+        try:
+            if obj.Shape.isNull():
+                break
+            name = base_face_at(obj, point, normal_hint=normal, loose=0.0)
+            if name is None:
+                break
+            other = obj.Shape.getElement(name)
+        except Exception:
+            break
+        if other.Surface.TypeId != "Part::GeomPlane":
+            break
+        if face_normal_at(other, point).dot(normal) < 1.0 - 1e-9:
+            break
+        best = (obj, name)
+    return best
+
+
+def earliest_edge(base, edge_name):
+    """(step, 'EdgeN'): the earliest step in `base`'s history with the same straight edge
+    (or the longer edge it lies on): a reference measured from it then does not depend on
+    the holes drilled in between (see earliest_face)."""
+    try:
+        edge = base.Shape.getElement(edge_name)
+    except Exception:
+        return base, edge_name
+    best = (base, edge_name)
+    for obj in _history(base):
+        try:
+            name = base_edge_like(obj, edge)
+        except Exception:
+            name = None
+        if name is None:
+            break
+        best = (obj, name)
+    return best
+
+
 def _attach(sketch, body, base, face_name, point):
     """Put the sketch flat on the face (planar faces: parametric attachment, the sketch
-    follows the face). On a curved face the sketch is tangent to the face at `point`
-    (body coordinates), its normal the face's outward normal there."""
+    follows the face, on the step that made it: earliest_face). On a curved face the sketch
+    is tangent to the face at `point` (body coordinates), its normal the face's outward
+    normal there."""
     face = base.Shape.getElement(face_name)
     point = snap_to_face(face, point)
     if face.Surface.TypeId == "Part::GeomPlane":
         sketch.AttachmentOffset = App.Placement()
-        sketch.AttachmentSupport = [(base, face_name)]
+        sketch.AttachmentSupport = [earliest_face(base, face_name, point)]
         sketch.MapMode = "FlatFace"
         return "planar"
     normal = face_normal_at(face, point)
@@ -488,14 +567,20 @@ def set_position(hole, base, face_name, point, refs=None):
         raise HoleError("This hole is placed from a sketch; edit that sketch to move it.")
     body = owner_body(hole)
     try:
-        point = snap_to_face(base.Shape.getElement(face_name), point)
+        face = base.Shape.getElement(face_name)
+        point = snap_to_face(face, point)
     except Exception:
         raise HoleError("That face is gone. Click a face of the part.")
     current = sketch.AttachmentSupport
+    if face.Surface.TypeId == "Part::GeomPlane":
+        src, src_name = earliest_face(base, face_name, point)
+    else:
+        src, src_name = None, ""  # a curved face: always placed again (tangent plane)
     same_face = (
-        current
-        and current[0][0] is base
-        and list(current[0][1]) == [face_name]
+        src is not None
+        and current
+        and current[0][0] is src
+        and list(current[0][1]) == [src_name]
         and sketch.MapMode == "FlatFace"
         and sketch.AttachmentOffset.isIdentity()
     )
@@ -505,6 +590,8 @@ def set_position(hole, base, face_name, point, refs=None):
     xy = _sketch_xy(sketch, point)
     wanted, lines = [], []
     for ref, distance in refs or []:
+        if ref[0] is not None and owner_body(ref[0]) is body:
+            ref = earliest_edge(ref[0], ref[1])  # on the step that made the edge
         line = _line_xy(sketch, ref)
         if line is None or any(_parallel(line, other) for other in lines):
             continue
@@ -557,7 +644,9 @@ def drop_orphans(body):
     """Helper sketches whose hole was deleted (timeline Delete keeps a hole's sketch)."""
     doc = body.Document
     for obj in list(body.Group):
-        if is_helper(obj) and hole_of(obj) is None:
+        if (is_to_helper(obj) and hole_of_to(obj) is None) or (
+            is_helper(obj) and hole_of(obj) is None
+        ):
             try:
                 body.removeObject(obj)
                 doc.removeObject(obj.Name)
@@ -675,12 +764,17 @@ def centres(hole):
     sketch = profile_sketch(hole)
     if sketch is None:
         return []
-    body = owner_body(hole)
+    subs = [s for s in (hole.Profile[1] or []) if s] if hole.Profile else []
+    return spots(sketch, subs, hole.Reversed, owner_body(hole))
+
+
+def spots(sketch, subs, reversed_, body):
+    """[(centre, direction)] (global) of holes drilled from `sketch` at `subs` (none: every
+    point and circle of it), the way FreeCAD's Hole drills them (`reversed_`: Reversed)."""
     place = body.getGlobalPlacement() if body is not None else App.Placement()
     normal = sketch.Placement.Rotation.multVec(Z)
-    direction = normal * (1.0 if hole.Reversed else -1.0)
-    subs = [s for s in (hole.Profile[1] or []) if s] if hole.Profile else []
-    subs = subs or sketch_targets(sketch)
+    direction = normal * (1.0 if reversed_ else -1.0)
+    subs = [s for s in (subs or []) if s] or sketch_targets(sketch)
     found = []
     shape = sketch.Shape
     for sub in subs:
@@ -768,13 +862,21 @@ def through_length(hole, base=None):
 
 def depth_to(hole, ref):
     """The depth that takes the first hole to the face or plane `ref` = (obj, sub)."""
+    found = centres(hole)
+    if not found:
+        raise HoleError("Place the hole first.")
+    point, direction = found[0]
+    return depth_along(point, direction, ref)
+
+
+def depth_along(point, direction, ref):
+    """How far from `point` along `direction` (global) the face or plane `ref` = (obj, sub)
+    is. Raises HoleError when it is not ahead."""
     import Part
 
     obj, sub = ref
-    spots = centres(hole)
-    if not spots:
-        raise HoleError("Place the hole first.")
-    point, direction = spots[0]
+    if obj is None:
+        raise HoleError("The face the hole goes to is gone. Pick it again.")
     if obj.TypeId in PLANE_TYPES:
         # Origin and construction planes: an infinite plane through their placement.
         place = obj.getGlobalPlacement()
@@ -814,6 +916,152 @@ def _plane_distance(point, direction, origin, normal):
     if t <= TOL:
         raise HoleError("That face is not ahead of the hole. Pick a face the hole runs into.")
     return t
+
+
+# -- Extents "To": a depth that follows the face -----------------------------------------------
+TO_ROLE = "HoleTo"
+TO_TYPE = "Part::Part2DObjectPython"
+
+
+class HoleToDistance:
+    """Fusion's Extents "To" keeps the hole ending on its face or plane when an earlier step
+    moves that face. FreeCAD's Hole has only a typed depth, so this hidden helper (in the
+    body, just before the hole) measures the depth from the hole's start to the face on
+    every recompute, and the hole's Depth is an expression on its Distance. Its shape is the
+    measured line (hidden). Saved documents store "sciforge.hole.HoleToDistance": keep the
+    name and the properties stable."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        def add(kind, name, doc):
+            if name not in obj.PropertiesList:
+                obj.addProperty(kind, name, "Hole To", doc)
+
+        add("App::PropertyLink", "Sketch", "The sketch the hole is drilled from")
+        add("App::PropertyStringList", "Spots", "Its points/circles drilled at (none: all)")
+        add("App::PropertyBool", "Reversed", "The hole drills the other way (Flip)")
+        add("App::PropertyLinkSubGlobal", "Target", "The face or plane the hole goes to")
+        add("App::PropertyDistance", "Distance", "The depth to the target (worked out)")
+        try:
+            obj.setPropertyStatus("Distance", "Output")
+        except Exception:
+            pass
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        import Part
+
+        sketch = obj.Sketch
+        if sketch is None:
+            raise HoleError("The hole's sketch is gone.")
+        found = spots(sketch, list(obj.Spots), obj.Reversed, owner_body(obj))
+        if not found:
+            raise HoleError("The hole has no point to start from.")
+        target = obj.Target
+        if not target or target[0] is None:
+            raise HoleError("The face the hole goes to is gone. Edit the hole and pick it again.")
+        subs = [s for s in (target[1] or []) if s]
+        point, direction = found[0]
+        depth = depth_along(point, direction, (target[0], subs[0] if subs else ""))
+        if abs(obj.Distance.Value - depth) > 1e-12:
+            obj.Distance = depth
+        body = owner_body(obj)
+        inverse = body.getGlobalPlacement().inverse() if body is not None else App.Placement()
+        a = inverse.multVec(point)
+        b = inverse.multVec(point + direction * depth)
+        obj.Shape = Part.LineSegment(a, b).toShape()
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def is_to_helper(obj):
+    return obj is not None and getattr(obj, ROLE, "") == TO_ROLE
+
+
+def to_helper(hole):
+    """The HoleToDistance helper of a hole with Extents To, or None."""
+    name = load_meta(hole).get("to_helper")
+    obj = hole.Document.getObject(name) if name else None
+    return obj if is_to_helper(obj) else None
+
+
+def hole_of_to(helper):
+    """The hole whose depth a To helper drives, or None."""
+    for obj in getattr(helper, "InList", []):
+        if is_hole(obj) and load_meta(obj).get("to_helper") == helper.Name:
+            return obj
+    return None
+
+
+def _follow_to(hole, ref):
+    """Make the hole's depth follow the face or plane `ref` (Extents To)."""
+    body = owner_body(hole)
+    sketch = profile_sketch(hole)
+    if body is None or sketch is None:
+        return
+    helper = to_helper(hole)
+    if helper is None:
+        helper = hole.Document.addObject(TO_TYPE, "HoleTo")
+        HoleToDistance(helper)
+        body.insertObject(helper, hole, False)  # just before the hole
+        if ROLE not in helper.PropertiesList:
+            helper.addProperty("App::PropertyString", ROLE, "SciForge", "", 0)
+            helper.setEditorMode(ROLE, 2)
+        setattr(helper, ROLE, TO_ROLE)
+        if TIMELINE not in helper.PropertiesList:
+            helper.addProperty("App::PropertyBool", TIMELINE, "SciForge", "", 4)
+        setattr(helper, TIMELINE, False)
+        meta = load_meta(hole)
+        meta["to_helper"] = helper.Name
+        _save_meta(hole, meta)
+    if helper.Sketch is not sketch:
+        helper.Sketch = sketch
+    subs = [s for s in (hole.Profile[1] or []) if s] if hole.Profile else []
+    if list(helper.Spots) != subs:
+        helper.Spots = subs
+    if helper.Reversed != bool(hole.Reversed):
+        helper.Reversed = bool(hole.Reversed)
+    obj, sub = ref
+    current = helper.Target
+    if (
+        not current
+        or current[0] is not obj
+        or [s for s in current[1] if s] != ([sub] if sub else [])
+    ):
+        helper.Target = (obj, [sub] if sub else [])
+    label = "%s To" % display_name(hole)
+    if helper.Label != label:
+        helper.Label = label
+    _hide(helper)
+    expr = "%s.Distance" % helper.Name
+    if dict(hole.ExpressionEngine).get("Depth") != expr:
+        hole.setExpression("Depth", expr)
+
+
+def _drop_to(hole):
+    """Extents is no longer To: the depth is the typed one again."""
+    helper = to_helper(hole)
+    if helper is None:
+        return
+    if dict(hole.ExpressionEngine).get("Depth", "").startswith(helper.Name + "."):
+        hole.setExpression("Depth", None)
+    meta = load_meta(hole)
+    meta.pop("to_helper", None)
+    _save_meta(hole, meta)
+    _delete(helper)
 
 
 # -- options <-> the PartDesign::Hole ----------------------------------------------------------
@@ -875,6 +1123,7 @@ def apply(hole, options):
             _set(hole, "ModelThread", bool(o["modeled"]))
     _set(hole, "Reversed", bool(o["flip"]) and placement_of(hole) == "sketch")
     if o["extent"] == "all":
+        _drop_to(hole)
         _set(hole, "DepthType", "ThroughAll")
     else:
         if o["extent"] == "to":
@@ -888,6 +1137,10 @@ def apply(hole, options):
             raise HoleError("The depth must be more than 0.")
         _set(hole, "DepthType", "Dimension")
         _set(hole, "Depth", depth)
+        if o["extent"] == "to":
+            _follow_to(hole, o["to"])  # the depth follows the face from now on
+        else:
+            _drop_to(hole)
     _set(hole, "DrillPoint", "Angled" if o["drill_point"] == "angle" else "Flat")
     if o["drill_point"] == "angle":
         if not 0 < o["drill_angle"] < 180:
@@ -918,6 +1171,7 @@ def apply(hole, options):
         _set(hole, "HoleCutType", "Countersink")
         _set(hole, "HoleCutCountersinkAngle", o["csink_angle"])
         _set(hole, "HoleCutDiameter", o["csink_diameter"])
+    _apply_formulas(hole, o)
     meta = load_meta(hole)
     meta.update(
         {
@@ -939,6 +1193,85 @@ def apply(hole, options):
     sync_label(hole)
 
 
+def active_formulas(options):
+    """{property: formula} of the formulas typed in fields that are in use with these
+    options (see FORMULAS)."""
+    o = options
+    used = set()
+    if o["extent"] == "distance":
+        used.add("depth")
+    if o["tap_type"] == "simple":
+        used.add("diameter")
+    if o["hole_type"] == "counterbore":
+        used |= {"cbore_diameter", "cbore_depth"}
+    elif o["hole_type"] == "countersink":
+        used |= {"csink_diameter", "csink_angle"}
+    if o["drill_point"] == "angle" and o["extent"] != "all":
+        used.add("drill_angle")
+    if o["tap_type"] == "tapped" and not o["full_tap"]:
+        used.add("tap_depth")
+    found = {}
+    for key, text in (o.get("expressions") or {}).items():
+        if key in used and key in FORMULAS and text:
+            found[FORMULAS[key]] = text
+    return found
+
+
+def _apply_formulas(hole, options):
+    """Put the formulas typed in the dialog on the hole's properties (FreeCAD expressions,
+    so the hole follows a parameter later) and take away those no longer typed."""
+    from . import parameters, parameters_core
+
+    wanted = active_formulas(options)
+    names = parameters.user_names(hole.Document)
+    engine = dict(hole.ExpressionEngine)
+    for prop in sorted(set(FORMULAS.values())):
+        if prop == "Depth" and options["extent"] == "to":
+            continue  # the To helper drives it
+        text = wanted.get(prop)
+        if text:
+            expr = parameters_core.to_freecad(text, names)
+            if engine.get(prop) != expr:
+                hole.setExpression(prop, expr)
+        elif prop in engine:
+            hole.setExpression(prop, None)
+
+
+def formulas_of(hole, options):
+    """{value field: formula} of an existing hole (the fields its expressions belong to)."""
+    from . import parameters_core
+
+    try:
+        engine = dict(hole.ExpressionEngine)
+    except Exception:
+        return {}
+    found = {}
+    for key, prop in FORMULAS.items():
+        expr = engine.get(prop)
+        if not expr:
+            continue
+        if key == "depth" and options["extent"] == "to":
+            continue  # driven by the To helper, not typed
+        if key.startswith("cbore") and options["hole_type"] != "counterbore":
+            continue
+        if key.startswith("csink") and options["hole_type"] != "countersink":
+            continue
+        found[key] = parameters_core.from_freecad(expr)
+    return found
+
+
+def misses(hole):
+    """True when a computed hole takes nothing away from the part (it was moved off it)."""
+    base = hole.BaseFeature
+    try:
+        if base is None or base.Shape.isNull() or hole.Shape.isNull():
+            return False
+        before, after = base.Shape.Volume, hole.Shape.Volume
+    except Exception:
+        return False
+    return before - after <= 1e-9 * max(1.0, abs(before))
+
+
 def read(hole):
     """The Fusion options of an existing hole (SciForge's or one made in FreeCAD)."""
     o = dict(DEFAULTS)
@@ -953,6 +1286,11 @@ def read(hole):
         o["depth"] = hole.Depth.Value
         if o["extent"] == "to":
             o["to"] = _ref_load(hole.Document, meta.get("to"))
+            helper = to_helper(hole)
+            if helper is not None and helper.Target and helper.Target[0] is not None:
+                # The face as the helper follows it now (FreeCAD keeps its name current).
+                subs = [x for x in helper.Target[1] if x]
+                o["to"] = (helper.Target[0], subs[0] if subs else "")
             if o["to"] is None:
                 o["extent"] = "distance"
     o["drill_point"] = "angle" if hole.DrillPoint == "Angled" else "flat"
@@ -996,6 +1334,7 @@ def read(hole):
         else:
             o["tap_type"] = "clearance"
             o["fit"] = tables.fit_from_freecad(series, hole.ThreadFit)
+    o["expressions"] = formulas_of(hole, o)
     return o
 
 
@@ -1058,8 +1397,11 @@ def remove(hole):
     body = owner_body(hole)
     base = hole.BaseFeature
     helper = helper_sketch(hole)
+    to = to_helper(hole)
     was_tip = body is not None and body.Tip is hole
     _delete(hole)
+    if to is not None:
+        _delete(to)
     if helper is not None:
         _delete(helper)
     if was_tip and base is not None:
@@ -1067,3 +1409,19 @@ def remove(hole):
             body.Tip = base
         except Exception:
             pass
+    if was_tip:
+        show_tip(body)
+
+
+def show_tip(body):
+    """FreeCAD draws a body through its Tip, and a new feature hides the one before it. A
+    hole removed by code (a preview whose face was cleared) left the new Tip hidden: the
+    whole part vanished from the view although it was still there."""
+    if body is None or not App.GuiUp:
+        return
+    try:
+        tip = body.Tip
+        if tip is not None and tip.ViewObject is not None:
+            tip.ViewObject.Visibility = True
+    except Exception:
+        pass  # the body went with an undo or a closed design

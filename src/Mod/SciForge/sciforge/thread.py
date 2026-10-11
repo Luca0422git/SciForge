@@ -119,6 +119,38 @@ def is_cylinder(face):
     return getattr(face.Surface, "TypeId", "") == "Part::GeomCylinder"
 
 
+def refind(shape, record, tol=1e-6):
+    """(Cylinder, "FaceN"): the full cylinder of `shape` that is the one a thread was on
+    (`record`: what its last recompute stored: base, axis, radius, internal), or None. The
+    one sharing most of the old length wins."""
+    if not record:
+        return None
+    axis = App.Vector(*record["axis"])
+    base = App.Vector(*record["base"])
+    best, overlap_best = None, 0.0
+    for index, face in enumerate(shape.Faces, start=1):
+        if not is_cylinder(face):
+            continue
+        try:
+            c = Cylinder(face)
+        except ThreadError:
+            continue
+        if not c.full or c.internal != record.get("internal", c.internal):
+            continue
+        if abs(c.radius - record["radius"]) > tol or abs(abs(c.axis.dot(axis)) - 1.0) > 1e-9:
+            continue
+        if (c.base - base).cross(axis).Length > tol:
+            continue  # parallel but another axis
+        # Positions along the old axis of the new face's ends.
+        a = (c.at(c.z0) - base).dot(axis)
+        b = (c.at(c.z1) - base).dot(axis)
+        lo, hi = min(a, b), max(a, b)
+        overlap = min(hi, record["z1"]) - max(lo, record["z0"])
+        if overlap > overlap_best + tol:
+            best, overlap_best = (c, "Face%d" % index), overlap
+    return best
+
+
 # -- sizes --------------------------------------------------------------------------------------
 def size_for(cylinder, standard):
     """The designation Fusion proposes for a cylinder: a shaft at its own (major) diameter, a
@@ -291,7 +323,24 @@ class ThreadFeature:
             raise ThreadError("Pick a cylindrical face to thread.")
         source, names = link[0], list(link[1])
         shape = source.Shape
-        cylinders = [cylinder_of(shape, name) for name in names]
+        before = computed(obj).get("threads", [])
+        cylinders, found_names = [], []
+        for i, name in enumerate(names):
+            try:
+                cylinders.append(cylinder_of(shape, name))
+                found_names.append(name)
+            except ThreadError:
+                # An earlier step changed the part and FreeCAD lost the face's name: find
+                # the same cylinder again by where it is (Fusion keeps the thread on it).
+                found = refind(shape, before[i] if i < len(before) else None)
+                if found is None:
+                    raise
+                cylinders.append(found[0])
+                found_names.append(found[1])
+        if found_names != names:
+            # Point the link at the face found, so FreeCAD stops reporting the lost name on
+            # every recompute (changes made inside execute() are not a new change).
+            obj.Faces = (source, found_names)
         options = read(obj)
         designation = resolve(options, cylinders[0])
         spans = [
@@ -310,11 +359,11 @@ class ThreadFeature:
                 raise ThreadError(
                     "The thread is 0 long here: make it longer or the offset smaller."
                 )
-        computed = []
+        spans_found = []
         for c, (z0, z1) in zip(cylinders, spans):
             if not c.full:
                 raise ThreadError("Pick a full cylinder (not part of one) to thread.")
-            computed.append(
+            spans_found.append(
                 {
                     "base": list(c.base),
                     "axis": list(c.axis),
@@ -325,7 +374,7 @@ class ThreadFeature:
                 }
             )
         record = {
-            "threads": computed,
+            "threads": spans_found,
             "designation": designation.label,
             "pitch": designation.pitch,
             "major": designation.diameter,
@@ -394,10 +443,47 @@ def apply(obj, faces, options):
     for prop, value in (("Length", o["length"]), ("Offset", o["offset"])):
         if abs(getattr(obj, prop).Value - float(value)) > 1e-12:
             setattr(obj, prop, float(value))
+    _apply_formulas(obj, o)
     if not o["full_length"] and float(o["length"]) <= 0:
         raise ThreadError("The thread length must be more than 0.")
     if float(o["offset"]) < 0:
         raise ThreadError("The offset cannot be negative.")
+
+
+# Value fields that take a parameter or a formula, and the property each one drives.
+FORMULAS = {"length": "Length", "offset": "Offset"}
+
+
+def _apply_formulas(obj, options):
+    """Formulas typed in Thread Length / Offset become expressions on the feature (it then
+    follows the parameter); a full-length thread uses neither."""
+    from . import parameters, parameters_core
+
+    typed = options.get("expressions") or {}
+    names = parameters.user_names(obj.Document)
+    engine = dict(obj.ExpressionEngine)
+    for key, prop in FORMULAS.items():
+        text = typed.get(key) if not options["full_length"] else ""
+        if text:
+            expr = parameters_core.to_freecad(text, names)
+            if engine.get(prop) != expr:
+                obj.setExpression(prop, expr)
+        elif prop in engine:
+            obj.setExpression(prop, None)
+
+
+def formulas_of(obj):
+    from . import parameters_core
+
+    try:
+        engine = dict(obj.ExpressionEngine)
+    except Exception:
+        return {}
+    return {
+        key: parameters_core.from_freecad(engine[prop])
+        for key, prop in FORMULAS.items()
+        if engine.get(prop)
+    }
 
 
 def read(obj):
@@ -413,6 +499,7 @@ def read(obj):
         "length": obj.Length.Value,
         "offset": obj.Offset.Value,
         "from_end": bool(obj.FromEnd),
+        "expressions": formulas_of(obj),
     }
 
 
@@ -485,3 +572,18 @@ def remove(obj):
             body.Tip = base
         except Exception:
             pass
+    if was_tip:
+        show_tip(body)
+
+
+def show_tip(body):
+    """A feature removed by code left the step before it hidden (FreeCAD hides it when a
+    feature is added): show the body's Tip again, or the part vanishes from the view."""
+    if body is None or not App.GuiUp:
+        return
+    try:
+        tip = body.Tip
+        if tip is not None and tip.ViewObject is not None:
+            tip.ViewObject.Visibility = True
+    except Exception:
+        pass

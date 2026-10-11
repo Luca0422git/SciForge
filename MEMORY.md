@@ -130,6 +130,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       or hole faces: size from the diameter, full/partial length (+ blue length arrow), cosmetic
       (dashed helix overlay, also for tapped holes) or modeled (own ISO 68-1 groove sweep,
       `thread_core.py`). 6 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
+- [x] Hole / Thread QA pass (branch `sf/hole-qa`): Enter over the view = OK, Ctrl+Z cancels
+      / Ctrl+S finishes first (`preview.UndoCancels`), formulas and parameters in every value
+      field, Redo list kept after an unchanged dialog, Extents To follows its face
+      (`hole.HoleToDistance` helper), hole that misses the part refused, arrows stop at sane
+      limits, timeline edits with a person's double-click, picks only from the dialog's own
+      design, OK/Cancel/other keys wait for a running recompute, a thread's lost face found
+      again by geometry. 4 QA scenarios (`hole_qa*.py`, 28 paths), golden
+      `hole_to_face_follows`. Spec: `parity/hole-thread.md`.
 - [x] Fusion-style Revolve (branch `sf/revolve`, `revolve.py` / `revolve_ui.py`): profile =
       sketch areas or flat faces; axis = origin axis (drawn as long X/Y/Z lines to click),
       sketch line, construction line (drawn dashed), straight part edge, construction axis;
@@ -701,10 +709,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     press, release (the timeline selects the step), double-click, release.
   - **Hole (hole owner, `hole_ui.py`)**: with a person's double-click on "Hole 1" in the
     timeline (the first click selects the Hole step), the edit dialog then picks nothing
-    when a reference edge is clicked (`hole.py` scenario run with `click_first=True`:
-    "one reference edge" ... 7 checks fail, every time). Probably the whole-feature
-    selection the timeline click left behind; the hole scenarios pass only with the bare
-    double-click. Switch `hole.py` to `click_first=True` and fix the dialog.
+    when a reference edge is clicked. **Fixed on `sf/hole-qa`**: the Hole and Thread edit
+    dialogs clear that whole-feature selection when they open; every hole scenario now
+    uses `click_first=True`.
   - A selected timeline item is a whole-feature selection: F after a right-click on the
     timeline (Roll History Marker Here) rounded every edge that feature made. Whole features
     are no longer taken as picks when F starts (a timeline click *inside* the dialog still
@@ -741,6 +748,54 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     turns) is its exact volume. Coil Intersect = `SubtractiveHelix` with `Outside` on.
   - Golden steps `sf_primitive`, `sf_coil`, `sf_path_sketch`, `sf_pipe`, `sf_primitive_edit`
     (`golden/primitive_ops.py`); the first three take `expressions` {field: formula}.
+- **Hole / Thread QA findings (branch `sf/hole-qa`)**:
+  - The Hole and Thread dialogs were built before main's shared dialog rules and missed
+    them all: Enter over the 3D view (`preview.EnterFinishes`), Ctrl+Z / Ctrl+S / closing the
+    design (`preview.UndoCancels`; the old `hole_common.DocumentWatch` committed the preview
+    and undid it, so Ctrl+Y brought a "cancelled" hole back), `preview.end_transaction` (an
+    unchanged dialog threw away the Redo list), `preview.FormulaInput` (a parameter typed in
+    Depth was silently dropped), showing the Tip after removing a preview by code. **A new
+    dialog should start from `pickpanel.py` or copy these five.**
+  - `preview.FormulaInput` only sees the text when the field is left (Tab, Enter, a click
+    elsewhere). A plain number typed over a formula must win at once (else the preview and
+    OK still used the formula): the Hole / Thread fields watch `textEdited` and drop the
+    formula as soon as the text is a plain number (`parameters.is_plain_number`).
+    `QPushButton.click()` (the harness's `task_button`) does not move the keyboard focus, so
+    in tests a field typed with `hole_steps.type_into` (no Tab) is never "left"; use
+    `dialog_input.type_into` (types, then Tab) for formulas.
+  - FreeCAD's Hole has no "up to face" depth. Extents To is now a hidden
+    `Part::Part2DObjectPython` in the body just before the hole (`hole.HoleToDistance`,
+    role `HoleTo`, `SciForgeTimeline = False`): it measures the depth from the hole's start
+    to the target on every recompute and the hole's Depth is the expression
+    `<helper>.Distance`. Removed with the hole (`hole.remove`, timeline Delete via
+    `_helpers_of`); an orphan is dropped by the next hole. Typed formulas never touch Depth
+    while Extents is To.
+  - A long recompute (modeled thread / tapped hole) runs timers inside it; a test step that
+    pressed H or OK then closed the dialog under the running recompute (traceback: "Internal
+    C++ object (QLabel) already deleted"). Hole / Thread `_recompute` stop once closed, and
+    OK / Cancel / another command wait while `doc.Recomputing`. Extrude has the same unguarded
+    `_recompute` (extrude owner: add `if self._closed: return` after `preview.recompute` and
+    guard the `setText` in its `except`); seen when OK followed a typed value within ~1 s on a
+    part with a modeled thread.
+  - In the iso view, a click point behind a taller feature hits that feature: compute the view
+    ray (camera +x -y +z) before choosing click points next to a boss (hole_qa_more P18).
+  - A thread's face link becomes `?FaceN` when an earlier step splits that face (a modeled
+    thread before it): FreeCAD prints "missing element reference" and the thread failed.
+    `ThreadFeature.execute` now finds the cylinder again from its last `Computed` record
+    (same axis line and radius, most overlap: `thread.refind`) and points the link at it
+    inside `execute()` (changes made there are purged, nothing new to undo), so the message
+    comes once, not on every recompute.
+  - A sketch attached to a face of the step just before it depends on that step: deleting the
+    step turns the attachment off ("stays where it was") and the sketch no longer follows the
+    part (a hole then sat frozen inside a plate made taller). `hole.earliest_face` /
+    `earliest_edge` walk the BaseFeature chain back to the step that made the same flat face
+    (same plane, holding the point) or the same edge, and attach there; a step that moved the
+    face stops the walk. Create Sketch (sketch owner) attaches to the Tip's face and has the
+    same weakness: suppressing Hole 1 also suppressed the holes of a sketch drawn after it
+    (timeline suppress takes dependents along).
+  - The browser lists Single Hole helper sketches ("Hole 1 Sketch", hidden; double-click opens
+    the hole). Fusion shows no sketch for a single hole: to confirm with Luca whether they
+    should leave the browser (browser owner + `hole.py` scenario's browser step).
 
 ## Questions waiting for Luca
 
@@ -1077,6 +1132,41 @@ done, what was learned, what is next. Newest session goes at the top of the log.
    revolve, patterns, shell_draft, bodies, inspect, primitives, sweep_loft. Merged so far: hole,
    extrude/presspull QA, revolve, sketch QA, patterns, timeline/browser QA, shell_draft,
    bodies, fillet QA, inspect, primitives. Merge each only after the full suite passes.
+### 2026-10-11: QA of Hole and Thread (branch `sf/hole-qa`)
+- Branched from `sf/hole` and merged the current main into it first (the hole branch was
+  older than every shared dialog rule), so the QA ran against today's product.
+- 4 new scenarios with only real input (28 paths): `hole_qa.py` (8 paths), `hole_qa_part.py`
+  (7), `hole_qa_thread.py` (7), `hole_qa_more.py` (6). Bugs found and fixed (details in
+  Known issues and the commits): Enter over the view did nothing; an unchanged dialog threw
+  away the Redo list; Ctrl+S saved a half-made hole/thread; Ctrl+Z in the dialog committed
+  the preview; parameters/formulas typed in fields were dropped; the diameter arrow pulled
+  through the centre grew the hole again; a hole dragged off the part was accepted; a
+  person's timeline double-click left the edit dialog unable to pick edges; clearing a
+  preview hid the part; clicks in another design were taken; Extents To did not follow its
+  face (now a helper measures it); choosing To warned before the face was picked; a later
+  hole's sketch hung on the hole before it and froze when that hole was deleted; OK / H
+  during a modeled-thread recompute left a traceback; the thread length arrow ran past the
+  face; a thread whose face lost its name failed (found again by geometry).
+- Golden models `hole_to_face_follows`, `hole_second_survives_first` (fails with the old
+  attachment: 9 faces, a closed pocket), `thread_second_after_modeled` (errors without the
+  geometric re-find; golden `edit` can now set a thread's `modeled`).
+- Teammate scenarios changed on purpose: `hole_edges` (Ctrl+Z in the dialog now cancels,
+  Ctrl+Y brings nothing back; the hole is made again), `hole`, `hole_sketch`,
+  `hole_tapped`, `hole_thread` use a person's double-click on the timeline.
+- Full suite on the branch (no --only, at code commit 24314786f2, 75 minutes): unit 199 OK,
+  golden 190 pass + 1 xfail (plate_hole_grid, core patch #4 not compiled), smoke 70/70,
+  journey 25/25, 83 of 83 scenarios PASS (8146 checks; hole_qa 489, hole_qa_more 362,
+  hole_qa_thread 375, hole_qa_part 257, ribbon_sweep 109).
+- Left for other owners (Known issues): Extrude's `_recompute` has no closed-dialog guard;
+  Create Sketch attaches to the Tip's face, so suppressing an unrelated earlier hole also
+  suppresses that sketch's holes (see `hole.earliest_face`); helper sketches in the browser.
+
+## Next steps (in order)
+
+1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
+   inspect (built on `sf/inspect`, merge after review), primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
+   then the QA stage for all 12 (including the 4 already merged; hole/thread QA done on
+   `sf/hole-qa`, merge after review). Merge each only after the full suite passes locally.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).

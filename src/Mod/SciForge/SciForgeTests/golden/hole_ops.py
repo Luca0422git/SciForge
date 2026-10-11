@@ -27,7 +27,8 @@ builder.Builder when builder.py is imported.
       Thread: the size comes from the face when no designation is given; modeled cuts the
       ISO 68-1 groove (sciforge/thread_core.py has the formulas), cosmetic changes nothing.
 
-`edit` steps can change a hole's "diameter" / "depth" and a thread's "length" / "offset".
+`edit` steps can change a hole's "diameter" / "depth" and a thread's "length" / "offset" /
+"modeled".
 """
 
 import FreeCAD as App
@@ -71,7 +72,7 @@ THREAD_OPTIONS = (
     "from_end",
 )
 
-_EDIT_PROPS["thread"] = {"length": "Length", "offset": "Offset"}
+_EDIT_PROPS["thread"] = {"length": "Length", "offset": "Offset", "modeled": "Modeled"}
 
 
 def _hole_options(builder, step):

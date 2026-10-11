@@ -37,6 +37,9 @@ FIT_LABELS = [("Close", "close"), ("Normal", "normal"), ("Loose", "loose")]
 DIRECTION_LABELS = [("Right hand", "right"), ("Left hand", "left")]
 BLUE = (0.30, 0.62, 0.95)
 LINE_TYPES = ("Part::GeomLine", "Part::GeomLineSegment")
+MIN_DIAMETER = 0.1  # mm: the diameter arrow stops here
+TO_WAITING = "Click the face or plane the hole goes to (in the 3D view or the browser)."
+MISSES = "The hole misses the part. Drag it (or type X / Y) back onto a face of the part."
 
 
 class PointDragger:
@@ -221,6 +224,11 @@ class HolePanel(Panel):
         super().__init__(doc, "Hole" if feature is None else "Edit Hole")
         HolePanel.last = self
         self.escape = preview.EscapeCancels(self)
+        # Ctrl+Z cancels the hole being made, Ctrl+S/N/O finish it first, closing the design
+        # drops the dialog; Enter over the 3D view is OK (the same rules as every dialog).
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
+        self.formula_error = ""  # a formula typed in a field that is no value
         self.target = feature
         self.editing = feature is not None
         self.body = hole.owner_body(feature) if feature is not None else commands.find_body()
@@ -243,8 +251,14 @@ class HolePanel(Panel):
         self.observer = None
         self.gate = None
         self.depth_base = None
-        self.watch = common.DocumentWatch(self)
         if feature is not None:
+            # A step clicked in the timeline (or a sketch row in the browser) stays selected
+            # as a whole object; FreeCAD then took the first click on its edges as a click
+            # on something already selected and picked nothing. The dialog starts clean.
+            try:
+                Gui.Selection.clearSelection()
+            except Exception:
+                pass
             try:
                 self.options.update(hole.read(feature))
             except Exception as exc:
@@ -253,8 +267,11 @@ class HolePanel(Panel):
                 self.sketch, self.subs = hole.picked_targets(feature)
                 self.active = "points"
                 self._show_sketch()
+        # Our own copy: the formulas typed in this dialog only.
+        self.options["expressions"] = dict(self.options.get("expressions") or {})
         self._build_form()
         self._show_options()
+        self.show_formulas()
         self._watch()
         if feature is not None:
             self.activate(self.active)
@@ -386,7 +403,29 @@ class HolePanel(Panel):
         )
         self.drill_angle_label = QtWidgets.QLabel("Tip Angle")
         form.addRow(self.drill_angle_label, self.drill_angle.widget)
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        # Fusion takes a parameter or a formula in every value field.
+        self.value_fields = {
+            "depth": self.depth,
+            "diameter": self.diameter,
+            "cbore_diameter": self.cbore_diameter,
+            "cbore_depth": self.cbore_depth,
+            "csink_diameter": self.csink_diameter,
+            "csink_angle": self.csink_angle,
+            "drill_angle": self.drill_angle,
+            "tap_depth": self.tap_depth,
+        }
+        self.formula_inputs = [
+            preview.FormulaInput(self, key, field) for key, field in self.value_fields.items()
+        ]
+        for key, field in self.value_fields.items():
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is not None:
+                edit.textEdited.connect(lambda text, key=key: self._text_edited(key, text))
         for box in (
             self.extent,
             self.hole_type,
@@ -638,8 +677,10 @@ class HolePanel(Panel):
             text = (
                 "Click points and circles of a sketch: a hole at each. Click one again to drop it."
             )
-        if self.target is None and self.base is None:
+        if self.target is None and self.base is None and not common.has_solid(self.doc):
             text = "Make a solid first (Create Sketch, then Extrude)."
+        elif self.extent.currentData() == "to" and not self.options.get("to"):
+            text = TO_WAITING  # what the dialog waits for, not a problem
         self.what.setText(text)
         self._update_visibility()
 
@@ -655,7 +696,7 @@ class HolePanel(Panel):
 
     def _start(self, selection=None):
         self.activate("face")
-        found = list(selection) if selection is not None else common.picks()
+        found = list(selection) if selection is not None else common.picks(self.doc)
         try:
             Gui.Selection.clearSelection()
         except Exception:
@@ -672,7 +713,9 @@ class HolePanel(Panel):
                 self._use_body(owner)
         if self.base is None:
             self._refresh_fields()
-            self.message.setText("⚠ Make a solid first: Create Sketch, then Extrude.")
+            if not common.has_solid(self.doc):
+                self.message.setText("⚠ Make a solid first: Create Sketch, then Extrude.")
+            # else: the active body is empty, a face of another body can still be clicked
             return
         if sketch_picks:
             self._quiet = True
@@ -724,7 +767,7 @@ class HolePanel(Panel):
         if self._closed:
             return
         try:
-            found = common.picks()
+            found = common.picks(self.doc)
             if not found:
                 return
             Gui.Selection.clearSelection()
@@ -738,7 +781,7 @@ class HolePanel(Panel):
         if obj.isDerivedFrom(hole.SKETCH_TYPE):
             if hole.is_helper(obj) or self.active == "to":
                 return
-            if self.base is None:
+            if self.base is None and not common.has_solid(self.doc):
                 return
             if self.placement.currentData() != "sketch":
                 if self.editing:
@@ -841,7 +884,7 @@ class HolePanel(Panel):
         if name is None:
             self.message.setText("That edge is made by this hole. Pick an edge of the part.")
             return
-        ref = (self.base, name)
+        ref = hole.earliest_edge(self.base, name)  # the step that made the edge
         sketch = hole.helper_sketch(self.target)
         why = hole.check_reference(sketch, ref)
         if why:
@@ -956,7 +999,7 @@ class HolePanel(Panel):
                 if name is None:
                     self.message.setText("That face is made by this hole. Pick a face of the part.")
                     return
-                ref = (self.base, name)
+                ref = hole.earliest_face(self.base, name, local)  # the step that made it
             else:
                 ref = (obj, short)
         else:
@@ -1089,6 +1132,67 @@ class HolePanel(Panel):
             return
         self._geometry_changed()
 
+    # -- formulas (preview.FormulaInput calls the three below) ----------------------------------
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options.setdefault("expressions", {})[key] = text
+        if key == "depth":
+            self._depth_typed(value)
+        elif key == "diameter":
+            self._diameter_typed(value)
+        else:
+            self._typed()
+        self.show_formulas()
+
+    def formula_cleared(self, key):
+        self.drop_formula(key)
+
+    def formula_failed(self, key, text):
+        # Kept until the field gets a value again (a preview rebuild must not wipe it).
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
+
+    def drop_formula(self, key):
+        """A plain number typed or a handle dragged: the value no longer follows a formula."""
+        self.formula_error = ""
+        if self.options.setdefault("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            self._changed()
+
+    def _text_edited(self, key, text):
+        """A plain number typed over a formula (or over a typo) wins at once: the preview and
+        OK use it without waiting for the field to be left."""
+        try:
+            from . import parameters
+
+            if self._closed or not text.strip() or not parameters.is_plain_number(text):
+                return
+            self.drop_formula(key)  # also forgets a typo made in a field before
+        except Exception as exc:
+            warn("hole value: %s" % exc)
+
+    def show_formulas(self):
+        names = {
+            "depth": "Depth",
+            "diameter": "Diameter",
+            "cbore_diameter": "Counterbore Diameter",
+            "cbore_depth": "Counterbore Depth",
+            "csink_diameter": "Countersink Diameter",
+            "csink_angle": "Countersink Angle",
+            "drill_angle": "Tip Angle",
+            "tap_depth": "Tap Depth",
+        }
+        rows = [
+            "%s = %s" % (names.get(key, key), text)
+            for key, text in sorted((self.options.get("expressions") or {}).items())
+            if text
+        ]
+        try:
+            self.formulas.setText("\n".join(rows))
+            self.formulas.setVisible(bool(rows))
+        except RuntimeError:
+            pass  # the dialog is gone
+
     def _apply_options(self, auto_flip=False):
         self._collect()
         options = dict(self.options)
@@ -1121,19 +1225,39 @@ class HolePanel(Panel):
                 self.dirty = False
                 self._apply()
             preview.recompute(self.doc)
+            if self._closed:
+                return  # finished or cancelled while the (slow) recompute ran
             self.show_status()
             self._show_computed()
             self._refresh_fields()
             self._make_draggers()
         except Exception as exc:
-            self.message.setText("⚠ %s" % exc)
+            if not self._closed:
+                try:
+                    self.message.setText("⚠ %s" % exc)
+                except RuntimeError:
+                    pass  # the dialog's widgets are gone
+
+    def _busy(self):
+        """True while FreeCAD recomputes (a modeled thread takes a moment). OK, Cancel and
+        another command's key wait for it: finishing the dialog in the middle of a recompute
+        removed the preview under FreeCAD's feet."""
+        try:
+            return bool(self.doc.Recomputing)
+        except Exception:
+            return False
 
     def _apply(self):
         if self.target is None:
             return
         self._collect()
+        options = dict(self.options)
+        if options["extent"] == "to" and not options.get("to"):
+            # Fusion: the To box waits for its click, nothing is wrong yet; the hole keeps its
+            # depth meanwhile (the dialog says what it waits for).
+            options["extent"] = "distance"
         try:
-            hole.apply(self.target, self.options)
+            hole.apply(self.target, options)
             self.error = ""
         except hole.HoleError as exc:
             self.error = str(exc)
@@ -1156,11 +1280,21 @@ class HolePanel(Panel):
     def feature(self):
         return self.target
 
-    def show_status(self):
+    def problem(self):
+        """What keeps the hole from being made, in words, or ''."""
+        if self.formula_error:
+            return self.formula_error
         if self.error:
-            self.message.setText("⚠ " + self.error)
-            return
+            return self.error
         text = plain(preview.failure(self.target))
+        if text:
+            return text
+        if self.target is not None and hole.misses(self.target):
+            return MISSES
+        return ""
+
+    def show_status(self):
+        text = self.problem()
         self.message.setText("⚠ " + text if text else "")
 
     # -- handles --------------------------------------------------------------------------
@@ -1233,7 +1367,7 @@ class HolePanel(Panel):
                     radius,
                     scale,
                     on_drag=self._diameter_dragged,
-                    on_release=self._diameter_dragged,
+                    on_release=self._diameter_released,
                 )
                 common.on_top(arrow.root)
                 self.draggers["diameter"] = arrow
@@ -1291,6 +1425,8 @@ class HolePanel(Panel):
             self.depth.set_value(depth)
         finally:
             self._quiet = False
+        if self.options.get("expressions", {}).pop("depth", None) is not None:
+            self.show_formulas()  # dragged: the depth no longer follows its formula
         self._changed()
 
     def _depth_released(self, value):
@@ -1301,31 +1437,49 @@ class HolePanel(Panel):
             arrow.set_distance(0.0)  # the arrow goes back above the hole
 
     def _diameter_dragged(self, value):
-        diameter = max(round(abs(value) * 2.0, 2), 0.1)
+        # The arrow sits on the rim: pulled in through the centre the hole stays as small as
+        # it gets (it used to grow again on the far side, as if the arrow were pushed out).
+        diameter = max(round(value * 2.0, 2), MIN_DIAMETER)
         self._quiet = True
         try:
             self.diameter.set_value(diameter)
         finally:
             self._quiet = False
+        if self.options.get("expressions", {}).pop("diameter", None) is not None:
+            self.show_formulas()
         self._changed()
 
-    # -- undo / closing while open ----------------------------------------------------------
-    def document_event(self, closing):
-        if closing:
-            self.target = self.base = self.body = None
-            common.abandon(self)
-        else:
-            QtCore.QTimer.singleShot(0, lambda: common.end_after_undo(self))
+    def _diameter_released(self, value):
+        self._diameter_dragged(value)
+        arrow = self.draggers.get("diameter")
+        if arrow is not None:
+            arrow.set_distance(self.diameter.value() / 2.0)  # back on the rim
 
     # -- OK / Cancel ----------------------------------------------------------------------
+    def finish(self):
+        """Another command is starting: keep the hole if it is good, else drop it. Not in the
+        middle of a recompute (the other command then says to finish this one first)."""
+        if self._busy():
+            return
+        super().finish()
+
     def accept(self):
         if self._closed:
             return True
+        if self._busy():
+            self.message.setText("⚠ Still working out the preview; press OK again in a moment.")
+            return False
         if self.target is None:
             if self.placement.currentData() == "single":
                 self.message.setText("⚠ Click a face to place the hole first.")
             else:
                 self.message.setText("⚠ Click points or circles of a sketch first.")
+            return False
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
+            return False
+        if self.extent.currentData() == "to" and not self.options.get("to"):
+            self.message.setText("⚠ " + TO_WAITING)
             return False
         self._timer.stop()
         if self.dirty:
@@ -1335,7 +1489,7 @@ class HolePanel(Panel):
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
-        text = plain(preview.failure(self.target))
+        text = self.problem()
         if text:
             self.message.setText("⚠ " + text)
             return False
@@ -1348,12 +1502,15 @@ class HolePanel(Panel):
         HolePanel.remembered = {
             k: v
             for k, v in self.options.items()
-            if k not in ("placement", "to", "flip", "user_flip", "extent")
+            # A formula is this hole's: the next hole starts with the plain values.
+            if k not in ("placement", "to", "flip", "user_flip", "extent", "expressions")
         }
         if self.options["extent"] != "to":
             HolePanel.remembered["extent"] = self.options["extent"]
         self.cleanup()
-        self.doc.commitTransaction()
+        # Also closes the step's name when nothing changed (else the next change anywhere
+        # took that name and threw away the Redo list).
+        preview.end_transaction(self.doc)
         self._close()
         log("%s done" % self.title)
         return True
@@ -1361,10 +1518,15 @@ class HolePanel(Panel):
     def reject(self):
         if self._closed:
             return True
+        if self._busy():
+            QtCore.QTimer.singleShot(200, self.reject)  # once the recompute is over
+            return False
         self._timer.stop()
+        body = self.body
         self.cleanup()
-        self.doc.abortTransaction()
+        preview.end_transaction(self.doc, abort=True)
         preview.recompute(self.doc)
+        hole.show_tip(body)
         self._close()
         return True
 
@@ -1372,20 +1534,27 @@ class HolePanel(Panel):
         self._hide_shown_sketch()
         self._unwatch()
         self.escape.remove()
+        self.undo_guard.remove()
+        self.enter.remove()
         self._remove_draggers()
-        self.watch.remove()
         super().cleanup()
 
 
 def _ref_text(ref):
+    """What a selection box shows: "Face of Extrude 1" (the step's name in the timeline,
+    not FreeCAD's internal label), or a plane's name."""
     if not ref or ref[0] is None:
         return ""
     obj, sub = ref
-    if obj.TypeId in hole.PLANE_TYPES:
-        return obj.Label
+    try:
+        if obj.TypeId in hole.PLANE_TYPES:
+            return obj.Label
+        name = hole.display_name(obj)
+    except Exception:
+        return ""  # the object went with an undo
     if sub:
-        return "%s of %s" % (sub.rstrip("0123456789") or sub, obj.Label)
-    return obj.Label
+        return "%s of %s" % (sub.rstrip("0123456789") or sub, name)
+    return name
 
 
 class HoleCommand:
@@ -1403,7 +1572,7 @@ class HoleCommand:
     def Activated(self):
         try:
             install_guard()
-            found = common.picks()  # a face or sketch points picked before H
+            found = common.picks(App.ActiveDocument)  # a face or sketch points picked before H
             if not commands.finish_open_dialog():
                 return
             Gui.Control.showDialog(HolePanel(App.ActiveDocument, selection=found))

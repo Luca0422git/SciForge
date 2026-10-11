@@ -127,10 +127,17 @@ def resolve(sel_obj, name):
     return obj, short
 
 
-def picks():
-    """[(object, short name, picked point or None)] of the selection (global point)."""
+def picks(doc=None):
+    """[(object, short name, picked point or None)] of the selection (global point). With
+    `doc`, only what was picked in that design (a click in another open design is no pick
+    for a dialog working on this one)."""
     found = []
     for sel in Gui.Selection.getSelectionEx():
+        try:
+            if doc is not None and sel.Object.Document.Name != doc.Name:
+                continue
+        except Exception:
+            continue
         points = list(getattr(sel, "PickedPoints", []) or [])
         names = list(sel.SubElementNames) or [""]
         for i, name in enumerate(names):
@@ -140,6 +147,19 @@ def picks():
             point = App.Vector(points[i]) if i < len(points) else None
             found.append((obj, short, point))
     return found
+
+
+def has_solid(doc):
+    """True when some body of the design has a solid (a face to drill or thread can be
+    clicked, also when the active body is still empty)."""
+    try:
+        for body in doc.findObjects("PartDesign::Body"):
+            tip = body.Tip
+            if tip is not None and not tip.Shape.isNull() and tip.Shape.Solids:
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def global_shape(obj, short):
