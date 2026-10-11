@@ -37,6 +37,7 @@ the timeline, typing into the dialog fields.
 import math
 
 import FreeCAD as App
+import FreeCADGui as Gui
 from PySide import QtCore
 
 from SciForgeTests.gui import bodies_steps as s
@@ -604,20 +605,25 @@ def m_extruded():
     h.shot("M-after-reopen")
 
 
-# == N: Del in the browser on the used-up body ==================================================
+# == N: Del on the used-up body ====================================================================
 def n_pick_used_up_row():
     state["n_volume"] = s.volume(s.bodies()[1])
     state["n_bodies"] = len(s.bodies())
-    s.click_browser_row(s.bodies()[0].Label)
+    used_up = s.bodies()[0]
+    tree = s.browser()
+    h.check(
+        "the used-up body is not in the browser (Fusion)",
+        tree is not None and tree.row(used_up.Label) is None,
+        tree.labels() if tree else None,
+    )
+    # No longer reachable in the browser: select it as a script would, then Del.
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(App.ActiveDocument.Name, used_up.Name)
 
 
 def n_del_key():
-    from SciForgeTests.gui import widget_input as w
-
-    tree = s.browser()
-    if h.check("browser", tree is not None):
-        h.check("the used-up body is selected", s.selected_names() == [s.bodies()[0].Name])
-        w.key(tree, QtCore.Qt.Key_Delete)
+    h.check("the used-up body is selected", s.selected_names() == [s.bodies()[0].Name])
+    h.press(QtCore.Qt.Key_Delete)
 
 
 n_del_key.wait_ms = 1500

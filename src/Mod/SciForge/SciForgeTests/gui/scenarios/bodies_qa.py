@@ -1106,7 +1106,17 @@ def g_joined():
 
 
 def g_pick_tool_row():
-    s.click_browser_row(s.bodies()[1].Label)
+    tool = s.bodies()[1]
+    tree = s.browser()
+    h.check(
+        "the used-up Body2 is not in the browser (Fusion)",
+        tree is not None and tree.row(tool.Label) is None,
+        tree.labels() if tree else None,
+    )
+    # No longer reachable in the browser: select it as a script would, to check that
+    # deleting a used-up tool body still keeps the Combine working.
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(App.ActiveDocument.Name, tool.Name)
 
 
 def g_delete_tool():
