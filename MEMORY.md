@@ -690,7 +690,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   clicks in another design taken as picks, the drag arrow left behind the edge.
 - Reported, not mine to fix: timeline Delete of the last step hides the whole part
   (`timeline_ops.delete`); `taskui.DistanceField` has the µm trap in every other dialog.
-- Full suite: FULL_SUITE_RESULT
+- Full suite at the end (no --only): unit 161 OK; golden 135 pass + 1 xfail
+  (`plate_hole_grid`, needs core patch #4); smoke 70/70; journey 25/25; 54 of 54 scenarios
+  PASS (4310 checks; fillet_qa 112, fillet_qa_part 96, fillet_qa_more 90,
+  fillet_qa_chamfer 62; the teammate's fillet 67, fillet_chamfer 48, fillet_features 23,
+  fillet_chain 14 unchanged).
 
 ## Next steps (in order)
 
