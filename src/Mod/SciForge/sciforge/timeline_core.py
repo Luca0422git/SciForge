@@ -61,6 +61,7 @@ KINDS = {
     "presspull": ("Press Pull", "press_pull"),
     "offset_face": ("Offset Face", "offset_face"),
     "replace_face": ("Replace Face", "replace_face"),
+    "delete_face": ("Delete Face", "delete"),
     "plane": ("Plane", "offset_plane"),
     "axis": ("Axis", "axis"),
     "point": ("Point", "point"),
@@ -143,6 +144,7 @@ KIND_BY_SCIFORGE_TYPE = {
     "RectangularPattern": "pattern_rect",
     "CircularPattern": "pattern_circ",
     "PatternOnPath": "pattern_path",
+    "DeleteFace": "delete_face",
     "Move": "move",
     "MoveCopy": "move",
 }
