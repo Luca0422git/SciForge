@@ -73,6 +73,11 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `pattern_rect` | `id`, `features`, `direction`, `count`, `spacing`, optional second direction `direction2`, `count2`, `spacing2` | Rectangular Pattern |
 | `pattern_circ` | `id`, `features`, `axis`, `count`, `angle` | Circular Pattern |
 | `mirror` | `id`, `features`, `plane` | Mirror |
+| `rectangular_pattern` | `id`, one of `features` (step ids) / `faces` (selector) / `body: true`, `direction` (X/Y/Z or `{"edge": sel}` / `{"face": sel}`), `quantity`, `distance`, `distribution` (extent/spacing), `direction_type` (one/symmetric), `direction2`, `quantity2`, `distance2`, `direction_type2`, `expressions` | Rectangular Pattern dialog (`golden/pattern_ops.py`, `sciforge/pattern.py`: the dialog's code). Bodies make new bodies; the model is then measured over every body |
+| `circular_pattern` | `id`, what (as above), `axis` (X/Y/Z, edge or round face), `quantity`, `type` (full/angle/symmetric), `angle` | Circular Pattern dialog |
+| `path_pattern` | `id`, what, `path` `{"sketch": id}` or `{"sketch": id, "edge": n}`, `quantity`, `distance`, `distribution`, `direction_type`, `orientation` (identical/path) | Pattern on Path dialog |
+| `fusion_mirror` | `id`, what, `plane` (XY/XZ/YZ or `{"face": sel}`), `operation` (join/new_body, bodies) | Mirror dialog |
+| `pattern_edit` | `target`, `set` {dialog field: value} | double-click a pattern in the timeline and change its fields |
 | `edit` | `target`, `set` {option: value} or `constraint` + `value` | double-click a timeline item and change it |
 | `check` | `expect` | measure the part at this point (before an edit, for example) |
 | `sketch_polygon` | `sketch`, `center`, `point` (middle of an edge, or a corner), `sides`, `circumscribed`, `diameter`, `name` | Circumscribed / Inscribed Polygon in a sketch (golden/sketch_ops.py) |

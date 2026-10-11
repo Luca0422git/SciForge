@@ -1,0 +1,60 @@
+{
+  "id": "pattern_circ_suppressed_bodies",
+  "title": "A 4x4x4 body patterned around Z (Full, 4) into new bodies, one copy suppressed",
+  "tags": [
+    "pattern",
+    "circular",
+    "bodies",
+    "suppression",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            -2,
+            14,
+            2
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 4
+    },
+    {
+      "op": "circular_pattern",
+      "id": "p1",
+      "body": true,
+      "axis": "Z",
+      "quantity": 4,
+      "suppressed": [
+        1
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 192,
+    "solids": 3,
+    "faces": 18,
+    "bbox": [
+      -2,
+      -14,
+      0,
+      14,
+      14,
+      4
+    ],
+    "source": "analytic",
+    "note": "Copies at 90, 180 and 270 degrees, copy 1 (180) left out. Original x 10..14, y -2..2; at 90: x -2..2, y 10..14; at 270: x -2..2, y -14..-10. Measured over every body: 3 cubes of 64, 18 faces."
+  }
+}

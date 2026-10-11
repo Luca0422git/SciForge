@@ -1,0 +1,79 @@
+{
+  "id": "mirror_fillet_feature",
+  "title": "Box 40x30x10 centred, one vertical edge filleted r3, the fillet mirrored across YZ",
+  "tags": [
+    "mirror",
+    "fillet",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "box"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 3,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "min"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "features": [
+        "f1"
+      ],
+      "plane": "YZ"
+    }
+  ],
+  "expect": {
+    "volume": 11961.371669411541,
+    "faces": 8,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "Each r3 round on a 10 mm vertical edge removes 10*3^2*(1 - pi/4). Faces: 6 + 2 rounds."
+  }
+}

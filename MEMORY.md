@@ -135,6 +135,18 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       the revolve goes mostly into material (Revolution <-> Groove swap); timeline edit;
       the interim "Revolve (Cut)" ribbon entry removed. 3 scenarios (`revolve_*.py`), 12
       golden models (`sf_revolve_*`, ops `sf_revolve` / `sf_revolve_edit`). Gap: Type "To".
+- [x] Rectangular Pattern, Circular Pattern, Pattern on Path, Mirror, Fusion-style (branch
+      `sf/patterns`): Pattern Type Features (FreeCAD's LinearPattern/PolarPattern/Mirrored,
+      dress-ups included; a face click takes the feature that made it) / Faces (SciForge's
+      `PatternFeature` closes the faces into the hole or boss they bound) / Bodies (one new body
+      per copy; Mirror: New Body or Join). Quantity, Distance, Extent/Spacing, One Direction/
+      Symmetric per direction, Direction 2 offered at right angles, Full/Angle/Symmetric,
+      Identical/Path Direction, Suppression (click the dot on a copy); origin axes and planes
+      drawn to click; blue arrows and a curved angle handle; parameters/formulas; live preview;
+      errors in the dialog; timeline edit.
+      Spec + gaps: `docs/sciforge/parity/patterns.md`. 6 scenarios (`patterns*.py`), 16 golden
+      models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
+      `SciForge_PatternOnPath` (was greyed).
 
 ## Known issues / findings
 
@@ -379,6 +391,48 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `Gui.getIcon("Sketcher_ToggleConstruction_Constr")`. Every new sketch starts in normal mode.
 - Unexplained: in one sketch_qa screenshot (path F) the task panel was drawn see-through (3D
   view visible behind the palette); not reproduced alone. Probably FreeCAD's overlay dock.
+- **Patterns findings (branch `sf/patterns`)**:
+  - FreeCAD's LinearPattern/PolarPattern read a spacing of exactly -1 as "use Offset"; a
+    symmetric pattern is a walk of gaps (0, s, .. then a jump back) that must never contain -1
+    (moved by a nanometre). List properties take a whole-list expression
+    (`list(Offset.Value; ...)`), not per-element ones: that keeps symmetric copies following a
+    parameter.
+  - FreeCAD 1.1 bodies allow several solids (`Body.AllowCompound` is on by default), and its
+    pattern features repeat dress-ups (fillets) too.
+  - A PartDesign body takes its BaseFeature's shape without the shape's placement: bake the
+    placement in (`shape.transformShape(matrix, True)`), or the copy lands on the original.
+  - A top-level `Part::FeaturePython` linking into a body needs `App::PropertyLink(Sub)Global`,
+    else "Link(s) ... go out of the allowed scope" is printed.
+  - An overlay drawn over the part (origin axes/planes) gets the press, but FreeCAD still
+    selects the part on the release: remember the overlay click and ignore that selection.
+  - `sketch_ui.PlanePicker` leaves every click over the part to the part (fine for Create
+    Sketch); pattern_ui subclasses it so a square in front of the part wins (Mirror Plane).
+  - Harness trap: a scenario step whose name contains "error" fails the step (the harness
+    reads its own "step: ..." log line in the Report view).
+  - **To confirm with Luca:** Fusion's Symmetric (rectangular and circular) is implemented as
+    "quantity and distance/angle per side, the original shared"; Direction 2 is offered at
+    right angles after Direction 1; Mirror of a body defaults to New Body.
+  - PartDesign features already own a `Suppressed` bool: a Python feature's own property of
+    that name is silently not added (use another name: `SuppressedCopies`).
+  - Quantity fields take parameters/formulas (`pattern_ui.CountBox`): FreeCAD's pattern
+    features cannot change their copy count from an expression cleanly, so such a pattern is
+    built by `PatternFeature` (expression `round(...)` on its `Quantity`). The spin arrows
+    drop the formula (a plain number again). Bodies refuse a quantity formula.
+  - A pattern has at most 2500 instances (`pattern_core.MAX_INSTANCES`, checked in
+    `pattern.check` and when the copies are computed): measured here, a LinearPattern of
+    50 x 40 holes took 14 s, 30 x 30 4 s; 5000 overlapping holes hung a scenario. The
+    Quantity box has keyboard tracking off (typing 900 must not build 9 and 90 on the way).
+  - The Total Angle handle counts on past 180 deg (`pattern_ui._TurnDragger` unwraps
+    extrude_ui.AngleDragger's -180..180 reading against the last one); drag up to 360.
+  - Theme (not patterns' file): an UNCHECKED QCheckBox indicator is practically invisible on
+    the dark task panel (the tick shows once checked). Affects Suppression and every other
+    dialog's check boxes: theme owner, give `QCheckBox::indicator` a visible border.
+  - Not done (gaps, see the parity doc): Compute Option Optimized/Adjust,
+    Components, face copies that heal into different
+    surroundings, an explicit start point on a path. The timeline module has no entry for
+    `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
+    kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
+    `"PatternOnPath"` to it in `KIND_BY_SCIFORGE_TYPE`.
 
 ## Questions waiting for Luca
 
@@ -526,6 +580,27 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Left open: Fusion's angle typed relative to the previous line, tangent arc by dragging from
   a line end, greyed sketch tools, Fusion's constraint glyph look; sketch_polygon failed once
   ("second use") and never again; one see-through task panel screenshot (path F).
+
+### 2026-10-10: Patterns and Mirror (branch `sf/patterns`)
+- New: `pattern_core.py` (where copies go, pure), `pattern.py` (document side: FreeCAD's
+  pattern features with both spacing lists written, symmetric gap walks, SciForge's
+  `PatternFeature` for faces / paths / anything FreeCAD cannot repeat, new-body copies for
+  Bodies), `pattern_ui.py` (Rectangular / Circular / Pattern on Path dialogs, origin-axis and
+  front-plane pickers, highlight overlay, arrows, angle handle, editors, delete watch for body
+  patterns), `mirror_ui.py` (Mirror). Ribbon: Pattern on Path enabled (one line).
+- Later the same day: Suppression (dots on the copies), Quantity from a parameter/formula,
+  SciForge's own extrude / a pattern step as mirror and pattern objects.
+- Tests: scenarios `patterns_rect`, `patterns_circ`, `patterns_mirror`, `patterns_path`,
+  `patterns_suppress`, `patterns_params`, `patterns_qa` (real input only); golden ops
+  `rectangular_pattern`, `circular_pattern`, `path_pattern`, `fusion_mirror`, `pattern_edit`
+  (`golden/pattern_ops.py`) + 19 models;
+  unit tests `test_pattern_core.py` (17).
+- Parity doc `docs/sciforge/parity/patterns.md` (assumptions to confirm with Luca, gaps).
+- Full suite at the end: unit 153 OK; golden 121 pass + 1 xfail (`plate_hole_grid`, needs
+  core patch #4); smoke 70/70; journey 25/25; 39 of 40 scenarios PASS in the full run,
+  `sketch_draw` failed 3 checks ("circle diameter typed: 8" got r 4.97) while another
+  worktree's suite ran at the same time, and PASSES alone (86 checks): timing-sensitive,
+  sketch owner to look at.
 
 ## Next steps (in order)
 

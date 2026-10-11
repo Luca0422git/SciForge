@@ -81,7 +81,7 @@ SOLID_CREATE = group(
                     ("SciForge_CircularPattern", "PartDesign_PolarPattern"),
                     "pattern_circ",
                 ),
-                item("Pattern on Path", None, "pattern_rect"),
+                item("Pattern on Path", "SciForge_PatternOnPath", "pattern_rect"),
             ],
         ),
         item("Mirror", ("SciForge_Mirror", "PartDesign_Mirrored"), "mirror"),

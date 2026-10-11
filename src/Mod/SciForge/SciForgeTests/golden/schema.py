@@ -494,3 +494,31 @@ def validate(model):  # noqa: F811  (adds the revolve checks to the checks above
     _validate_before_revolve(model)
     _check_revolve_steps(model)
     return model
+
+
+
+# Fusion-style Rectangular / Circular Pattern, Pattern on Path and Mirror (golden/pattern_ops.py;
+# sciforge/pattern.py, the same code as their dialogs). What is patterned: one of "features"
+# (step ids), "faces" (a selector) or "body": true.
+_PATTERN_WHAT = {"features", "faces", "body", "expressions", "suppressed", "comment"}
+STEP_KEYS["rectangular_pattern"] = (
+    {"id", "direction"},
+    _PATTERN_WHAT
+    | {
+        "quantity",
+        "distance",
+        "distribution",
+        "direction_type",
+        "direction2",
+        "quantity2",
+        "distance2",
+        "direction_type2",
+    },
+)
+STEP_KEYS["circular_pattern"] = ({"id", "axis"}, _PATTERN_WHAT | {"quantity", "type", "angle"})
+STEP_KEYS["path_pattern"] = (
+    {"id", "path"},
+    _PATTERN_WHAT | {"quantity", "distance", "distribution", "direction_type", "orientation"},
+)
+STEP_KEYS["fusion_mirror"] = ({"id", "plane"}, _PATTERN_WHAT | {"operation"})
+STEP_KEYS["pattern_edit"] = ({"target", "set"}, {"comment"})

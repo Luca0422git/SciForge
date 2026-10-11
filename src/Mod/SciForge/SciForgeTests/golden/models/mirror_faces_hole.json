@@ -1,0 +1,82 @@
+{
+  "id": "mirror_faces_hole",
+  "title": "Plate 40x30x10 centred: the wall of a hole r3 at (10, 5) mirrored across YZ (Faces)",
+  "tags": [
+    "mirror",
+    "faces",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            5,
+            3
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 3,
+        "count": 1
+      },
+      "plane": "YZ"
+    }
+  ],
+  "expect": {
+    "volume": 11434.513322353838,
+    "area": 4063.8937829015426,
+    "faces": 8,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "The wall closed with its top and bottom discs is the hole's cylinder, cut again at (-10, 5). V = 12000 - 2*pi*3^2*10; A = 3800 - 4*9pi + 2*(2pi*3*10)."
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "id": "pattern_circ_faces_bolt_circle",
+  "title": "Disc r40x10: the wall of a hole r4 patterned around Z, Full, 6 (Pattern Type Faces)",
+  "tags": [
+    "pattern",
+    "circular",
+    "faces",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            40
+          ],
+          "name": "disc"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            30,
+            0,
+            4
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "circular_pattern",
+      "id": "p1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 4,
+        "count": 1
+      },
+      "axis": "Z",
+      "quantity": 6
+    }
+  ],
+  "expect": {
+    "volume": 47249.553509990496,
+    "area": 13471.149298593034,
+    "faces": 9,
+    "bbox": [
+      -40,
+      -40,
+      0,
+      40,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "The picked wall is closed with the top and bottom faces into the hole's cylinder, which is cut at 60 degree steps. V = pi*40^2*10 - 6*pi*4^2*10; A = 2*1600pi + 2pi*40*10 - 12*16pi + 6*2pi*4*10 (same as flange_polar_holes)."
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "id": "pattern_circ_symmetric_holes",
+  "title": "Disc r40x10, a hole r4 at (30, 0) patterned Symmetric, 2 per side over 60 degrees",
+  "tags": [
+    "pattern",
+    "circular",
+    "symmetric",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            40
+          ],
+          "name": "disc"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            30,
+            0,
+            4
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "circular_pattern",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "axis": "Z",
+      "quantity": 2,
+      "type": "symmetric",
+      "angle": 60
+    }
+  ],
+  "expect": {
+    "volume": 48757.517983713595,
+    "area": 13018.759956476102,
+    "faces": 6,
+    "bbox": [
+      -40,
+      -40,
+      0,
+      40,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "Holes at -60, 0, 60 degrees. V = pi*40^2*10 - 3*pi*4^2*10; A = 3200pi + 800pi - 6*16pi + 3*80pi; faces: top, bottom, side + 3 walls."
+  }
+}

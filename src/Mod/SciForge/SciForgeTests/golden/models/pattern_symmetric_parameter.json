@@ -1,0 +1,115 @@
+{
+  "id": "pattern_symmetric_parameter",
+  "title": "A tab patterned Symmetric with Spacing = gap; gap changed from 20 to 30",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "symmetric",
+    "parameter",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "gap",
+      "value": 20,
+      "unit": "mm"
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            -2,
+            14,
+            2
+          ],
+          "name": "tab"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "t1",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "t1"
+      ],
+      "direction": "X",
+      "quantity": 2,
+      "distance": 20,
+      "distribution": "spacing",
+      "direction_type": "symmetric",
+      "expressions": {
+        "distance": "gap"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 2160,
+        "solids": 2,
+        "bbox": [
+          -10,
+          -10,
+          0,
+          34,
+          10,
+          5
+        ],
+        "source": "analytic",
+        "note": "gap 20: copies at +20 (x 30..34, apart) and -20 (inside the plate)."
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "gap",
+      "value": 30,
+      "unit": "mm"
+    }
+  ],
+  "expect": {
+    "volume": 2240,
+    "solids": 3,
+    "bbox": [
+      -20,
+      -10,
+      0,
+      44,
+      10,
+      5
+    ],
+    "source": "analytic",
+    "note": "Plate 20x20x5 = 2000, tab 4x4x5 = 80 at x 10..14. gap 30: copies at x 40..44 and -20..-16, both apart from the plate. The symmetric gaps are an expression of the spacing, so the copies follow the parameter."
+  }
+}

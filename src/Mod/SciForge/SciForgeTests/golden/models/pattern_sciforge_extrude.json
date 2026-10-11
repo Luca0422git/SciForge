@@ -1,0 +1,92 @@
+{
+  "id": "pattern_sciforge_extrude",
+  "title": "A tapered column (SciForge's own extrude: taper to a face) repeated along X",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "features",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "rect": [
+            10,
+            10,
+            20,
+            20
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "extent": "to_object",
+      "taper": 10,
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      }
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "e2"
+      ],
+      "direction": "X",
+      "quantity": 2,
+      "distance": 25
+    }
+  ],
+  "expect": {
+    "volume": 25484.51071268506,
+    "faces": 16,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      30,
+      30
+    ],
+    "source": "analytic",
+    "note": "FreeCAD's patterns cannot repeat SciForge's own extrude (a Python feature), so SciForge's pattern feature copies what it added. Each column is a frustum 20 tall from 10x10 to b = 10 + 40 tan(10 deg) square: V = h/3 (a^2 + b^2 + a b). V = 60*30*10 + 2 * that; faces 6 + 2*(4 sides + top)."
+  }
+}
