@@ -811,6 +811,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   selected), `inspect_com_interference` (an all-bodies Center of Mass following a hidden
   body and an edited extrude; a second Interference started with both bodies selected).
   6 golden models, unit tests `test_inspect_core.py`.
+- Full suite on the branch (no --only): unit 192 OK, golden 161 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 68 scenarios
+  PASS (5847 checks), ribbon_sweep included.
 - Gaps (see `parity/inspect.md`): Tangent Plane reference plane, Along Path on a chain,
   Offset Plane To Object, browser double-click/right-click Edit for Analysis items (browser
   owner), one material for Center of Mass, Component filter, Interference "create bodies".
