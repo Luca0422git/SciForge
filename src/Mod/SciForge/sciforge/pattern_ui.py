@@ -1713,7 +1713,7 @@ class PatternPanel(Panel):
         names = []
         refs = [self.options.get(n) for n in ("direction", "direction2", "axis", "plane", "path")]
         titles = self._titles() if objects or any(refs) else {}
-        for obj, sub in objects:
+        for obj, sub in self._listed(objects):
             title = titles.get(obj.Name, obj.Label)
             text = title if not sub else "%s of %s" % (sub.rstrip("0123456789"), title)
             if text not in names:
@@ -1723,6 +1723,22 @@ class PatternPanel(Panel):
             if name in self.fields:
                 self.fields[name].set_text(self._ref_text(self.options.get(name), titles))
         self._show_marks()
+
+    @staticmethod
+    def _listed(objects):
+        """The picks in timeline order (they are repeated in that order too)."""
+        order = {}
+        for obj, _sub in objects:
+            body = pattern.owner_body(obj)
+            if body is not None and body.Name not in order:
+                order[body.Name] = {o.Name: i for i, o in enumerate(body.Group)}
+
+        def key(ref):
+            body = pattern.owner_body(ref[0])
+            index = order.get(body.Name, {}) if body is not None else {}
+            return index.get(ref[0].Name, len(index))
+
+        return sorted(objects, key=key)
 
     @staticmethod
     def _ref_text(ref, titles):

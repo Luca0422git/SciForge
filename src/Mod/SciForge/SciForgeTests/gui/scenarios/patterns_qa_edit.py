@@ -8,8 +8,9 @@ Path 5, edit from the timeline three times with a person's double-click: the fir
 Path 6, later steps survive an edit that rebuilds the pattern: a sketch on the pattern's top
         face and a boss extruded from it, then the pattern edited with Suppression (one copy
         left out). FreeCAD cannot leave a copy out, so SciForge rebuilds the step as its own
-        feature: the boss's sketch stays on the top face (before, it lost its face silently),
-        and when the box is made taller from the timeline the boss rides up with the face.
+        feature: the boss's sketch stays on the top face (before, a sketch hung on the
+        pattern lost its face silently), and when the box is made taller from the timeline the
+        boss rides up with the face.
 Path 7, the design saved (Ctrl+S with the edit dialog open: the edit is finished first),
         closed and opened again; the pattern edited again (Suppression off: FreeCAD's pattern
         again, the boss still on its face); Ctrl+Z / Ctrl+Y.
@@ -181,15 +182,33 @@ def p5_redone2():
 
 
 # -- Path 6: a boss on the pattern's top face, the pattern rebuilt ---------------------------------------
+def on_top_face(top=10.0):
+    """(ok, detail): the boss's sketch still hangs on a top face of the part. Clicked on the
+    patterned part, it hangs on the pattern, or (when Create Sketch picks the step that made
+    the face) on the step before it; if it hung on the pattern, it must hang on the pattern
+    now (the rebuilt one), not on nothing."""
+    sketch = boss_sketch()
+    support = list(sketch.AttachmentSupport) if sketch else []
+    if not support or not support[0][1]:
+        return False, support
+    obj, subs = support[0]
+    if s.get("on_pattern") and obj is not the_pattern():
+        return False, ("not on the pattern any more", support)
+    try:
+        face = obj.Shape.getElement(subs[0])
+    except Exception as exc:
+        return False, (support, exc)
+    ok = abs(face.CenterOfMass.z - top) < 1e-6 and face.Surface.TypeId == "Part::GeomPlane"
+    return ok, (obj.Label, subs, face.CenterOfMass)
+
+
 def p6_boss_made():
     sketches = [o for o in doc().Objects if o.TypeId == "Sketcher::SketchObject"]
     s["boss_sketch"] = sketches[-1].Name
     support = sketches[-1].AttachmentSupport
-    h.check(
-        "the boss's sketch sits on the pattern's top face",
-        support and support[0][0] is the_pattern(),
-        support,
-    )
+    s["on_pattern"] = bool(support) and support[0][0] is the_pattern()
+    ok, detail = on_top_face()
+    h.check("the boss's sketch sits on the top face", ok, detail)
     s["v"] = h.solid_volume()
     ps.timeline_double_click("Rectangular Pattern 1")
 
@@ -224,19 +243,8 @@ def p6_after():
     h.check(
         "one pattern, now SciForge's own feature", pat and pat.TypeId == "PartDesign::FeaturePython"
     )
-    sketch = boss_sketch()
-    support = sketch.AttachmentSupport if sketch else None
-    h.check(
-        "the boss's sketch is still on the pattern's top face (not lost)",
-        support and support[0][0] is pat and support[0][1][0].startswith("Face"),
-        support,
-    )
-    face = pat.Shape.getElement(support[0][1][0]) if support else None
-    h.check(
-        "that face is the top face",
-        face is not None and abs(face.CenterOfMass.z - 10) < 1e-6,
-        face and face.CenterOfMass,
-    )
+    ok, detail = on_top_face()
+    h.check("the boss's sketch is still on the top face (not lost)", ok, detail)
     h.check("boss still there", ps.close(h.solid_volume(), s["v"] + HOLE), h.solid_volume())
     h.check("timeline title kept", "Rectangular Pattern 1" in ps.timeline_titles())
     broken = [o.Label for o in doc().Objects if set(o.State) & {"Invalid", "Error"}]
@@ -342,9 +350,8 @@ p7_untick_ok.wait_ms = 1200
 def p7_native_again():
     pat = the_pattern()
     h.check("FreeCAD's LinearPattern again", pat and pat.TypeId == "PartDesign::LinearPattern")
-    sketch = boss_sketch()
-    support = sketch.AttachmentSupport if sketch else None
-    h.check("the boss's sketch followed again", support and support[0][0] is pat, support)
+    ok, detail = on_top_face()
+    h.check("the boss's sketch followed again", ok, detail)
     tops = ps.circle_centres(h.body().Shape, 3.0, z=14)
     h.check("the boss is there", tops == [(30, 22)], tops)
     s["v"] = h.solid_volume()
@@ -355,9 +362,8 @@ def p7_undone():
     pat = the_pattern()
     h.check("Ctrl+Z: SciForge's feature with the copy left out", xs() == [8, 24], centres())
     h.check("one pattern", pat is not None)
-    sketch = boss_sketch()
-    support = sketch.AttachmentSupport if sketch else None
-    h.check("the sketch is on it", support and support[0][0] is pat, support)
+    ok, detail = on_top_face()
+    h.check("the sketch is on the top face", ok, detail)
     h.press(QtCore.Qt.Key_Y, QtCore.Qt.ControlModifier)
 
 
