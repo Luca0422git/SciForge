@@ -556,6 +556,7 @@ STEP_KEYS["move_bodies"] = (
 STEP_KEYS["delete_face"] = ({"id", "faces"}, {"comment"})
 STEP_KEYS["body_tool_edit"] = ({"target", "set"}, {"comment"})
 STEP_KEYS["measure_bodies"] = ({"steps"}, {"comment"})
+STEP_KEYS["delete_bodies"] = ({"steps"}, {"comment"})
 
 BODY_OPERATIONS = ("join", "cut", "intersect")
 MOVE_TYPES = ("free", "translate", "rotate", "point_to_point", "point_to_position")
@@ -618,8 +619,10 @@ def _check_body_steps(model):
             "move_bodies",
         ):
             _fail(here, "body_tool_edit must name a combine, split_body or move_bodies step")
-        if op == "measure_bodies" and any(s not in seen for s in step["steps"]):
-            _fail(here, "measure_bodies names unknown steps")
+        if op in ("measure_bodies", "delete_bodies") and any(
+            s not in seen for s in step["steps"]
+        ):
+            _fail(here, "%s names unknown steps" % op)
         if "id" in step:
             seen[step["id"]] = op
 

@@ -85,6 +85,10 @@ class CombineFeature:
         add("App::PropertyBool", "KeepTools", "The tool bodies stay in the design")
         if add("App::PropertyBool", "Refine", "Merge faces that end up in one plane, like Fusion"):
             obj.Refine = True
+        if "FrozenTools" not in obj.PropertiesList:
+            # Tool bodies deleted later (SciForge's Delete): kept as they were, so the Combine
+            # still gives the same result (design coordinates).
+            obj.addProperty("Part::PropertyPartShape", "FrozenTools", "Combine", "", 4)
         bodies.mark(obj, SCIFORGE_TYPE)
 
     def onDocumentRestored(self, obj):
@@ -100,15 +104,15 @@ class CombineFeature:
             )
         tools = [t for t in obj.Tools if bodies.alive(t)]
         tools = [t for t in tools if not t.Shape.isNull() and t.Shape.Solids]
-        if not tools:
+        shapes = [bodies.global_shape(t) for t in tools]
+        frozen = obj.FrozenTools if "FrozenTools" in obj.PropertiesList else None
+        if frozen is not None and not frozen.isNull():
+            shapes += [s.copy() for s in frozen.Solids]
+        if not shapes:
             raise CombineError(
                 "Its tool bodies are gone (deleted?). Edit the Combine and pick the tool bodies."
             )
-        result = combine_shapes(
-            bodies.global_shape(base_obj),
-            [bodies.global_shape(t) for t in tools],
-            obj.Operation.lower(),
-        )
+        result = combine_shapes(bodies.global_shape(base_obj), shapes, obj.Operation.lower())
         shape = bodies.as_result(result, refine=bool(obj.Refine))
         obj.Shape = bodies.to_local(shape, body)
 
@@ -154,6 +158,30 @@ def combine_shapes(base, tools, operation):
 
 
 # -- reading and building ----------------------------------------------------------------------------
+def freeze_tools(feature, gone):
+    """Tool steps in `gone` (names of objects about to be deleted) are kept as their shape:
+    the Combine goes on giving the same result without them (SciForge's Delete)."""
+    import Part
+
+    keep, frozen = [], []
+    for step in feature.Tools:
+        if step.Name in gone:
+            try:
+                frozen.extend(bodies.global_shape(step).Solids)
+            except Exception:
+                pass
+        else:
+            keep.append(step)
+    if not frozen:
+        return False
+    old = feature.FrozenTools
+    if old is not None and not old.isNull():
+        frozen = list(old.Solids) + frozen
+    feature.FrozenTools = Part.makeCompound(frozen)
+    feature.Tools = keep
+    return True
+
+
 def target_body(feature):
     """The body the Combine changes (with New Body: the body it was made from)."""
     if feature.NewBody:
@@ -192,8 +220,18 @@ def read(feature):
             "operation": feature.Operation.lower(),
             "new_body": bool(feature.NewBody),
             "keep_tools": bool(feature.KeepTools),
+            "frozen": frozen_count(feature),
         }
     )
+
+
+def frozen_count(feature):
+    """How many tools a Combine keeps from bodies deleted since."""
+    frozen = getattr(feature, "FrozenTools", None)
+    try:
+        return 0 if frozen is None or frozen.isNull() else len(frozen.Solids)
+    except Exception:
+        return 0
 
 
 def check(options):
@@ -201,7 +239,7 @@ def check(options):
     tools = [t for t in options["tools"] if t is not None]
     if target is None:
         raise NeedsPick("Select the target body: the body that is changed.")
-    if not tools:
+    if not tools and not options.get("frozen"):
         raise NeedsPick("Select the tool bodies: the bodies that change the target.")
     if options["operation"] not in OPERATIONS:
         raise CombineError("Pick Join, Cut or Intersect.")

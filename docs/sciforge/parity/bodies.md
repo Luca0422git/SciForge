@@ -49,7 +49,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Fusion | SciForge |
 |---|---|
 | Body to Split, Splitting Tool(s), Extend Splitting Tool | same (one splitting tool) |
-| tools: planes, faces, bodies, sketch curves | origin planes (the big squares of Create Sketch are drawn while the box waits), construction planes, faces of any body (flat or round), bodies (click them in the browser) |
+| tools: planes, faces, bodies, sketch curves | origin planes (the big squares of Create Sketch are drawn while the box waits for a tool), construction planes, faces of any body (flat or round), bodies (click them in the browser), sketch lines and arcs (cut straight through along the sketch's normal) |
 | Extend Splitting Tool | on: a flat face is taken as its whole plane, a round face as its whole cylinder; off: only where the face is (the reason is shown when it then does not cut) |
 | result: bodies in the browser and the timeline | same; deleting the Split Body step deletes the bodies it made |
 
@@ -62,6 +62,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Translate: X/Y/Z Distance, arrows | same |
 | Rotate: Axis, Angle | same; the axis: an origin axis (drawn as long lines while the box waits), a straight edge, a round edge or face (its axis); a blue handle turns round it |
 | Point to Point | same; a click near a corner takes the corner (Fusion lights it up), a round edge its centre, a straight edge its middle |
+| Point to Position | same: pick the point, X / Y / Z start at where it is; type where it goes |
 | Create Copy | same: new bodies; the originals stay |
 | recorded in the timeline, editable, undo | same (one Move step per body, edited together) |
 
@@ -69,8 +70,8 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion | SciForge |
 |---|---|
-| a body | deleted with everything in it; bodies copied or split from it keep their shape |
-| a feature / sketch / plane | deleted; steps after it keep working where they can: fillets, sketches and other steps that used its edges or faces move onto the same edges/faces of the step before it, the body's history is re-linked, the Tip moves back; what cannot (an extrude whose sketch is gone) is shown red in the timeline with the reason, never as errors in the Report view |
+| a body | deleted with everything in it; bodies copied or split from it keep their shape; a Combine that used it as a tool keeps it as it was (same result) |
+| a feature / sketch / plane | deleted; steps after it keep working where they can: fillets, sketches and other steps that used its edges or faces move onto the same edges/faces of the step before it, a Combine or a copy that used it uses the step before it, the body's history is re-linked, the Tip moves back; what cannot (an extrude whose sketch is gone; a fillet whose edge FreeCAD's naming loses because everything moved) is shown red in the timeline with the reason, never as errors in the Report view |
 | faces | a Delete Face step closing the gap; refused with the reason next to the pointer when the faces around cannot close it (the box's top face) |
 | sketch curves | deleted from the sketch |
 | nothing selected | a note next to the pointer, nothing else |
@@ -91,8 +92,9 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 |---|---|
 | Combine "New Component" | SciForge has no components; New Body is offered instead |
 | Used-up tool bodies disappear from the browser | they stay listed with their eye off (the browser belongs to the timeline/browser module) |
-| Split Body with sketch curves or several tools at once | one tool: a plane, a face or a body |
-| Move Type Point to Position, Set Pivot, Move Object Components / Faces | not built yet (Faces: Press Pull moves faces) |
+| Split Body with several tools at once | one tool: a plane, a face, a body or a sketch curve |
+| Move: Set Pivot, Move Object Components / Faces | not built yet (Faces: Press Pull moves faces); Free Move turns about the middle of the bodies |
+| The timeline's and the browser's own Delete re-route dependants like SciForge's Delete | they belong to the timeline/browser module; they delete the bodies a Split Body or a copy made (bodies_gui.Watch), and flag what breaks |
 | Rolling the timeline marker back before a Create Copy hides the copy | the copy's step sits outside the bodies, so the marker does not hide it |
 | Physical material shown in the browser | the browser module shows no material; the Physical Material dialog lists them ("In This Design") with each body's mass |
 | Inspect > mass properties | `bodies.mass(body)` gives the mass from the material; the Inspect module (separate work) is to use it |

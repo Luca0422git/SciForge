@@ -157,8 +157,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       steps with dependants re-linked or flagged, faces -> "Delete Face" step, sketch curves),
       Appearance (library + custom colour, bodies or faces, drag a swatch onto the part),
       Physical Material (FreeCAD's library, mass shown; `bodies.mass()` for Inspect).
+      Split Body also takes sketch lines/arcs; Move also Point to Position. Deleting keeps
+      dependants working (fillets re-pointed at the step before, Combines/copies re-routed,
+      a deleted tool body kept frozen in its Combine).
       `bodies.py` helpers for every multi-body tool. Spec + gaps: `docs/sciforge/parity/
-      bodies.md`. 6 scenarios (`bodies_*.py`), 21 golden models (`bodies_*`), unit tests
+      bodies.md`. 6 scenarios (`bodies_*.py`), 24 golden models (`bodies_*`), unit tests
       `test_bodies_schema.py`. Ribbon: Split Body runs `SciForge_SplitBody` (was greyed).
 
 ## Known issues / findings
@@ -678,8 +681,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Tests: scenarios `bodies_combine`, `bodies_split`, `bodies_move`, `bodies_delete`,
   `bodies_look`, `bodies_timeline` (real input only; timeline roll/suppress/delete, Ctrl+Z
   in a dialog, save + reopen); golden ops in `golden/bodies_ops.py` (combine, split_body,
-  move_bodies, delete_face, body_tool_edit, measure_bodies) + 24 models `bodies_*`; unit
-  tests `test_bodies_schema.py`.
+  move_bodies, delete_face, delete_bodies, body_tool_edit, measure_bodies) + 24 models
+  `bodies_*`; unit tests `test_bodies_schema.py`.
 - Spec and gaps: `docs/sciforge/parity/bodies.md`.
 - Full suite at the end: see the result below (FULL_SUITE_RESULT).
 

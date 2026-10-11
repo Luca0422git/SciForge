@@ -29,6 +29,9 @@ Bodies are named by a step that made them (its body): "e1" is the body of extrud
       Double-click the step in the timeline and change its fields (same option names).
 
   {"op": "measure_bodies", "steps": ["e1", "e2"]}  measure these bodies from now on
+
+  {"op": "delete_bodies", "steps": ["e2"]}
+      Delete (Del) on bodies (picked in the browser); what used them keeps working.
 """
 import Part
 
@@ -245,6 +248,29 @@ def op_body_tool_edit(self, step):
     return feature
 
 
+def op_delete_bodies(self, step):
+    from sciforge import delete
+
+    found = [_body(self, s) for s in step["steps"]]
+    try:
+        delete.run(self.doc, delete.plan([(b, "") for b in found]))
+    except delete.DeleteError as exc:
+        raise BuildError("delete_bodies: %s" % exc)
+    names = {b.Name for b in found}
+    for key in [k for k, obj in self.objects.items() if not _alive(obj)]:
+        self.objects.pop(key, None)
+    left = [n for n in getattr(self, "measure_bodies", None) or [] if n not in names]
+    self.measure_bodies = left or None
+    self.doc.recompute()
+
+
+def _alive(obj):
+    try:
+        return obj.isAttachedToDocument()
+    except Exception:
+        return False
+
+
 def op_measure_bodies(self, step):
     _measure(self, [_body(self, s) for s in step["steps"]])
 
@@ -274,3 +300,4 @@ Builder.op_move_bodies = op_move_bodies
 Builder.op_delete_face = op_delete_face
 Builder.op_body_tool_edit = op_body_tool_edit
 Builder.op_measure_bodies = op_measure_bodies
+Builder.op_delete_bodies = op_delete_bodies

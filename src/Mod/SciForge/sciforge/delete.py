@@ -293,6 +293,8 @@ def delete_steps(doc, steps):
         gone.update(o.Name for o in body.Group)
     for step in sorted(steps, key=lambda o: -o.ID):
         _relink_to_base(doc, step, gone)
+        _reroute_users(doc, step, gone)
+    _freeze_users(doc, gone)
     _keep_attached(doc, gone)
     _show_profiles(doc, gone)
     for body in extra:
@@ -325,6 +327,7 @@ def delete_bodies(doc, targets):
                 for piece in split.pieces_of(step):
                     piece.Split = None  # the pieces keep their shape (the source is gone)
     _keep_attached(doc, gone)
+    _freeze_users(doc, gone)
     from . import move
 
     for body in targets:
@@ -336,6 +339,40 @@ def delete_bodies(doc, targets):
                 doc.removeObject(base.Name)
             except Exception:
                 pass
+
+
+def _reroute_users(doc, step, gone):
+    """A Combine that used the deleted step as a tool, or a copy made from it, uses the
+    step before it instead (the tool body as it was just before that step)."""
+    from . import combine, move
+
+    base = getattr(step, "BaseFeature", None)
+    if base is None or base.Name in gone:
+        return
+    for obj in list(step.InList):
+        if obj.Name in gone:
+            continue
+        try:
+            if combine.is_combine(obj) and step in obj.Tools:
+                obj.Tools = [base if t is step else t for t in obj.Tools]
+            elif move.is_copy(obj) and obj.Source is step:
+                obj.Source = base
+        except Exception:
+            pass
+
+
+def _freeze_users(doc, gone):
+    """Combines (outside what is deleted) that use a deleted body as a tool keep it as it
+    was: they go on giving the same result."""
+    from . import combine
+
+    for obj in doc.Objects:
+        if obj.Name in gone or not combine.is_combine(obj):
+            continue
+        try:
+            combine.freeze_tools(obj, gone)
+        except Exception:
+            pass
 
 
 def delete_curves(sketch, indices):
