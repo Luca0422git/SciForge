@@ -628,3 +628,4 @@ from . import sketch_ops  # noqa: E402,F401  (registers Builder.op_sketch_* step
 from . import hole_ops  # noqa: E402,F401  (registers op_hole_at, op_hole_points, op_thread)
 from . import revolve_ops  # noqa: E402,F401  (registers Builder.op_sf_revolve* steps)
 from . import pattern_ops  # noqa: E402,F401  (registers the Fusion pattern / mirror steps)
+from . import blend_ops  # noqa: E402,F401  (registers op_blend_insert, op_blend_edit)

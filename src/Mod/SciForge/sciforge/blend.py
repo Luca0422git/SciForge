@@ -21,6 +21,7 @@ fillets, returns a broken solid that FreeCAD would keep. trial() builds the blen
 and turns both into a plain-language BlendError, so the dialog can show it and keep the
 last good preview instead of breaking the part.
 """
+import contextlib
 import math
 import time
 
@@ -483,6 +484,253 @@ def make(body, base, refs, kind, options, name=None):
     return feature
 
 
+# -- later steps keep their edges -------------------------------------------------------
+# Fusion keeps every later step attached to "its" edges when an earlier step changes: a
+# fillet inserted earlier in the timeline (marker rolled back), or an earlier fillet edited
+# to round one more edge. FreeCAD's element names do not survive an edge that the change
+# trims or lengthens: the later fillet failed with "Invalid edge link" in the Report view.
+# References keeps what the later blends point at as geometry and finds it again.
+DRESS_UPS = (FILLET, CHAMFER, "PartDesign::Draft", "PartDesign::Thickness")
+
+
+def later_steps(body, after):
+    """Features of `body` after `after` in the timeline (body order)."""
+    if body is None or after is None:
+        return []
+    group = list(body.Group)
+    names = [o.Name for o in group]
+    if after.Name not in names:
+        return []
+    return group[names.index(after.Name) + 1 :]
+
+
+def _same_curve(old, new, tol):
+    try:
+        # (a degenerated edge where rounds meet at a corner has no curve: TypeError)
+        a, b = old.Curve, new.Curve
+    except Exception:
+        return False
+    kind = type(a).__name__
+    if kind != type(b).__name__:
+        return False
+    try:
+        if kind in ("Line", "LineSegment"):
+            da, db = a.Direction, b.Direction
+            if abs(abs(da.dot(db)) - 1.0) > 1e-9:
+                return False
+            p = new.valueAt((new.FirstParameter + new.LastParameter) / 2.0)
+            off = p - a.Location
+            return (off - da * off.dot(da)).Length < tol
+        if kind in ("Circle", "ArcOfCircle"):
+            return (
+                (a.Center - b.Center).Length < tol
+                and abs(a.Radius - b.Radius) < tol
+                and abs(abs(a.Axis.dot(b.Axis)) - 1.0) < 1e-9
+            )
+        return bool(a.isSame(b, tol, 1e-9))
+    except Exception:
+        return False
+
+
+def _same_edge(old, new, tol=1e-6):
+    """True if `new` is (a piece of) the same edge as `old`: same curve, overlapping."""
+    import Part
+
+    if not _same_curve(old, new, tol):
+        return False
+
+    def mid(edge):
+        return edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+
+    try:
+        return (
+            old.distToShape(Part.Vertex(mid(new)))[0] < tol
+            or new.distToShape(Part.Vertex(mid(old)))[0] < tol
+        )
+    except Exception:
+        return False
+
+
+def _same_surface(a, b, tol):
+    kind = type(a).__name__
+    if kind != type(b).__name__:
+        return False
+    try:
+        if kind == "Plane":
+            na, nb = a.Axis, b.Axis
+            if abs(abs(na.dot(nb)) - 1.0) > 1e-9:
+                return False
+            return abs((b.Position - a.Position).dot(na)) < tol
+        if kind == "Cylinder":
+            off = b.Center - a.Center
+            return (
+                abs(a.Radius - b.Radius) < tol
+                and abs(abs(a.Axis.dot(b.Axis)) - 1.0) < 1e-9
+                and (off - a.Axis * off.dot(a.Axis)).Length < tol
+            )
+        return bool(a.isSame(b, tol, 1e-9))
+    except Exception:
+        return False
+
+
+def _same_face(old, new, tol=1e-6):
+    """True if `new` is (a piece of) the same face as `old`: same surface, overlapping."""
+    try:
+        if not _same_surface(old.Surface, new.Surface, tol):
+            return False
+    except Exception:
+        return False
+    try:
+        if old.distToShape(new)[0] > tol:
+            return False
+        return old.common(new).Area > 1e-6 * max(1.0, min(old.Area, new.Area))
+    except Exception:
+        return False
+
+
+def find_same(shape, old, tol=1e-6):
+    """Names of the elements of `shape` that are the edge/face `old` (from an earlier
+    version of the part), possibly trimmed or lengthened by an earlier change."""
+    names = []
+    if old.ShapeType == "Edge":
+        for i, edge in enumerate(shape.Edges, start=1):
+            if _same_edge(old, edge, tol):
+                names.append("Edge%d" % i)
+    elif old.ShapeType == "Face":
+        for i, face in enumerate(shape.Faces, start=1):
+            if _same_face(old, face, tol):
+                names.append("Face%d" % i)
+    return names
+
+
+def _alive(obj):
+    try:
+        return obj is not None and bool(obj.Name) and obj.isAttachedToDocument()
+    except Exception:
+        return False
+
+
+class References:
+    """The edges/faces the blends after `after` (in `body`) are attached to, as geometry.
+    Take it before an earlier step changes; repair() afterwards."""
+
+    def __init__(self, body, after):
+        self.items = []  # (feature, [(element name, element shape copy)])
+        for obj in later_steps(body, after):
+            if obj.TypeId not in DRESS_UPS:
+                continue
+            try:
+                base = obj.Base
+                if not base or base[0] is None or base[0].Shape.isNull():
+                    continue
+                shape = base[0].Shape
+                found = []
+                for sub in base[1]:
+                    name = (sub or "").split(".")[-1].lstrip("?")
+                    item = element(shape, name) if name else None
+                    if item is not None:
+                        found.append((name, item.copy()))
+                if found:
+                    self.items.append((obj, found))
+            except Exception:
+                continue
+
+    def broken(self):
+        """The later steps that lost an edge/face or no longer compute."""
+        found = []
+        for obj, _subs in self.items:
+            if not _alive(obj):
+                continue
+            try:
+                subs = list(obj.Base[1]) if obj.Base else []
+                state = list(obj.State)
+            except Exception:
+                continue
+            if any((s or "").startswith("?") for s in subs) or "Invalid" in state:
+                found.append(obj)
+        return found
+
+    def repair(self):
+        """Point each broken later step at the same edges/faces of its new base shape (an
+        edge an earlier change trimmed is still that edge). Returns the features changed;
+        the caller recomputes."""
+        changed = []
+        broken = self.broken()
+        for obj, subs in self.items:
+            if obj not in broken:
+                continue
+            try:
+                src = obj.Base[0] if obj.Base else obj.BaseFeature
+                if src is None or src.Shape.isNull():
+                    continue
+                names = []
+                for _name, old in subs:
+                    for match in find_same(src.Shape, old):
+                        if match not in names:
+                            names.append(match)
+                if names and list(obj.Base[1]) != names:
+                    obj.Base = (src, names)
+                    changed.append(obj)
+            except Exception:
+                continue
+        return changed
+
+
+@contextlib.contextmanager
+def quiet():
+    """Mute FreeCAD's error/warning output (Report view, console) for a recompute whose
+    passing failures SciForge repairs or explains itself."""
+    import FreeCAD as App
+
+    muted = []
+    try:
+        for name in App.Console.GetObservers():
+            for kind in ("Err", "Wrn"):
+                try:
+                    if App.Console.GetStatus(name, kind):
+                        App.Console.SetStatus(name, kind, False)
+                        muted.append((name, kind))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    try:
+        yield
+    finally:
+        for name, kind in muted:
+            try:
+                App.Console.SetStatus(name, kind, True)
+            except Exception:
+                pass
+
+
+def recompute_keeping(doc, keep, rounds=4):
+    """Recompute; later blends that lost their edges are put back on them (a repaired step
+    can uncover the next one, hence the rounds). Quiet: what still fails afterwards is
+    reported by the caller (the dialog says which later steps no longer work)."""
+    with quiet():
+        doc.recompute()
+        if keep is None:
+            return []
+        changed = []
+        for _ in range(rounds):
+            fixed = keep.repair()
+            if not fixed:
+                break
+            changed.extend(fixed)
+            doc.recompute()
+    return changed
+
+
+def insert(body, base, refs, kind, options, name=None):
+    """make() for a blend that may land before later steps (timeline marker rolled back):
+    builds, recomputes and keeps the later blends on their edges. Returns the feature."""
+    keep = References(body, base)
+    feature = make(body, base, refs, kind, options, name)
+    recompute_keeping(body.Document, keep)
+    return feature
+
+
 # -- checking before building ------------------------------------------------------
 def reference_face(info, edge_name_, flip=False):
     """The face a chamfer measures Distance 1 on, like FreeCAD: the edge's first face, or
@@ -545,6 +793,16 @@ def trial(kind, info, refs, options):
             angle = float(options.get("angle", 45.0))
             if not 0.0 < angle < 180.0:
                 raise BlendError("The angle must be between 0° and 180°.")
+            # The bevel leaves the measured face at `angle`; it only meets the other face
+            # if angle + (the corner's angle) < 180 degrees: less than 90 on a box edge.
+            corners = [info.frame(n) for n in names]
+            widest = max([math.degrees(c["gamma"]) for c in corners if c] or [0.0])
+            limit = 180.0 - widest
+            if widest and angle >= limit - 1e-9:
+                raise BlendError(
+                    "At %g° the bevel never reaches the face on the other side of the edge. "
+                    "Use an angle below %g° here." % (angle, round(limit, 2))
+                )
     edges = [element(info.shape, n) for n in names]
     try:
         result = _build(kind, info.shape, edges, options)
@@ -554,7 +812,9 @@ def trial(kind, info, refs, options):
         return None
     if result.isNull() or not result.Solids:
         raise BlendError(too_big(kind, label, size))
-    if len(result.Solids) > 1:
+    # A body may already hold several separate solids (two profiles extruded apart, like a
+    # Fusion body with two lumps): only a blend that adds pieces cuts the part apart.
+    if len(result.Solids) > max(1, len(info.shape.Solids)):
         raise BlendError(
             "This %s would cut the part into pieces. Use a smaller %s." % (kind, label)
         )

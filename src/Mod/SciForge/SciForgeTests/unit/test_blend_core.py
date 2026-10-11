@@ -101,6 +101,31 @@ class MessageTests(unittest.TestCase):
                 "chamfer", info, ["Edge1"], {"chamfer_type": "angle", "distance": 1, "angle": 180}
             )
 
+    def test_angle_chamfer_must_reach_the_other_face(self):
+        """Distance and Angle: the bevel leaves the measured face at the angle and meets the
+        other face only if angle + corner angle < 180 (below 90 degrees on a box edge)."""
+        import math
+
+        class Corner(FakeInfo):
+            shape = None
+
+            def __init__(self, degrees):
+                self.gamma = math.radians(degrees)
+
+            def frame(self, name):
+                return {"gamma": self.gamma}
+
+        options = {"chamfer_type": "angle", "distance": 1}
+        with self.assertRaises(blend.BlendError) as ctx:
+            blend.trial("chamfer", Corner(90), ["Edge1"], dict(options, angle=90))
+        self.assertIn("below 90", str(ctx.exception))
+        # 60 degrees fits a box edge; the feature itself is then built (nothing to check here)
+        self.assertIsNone(blend.trial("chamfer", Corner(90), ["Edge1"], dict(options, angle=60)))
+        # a sharper (60 degree) corner takes up to 120 degrees
+        self.assertIsNone(blend.trial("chamfer", Corner(60), ["Edge1"], dict(options, angle=100)))
+        with self.assertRaises(blend.BlendError):
+            blend.trial("chamfer", Corner(60), ["Edge1"], dict(options, angle=125))
+
 
 if __name__ == "__main__":
     unittest.main()

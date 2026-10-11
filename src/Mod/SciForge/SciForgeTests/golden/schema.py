@@ -522,3 +522,44 @@ STEP_KEYS["path_pattern"] = (
 )
 STEP_KEYS["fusion_mirror"] = ({"id", "plane"}, _PATTERN_WHAT | {"operation"})
 STEP_KEYS["pattern_edit"] = ({"target", "set"}, {"comment"})
+
+
+# History edits around Fusion-style Fillet / Chamfer (golden/blend_ops.py, the dialogs' code):
+# a blend made with the timeline marker rolled back, and a blend edited to pick more edges.
+_BLEND_OPTIONS = {"radius", "distance", "chamfer_type", "distance2", "angle", "flip"}
+STEP_KEYS["blend_insert"] = ({"id", "kind"}, _BLEND_OPTIONS | {"edges", "faces", "comment"})
+STEP_KEYS["blend_edit"] = ({"target"}, {"add_edges", "add_faces", "set", "comment"})
+
+
+def _check_blend_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "blend_insert":
+            if step["kind"] not in ("fillet", "chamfer"):
+                _fail(here, "'kind' must be fillet or chamfer")
+            size = "radius" if step["kind"] == "fillet" else "distance"
+            _check_number(here + "." + size, step.get(size), positive=True)
+            if "edges" not in step and "faces" not in step:
+                _fail(here, "blend_insert needs 'edges' and/or 'faces'")
+        if op == "blend_edit":
+            if seen.get(step["target"]) not in ("blend_fillet", "blend_chamfer", "blend_insert"):
+                _fail(here, "'target' must name an earlier blend_fillet/blend_chamfer step")
+            unknown = set(step.get("set", {})) - _BLEND_OPTIONS
+            if unknown:
+                _fail(here, "blend_edit cannot set %s" % sorted(unknown))
+            if not ({"add_edges", "add_faces", "set"} & set(step)):
+                _fail(here, "blend_edit needs 'add_edges', 'add_faces' or 'set'")
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_blend = validate
+
+
+def validate(model):  # noqa: F811  (adds the blend history checks to the checks above)
+    _validate_before_blend(model)
+    _check_blend_steps(model)
+    return model
