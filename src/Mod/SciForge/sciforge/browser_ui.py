@@ -22,9 +22,25 @@ META_VIEW = "SciForge.NamedView."
 _isolated = {}  # document name -> names of bodies Isolate hid
 
 
+def _used_up_bodies(doc):
+    """Bodies a Combine (without Keep Tools) has used up: Fusion takes them out of the
+    browser. While a body-tool dialog is open they stay, so they can be picked here."""
+    try:
+        from . import bodies
+
+        if doc.Name in bodies.PAUSED:
+            return set()
+        return bodies.consumed(doc)
+    except Exception:
+        return set()
+
+
 def _objects(doc):
     rows = []
+    used_up = _used_up_bodies(doc)
     for obj in doc.Objects:
+        if obj.Name in used_up:
+            continue
         try:
             parent = obj.getParentGeoFeatureGroup()
             visible = obj.ViewObject.Visibility if obj.ViewObject is not None else None

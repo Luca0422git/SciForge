@@ -85,6 +85,12 @@ def a_joined():
     h.check("Body1 = 21000", s.close(s.volume(body1()), 21000), s.volume(body1()))
     h.check("one block: 6 faces", len(body1().Shape.Faces) == 6, len(body1().Shape.Faces))
     h.check("Body2 used up (hidden)", not s.shown(body2()))
+    tree = s.browser()
+    h.check(
+        "Body2 is out of the browser, like Fusion",
+        tree.row(body2().Label) is None,
+        tree.labels(),
+    )
     h.check("one Combine step", len(combines()) == 1, combines())
     h.check("timeline shows the Combine", s.timeline_title_of(combines()[0]) is not None)
     h.shot("A-joined")
@@ -101,6 +107,8 @@ def a_undone():
 
 def a_undone_view():
     h.check("undo: Body2 shown again", s.shown(body2()))
+    tree = s.browser()
+    h.check("undo: Body2 back in the browser", tree.row(body2().Label) is not None, tree.labels())
 
 
 def a_redo():

@@ -389,6 +389,19 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   dialog refuses before applying it (fillet radius, shell thickness, scale factor) keeps
   the last good preview. `patterns_path` expected the old FreeCAD behaviour (a failed step
   keeps its old shape) and was updated.
+- **Value boxes: a plain number is mm (or degrees), always** (2026-10-11, all dialogs via
+  `taskui.DistanceField`): FreeCAD's QuantitySpinBox reads a bare number in the unit it
+  *shows*; after a value below 0.1 mm it showed µm and "4" became 4 µm. The box also had
+  `autoNormalize` on, which swallowed the first Enter after a sum ("2*0.25"). Trap found
+  while fixing it: leaving a box "finishes" it, also while its dialog closes, so anything
+  connected to `editingFinished` must not report to a closed dialog (`Panel._recompute`
+  now returns once closed). Scenario `value_box_units`.
+- Timeline Delete of a body's last step hid the whole part: FreeCAD moves the Tip back by
+  itself, so `_set_tips` saw nothing to do and the new Tip stayed hidden. `delete()` now
+  shows each touched body's Tip (`fillet_qa_more` P19 checks it).
+- Bodies used up by a Combine (no Keep Tools) are no longer listed in the browser, like
+  Fusion (`browser_ui._used_up_bodies`, `bodies.consumed`); while a body-tool dialog is
+  open (`bodies.PAUSED`) they stay listed so they can be picked. `bodies_combine` checks it.
 - `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
   `palette_check.svg` (check-box tick) would have been deleted; it is now in its `RAW` table.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
