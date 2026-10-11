@@ -14,6 +14,12 @@ input). Each path is what Fusion does, checked on the design:
   C  Center of Mass with the box clicked (20, 15, 5); the x clicked: all visible bodies, the
      same centre (one body); OK. A second one, then Ctrl+Z inside its dialog: cancelled,
      nothing added.
+  D  Offset Plane on the top face, 7 typed, then the box's extrude double-clicked in the
+     timeline (no OK): the plane is kept at z = 17 like with any other command, the extrude
+     opens; Esc leaves the part as it was.
+  P  Plane Along Path on the front top edge: its dot dragged and let go over the top face (the
+     face is no pick: still the edge); the box clicked and the right top edge picked: the
+     plane moves there at the same fraction. OK.
 
 Part: box 40 x 30 x 10 from the origin (real input).
 """
@@ -304,6 +310,123 @@ def c_undone():
     now = snapshot()
     h.check("C same objects", now["objects"] == st["c"]["objects"], now["objects"])
     h.check("C same undo list", now["undo"] == st["c"]["undo"], now["undo"])
+
+
+# -- D: another step double-clicked in the timeline while a dialog is open ---------------------
+def d_start():
+    h.click_empty()
+    h.ribbon("Offset Plane")
+
+
+def d_pick():
+    h.fit()
+    h.click(V(30, 20, 10))
+
+
+def d_type():
+    p = s.construct_panel()
+    h.check("D Offset Plane previews", p is not None and p.datum is not None)
+    if p is not None:
+        s.type_into(p.distance.widget, "7")
+
+
+def d_double_click_extrude():
+    features = [o for o in h.body().Group if o.isDerivedFrom("PartDesign::Feature")]
+    st["d_extrude"] = features[0].Name if features else None
+    if features:
+        s.double_click_timeline(features[0])
+
+
+def d_kept():
+    from sciforge import extrude_ui
+
+    h.check("D the Offset Plane dialog is closed", s.construct_panel() is None)
+    planes = [o for o in s.datums("PartDesign::Plane") if o.Label == "Plane2"]
+    h.check("D ...and kept as Plane2 (OK, like any other command started)", len(planes) == 1)
+    if planes:
+        st["d"] = planes[0].Name
+        z = base_of(planes[0]).z
+        h.check("D with the 7 typed: z = 17", s.close(z, 17.0), z)
+    p = b.active_panel()
+    h.check("D the extrude opens to edit", isinstance(p, extrude_ui.ExtrudePanel), p)
+    s.press_escape()
+
+
+def d_escaped():
+    h.check("D Esc closed the extrude", not Gui.Control.activeDialog())
+    h.check("D the part as it was", s.close(h.solid_volume(), 12000.0), h.solid_volume())
+    s.eye("Plane2")
+
+
+# -- P: the dot of Plane Along Path dragged, let go over the part, then another edge -----------
+def p_start():
+    h.click_empty()
+    s.menu("CONSTRUCT", "Plane Along Path")
+
+
+def p_edge():
+    h.fit()
+    h.click_edge(V(30, 0, 10))
+
+
+def p_drag():
+    p = s.construct_panel()
+    if p is None or p.handle is None or p.handle_key != "path":
+        h.check("P a dot on the edge", False)
+        return
+    h.check("P halfway", s.close(p.fraction.value(), 0.5), p.fraction.value())
+    start = s.screen(p.handle.point())
+    h.drag(start, s.screen(V(34, 15, 10)), steps=16)  # let go over the top face
+
+
+p_drag.wait_ms = 1000
+
+
+def p_dragged():
+    p = s.construct_panel()
+    if p is None or p.datum is None:
+        h.check("P still open", False)
+        return
+    f = p.fraction.value()
+    h.check("P the dot moved", abs(f - 0.5) > 0.1, f)
+    h.check("P let go", not p.handle.dragging())
+    h.check(
+        "P still on the edge (the top face under the mouse is no pick)",
+        "edge" in s.box_value(p, 0).lower(),
+        s.box_value(p, 0),
+    )
+    st["p_fraction"] = f
+    s.click_box(p, 0)
+
+
+def p_right_edge():
+    h.click_edge(V(40, 15, 10))
+
+
+def p_moved():
+    p = s.construct_panel()
+    d = p.datum if p else None
+    h.check("P a plane on the new edge", d is not None)
+    if d is None:
+        return
+    n = unit_normal(d)
+    h.check("P across the right top edge (normal along Y)", s.near(n, V(0, 1, 0)), n)
+    base = base_of(d)
+    h.check(
+        "P on that edge (x = 40, z = 10)", s.close(base.x, 40.0) and s.close(base.z, 10.0), base
+    )
+    f = st.get("p_fraction", 0.5)
+    h.check(
+        "P the same fraction along it",
+        s.close(base.y, 30.0 * f, 1e-6) or s.close(base.y, 30.0 * (1 - f), 1e-6),
+        (base.y, f),
+    )
+    h.task_button("OK")
+
+
+def p_made():
+    h.check("P OK closed it", not Gui.Control.activeDialog())
+    h.check("P Plane3 kept", any(o.Label == "Plane3" for o in s.datums()), s.datums())
     s.no_popups("the end")
     h.shot("end")
 
@@ -314,6 +437,8 @@ STEPS = (
     + [e_edit, e_clear, e_ok, e_refused, e_cancelled]
     + [x_start, x_origin, x_corner, x_preview, x_made, x_undone, x_redone]
     + [c_start, c_body, c_picked, c_cleared, c_made, c_second, c_undone]
+    + [d_start, d_pick, d_type, d_double_click_extrude, d_kept, d_escaped]
+    + [p_start, p_edge, p_drag, p_dragged, p_right_edge, p_moved, p_made]
 )
 
 h.run("inspect_qa8", ti.watched(STEPS))

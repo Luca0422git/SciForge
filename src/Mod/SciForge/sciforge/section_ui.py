@@ -35,6 +35,9 @@ SWATCHES = [
     (0.60, 0.45, 0.85),
     (0.80, 0.80, 0.80),
 ]
+# value box -> the analysis property its formula goes on, and the box's name
+FORMULA_PROPS = {"distance": "Distance", "x_angle": "XAngle", "y_angle": "YAngle"}
+FORMULA_NAMES = {"distance": "Distance", "x_angle": "X Angle", "y_angle": "Y Angle"}
 
 
 # -- keeping the cut display in order ----------------------------------------------------------
@@ -443,10 +446,18 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             "hatch": True,
             "pivot": (0.0, 0.0),
         }
+        # Values typed as a parameter or formula ("-gap", "depth / 2") follow it, as in every
+        # Fusion value box: kept as expressions on the analysis' Distance / XAngle / YAngle.
+        self.formulas = {}
+        self.formula_errors = {}  # value box -> why what was typed there is no value
         if analysis is not None:
             ref, options = section.read(analysis)
             self.ref = ref
             self.options.update(options)
+            for key, prop in FORMULA_PROPS.items():
+                text = preview.formula_of(analysis, prop)
+                if text:
+                    self.formulas[key] = text
         self.handles = {}
         self.planes = None
         self.repick = False
@@ -486,6 +497,19 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         self.y_angle = DistanceField(self.options["y_angle"], unit="deg", on_change=self._typed_y)
         self.y_angle.widget.setObjectName("SciForgeSection_yangle")
         self.layout.addRow("Y Angle", self.y_angle.widget)
+        self._formula_inputs = [
+            preview.FormulaInput(self, key, field)
+            for key, field in (
+                ("distance", self.distance),
+                ("x_angle", self.x_angle),
+                ("y_angle", self.y_angle),
+            )
+        ]
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setObjectName("SciForgeSection_formulas")
+        self.formula_label.setWordWrap(True)
+        self.layout.addRow(self.formula_label)
+        self._show_formulas()
         self.flip = QtWidgets.QPushButton("Flip")
         self.flip.setObjectName("SciForgeSection_flip")
         self.flip.setCheckable(True)
@@ -643,23 +667,74 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             return False
 
     # -- values ------------------------------------------------------------------------------
+    def _plain_value(self, key, value):
+        """A number typed or dragged: the box no longer follows a formula."""
+        self.options[key] = float(value)
+        self.formulas.pop(key, None)
+        self.formula_errors.pop(key, None)
+        self._show_formulas()
+
     @_safe
     def _typed_distance(self, value):
-        self.options["distance"] = float(value)
+        self._plain_value("distance", value)
         self._move_handles()
         self.schedule()
 
     @_safe
     def _typed_x(self, value):
-        self.options["x_angle"] = float(value)
+        self._plain_value("x_angle", value)
         self._rebuild_handles()
         self.schedule()
 
     @_safe
     def _typed_y(self, value):
-        self.options["y_angle"] = float(value)
+        self._plain_value("y_angle", value)
         self._move_handles()
         self.schedule()
+
+    # preview.FormulaInput calls these
+    def formula_typed(self, key, text, value):
+        self.formula_errors.pop(key, None)
+        self.formulas[key] = text
+        self.options[key] = float(value)
+        self._show_formulas()
+        if key == "x_angle":
+            self._rebuild_handles()
+        else:
+            self._move_handles()
+        self.schedule()
+
+    def formula_cleared(self, key):
+        self.formula_errors.pop(key, None)
+        if self.formulas.pop(key, None) is not None:
+            self._show_formulas()
+        self.schedule()
+
+    def formula_failed(self, key, message):
+        """Something that is no value ("gap +"): the dialog stays open (also on Enter and
+        OK) and says so; the cut keeps the last good value."""
+        self.formula_errors[key] = message
+        self._show_status("")
+
+    def _show_formulas(self):
+        label = getattr(self, "formula_label", None)
+        if label is None:
+            return
+        rows = [
+            "%s = %s" % (FORMULA_NAMES[k], self.formulas[k])
+            for k in FORMULA_PROPS
+            if self.formulas.get(k)
+        ]
+        label.setText("\n".join(rows))
+        label.setVisible(bool(rows))
+
+    def _show_status(self, problem):
+        if self.formula_errors:
+            self.say("⚠ %s" % next(iter(self.formula_errors.values())))
+        elif problem:
+            self.say(problem)
+        else:
+            self.hint("")
 
     @_safe
     def _flipped(self, *_):
@@ -760,7 +835,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
     @_safe
     def _dragged_distance(self, value):
         value = round(float(value), 3)
-        self.options["distance"] = value
+        self._plain_value("distance", value)
         self.distance.set_value(value)
         handle = self.handles.get("distance")
         if handle is not None and not handle.dragging():
@@ -770,7 +845,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
     @_safe
     def _dragged_x(self, value):
         value = round(float(value), 2)
-        self.options["x_angle"] = value
+        self._plain_value("x_angle", value)
         self.x_angle.set_value(value)
         handle = self.handles.get("x")
         if handle is not None and not handle.dragging():
@@ -780,7 +855,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
     @_safe
     def _dragged_y(self, value):
         value = round(float(value), 2)
-        self.options["y_angle"] = value
+        self._plain_value("y_angle", value)
         self.y_angle.set_value(value)
         self.schedule()
 
@@ -827,6 +902,8 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             make_view(self.analysis)
         else:
             section.update(self.analysis, self.ref, self.options)
+        for key, prop in FORMULA_PROPS.items():
+            preview.set_formula(self.analysis, prop, self.formulas.get(key, ""))
         preview.recompute(self.doc)
         try:
             if self.analysis.ViewObject is not None and not self.analysis.ViewObject.Visibility:
@@ -836,11 +913,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         schedule(self.doc)
         if not any(h.dragging() for h in self.handles.values()):
             self._rebuild_handles()
-        problem = section.problem(self.analysis) or preview.failure(self.analysis)
-        if problem:
-            self.say(problem)
-        else:
-            self.hint("")
+        self._show_status(section.problem(self.analysis) or preview.failure(self.analysis))
 
     def _frame_options(self):
         return {
@@ -876,6 +949,9 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             if self.error:
                 self.say(self.error)
                 return False
+            if self.formula_errors:  # Fusion does not take a value it cannot read
+                self._show_status("")
+                return False
             label = self.analysis.Label
             done = self.finish_ok()
             schedule(self.doc)
@@ -897,6 +973,9 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         if enter is not None:
             enter.remove()
             self._enter_sum = None
+        for formula in getattr(self, "_formula_inputs", []):
+            formula.panel = None
+        self._formula_inputs = []
         if self.planes is not None:
             try:
                 self.planes.remove()

@@ -21,6 +21,9 @@ is what Fusion does, checked on the design:
      the XZ plane; 45 typed + Enter: the plane turns 45 deg about Z.
   M  That plane selected in the browser and deleted with the Delete key: the plane and its
      hidden helper go, no error; Undo brings both back and it edits as before (Z axis, 45).
+  F  A typo in a formula ("gap +", Enter): the dialog stays open and says so, OK too (Fusion
+     does not take a value it cannot read); "gap * 3" + Enter: z = 10 + 15 = 25. Section
+     Analysis on the top face with "-gap" typed: the cut at z = 5 (6000 stays).
 
 Part: box 40 x 30 x 10 from the origin (real input). Hand-derived values are in the steps.
 """
@@ -516,6 +519,105 @@ def m_edit_dialog():
 
 def m_end():
     h.check("M Esc closed it", not Gui.Control.activeDialog())
+    s.eye("Plane6")
+
+
+# -- F: a typo in a formula; a parameter in Section Analysis ---------------------------------
+def f_start():
+    h.check("F gap is 5", s.close(doc().getObject("Parameters").gap.Value, 5.0))
+    h.click_empty()
+    h.ribbon("Offset Plane")
+
+
+def f_pick():
+    h.fit()
+    h.click(TOP)
+
+
+def f_typo():
+    p = s.construct_panel()
+    h.check("F previews at z = 20", p is not None and p.datum is not None)
+    if p is not None:
+        st["f_z"] = base_of(p.datum).z if p.datum is not None else None
+        s.type_enter(p.distance.widget, "gap +")
+
+
+def f_typo_kept_open():
+    p = s.construct_panel()
+    h.check("F Enter after a typo keeps the dialog open", p is not None)
+    s.no_popups("a typo")
+    if p is None:
+        return
+    h.check("F it says the formula is wrong", "⚠" in p.message.text(), p.message.text())
+    h.check(
+        "F the preview is unchanged",
+        p.datum is not None and s.close(base_of(p.datum).z, st.get("f_z") or 0.0),
+    )
+    h.task_button("OK")
+
+
+def f_ok_refused():
+    p = s.construct_panel()
+    h.check("F OK waits too", p is not None)
+    if p is not None:
+        h.check("F still says why", "⚠" in p.message.text(), p.message.text())
+        s.type_enter(p.distance.widget, "gap * 3")
+
+
+def f_fixed():
+    h.check("F the right formula + Enter finished it", not Gui.Control.activeDialog())
+    plane = plane_named("Plane7")
+    h.check("F Plane7 made", plane is not None, [o.Label for o in s.datums()])
+    if plane is None:
+        return
+    h.check("F z = 10 + 3 * 5 = 25", s.close(base_of(plane).z, 25.0), base_of(plane))
+    h.check("F follows gap * 3", formula(plane) == "gap * 3", formula(plane))
+    s.eye("Plane7")
+
+
+def f_section():
+    h.click_empty()
+    h.ribbon("Section Analysis")
+
+
+def f_section_top():
+    h.fit()
+    h.click(TOP)
+
+
+def f_section_gap():
+    from sciforge import section_ui, taskui
+
+    p = taskui.current()
+    h.check("F Section on the top face", isinstance(p, section_ui.SectionPanel) and p.analysis)
+    if isinstance(p, section_ui.SectionPanel):
+        s.type_into(p.distance.widget, "-gap")
+
+
+def f_section_cut():
+    from sciforge import section, section_ui, taskui
+
+    p = taskui.current()
+    if not isinstance(p, section_ui.SectionPanel) or p.analysis is None:
+        h.check("F Section still open", False)
+        return
+    h.check("F -gap is -5", s.close(p.options["distance"], -5.0), p.options["distance"])
+    kept = section.kept_volume(h.body().Shape, p.analysis.CutPlacement)
+    h.check("F the cut at z = 5: 6000 stays", s.close(kept, 6000.0), kept)
+    text = p.formula_label.text() if hasattr(p, "formula_label") else ""
+    h.check("F the dialog says the distance follows -gap", "-gap" in text, text)
+    st["f_section"] = p.analysis.Name
+    h.task_button("OK")
+
+
+def f_end():
+    from sciforge import section
+
+    h.check("F OK closed it", not Gui.Control.activeDialog())
+    set_gap("2")
+    a = doc().getObject(st["f_section"]) if st.get("f_section") else None
+    kept = section.kept_volume(h.body().Shape, a.CutPlacement) if a is not None else None
+    h.check("F gap = 2: the cut follows (z = 8, 9600 stays)", s.close(kept or 0, 9600.0), kept)
     s.no_popups("the end")
     h.shot("end")
 
@@ -530,6 +632,8 @@ STEPS = (
     + [g_select_top, g_select_front, g_start, g_preview, g_made]
     + [h_start, h_axis, h_preview, h_made]
     + [m_select, m_delete, m_deleted, m_undone, m_edit_dialog, m_end]
+    + [f_start, f_pick, f_typo, f_typo_kept_open, f_ok_refused, f_fixed]
+    + [f_section, f_section_top, f_section_gap, f_section_cut, f_end]
 )
 
 h.run("inspect_qa6", ti.watched(STEPS))

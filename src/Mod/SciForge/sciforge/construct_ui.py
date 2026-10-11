@@ -394,6 +394,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         self.active = 0
         self.values = construct.default_values(key)
         self.formulas = {}
+        self.formula_errors = {}  # value box -> why what was typed there is no value
         self.work_body = commands.find_body()
         self.handle = None
         self.handle_key = None
@@ -534,6 +535,9 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             box.set_active(i == self.active and not self._closed)
 
     def _prompt(self):
+        if self.formula_errors:
+            self.say("⚠ %s" % next(iter(self.formula_errors.values())))
+            return
         if self.error:
             self.say(self.error)
             return
@@ -854,11 +858,13 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             self.fraction.blockSignals(False)
         self.values["distance_type"] = kind
         self.formulas.pop("distance", None)
+        self.formula_errors.pop("distance", None)
         self._show_path_type()
         self.schedule()
 
     # preview.FormulaInput calls these
     def formula_typed(self, key, text, value):
+        self.formula_errors.pop(key, None)
         self.formulas[key] = text
         self.values[key] = float(value)
         if self.handle is not None and self.handle_key == key:
@@ -869,11 +875,18 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         self.schedule()
 
     def formula_cleared(self, key):
+        had_error = self.formula_errors.pop(key, None) is not None
         if self.formulas.pop(key, None) is not None:
             self.schedule()
+        elif had_error:
+            self._prompt()
 
     def formula_failed(self, key, message):
-        self.say(message)
+        """A value box holds something that is no value ("gap +"): Fusion keeps the dialog
+        open (also on Enter or OK) until it is put right; the preview keeps the last good
+        value. Before, Enter closed the dialog with that old value without a word."""
+        self.formula_errors[key] = message
+        self._prompt()
 
     # -- handles -----------------------------------------------------------------------------
     def _remove_handle(self):
@@ -970,6 +983,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         value = round(float(value), 3)
         self.values["distance"] = value
         self.formulas.pop("distance", None)
+        self.formula_errors.pop("distance", None)  # the arrow gave the box a value
         if self.distance is not None:
             self.distance.set_value(value)
         self.schedule()
@@ -979,6 +993,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         value = round(float(value), 2)
         self.values["angle"] = value
         self.formulas.pop("angle", None)
+        self.formula_errors.pop("angle", None)
         if self.angle is not None:
             self.angle.set_value(value)
         self.schedule()
@@ -998,6 +1013,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             self.values["distance"] = round(s, 3)
             self.distance.set_value(self.values["distance"])
             self.formulas.pop("distance", None)
+            self.formula_errors.pop("distance", None)
         else:
             self.values["fraction"] = round(s / length, 4) if length > 0 else 0.0
             self.fraction.blockSignals(True)
@@ -1086,7 +1102,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         try:
             self._timer.stop()
             self._apply_now()
-            if not self._complete():
+            if not self._complete() or self.formula_errors:
                 self._prompt()
                 return False
             if self.error or self.datum is None:
