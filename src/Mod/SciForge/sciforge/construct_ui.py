@@ -420,6 +420,11 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         if self.active is None:
             self.active = len(self.inputs) - 1
         self.start_picking()
+        if self.editing:
+            # The construction being edited never takes a click, also while it waits for a
+            # new pick (it lost what it was on): it stands in front of the part, and the
+            # origin square behind it got the click meant for the face under it.
+            self._not_pickable()
         self._install_gate()
         self._show_boxes()
         self._update_overlays()
@@ -481,6 +486,13 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             self.layout.addRow("Distance", self.distance_stack)
             self._formula_inputs.append(preview.FormulaInput(self, "distance", self.distance))
             self._show_path_type()
+        # Fusion shows a formula in its value box; FreeCAD's number box can only show the
+        # value, so what follows a parameter is listed under the boxes (as in Revolve).
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setObjectName("SciForgeConstruct_formulas")
+        self.formula_label.setWordWrap(True)
+        self.layout.addRow(self.formula_label)
+        self._show_formulas()
         self._enter_sum = EnterAfterSum(self, [self.distance, self.angle])
         self.finish_layout()
 
@@ -493,6 +505,21 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
                 edit.setToolTip("Formula: %s" % text)
         except Exception:
             pass
+
+    FORMULA_NAMES = {"distance": "Distance", "angle": "Angle"}
+
+    def _show_formulas(self):
+        """List the values that follow a parameter or formula ("Distance = gap")."""
+        label = getattr(self, "formula_label", None)
+        if label is None:
+            return
+        rows = [
+            "%s = %s" % (self.FORMULA_NAMES.get(k, k), v)
+            for k, v in sorted(self.formulas.items())
+            if v
+        ]
+        label.setText("\n".join(rows))
+        label.setVisible(bool(rows))
 
     def _show_path_type(self):
         if self.distance_stack is None:
@@ -992,6 +1019,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
     # -- the construction itself -------------------------------------------------------------
     def schedule(self):
         if not self._closed:
+            self._show_formulas()  # every change of a value comes through here
             self._timer.start()
 
     def _preview(self):
