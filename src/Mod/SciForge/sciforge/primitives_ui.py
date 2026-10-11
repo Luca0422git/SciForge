@@ -716,6 +716,56 @@ class Placer:
             pass
 
 
+def clear_selection_soon():
+    """Drop the selection now and once the click that opened an edit has finished: the
+    timeline's click selects the step being edited, and a click on that step's own edge or
+    face then selected the whole body instead (FreeCAD climbs to the parent of an object
+    that is selected already), so the pick said "pick an edge" (found by the primitives
+    QA). Fusion edits a step with nothing selected."""
+    for delay in (None, 0, 150):
+        if delay is None:
+            _clear_selection()
+        else:
+            QtCore.QTimer.singleShot(delay, _clear_selection)
+
+
+def _clear_selection():
+    try:
+        Gui.Selection.clearSelection()
+    except Exception:
+        pass
+
+
+def base_face_holding(base, face_global):
+    """'FaceN' of `base` (the part before this step) in the same plane as the flat face
+    `face_global` clicked on the step's result and holding it, or None. The step itself
+    changed that face (a box joined on top leaves the top a square smaller), so it is no
+    longer the same face: before, the click said "that face belongs to this box itself"
+    (found by the primitives QA)."""
+    from . import hole
+
+    try:
+        if face_global.Surface.TypeId != "Part::GeomPlane":
+            return None
+        point = primitives.point_on(face_global)
+        if point is None:
+            return None
+        inverse = primitives.body_placement(base).inverse()
+        local = inverse.multVec(point)
+        normal = inverse.Rotation.multVec(hole.face_normal_at(face_global, point))
+        name = hole.base_face_at(base, local, normal_hint=normal, loose=0.0)
+        if name is None:
+            return None
+        other = base.Shape.getElement(name)
+        if other.Surface.TypeId != "Part::GeomPlane":
+            return None
+        if hole.face_normal_at(other, local).dot(normal) < 1.0 - 1e-9:
+            return None
+        return name
+    except Exception:
+        return None
+
+
 def design_reach(body):
     """How far the visible bodies of the design reach from `body`'s origin, along its axes
     (0 for an empty design)."""
@@ -856,6 +906,7 @@ class PlacedPanel(Panel):
         self._show_fields()
         self._watch()
         if feature is not None:
+            clear_selection_soon()  # the timeline's click selected the step being edited
             self.state = "ready"
             self.activate(None)
             self._show_plane()
@@ -1126,7 +1177,7 @@ class PlacedPanel(Panel):
         face = profile_pick.global_face(obj, sub)
         if face is None:
             return None
-        name = profile_pick.face_name_in(base, face)
+        name = profile_pick.face_name_in(base, face) or base_face_holding(base, face)
         return (base, name) if name else None
 
     def _later(self, obj, body):

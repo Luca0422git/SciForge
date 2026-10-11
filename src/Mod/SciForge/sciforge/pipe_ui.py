@@ -25,6 +25,7 @@ from .primitives_ui import (
     EnterTakesNumber,
     TypeOverView,
     _plain,
+    clear_selection_soon,
     combo,
     safe,
     set_combo,
@@ -207,6 +208,7 @@ class PipePanel(Panel):
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
             self._show_sketches()
+            clear_selection_soon()  # the timeline's click selected the pipe being edited
         self._build_form()
         self._show_fields()
         self._watch()
@@ -461,18 +463,24 @@ class PipePanel(Panel):
         except Exception:
             return None
         ends = [v.Point for v in edge.Vertexes]
+        holding = None
         for i, candidate in enumerate(base.Shape.Edges, start=1):
             try:
                 other = pipe._global_edge(base, "Edge%d" % i)
             except Exception:
                 continue
-            if other.Curve.TypeId != edge.Curve.TypeId or len(other.Vertexes) != len(ends):
+            if other.Curve.TypeId != edge.Curve.TypeId:
                 continue
             points = [v.Point for v in other.Vertexes]
-            if all(min((p - q).Length for q in points) < 1e-6 for p in ends):
-                if abs(other.Length - edge.Length) < 1e-6:
+            if len(points) == len(ends) and abs(other.Length - edge.Length) < 1e-6:
+                if all(min((p - q).Length for q in points) < 1e-6 for p in ends):
                     return (base, "Edge%d" % i)
-        return None
+            if holding is None and _holds(other, edge):
+                holding = (base, "Edge%d" % i)
+        # The pipe itself shortened the edge (its groove took a corner off): the edge of
+        # the part it lies on (before, the click said "that edge belongs to this pipe
+        # itself": found by the primitives QA).
+        return holding
 
     def _toggle(self, ref):
         key = (ref[0].Name, ref[1])
@@ -803,6 +811,20 @@ class PipePanel(Panel):
         self._remove_handles()
         self._hide_shown()
         super().cleanup()
+
+
+def _holds(longer, edge):
+    """True if `edge` lies on `longer` (its ends and middle on it): a piece of it."""
+    import Part
+
+    try:
+        if longer.Length < edge.Length - 1e-6:
+            return False
+        middle = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+        points = [v.Point for v in edge.Vertexes] + [middle]
+        return all(longer.distToShape(Part.Vertex(p))[0] < 1e-6 for p in points)
+    except Exception:
+        return False
 
 
 class _Field:

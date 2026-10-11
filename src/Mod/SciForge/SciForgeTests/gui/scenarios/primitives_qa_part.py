@@ -9,7 +9,8 @@ P5. A 40 x 30 x 10 block (Create Sketch, rectangle, E). Top face selected, Cylin
     pulled up 5. Extrude 1 edited to 20: the hole, the box and the pull ride up with the
     top. Cylinder 1 deleted in the timeline: the box stays where it is, no error. Ctrl+Z,
     Ctrl+Y. Create Sketch on the pulled top, a circle r3, E 4. Box 1 edited to Height 8:
-    the pull and the boss on it follow. Ctrl+Z.
+    the pull and the boss on it follow. Ctrl+Z. Box 1 edited again, its Plane box clicked,
+    the block's top clicked (the box made that face smaller): taken, nothing moves; Esc.
 P6. Problems said in the dialog, never in the Report view: a Box away from the part
     (New Body by itself) switched to Cut (it touches nothing), Join (two separate pieces
     in one body), Intersect (nothing in common): each said, OK waits; New Body: fine; Esc
@@ -330,6 +331,46 @@ def p5_back():
     h.fit()
 
 
+def p5_replane():
+    h.check("P5 double-click Box 1 once more", ti.double_click("Box 1"), ti.titles())
+
+
+def p5_plane_box():
+    p = pi.panel("BoxPanel")
+    h.check("P5 editing Box 1 again", p is not None and p.editing)
+    if p is not None:
+        ui.click(p.plane_field.button)
+
+
+p5_plane_box.wait_ms = 1500
+
+
+def p5_click_block_top():
+    p = pi.panel("BoxPanel")
+    h.check(
+        "P5 the Plane box waits for a pick", p is not None and p.state == "replane", p and p.state
+    )
+    h.click(V(5, 5, 20))  # the block's top, which the box itself made smaller
+
+
+def p5_replaned():
+    p = pi.panel("BoxPanel")
+    h.check("P5 the block's top is taken", p is not None and p.state == "ready", p and p.state)
+    h.check("P5 no message", msg(p) == "", msg(p))
+    text = p.plane_field.button.text() if p is not None else ""
+    h.check("P5 on Extrude 1's face", text == "Face of Extrude 1", text)
+    h.check("P5 the part unchanged", near(vol(), s["vol"]), vol())
+    h.press(QtCore.Qt.Key_Escape)
+
+
+p5_replaned.wait_ms = 1500
+
+
+def p5_replane_esc():
+    h.check("P5 Esc closed it", pi.no_dialog())
+    h.check("P5 the part as it was", near(vol(), s["vol"]), vol())
+
+
 # == P6: problems said in the dialog ======================================================
 def p6_box():
     h.click_empty()
@@ -595,6 +636,11 @@ h.run(
         p5_box_8_ok,
         p5_followed,
         p5_back,
+        p5_replane,
+        p5_plane_box,
+        p5_click_block_top,
+        p5_replaned,
+        p5_replane_esc,
         p6_box,
         p6_plane,
         p6_c1,
