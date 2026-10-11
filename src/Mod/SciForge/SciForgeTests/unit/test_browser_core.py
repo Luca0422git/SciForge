@@ -116,6 +116,11 @@ class BrowserTests(unittest.TestCase):
         labels = self.labels(self.tree(rows))
         self.assertEqual(labels[2], "Analysis")
 
+    def test_analysis_menu_edits(self):
+        """Fusion: an analysis in the browser is edited from its menu (and double-click)."""
+        node = {"kind": "analysis", "visible": True}
+        self.assertEqual(core.menu_for(node)[0], "Edit Feature")
+
     def test_problems_shown(self):
         rows = [dict(o) for o in OBJECTS]
         rows[5]["warning"] = "Lost its plane"

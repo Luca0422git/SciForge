@@ -486,8 +486,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             obj = self._object(node)
             if node["kind"] == "body" and obj is not None:
                 self._activate(obj)
-            elif node["kind"] in ("sketch", "construction") and obj is not None:
-                _later(_edit_object, obj)
+            elif node["kind"] in ("sketch", "construction", "analysis") and obj is not None:
+                _later(_edit_object, obj)  # Fusion: double-click a section to edit it
         except Exception as exc:
             warn("browser: %s" % exc)
 

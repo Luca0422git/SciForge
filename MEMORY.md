@@ -420,6 +420,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Bodies used up by a Combine (no Keep Tools) are no longer listed in the browser, like
   Fusion (`browser_ui._used_up_bodies`, `bodies.consumed`); while a body-tool dialog is
   open (`bodies.PAUSED`) they stay listed so they can be picked. `bodies_combine` checks it.
+- Browser: an analysis (Section, Center of Mass, Interference) is edited by double-click or
+  right-click Edit Feature, like Fusion (found by the inspect agent; `inspect_section`).
 - `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
   `palette_check.svg` (check-box tick) would have been deleted; it is now in its `RAW` table.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not

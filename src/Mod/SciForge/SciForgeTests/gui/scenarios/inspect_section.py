@@ -253,6 +253,29 @@ def edited():
     h.check("edited", s.close(kept(found[0]), 4000 + math.pi * 125), kept(found[0]))
 
 
+def dbl_start():
+    """Fusion: double-click the analysis in the browser to edit it."""
+    from SciForgeTests.gui import timeline_input as ti
+
+    h.click_empty()
+    h.check("Section1 row in the browser", ti.double_click_row("Section1"))
+
+
+def dbl_dialog():
+    p = panel()
+    h.check("double-click opens the analysis to edit", p is not None and p.editing)
+    if p is not None:
+        h.check("with its distance", s.close(p.distance.value(), -10.0), p.distance.value())
+        h.task_button("Cancel")
+
+
+def dbl_cancelled():
+    found = analyses()
+    h.check("Cancel: still one analysis", len(found) == 1)
+    if found:
+        h.check("Cancel: unchanged", s.close(kept(found[0]), 4000 + math.pi * 125), kept(found[0]))
+
+
 def angle_start():
     start()
 
@@ -394,6 +417,9 @@ h.run(
         edit_dialog,
         edit_check,
         edited,
+        dbl_start,
+        dbl_dialog,
+        dbl_cancelled,
         angle_start,
         angle_pick,
         angle_90,

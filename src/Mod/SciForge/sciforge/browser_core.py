@@ -289,7 +289,7 @@ MENUS = {
         "Rename",
         "Delete",
     ],
-    "analysis": ["Show/Hide", "-", "Rename", "Delete"],
+    "analysis": ["Edit Feature", "-", "Show/Hide", "-", "Rename", "Delete"],
 }
 
 
