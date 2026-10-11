@@ -170,6 +170,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       corner, arrows that move with the part. Shared dialog base `pickpanel.py`. Ribbon: Scale
       now runs `SciForge_Scale` (was greyed). 6 scenarios (`shell_draft*.py`), 20 golden models
       (`sf_shell_*`, `sf_draft_*`, `sf_scale_*`), unit tests `test_shell_draft_core.py`.
+- [x] Shell / Draft / Scale QA pass (branch `sf/shell_draft-qa`, 11 bugs fixed): later steps
+      keep their faces when a shell/scale/draft is edited (`follow.py`), a 1 mm cup wall is no
+      longer "too thick", arrows can always be grabbed, Draft's Pull Direction box and
+      clickable pull arrow, Change Parameters lists Shell / Scale values. 4 QA scenarios
+      (`shell_draft_qa_shell/_draft/_scale/_mix.py`, 25 paths), 4 golden models.
 - [x] Body tools, Fusion-style (branch `sf/bodies`): Combine (Target / Tool Bodies, Join /
       Cut / Intersect, New Body, Keep Tools; used-up tools hidden while the step is part of
       the design), Split Body (origin/construction plane, face with Extend Splitting Tool,
@@ -628,7 +633,52 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - Draggers inside a see-through part cannot be grabbed (Coin gives the click to the part's
     face in front): the Draft handle sits on the face's continuation outside the part, the
     Scale arrow keeps a gap from the corner it sits on (the corner stays clickable).
-- **CONSTRUCT / INSPECT findings (2026-10-11, branch `sf/inspect`):**
+    (QA pass: now solved differently, the arrows are screen-space handles; see below.)
+- **Shell / Draft / Scale QA findings (2026-10-11, branch `sf/shell_draft-qa`)**:
+  - **FreeCAD's element names are what keeps a later step on its face.** A sketch on a face,
+    a Press Pull, a fillet name the faces of the step before them; FreeCAD 1.1 finds them
+    again through "mapped" names built from each step's history. SciForge's Python features
+    must keep those names stable or every later step breaks on an edit:
+    - Two shapes made from the same solid and joined (Shell Both: inside and outside
+      walls; hollow Both: two offsets) both have tag 0, so the fuse tells their faces apart
+      with a `D<number>` that changes with the geometry: editing a thickness lost every
+      later reference ("?Face6"). `shelling._tagged` gives the two walls their own tags
+      (from the feature's ID: stable, saved with the design).
+    - `transformGeometry` (non-uniform scale) returns a shape with no names, and the
+      uniform `scale()` names them differently: switching or editing lost the faces.
+      `scale._keep_names` copies the part's own `ElementMap` and `Tag` (same topology,
+      same order) in both cases.
+    - Swapping FreeCAD's Thickness for SciForge's shell (Inside to Both) makes new names
+      anyway (the outside walls are new faces). Repointing the dependents must happen
+      *after* the new feature has computed (else FreeCAD stores a stale shadow name:
+      "subshape not found Shell001.Face11"), and with the same face found by geometry.
+    - Whatever is still lost is found again by geometry (`follow.py`: `snapshot()` when
+      the dialog opens, `repair()` after each preview recompute, a few rounds because a
+      repaired step changes the ones after it): the same place and size, else the same
+      kind of face facing the same way nearest to where it was. Golden ops `sf_*_edit` do
+      the same. Press Pull stores short names only (`presspull.py`): without this its face
+      was lost, or on the base code silently became another face (golden
+      `sf_shell_swap_presspull_follows`: the wall pulled was the back one).
+  - **`shape.BoundBox` comes from the display triangles once the part was drawn**: a
+    cylinder of radius 10 measured 9.997 wide, so a shelled cup "stuck out" of the part and
+    every wall of a round part was refused as too thick (headless tests never saw it:
+    nothing is drawn). Use `shape.optimalBoundingBox(False, False)` for any geometric
+    decision. The golden `sf_shell` step triangulates the part first, like the 3D view.
+  - **Greedy selection (pickpanel's toggling clicks) keeps the left-button release from
+    `view.addEventCallback` callbacks.** `handles3d` handles wait for that release, so in a
+    PickPanel dialog a handle stayed "held" after the first drag and every later click was
+    taken as the handle's. `pickpanel.Arrow` reads the release from Qt
+    (`QApplication.mouseButtons()`). `construct_ui.py` (inspect) uses `handles3d` in a
+    PickPanel dialog too and has the same problem (task suggested to its owner).
+  - A handle drawn over the part takes the click (by screen distance), but FreeCAD still
+    picks the face behind it: `PickPanel.handles_busy()` ignores picks while a handle is
+    pressed or was pressed in the last 0.6 s (also when the handle was rebuilt meanwhile:
+    a click on the Draft pull arrow flips it and makes a new arrow at once).
+  - A handle over the part steals the clicks meant for faces: the Draft pull arrow now
+    stands beside the part (at the outline corner seen furthest left), not through it.
+  - The Shell arrow came from `thicknesses()`, which is 0 for a wrong or zero value: after
+    "0" the arrow vanished and never came back. Arrows now follow the direction only.
+
   - FreeCAD's attacher cannot express most Fusion constructions (angle about an edge, tangent
     at a clicked spot, a fraction along a curve). SciForge attaches those datums to a hidden
     helper in the body (`construct.ConstructionFrame`, `SciForgeTimeline = False`,
@@ -1231,6 +1281,46 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Full suite at the end (no --only, 2026-10-11): unit 185 OK (194 with the new schema
   tests, run after); golden 216 pass + 1 xfail (`plate_hole_grid`, needs core patch #4);
   smoke 70/70; journey 25/25; 79 of 79 scenarios PASS (6594 checks).
+
+### 2026-10-11: QA of Shell, Draft and Scale (branch `sf/shell_draft-qa`)
+- `sf/shell_draft` was already merged into main: the QA branch starts from the current main
+  (so it tests today's product). 4 new scenarios with only real input, 25 paths:
+  `shell_draft_qa_shell` (8: OK with nothing picked, body/face/body/x picks, Esc while
+  dragging the arrow, values typed fast / "abc" / 0 / Delete / the arrow dragged through
+  the surface and far in, E and F with the dialog open, two timeline edits with undo/redo,
+  a boss sketched on the shell's floor + Press Pull, save/reopen and the edit to Both),
+  `shell_draft_qa_draft` (7: a face clicked first becomes the Pull Direction, OK without
+  faces, Q with the dialog open, the handle dragged far and negative, the pull arrow
+  clicked, save/reopen/edit, a drafted + shelled moulded part edited), `shell_draft_qa_scale`
+  (7: OK with nothing picked, shrink by dragging and grab the arrow again inside the part,
+  a boss on the scaled top while the scale is edited and made Non Uniform, E with the dialog
+  open, a corner point followed through an Extrude edit, parameters + Change Parameters,
+  save/reopen), `shell_draft_qa_mix` (7: Shell inserted at the rolled-back marker under a
+  boss, edited, Scale from the browser, timeline Delete / Ctrl+Z, Suppress, Ctrl+S with a
+  dialog open, a cup).
+- Bugs found and fixed (details in Known issues): later steps lost their faces when a
+  shell was edited (Both thickness, Inside to Both swap: sketch "subshape not found", Press
+  Pull failed or silently took the back wall) or a scale went Non Uniform; a 1 mm cup wall
+  refused as too thick; the Shell arrow vanished after a 0; arrows stayed "held" after a
+  drag (every later click ignored) and could not be grabbed inside the see-through part;
+  Draft's box was "Plane" (spec: Pull Direction) and its arrow could not be clicked to flip
+  (Fusion can); the pull arrow covered faces to click; a flip click also picked the face
+  behind it; dragged handles did not come back to their limits; Change Parameters did not
+  list SciForge's Shell / Scale values (`parameters.py`, unowned: one dict + one branch).
+- Golden models `sf_shell_both_edit_presspull`, `sf_shell_swap_presspull_follows`,
+  `sf_scale_non_uniform_keeps_faces` (all three fail on the base code, checked) and
+  `sf_shell_cup`.
+- Full suite on the branch (no --only, at code commit d201082764, 92 minutes): unit 244 OK,
+  golden 254 pass + 1 xfail (`plate_hole_grid`, core patch #4 not compiled), smoke 70/70,
+  journey 25/25, scenarios 98 of 100 PASS (10418 checks; shell_draft_qa_shell 442,
+  shell_draft_qa_scale 368, shell_draft_qa_draft 362, shell_draft_qa_mix 252, the five
+  teammate shell_draft scenarios 365, ribbon_sweep 112). The 2 failures are the known
+  baseline ones not owned here: `sweep_loft_loft` and `sweep_loft_loft_guides` use
+  `p.field` of the old Offset Plane dialog (`ConstructPanel` has no `field` on main
+  eefca10bc0 either).
+- Left for other owners: `construct_ui.py` uses `handles3d` handles inside a PickPanel
+  dialog (greedy selection): after a drag the handle stays "held" (task suggested);
+  `presspull.py` stores short face names only (SciForge's dialogs now repair them).
 
 ## Next steps (in order)
 
