@@ -1,0 +1,61 @@
+{
+  "id": "sf_coil_param_driven",
+  "title": "Coil whose Diameter is coil_d and Height rise (20 x 20, then 30 x 40), 4 revolutions, section 2",
+  "tags": [
+    "primitive",
+    "coil",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "coil_d",
+      "value": 20,
+      "unit": "mm"
+    },
+    {
+      "op": "parameter",
+      "name": "rise",
+      "value": 20,
+      "unit": "mm"
+    },
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "diameter": 20,
+      "revolutions": 4,
+      "height": 20,
+      "section_size": 2,
+      "expressions": {
+        "diameter": "coil_d",
+        "height": "rise"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "coil_d",
+      "value": 30
+    },
+    {
+      "op": "parameter",
+      "name": "rise",
+      "value": 40
+    }
+  ],
+  "expect": {
+    "volume": 1105.395692922008,
+    "bbox": [
+      -15,
+      -15,
+      -1,
+      15,
+      15,
+      41
+    ],
+    "abs_tol": 0.001,
+    "note": "As sf_coil_basic with the axis radius 15 - 1 = 14: V = pi 1^2 * 2 pi 14 * 4 = 112 pi^2 (the rise adds no volume); the coil now goes up to 40 + 1.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

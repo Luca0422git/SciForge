@@ -241,7 +241,16 @@ class PipePanel(Panel):
         form.addRow(self.thickness_label, self.thickness.widget)
         self.operation = combo(OPERATION_LABELS, self.options["operation"], "SciForgeOperation")
         form.addRow("Operation", self.operation)
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        self.formula_error = ""
+        self.formula_fields = {"section_size": self.size, "thickness": self.thickness}
+        self.formula_inputs = [
+            preview.FormulaInput(self, key, field) for key, field in self.formula_fields.items()
+        ]
         try:
             lines = self.message.fontMetrics().lineSpacing()
             self.message.setMinimumHeight(lines * self.MESSAGE_LINES + 4)
@@ -267,6 +276,7 @@ class PipePanel(Panel):
         finally:
             self._quiet = False
         self._update_visibility()
+        self.show_formulas()
 
     def _update_visibility(self):
         for widget in (self.thickness.widget, self.thickness_label):
@@ -281,6 +291,39 @@ class PipePanel(Panel):
         o["hollow"] = self.hollow.isChecked()
         o["thickness"] = abs(self.thickness.value())
         o["operation"] = self.operation.currentData()
+
+    # -- formulas (preview.FormulaInput calls these) -----------------------------------------------
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options.setdefault("expressions", {})[key] = text
+        if key == "section_size":
+            self.size_set = True
+        self._quiet = True
+        try:
+            self.formula_fields[key].set_value(value)
+        finally:
+            self._quiet = False
+        self.show_formulas()
+        self._changed(new_geometry=True)
+
+    def formula_cleared(self, key):
+        self.formula_error = ""
+        if self.options.get("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            self._changed()
+
+    def formula_failed(self, key, text):
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
+
+    def show_formulas(self):
+        names = {"section_size": "Section Size", "thickness": "Section Thickness"}
+        rows = [
+            "%s = %s" % (names.get(k, k), v)
+            for k, v in sorted(self.options.get("expressions", {}).items())
+            if v
+        ]
+        self.formulas.setText("\n".join(rows))
 
     def activate(self, name):
         self.path_field.set_active(name == "path")
@@ -574,6 +617,9 @@ class PipePanel(Panel):
         return self.target
 
     def show_status(self):
+        if self.formula_error:
+            self.message.setText("⚠ " + self.formula_error)
+            return
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
@@ -650,6 +696,8 @@ class PipePanel(Panel):
     @safe
     def _size_dragged(self, value):
         value = max(0.02, round(abs(value), 2))
+        if self.options.get("expressions", {}).pop("section_size", None) is not None:
+            self.show_formulas()
         self.size_set = True
         self._quiet = True
         try:
@@ -676,6 +724,9 @@ class PipePanel(Panel):
         if self.target is None:
             text = self.error or "Pick the path first: click sketch curves or model edges."
             self.message.setText("⚠ " + text)
+            return False
+        if self.formula_error:
+            self.message.setText("⚠ " + self.formula_error)
             return False
         self._timer.stop()
         if self.dirty:

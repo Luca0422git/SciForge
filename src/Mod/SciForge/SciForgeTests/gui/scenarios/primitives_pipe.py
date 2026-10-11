@@ -59,8 +59,13 @@ def pipes():
 
 # -- the path sketch -------------------------------------------------------------------------------
 def new_design():
+    from sciforge import parameters
+
     Gui.activateWorkbench("SciForgeWorkbench")
     App.newDocument("Pipes")
+    # Change Parameters (its own dialog) made this user parameter:
+    parameters.add_user(App.ActiveDocument, "size", "mm", "2")
+    App.ActiveDocument.recompute()
     h.fit()
 
 
@@ -135,13 +140,16 @@ def chained():
     h.check("a pipe preview", p.target is not None and vol() > 0, vol())
     h.check("first solid: New Body", p.operation.currentText() == "New Body")
     h.check("handles", set(p.handles) == {"distance", "section_size"}, list(p.handles))
-    ui.type_into(p.size.widget, "2")
+    ui.type_into(p.size.widget, "size")  # the parameter size = 2
 
 
 chained.wait_ms = 1500
 
 
 def size_2():
+    p = panel()
+    h.check("Section Size = size: 2", near(p.size.value(), 2.0), p.size.value())
+    h.check("the formula is listed", "Section Size = size" in p.formulas.text(), p.formulas.text())
     h.check("d2 along the path: pi L", near(vol(), PI * L, 1e-5), vol())
     h.fit()
     h.shot("2-pipe")
@@ -273,6 +281,7 @@ def pipe_editing():
         return
     h.check("edit shows the path", len(p.path) == 3)
     h.check("edit shows hollow 0.25", p.hollow.isChecked() and near(p.thickness.value(), 0.25))
+    h.check("edit shows the formula", "Section Size = size" in p.formulas.text(), p.formulas.text())
     h.check("the sketch shows while editing", s["sketch"].ViewObject.Visibility)
     h.check("Triangular", ui.choose(p.section, "Triangular"))
 
@@ -413,6 +422,19 @@ def after_esc():
     h.check("Esc changes nothing", near(vol(), s["volume"]), vol())
     h.check("no new objects", len(App.ActiveDocument.Objects) == s["count"])
     h.shot("5-end")
+    from sciforge import parameters
+
+    parameters.set_user(App.ActiveDocument, "size", "3")  # in Change Parameters
+    App.ActiveDocument.recompute()
+
+
+def formula_follows():
+    pipe1 = [b for b in pi.bodies() if b.Label != "Body2"]
+    h.check(
+        "size = 3: the first pipe's section grows (area x 2.25)",
+        near(vol(), TRI * L * 2.25 + 8000.0 - 10.0 * PI, 1e-5),
+        (vol(), [b.Label for b in pipe1]),
+    )
 
 
 h.run(
@@ -464,5 +486,6 @@ h.run(
         cancelled,
         esc_now,
         after_esc,
+        formula_follows,
     ],
 )

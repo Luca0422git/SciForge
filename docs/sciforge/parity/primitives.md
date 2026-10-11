@@ -1,0 +1,107 @@
+# Parity spec: Box, Cylinder, Sphere, Torus, Coil, Pipe (outline 7.6, Primitives)
+
+Source: Fusion's documented behaviour for SOLID > CREATE > Box / Cylinder / Sphere / Torus /
+Coil / Pipe and everyday use. Not yet checked against Luca's own screen captures (outline
+2.4). Implemented in `src/Mod/SciForge/sciforge/`: `primitives_core.py` (no FreeCAD needed:
+rounding, size checks, volumes, the automatic operation), `primitives.py` + `primitives_ui.py`
+(Box, Cylinder, Sphere, Torus and the shared dialog base), `coil.py` + `coil_ui.py`,
+`pipe.py` + `pipe_ui.py`, `undo_links.py` (see "FreeCAD bug" below). Status: **first pass,
+not yet signed off**.
+
+## What every one of these commands does
+
+| Fusion | SciForge |
+|---|---|
+| Nothing selected: the origin planes show as squares; click one, or click a flat face of the part | Same (the plane picker of Create Sketch). Curved faces are refused with a note in the dialog. A plane or flat face selected before the command is taken at once |
+| The plane box in the dialog: click it to pick another plane | Same ("Plane" field); the shape moves to the new plane, sizes kept |
+| Place with the mouse: the cursor moves on the plane (a blue outline follows it) | Same: the mouse ray meets the plane. Clicks snap to the plane's origin (10 px) and round to steps that suit the zoom (1, 2.5 or 5 x 10^n, about 6 pixels) |
+| Blue arrows to drag sizes after placing | Same, drawn on top of the part; they show the value while dragging |
+| Typed values in the dialog (and parameters / formulas: `w`, `d / 4`) | Same; a formula keeps driving the shape (an expression), listed under the fields, and follows the parameter in Change Parameters, after undo/redo and after reopening the file |
+| Operation Join / Cut / Intersect / New Body; dragging into the part switches to Cut | Same. Until you pick one yourself: mostly inside the part -> Cut, touching or overlapping -> Join, away from it or no part yet -> New Body |
+| Live preview; problems said in the dialog (OK waits) | Same; nothing goes to the Report view |
+| OK = one undo step; Cancel / Esc leave nothing behind; Enter = OK; Ctrl+Z while the dialog is open = Cancel | Same |
+| Double-click the step in the timeline to edit it; the step can change operation | Same: the step keeps its place and name (e.g. a Box turned to Cut swaps `AdditiveBox` for `SubtractiveBox` in place; later steps move over) |
+| A second use right after the first | Same (tested) |
+
+## Box
+
+| Fusion | SciForge |
+|---|---|
+| Click the first corner, then the opposite corner; then a height arrow | Same: the rectangle follows the mouse (rubber band), then the box appears with Length, Width and Height arrows |
+| Length / Width / Height fields; a negative height goes the other way | Same; height below zero goes into the part (Cut is picked by itself when it is inside) |
+
+Built as FreeCAD's `PartDesign::AdditiveBox` / `SubtractiveBox`, attached to the plane
+(`FlatFace` + `AttachmentOffset`).
+
+## Cylinder, Sphere, Torus
+
+| Fusion | SciForge |
+|---|---|
+| Cylinder: centre click, a point on the circle, then the height arrow; Diameter / Height | Same; the diameter has its own arrow too |
+| Sphere: centre click; Diameter | Same; the sphere sits with its centre on the plane |
+| Torus: centre click, a point on the circle; Inner Diameter, Torus Diameter, Position Inside / On Center / Outside | Same; Position says where the tube sits against the inner diameter. Arrows for both diameters |
+
+Built as FreeCAD's `PartDesign::AdditiveCylinder` / `Sphere` / `Torus` (and the Subtractive
+ones). Intersect for any of them is SciForge's `PrimitiveFeature` (a
+`PartDesign::FeaturePython`), because FreeCAD's primitives only add or take away.
+
+## Coil
+
+| Fusion | SciForge |
+|---|---|
+| Centre click, a point on the circle (diameter), then the height arrow | Same |
+| Type: Revolution and Height / Revolution and Pitch / Height and Pitch / Spiral | Same; switching type keeps the coil's shape (the value the new type works out is filled in) |
+| Diameter, Revolutions, Height, Pitch, Angle (taper) | Same; the fields the type does not use are hidden |
+| Rotation Clockwise / Counterclockwise | Same |
+| Section Circular / Square / Triangular (External) / Triangular (Internal); Section Position Inside / On Center / Outside; Section Size | Same |
+| Operation (Cut when it is inside the part) | Same |
+| Impossible coils (turns touching each other, section reaching the axis, an angle that closes the coil) explained | Same, in the dialog, saying what to change (e.g. the pitch must be larger than the section, 2 mm) |
+
+Built on FreeCAD's `PartDesign::AdditiveHelix` / `SubtractiveHelix` with a small section
+object made for it (a SciForge 2D object holding the section, hidden from the timeline). Spiral
+uses FreeCAD's "height-turns-growth" mode with height 0.
+
+## Pipe
+
+| Fusion | SciForge |
+|---|---|
+| Path: sketch curves or model edges; Chain Selection picks the curves that continue it | Same; click again to drop a curve |
+| Distance (0..1 of the path), with a blue handle at the pipe's end | Same |
+| Section Circular / Square / Triangular, Section Size | Same, with a size arrow |
+| Hollow + Section Thickness | Same; a wall too thick is explained |
+| Operation (Join / Cut / Intersect / New Body), auto from where the pipe goes | Same |
+| The path sketch is hidden after OK | Same; shown again while the pipe is edited |
+
+Built on FreeCAD's `PartDesign::AdditivePipe` / `SubtractivePipe` with two SciForge helper
+objects (the path, cut to the distance, and the section). Intersect is SciForge's
+`PipeFeature`.
+
+## FreeCAD bug found and worked around
+
+Undo a step that put a formula on a value, then redo it: the formula comes back but its link
+to the parameter does not (FreeCAD 1.1.4; Pad, the primitives and Python 2D objects alike).
+Changing the parameter then changes nothing until the file is reopened. `undo_links.py`
+watches undo/redo and sets the same formula again where the link is missing (outside the undo
+history). This fixes it for every feature, not only these. Should be reported upstream.
+
+## Tests
+
+Scenarios with real mouse and keyboard input (`SciForgeTests/gui/scenarios/`):
+`primitives_box.py`, `primitives_shapes.py`, `primitives_coil.py`, `primitives_pipe.py`,
+`primitives_qa.py` (nothing selected, valid selection, Cancel, Esc, Enter, Ctrl+Z, edit again,
+undo/redo, second use, parameters, re-pick plane, save + reopen + edit, timeline Delete).
+Golden models `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil_*`,
+`sf_pipe_*` (25, volumes worked out by hand: Pappus for coils and pipes), built with
+`golden/primitive_ops.py`. Unit tests `test_primitives_core.py`.
+
+## Known gaps
+
+| Fusion | Why not yet |
+|---|---|
+| Operation New Component | Components are not built yet (outline 7.2) |
+| Values typed in boxes on the canvas next to the mouse | The live values are in the dialog fields (type there) |
+| Snapping to sketch points and part edges while placing | Snaps to the plane's origin and round steps only |
+| Coil Revolutions with a parameter | A spin box (no formula); the other coil fields take formulas |
+| Exact Fusion defaults (to confirm with Luca): Torus Position starts On Center; Clockwise = right-hand coil; for square and triangle sections Section Size is the circle round the section; how pipe squares/triangles are turned; the coil starts centred on the plane | Taken from the docs, not compared with a capture |
+| Sharp path corners in Pipe | FreeCAD's "Transformed" corners (Fusion's look may differ) |
+| Coil section | FreeCAD sweeps an upright section along the helix (Fusion's section may lean with the pitch) |

@@ -751,10 +751,13 @@ _COIL_OPTIONS = {
     "operation",
 }
 _PIPE_OPTIONS = {"distance", "section", "section_size", "hollow", "thickness", "operation"}
-STEP_KEYS["sf_primitive"] = ({"id", "kind"}, {"plane", "comment"} | _PRIMITIVE_OPTIONS)
-STEP_KEYS["sf_coil"] = ({"id"}, {"plane", "comment"} | _COIL_OPTIONS)
+STEP_KEYS["sf_primitive"] = (
+    {"id", "kind"},
+    {"plane", "expressions", "comment"} | _PRIMITIVE_OPTIONS,
+)
+STEP_KEYS["sf_coil"] = ({"id"}, {"plane", "expressions", "comment"} | _COIL_OPTIONS)
 STEP_KEYS["sf_path_sketch"] = ({"id", "segments"}, {"plane", "comment"})
-STEP_KEYS["sf_pipe"] = ({"id", "path"}, {"chain", "comment"} | _PIPE_OPTIONS)
+STEP_KEYS["sf_pipe"] = ({"id", "path"}, {"chain", "expressions", "comment"} | _PIPE_OPTIONS)
 STEP_KEYS["sf_primitive_edit"] = ({"target", "set"}, {"comment"})
 PRIMITIVE_KINDS = ("box", "cylinder", "sphere", "torus")
 PRIMITIVE_OPERATIONS = ("auto",) + OPERATIONS
@@ -842,6 +845,17 @@ def _check_primitive_steps(model):
                 _fail(here, "'path' names unknown sketch %r" % path["sketch"])
             values = {k: v for k, v in step.items() if k in _PIPE_OPTIONS}
             _check_primitive_values(here, values, _PIPE_OPTIONS)
+        if "expressions" in step and op in ("sf_primitive", "sf_coil", "sf_pipe"):
+            allowed = {
+                "sf_primitive": _PRIMITIVE_OPTIONS,
+                "sf_coil": _COIL_OPTIONS,
+                "sf_pipe": _PIPE_OPTIONS,
+            }[op]
+            formulas = step["expressions"]
+            if not isinstance(formulas, dict) or any(
+                k not in allowed or not isinstance(v, str) for k, v in formulas.items()
+            ):
+                _fail(here, "'expressions' is {field: formula} for this step's own fields")
         if op == "sf_primitive_edit":
             kind = seen.get(step["target"])
             allowed = {

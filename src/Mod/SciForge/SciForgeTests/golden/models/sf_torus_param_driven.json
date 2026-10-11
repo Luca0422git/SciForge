@@ -1,0 +1,49 @@
+{
+  "id": "sf_torus_param_driven",
+  "title": "Torus whose inner diameter is the parameter ring_d (30, then 40), torus diameter 6, Inside",
+  "tags": [
+    "primitive",
+    "torus",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "ring_d",
+      "value": 30,
+      "unit": "mm"
+    },
+    {
+      "op": "sf_primitive",
+      "id": "t1",
+      "kind": "torus",
+      "plane": "XY",
+      "inner_diameter": 30,
+      "torus_diameter": 6,
+      "position": "inside",
+      "expressions": {
+        "inner_diameter": "ring_d"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "ring_d",
+      "value": 40
+    }
+  ],
+  "expect": {
+    "volume": 3020.098946733344,
+    "area": 2013.399297822229,
+    "bbox": [
+      -20,
+      -20,
+      -3,
+      20,
+      20,
+      3
+    ],
+    "note": "Inside: the tube touches the inner diameter from inside, so R = 40/2 - 3 = 17, r = 3: V = 2 pi^2 R r^2, A = 4 pi^2 R r.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

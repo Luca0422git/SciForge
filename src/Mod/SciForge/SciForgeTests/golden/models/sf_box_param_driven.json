@@ -1,0 +1,51 @@
+{
+  "id": "sf_box_param_driven",
+  "title": "Box whose Length is the parameter w and Height w / 3; then w changes from 30 to 60",
+  "tags": [
+    "primitive",
+    "box",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "w",
+      "value": 30,
+      "unit": "mm"
+    },
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 30,
+      "width": 20,
+      "height": 10,
+      "expressions": {
+        "length": "w",
+        "height": "w / 3"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "w",
+      "value": 60
+    }
+  ],
+  "expect": {
+    "volume": 24000.0,
+    "area": 5600.0,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      20,
+      20
+    ],
+    "note": "Typed in the dialog the formulas keep driving the box: w = 60 gives 60 x 20 x 20.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

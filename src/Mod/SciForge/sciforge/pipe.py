@@ -639,11 +639,19 @@ def _update(feature, body, path, options):
             "v": 1,
             "kind": "pipe",
             "path": [[obj.Name, sub] for obj, sub in path],
-            "options": dict(options),
+            "options": {k: v for k, v in options.items() if k != "expressions"},
+            "formulas": {k: v for k, v in (options.get("expressions") or {}).items() if v},
             "helpers": [h.Name for h in helpers],
         }
     )
     primitives.save_meta(feature, meta, META)
+    formulas = options.get("expressions") or {}
+    primitives.set_formulas(
+        [
+            (section, "SectionSize", formulas.get("section_size", "")),
+            (section, "Thickness", formulas.get("thickness", "") if options["hollow"] else ""),
+        ]
+    )
 
 
 def hide_sketches(path):
@@ -675,6 +683,22 @@ def read(feature):
     else:
         saved = meta.get("options", {}).get("operation")
         options["operation"] = "new_body" if saved == "new_body" else "join"
+    # The values as they are now (a parameter may drive them), not as last typed.
+    section = None
+    for name in meta.get("helpers", []):
+        helper = feature.Document.getObject(name)
+        if helper is not None and isinstance(getattr(helper, "Proxy", None), PipeSection):
+            section = helper
+        elif helper is not None and isinstance(getattr(helper, "Proxy", None), PipePath):
+            options["distance"] = float(helper.Distance)
+    options["expressions"] = {}
+    if section is not None:
+        options["section_size"] = section.SectionSize.Value
+        options["thickness"] = section.Thickness.Value
+        options["expressions"] = primitives.kept_formulas(
+            meta,
+            {"section_size": [(section, "SectionSize")], "thickness": [(section, "Thickness")]},
+        )
     return path, options
 
 

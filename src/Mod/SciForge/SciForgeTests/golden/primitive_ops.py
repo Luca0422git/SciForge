@@ -15,6 +15,8 @@ registered on builder.Builder when builder.py is imported.
                 position (inside / center / outside)
       operation auto (default: what the dialog picks by itself) | join | cut | intersect |
                 new_body
+      expressions {field: formula}: a parameter typed in that field (it keeps driving it;
+                the field's value is what the formula gives when the step is made)
 
   {"op": "sf_coil", "id": "c1", "plane": "XY", "x": 0, "y": 0, "diameter": 20,
    "type": "rev_height", "revolutions": 4, "height": 20, "pitch": 5, "angle": 0,
@@ -114,6 +116,7 @@ def op_sf_primitive(self, step):
     kind = step["kind"]
     ref = _plane(self, step)
     options = {k: step[k] for k in PRIMITIVE_KEYS if k in step}
+    options["expressions"] = dict(step.get("expressions", {}))
     try:
         if options.get("operation", "auto") == "auto":
             tool = primitives.tool_shape(kind, ref, dict(options, operation="join"))
@@ -129,6 +132,7 @@ def op_sf_coil(self, step):
 
     ref = _plane(self, step)
     options = {k: step[k] for k in COIL_KEYS if k in step}
+    options["expressions"] = dict(step.get("expressions", {}))
     try:
         if options.get("operation", "auto") == "auto":
             full = coil.with_defaults(dict(options, operation="join"))
@@ -183,6 +187,7 @@ def op_sf_pipe(self, step):
 
     path = _path(self, step)
     options = {k: step[k] for k in PIPE_KEYS if k in step}
+    options["expressions"] = dict(step.get("expressions", {}))
     try:
         if options.get("operation", "auto") == "auto":
             src = pipe.source_body(path) or self.body

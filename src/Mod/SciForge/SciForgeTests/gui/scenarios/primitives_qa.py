@@ -470,6 +470,174 @@ def d_end():
     h.shot("end")
 
 
+# -- E: parameters in the Torus and Coil fields ----------------------------------------------------
+def e_new():
+    from sciforge import parameters
+
+    App.newDocument("PrimQA2")
+    parameters.add_user(doc(), "d", "mm", "20")
+    doc().recompute()
+    h.fit()
+    pi.menu("Torus")
+
+
+def e_plane():
+    h.click(V(15, -15, 0))
+
+
+def e_centre():
+    h.click(V(0, 0, 0))
+
+
+def e_circle():
+    h.click(V(10, 0, 0))
+
+
+e_circle.wait_ms = 1500
+
+
+def e_inner():
+    p = pi.panel("TorusPanel")
+    h.check("torus placed", p is not None and p.target is not None)
+    ui.type_into(p.inner.widget, "d")
+
+
+e_inner.wait_ms = 1500
+
+
+def e_tube():
+    ui.type_into(pi.panel("TorusPanel").tube.widget, "d / 4")
+
+
+e_tube.wait_ms = 1500
+
+
+def e_torus_ok():
+    p = pi.panel("TorusPanel")
+    h.check(
+        "inner d = 20, torus d/4 = 5", near(p.inner.value(), 20.0) and near(p.tube.value(), 5.0)
+    )
+    h.check("R10 r2.5: 125 pi^2", near(vol(), 125.0 * PI * PI), vol())
+    h.check("both formulas listed", p.formulas.text().count("= d") == 2, p.formulas.text())
+    h.task_button("OK")
+
+
+e_torus_ok.wait_ms = 1500
+
+
+def e_d40():
+    from sciforge import parameters
+
+    parameters.set_user(doc(), "d", "40")  # in Change Parameters
+    doc().recompute()
+
+
+def e_torus_follows():
+    h.check("d = 40: R20 r5, 1000 pi^2", near(vol(), 1000.0 * PI * PI), vol())
+    h.check("double-click Torus 1", ui.double_click_timeline("Torus 1"))
+
+
+def e_torus_editing():
+    p = pi.panel("TorusPanel")
+    h.check("editing the torus", p is not None and p.editing)
+    if p is None:
+        return
+    h.check("shows the values d gives", near(p.inner.value(), 40.0) and near(p.tube.value(), 10.0))
+    h.check("and the formulas", p.formulas.text().count("= d") == 2, p.formulas.text())
+    h.check("Outside", ui.choose(p.position, "Outside"))
+
+
+def e_torus_outside():
+    h.check("Outside keeps the formulas: R25 r5", near(vol(), 1250.0 * PI * PI), vol())
+    h.task_button("OK")
+
+
+e_torus_outside.wait_ms = 1500
+
+
+def e_torus_kept():
+    s["torus"] = vol()
+    h.click_empty()
+    pi.menu("Coil")
+
+
+def e_coil_plane():
+    h.click(V(30, -30, 0))
+
+
+def e_coil_centre():
+    p = pi.panel("CoilPanel")
+    h.check("placing the coil", p is not None and p.state == "place", p and p.state)
+    h.click(V(0, 0, 0))  # in the middle of the torus' hole
+
+
+def e_coil_circle():
+    h.click(V(10, 0, 0))
+
+
+e_coil_circle.wait_ms = 2500
+
+
+def e_coil_type():
+    h.check("Height and Pitch", ui.choose(pi.panel("CoilPanel").type, "Height and Pitch"))
+
+
+e_coil_type.wait_ms = 2000
+
+
+def e_coil_height():
+    p = pi.panel("CoilPanel")
+    ui.type_into(p.pitch.widget, "4")
+
+
+e_coil_height.wait_ms = 2000
+
+
+def e_coil_formula():
+    ui.type_into(pi.panel("CoilPanel").height.widget, "d / 2")
+
+
+e_coil_formula.wait_ms = 2000
+
+
+def e_coil_ok():
+    p = pi.panel("CoilPanel")
+    h.check(
+        "height d/2 = 20, pitch 4: 5 turns, 90 pi^2", near(vol() - s["torus"], 90.0 * PI * PI, 1e-5)
+    )
+    h.task_button("OK")
+
+
+e_coil_ok.wait_ms = 2500
+
+
+def e_d60():
+    from sciforge import parameters
+
+    parameters.set_user(doc(), "d", "60")
+    doc().recompute()
+
+
+e_d60.wait_ms = 2500
+
+
+def e_coil_follows():
+    # torus: inner 60, section 15, Outside: R 37.5, r 7.5; coil: height 30, pitch 4: 7.5 turns
+    torus = [
+        b for b in pi.bodies() if b.Tip is not None and b.Tip.TypeId == "PartDesign::AdditiveTorus"
+    ]
+    h.check("the torus and the coil are two bodies", len(torus) == 1 and len(pi.bodies()) == 2)
+    if not torus:
+        return
+    expected = 2.0 * PI * PI * 37.5 * 7.5 * 7.5
+    h.check(
+        "the torus follows d", near(torus[0].Shape.Volume, expected, 1e-6), torus[0].Shape.Volume
+    )
+    coil = vol() - torus[0].Shape.Volume
+    h.check("the coil follows d: 7.5 turns", near(coil, 135.0 * PI * PI, 1e-5), coil)
+    h.shot("formulas")
+
+
 h.run(
     "primitives_qa",
     [
@@ -528,5 +696,26 @@ h.run(
         d_coil_deleted,
         d_tidied,
         d_end,
+        e_new,
+        e_plane,
+        e_centre,
+        e_circle,
+        e_inner,
+        e_tube,
+        e_torus_ok,
+        e_d40,
+        e_torus_follows,
+        e_torus_editing,
+        e_torus_outside,
+        e_torus_kept,
+        e_coil_plane,
+        e_coil_centre,
+        e_coil_circle,
+        e_coil_type,
+        e_coil_height,
+        e_coil_formula,
+        e_coil_ok,
+        e_d60,
+        e_coil_follows,
     ],
 )

@@ -719,9 +719,11 @@ class PlacedPanel(Panel):
             self.formula_inputs.append(preview.FormulaInput(self, key, field))
         return field, caption
 
+    FORMULA_KEYS = ()  # fields where a typed parameter / formula keeps driving the value
+
     def _formula_key(self, key):
         """True if a formula typed in this field stays linked (a parameter drives it)."""
-        return key in primitives.FORMULA_PROPS.get(self.kind, {})
+        return key in self.FORMULA_KEYS
 
     def activate(self, name):
         """The Plane box clicked: pick another plane (Fusion re-opens the selection)."""
@@ -1287,6 +1289,7 @@ def _plain(text):
 
 # -- Box ---------------------------------------------------------------------------------------------------------
 class BoxPanel(PlacedPanel):
+    FORMULA_KEYS = ("length", "width", "height")
     title = "Box"
     icon = "box"
     kind = "box"
@@ -1378,6 +1381,7 @@ class BoxPanel(PlacedPanel):
 
 # -- Cylinder ----------------------------------------------------------------------------------------------------
 class CylinderPanel(PlacedPanel):
+    FORMULA_KEYS = ("diameter", "height")
     title = "Cylinder"
     icon = "cylinder"
     kind = "cylinder"
@@ -1442,6 +1446,7 @@ class CylinderPanel(PlacedPanel):
 
 # -- Sphere --------------------------------------------------------------------------------------------------------
 class SpherePanel(PlacedPanel):
+    FORMULA_KEYS = ("diameter",)
     title = "Sphere"
     icon = "sphere"
     kind = "sphere"
@@ -1500,6 +1505,7 @@ class SpherePanel(PlacedPanel):
 
 # -- Torus ----------------------------------------------------------------------------------------------------------
 class TorusPanel(PlacedPanel):
+    FORMULA_KEYS = ("inner_diameter", "torus_diameter")
     title = "Torus"
     icon = "torus"
     kind = "torus"
@@ -1527,6 +1533,7 @@ class TorusPanel(PlacedPanel):
             set_combo(self.operation, self.options["operation"])
         finally:
             self._quiet = False
+        self.show_formulas()
 
     def _collect(self):
         self.options["inner_diameter"] = abs(self.inner.value())
@@ -1699,3 +1706,10 @@ for _word in primitives.NATIVE.values():
     EDITORS["PartDesign::Additive" + _word] = edit
     EDITORS["PartDesign::Subtractive" + _word] = edit
     EDITORS["SciForge::" + _word] = edit
+
+try:  # FreeCAD forgets a formula's parameter link on undo + redo: put it back (undo_links.py)
+    from . import undo_links
+
+    undo_links.install()
+except Exception as _exc:
+    warn("formula re-linking unavailable: %s" % _exc)

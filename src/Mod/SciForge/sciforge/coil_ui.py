@@ -34,6 +34,7 @@ SECTION_LABELS = [
 
 
 class CoilPanel(PlacedPanel):
+    FORMULA_KEYS = ("diameter", "height", "pitch", "angle", "section_size")
     title = "Coil"
     icon = "coil"
     kind = "coil"
@@ -55,9 +56,6 @@ class CoilPanel(PlacedPanel):
 
     def _auto(self, base):
         return coil.auto_operation(base, self.ref, self.options)
-
-    def _formula_key(self, key):
-        return False
 
     # -- form -----------------------------------------------------------------------------------------
     def _build_fields(self, form):
@@ -119,6 +117,7 @@ class CoilPanel(PlacedPanel):
         finally:
             self._quiet = False
         self._update_visibility()
+        self.show_formulas()
 
     def _update_visibility(self):
         uses = coil.USES[self.type.currentData() or "rev_height"]

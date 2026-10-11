@@ -302,10 +302,47 @@ def _update(feature, body, ref, options):
             "kind": "coil",
             "ref": [ref[0].Name, ref[1]],
             "options": {k: v for k, v in options.items() if k != "expressions"},
+            "formulas": {k: v for k, v in (options.get("expressions") or {}).items() if v},
             "helpers": [h.Name for h in helpers],
         }
     )
     primitives.save_meta(feature, meta, META)
+    _apply_formulas(feature, section, options)
+
+
+def _formula_targets(feature, section, kind):
+    """Dialog field -> [(object, property)] that holds its value, for this coil type."""
+    uses = USES[kind]
+    targets = {"diameter": [(section, "Diameter")], "section_size": [(section, "SectionSize")]}
+    if "height" in uses:
+        targets["height"] = [(feature, "Height")]
+    if "pitch" in uses:
+        targets["pitch"] = [(feature, "Growth" if kind == "spiral" else "Pitch")]
+    if "angle" in uses:
+        targets["angle"] = [(feature, "Angle")]
+    return targets
+
+
+def _apply_formulas(feature, section, options):
+    """A parameter typed in a field keeps driving the coil (Fusion): an expression on the
+    property that holds the value. Properties the type works out itself carry none."""
+    formulas = options.get("expressions") or {}
+    wanted = {}
+    for key, objs in _formula_targets(feature, section, options["type"]).items():
+        text = formulas.get(key, "")
+        if text and key == "height" and float(options.get("height", 1.0)) < 0:
+            text = "-(%s)" % text
+        for obj, prop in objs:
+            wanted[(obj.Name, prop)] = (obj, prop, text)
+    every = [
+        (section, "Diameter"),
+        (section, "SectionSize"),
+        (feature, "Height"),
+        (feature, "Pitch"),
+        (feature, "Growth"),
+        (feature, "Angle"),
+    ]
+    primitives.set_formulas([wanted.get((o.Name, p), (o, p, "")) for o, p in every])
 
 
 def _set(obj, prop, value):
@@ -366,6 +403,27 @@ def read(feature):
         saved = meta.get("options", {}).get("operation")
         options["operation"] = "new_body" if saved == "new_body" else "join"
     options["clockwise"] = not feature.LeftHanded
+    # The values as they are now (a parameter may drive them), not as last typed.
+    section = None
+    for name in meta.get("helpers", []):
+        helper = feature.Document.getObject(name)
+        if helper is not None and isinstance(getattr(helper, "Proxy", None), CoilSection):
+            section = helper
+    if section is not None:
+        options["diameter"] = section.Diameter.Value
+        options["section_size"] = section.SectionSize.Value
+    kind = options["type"]
+    sign = -1.0 if feature.Reversed else 1.0
+    options["revolutions"] = float(feature.Turns)
+    if kind == "spiral":
+        options["pitch"] = feature.Growth.Value
+    else:
+        options["height"] = sign * feature.Height.Value
+        options["pitch"] = feature.Pitch.Value
+        options["angle"] = feature.Angle.Value
+    if section is not None:
+        targets = _formula_targets(feature, section, kind)
+        options["expressions"] = primitives.kept_formulas(meta, targets)
     return ref, options
 
 

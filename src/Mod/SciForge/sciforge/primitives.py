@@ -792,6 +792,7 @@ def _update(feature, body, kind, ref, options):
             "kind": kind,
             "ref": [ref[0].Name, ref[1]],
             "options": {k: v for k, v in options.items() if k != "expressions"},
+            "formulas": {k: v for k, v in (options.get("expressions") or {}).items() if v},
             "helpers": [h.Name for h in helpers],
         }
     )
@@ -825,22 +826,88 @@ def _apply_sizes(feature, kind, options):
             _set(feature, "Radius1", major)
 
 
-def _apply_formulas(feature, kind, options):
+def set_formulas(targets):
+    """Expressions on the properties that hold a dialog's values, so a parameter typed in
+    a field keeps driving it: targets [(object, property, expression or "")]. A formula
+    FreeCAD cannot take is dropped (the plain value stays)."""
     from . import preview
 
+    for obj, prop, text in targets:
+        try:
+            preview.set_formula(obj, prop, text)
+        except Exception:
+            try:
+                preview.set_formula(obj, prop, "")
+            except Exception:
+                pass
+
+
+def term(options, key, owner=None):
+    """A length typed in the dialog, inside a composed expression: its formula, else the
+    number, always as a length (FreeCAD refuses "ring_d / 2 - 6 / 2": mm minus a plain
+    number). A formula without a unit (a parameter with no unit) counts as mm."""
+    text = (options.get("expressions") or {}).get(key, "")
+    if not text:
+        return "%r mm" % float(options.get(key, 0.0))
+    if owner is not None and _unitless(owner, text):
+        return "(%s) * 1 mm" % text
+    return "(%s)" % text
+
+
+def _unitless(owner, text):
+    """True when the formula's value is a plain number (no length unit)."""
+    from . import parameters, parameters_core
+
+    try:
+        expr = parameters_core.to_freecad(text, parameters.user_names(owner.Document))
+        value = owner.evalExpression(expr)
+    except Exception:
+        return False
+    unit = getattr(value, "Unit", None)
+    return unit is None or unit == App.Units.Quantity(1.0).Unit
+
+
+def kept_formulas(meta, targets):
+    """The formulas saved in a step's meta whose property still has an expression (one
+    removed in Change Parameters or by a plain number is gone)."""
+    from . import preview
+
+    saved = meta.get("formulas") or {}
+    out = {}
+    for key, objs in targets.items():
+        if saved.get(key) and any(preview.formula_of(o, p) for o, p in objs if o is not None):
+            out[key] = saved[key]
+    return out
+
+
+def _apply_formulas(feature, kind, options):
     formulas = options.get("expressions") or {}
+    targets = []
+    if kind == "torus":
+        if formulas.get("inner_diameter") or formulas.get("torus_diameter"):
+            sign = {"inside": " - ", "outside": " + "}.get(options.get("position"), "")
+            ring = "%s / 2" % term(options, "inner_diameter", feature)
+            if sign:
+                ring += sign + "%s / 2" % term(options, "torus_diameter", feature)
+            targets += [
+                (feature, "Radius1", ring),
+                (feature, "Radius2", "%s / 2" % term(options, "torus_diameter", feature)),
+            ]
+        else:
+            targets += [(feature, "Radius1", ""), (feature, "Radius2", "")]
     for key, (prop, template) in FORMULA_PROPS.get(kind, {}).items():
         text = formulas.get(key, "")
-        try:
-            if text:
-                value = float(options.get(key, 1.0))
-                if key == "height" and value < 0:
-                    template = "-({})"
-                preview.set_formula(feature, prop, template.format(text))
-            else:
-                preview.set_formula(feature, prop, "")
-        except Exception:
-            preview.set_formula(feature, prop, "")
+        if text and key == "height" and float(options.get(key, 1.0)) < 0:
+            template = "-({})"
+        targets.append((feature, prop, template.format(text) if text else ""))
+    set_formulas(targets)
+
+
+def _formula_targets(feature, kind):
+    if kind == "torus":
+        both = [(feature, "Radius1"), (feature, "Radius2")]
+        return {"inner_diameter": both, "torus_diameter": both}
+    return {key: [(feature, prop)] for key, (prop, _t) in FORMULA_PROPS.get(kind, {}).items()}
 
 
 # -- reading back --------------------------------------------------------------------------------------
@@ -885,11 +952,19 @@ def read(feature):
         options["height"] = sign * feature.Height.Value
     elif kind == "sphere":
         options["diameter"] = 2.0 * feature.Radius.Value
-    expressions = {}
-    for key, (prop, _template) in FORMULA_PROPS.get(kind, {}).items():
-        text = preview.formula_of(feature, prop)
-        if text:
-            expressions[key] = _strip_template(text)
+    else:
+        ring, minor = feature.Radius1.Value, feature.Radius2.Value
+        inner = {"inside": ring + minor, "outside": ring - minor}.get(options["position"], ring)
+        options["inner_diameter"] = 2.0 * inner
+        options["torus_diameter"] = 2.0 * minor
+    if "formulas" in meta:
+        expressions = kept_formulas(meta, _formula_targets(feature, kind))
+    else:  # a step from before formulas were kept in the meta
+        expressions = {}
+        for key, (prop, _template) in FORMULA_PROPS.get(kind, {}).items():
+            text = preview.formula_of(feature, prop)
+            if text:
+                expressions[key] = _strip_template(text)
     options["expressions"] = expressions
     return kind, ref, options
 
