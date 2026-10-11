@@ -485,9 +485,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     timeline steps; extrude.py's profile binders lacked the flag and showed as steps.
   - Test input: release a drag with `QTest.mouseRelease` (through the window); a release
     sent with `sendEvent` left the button "down" and the next click went to the dragged widget.
-  - Not fixed (extrude owner): while rolled back before a fillet, Extrude cannot switch to
-    Cut ("... is used by Fillet": `extrude.dependents()` counts the fillet's `Base`, which only
-    follows the history chain; skip it when it is the `BaseFeature`).
+  - Fixed since: while rolled back before a fillet, Extrude could not switch to Cut ("... is
+    used by Fillet"): `extrude.dependents()` now skips a dress-up's `Base` when it is its
+    `BaseFeature` (the history chain; `settle()` re-finds the edges). Scenario
+    `timeline_rolled_cut` (fails without the fix, checked).
 - **Shell / Draft / Scale findings (branch `sf/shell_draft`)**:
   - FreeCAD's `PartDesign::Thickness` with no faces just copies the part (it cannot hollow a
     closed body) and has one thickness (no Both): SciForge's `ShellFeature` does those

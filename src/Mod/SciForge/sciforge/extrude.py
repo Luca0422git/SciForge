@@ -719,14 +719,31 @@ def _contains(value, target):
 
 
 def dependents(feature):
-    """Later features that use this extrude's own faces/edges (not just its result)."""
+    """Later features that use this extrude's own faces/edges (not just its result).
+
+    A fillet/chamfer/draft/shell right after the extrude names its edges or faces on its
+    BaseFeature (`Base` is the BaseFeature): that is the history chain, which follows a
+    swapped extrude, and timeline_ops.settle() finds those edges again afterwards (as
+    timeline_ops.uses() treats it). Counting it blocked Join -> Cut whenever a round came
+    next, e.g. an extrude added with the marker rolled back before a fillet."""
     found = []
     for obj in feature.InList:
         if obj.TypeId in ("PartDesign::Body", "App::Part") or is_helper(obj):
             continue
-        if _links_to(obj, feature):
+        skip = ("BaseFeature",)
+        if getattr(obj, "BaseFeature", None) is feature and _base_object(obj) is feature:
+            skip = ("BaseFeature", "Base")
+        if _links_to(obj, feature, skip):
             found.append(obj)
     return found
+
+
+def _base_object(obj):
+    try:
+        base = obj.Base
+    except Exception:
+        return None
+    return base[0] if isinstance(base, (list, tuple)) and base else base
 
 
 def _source_body(profiles):
