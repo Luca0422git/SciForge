@@ -20,6 +20,9 @@ input). Each path is what Fusion does, checked on the design:
   P  Plane Along Path on the front top edge: its dot dragged and let go over the top face (the
      face is no pick: still the edge); the box clicked and the right top edge picked: the
      plane moves there at the same fraction. OK.
+  Y  A body moved by its own Placement (20 up, as in a design made in plain FreeCAD): Section
+     Analysis on its top face (z = 30), -5: the cut at z = 25 keeps 6000, and the body is
+     drawn cut there too (the clip plane is given in the body's own coordinates: z = 5).
 
 Part: box 40 x 30 x 10 from the origin (real input).
 """
@@ -427,6 +430,62 @@ def p_moved():
 def p_made():
     h.check("P OK closed it", not Gui.Control.activeDialog())
     h.check("P Plane3 kept", any(o.Label == "Plane3" for o in s.datums()), s.datums())
+    s.eye("Plane3")
+
+
+# -- Y: a body moved by its Placement, then a section ------------------------------------------
+def y_move():
+    # A design made in plain FreeCAD can move a whole body with its Placement (SciForge's own
+    # Move adds a step instead); set here the way such a file comes in.
+    body = h.body()
+    body.Placement = App.Placement(V(0, 0, 20), App.Rotation())
+    doc().recompute()
+    h.click_empty()
+    h.fit()
+    h.ribbon("Section Analysis")
+
+
+def y_top():
+    h.fit()
+    h.click(V(30, 20, 30))
+
+
+def y_type():
+    from sciforge import section_ui, taskui
+
+    p = taskui.current()
+    h.check("Y Section on the moved top face", isinstance(p, section_ui.SectionPanel) and p.ref)
+    if isinstance(p, section_ui.SectionPanel):
+        s.type_into(p.distance.widget, "-5")
+
+
+def y_cut():
+    from sciforge import section, section_ui, taskui
+
+    p = taskui.current()
+    if not isinstance(p, section_ui.SectionPanel) or p.analysis is None:
+        h.check("Y Section still open", False)
+        return
+    body = h.body()
+    kept = section.kept_volume(body.Shape, p.analysis.CutPlacement)
+    h.check("Y the cut at z = 25: 6000 stays", s.close(kept, 6000.0), kept)
+    clips = section_ui.clips_on(body)
+    h.check("Y the body is drawn cut", len(clips) == 1, clips)
+    if clips:
+        plane = clips[0].plane.getValue()
+        normal = V(*plane.getNormal().getValue())
+        # the plane holds the body's own point z = 5 (z = 25 in the design)
+        local = normal.dot(V(20, 15, 5))
+        h.check(
+            "Y ...at the cut, in the body's own coordinates (z = 5 there)",
+            abs(abs(normal.z) - 1.0) < 1e-6 and abs(local - plane.getDistanceFromOrigin()) < 1e-4,
+            (normal, plane.getDistanceFromOrigin()),
+        )
+    h.task_button("OK")
+
+
+def y_end():
+    h.check("Y OK closed it", not Gui.Control.activeDialog())
     s.no_popups("the end")
     h.shot("end")
 
@@ -439,6 +498,7 @@ STEPS = (
     + [c_start, c_body, c_picked, c_cleared, c_made, c_second, c_undone]
     + [d_start, d_pick, d_type, d_double_click_extrude, d_kept, d_escaped]
     + [p_start, p_edge, p_drag, p_dragged, p_right_edge, p_moved, p_made]
+    + [y_move, y_top, y_type, y_cut, y_end]
 )
 
 h.run("inspect_qa8", ti.watched(STEPS))

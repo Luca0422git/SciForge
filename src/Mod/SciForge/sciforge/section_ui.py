@@ -189,6 +189,17 @@ def clips_on(obj):
     return _clip_nodes(_root(shown)) if shown is not None else []
 
 
+def _parent_frame(obj):
+    """Global -> the coordinates obj's display is drawn in (its body's, or a container's)."""
+    try:
+        parent = obj.getParentGeoFeatureGroup()
+        if parent is not None:
+            return parent.getGlobalPlacement().inverse()
+    except Exception:
+        pass
+    return App.Placement()
+
+
 def refresh(doc):
     """Clip planes on every body's solid for the visible sections, cut faces drawn again."""
     if App.GuiUp is False or Gui.getDocument(doc.Name) is None:
@@ -207,8 +218,12 @@ def refresh(doc):
                 root.removeChild(node)
             if not cut:
                 continue
+            # The clip goes first in the step's own display, which is drawn inside its
+            # body's placement: give it the cut in the body's coordinates (a body that was
+            # moved by its Placement was cut in the wrong place).
+            frame = _parent_frame(target)
             for analysis in shown:
-                root.insertChild(_clip_node(analysis.CutPlacement), 0)
+                root.insertChild(_clip_node(frame.multiply(analysis.CutPlacement)), 0)
     for analysis in section.sections(doc):
         proxy = getattr(analysis.ViewObject, "Proxy", None) if analysis.ViewObject else None
         if isinstance(proxy, ViewProviderSection):
@@ -344,8 +359,15 @@ class ViewProviderSection:
         for a, b, c in triangles:
             index += [a, b, c, -1]
         faces.coordIndex.setValues(0, len(index), index)
+        # The hatch lines lie a hair above the cut face; that alone lost to the depth
+        # buffer's rounding on a cut seen at a slant (bands of the hatch went missing).
+        # Push the filled face back a little, as decals are drawn.
+        offset = coin.SoPolygonOffset()
+        offset.factor.setValue(1.0)
+        offset.units.setValue(2.0)
         sep.addChild(material)
         sep.addChild(hints)
+        sep.addChild(offset)
         sep.addChild(coords)
         sep.addChild(faces)
         parent.addChild(sep)

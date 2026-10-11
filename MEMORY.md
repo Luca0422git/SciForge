@@ -226,7 +226,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       (branch `sf/inspect-qa-2`, 5 scenarios `inspect_qa*.py`, 35 paths): Measure inside a
       sketch (I keeps the sketch open), Center of Mass weighted by Physical Material and
       measurable, one Enter after a sum, picks through what the box cannot take, held
-      handles, deleted references (warnings, no errors), see the session log.
+      handles, deleted references (warnings, no errors), see the session log. Third QA round
+      (branch `sf/inspect-qa-3`, `inspect_qa6..8`, 17 more paths, 52 in all): a handle let go
+      over the part is never a pick, typos in value boxes keep the dialog open, Section
+      takes parameters, the construction being edited never takes a click, golden
+      `inspect_three_points_oblique_hole`.
 - [x] Box, Cylinder, Sphere, Torus, Coil, Pipe, Fusion-style (branch `sf/primitives`; spec +
       gaps in `docs/sciforge/parity/primitives.md`). Pick an origin plane (squares) or a flat
       face, place with the mouse (Box: two corners with a rubber band; Cylinder / Torus /
@@ -798,6 +802,41 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       draws a clickable dot on it instead (`MeasurePanel._show_com_dots`).
     - The Measure / Interference result lists drew their items in a dark grey on the dark
       panel: they set light text themselves (`measure_ui.RESULTS_STYLE`).
+  - **Inspect QA round 3 findings (branch `sf/inspect-qa-3`)**:
+    - **A handle's release is also a pick, and dialogs remake their handles on release.**
+      FreeCAD selects the face under the mouse when a drag ends over the part. A handle's
+      own `busy()` memory dies with it, and Section Analysis builds new handles as soon as a
+      drag ends, so the release's face became the new section plane (the bottom face, seen
+      through the cut, after the arrow was dragged far down). `handles3d.just_used()`
+      remembers the last press / drag / release of any handle; Section and CONSTRUCT ignore
+      picks in that moment. Rule for every dialog with handles that are rebuilt: ask a
+      module-level clock, not the handle object.
+    - revolve_ui's turning ball and handles3d's arrow used separate "one press, one handle"
+      guards, so a press where they meet moved both: `angle_handle()` now honours
+      `handles3d.GRAB` too.
+    - Coin's picking respects the section clip planes: what a section cuts away cannot be
+      clicked (like Fusion); a click there picks what is seen behind it (e.g. the inside of
+      the bottom face).
+    - A value box that holds no value ("gap +") must keep the dialog open on Enter and OK
+      (Revolve already did; CONSTRUCT closed with the old value, Section silently ignored
+      "-gap"). Section's Distance / X / Y Angle now go through `preview.FormulaInput` and
+      are stored as expressions on the analysis (`section_ui.FORMULA_PROPS`).
+    - The construction being edited must be unpickable from the start of the edit, not only
+      once it previews: a construction that lost its reference stood over the part and its
+      click went to the origin square behind it.
+    - FreeCAD stores a length expression on an angle property without complaint ("gap * 3"
+      typed as an angle gives "45 mm" used as 45 deg); Fusion would refuse the units. Not
+      fixed (rare).
+    - Midplane of two faces meeting at an edge is the bisector through the part
+      (`n1 - n2`); the QA first expected the outside one.
+    - **A step's display is drawn inside its body's placement** (Coin path: body
+      SoFCSelectionRoot > Switch > step root). A node put into a step's root works in the
+      body's coordinates: the section clip plane is converted with the body's placement
+      (`section_ui._parent_frame`); before, a body moved by its Placement was cut in the
+      wrong place. Shapes (`obj.Shape` of a body) are global, a step's own Shape is not.
+    - Lines drawn a hair above a face lose to the depth buffer on a face seen at a slant
+      (bands of the Section hatch were missing on a horizontal cut): the cut face is drawn
+      with an `SoPolygonOffset` (pushed back), the usual way to draw decals.
 
 - **Body tools findings (branch `sf/bodies`)**:
   - FreeCAD's `PartDesign::Boolean` adopts its tool bodies as children (GeoFeatureGroup): they
@@ -1591,8 +1630,39 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   the dark panel.
 - Shared change: `pattern_ui._part_depth` (a construction plane in front of an origin square
   is a Mirror Plane). No core patch.
-- Full suite at the end: FULLSUITE
+- Full suite at the end: not run (the session stopped on the spend limit); its scenarios
+  were finished and checked by the third round below.
 - For other owners: taskui (one Enter after a sum in every other dialog, see the finding).
+
+### 2026-10-11: QA of CONSTRUCT and INSPECT, round 3 (branch `sf/inspect-qa-3`)
+- Merged `sf/inspect-qa-2` (the round stopped by the spend limit) into the current main; only
+  MEMORY.md conflicted (both sides kept; main had dropped the QA session logs, they are back
+  in the Session log). All 12 inspect scenarios passed on the merged base as they were.
+- In plain words: used CONSTRUCT and INSPECT like Luca would, with the mouse and keys only, in
+  3 more scenarios (17 paths, 52 with the earlier rounds): `inspect_qa6` (a parameter typed
+  into Offset Plane + one Enter, edited from the timeline; the arrow dragged up and down and
+  the face picked again; an offset of an offset whose base is deleted, re-picked, undo/redo;
+  two faces selected before Midplane; Plane at Angle on the origin Z axis; Delete in the
+  browser + Undo; a typo in a formula; "-gap" in Section Analysis), `inspect_qa7` (a plane
+  made with the timeline marker rolled back + Measure against it; a section made before a
+  New Body, edited from the browser, the arrow let go over the part, another face, Flip,
+  Esc; Interference of three bodies with an overlap and a touching pair, following an edit),
+  `inspect_qa8` (the x of a selection box, OK refused in an edit, Ctrl+Z / Ctrl+Y after OK,
+  Center of Mass x, a timeline double-click with a dialog open, the Along Path dot let go
+  over the part, a section of a body moved by its Placement).
+- Bugs fixed (details in Known issues, "Inspect QA round 3"): (1) letting go of the Section
+  arrow over the part moved the section onto the face under the mouse; (2) one press could
+  move the arrow and a turning ball together; (3) a typo in a CONSTRUCT value box + Enter
+  closed the dialog with the old value; (4) Section Analysis ignored parameters/formulas;
+  (5) editing a construction that lost its reference picked the origin square behind it
+  instead of the face; (6) the CONSTRUCT dialog did not show that a value follows a
+  parameter; (7) Section handles were sized from the last body only; (8) a body moved by its
+  Placement was drawn cut in the wrong place; (9) bands of the Section hatch were missing on
+  a cut seen at a slant (checked on the screenshot).
+- New golden model `inspect_three_points_oblique_hole` (a construction point in Plane Through
+  Three Points, a slanted hole cut from that plane: 12000 - 520 pi / 12).
+- No shared file changed; no core patch.
+- Full suite at the end: FULLSUITE3
 
 ## Next steps (in order)
 
@@ -1600,6 +1670,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
    patterns, shell_draft, bodies (plus extrude/presspull, sketch, timeline/browser, fillet) are
    merged. The QA of inspect, primitives and sweep_loft stopped on the org spend limit and was
    restarted as wf_d887d414-12d (qa_only, from the merged HEAD). Merge each after the full suite.
+   Inspect QA: finished on `sf/inspect-qa-3` (includes `sf/inspect-qa-2`), merge that one.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).
