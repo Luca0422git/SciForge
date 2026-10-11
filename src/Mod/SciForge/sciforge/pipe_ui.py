@@ -22,7 +22,10 @@ from .primitives_ui import (
     OPERATION_LABELS,
     LinearHandle,
     SelectionField,
+    EnterTakesNumber,
+    TypeOverView,
     _plain,
+    clear_selection_soon,
     combo,
     safe,
     set_combo,
@@ -52,6 +55,9 @@ class PathHandle(LinearHandle):
             on_release=on_release,
             name="distance",
         )
+
+    def snap(self, value):
+        return value  # a fraction of the path: the dialog rounds it to 0.01
 
     def _segment(self, fraction):
         goal = max(0.0, min(1.0, float(fraction))) * self.total
@@ -176,6 +182,8 @@ class PipePanel(Panel):
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
+        self.typing = TypeOverView(self)
+        self._last_handle = None
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else pipe.owner_body(feature)
@@ -200,6 +208,7 @@ class PipePanel(Panel):
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
             self._show_sketches()
+            clear_selection_soon()  # the timeline's click selected the pipe being edited
         self._build_form()
         self._show_fields()
         self._watch()
@@ -222,6 +231,7 @@ class PipePanel(Panel):
         self.info.setStyleSheet("color: #8cc4ff;")
         form.addRow(self.info)
         self.distance = QtWidgets.QDoubleSpinBox()
+        self.distance_box = _Field(self.distance)  # where numbers typed over the view go
         self.distance.setObjectName("SciForgePipe_distance")
         self.distance.setDecimals(2)
         self.distance.setRange(0.01, 1.0)
@@ -231,12 +241,14 @@ class PipePanel(Panel):
         form.addRow("Section", self.section)
         self.size = DistanceField(self.options["section_size"], on_change=self._size_typed)
         self.size.widget.setObjectName("SciForgePipe_size")
+        self.size.enter_filter = EnterTakesNumber(self.size)
         form.addRow("Section Size", self.size.widget)
         self.hollow = QtWidgets.QCheckBox("Hollow")
         self.hollow.setObjectName("SciForgePipe_hollow")
         form.addRow(self.hollow)
         self.thickness = DistanceField(self.options["thickness"], on_change=self._typed)
         self.thickness.widget.setObjectName("SciForgePipe_thickness")
+        self.thickness.enter_filter = EnterTakesNumber(self.thickness)
         self.thickness_label = QtWidgets.QLabel("Section Thickness")
         form.addRow(self.thickness_label, self.thickness.widget)
         self.operation = combo(OPERATION_LABELS, self.options["operation"], "SciForgeOperation")
@@ -327,6 +339,16 @@ class PipePanel(Panel):
 
     def activate(self, name):
         self.path_field.set_active(name == "path")
+
+    def typing_field(self):
+        """Where a number typed over the 3D view goes (Fusion's box next to the handle):
+        the Distance after its ball was dragged, else the Section Size; none before the
+        pipe has a path."""
+        if self._closed or self.target is None or not self.path:
+            return None
+        if self._last_handle == "distance":
+            return self.distance_box
+        return self.size
 
     def clear_field(self, name):
         self.seeds = []
@@ -441,18 +463,24 @@ class PipePanel(Panel):
         except Exception:
             return None
         ends = [v.Point for v in edge.Vertexes]
+        holding = None
         for i, candidate in enumerate(base.Shape.Edges, start=1):
             try:
                 other = pipe._global_edge(base, "Edge%d" % i)
             except Exception:
                 continue
-            if other.Curve.TypeId != edge.Curve.TypeId or len(other.Vertexes) != len(ends):
+            if other.Curve.TypeId != edge.Curve.TypeId:
                 continue
             points = [v.Point for v in other.Vertexes]
-            if all(min((p - q).Length for q in points) < 1e-6 for p in ends):
-                if abs(other.Length - edge.Length) < 1e-6:
+            if len(points) == len(ends) and abs(other.Length - edge.Length) < 1e-6:
+                if all(min((p - q).Length for q in points) < 1e-6 for p in ends):
                     return (base, "Edge%d" % i)
-        return None
+            if holding is None and _holds(other, edge):
+                holding = (base, "Edge%d" % i)
+        # The pipe itself shortened the edge (its groove took a corner off): the edge of
+        # the part it lies on (before, the click said "that edge belongs to this pipe
+        # itself": found by the primitives QA).
+        return holding
 
     def _toggle(self, ref):
         key = (ref[0].Name, ref[1])
@@ -682,6 +710,7 @@ class PipePanel(Panel):
 
     @safe
     def _distance_dragged(self, value):
+        self._last_handle = "distance"
         value = max(0.01, min(1.0, round(value, 2)))
         self._quiet = True
         try:
@@ -697,6 +726,7 @@ class PipePanel(Panel):
 
     @safe
     def _size_dragged(self, value):
+        self._last_handle = "section_size"
         value = max(0.02, round(abs(value), 2))
         if self.options.get("expressions", {}).pop("section_size", None) is not None:
             self.show_formulas()
@@ -777,9 +807,31 @@ class PipePanel(Panel):
         self.escape.remove()
         self.undo_guard.remove()
         self.enter.remove()
+        self.typing.remove()
         self._remove_handles()
         self._hide_shown()
         super().cleanup()
+
+
+def _holds(longer, edge):
+    """True if `edge` lies on `longer` (its ends and middle on it): a piece of it."""
+    import Part
+
+    try:
+        if longer.Length < edge.Length - 1e-6:
+            return False
+        middle = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+        points = [v.Point for v in edge.Vertexes] + [middle]
+        return all(longer.distToShape(Part.Vertex(p))[0] < 1e-6 for p in points)
+    except Exception:
+        return False
+
+
+class _Field:
+    """A plain Qt number box seen as a dialog field (`.widget`), for TypeOverView."""
+
+    def __init__(self, widget):
+        self.widget = widget
 
 
 def _wire(path):

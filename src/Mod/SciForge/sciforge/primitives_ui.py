@@ -133,6 +133,141 @@ def view_scale(view, point):
         return 0.1
 
 
+class TypeOverView:
+    """Fusion: with a command open, a number typed while the mouse is over the 3D view goes
+    into the command's value (its box next to the mouse or the arrow); Fusion has no view
+    keys on the digits. FreeCAD took them as its view keys (0 isometric, 1 front, 2 top...):
+    the view jumped and the number was lost (found by the primitives QA, as by the revolve
+    QA). Digits, a minus sign and a decimal point typed on the 3D view now go into the
+    dialog's field `panel.typing_field()` (the first one replaces its text, the next ones
+    follow); the field keeps the keyboard, so Tab goes on to the next field and Enter is
+    OK. remove() when the dialog closes."""
+
+    KEYS = set("0123456789-.,")
+    BURST = 1.5  # seconds: keys this close follow each other into the same field
+
+    def __init__(self, panel):
+        self.panel = panel
+        self.last = (None, 0.0)
+        guard = self
+
+        class KeyFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                return guard._filter(obj, event)
+
+        self.filter = KeyFilter()
+        QtWidgets.QApplication.instance().installEventFilter(self.filter)
+
+    @staticmethod
+    def _on_view(widget):
+        while widget is not None:
+            try:
+                name = widget.metaObject().className()
+            except Exception:
+                return False
+            if name in ("Gui::View3DInventorViewer", "QOpenGLWidget", "Gui::View3DInventor"):
+                return True
+            if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox)):
+                return False
+            widget = widget.parentWidget() if isinstance(widget, QtWidgets.QWidget) else None
+        return False
+
+    def _filter(self, obj, event):
+        from .compat import QtGui
+
+        try:
+            kind = event.type()
+            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
+                return False
+            if self.panel is None or getattr(self.panel, "_closed", True):
+                return False
+            if not isinstance(event, QtGui.QKeyEvent):
+                return False
+            mods = event.modifiers()
+            if mods & (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier | QtCore.Qt.MetaModifier):
+                return False
+            text = event.text()
+            if not text or text not in self.KEYS or not isinstance(obj, QtWidgets.QWidget):
+                return False
+            if not self._on_view(obj):
+                return False
+            field = self.panel.typing_field()
+            if field is None:
+                return False
+            event.accept()  # ShortcutOverride accepted: FreeCAD's view key does not fire
+            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
+                now = time.time()
+                fresh = self.last[0] is not field or now - self.last[1] > self.BURST
+                self.last = (field, now)
+                key = event.key()
+                QtCore.QTimer.singleShot(0, lambda: self._type(field, key, text, fresh))
+            return True
+        except Exception:
+            return False
+
+    def _type(self, field, key, text, fresh):
+        from .compat import QtGui
+
+        try:
+            if self.panel is None or getattr(self.panel, "_closed", True):
+                return
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is None:
+                return
+            if fresh or not edit.hasFocus():
+                field.widget.setFocus()
+            if fresh:
+                edit.selectAll()
+            # Sent as a key press, so the field reacts as to a person's typing.
+            press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, press)
+            release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, release)
+        except Exception as exc:
+            warn("typing a value: %s" % exc)
+
+    def remove(self):
+        try:
+            QtWidgets.QApplication.instance().removeEventFilter(self.filter)
+        except Exception:
+            pass
+        self.panel = None
+
+
+class EnterTakesNumber(QtCore.QObject):
+    """Enter in a value box after a negative number ("-5") is OK at once, like Fusion.
+    FreeCAD's number box counts any text with a minus or another operator as a formula
+    to tidy up first: its first Enter only rewrote "-5" as "-5.00 mm" and the dialog
+    stayed open, so a negative Height needed Enter twice (found by the primitives QA).
+    A plain number typed is set as the box's value (tidied text) just before the box
+    sees the Enter, which then goes on to OK. Formulas keep FreeCAD's way."""
+
+    def __init__(self, field):
+        super().__init__(field.widget)
+        self.field = field
+        field.widget.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() != QtCore.QEvent.KeyPress:
+                return False
+            if event.key() not in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                return False
+            field = self.field
+            typed = field._bare()  # a plain number typed since the box was settled, or None
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            text = edit.text() if edit is not None else ""
+            if typed is None or not any(c in text for c in "+-*/"):
+                return False
+            before = float(field.widget.property("rawValue"))
+            field.set_value(typed)  # the box's own tidy text: its Enter now goes on to OK
+            if abs(before - typed) > 1e-12 and field._on_change is not None:
+                field._on_change(typed)
+        except Exception as exc:
+            warn("value box Enter: %s" % exc)
+        return False
+
+
 _GRAB = {"time": 0.0}  # when a handle last took a press (one press moves one handle)
 
 
@@ -357,11 +492,24 @@ class LinearHandle:
             if value is None:
                 value = self._incremental(position, current)
             else:
-                value -= self._grab
+                value = self.snap(value - self._grab)
             self._last_pos = (float(position[0]), float(position[1]))
             self._pending = value
         except Exception as exc:
             warn("handle: %s" % exc)
+
+    SNAP_PIXELS = 5.0
+
+    def snap(self, value):
+        """Fusion's arrows move in round steps that suit the zoom (about 5 pixels: 0.1,
+        0.25, 0.5, 1 mm...), so a drag ends on a value a person would type (14.99 or 24.97
+        before: the hand's pixel, found by the primitives QA)."""
+        try:
+            pixel = view_scale(self.view, self.position()) / max(abs(self.scale), 1e-9)
+            step = nice_floor(self.SNAP_PIXELS * pixel)
+            return round_to(value, step) if step > 0 else value
+        except Exception:
+            return value
 
     def dragging(self):
         return self._drag
@@ -568,6 +716,113 @@ class Placer:
             pass
 
 
+def clear_selection_soon():
+    """Drop the selection now and once the click that opened an edit has finished: the
+    timeline's click selects the step being edited, and a click on that step's own edge or
+    face then selected the whole body instead (FreeCAD climbs to the parent of an object
+    that is selected already), so the pick said "pick an edge" (found by the primitives
+    QA). Fusion edits a step with nothing selected."""
+    for delay in (None, 0, 150):
+        if delay is None:
+            _clear_selection()
+        else:
+            QtCore.QTimer.singleShot(delay, _clear_selection)
+
+
+def _clear_selection():
+    try:
+        Gui.Selection.clearSelection()
+    except Exception:
+        pass
+
+
+def base_face_holding(base, face_global):
+    """'FaceN' of `base` (the part before this step) in the same plane as the flat face
+    `face_global` clicked on the step's result and holding it, or None. The step itself
+    changed that face (a box joined on top leaves the top a square smaller), so it is no
+    longer the same face: before, the click said "that face belongs to this box itself"
+    (found by the primitives QA)."""
+    from . import hole
+
+    try:
+        if face_global.Surface.TypeId != "Part::GeomPlane":
+            return None
+        point = primitives.point_on(face_global)
+        if point is None:
+            return None
+        inverse = primitives.body_placement(base).inverse()
+        local = inverse.multVec(point)
+        normal = inverse.Rotation.multVec(hole.face_normal_at(face_global, point))
+        name = hole.base_face_at(base, local, normal_hint=normal, loose=0.0)
+        if name is None:
+            return None
+        other = base.Shape.getElement(name)
+        if other.Surface.TypeId != "Part::GeomPlane":
+            return None
+        if hole.face_normal_at(other, local).dot(normal) < 1.0 - 1e-9:
+            return None
+        return name
+    except Exception:
+        return None
+
+
+def design_reach(body):
+    """How far the visible bodies of the design reach from `body`'s origin, along its axes
+    (0 for an empty design)."""
+    inverse = body.getGlobalPlacement().inverse()
+    reach = 0.0
+    for obj in body.Document.Objects:
+        try:
+            if obj.TypeId != "PartDesign::Body" or not obj.ViewObject.Visibility:
+                continue
+            shape = obj.Shape
+            if shape.isNull() or not shape.Solids:
+                continue
+            b = shape.BoundBox
+            for x in (b.XMin, b.XMax):
+                for y in (b.YMin, b.YMax):
+                    for z in (b.ZMin, b.ZMax):
+                        p = inverse.multVec(App.Vector(x, y, z))
+                        reach = max(reach, abs(p.x), abs(p.y), abs(p.z))
+        except Exception:
+            continue
+    return reach
+
+
+def design_plane_picker(view, body, on_pick):
+    """The origin squares of Create Sketch (sketch_ui.PlanePicker), big enough to reach
+    round the whole design: the picker sizes them from the active body alone, so after a
+    small second body (a cylinder beside the part) they shrank to 20 mm round the origin
+    and a click on the plane beside the part hit nothing (found by the primitives QA).
+    Fusion's origin planes span the design."""
+    from pivy import coin
+
+    from . import sketch_ui
+
+    class DesignPlanes(sketch_ui.PlanePicker):
+        def _geometry_at(self, position):
+            """Anything of the part under the mouse (an edge or a corner too, not only a
+            face) is what the click is for: the selection takes it. Before, a click on
+            an edge fell through to an origin square hidden behind the part, and the
+            box went onto that plane (found by the primitives QA)."""
+            info = self.view.getObjectInfo(tuple(position))
+            return bool(info and info.get("Object"))
+
+    picker = DesignPlanes(view, body, on_pick)
+    try:
+        size = 2.0 * 1.15 * design_reach(body)
+        if size > picker.size + 1e-6:
+            root = picker.root
+            while root.getNumChildren() > 2:  # its pick style and offset stay, the squares go
+                root.removeChild(root.getNumChildren() - 1)
+            picker.size = size
+            picker.hovered = None
+            picker.materials = {role: picker._square(coin, role) for role in picker.objects}
+    except Exception as exc:
+        warn("origin planes: %s" % exc)
+    return picker
+
+
 def circle_points(cx, cy, r, steps=72):
     return [
         (cx + r * math.cos(2 * math.pi * i / steps), cy + r * math.sin(2 * math.pi * i / steps))
@@ -577,6 +832,16 @@ def circle_points(cx, cy, r, steps=72):
 
 def cross_points(x, y, size):
     return [[(x - size, y), (x + size, y)], [(x, y - size), (x, y + size)]]
+
+
+def on_circle(center, mouse, radius):
+    """The point `radius` from `center` towards `mouse` (along +x when they coincide)."""
+    (cx, cy), (mx, my) = center, mouse
+    dx, dy = mx - cx, my - cy
+    length = math.hypot(dx, dy)
+    if length < 1e-9:
+        return (cx + radius, cy)
+    return (cx + dx / length * radius, cy + dy / length * radius)
 
 
 # -- the dialog base ----------------------------------------------------------------------------------------
@@ -607,6 +872,7 @@ class PlacedPanel(Panel):
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
+        self.typing = TypeOverView(self)
         self.target = feature
         self.editing = feature is not None
         self.ref = None
@@ -617,6 +883,9 @@ class PlacedPanel(Panel):
         self.state = "plane"
         self.points = []
         self.handles = {}
+        self.fields = {}  # option key -> DistanceField
+        self.locked = {}  # sizes typed while placing: the clicks only give the rest
+        self._last_handle = None
         self.planes = None
         self.placer = None
         self.observer = None
@@ -637,6 +906,7 @@ class PlacedPanel(Panel):
         self._show_fields()
         self._watch()
         if feature is not None:
+            clear_selection_soon()  # the timeline's click selected the step being edited
             self.state = "ready"
             self.activate(None)
             self._show_plane()
@@ -715,22 +985,71 @@ class PlacedPanel(Panel):
         )
         if name:
             field.widget.setObjectName(name)
+        field.enter_filter = EnterTakesNumber(field)
         caption = QtWidgets.QLabel(label)
         form.addRow(caption, field.widget)
+        self.fields[key] = field
         if self._formula_key(key):
             self.formula_inputs = getattr(self, "formula_inputs", [])
             self.formula_inputs.append(preview.FormulaInput(self, key, field))
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is not None:
+                edit.textEdited.connect(lambda text, key=key: self._text_edited(key, text))
         return field, caption
 
     FORMULA_KEYS = ()  # fields where a typed parameter / formula keeps driving the value
+    # Where numbers typed over the 3D view go: while placing, the first of these not typed
+    # yet; afterwards the field of the arrow dragged last, else READY_KEY.
+    TYPE_ORDER = ()
+    READY_KEY = ""
 
     def _formula_key(self, key):
         """True if a formula typed in this field stays linked (a parameter drives it)."""
         return key in self.FORMULA_KEYS
 
+    def _text_edited(self, key, text):
+        """A plain number typed over a formula (or over a typo) wins at once: the preview
+        and OK use it without waiting for the field to be left (before, the preview kept
+        the formula's value until Tab; found by the primitives QA, as by the hole QA)."""
+        try:
+            from . import parameters
+
+            if self._closed or not text.strip() or not parameters.is_plain_number(text):
+                return
+            self.formula_error = ""
+            if self.options.get("expressions", {}).pop(key, None) is not None:
+                self.show_formulas()
+                self._changed(new_geometry=True)
+        except Exception as exc:
+            warn("%s value: %s" % (self.title, exc))
+
+    def _visible_field(self, key):
+        field = self.fields.get(key)
+        if field is None:
+            return None
+        try:
+            return field if not field.widget.isHidden() else None
+        except RuntimeError:
+            return None
+
+    def typing_field(self):
+        """The value field a number typed over the 3D view goes to (Fusion's box next to the
+        mouse), or None."""
+        if self._closed:
+            return None
+        if self.state in ("plane", "place"):
+            keys = [k for k in self.TYPE_ORDER if k not in self.locked] or list(self.TYPE_ORDER)
+        else:
+            keys = [self._last_handle, self.READY_KEY] + list(self.TYPE_ORDER)
+        for key in keys:
+            field = self._visible_field(key) if key else None
+            if field is not None:
+                return field
+        return None
+
     def activate(self, name):
         """The Plane box clicked: pick another plane (Fusion re-opens the selection)."""
-        if name == "plane" and self.state == "ready":
+        if name == "plane" and self.state in ("ready", "place"):
             self._wait_for_plane()
             return
         self.plane_field.set_active(name == "plane")
@@ -774,15 +1093,13 @@ class PlacedPanel(Panel):
             self._wait_for_plane()
 
     def _wait_for_plane(self):
-        from . import sketch_ui
-
         self._stop_placing()
         self.state = "plane" if self.target is None else "replane"
         self.plane_field.set_active(True)
         self.info.setText("Click a plane or a flat face to put the %s on." % self.title.lower())
         if self.planes is None and self.body is not None:
             try:
-                self.planes = sketch_ui.PlanePicker(
+                self.planes = design_plane_picker(
                     Gui.ActiveDocument.ActiveView,
                     self.body,
                     lambda plane: QtCore.QTimer.singleShot(0, lambda: self._plane_clicked(plane)),
@@ -860,7 +1177,7 @@ class PlacedPanel(Panel):
         face = profile_pick.global_face(obj, sub)
         if face is None:
             return None
-        name = profile_pick.face_name_in(base, face)
+        name = profile_pick.face_name_in(base, face) or base_face_holding(base, face)
         return (base, name) if name else None
 
     def _later(self, obj, body):
@@ -875,6 +1192,7 @@ class PlacedPanel(Panel):
     def _set_plane(self, ref):
         try:
             ref = primitives.check_ref(ref)
+            ref = primitives.earliest_ref(ref)  # the step that made the face, not the last one
             primitives.global_frame(ref)
         except PrimitiveError as exc:
             self.message.setText("⚠ %s" % exc)
@@ -939,22 +1257,80 @@ class PlacedPanel(Panel):
     def _clicked(self, point):
         if self._closed or self.state != "place":
             return
-        if self.points and math.hypot(
-            point[0] - self.points[-1][0], point[1] - self.points[-1][1]
-        ) < (1e-6):
+        if (
+            self.points
+            and math.hypot(point[0] - self.points[-1][0], point[1] - self.points[-1][1]) < 1e-6
+            and self._typed_point(self.points, point) is None
+        ):
             return  # the same spot twice: a size cannot be 0
+        typed = self._typed_point(self.points, point)
+        if typed is not None:
+            point = typed  # the typed sizes win; the click only says which side
         self.points.append(point)
         if self.placer is not None:
             self.placer.points = list(self.points)
         if len(self.points) < self.clicks:
-            self.info.setText(self.HINTS[min(len(self.points), len(self.HINTS) - 1)])
+            self._show_hint()
             return
         self._placed(list(self.points))
+        for key, value in self.locked.items():  # a size typed while placing stays
+            if key in self.fields:
+                self.options[key] = value
+        self.locked = {}
         self._stop_placing()
         self.state = "ready"
         self.info.setText("")
         self._show_fields()
         self._changed(new_geometry=True)
+
+    def _show_hint(self):
+        self.info.setText(self.HINTS[min(len(self.points), len(self.HINTS) - 1)])
+
+    CIRCLE_KEY = ""  # the diameter the second click gives (Cylinder, Torus, Coil)
+
+    def _typed_point(self, points, mouse):
+        """The next click as the sizes typed while placing make it (`mouse` only gives the
+        side), or None when the click itself is needed. For a circle (CIRCLE_KEY): a
+        diameter typed after the centre click wins; the mouse only gives the direction
+        (Fusion: click the centre, type the diameter, Enter)."""
+        key = self.CIRCLE_KEY
+        if not key or len(points) != 1 or key not in self.locked:
+            return None
+        radius = self.locked_size(key, 0.0) / 2.0
+        if radius <= 0.0:
+            return None
+        return on_circle(points[0], mouse, radius)
+
+    def _circle_radius(self, points, mouse):
+        """The radius the circle being placed has: typed (CIRCLE_KEY), else to the mouse."""
+        typed = self.locked_size(self.CIRCLE_KEY, None) if self.CIRCLE_KEY else None
+        if typed is not None:
+            return typed / 2.0
+        return math.hypot(mouse[0] - points[0][0], mouse[1] - points[0][1])
+
+    def _live_diameter(self, points, mouse, field):
+        """The diameter field follows the mouse while placing, unless one was typed."""
+        if points and self.CIRCLE_KEY not in self.locked:
+            self.set_field(field, 2.0 * self._circle_radius(points, mouse))
+
+    def _finish_placing(self):
+        """Enter while placing, after the sizes were typed (Fusion: type the length and
+        width, Enter): the shape is placed as if clicked. True if it was."""
+        if self.state != "place" or self.placer is None or len(self.points) != self.clicks - 1:
+            return False
+        mouse = self.placer.mouse or (self.points[-1] if self.points else None)
+        if mouse is None:
+            return False
+        point = self._typed_point(self.points, mouse)
+        if point is None:
+            return False
+        self._clicked(point)
+        return self.state == "ready"
+
+    def locked_size(self, key, default):
+        """A size typed while placing (positive), else `default`."""
+        value = self.locked.get(key)
+        return abs(float(value)) if value is not None and abs(float(value)) > 1e-9 else default
 
     # -- changes --------------------------------------------------------------------------------------------
     @safe
@@ -962,6 +1338,13 @@ class PlacedPanel(Panel):
         if self._quiet:
             return
         self.options[key] = value
+        if self.state in ("plane", "place"):
+            # Fusion: a size typed while placing is kept; the clicks give the rest (it was
+            # overwritten by the next mouse move and the clicks: found by the primitives QA).
+            self.locked[key] = value
+            if self.placer is not None:
+                self.placer.redraw()
+            return
         handle = self.handles.get(key)
         if handle is not None:
             handle.set_value(value)
@@ -980,7 +1363,7 @@ class PlacedPanel(Panel):
         if not points:
             return cross_points(mouse[0], mouse[1], self._mark())
         cx, cy = points[0]
-        r = math.hypot(mouse[0] - cx, mouse[1] - cy)
+        r = self._circle_radius(points, mouse)
         return [circle_points(cx, cy, r)] + cross_points(cx, cy, self._mark())
 
     def _height_value(self, field, value):
@@ -1095,8 +1478,12 @@ class PlacedPanel(Panel):
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or self._problem()
         self.message.setText("⚠ " + text if text else "")
+
+    def _problem(self):
+        """A cut that misses or takes everything, separate pieces (FreeCAD says nothing)."""
+        return primitives.problem(self.target, "the %s" % self.title.lower())
 
     # -- formulas (preview.FormulaInput calls these) -------------------------------------------------------
     def formula_typed(self, key, text, value):
@@ -1195,6 +1582,7 @@ class PlacedPanel(Panel):
 
     @safe
     def _handle_dragged(self, name, apply, value):
+        self._last_handle = name  # a number typed over the view now goes to its field
         self.drop_formula(name)
         apply(value)
         self._changed()
@@ -1221,6 +1609,8 @@ class PlacedPanel(Panel):
             return False
 
     def _accept(self):
+        if self.target is None and self._finish_placing():
+            return False  # placed from the typed sizes; the dialog stays for the next value
         if self.target is None:
             if self.ref is None:
                 text = "Pick a plane or a flat face first."
@@ -1241,7 +1631,7 @@ class PlacedPanel(Panel):
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or self._problem()
         if text:
             self.message.setText("⚠ " + text)
             return False
@@ -1262,6 +1652,15 @@ class PlacedPanel(Panel):
     def _finishing(self, feature):
         """Just before OK closes the dialog (Pipe hides its path sketch here)."""
 
+    def finish(self):
+        """Another command starts: keep the shape if it can be kept, else drop it. A shape
+        not placed yet is dropped (Enter would place it from typed sizes and wait for the
+        height: never as a side effect of another command)."""
+        if self.target is None:
+            self.reject()
+            return
+        super().finish()
+
     def reject(self):
         try:
             self._timer.stop()
@@ -1281,6 +1680,7 @@ class PlacedPanel(Panel):
         self.escape.remove()
         self.undo_guard.remove()
         self.enter.remove()
+        self.typing.remove()
         self._remove_handles()
         super().cleanup()
 
@@ -1302,12 +1702,17 @@ def _plain(text):
 # -- Box ---------------------------------------------------------------------------------------------------------
 class BoxPanel(PlacedPanel):
     FORMULA_KEYS = ("length", "width", "height")
+    TYPE_ORDER = ("length", "width", "height")
+    READY_KEY = "height"
     title = "Box"
     icon = "box"
     kind = "box"
     clicks = 2
     last = None
-    HINTS = ("Click the first corner on the plane.", "Click the opposite corner.")
+    HINTS = (
+        "Click the first corner on the plane.",
+        "Click the opposite corner, or type Length and Width and press Enter.",
+    )
 
     def _build_fields(self, form):
         self.length, _ = self.distance_field(form, "Length", "length", name="SciForgeBox_length")
@@ -1330,19 +1735,40 @@ class BoxPanel(PlacedPanel):
         self.options["width"] = abs(self.width.value())
         self.options["height"] = self.height.value()
 
+    def _corner(self, first, mouse):
+        """The opposite corner for the mouse at `mouse`: a typed Length / Width wins (the
+        mouse then only says to which side of the first corner the box goes)."""
+        (x0, y0), (mx, my) = first, mouse
+        x1, y1 = mx, my
+        length = self.locked_size("length", None)
+        width = self.locked_size("width", None)
+        if length is not None:
+            x1 = x0 + (length if mx >= x0 else -length)
+        if width is not None:
+            y1 = y0 + (width if my >= y0 else -width)
+        return x1, y1
+
     def _outline(self, points, mouse):
         if not points:
             return cross_points(mouse[0], mouse[1], self._mark())
-        (x0, y0), (x1, y1) = points[0], mouse
+        (x0, y0), (x1, y1) = points[0], self._corner(points[0], mouse)
         return [[(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]]
 
     def _live(self, points, mouse):
         if points:
-            self.set_field(self.length, abs(mouse[0] - points[0][0]))
-            self.set_field(self.width, abs(mouse[1] - points[0][1]))
+            x1, y1 = self._corner(points[0], mouse)
+            if "length" not in self.locked:
+                self.set_field(self.length, abs(x1 - points[0][0]))
+            if "width" not in self.locked:
+                self.set_field(self.width, abs(y1 - points[0][1]))
+
+    def _typed_point(self, points, mouse):
+        if len(points) == 1 and "length" in self.locked and "width" in self.locked:
+            return self._corner(points[0], mouse)
+        return None
 
     def _placed(self, points):
-        (x0, y0), (x1, y1) = points
+        (x0, y0), (x1, y1) = points[0], self._corner(points[0], points[1])
         length, width = abs(x1 - x0), abs(y1 - y0)
         if length < 1e-6 or width < 1e-6:
             # Two corners on one line: a square from the longer side, sized in the fields.
@@ -1358,6 +1784,13 @@ class BoxPanel(PlacedPanel):
             width=width,
             height=primitives.nice(min(length, width)),
         )
+
+    def _side_value(self, key, side_key, field, value, side):
+        """A Length or Width arrow pulled back through the first corner: the box goes over
+        to the other side of that corner, as the rubber band did while placing (it grew
+        back on the same side before, away from the arrow: found by the primitives QA)."""
+        self.options[side_key] = side if value >= 0 else -side
+        self._size_value(key, field, value)
 
     def _handle_specs(self):
         o = self.options
@@ -1378,7 +1811,7 @@ class BoxPanel(PlacedPanel):
                 u * sx,
                 length,
                 1.0,
-                lambda v: self._size_value("length", self.length, v),
+                lambda v, s=sx: self._side_value("length", "sx", self.length, v, s),
             ),
             (
                 "width",
@@ -1386,7 +1819,7 @@ class BoxPanel(PlacedPanel):
                 v * sy,
                 width,
                 1.0,
-                lambda v: self._size_value("width", self.width, v),
+                lambda v, s=sy: self._side_value("width", "sy", self.width, v, s),
             ),
         ]
 
@@ -1394,12 +1827,18 @@ class BoxPanel(PlacedPanel):
 # -- Cylinder ----------------------------------------------------------------------------------------------------
 class CylinderPanel(PlacedPanel):
     FORMULA_KEYS = ("diameter", "height")
+    TYPE_ORDER = ("diameter", "height")
+    READY_KEY = "height"
+    CIRCLE_KEY = "diameter"
     title = "Cylinder"
     icon = "cylinder"
     kind = "cylinder"
     clicks = 2
     last = None
-    HINTS = ("Click the centre on the plane.", "Click a point on the circle (its size).")
+    HINTS = (
+        "Click the centre on the plane.",
+        "Click a point on the circle, or type the Diameter and press Enter.",
+    )
 
     def _build_fields(self, form):
         self.diameter, _ = self.distance_field(
@@ -1427,9 +1866,7 @@ class CylinderPanel(PlacedPanel):
         return self._circle_outline(points, mouse)
 
     def _live(self, points, mouse):
-        if points:
-            r = math.hypot(mouse[0] - points[0][0], mouse[1] - points[0][1])
-            self.set_field(self.diameter, 2.0 * r)
+        self._live_diameter(points, mouse, self.diameter)
 
     def _placed(self, points):
         (cx, cy), (px, py) = points
@@ -1459,6 +1896,8 @@ class CylinderPanel(PlacedPanel):
 # -- Sphere --------------------------------------------------------------------------------------------------------
 class SpherePanel(PlacedPanel):
     FORMULA_KEYS = ("diameter",)
+    TYPE_ORDER = ("diameter",)
+    READY_KEY = "diameter"
     title = "Sphere"
     icon = "sphere"
     kind = "sphere"
@@ -1518,12 +1957,18 @@ class SpherePanel(PlacedPanel):
 # -- Torus ----------------------------------------------------------------------------------------------------------
 class TorusPanel(PlacedPanel):
     FORMULA_KEYS = ("inner_diameter", "torus_diameter")
+    TYPE_ORDER = ("inner_diameter", "torus_diameter")
+    READY_KEY = "torus_diameter"
+    CIRCLE_KEY = "inner_diameter"
     title = "Torus"
     icon = "torus"
     kind = "torus"
     clicks = 2
     last = None
-    HINTS = ("Click the centre on the plane.", "Click a point on the inner circle (its size).")
+    HINTS = (
+        "Click the centre on the plane.",
+        "Click a point on the inner circle, or type the Inner Diameter and press Enter.",
+    )
 
     def _build_fields(self, form):
         self.inner, _ = self.distance_field(
@@ -1556,9 +2001,7 @@ class TorusPanel(PlacedPanel):
         return self._circle_outline(points, mouse)
 
     def _live(self, points, mouse):
-        if points:
-            r = math.hypot(mouse[0] - points[0][0], mouse[1] - points[0][1])
-            self.set_field(self.inner, 2.0 * r)
+        self._live_diameter(points, mouse, self.inner)
 
     def _placed(self, points):
         (cx, cy), (px, py) = points
