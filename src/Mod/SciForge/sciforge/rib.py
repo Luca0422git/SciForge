@@ -357,7 +357,8 @@ def _band(edge, normal, left, right):
 
 
 def _free_ends(edges):
-    """[(point, outward direction)] of curve ends no other curve meets."""
+    """[(edge index, at its start, point, outward direction)] of curve ends no other curve
+    meets."""
     ends = []
     for i, edge in enumerate(edges):
         for param, sign in ((edge.FirstParameter, -1.0), (edge.LastParameter, 1.0)):
@@ -373,7 +374,7 @@ def _free_ends(edges):
             t = App.Vector(edge.tangentAt(param)) * sign
             if t.Length > 1e-12:
                 t.normalize()
-                ends.append((i, param, p, t))
+                ends.append((i, sign < 0, p, t))
     return ends
 
 
@@ -403,7 +404,7 @@ def _web_tool(refs, options, base):
     pieces = list(edges)
     if options["extend"] and base is not None:
         # carry free ends on until they meet the part, at the depth the web reaches
-        for i, param, point, out in _free_ends(edges):
+        for _i, at_start, point, out in _free_ends(edges):
             hits = []
             for frac in (0.02, 0.25, 0.5, 0.75, 0.98):
                 step = min(length, reach) * frac
@@ -412,7 +413,11 @@ def _web_tool(refs, options, base):
                     hits.append(hit)
             if hits:
                 stretch = min(hits) + max(left, right)
-                pieces.append(_stub(point, out, stretch))
+                stub = _stub(point, out, stretch)
+                if at_start:
+                    # run the stub the curve's way, so One Side stays on the curve's side
+                    stub = _stub(point + out * stretch, out * -1.0, stretch)
+                pieces.append(stub)
     bands = [_band(e, normal, left, right) for e in pieces]
     region = bands[0] if len(bands) == 1 else bands[0].fuse(bands[1:])
     try:
@@ -454,8 +459,26 @@ def tool_shape(refs, options, base):
     options = options_with_defaults(options)
     check_options(options)
     if options["kind"] == "web":
-        return _web_tool(refs, options, base)
-    return _rib_tool(refs, options, base)
+        tool = _web_tool(refs, options, base)
+    else:
+        tool = _rib_tool(refs, options, base)
+    if base is not None:
+        _check_joins(base, tool, options)
+    return tool
+
+
+def _check_joins(base, tool, options):
+    """Refuse a rib / web that would only touch the part along an edge (e.g. One Side turned
+    out of the part's side face): joined, it would be a separate piece."""
+    try:
+        joined = base.fuse(tool)
+    except Exception:
+        return
+    if len(joined.Solids) > len(base.Solids):
+        raise RibError(
+            "The %s only touches the part along an edge, so it would be a separate piece. "
+            "Change Flip Side or Symmetric, or draw it on a plane through the part." % word(options)
+        )
 
 
 # -- meta ------------------------------------------------------------------------------------------------

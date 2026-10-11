@@ -1,0 +1,88 @@
+{
+  "id": "sf_rib_arc",
+  "title": "Rib: a quarter arc r20 (centre (25, 25)) across the inside corner, To Next",
+  "tags": [
+    "rib",
+    "fusion-rib"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              5
+            ],
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            25,
+            25,
+            20,
+            180,
+            270
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "sf_rib",
+      "id": "rib",
+      "curves": "r",
+      "thickness": 2
+    }
+  ],
+  "expect": {
+    "volume": 7671.681469282042,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      40
+    ],
+    "note": "An L bracket (legs 40 long, 5 thick) on XZ extruded 20 (to y -20): (40 * 5 + 35 * 5) * 20 = 7500. Between the corner (5, 5) and the arc lies the 20 x 20 square less a quarter disc r20: (400 - 100 pi) * 2 thick.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "id": "sf_web_one_side_flip",
+  "title": "Web: the same line, One Side 3 thick, edited to Flip Side (away from the wall)",
+  "tags": [
+    "web",
+    "fusion-web"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            -18,
+            -18,
+            18,
+            18
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s1",
+      "distance": 8,
+      "flip": true,
+      "operation": "cut"
+    },
+    {
+      "op": "sf_curves",
+      "id": "w",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "line": [
+            -10,
+            17,
+            10,
+            17
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_rib",
+      "id": "web",
+      "kind": "web",
+      "curves": "w",
+      "thickness": 3,
+      "thickness_side": "one_side"
+    },
+    {
+      "op": "sf_rib_edit",
+      "target": "web",
+      "set": {
+        "flip_side": true
+      }
+    }
+  ],
+  "expect": {
+    "volume": 6496.0,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      10
+    ],
+    "note": "A tray: 40 x 40 x 10 less a 36 x 36 pocket 8 deep: 16000 - 10368 = 5632. Flip Side puts the 3 on the line's right (y 14 to 17), all inside the pocket: 36 * 3 * 8 = 864.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

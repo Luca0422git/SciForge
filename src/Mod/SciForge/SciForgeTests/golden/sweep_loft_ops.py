@@ -33,7 +33,16 @@ builder.py is imported.
       "at": [x, y]}} (a sketch point, first or last only). Each rails entry is one rail.
 
   {"op": "sf_loft_edit", "target": "l1", "set": {"closed": true, ...}}
+
+  {"op": "sf_rib", "id": "r1", "curves": <curves>, "kind": "rib" | "web", "thickness": 2,
+   "thickness_side": "symmetric" | "one_side", "flip_side": false,
+   "depth_type": "to_next" | "depth", "depth": 10, "flip": false, "extend": true}
+      a Rib (one open curve, grows in the sketch plane) or a Web (open curves, grows out of
+      the sketch plane); always joins the part.
+
+  {"op": "sf_rib_edit", "target": "r1", "set": {"thickness": 3, ...}}
 """
+
 import math
 
 import FreeCAD as App
@@ -253,8 +262,41 @@ def op_sf_loft_edit(self, step):
     return _edit(self, step, "sf_loft", loft, (loft.LoftError, curves.CurveError))
 
 
+RIB_KEYS = (
+    "kind",
+    "thickness",
+    "thickness_side",
+    "flip_side",
+    "depth_type",
+    "depth",
+    "flip",
+    "extend",
+)
+
+
+def op_sf_rib(self, step):
+    from sciforge import curves, rib
+
+    where = "sf_rib %r" % step["id"]
+    refs = curves_of(self, step["curves"], where)
+    options = {k: step[k] for k in RIB_KEYS if k in step}
+    try:
+        feature = rib.make(refs, options, step["id"])
+    except (rib.RibError, curves.CurveError) as exc:
+        raise BuildError("%s: %s" % (where, exc))
+    return _settle(self, step, feature, rib.owner_body)
+
+
+def op_sf_rib_edit(self, step):
+    from sciforge import curves, rib
+
+    return _edit(self, step, "sf_rib", rib, (rib.RibError, curves.CurveError))
+
+
 Builder.op_sf_curves = op_sf_curves
 Builder.op_sf_sweep = op_sf_sweep
 Builder.op_sf_sweep_edit = op_sf_sweep_edit
 Builder.op_sf_loft = op_sf_loft
 Builder.op_sf_loft_edit = op_sf_loft_edit
+Builder.op_sf_rib = op_sf_rib
+Builder.op_sf_rib_edit = op_sf_rib_edit

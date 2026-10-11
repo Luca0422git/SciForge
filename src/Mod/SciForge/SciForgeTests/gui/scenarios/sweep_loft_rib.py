@@ -4,8 +4,9 @@
 An L bracket: a sketch on XZ, the L outline (legs 40 long, 5 thick), Extrude 20 (it goes
 to y -20). A sketch on XZ again with a line from (5, 25) to (25, 5) across the inside
 corner. CREATE > Rib: click the line: To Next fills the corner triangle (a gusset), 2 thick
-about the sketch plane. Thickness 4; One Side; Flip Side (now on the other side of the
-plane); Symmetric and 2 again; Depth Options Depth, 5: a strip along the line; drag the
+about the sketch plane. Thickness 4; One Side (into the bracket's side); Flip Side would
+turn it out of the side face, where only edges touch the part: the dialog says why; back;
+Symmetric and 2 again; Depth Options Depth, 5: a strip along the line; drag the
 blue depth arrow; To Next again; OK. Undo / redo. Edit from the timeline: thickness 3, OK.
 Flip Direction in an edit says why it cannot be built (nothing to reach on that side) and
 Cancel keeps the rib. Esc cancels a new Rib.
@@ -165,10 +166,24 @@ def one_side():
 
 
 def flipped_side():
-    bb = st.bbox(h.body().Shape)
-    h.check("Flip Side: now out of the face", st.near(bb[4], 4.0), bb)
-    h.check("same volume", st.near(h.solid_volume(), L + TRI * 4), h.solid_volume())
     p = panel()
+    h.check("dialog stays open", p is not None)
+    if p is None:
+        return
+    h.check(
+        "Flip Side out of the face: only an edge would touch, the dialog says why",
+        "separate piece" in p.message.text(),
+        p.message.text(),
+    )
+    h.check("the last good rib stays", st.near(h.solid_volume(), L + TRI * 4), h.solid_volume())
+    hole_steps.click_checkbox(p.flip_side)
+
+
+def unflipped_side():
+    p = panel()
+    h.check("message gone", p.message.text() == "", p.message.text())
+    bb = st.bbox(h.body().Shape)
+    h.check("back into the bracket's side", st.near(bb[4], 0.0), bb)
     h.check("choose Symmetric", ui.choose(p.side, "Symmetric"))
 
 
@@ -337,6 +352,7 @@ h.run(
         thick4,
         one_side,
         flipped_side,
+        unflipped_side,
         symmetric_again,
         thin_again,
         depth_box,
