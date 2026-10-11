@@ -562,6 +562,27 @@ def set_support(obj, support):
         obj.MapMode = "FlatFace"
 
 
+HELPER_ROLES = ("PrimitivePlane", "CoilSection", "PipePath", "PipeSection")
+
+
+def drop_orphans(doc):
+    """Hidden helpers whose step is gone (the timeline's Delete keeps a helper another
+    helper still links, e.g. a pipe's path, which its section reads). Removed when a
+    primitive dialog opens, inside its undo step."""
+    for _ in range(4):
+        gone = []
+        for obj in list(doc.Objects):
+            if getattr(obj, ROLE, "") not in HELPER_ROLES:
+                continue
+            users = [u for u in obj.InList if u.TypeId not in ("PartDesign::Body", "App::Part")]
+            if not users:
+                gone.append(obj)
+        if not gone:
+            return
+        for obj in gone:
+            delete(obj)
+
+
 def drop_helpers(doc, names, keep):
     for name in names:
         helper = doc.getObject(name)

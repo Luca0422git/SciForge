@@ -597,6 +597,10 @@ class PlacedPanel(Panel):
         super().__init__(doc, self.title if feature is None else "Edit %s" % self.title)
         type(self).last = self
         PlacedPanel.last = self
+        try:
+            primitives.drop_orphans(doc)  # helpers a timeline Delete left behind
+        except Exception as exc:
+            warn("could not tidy up helpers: %s" % exc)
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)

@@ -169,6 +169,10 @@ class PipePanel(Panel):
     def __init__(self, doc, feature=None):
         super().__init__(doc, "Pipe" if feature is None else "Edit Pipe")
         PipePanel.last = self
+        try:
+            primitives.drop_orphans(doc)  # helpers a timeline Delete left behind
+        except Exception as exc:
+            warn("could not tidy up helpers: %s" % exc)
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
