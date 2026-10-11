@@ -52,6 +52,15 @@ class ConstructError(ValueError):
     pass
 
 
+class LostReference(ConstructError):
+    """What a construction is built on is gone (deleted, or its face / edge no longer
+    exists after an edit)."""
+
+
+LOST = "Lost what it was built on (deleted or changed). Edit it and pick again."
+WARNING = "SciForgeWarning"  # the timeline shows this text as the step's warning
+
+
 def _inp(name, kinds, optional=False, hint=""):
     return {"name": name, "kinds": set(kinds), "optional": optional, "hint": hint}
 
@@ -430,7 +439,7 @@ def element(obj, sub):
     try:
         item = obj.Shape.getElement(sub)
     except Exception:
-        raise ConstructError("%s is no longer there. Pick it again." % describe(obj, sub))
+        raise LostReference("%s is no longer there. Pick it again." % describe(obj, sub))
     item = item.copy()
     place = _parent_placement(obj)
     if not place.isIdentity():
@@ -676,7 +685,7 @@ def compute(key, refs, points=None, values=None):
     refs = [(r[0], r[1]) for r in refs]
     for ref in refs:
         if not alive(ref[0]):
-            raise ConstructError("Something it was built on is gone. Pick it again.")
+            raise LostReference("Something it was built on is gone. Pick it again.")
     handler = globals()["_c_" + key]
     return handler(refs, points, values, spec)
 
@@ -980,17 +989,36 @@ class ConstructionFrame:
         if "SciForgeRole" not in props:
             obj.addProperty("App::PropertyString", "SciForgeRole", "SciForge", "Helper of")
             obj.SciForgeRole = "ConstructionFrame"
+        if "Problem" not in props:
+            obj.addProperty("App::PropertyString", "Problem", "SciForge", "Why it stays put")
+            _output(obj, "Problem")
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
 
     def execute(self, obj):
+        """Work the frame out from the picks. When that is not possible any more (what it
+        was built on was deleted, or an earlier edit made the picks unusable) the frame
+        stays where it was and the construction shows a warning in the timeline, like a
+        Fusion construction that lost its references. It never fails: a failed helper
+        stopped its whole body from recomputing, and the part vanished from the view."""
         refs = helper_refs(obj)
-        place = compute(obj.Kind, refs, helper_points(obj), helper_values(obj))
+        try:
+            if len(refs) < len(obj.HasPoint) or any(not alive(r[0]) for r in refs):
+                raise LostReference(LOST)
+            place = compute(obj.Kind, refs, helper_points(obj), helper_values(obj))
+        except LostReference:
+            report_problem(obj, LOST)
+            return
+        except Exception as exc:
+            report_problem(obj, str(exc) or "This construction cannot be built any more.")
+            return
         body = owner_body(obj)
         if body is not None:
             place = body.getGlobalPlacement().inverse().multiply(place)
-        obj.Placement = place
+        report_problem(obj, "")
+        if not obj.Placement.isSame(place, 1e-12):
+            obj.Placement = place
 
     def dumps(self):
         return None
@@ -1000,6 +1028,45 @@ class ConstructionFrame:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _output(obj, prop):
+    """A worked-out property: writing it does not mark the object as changed."""
+    try:
+        obj.setPropertyStatus(prop, ["Output", "Hidden"])
+    except Exception:
+        pass
+
+
+def users_of(helper):
+    """The construction datums attached to `helper`."""
+    found = []
+    try:
+        for obj in helper.InList:
+            if obj.TypeId in DATUM_TYPES and helper_of(obj) is helper:
+                found.append(obj)
+    except Exception:
+        pass
+    return found
+
+
+def report_problem(helper, text):
+    """Keep `text` on the helper and show it as the timeline warning of its construction
+    ("" clears both)."""
+    text = text or ""
+    if getattr(helper, "Problem", "") != text:
+        helper.Problem = text
+    for datum in users_of(helper):
+        try:
+            if WARNING not in datum.PropertiesList:
+                if not text:
+                    continue
+                datum.addProperty("App::PropertyString", WARNING, "SciForge", "Timeline warning")
+                _output(datum, WARNING)
+            if getattr(datum, WARNING) != text:
+                setattr(datum, WARNING, text)
+        except Exception:
+            continue
 
 
 def expand(value):
@@ -1018,9 +1085,15 @@ def helper_refs(helper):
 
 
 def helper_points(helper):
+    """The clicked point of each pick (None where there is none). helper.Refs groups picks
+    of the same object into one entry, so count the picks themselves."""
     flags = list(helper.HasPoint)
     points = list(helper.Points)
-    return [V(points[i]) if i < len(flags) and flags[i] else None for i in range(len(helper.Refs))]
+    count = len(helper_refs(helper))
+    return [
+        V(points[i]) if i < len(flags) and i < len(points) and flags[i] else None
+        for i in range(count)
+    ]
 
 
 def helper_values(helper):
@@ -1164,6 +1237,7 @@ def update(datum, key, refs, values=None, points=None, formulas=None):
         _set_expression(datum, ".AttachmentOffset.Base.z", formulas.get("distance"))
         if not formulas.get("distance") and not datum.AttachmentOffset.isSame(offset, 1e-12):
             datum.AttachmentOffset = offset
+        _clear_warning(datum)  # picked again: no longer "lost what it was on"
         return datum
     _set_expression(datum, ".AttachmentOffset.Base.z", None)
     if not datum.AttachmentOffset.isIdentity():
@@ -1178,6 +1252,14 @@ def update(datum, key, refs, values=None, points=None, formulas=None):
     }[datum.TypeId]
     _set_support(datum, [(helper, "")], mode)
     return datum
+
+
+def _clear_warning(datum):
+    try:
+        if WARNING in datum.PropertiesList and getattr(datum, WARNING):
+            setattr(datum, WARNING, "")
+    except Exception:
+        pass
 
 
 def _set_support(datum, refs, mode):
@@ -1325,7 +1407,10 @@ def guess_key(datum):
 
 def failure(datum):
     """The reason a construction does not compute, or ''."""
-    for obj in (helper_of(datum), datum):
+    helper = helper_of(datum)
+    if helper is not None and getattr(helper, "Problem", ""):
+        return helper.Problem
+    for obj in (helper, datum):
         if obj is None:
             continue
         state = list(getattr(obj, "State", []))

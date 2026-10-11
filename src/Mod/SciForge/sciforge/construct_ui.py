@@ -16,6 +16,7 @@ Problems are shown in the dialog, which then stays open. OK keeps it (one undo s
 Cancel / Esc / Ctrl+Z leave the design as it was. Double-click it in the timeline to edit.
 """
 import math
+import re
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -64,6 +65,69 @@ def _safe(method):
         return None
 
     return wrapper
+
+
+_SUM = re.compile(r"[+\-*/]")
+
+
+class EnterAfterSum(QtCore.QObject):
+    """Fusion: Enter in a value box finishes the command, also right after a sum ("70 + 5",
+    "-15", "width / 2"). FreeCAD's number box takes that first Enter only to rewrite the
+    text ("75 °") and keeps it from the dialog, so a second Enter was needed. Installed on
+    the value boxes of a dialog: after such an Enter the box has its value, the formula is
+    taken (preview.FormulaInput) and the dialog's OK runs. remove() when it closes."""
+
+    def __init__(self, panel, fields):
+        super().__init__()
+        self.panel = panel
+        self.widgets = []
+        for field in fields:
+            if field is None:
+                continue
+            try:
+                field.widget.installEventFilter(self)
+                self.widgets.append(field.widget)
+            except Exception as exc:
+                warn("%s: Enter in a value box: %s" % (getattr(panel, "title", ""), exc))
+
+    def eventFilter(self, obj, event):
+        try:
+            if (
+                self.panel is not None
+                and event.type() == QtCore.QEvent.KeyPress
+                and event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter)
+            ):
+                edit = obj.findChild(QtWidgets.QLineEdit)
+                if edit is not None and _SUM.search(edit.text() or ""):
+                    QtCore.QTimer.singleShot(0, self._finish)
+        except Exception:
+            pass
+        return False
+
+    def _finish(self):
+        """After the box handled the Enter: if it kept it (the dialog is still open), take
+        what was typed and press OK. OK that is not possible keeps the dialog open and says
+        why, as for any Enter."""
+        try:
+            panel = self.panel
+            if panel is None or getattr(panel, "_closed", True):
+                return
+            for formula in list(getattr(panel, "_formula_inputs", []) or []):
+                if formula.raw is not None:
+                    formula._finished()
+            if not getattr(panel, "_closed", True):
+                panel.accept()
+        except Exception as exc:
+            warn("Enter: %s" % exc)
+
+    def remove(self):
+        for widget in self.widgets:
+            try:
+                widget.removeEventFilter(self)
+            except Exception:
+                pass
+        self.widgets = []
+        self.panel = None
 
 
 def _resolve_gate(obj, sub):
@@ -119,9 +183,22 @@ def _depth_under_mouse(view, position):
     return (hit - point).dot(direction)
 
 
+def _part_under_mouse(view, position):
+    """True when a face, edge or corner of a solid is under the mouse."""
+    try:
+        info = view.getObjectInfo(tuple(position))
+    except Exception:
+        return False
+    if not info or not info.get("Object"):
+        return False
+    component = str(info.get("Component", "")).split(".")[-1]
+    return component.startswith(("Face", "Edge", "Vertex"))
+
+
 def _origin_planes_class():
-    """sketch_ui.PlanePicker (the big origin squares) where a square in front of whatever
-    else is under the mouse takes the click (the part, a construction plane...)."""
+    """sketch_ui.PlanePicker (the big origin squares, drawn bigger than the part) where the
+    part under the mouse always takes the click, and otherwise the nearest of a square and
+    whatever else is there (a construction plane) does."""
     from .profile_pick import ray_plane
     from .sketch_ui import HOVER, IDLE, PlanePicker
 
@@ -141,9 +218,22 @@ def _origin_planes_class():
                         best = (role, t)
             if best is None:
                 return None
+            # What is under the mouse but cannot go into the blue box (an axis for a box
+            # that waits for a plane, a round face...) does not take the click: Fusion picks
+            # through it, so the square behind does.
+            takes = getattr(self, "takes", None)
+            if takes is not None and not takes(position):
+                return best[0]
+            # The part under the mouse takes the click, also where a square is drawn in
+            # front of it or lies in one of its faces: the squares are big and drawn over
+            # the part (from the iso view the XZ square covers its back half), and Fusion
+            # picks the face that was clicked. Squares are picked beside the part.
+            if _part_under_mouse(self.view, position):
+                return None
             depth = _depth_under_mouse(self.view, position)
-            if depth is not None and depth < best[1] - 1e-6:
-                return None  # something is in front of the square: the click is its
+            tol = 1e-4 * max(1.0, abs(best[1]))
+            if depth is not None and depth <= best[1] + tol:
+                return None  # a construction plane in front takes it
             return best[0]
 
         def _moved(self, info):
@@ -180,6 +270,80 @@ def _origin_planes_class():
             return time.time() - getattr(self, "last_click", 0.0) < seconds
 
     return OriginPlanes
+
+
+def _square_depth(picker, position):
+    """Distance along the mouse ray to the nearest origin square of `picker` under the
+    mouse (sketch_ui.PlanePicker), or None."""
+    from .profile_pick import ray_plane
+
+    best = None
+    for role in picker.objects:
+        base, normal, u, v = picker._frame(role)
+        hit = ray_plane(picker.view, position, base, normal)
+        if hit is None:
+            continue
+        point, t = hit
+        local = point - base
+        half = picker.size / 2.0
+        if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
+            if best is None or t < best:
+                best = t
+    return best
+
+
+def construction_in_front(picker, position):
+    """True when a construction plane is what the mouse points at, in front of the origin
+    square behind it: the click is the construction plane's."""
+    try:
+        view = picker.view
+        info = view.getObjectInfo(tuple(position))
+        if not info or not info.get("Object"):
+            return False
+        doc = App.ActiveDocument
+        top = doc.getObject(info["Object"]) if doc is not None else None
+        if top is None:
+            return False
+        obj, _short = _resolve_gate(top, str(info.get("Component", "")))
+        if obj is None or obj.TypeId not in construct.PLANE_TYPES:
+            return False
+        square = _square_depth(picker, tuple(position))
+        if square is None:
+            return True
+        depth = _depth_under_mouse(view, tuple(position))
+        return depth is not None and depth <= square + 1e-6
+    except Exception as exc:
+        warn("construction plane pick: %s" % exc)
+        return False
+
+
+def _install_sketch_plane_pick():
+    """Create Sketch waits with the three origin squares (sketch_ui.PlanePicker), which leave
+    a click to whatever is in front of them only when that is a face of the part. A
+    construction plane in front of a square (an Offset Plane above the part, with the YZ
+    square behind it) lost the click to the square: the sketch went onto the origin plane.
+    While Create Sketch waits, a construction plane in front now takes the click like a face
+    (FreeCAD's selection then hands it to Create Sketch). Installed once, from here, so the
+    construction geometry this module makes is usable by Create Sketch."""
+    try:
+        from . import sketch_ui, taskui
+    except Exception as exc:
+        warn("Create Sketch on construction planes: %s" % exc)
+        return
+    picker = sketch_ui.PlanePicker
+    if getattr(picker, "_sciforge_construction_planes", False):
+        return
+    original = picker._geometry_at
+
+    def _geometry_at(self, position):
+        if original(self, position):
+            return True
+        if not isinstance(taskui.current(), sketch_ui.SketchPicker):
+            return False
+        return construction_in_front(self, position)
+
+    picker._geometry_at = _geometry_at
+    picker._sciforge_construction_planes = True
 
 
 def _origin_features(body):
@@ -317,6 +481,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             self.layout.addRow("Distance", self.distance_stack)
             self._formula_inputs.append(preview.FormulaInput(self, "distance", self.distance))
             self._show_path_type()
+        self._enter_sum = EnterAfterSum(self, [self.distance, self.angle])
         self.finish_layout()
 
     def _show_formula(self, field, text):
@@ -529,6 +694,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             "axes": "line" in kinds,
             "point": "point" in kinds,
         }
+        self._pick_through()
         for name, on in want.items():
             if on and name not in self.overlays:
                 try:
@@ -547,7 +713,9 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         body = self.work_body or commands.find_body()
         if name == "planes":
             cls = _origin_planes_class()
-            return cls(view, body, self._overlay_pick)
+            picker = cls(view, body, self._overlay_pick)
+            picker.takes = self._takes_under
+            return picker
         origin = _origin_features(body)
         place = body.getGlobalPlacement() if body is not None else App.Placement()
         size = _size_of(body) * 0.75
@@ -563,17 +731,49 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
                 lines.append(
                     (feature, key, place.Base - direction * size, place.Base + direction * size)
                 )
-            return AxisPicker(view, lines, self._overlay_pick, competing=self._something_under)
+            return AxisPicker(view, lines, self._overlay_pick, competing=self._takes_under)
         feature = origin.get("Origin")
         dots = [(feature, place.Base, ORIGIN_DOT)] if feature is not None else []
         return handles3d.PointDots(view, dots, self._overlay_pick, size=size * 0.04)
 
-    def _something_under(self, position):
+    def _takes_under(self, position):
+        """True when what FreeCAD picks under the mouse can go into the blue box (or is a
+        pick, to drop it): it then gets the click. Anything else does not compete with the
+        origin squares / axes drawn to click (Fusion picks through it)."""
         try:
             info = Gui.ActiveDocument.ActiveView.getObjectInfo(tuple(position))
-            return bool(info and info.get("Object"))
+            if not info or not info.get("Object"):
+                return False
+            top = self.doc.getObject(info["Object"])
+            if top is None:
+                return False
+            obj, short = _resolve_gate(top, str(info.get("Component", "")))
+            return bool(self.allow(obj, short))
         except Exception:
             return False
+
+    def _pick_through(self):
+        """Construction planes, axes and points the blue box cannot take let the clicks
+        through to what is behind them, like Fusion (a big construction plane in front of
+        the corner a Point at Vertex waits for, an axis in front of a plane). Put back when
+        the box changes and when the dialog closes."""
+        looks = getattr(self, "_through", None)
+        if looks is None:
+            looks = self._through = pickpanel.Looks()
+        looks.restore()
+        if self._closed or self.active is None:
+            return
+        try:
+            for obj in self.doc.Objects:
+                if obj.TypeId not in construct.DATUM_TYPES or self._own(obj):
+                    continue
+                vobj = obj.ViewObject
+                if vobj is None or not vobj.Visibility or self.allow(obj, ""):
+                    continue
+                for node in pickpanel.nodes(vobj.RootNode, "SoPickStyle"):
+                    looks.set(node, "style", node.UNPICKABLE)
+        except Exception as exc:
+            warn("%s: construction geometry stays in the way: %s" % (self.title, exc))
 
     def _remove_overlays(self):
         for overlay in self.overlays.values():
@@ -582,6 +782,9 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             except Exception:
                 pass
         self.overlays = {}
+        looks = getattr(self, "_through", None)
+        if looks is not None:
+            looks.restore()
 
     # -- values ------------------------------------------------------------------------------
     @_safe
@@ -683,10 +886,8 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             )
             self.handle_key = "distance"
         elif kind == "angle":
-            from .revolve_ui import AngleHandle
-
             centre, axis, zero, radius = self._angle_frame(refs, points)
-            self.handle = AngleHandle(
+            self.handle = handles3d.angle_handle(
                 centre,
                 axis,
                 zero,
@@ -882,6 +1083,10 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
     def cleanup(self):
         self._remove_handle()
         self._remove_overlays()
+        enter = getattr(self, "_enter_sum", None)
+        if enter is not None:
+            enter.remove()
+            self._enter_sum = None
         for fi in self._formula_inputs:
             fi.panel = None
         self._formula_inputs = []
@@ -951,3 +1156,4 @@ def command_classes():
 
 COMMANDS = command_classes()
 EDITORS = {"PartDesign::Plane": edit, "PartDesign::Line": edit, "PartDesign::Point": edit}
+_install_sketch_plane_pick()

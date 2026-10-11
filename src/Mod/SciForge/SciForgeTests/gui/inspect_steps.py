@@ -61,6 +61,21 @@ def screen(point):
     return h.screen_point(point)
 
 
+def type_enter(widget, text):
+    """Click into a value field, select what is there, type `text` and press Enter (Fusion:
+    Enter in a field finishes the command with what was typed)."""
+    QtTest.QTest.mouseClick(
+        widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, QtCore.QPoint(10, widget.height() // 2)
+    )
+    QtWidgets.QApplication.processEvents()
+    widget.setFocus()
+    QtTest.QTest.keyClick(widget, QtCore.Qt.Key_A, QtCore.Qt.ControlModifier)
+    QtTest.QTest.keyClicks(widget, text)
+    QtWidgets.QApplication.processEvents()
+    QtTest.QTest.keyClick(widget, QtCore.Qt.Key_Return)
+    QtWidgets.QApplication.processEvents()
+
+
 def drag_px(start, dx, dy):
     """Drag from a widget pixel by (dx, dy) pixels."""
     h.drag(start, QtCore.QPoint(start.x() + dx, start.y() + dy), steps=16)
@@ -163,9 +178,9 @@ def _active_panel():
     return taskui.current()
 
 
-def boss_steps():
+def boss_steps(base_volume=12000.0):
     """Steps (real input) that put a round boss r = 5, 10 high, centre (10, 10) on the top
-    face of the 40 x 30 x 10 box."""
+    face of the 40 x 30 x 10 box (`base_volume`: the part before the boss)."""
 
     def sketch_top():
         h.click_empty()
@@ -200,7 +215,7 @@ def boss_steps():
 
     def boss_made():
         v = h.solid_volume()
-        h.check("box + boss made", close(v, 12000 + math.pi * 25 * 10), v)
+        h.check("box + boss made", close(v, base_volume + math.pi * 25 * 10), v)
         h.fit()
 
     return [sketch_top, click_top, circle, finish, extrude, distance, ok, boss_made]
