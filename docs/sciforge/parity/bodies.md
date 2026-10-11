@@ -37,10 +37,11 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Fusion | SciForge |
 |---|---|
 | Target Body, Tool Bodies, Operation Join / Cut / Intersect, New Component, Keep Tools | Target Body, Tool Bodies, Operation Join / Cut / Intersect, **New Body** (SciForge has no components; the result goes into a new body, the target is used up like the tools **(assumed)**), Keep Tools |
-| nothing selected: the dialog waits for the target | same; the Target Body box takes the first click, then the Tool Bodies box every further one (a click on a picked tool drops it) |
+| nothing selected: the dialog waits for the target | same; the Target Body box takes the first click, then the Tool Bodies box every further one (a click on a picked tool drops it, also where the Join preview is drawn over it: the click means the body really under the pointer) |
 | bodies selected first | taken at once: the first is the target, the others tools |
 | live preview | same; the tool bodies stay visible, see-through, while the dialog is open (they can be clicked to drop them) |
-| tool bodies disappear after OK (Keep Tools off) | they are hidden while the Combine is part of the design and come back when it is deleted, suppressed, undone or rolled back (timeline marker) |
+| tool bodies disappear after OK (Keep Tools off) | they are hidden while the Combine is part of the design and come back when it is deleted, suppressed, undone or rolled back (timeline marker). A used-up body is never left as the active body (new sketches and extrudes would go into a body nobody sees): the Combine's body becomes the active one, also in a design opened again |
+| editing a Combine (timeline double-click) shows its tools | same: the used-up tools show, see-through, as soon as the dialog opens |
 | problems shown in the dialog (Intersect of bodies that do not overlap...) | same; OK keeps the dialog open |
 | OK / Enter, Cancel / Esc, one undo step, Ctrl+Z in the dialog cancels it, double-click in the timeline edits | same |
 
@@ -61,7 +62,8 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Move Type Free Move: manipulator with arrows and rotation handles; X/Y/Z Distance, X/Y/Z Angle | same: three arrows (X red, Y green, Z blue) and three curved turn handles at the middle of the bodies, drawn on top of the part; turns are about X, then Y, then Z through that middle **(assumed order)** |
 | Translate: X/Y/Z Distance, arrows | same |
 | Rotate: Axis, Angle | same; the axis: an origin axis (drawn as long lines while the box waits), a straight edge, a round edge or face (its axis); a blue handle turns round it |
-| Point to Point | same; a click near a corner takes the corner (Fusion lights it up), a round edge its centre, a straight edge its middle |
+| Point to Point | same; a click near a corner takes the corner (Fusion lights it up), a round edge its centre (also right next to the point where OpenCASCADE starts the circle, which is no corner), a straight edge its middle |
+| Move Type chosen before the bodies | the Objects box keeps the first click (the body), then the dialog moves on to the axis or the point |
 | Point to Position | same: pick the point, X / Y / Z start at where it is; type where it goes |
 | Create Copy | same: new bodies; the originals stay |
 | recorded in the timeline, editable, undo | same (one Move step per body, edited together) |
@@ -70,7 +72,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion | SciForge |
 |---|---|
-| a body | deleted with everything in it; bodies copied or split from it keep their shape; a Combine that used it as a tool keeps it as it was (same result) |
+| a body | deleted with everything in it; bodies copied or split from it keep their shape; a Combine that used it as a tool (or, with New Body, as its target) keeps it as it was (same result). This also holds for the browser's and the timeline's own Delete (bodies_gui.Watch keeps it, in the same undo step); editing such a Combine lists "N deleted bodies" in Tool Bodies, the X of the box drops them |
 | a feature / sketch / plane | deleted; steps after it keep working where they can: fillets, sketches and other steps that used its edges or faces move onto the same edges/faces of the step before it, a Combine or a copy that used it uses the step before it, the body's history is re-linked, the Tip moves back; what cannot (an extrude whose sketch is gone; a fillet whose edge FreeCAD's naming loses because everything moved) is shown red in the timeline with the reason, never as errors in the Report view |
 | faces | a Delete Face step closing the gap; refused with the reason next to the pointer when the faces around cannot close it (the box's top face) |
 | sketch curves | deleted from the sketch |
@@ -82,7 +84,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Fusion | SciForge |
 |---|---|
 | Appearance: Apply To Bodies/Components / Faces, In This Design, Library, drag a look onto a body or face | Apply To Bodies / Faces, In This Design, a library (steel, stainless, aluminium incl. anodized, titanium, iron, brass, copper, chrome, glossy plastics in 9 colours, matte plastics, clear plastic, rubber black/grey, glass, wood), a custom colour (#RRGGBB or R/G/B sliders). Pick a swatch and click bodies/faces, or drag the swatch onto them. A face keeps its look through later steps while it survives |
-| Physical Material: library, In This Design, assign to bodies | same; 19 materials from FreeCAD's library with their density (steel, stainless steel, iron, aluminium, aluminium 6061, copper, titanium, ABS, PLA, PET/PETG, nylon 6, polycarbonate, acetal, acrylic, polypropylene, PTFE, PEEK, wood, glass); the mass of each body is shown. A material gives the body its look unless the body has an Appearance of its own (as in Fusion) |
+| Physical Material: library, In This Design, assign to bodies | same; 19 materials from FreeCAD's library with their density (steel, stainless steel, iron, aluminium, aluminium 6061, copper, titanium, ABS, PLA, PET/PETG, nylon 6, polycarbonate, acetal, acrylic, polypropylene, PTFE, PEEK, wood, glass); the mass of each body is shown. A material gives the body its look unless the body has an Appearance of its own (as in Fusion). Drag a material from the library onto a body (Fusion's way), or pick it and click bodies |
 | a design starts in Steel | FreeCAD starts with a weightless "Default"; such a body counts as Steel for its mass (`material.effective`) |
 | OK / Cancel, undo | same (one undo step for everything done in the dialog) |
 

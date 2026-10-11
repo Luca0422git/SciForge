@@ -27,7 +27,7 @@ Two bodies made like Luca makes them: Body1 = 0..40 x 0..30 x 10 (12000), Body2 
      looks and material; the Move, the Split Body and the Combine edited again from the
      timeline (each change flows through the steps after it). Undo.
   G  Delete around a Combine: the used-up tool body (browser, Modify > Delete): the Combine
-     keeps its result; the target body: the tool body is free and shown again; the target's
+     keeps its result, and edited (Cut) it still uses the deleted body; the target body: the tool body is free and shown again; the target's
      first extrude: the Combine says why in the timeline, no error in the Report view. Undo
      after each.
   H  Appearance with a face selected first (Apply To Faces), Esc puts the look back;
@@ -1124,7 +1124,36 @@ def g_tool_deleted():
     no_problems("deleting a used-up tool body")
 
 
+def g_edit_frozen():
+    s.timeline_double_click(combines()[0])
+
+
+def g_frozen_shown():
+    p = s.panel()
+    if h.check("Combine edit open", p is not None and p.editing, p):
+        text = p.fields["tools"].button.text()
+        h.check("the deleted tool body is listed as kept", "deleted" in text.lower(), text)
+        h.check("no hint waiting for a tool", not p.info.text(), p.info.text())
+        b.choose(p.operation, "Cut")
+
+
+def g_frozen_cut():
+    h.check("cut with the kept tool: 9000", s.close(s.volume(s.bodies()[0]), 9000))
+    h.task_button("OK")
+
+
+def g_frozen_done():
+    h.check("dialog closed", s.panel() is None)
+    h.check("cut 9000", s.close(s.volume(s.bodies()[0]), 9000), s.volume(s.bodies()[0]))
+    no_problems("editing a Combine whose tool body was deleted")
+
+
+def g_undo_edit():
+    s.undo()
+
+
 def g_undo_tool():
+    h.check("undo: joined again", s.close(s.volume(s.bodies()[0]), 21000))
     s.undo()
 
 
@@ -1510,6 +1539,11 @@ h.run(
         g_pick_tool_row,
         g_delete_tool,
         g_tool_deleted,
+        g_edit_frozen,
+        g_frozen_shown,
+        g_frozen_cut,
+        g_frozen_done,
+        g_undo_edit,
         g_undo_tool,
         g_tool_back,
         g_pick_target_row,

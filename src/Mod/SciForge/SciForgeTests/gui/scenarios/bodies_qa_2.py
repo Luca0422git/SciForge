@@ -22,6 +22,10 @@ the timeline, typing into the dialog fields.
      Create Sketch on XY and E: the new extrude must be shown (not go into the hidden body).
   N  The used-up body (listed with its eye off) clicked in the browser and Del pressed there
      (the browser's own Delete, as Luca tidies up): the Combine keeps its result. Undo.
+  P  (on J's part) Point to Point, a click on the boss's round top edge right next to where
+     OpenCASCADE starts the circle: the origin point is the circle's centre, as in Fusion.
+  O  Construct > Offset Plane 4 mm under the top face, then Split Body with that construction
+     plane (picked in the browser): 7200 + 4800. Undo.
 """
 import math
 
@@ -607,6 +611,122 @@ def n_undone():
     no_problems("undoing the browser delete")
 
 
+# == O: Split Body with a construction plane ======================================================
+def o_offset_plane():
+    h.click_empty()
+    h.fit()
+    h.ribbon("Offset Plane")
+
+
+def o_top_face():
+    h.click(V(20, 15, 10))
+
+
+def o_distance():
+    p = s.panel()
+    field = getattr(getattr(p, "field", None), "widget", None)
+    if h.check("Offset Plane dialog", field is not None, p):
+        s.type_value(field, "-4")
+
+
+def o_plane_ok():
+    h.task_button("OK")
+
+
+def o_plane_made():
+    planes = [o for o in App.ActiveDocument.Objects if o.TypeId == "PartDesign::Plane"]
+    if h.check("a construction plane", len(planes) == 1, planes):
+        state["o_plane"] = planes[0].Label
+        h.check(
+            "6 mm up", abs(planes[0].getGlobalPlacement().Base.z - 6) < 1e-6, planes[0].Placement
+        )
+
+
+def o_split_open():
+    h.click_empty()
+    h.fit()
+    h.ribbon("Split Body")
+
+
+def o_split_body():
+    h.click(V(20, 15, 10))
+
+
+def o_pick_plane():
+    s.click_browser_row(state.get("o_plane", "DatumPlane"))
+
+
+def o_preview():
+    p = s.panel()
+    if p is not None:
+        h.check("the plane is the tool", p.options["tool"] is not None, p.options)
+    found = s.bodies()
+    vols = [round(s.volume(x)) for x in found]
+    h.check("split at z 6: 7200 and 4800", vols == [7200, 4800], vols)
+    h.task_button("OK")
+
+
+def o_done():
+    found = s.bodies()
+    h.check("dialog closed", s.panel() is None)
+    if len(found) == 2:
+        h.check("the new body is the top", s.close(bbox(found[1]).ZMin, 6), bbox(found[1]))
+    no_problems("splitting with a construction plane")
+
+
+def o_undo():
+    s.undo()
+
+
+def o_undone():
+    h.check("undo: one body", len(s.bodies()) == 1, [x.Label for x in s.bodies()])
+
+
+# == P: Point to Point from a round edge: its centre, never the circle's hidden start point ========
+def p_open():
+    state["p_box"] = list(bbox(s.bodies()[0]).Center)
+    h.click_empty()
+    h.fit()
+    h.press("m")
+
+
+def p_body():
+    h.click(V(32, 25, 35))
+
+
+def p_point_to_point():
+    p = s.panel()
+    if h.check("Move open", p is not None):
+        h.check("body picked", len(p.options["bodies"]) == 1, p.options)
+        b.choose(p.move_type, "Point to Point")
+
+
+def p_round_edge():
+    p = s.panel()
+    if p is not None:
+        h.check("origin point box waits", p.active == "from_point", p.active)
+    a = math.radians(10)  # close to where OpenCASCADE starts the circle (angle 0)
+    h.click_edge(V(8 + 3 * math.cos(a), 8 + 3 * math.sin(a), 40))
+
+
+def p_centre():
+    p = s.panel()
+    if p is not None:
+        got = p.options["from_point"]
+        h.check(
+            "the round edge gives its centre (8, 8, 40)",
+            got is not None and (V(*got) - V(8, 8, 40)).Length < 1e-6,
+            (got, h.state.get("last_click")),
+        )
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def p_nothing_moved():
+    h.check("Esc: dialog closed", s.panel() is None)
+    c = bbox(s.bodies()[0]).Center
+    h.check("nothing moved", (c - V(*state["p_box"])).Length < 1e-9, c)
+
+
 h.run(
     "bodies_qa_2",
     [s.new_design("QA_Multi")]
@@ -656,6 +776,12 @@ h.run(
         j_split_done,
         j_undo,
         j_undone,
+        p_open,
+        p_body,
+        p_point_to_point,
+        p_round_edge,
+        p_centre,
+        p_nothing_moved,
     ]
     + [s.new_design("QA_Three")]
     + s.box_steps("three_body1", (0, 0, 40, 30), 10, V(12, -8, 0))
@@ -711,5 +837,21 @@ h.run(
         n_deleted,
         n_undo,
         n_undone,
+    ]
+    + [s.new_design("QA_Plane")]
+    + s.box_steps("plane_box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + [
+        o_offset_plane,
+        o_top_face,
+        o_distance,
+        o_plane_ok,
+        o_plane_made,
+        o_split_open,
+        o_split_body,
+        o_pick_plane,
+        o_preview,
+        o_done,
+        o_undo,
+        o_undone,
     ],
 )

@@ -76,17 +76,29 @@ class CombinePanel(BodyPanel):
 
     def _show_picks(self):
         target = self.options["target"]
-        self.fields["target"].set_text(target.Label if target is not None else "")
+        if target is not None:
+            text = target.Label
+        elif self.options.get("frozen_target") and self.options["new_body"]:
+            text = "Deleted body (kept as it was)"
+        else:
+            text = ""
+        self.fields["target"].set_text(text)
         tools = self.options["tools"]
-        self.fields["tools"].set_text(
-            bodies_gui.body_text(tools) if tools else "",
-        )
+        text = bodies_gui.body_text(tools) if tools else ""
+        kept = self.options.get("frozen") or 0
+        if kept:
+            # tool bodies deleted since: the Combine keeps them as they were
+            more = "%d deleted body%s" % (kept, "" if kept == 1 else "s")
+            text = "%s + %s" % (text, more) if text else more
+        self.fields["tools"].set_text(text)
 
     def cleared(self, name):
         if name == "target":
             self.options["target"] = None
+            self.options["frozen_target"] = False
         else:
             self.options["tools"] = []
+            self.options["frozen"] = 0  # tool bodies deleted since go too
         self._show_picks()
 
     # -- clicks -----------------------------------------------------------------------------------

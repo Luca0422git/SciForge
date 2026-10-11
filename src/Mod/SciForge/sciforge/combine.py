@@ -242,8 +242,18 @@ def read(feature):
             "new_body": bool(feature.NewBody),
             "keep_tools": bool(feature.KeepTools),
             "frozen": frozen_count(feature),
+            "frozen_target": has_frozen_target(feature),
         }
     )
+
+
+def has_frozen_target(feature):
+    """True when a New Body Combine keeps its target from a body deleted since."""
+    frozen = getattr(feature, "FrozenTarget", None)
+    try:
+        return bool(feature.NewBody) and frozen is not None and not frozen.isNull()
+    except Exception:
+        return False
 
 
 def frozen_count(feature):
@@ -258,7 +268,8 @@ def frozen_count(feature):
 def check(options):
     target = options["target"]
     tools = [t for t in options["tools"] if t is not None]
-    if target is None:
+    kept = options.get("frozen_target") and options.get("new_body")
+    if target is None and not kept:
         raise NeedsPick("Select the target body: the body that is changed.")
     if not tools and not options.get("frozen"):
         raise NeedsPick("Select the tool bodies: the bodies that change the target.")
@@ -266,7 +277,7 @@ def check(options):
         raise CombineError("Pick Join, Cut or Intersect.")
     if any(t is target for t in tools):
         raise CombineError("The target body cannot be one of its own tool bodies.")
-    for body in [target] + tools:
+    for body in ([target] if target is not None else []) + tools:
         if not bodies.has_solid(body):
             raise CombineError("%s has no solid to combine." % body.Label)
 
@@ -316,8 +327,18 @@ def build(options, feature=None, name="Combine"):
         feature.Tools = steps
     _set(feature, "KeepTools", bool(options["keep_tools"]))
     _set(feature, "NewBody", bool(options["new_body"]))
+    if not options.get("frozen") and frozen_count(feature):
+        import Part
+
+        feature.FrozenTools = Part.Shape()  # the box was cleared: deleted tools go too
+    if target is not None and has_frozen_target(feature):
+        import Part
+
+        feature.FrozenTarget = Part.Shape()
     if options["new_body"]:
-        if feature.Target is None or bodies.body_of(feature.Target) is not target:
+        if target is None:
+            pass  # the target was deleted: the Combine keeps it (FrozenTarget)
+        elif feature.Target is None or bodies.body_of(feature.Target) is not target:
             feature.Target = target.Tip
     elif feature.Target is not None:
         feature.Target = None

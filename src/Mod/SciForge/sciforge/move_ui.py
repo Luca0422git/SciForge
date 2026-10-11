@@ -883,11 +883,31 @@ def _snap(obj, short, point):
     else:
         reach = 0.12 * element.BoundBox.DiagonalLength
     best = None
-    for vertex in element.Vertexes:
+    for vertex in _corners(element):
         d = (vertex.Point - point).Length
         if d <= reach and (best is None or d < best[0]):
             best = (d, vertex.Point)
     return App.Vector(best[1]) if best else None
+
+
+def _corners(element):
+    """The corners a person sees on an edge or a face. The start point OpenCASCADE gives a
+    full circle, and the ends of a cylinder's seam line, are not corners: a click on a
+    round edge takes its centre (Fusion), never that hidden point."""
+    edges = [element] if element.ShapeType == "Edge" else list(element.Edges)
+    real = []
+    for edge in edges:
+        if edge.isClosed():
+            continue  # a full circle or ellipse: its one vertex is a seam
+        if element.ShapeType == "Face" and sum(1 for e in edges if e.isSame(edge)) > 1:
+            continue  # a seam line (it bounds the face twice)
+        real.append(edge)
+    found = []
+    for edge in real:
+        for vertex in edge.Vertexes:
+            if not any(vertex.isSame(v) for v in found):
+                found.append(vertex)
+    return found
 
 
 def _perpendicular(axis):

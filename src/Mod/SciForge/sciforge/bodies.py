@@ -17,7 +17,7 @@ body (bold in the browser) is where new sketches and features go.
 
 Tools that "use up" bodies (Combine without Keep Tools) hide them while that step is part of
 the design, and show them again when the step is deleted, undone, suppressed or rolled back
-(sync_consumed, run after every recompute/undo by bodies_watch.py).
+(sync_consumed, run after every recompute/undo by bodies_gui.Watch).
 """
 import json
 
