@@ -7,12 +7,14 @@ two lines, 20 long, short of the walls. CREATE > Web: click both lines: the cros
 to the floor and, with Extend Curves, out to the walls. Extend Curves off: only the 20 long
 cross. On again. Depth 4. Flip Direction: the web would grow up into the air, away from the
 part: the dialog says so. Back; To Next; OK. Undo / redo. Edit from the timeline: thickness
-3, OK. Esc cancels a new Web.
+3, OK. Second use: a line at y 10 on the rim, clicked before CREATE > Web: it is taken and
+becomes a plate across the cavity, OK. Esc cancels a third Web (nothing selected).
 
 Hand-derived: tray 40*40*10 - 36*36*8 = 5632. A web plate L long, t thick, h high adds
 L t h; the two plates of the cross share a t x t x h post: extended (L = 36, the cavity) and
 To Next (h = 8, down to the floor): 2 * 36 * 2 * 8 - 2 * 2 * 8 = 1120; not extended (L = 20):
-608; Depth 4: 2 * 36 * 2 * 4 - 2 * 2 * 4 = 560; thickness 3: 2 * 36 * 3 * 8 - 3 * 3 * 8.
+608; Depth 4: 2 * 36 * 2 * 4 - 2 * 2 * 4 = 560; thickness 3: 2 * 36 * 3 * 8 - 3 * 3 * 8. The
+second plate, 36 * 2 * 8, crosses the 3 thick one: less 3 * 2 * 8.
 """
 
 import FreeCAD as App
@@ -26,6 +28,7 @@ from SciForgeTests.gui import sweep_loft_steps as st
 
 V = App.Vector
 TRAY = 40.0 * 40.0 * 10.0 - 36.0 * 36.0 * 8.0
+SECOND = 36.0 * 2.0 * 8.0 - 3.0 * 2.0 * 8.0
 
 
 def cross(length, t, height):
@@ -285,19 +288,66 @@ def edit_ok():
 def edited():
     h.check("dialog closed", not Gui.Control.activeDialog())
     h.check("kept", st.near(h.solid_volume(), TRAY + cross(36, 3, 8)), h.solid_volume())
+    h.fit()
+    h.ribbon("Create Sketch")
+
+
+def pick_rim_2():
+    h.click(V(19, -10, 10))
+
+
+def draw_second():
+    sk = h.in_sketch()
+    h.check("second sketch on the rim", sk is not None)
+    if sk:
+        st.add_lines(sk, [h.to_sketch(sk, V(-10, 10, 10)), h.to_sketch(sk, V(10, 10, 10))])
+
+
+def finish_second():
+    h.ribbon("Finish Sketch")
+
+
+def select_second():
+    h.fit()
+    h.click_empty()
+    h.check("clicked the new line before the command", h.click_edge(V(5, 10, 10)))
+
+
+def web_again():
+    st.menu("Web")
+
+
+def second_web():
+    p = panel()
+    h.check("second Web dialog", p is not None and not p.editing)
+    if p is None:
+        return
+    h.check("the selected line is taken", len(p.refs) == 1, p.refs)
+    want = TRAY + cross(36, 3, 8) + SECOND
+    h.check("a plate across the cavity", st.near(h.solid_volume(), want), (h.solid_volume(), want))
+    h.task_button("OK")
+
+
+def second_kept():
+    h.check("dialog closed", not Gui.Control.activeDialog())
+    h.check("Web 2 in the timeline", "Web 2" in st.timeline_titles(), st.timeline_titles())
+    h.check("two webs", len(st.features("web")) == 2, st.features("web"))
     s["volume"] = h.solid_volume()
+    h.click_empty()
     st.menu("Web")
 
 
 def esc_now():
-    h.check("dialog open", panel() is not None)
+    p = panel()
+    h.check("dialog open", p is not None)
+    h.check("nothing selected: the Curves box waits", p is not None and not p.refs, p and p.refs)
     h.press(QtCore.Qt.Key_Escape)
 
 
 def after_esc():
     h.check("Esc closes the dialog", not Gui.Control.activeDialog())
     h.check("Esc changes nothing", st.near(h.solid_volume(), s["volume"]), h.solid_volume())
-    h.check("one web", len(st.features("web")) == 1, st.features("web"))
+    h.check("still two webs", len(st.features("web")) == 2, st.features("web"))
 
 
 h.run(
@@ -341,6 +391,13 @@ h.run(
         editing,
         edit_ok,
         edited,
+        pick_rim_2,
+        draw_second,
+        finish_second,
+        select_second,
+        web_again,
+        second_web,
+        second_kept,
         esc_now,
         after_esc,
     ],

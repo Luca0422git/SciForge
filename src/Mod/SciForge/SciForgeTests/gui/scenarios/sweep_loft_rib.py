@@ -3,13 +3,13 @@
 
 An L bracket: a sketch on XZ, the L outline (legs 40 long, 5 thick), Extrude 20 (it goes
 to y -20). A sketch on XZ again with a line from (5, 25) to (25, 5) across the inside
-corner. CREATE > Rib: click the line: To Next fills the corner triangle (a gusset), 2 thick
+corner. Click the line, then CREATE > Rib: the line is taken; To Next fills the corner triangle (a gusset), 2 thick
 about the sketch plane. Thickness 4; One Side (into the bracket's side); Flip Side would
 turn it out of the side face, where only edges touch the part: the dialog says why; back;
 Symmetric and 2 again; Depth Options Depth, 5: a strip along the line; drag the
 blue depth arrow; To Next again; OK. Undo / redo. Edit from the timeline: thickness 3, OK.
 Flip Direction in an edit says why it cannot be built (nothing to reach on that side) and
-Cancel keeps the rib. Esc cancels a new Rib.
+Cancel keeps the rib. Esc cancels a new Rib (nothing selected: the Curve box waits).
 
 Hand-derived: L area 40 * 5 + 35 * 5 = 375, times 20 = 7500. The gusset triangle has legs 20
 (from the corner (5, 5) to the line): area 200, times the thickness. Depth d: a strip 20
@@ -111,9 +111,13 @@ def finish_line():
     h.ribbon("Finish Sketch")
 
 
-def rib_start():
+def select_line():
     h.fit()
     h.click_empty()
+    h.check("clicked the line before the command", h.click_edge(V(15, 0, 15)))
+
+
+def rib_start():
     st.menu("Rib")
 
 
@@ -132,13 +136,11 @@ def dialog_open():
     )
     h.check("no Extend Curves for a rib", not p.extend.isVisible())
     h.check("no Depth box for To Next", not p.depth.widget.isVisible())
-    h.fit()
-    h.check("clicked the line", h.click_edge(V(15, 0, 15)))
+    h.check("the selected line is taken", len(p.refs) == 1, p.refs)
 
 
 def gusset():
     p = panel()
-    h.check("line picked", p is not None and len(p.refs) == 1, p and p.refs)
     h.check("SciForge's Rib", p.target is not None and p.target.SciForgeType == "Rib")
     h.check("gusset: triangle x 2", st.near(h.solid_volume(), L + TRI * 2), h.solid_volume())
     h.check("thickness arrow shown", "thickness" in p.arrows, list(p.arrows))
@@ -322,7 +324,9 @@ def flip_cancelled():
 
 
 def esc_now():
-    h.check("dialog open", panel() is not None)
+    p = panel()
+    h.check("dialog open", p is not None)
+    h.check("nothing selected: the Curve box waits", p is not None and not p.refs, p and p.refs)
     h.press(QtCore.Qt.Key_Escape)
 
 
@@ -346,6 +350,7 @@ h.run(
         pick_xz_2,
         draw_line,
         finish_line,
+        select_line,
         rib_start,
         dialog_open,
         gusset,
