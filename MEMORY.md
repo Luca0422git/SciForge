@@ -494,11 +494,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   also count cancelled previews, so they are not usable); an extrude's binder showed as a step; a right-click
   during Fillet made a fillet; rename/activate/find opened undo steps inside a command; two
   origins after reopening; Esc did not drop a drag; long timelines hid the marker; "Hide
-  Timeline" had no way back. 2 golden models (`tl_delete_before_fillet`,
+  Timeline" had no way back. New: hovering a step lights up the faces it made (Fusion).
+  2 golden models (`tl_delete_before_fillet`,
   `tl_insert_before_fillet`), unit tests for the marker, numbering, origin, suppressed rows.
 - Left for others: Extrude cannot switch to Cut while rolled back before a fillet (extrude),
   the floating empty "Tasks" header over the 3D view (shell), browser vs timeline names
-  (shared smoke test), no hover highlight of a step's faces yet.
+  (shared smoke test).
+- Trap: the timeline's height sets the 3D view's size; 8 px more moved where a scenario's
+  click lands (sketch_polygon's snap) - keep the dock height.
 
 ## Next steps (in order)
 

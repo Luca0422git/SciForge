@@ -19,6 +19,8 @@ Path 23, delete the first extrude (everything is built on it): the sketch on its
          nothing in the Report view; Ctrl+Z.
 Path 24, a long design (60 more steps): a new step made with E is in view at the end of
          the timeline, the mouse wheel scrolls it, a far step can still be dragged to.
+Path 25, the mouse over a step lights up what it made in the 3D view (a sketch: its
+         curves); leaving the icon clears it.
 
 Numbers by hand: box 12000; boss r5 x 5 = 125 pi; the second boss r3 x 4 = 36 pi.
 """
@@ -298,6 +300,52 @@ def p23_undone():
     h.check("nothing yellow or red", all(v[1] == "ok" for v in st.values()), st)
 
 
+# -- Path 25: hover a step ------------------------------------------------------------------------------------
+def hover_nodes():
+    """Names of the highlight nodes in the 3D view's scene (looked up fresh)."""
+    sg = Gui.ActiveDocument.ActiveView.getSceneGraph()
+    return [
+        sg.getChild(i).getName().getString()
+        for i in range(sg.getNumChildren())
+        if sg.getChild(i).getName().getString() == "SciForgeTimelineHover"
+    ]
+
+
+def p25_hover_boss():
+    b_ = t.button("Boss")
+    from SciForgeTests.gui import widget_input as w
+
+    w.move(b_, w.center(b_) + QtCore.QPoint(3, 0))
+    w.move(b_, w.center(b_))
+
+
+def p25_lit():
+    tl = t.tl()
+    h.check("the mouse over Boss lights it up", tl.hovered() == t.item("Boss").name, tl.hovered())
+    h.check("drawn in the 3D view", len(hover_nodes()) == 1, hover_nodes())
+    h.shot("2b-hover")
+    from SciForgeTests.gui import widget_input as w
+
+    w.move(h.gl_widget(), QtCore.QPoint(200, 200))
+
+
+def p25_gone():
+    h.check("leaving the icon clears it", t.tl().hovered() is None, t.tl().hovered())
+    h.check("nothing left in the 3D view", not hover_nodes(), hover_nodes())
+    b_ = t.button("Sketch 2")
+    from SciForgeTests.gui import widget_input as w
+
+    w.move(b_, w.center(b_) + QtCore.QPoint(3, 0))
+    w.move(b_, w.center(b_))
+
+
+def p25_sketch():
+    h.check("a sketch lights up too", t.tl().hovered() == t.item("Sketch 2").name, t.tl().hovered())
+    from SciForgeTests.gui import widget_input as w
+
+    w.move(h.gl_widget(), QtCore.QPoint(200, 200))
+
+
 # -- Path 24: a long design -----------------------------------------------------------------------------------
 def p24_many_steps():
     """60 more steps (posts on the box), made in code: what is tested is the timeline."""
@@ -433,6 +481,10 @@ STEPS = (
         p23_delete,
         p23_deleted,
         p23_undone,
+        p25_hover_boss,
+        p25_lit,
+        p25_gone,
+        p25_sketch,
         p24_many_steps,
     ]
     + P24

@@ -135,8 +135,15 @@ class HoverLook:
             return None
         root = coin.SoSeparator()
         root.setName("SciForgeTimelineHover")
-        annotation = coin.SoAnnotation()  # on top of the part, like Fusion's highlight
+        # Faces are drawn where they are (hidden ones stay hidden), pulled a little towards
+        # the eye so they win over the part's own faces; sketch curves on top of the part.
+        annotation = coin.SoSeparator() if faces else coin.SoAnnotation()
         root.addChild(annotation)
+        if faces:
+            offset = coin.SoPolygonOffset()
+            offset.factor = -2.0
+            offset.units = -2.0
+            annotation.addChild(offset)
         # Shapes are in their body's coordinates; the body may have been moved.
         try:
             extra = obj.getGlobalPlacement().multiply(obj.Placement.inverse())

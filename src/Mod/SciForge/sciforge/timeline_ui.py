@@ -231,6 +231,20 @@ class _ItemButton(QtWidgets.QToolButton):
         self.doubleClicked.emit()
         event.accept()
 
+    def enterEvent(self, event):
+        try:
+            self.timeline.hover(self.item)
+        except Exception as exc:
+            warn("timeline hover: %s" % exc)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        try:
+            self.timeline.unhover(self.item)
+        except Exception:
+            pass
+        super().leaveEvent(event)
+
     # -- keys ----------------------------------------------------------------------
     def event(self, event):
         # Delete and F2 belong to the timeline while a step has the focus, Esc while
@@ -396,6 +410,7 @@ class TimelineWidget(QtWidgets.QWidget):
         self._slots = []
         self._undo_watch = None
         self._move_timeline = self._timeline
+        self._hover = None  # timeline_hover.HoverLook, made on first use
 
         outer = QtWidgets.QHBoxLayout(self)
         outer.setContentsMargins(8, 3, 8, 3)
@@ -416,9 +431,10 @@ class TimelineWidget(QtWidgets.QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         self._scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        # A long design scrolls sideways: a thin bar under the icons (it covered their
-        # lower half) and the mouse wheel.
-        self._scroll.setFixedHeight(ICON + 22)
+        # A long design scrolls sideways: a thin bar under the icons (the default one
+        # covered their lower half) and the mouse wheel. The height stays as it was: the
+        # 3D view's size (and so where a click lands) must not change.
+        self._scroll.setFixedHeight(ICON + 14)
         self._scroll.horizontalScrollBar().setStyleSheet("QScrollBar:horizontal { height: 6px; }")
         self._wheel = _WheelScroll(self._scroll)
         self._scroll.viewport().installEventFilter(self._wheel)
@@ -465,6 +481,7 @@ class TimelineWidget(QtWidgets.QWidget):
     def stop(self):
         self._timer.stop()
         self._play_timer.stop()
+        self.unhover()
         ops.remove_guard()
         if self._undo_watch is not None:
             try:
@@ -545,6 +562,7 @@ class TimelineWidget(QtWidgets.QWidget):
         return None
 
     def _clear(self):
+        self.unhover()  # the step under the mouse may change or go
         self._cancel_editor()
         while self._row.count():
             entry = self._row.takeAt(0)
@@ -794,7 +812,32 @@ class TimelineWidget(QtWidgets.QWidget):
         self.refresh(force=True)
 
     # -- reordering ----------------------------------------------------------------
+    # -- hover: light up what a step made ---------------------------------------------
+    def hover(self, item):
+        """Fusion: the mouse over a step lights up its faces (sketch: its curves) in the
+        3D view. Not for steps after the marker or switched off (they add nothing)."""
+        if self._drag is not None or self._busy or item.state != "done" or item.suppressed:
+            self.unhover()
+            return
+        obj = self._object(item.name)
+        if obj is None:
+            return
+        from .timeline_hover import HoverLook
+
+        if self._hover is None:
+            self._hover = HoverLook()
+        self._hover.show(obj)
+
+    def unhover(self, item=None):
+        if self._hover is not None and (item is None or self._hover.name == item.name):
+            self._hover.clear()
+
+    def hovered(self):
+        """Name of the step lit up in the 3D view, or None (tests)."""
+        return self._hover.name if self._hover is not None else None
+
     def begin_drag(self, button):
+        self.unhover()
         line = QtWidgets.QFrame(self._inner)
         line.setProperty("role", "drop")
         line.resize(3, ICON + 8)

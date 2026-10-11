@@ -35,6 +35,7 @@ by Luca.**
 | Esc while dragging a step or the marker | Drops the drag | |
 | Long designs | The timeline keeps the marker in view; mouse wheel and a thin bar scroll it | |
 | Right-click while a command waits for picks | Not a pick; the menu entry ends the command first | A right-click selected the step and Fillet took it as "all edges of this feature". |
+| Hover a step | Lights up what it made in the 3D view (the faces of an extrude/hole/fillet, a sketch's curves, a plane); nothing for steps after the marker or suppressed | `timeline_hover.py`: a face of the step's result is its own when no face of its base lies on the same surface; drawn in SciForge's own Coin nodes. |
 
 ## Browser
 
@@ -72,7 +73,6 @@ and planes are greyed and struck through, not shown as warnings.
   shared smoke test looks the browser row up by the label "Sketch").
 - Groups cannot be dragged as a whole yet (their steps can).
 - Steps outside any body (plain Part features) are shown in the timeline but never rolled back.
-- No hover highlight of a step's faces from the timeline yet (Fusion highlights them).
 - Saved named views are stored in the document's `Meta`, which Undo does not cover.
 - Errors from a recompute run while the design already has red or suppressed steps are not
   printed in the Report view (by design); they are on the timeline. The first failure of a
