@@ -749,7 +749,16 @@ def design_plane_picker(view, body, on_pick):
 
     from . import sketch_ui
 
-    picker = sketch_ui.PlanePicker(view, body, on_pick)
+    class DesignPlanes(sketch_ui.PlanePicker):
+        def _geometry_at(self, position):
+            """Anything of the part under the mouse (an edge or a corner too, not only a
+            face) is what the click is for: the selection takes it. Before, a click on
+            an edge fell through to an origin square hidden behind the part, and the
+            box went onto that plane (found by the primitives QA)."""
+            info = self.view.getObjectInfo(tuple(position))
+            return bool(info and info.get("Object"))
+
+    picker = DesignPlanes(view, body, on_pick)
     try:
         size = 2.0 * 1.15 * design_reach(body)
         if size > picker.size + 1e-6:
