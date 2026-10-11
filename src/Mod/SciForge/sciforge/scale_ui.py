@@ -17,10 +17,11 @@ import FreeCADGui as Gui
 
 from . import commands, hole_common, log, pickpanel, preview, scale, ui_icon_path, warn
 from .compat import QtWidgets
-from .taskui import ArrowDragger, DistanceField
+from .taskui import DistanceField
 
 ENTITY_HELP = "Click the body to scale (any face of it), or its row in the browser."
 POINT_HELP = "Scaled about the origin. Click a corner of the part to scale about it."
+ARROW_LENGTH = 2.2  # the arrow's length in units of the handle size (ball, shaft, head)
 TYPE_ITEMS = [("Uniform", "uniform"), ("Non Uniform", "non_uniform")]
 
 
@@ -80,7 +81,7 @@ class ScalePanel(pickpanel.PickPanel):
         self.options = scale.default_options()
         self.formulas = {"factor": "", "x": "", "y": "", "z": ""}
         self.formula_errors = {}
-        self.arrows = []  # (ArrowDragger, spot, origin, direction)
+        self.arrows = []  # (pickpanel.Arrow, spot, origin, direction)
         if feature is not None:
             self.body = scale.owner_body(feature)
             base, ref, options, formulas = scale.read(feature)
@@ -152,6 +153,8 @@ class ScalePanel(pickpanel.PickPanel):
 
     # -- starting -----------------------------------------------------------------------
     def _start(self):
+        if self.base is not None:
+            self.remember_later(self.target if self.editing else self.base)
         self.start_picking()
         self._activate(self.active)
         self._picks_updated(schedule=False)
@@ -258,8 +261,9 @@ class ScalePanel(pickpanel.PickPanel):
         if self.body is None:
             self.body, self.base = body, base
             self.prepare_display()
+            self.remember_later(base)
         else:
-            self.switch_body(body, base)
+            self.switch_body(body, base)  # also remembers what later steps use
         pickpanel.activate(body)
         self._activate("point")
         return True
@@ -305,9 +309,16 @@ class ScalePanel(pickpanel.PickPanel):
                 dragger.set_distance((value - 1.0) * spot["length"])
         self.schedule()
 
-    def _dragged(self, spot, distance):
+    def _dragged(self, spot, distance, released=False):
         value = max(0.001, round(1.0 + distance / spot["length"], 3))
         what = spot["what"]
+        if released:
+            # dragged through the scale point: the arrow goes back to the smallest factor
+            wanted = (value - 1.0) * spot["length"]
+            if abs(wanted - distance) > 1e-6:
+                for dragger, other, _origin, _direction in self.arrows:
+                    if other is spot:
+                        dragger.set_distance(wanted)
         if what == "factor":
             self.options["factor"] = value
         else:
@@ -374,15 +385,14 @@ class ScalePanel(pickpanel.PickPanel):
                 local = spot["origin"] + spot["direction"] * (2.2 * size)
                 origin = placement.multVec(local)
                 direction = placement.Rotation.multVec(spot["direction"])
-                dragger = ArrowDragger(
+                dragger = pickpanel.Arrow(
                     origin,
                     direction,
                     (value - 1.0) * spot["length"],
-                    size,
+                    size * ARROW_LENGTH,
                     on_drag=lambda d, s=spot: self._dragged(s, d),
-                    on_release=lambda d, s=spot: self._dragged(s, d),
+                    on_release=lambda d, s=spot: self._dragged(s, d, True),
                 )
-                hole_common.on_top(dragger.root)
                 self.arrows.append((dragger, spot, origin, direction))
         except Exception as exc:
             warn("Scale arrow unavailable: %s" % exc)
@@ -423,6 +433,7 @@ class ScalePanel(pickpanel.PickPanel):
         else:
             scale.apply(self.target, self.base, self.point_ref, self.options, self.formulas)
         self.quiet_recompute()
+        self.follow_later()
         self.show_preview(True)
         self.show_status()
 

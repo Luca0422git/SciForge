@@ -42,6 +42,9 @@ def op_sf_shell(self, step):
     from sciforge import shelling
 
     base = self._tip()
+    # The 3D view has drawn the part before Shell is used: its triangles change what
+    # BoundBox returns (a round part's box gets a little smaller). Do the same here.
+    base.Shape.tessellate(0.1)
     names = [] if step.get("body") else selectors.select(base.Shape, step["faces"], "faces")
     options = {k: step[k] for k in SHELL_OPTIONS if k in step}
     try:
@@ -56,20 +59,21 @@ def op_sf_shell(self, step):
 
 
 def op_sf_shell_edit(self, step):
-    from sciforge import shelling
+    from sciforge import follow, shelling
 
     target = self.objects.get(step["target"])
     if target is None or self.ops.get(step["target"]) != "sf_shell":
         raise BuildError("sf_shell_edit: %r is not a sf_shell step" % step["target"])
     base, names, options, formulas = shelling.read(target)
     options.update(step["set"])
+    later = follow.snapshot(self.body, target)  # as the dialog does: later steps follow
     try:
         shelling.trial(base.Shape, names, options)
         feature = shelling.update(target, base, names, options, formulas)
     except shelling.ShellError as exc:
         raise BuildError("sf_shell_edit %r: %s" % (step["target"], exc))
     self.objects[step["target"]] = feature
-    self.doc.recompute()
+    follow.recompute(self.doc, later)
     _check_broken(self, "editing %r" % step["target"])
     return feature
 
@@ -107,19 +111,20 @@ def op_sf_draft(self, step):
 
 
 def op_sf_draft_edit(self, step):
-    from sciforge import drafting
+    from sciforge import drafting, follow
 
     target = self.objects.get(step["target"])
     if target is None or self.ops.get(step["target"]) != "sf_draft":
         raise BuildError("sf_draft_edit: %r is not a sf_draft step" % step["target"])
     base, plane, names, options, formula = drafting.read(target)
     options.update(step["set"])
+    later = follow.snapshot(self.body, target)
     try:
         drafting.check(base.Shape, plane, names, options)
         drafting.apply(target, base, plane, names, options, formula)
     except drafting.DraftError as exc:
         raise BuildError("sf_draft_edit %r: %s" % (step["target"], exc))
-    self.doc.recompute()
+    follow.recompute(self.doc, later)
     _check_broken(self, "editing %r" % step["target"])
     return target
 
@@ -160,19 +165,20 @@ def op_sf_scale(self, step):
 
 
 def op_sf_scale_edit(self, step):
-    from sciforge import scale
+    from sciforge import follow, scale
 
     target = self.objects.get(step["target"])
     if target is None or self.ops.get(step["target"]) != "sf_scale":
         raise BuildError("sf_scale_edit: %r is not a sf_scale step" % step["target"])
     base, point, options, formulas = scale.read(target)
     options.update(_scale_options(step["set"]))
+    later = follow.snapshot(self.body, target)
     try:
         scale.trial(base.Shape, point, options)
         scale.apply(target, base, point, options, formulas)
     except scale.ScaleError as exc:
         raise BuildError("sf_scale_edit %r: %s" % (step["target"], exc))
-    self.doc.recompute()
+    follow.recompute(self.doc, later)
     _check_broken(self, "editing %r" % step["target"])
     return target
 

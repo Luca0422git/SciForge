@@ -14,13 +14,17 @@ Ctrl+Z cancels the step being made (preview.UndoCancels, which also closes the d
 when the document is closed under it), Delete does nothing (it would delete the part the
 picks belong to). Problems are shown in the dialog, never in the Report view.
 """
+import time
+
 import FreeCADGui as Gui
 
-from . import commands, hole_common, log, preview, warn
+from . import commands, handles3d, hole_common, log, preview, warn
 from .compat import QtCore, QtWidgets
 from .taskui import Panel
 
 GHOST = 75  # transparency (%) of the part before the step while the preview is shown
+PRESSED = {"time": 0.0}  # when an Arrow was last pressed (it may be rebuilt right after)
+HANDLE_CLICK_S = 0.6  # a pick this soon after pressing a handle is the handle's click
 GREEDY = 1  # FreeCAD selection style where a click toggles a pick, like in Fusion's commands
 NORMAL = 0
 
@@ -187,6 +191,7 @@ class PickPanel(Panel):
         self._looks = Looks()
         self._ghost = False
         self._held = []
+        self._later = {}  # what later steps use (follow.py), remembered when picking starts
         self._doc_name = doc.Name
         self._events = QtCore.QTimer()
         self._events.setSingleShot(True)
@@ -300,6 +305,8 @@ class PickPanel(Panel):
                             dropped.append((obj, short, None))
             added = [e for e, k in zip(now, keys) if k not in self._shown]
             changed = False
+            if self.handles_busy():
+                added = dropped = []  # the press was on a handle: no pick (it is put back)
             if added or dropped:
                 changed = self.picks_changed(added, dropped)
             self._sync()
@@ -307,6 +314,29 @@ class PickPanel(Panel):
                 self.schedule()
         except Exception as exc:
             warn("%s pick: %s" % (self.title, exc))
+
+    # -- handles -------------------------------------------------------------------------
+    def live_handles(self):
+        """The drag handles / clickable arrows shown now (self.arrows by default)."""
+        found = []
+        for item in getattr(self, "arrows", None) or []:
+            found.append(item[0] if isinstance(item, tuple) else item)
+        return [x for x in found if x is not None]
+
+    def handles_busy(self):
+        """True while a handle is pressed or was just let go: FreeCAD also takes that click
+        as a pick of the face behind the handle, which must not count. Also when the
+        handle pressed was rebuilt since (a click on the Draft arrow flips it and makes a
+        new arrow before the click's pick is looked at)."""
+        if time.time() - PRESSED["time"] < HANDLE_CLICK_S:
+            return True
+        for handle in self.live_handles():
+            try:
+                if handle.busy():
+                    return True
+            except Exception:
+                continue
+        return False
 
     # -- display -------------------------------------------------------------------------
     # Nothing here changes a document or view property: FreeCAD records those in the undo
@@ -382,6 +412,7 @@ class PickPanel(Panel):
         self.restore_display()
         self.body, self.base = body, base
         self.prepare_display()
+        self.remember_later(base)
 
     # -- preview ------------------------------------------------------------------------
     def schedule(self):
@@ -402,6 +433,30 @@ class PickPanel(Panel):
 
     def quiet_recompute(self):
         preview.recompute(self.doc)
+
+    def remember_later(self, after):
+        """Remember the faces/edges the steps after `after` use (see follow.py)."""
+        try:
+            from . import follow
+
+            self._later = follow.snapshot(self.body, after)
+        except Exception as exc:
+            self._later = {}
+            warn("%s: later steps not followed: %s" % (self.title, exc))
+
+    def follow_later(self):
+        """After a preview recompute: a later step that lost its face/edge (the step
+        being edited now makes it another way) gets it back, found by where it is."""
+        later = getattr(self, "_later", None)
+        if not later or self._closed:
+            return
+        try:
+            from . import follow
+
+            if follow.repair(self.doc, later):
+                follow.recompute(self.doc, later, self.quiet_recompute)
+        except Exception as exc:
+            warn("%s: later steps not followed: %s" % (self.title, exc))
 
     def _compute_hint(self):
         pass
@@ -490,6 +545,39 @@ class PickPanel(Panel):
         except Exception as exc:
             warn("%s could not restore the view: %s" % (self.title, exc))
         super().cleanup()
+
+
+class Arrow(handles3d.LinearHandle):
+    """Fusion's blue drag arrow for these dialogs: a handles3d.LinearHandle (drawn over
+    the part and grabbed by where it is on the screen, so it can be dragged also where it
+    is inside the see-through part: a Coin dragger there lost the click to the part's
+    face in front of it), with taskui.ArrowDragger's distance() / set_distance().
+
+    The release of the mouse button is read from Qt: while these dialogs make clicks
+    toggle picks (FreeCAD's greedy selection), FreeCAD keeps the button-up event from
+    the 3D view's callbacks, and the handle stayed "held" after the first drag (every
+    later click in the view was then taken as the handle's, not a pick)."""
+
+    def _press(self, position):
+        PRESSED["time"] = time.time()
+        super()._press(position)
+
+    def _poll(self):
+        try:
+            held = QtWidgets.QApplication.mouseButtons() & QtCore.Qt.LeftButton
+            if self._drag and not held:
+                self._drag = False
+                self._released = True
+                self._last_event = time.time()
+        except Exception:
+            pass
+        super()._poll()
+
+    def distance(self):
+        return self.value()
+
+    def set_distance(self, value):
+        self.set_value(value)
 
 
 def combo(items, current=None):

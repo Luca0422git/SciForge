@@ -21,12 +21,13 @@ import FreeCADGui as Gui
 
 from . import commands, hole_common, log, pickpanel, preview, shelling, ui_icon_path, warn
 from .compat import QtWidgets
-from .taskui import ArrowDragger, DistanceField
+from .taskui import DistanceField
 
 PICK_HELP = (
     "Click faces to take away (click one again to drop it).\n"
     "Pick the body in the browser to make it hollow."
 )
+ARROW_LENGTH = 2.2  # the arrow's length in units of the handle size (ball, shaft, head)
 DIRECTION_ITEMS = [("Inside", "inside"), ("Outside", "outside"), ("Both", "both")]
 TYPE_ITEMS = [
     ("Sharp", "sharp", True, "Walls meet in sharp corners outside the part"),
@@ -102,7 +103,7 @@ class ShellPanel(pickpanel.PickPanel):
         self.options = shelling.default_options()
         self.formulas = {"inside": "", "outside": ""}
         self.formula_errors = {}
-        self.arrows = []  # (ArrowDragger, spot, origin, direction) in global coordinates
+        self.arrows = []  # (pickpanel.Arrow, spot, origin, direction) in global coordinates
         self._chains = {}
         if feature is not None:
             self.body = shelling.owner_body(feature)
@@ -180,6 +181,7 @@ class ShellPanel(pickpanel.PickPanel):
                 self._pick_body(obj)
             elif short.startswith("Face"):
                 self._add_face(obj, short)
+        self.remember_later(self.target if self.editing else self.base)
         self.start_picking()
         self._picks_updated(schedule=False)
         if self.target is not None:
@@ -343,13 +345,22 @@ class ShellPanel(pickpanel.PickPanel):
 
     def _typed(self, what, value):
         self.options[what] = value
+        found = False
         for dragger, spot, _origin, _direction in self.arrows:
             if spot["what"] == what:
                 dragger.set_distance(max(value, 0.0))
+                found = True
+        if not found and self.has_picks():
+            self._update_arrows()  # the arrow comes back with a value it can show
         self.schedule()
 
-    def _dragged(self, what, distance):
+    def _dragged(self, what, distance, released=False):
         value = max(0.01, round(distance, 2))
+        if released and abs(value - distance) > 1e-9:
+            # dragged through the surface: the arrow goes back to the thinnest wall
+            for dragger, spot, _origin, _direction in self.arrows:
+                if spot["what"] == what:
+                    dragger.set_distance(value)
         self.options[what] = value
         field = self.inside if what == "inside" else self.outside
         field.set_value(value)
@@ -424,19 +435,19 @@ class ShellPanel(pickpanel.PickPanel):
             spots = shelling.arrow_spots(shape, self.names(), self.options, local_toward)
             size = max(2.0, min(shape.BoundBox.DiagonalLength * 0.06, 12.0))
             for spot in spots:
-                local = spot["point"] + spot["lift"] * (0.25 * size) + spot["direction"] * size
+                # the ball sits where the wall ends (rim + thickness), the arrow beyond it
+                local = spot["point"] + spot["lift"] * (0.25 * size)
                 origin = placement.multVec(local)
                 direction = placement.Rotation.multVec(spot["direction"])
                 value = float(self.options.get(spot["what"], 1.0))
-                dragger = ArrowDragger(
+                dragger = pickpanel.Arrow(
                     origin,
                     direction,
                     value,
-                    size,
+                    size * ARROW_LENGTH,
                     on_drag=lambda d, w=spot["what"]: self._dragged(w, d),
-                    on_release=lambda d, w=spot["what"]: self._dragged(w, d),
+                    on_release=lambda d, w=spot["what"]: self._dragged(w, d, True),
                 )
-                hole_common.on_top(dragger.root)
                 self.arrows.append((dragger, spot, origin, direction))
         except Exception as exc:
             warn("Shell arrow unavailable: %s" % exc)
@@ -481,6 +492,7 @@ class ShellPanel(pickpanel.PickPanel):
                 self._ghost = False
                 self.target = new
         self.quiet_recompute()
+        self.follow_later()
         self.show_preview(True)
         self.show_status()
 

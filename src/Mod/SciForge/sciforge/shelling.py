@@ -37,6 +37,8 @@ FP_TYPE = "PartDesign::FeaturePython"
 KIND = "Shell"
 META = "SciForgeShell"  # hidden JSON on the feature: what FreeCAD's Thickness cannot hold
 TOL = 1e-7
+TAG_BASE = 1 << 40  # wall tags (see _tagged): far from FreeCAD's object ids
+RIM_SPOTS = (0.5, 0.375, 0.625, 0.25, 0.75, 0.125, 0.875, 0.0)  # where an arrow may sit
 SMOOTH = math.radians(1.0)
 DIRECTIONS = ("inside", "outside", "both")
 SHELL_TYPES = ("sharp", "rounded")
@@ -177,6 +179,17 @@ def _offset(solid, offset, join, what):
     return result.Solids[0]
 
 
+def _box(shape):
+    """The exact bounding box. shape.BoundBox comes from the display triangles once the
+    part has been drawn: a round part's box is then a little too small (a cylinder of
+    radius 10 measured 9.997), and a 1 mm cup wall looked like "sticking out of the part"
+    (it was refused as too thick)."""
+    try:
+        return shape.optimalBoundingBox(False, False)
+    except Exception:
+        return shape.BoundBox
+
+
 def _inside_box(inner, outer, margin):
     tol = margin + 1e-6 * max(1.0, outer.DiagonalLength)
     return (
@@ -200,9 +213,33 @@ def solid_of(shape):
     return shape if shape.ShapeType == "Solid" else shape.Solids[0]
 
 
-def build(shape, names, options):
+def _tagged(shapes, tags):
+    """Give the two walls that are joined their own tags. Both come from the same solid
+    with the same history, so without it FreeCAD's naming had to tell their faces apart
+    by an index that changed with every thickness: a later step (a Press Pull on the
+    outside wall, a sketch on it) lost its face whenever the shell was edited."""
+    if not tags:
+        return
+    for shape, tag in zip(shapes, tags):
+        try:
+            shape.Tag = int(tag)
+        except Exception:
+            pass
+
+
+def wall_tags(feature):
+    """The tags build() gives the walls of `feature` (stable: saved with the design)."""
+    try:
+        ident = int(feature.ID)
+    except Exception:
+        return None
+    return (TAG_BASE + 2 * ident, TAG_BASE + 2 * ident + 1)
+
+
+def build(shape, names, options, tags=None):
     """The shelled shape of `shape` (not refined), with faces `names` taken away (none:
-    hollow). Checked: raises ShellError with a plain-language reason."""
+    hollow). Checked: raises ShellError with a plain-language reason. `tags`: see
+    _tagged() (the feature passes its own; trials do not need them)."""
     opts = with_defaults(options)
     inside, outside = thicknesses(opts)
     if opts["direction"] in ("inside", "both") and inside <= 0:
@@ -229,6 +266,7 @@ def build(shape, names, options):
             walls.append(_thick(solid, faces, outside, join, "outside"))
         result = walls[0]
         if len(walls) == 2:
+            _tagged(walls, tags)
             try:
                 result = walls[0].fuse(walls[1])
             except Exception:
@@ -236,8 +274,10 @@ def build(shape, names, options):
     else:
         inner = _offset(solid, -inside, join, "inside") if inside > 0 else solid
         outer = _offset(solid, outside, join, "outside") if outside > 0 else solid
-        if inside > 0 and not _inside_box(inner.BoundBox, solid.BoundBox, 0.0):
+        if inside > 0 and not _inside_box(_box(inner), _box(solid), 0.0):
             raise ShellError(too_thick("inside", inside))
+        if inside > 0 and outside > 0:
+            _tagged((outer, inner), tags)
         try:
             result = outer.cut(inner)
         except Exception:
@@ -258,7 +298,7 @@ def _check(solid, result, inside, outside, opened):
         )
     if not result.isValid():
         raise ShellError(too_thick(what, biggest))
-    if not _inside_box(result.BoundBox, solid.BoundBox, outside):
+    if not _inside_box(_box(result), _box(solid), outside):
         raise ShellError(too_thick(what, biggest))
     volume = result.Volume
     if volume <= TOL:
@@ -300,7 +340,11 @@ def arrow_spots(shape, names, options, toward=None):
     opening, pointing into the wall (inside) or out of it (outside); a hollow body gets
     them on the face turned most toward the viewer, pointing out of the part (dragging
     away from the surface makes the wall thicker)."""
-    inside, outside = thicknesses(options)
+    direction = options.get("direction", "inside")
+    # An arrow for every wall the direction has, also while its value is 0 or wrong: the
+    # arrow is how the wall is dragged back to a good value.
+    inside = direction in ("inside", "both")
+    outside = direction in ("outside", "both")
     spots = []
     try:
         solid = solid_of(shape)
@@ -311,27 +355,31 @@ def arrow_spots(shape, names, options, toward=None):
             opening = shape.getElement(names[0])
         except Exception:
             return spots
-        best = None  # (score, point, wall normal, opening normal): the rim edge facing you
+        best = None  # (score, point, wall normal, opening normal): the rim spot facing you
         for edge in opening.Edges:
             for i, face in enumerate(solid.Faces, start=1):
                 if "Face%d" % i in names or not any(e.isSame(edge) for e in face.Edges):
                     continue
-                mid = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
-                try:
-                    wall = _normal_at(face, mid)
-                    up = _normal_at(opening, mid)
-                except Exception:
-                    continue
-                if wall.Length < 0.5 or up.Length < 0.5:
-                    continue
-                score = wall.dot(toward) if toward is not None else 0.0
-                if best is None or score > best[0] + 1e-9:
-                    best = (score, mid, wall, up)
+                # several spots along the edge: a round rim (a cup) is one edge whose middle
+                # is not the side turned toward you; the middle wins a tie (a straight edge)
+                for fraction in RIM_SPOTS:
+                    t = edge.FirstParameter + (edge.LastParameter - edge.FirstParameter) * fraction
+                    mid = edge.valueAt(t)
+                    try:
+                        wall = _normal_at(face, mid)
+                        up = _normal_at(opening, mid)
+                    except Exception:
+                        continue
+                    if wall.Length < 0.5 or up.Length < 0.5:
+                        continue
+                    score = wall.dot(toward) if toward is not None else 0.0
+                    if best is None or score > best[0] + 1e-9:
+                        best = (score, mid, wall, up)
         if best is not None:
             _score, mid, wall, up = best
-            if inside > 0:
+            if inside:
                 spots.append({"what": "inside", "point": mid, "direction": -wall, "lift": up})
-            if outside > 0:
+            if outside:
                 spots.append({"what": "outside", "point": mid, "direction": wall, "lift": up})
         return spots
     faces = list(solid.Faces)
@@ -339,8 +387,8 @@ def arrow_spots(shape, names, options, toward=None):
         faces.sort(key=lambda f: -_face_normal(f).dot(toward))
     else:
         faces.sort(key=lambda f: -f.Area)
-    for what, value in (("inside", inside), ("outside", outside)):
-        if value <= 0 or not faces:
+    for what, used in (("inside", inside), ("outside", outside)):
+        if not used or not faces:
             continue
         face = faces.pop(0)
         point, normal = _face_middle(face)
@@ -460,9 +508,25 @@ class ShellFeature:
         if "SciForgeType" not in obj.PropertiesList:
             obj.addProperty("App::PropertyString", "SciForgeType", "Base", "", 4)  # hidden
             obj.SciForgeType = KIND
+        ShellFeature.show_used(obj)
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+
+    def onChanged(self, obj, prop):
+        if prop == "Direction":
+            ShellFeature.show_used(obj)
+
+    @staticmethod
+    def show_used(obj):
+        """Only the thickness the direction uses is shown (property editor, Change
+        Parameters), like the dialog's fields."""
+        try:
+            direction = str(obj.Direction)
+            obj.setEditorMode("InsideThickness", 0 if direction in ("Inside", "Both") else 2)
+            obj.setEditorMode("OutsideThickness", 0 if direction in ("Outside", "Both") else 2)
+        except Exception:
+            pass
 
     def execute(self, obj):
         base = obj.BaseFeature
@@ -470,7 +534,7 @@ class ShellFeature:
             raise ShellError("Shell needs a solid before it in the timeline.")
         link = obj.Faces
         names = [s.lstrip("?") for s in (link[1] if link else []) if s]
-        result = build(base.Shape, names, _fp_options(obj))
+        result = build(base.Shape, names, _fp_options(obj), tags=wall_tags(obj))
         if obj.Refine:
             try:
                 result = result.removeSplitter()
@@ -658,6 +722,7 @@ def _replace(old, base, names, options, formulas):
     was_tip = body.Tip is old
     label = old.Label
     new = make(body, base, names, options, before=old, formulas=formulas)
+    _compute(new)  # its faces must exist to point the later steps at them
     _repoint(old, new)
     try:
         body.removeObject(old)
@@ -674,20 +739,65 @@ def _replace(old, base, names, options, formulas):
     return new
 
 
-def _swap(value, old, new):
+def _compute(feature):
+    """Compute one new feature now (quietly: the dialog already tried its values)."""
+    try:
+        from . import preview
+
+        with preview.quiet():
+            feature.recompute()
+    except Exception:
+        pass
+
+
+def _is_subs(value):
+    return isinstance(value, (list, tuple)) and all(isinstance(s, str) for s in value)
+
+
+def _swap(value, old, new, rename=None):
     if value is old:
         return new, True
+    if (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and value[0] is old
+        and _is_subs(value[1])
+        and rename is not None
+    ):
+        subs = [rename(s) for s in value[1]]
+        return (new, type(value[1])(subs)), True
     if isinstance(value, tuple):
-        items = [_swap(v, old, new) for v in value]
+        items = [_swap(v, old, new, rename) for v in value]
         return tuple(v for v, _c in items), any(c for _v, c in items)
     if isinstance(value, list):
-        items = [_swap(v, old, new) for v in value]
+        items = [_swap(v, old, new, rename) for v in value]
         return [v for v, _c in items], any(c for _v, c in items)
     return value, False
 
 
+def _renamer(old, new):
+    """Old element name -> the same face/edge/corner on the new feature (found by where
+    it is: the two kinds of feature number their faces differently)."""
+    from . import follow
+
+    def rename(sub):
+        name = (sub or "").split(".")[-1].lstrip("?")
+        if not name.startswith(("Face", "Edge", "Vertex")):
+            return sub
+        try:
+            element = old.Shape.getElement(name)
+            found = follow.find(new.Shape, element)
+        except Exception:
+            found = None
+        return found or name
+
+    return rename
+
+
 def _repoint(old, new):
-    """Steps that used `old` (a sketch on one of its faces, a later fillet...) use `new`."""
+    """Steps that used `old` (a sketch on one of its faces, a later fillet...) use `new`,
+    and the same faces of it."""
+    rename = _renamer(old, new)
     for dep in list(old.InList):
         if dep is new or dep.TypeId == "PartDesign::Body":
             continue
@@ -699,7 +809,7 @@ def _repoint(old, new):
             if not kind.startswith(("App::PropertyLink", "App::PropertyXLink")):
                 continue
             try:
-                value, changed = _swap(getattr(dep, prop), old, new)
+                value, changed = _swap(getattr(dep, prop), old, new, rename)
                 if changed:
                     setattr(dep, prop, value)
             except Exception:

@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Draft with Fusion's dialog (type Fixed Plane).
 
-Pressing Draft with nothing selected opens the dialog, which waits for the fixed plane:
-click a flat face of the part, or one of the big origin squares shown while the Plane
-box is blue (or a plane in the browser). The pull direction is shown as a blue arrow
-across the plane; Flip turns it round. The Faces box then takes the clicks: click the
+Pressing Draft with nothing selected opens the dialog, which waits for the Pull
+Direction (the fixed plane): click a flat face of the part, or one of the big origin
+squares shown while that box is blue (or a plane in the browser). The pull direction is
+shown as a blue arrow across the plane; clicking the arrow or the flip button next to
+the box turns it round. The Faces box then takes the clicks: click the
 faces to tilt (click one again to drop it); Tangent Chain picks the faces that continue a
 picked one smoothly. Drag the blue curved handle or type the angle; a positive angle
 makes the part narrower toward the pull direction. Faces that cannot be tilted do not
@@ -17,58 +18,49 @@ FreeCAD's Draft cannot do: those choices are shown greyed with the reason.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, drafting, hole_common, log, pickpanel, preview, ui_icon_path, warn
+from . import (
+    commands,
+    drafting,
+    hole_common,
+    log,
+    pickpanel,
+    preview,
+    ui_icon_path,
+    warn,
+)
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField
 
-PLANE_HELP = "Click a flat face or an origin plane: the faces turn about it."
+PLANE_HELP = (
+    "Pull Direction: click a flat face or an origin plane. The faces turn about it; the "
+    "arrow shows which way the part is pulled out (click it to flip)."
+)
 FACES_HELP = "Click the faces to draft (click one again to drop it)."
 NO_SPLIT = "FreeCAD's draft cannot split faces at a line, so this is not available yet"
 
 
-class PullArrow:
-    """A blue arrow (not draggable) showing the pull direction, like Fusion's."""
+class PullArrow(pickpanel.Arrow):
+    """The blue arrow showing the pull direction, like Fusion's: clicking it flips the
+    pull direction (as the flip button does). Grabbed by where it is on the screen
+    (handles3d), so it takes the click also where it is drawn over the part."""
 
-    def __init__(self, origin, direction, length):
-        from pivy import coin
+    def __init__(self, origin, direction, length, on_click):
+        self.on_click = on_click
+        super().__init__(origin, direction, 0.0, length, on_release=self._let_go)
 
-        self.view = Gui.ActiveDocument.ActiveView
-        self.root = coin.SoSeparator()
-        place = coin.SoTransform()
-        place.translation.setValue(origin.x, origin.y, origin.z)
-        rot = App.Rotation(App.Vector(0, 1, 0), direction)  # cylinders/cones run along +Y
-        place.rotation.setValue(*rot.Q)
-        material = coin.SoMaterial()
-        material.diffuseColor.setValue(0.30, 0.62, 0.95)
-        material.emissiveColor.setValue(0.10, 0.25, 0.45)
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        shaft = coin.SoSeparator()
-        move = coin.SoTranslation()
-        move.translation.setValue(0, length * 0.4, 0)
-        cylinder = coin.SoCylinder()
-        cylinder.radius = length * 0.03
-        cylinder.height = length * 0.8
-        shaft.addChild(move)
-        shaft.addChild(cylinder)
-        head = coin.SoSeparator()
-        move2 = coin.SoTranslation()
-        move2.translation.setValue(0, length * 0.9, 0)
-        cone = coin.SoCone()
-        cone.bottomRadius = length * 0.09
-        cone.height = length * 0.2
-        head.addChild(move2)
-        head.addChild(cone)
-        for node in (pick, place, material, shaft, head):
-            self.root.addChild(node)
-        hole_common.on_top(self.root)
-        self.view.getSceneGraph().addChild(self.root)
-
-    def remove(self):
+    def _let_go(self, value):
         try:
-            self.view.getSceneGraph().removeChild(self.root)
-        except Exception:
-            pass
+            moved = self.value()
+            self.set_value(0.0)  # it shows a direction: it never stays dragged away
+            # a click (or a drag backwards) flips; a drag along it does nothing
+            if abs(moved) < 0.25 * self.size or moved < 0:
+                QtCore.QTimer.singleShot(0, self.on_click)
+        except Exception as exc:
+            warn("Draft pull arrow: %s" % exc)
+
+    def tip(self):
+        """A point on the arrow head (tests, hints)."""
+        return self.tip_point() - self.direction * (0.15 * self.size)
 
 
 class DraftPanel(pickpanel.PickPanel):
@@ -89,7 +81,7 @@ class DraftPanel(pickpanel.PickPanel):
         self.formula_error = ""
         self.handle = None
         self.arrow = None
-        self.planes = None  # the origin squares while the Plane box takes the clicks
+        self.planes = None  # the origin squares while the Pull Direction box takes the clicks
         self._chains = {}
         if feature is not None:
             self.body = drafting.owner_body(feature)
@@ -135,7 +127,7 @@ class DraftPanel(pickpanel.PickPanel):
         self.flip.toggled.connect(self._flipped)
         line.addWidget(self.plane_box.widget, 1)
         line.addWidget(self.flip)
-        self.layout.addRow("Plane", row)
+        self.layout.addRow("Pull Direction", row)
         self.faces_box = hole_common.SelectionField(self, "faces", "Select")
         self.layout.addRow("Faces", self.faces_box.widget)
         self.help = QtWidgets.QLabel(PLANE_HELP)
@@ -178,6 +170,7 @@ class DraftPanel(pickpanel.PickPanel):
             self._set_plane((obj, ""))
         for obj, short in faces:
             self._add_face(obj, short)
+        self.remember_later(self.target if self.editing else self.base)
         self.start_picking()
         self._activate(self.active if self.plane_ref is not None else "plane", schedule=False)
         self._picks_updated(schedule=False)
@@ -424,6 +417,14 @@ class DraftPanel(pickpanel.PickPanel):
         self._update_handles()
         self.schedule()
 
+    def _arrow_clicked(self):
+        """Fusion: clicking the pull direction arrow flips it."""
+        try:
+            if not self._closed and self.plane_ref is not None:
+                self.flip.toggle()  # -> _flipped()
+        except Exception as exc:
+            warn("Draft flip: %s" % exc)
+
     # -- values -------------------------------------------------------------------------------
     def _typed(self, value):
         self.options["angle"] = value
@@ -434,8 +435,10 @@ class DraftPanel(pickpanel.PickPanel):
                 pass
         self.schedule()
 
-    def _turned(self, degrees):
+    def _turned(self, degrees, released=False):
         value = round(max(-89.9, min(89.9, degrees)), 1)
+        if released and abs(value - degrees) > 0.05 and self.handle is not None:
+            self.handle.set_angle(value)  # turned past what a draft can be: back to the limit
         self.options["angle"] = value
         self.angle.set_value(value)
         if self.formula:
@@ -483,6 +486,9 @@ class DraftPanel(pickpanel.PickPanel):
     def arrows(self):
         return [self.handle] if self.handle is not None else []
 
+    def live_handles(self):
+        return [x for x in (self.handle, self.arrow) if x is not None]
+
     def _update_handles(self):
         self._remove_handles()
         if self.base is None or self.plane_ref is None or self._closed:
@@ -497,10 +503,12 @@ class DraftPanel(pickpanel.PickPanel):
             if not self.plane_ref[1]:
                 center = shape.BoundBox.Center
                 point = center - pull * (center - point).dot(pull)
+            point = self._arrow_foot(shape, point, pull, placement)
             self.arrow = PullArrow(
                 placement.multVec(point),
                 placement.Rotation.multVec(pull),
                 max(4.0, min(diag * 0.25, 40.0)),
+                self._arrow_clicked,
             )
             frame = drafting.handle_frame(shape, self.plane_ref, self.names(), self.options)
             if frame is None:
@@ -517,11 +525,35 @@ class DraftPanel(pickpanel.PickPanel):
                 radius,
                 radius * 0.12,
                 on_drag=self._turned,
-                on_release=self._turned,
+                on_release=lambda d: self._turned(d, True),
             )
             hole_common.on_top(self.handle.root)
         except Exception as exc:
             warn("Draft handles unavailable: %s" % exc)
+
+    def _arrow_foot(self, shape, point, pull, placement):
+        """Where the pull arrow stands: on the plane, just beside the part (at the corner
+        of its outline seen furthest left). Over the part it covered the faces to click,
+        and it takes the clicks itself (they flip it)."""
+        box = shape.BoundBox
+        corners = [
+            App.Vector(x, y, z)
+            for x in (box.XMin, box.XMax)
+            for y in (box.YMin, box.YMax)
+            for z in (box.ZMin, box.ZMax)
+        ]
+        on_plane = [c - pull * (c - point).dot(pull) for c in corners]
+        middle = box.Center - pull * (box.Center - point).dot(pull)
+        try:
+            view = Gui.ActiveDocument.ActiveView
+            corner = min(on_plane, key=lambda c: view.getPointOnViewport(placement.multVec(c))[0])
+        except Exception:
+            corner = on_plane[0]
+        out = corner - middle
+        if out.Length < 1e-9:
+            return point
+        out.normalize()
+        return corner + out * max(1.0, box.DiagonalLength * 0.06)
 
     # -- preview --------------------------------------------------------------------------
     def _preview(self):
@@ -560,6 +592,7 @@ class DraftPanel(pickpanel.PickPanel):
                 self.target, self.base, self.plane_ref, names, self.options, self.formula
             )
         self.quiet_recompute()
+        self.follow_later()
         if _failed(self.target):
             self.error = drafting.friendly(_status(self.target))
         else:
@@ -599,7 +632,7 @@ class DraftPanel(pickpanel.PickPanel):
                 self.say("⚠ Make a solid first (Create Sketch, then Extrude).")
                 return False
             if self.plane_ref is None:
-                self.say("⚠ Pick the fixed plane first: a flat face or an origin plane.")
+                self.say("⚠ Pick the pull direction first: a flat face or an origin plane.")
                 return False
             if not self.names():
                 self.say("⚠ Pick the faces to draft.")
