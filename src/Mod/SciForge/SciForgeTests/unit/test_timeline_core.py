@@ -47,6 +47,12 @@ class ClassifyTests(unittest.TestCase):
 
     def test_sciforge_types(self):
         self.assertEqual(core.classify("SciForge::PressPull"), "presspull")
+        self.assertEqual(core.classify("SciForge::PatternOnPath"), "pattern_path")
+        self.assertEqual(
+            core.title_base("SciForge::PatternOnPath", "pattern_path"), "Pattern on Path"
+        )
+        self.assertEqual(core.icon_for("pattern_path"), "pattern_rect")
+        self.assertEqual(core.classify("SciForge::Mirror"), "mirror")
         self.assertEqual(core.classify("SciForge::Coil"), "coil")
         self.assertEqual(core.classify("SciForge::SplitBody"), "split_body")
         self.assertEqual(core.classify("SciForge::WeirdThing"), "other")

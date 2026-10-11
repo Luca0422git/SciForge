@@ -45,6 +45,7 @@ KINDS = {
     "primitive": ("Primitive", "box"),
     "pattern_rect": ("Rectangular Pattern", "pattern_rect"),
     "pattern_circ": ("Circular Pattern", "pattern_circ"),
+    "pattern_path": ("Pattern on Path", "pattern_rect"),
     "pattern": ("Pattern", "pattern_rect"),
     "mirror": ("Mirror", "mirror"),
     "thicken": ("Thicken", "thicken"),
@@ -141,6 +142,7 @@ KIND_BY_SCIFORGE_TYPE = {
     "SplitFace": "split_face",
     "RectangularPattern": "pattern_rect",
     "CircularPattern": "pattern_circ",
+    "PatternOnPath": "pattern_path",
     "Move": "move",
     "MoveCopy": "move",
 }

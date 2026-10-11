@@ -467,10 +467,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     dialog's check boxes: theme owner, give `QCheckBox::indicator` a visible border.
   - Not done (gaps, see the parity doc): Compute Option Optimized/Adjust,
     Components, face copies that heal into different
-    surroundings, an explicit start point on a path. The timeline module has no entry for
-    `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
-    kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
-    `"PatternOnPath"` to it in `KIND_BY_SCIFORGE_TYPE`.
+    surroundings, an explicit start point on a path. Pattern on Path now has its timeline
+    kind (`pattern_path`: "Pattern on Path", pattern icon), added 2026-10-11.
 - **Timeline/browser QA findings (branch `sf/timeline_browser-qa`)**, rules for everyone:
   - `Document.openTransaction` **commits the undo step that is open** (FreeCAD's
     `setActiveTransaction` commits every document's). Anything that opens an undo step while
