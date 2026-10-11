@@ -22,6 +22,8 @@ from .primitives_ui import (
     OPERATION_LABELS,
     LinearHandle,
     SelectionField,
+    EnterTakesNumber,
+    TypeOverView,
     _plain,
     combo,
     safe,
@@ -179,6 +181,8 @@ class PipePanel(Panel):
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
+        self.typing = TypeOverView(self)
+        self._last_handle = None
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else pipe.owner_body(feature)
@@ -225,6 +229,7 @@ class PipePanel(Panel):
         self.info.setStyleSheet("color: #8cc4ff;")
         form.addRow(self.info)
         self.distance = QtWidgets.QDoubleSpinBox()
+        self.distance_box = _Field(self.distance)  # where numbers typed over the view go
         self.distance.setObjectName("SciForgePipe_distance")
         self.distance.setDecimals(2)
         self.distance.setRange(0.01, 1.0)
@@ -234,12 +239,14 @@ class PipePanel(Panel):
         form.addRow("Section", self.section)
         self.size = DistanceField(self.options["section_size"], on_change=self._size_typed)
         self.size.widget.setObjectName("SciForgePipe_size")
+        self.size.enter_filter = EnterTakesNumber(self.size)
         form.addRow("Section Size", self.size.widget)
         self.hollow = QtWidgets.QCheckBox("Hollow")
         self.hollow.setObjectName("SciForgePipe_hollow")
         form.addRow(self.hollow)
         self.thickness = DistanceField(self.options["thickness"], on_change=self._typed)
         self.thickness.widget.setObjectName("SciForgePipe_thickness")
+        self.thickness.enter_filter = EnterTakesNumber(self.thickness)
         self.thickness_label = QtWidgets.QLabel("Section Thickness")
         form.addRow(self.thickness_label, self.thickness.widget)
         self.operation = combo(OPERATION_LABELS, self.options["operation"], "SciForgeOperation")
@@ -330,6 +337,16 @@ class PipePanel(Panel):
 
     def activate(self, name):
         self.path_field.set_active(name == "path")
+
+    def typing_field(self):
+        """Where a number typed over the 3D view goes (Fusion's box next to the handle):
+        the Distance after its ball was dragged, else the Section Size; none before the
+        pipe has a path."""
+        if self._closed or self.target is None or not self.path:
+            return None
+        if self._last_handle == "distance":
+            return self.distance_box
+        return self.size
 
     def clear_field(self, name):
         self.seeds = []
@@ -685,6 +702,7 @@ class PipePanel(Panel):
 
     @safe
     def _distance_dragged(self, value):
+        self._last_handle = "distance"
         value = max(0.01, min(1.0, round(value, 2)))
         self._quiet = True
         try:
@@ -700,6 +718,7 @@ class PipePanel(Panel):
 
     @safe
     def _size_dragged(self, value):
+        self._last_handle = "section_size"
         value = max(0.02, round(abs(value), 2))
         if self.options.get("expressions", {}).pop("section_size", None) is not None:
             self.show_formulas()
@@ -780,9 +799,17 @@ class PipePanel(Panel):
         self.escape.remove()
         self.undo_guard.remove()
         self.enter.remove()
+        self.typing.remove()
         self._remove_handles()
         self._hide_shown()
         super().cleanup()
+
+
+class _Field:
+    """A plain Qt number box seen as a dialog field (`.widget`), for TypeOverView."""
+
+    def __init__(self, widget):
+        self.widget = widget
 
 
 def _wire(path):

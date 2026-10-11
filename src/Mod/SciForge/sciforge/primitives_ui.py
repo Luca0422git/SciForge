@@ -234,6 +234,40 @@ class TypeOverView:
         self.panel = None
 
 
+class EnterTakesNumber(QtCore.QObject):
+    """Enter in a value box after a negative number ("-5") is OK at once, like Fusion.
+    FreeCAD's number box counts any text with a minus or another operator as a formula
+    to tidy up first: its first Enter only rewrote "-5" as "-5.00 mm" and the dialog
+    stayed open, so a negative Height needed Enter twice (found by the primitives QA).
+    A plain number typed is set as the box's value (tidied text) just before the box
+    sees the Enter, which then goes on to OK. Formulas keep FreeCAD's way."""
+
+    def __init__(self, field):
+        super().__init__(field.widget)
+        self.field = field
+        field.widget.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() != QtCore.QEvent.KeyPress:
+                return False
+            if event.key() not in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                return False
+            field = self.field
+            typed = field._bare()  # a plain number typed since the box was settled, or None
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            text = edit.text() if edit is not None else ""
+            if typed is None or not any(c in text for c in "+-*/"):
+                return False
+            before = float(field.widget.property("rawValue"))
+            field.set_value(typed)  # the box's own tidy text: its Enter now goes on to OK
+            if abs(before - typed) > 1e-12 and field._on_change is not None:
+                field._on_change(typed)
+        except Exception as exc:
+            warn("value box Enter: %s" % exc)
+        return False
+
+
 _GRAB = {"time": 0.0}  # when a handle last took a press (one press moves one handle)
 
 
@@ -682,6 +716,54 @@ class Placer:
             pass
 
 
+def design_reach(body):
+    """How far the visible bodies of the design reach from `body`'s origin, along its axes
+    (0 for an empty design)."""
+    inverse = body.getGlobalPlacement().inverse()
+    reach = 0.0
+    for obj in body.Document.Objects:
+        try:
+            if obj.TypeId != "PartDesign::Body" or not obj.ViewObject.Visibility:
+                continue
+            shape = obj.Shape
+            if shape.isNull() or not shape.Solids:
+                continue
+            b = shape.BoundBox
+            for x in (b.XMin, b.XMax):
+                for y in (b.YMin, b.YMax):
+                    for z in (b.ZMin, b.ZMax):
+                        p = inverse.multVec(App.Vector(x, y, z))
+                        reach = max(reach, abs(p.x), abs(p.y), abs(p.z))
+        except Exception:
+            continue
+    return reach
+
+
+def design_plane_picker(view, body, on_pick):
+    """The origin squares of Create Sketch (sketch_ui.PlanePicker), big enough to reach
+    round the whole design: the picker sizes them from the active body alone, so after a
+    small second body (a cylinder beside the part) they shrank to 20 mm round the origin
+    and a click on the plane beside the part hit nothing (found by the primitives QA).
+    Fusion's origin planes span the design."""
+    from pivy import coin
+
+    from . import sketch_ui
+
+    picker = sketch_ui.PlanePicker(view, body, on_pick)
+    try:
+        size = 2.0 * 1.15 * design_reach(body)
+        if size > picker.size + 1e-6:
+            root = picker.root
+            while root.getNumChildren() > 2:  # its pick style and offset stay, the squares go
+                root.removeChild(root.getNumChildren() - 1)
+            picker.size = size
+            picker.hovered = None
+            picker.materials = {role: picker._square(coin, role) for role in picker.objects}
+    except Exception as exc:
+        warn("origin planes: %s" % exc)
+    return picker
+
+
 def circle_points(cx, cy, r, steps=72):
     return [
         (cx + r * math.cos(2 * math.pi * i / steps), cy + r * math.sin(2 * math.pi * i / steps))
@@ -691,6 +773,16 @@ def circle_points(cx, cy, r, steps=72):
 
 def cross_points(x, y, size):
     return [[(x - size, y), (x + size, y)], [(x, y - size), (x, y + size)]]
+
+
+def on_circle(center, mouse, radius):
+    """The point `radius` from `center` towards `mouse` (along +x when they coincide)."""
+    (cx, cy), (mx, my) = center, mouse
+    dx, dy = mx - cx, my - cy
+    length = math.hypot(dx, dy)
+    if length < 1e-9:
+        return (cx + radius, cy)
+    return (cx + dx / length * radius, cy + dy / length * radius)
 
 
 # -- the dialog base ----------------------------------------------------------------------------------------
@@ -833,6 +925,7 @@ class PlacedPanel(Panel):
         )
         if name:
             field.widget.setObjectName(name)
+        field.enter_filter = EnterTakesNumber(field)
         caption = QtWidgets.QLabel(label)
         form.addRow(caption, field.widget)
         self.fields[key] = field
@@ -940,15 +1033,13 @@ class PlacedPanel(Panel):
             self._wait_for_plane()
 
     def _wait_for_plane(self):
-        from . import sketch_ui
-
         self._stop_placing()
         self.state = "plane" if self.target is None else "replane"
         self.plane_field.set_active(True)
         self.info.setText("Click a plane or a flat face to put the %s on." % self.title.lower())
         if self.planes is None and self.body is not None:
             try:
-                self.planes = sketch_ui.PlanePicker(
+                self.planes = design_plane_picker(
                     Gui.ActiveDocument.ActiveView,
                     self.body,
                     lambda plane: QtCore.QTimer.singleShot(0, lambda: self._plane_clicked(plane)),
@@ -1135,10 +1226,32 @@ class PlacedPanel(Panel):
     def _show_hint(self):
         self.info.setText(self.HINTS[min(len(self.points), len(self.HINTS) - 1)])
 
+    CIRCLE_KEY = ""  # the diameter the second click gives (Cylinder, Torus, Coil)
+
     def _typed_point(self, points, mouse):
         """The next click as the sizes typed while placing make it (`mouse` only gives the
-        side), or None when the click itself is needed (subclasses)."""
-        return None
+        side), or None when the click itself is needed. For a circle (CIRCLE_KEY): a
+        diameter typed after the centre click wins; the mouse only gives the direction
+        (Fusion: click the centre, type the diameter, Enter)."""
+        key = self.CIRCLE_KEY
+        if not key or len(points) != 1 or key not in self.locked:
+            return None
+        radius = self.locked_size(key, 0.0) / 2.0
+        if radius <= 0.0:
+            return None
+        return on_circle(points[0], mouse, radius)
+
+    def _circle_radius(self, points, mouse):
+        """The radius the circle being placed has: typed (CIRCLE_KEY), else to the mouse."""
+        typed = self.locked_size(self.CIRCLE_KEY, None) if self.CIRCLE_KEY else None
+        if typed is not None:
+            return typed / 2.0
+        return math.hypot(mouse[0] - points[0][0], mouse[1] - points[0][1])
+
+    def _live_diameter(self, points, mouse, field):
+        """The diameter field follows the mouse while placing, unless one was typed."""
+        if points and self.CIRCLE_KEY not in self.locked:
+            self.set_field(field, 2.0 * self._circle_radius(points, mouse))
 
     def _finish_placing(self):
         """Enter while placing, after the sizes were typed (Fusion: type the length and
@@ -1190,7 +1303,7 @@ class PlacedPanel(Panel):
         if not points:
             return cross_points(mouse[0], mouse[1], self._mark())
         cx, cy = points[0]
-        r = math.hypot(mouse[0] - cx, mouse[1] - cy)
+        r = self._circle_radius(points, mouse)
         return [circle_points(cx, cy, r)] + cross_points(cx, cy, self._mark())
 
     def _height_value(self, field, value):
@@ -1479,6 +1592,15 @@ class PlacedPanel(Panel):
     def _finishing(self, feature):
         """Just before OK closes the dialog (Pipe hides its path sketch here)."""
 
+    def finish(self):
+        """Another command starts: keep the shape if it can be kept, else drop it. A shape
+        not placed yet is dropped (Enter would place it from typed sizes and wait for the
+        height: never as a side effect of another command)."""
+        if self.target is None:
+            self.reject()
+            return
+        super().finish()
+
     def reject(self):
         try:
             self._timer.stop()
@@ -1645,12 +1767,18 @@ class BoxPanel(PlacedPanel):
 # -- Cylinder ----------------------------------------------------------------------------------------------------
 class CylinderPanel(PlacedPanel):
     FORMULA_KEYS = ("diameter", "height")
+    TYPE_ORDER = ("diameter", "height")
+    READY_KEY = "height"
+    CIRCLE_KEY = "diameter"
     title = "Cylinder"
     icon = "cylinder"
     kind = "cylinder"
     clicks = 2
     last = None
-    HINTS = ("Click the centre on the plane.", "Click a point on the circle (its size).")
+    HINTS = (
+        "Click the centre on the plane.",
+        "Click a point on the circle, or type the Diameter and press Enter.",
+    )
 
     def _build_fields(self, form):
         self.diameter, _ = self.distance_field(
@@ -1678,9 +1806,7 @@ class CylinderPanel(PlacedPanel):
         return self._circle_outline(points, mouse)
 
     def _live(self, points, mouse):
-        if points:
-            r = math.hypot(mouse[0] - points[0][0], mouse[1] - points[0][1])
-            self.set_field(self.diameter, 2.0 * r)
+        self._live_diameter(points, mouse, self.diameter)
 
     def _placed(self, points):
         (cx, cy), (px, py) = points
@@ -1710,6 +1836,8 @@ class CylinderPanel(PlacedPanel):
 # -- Sphere --------------------------------------------------------------------------------------------------------
 class SpherePanel(PlacedPanel):
     FORMULA_KEYS = ("diameter",)
+    TYPE_ORDER = ("diameter",)
+    READY_KEY = "diameter"
     title = "Sphere"
     icon = "sphere"
     kind = "sphere"
@@ -1769,12 +1897,18 @@ class SpherePanel(PlacedPanel):
 # -- Torus ----------------------------------------------------------------------------------------------------------
 class TorusPanel(PlacedPanel):
     FORMULA_KEYS = ("inner_diameter", "torus_diameter")
+    TYPE_ORDER = ("inner_diameter", "torus_diameter")
+    READY_KEY = "torus_diameter"
+    CIRCLE_KEY = "inner_diameter"
     title = "Torus"
     icon = "torus"
     kind = "torus"
     clicks = 2
     last = None
-    HINTS = ("Click the centre on the plane.", "Click a point on the inner circle (its size).")
+    HINTS = (
+        "Click the centre on the plane.",
+        "Click a point on the inner circle, or type the Inner Diameter and press Enter.",
+    )
 
     def _build_fields(self, form):
         self.inner, _ = self.distance_field(
@@ -1807,9 +1941,7 @@ class TorusPanel(PlacedPanel):
         return self._circle_outline(points, mouse)
 
     def _live(self, points, mouse):
-        if points:
-            r = math.hypot(mouse[0] - points[0][0], mouse[1] - points[0][1])
-            self.set_field(self.inner, 2.0 * r)
+        self._live_diameter(points, mouse, self.inner)
 
     def _placed(self, points):
         (cx, cy), (px, py) = points

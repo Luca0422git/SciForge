@@ -35,12 +35,18 @@ SECTION_LABELS = [
 
 class CoilPanel(PlacedPanel):
     FORMULA_KEYS = ("diameter", "revolutions", "height", "pitch", "angle", "section_size")
+    TYPE_ORDER = ("diameter",)
+    READY_KEY = "height"
+    CIRCLE_KEY = "diameter"
     title = "Coil"
     icon = "coil"
     kind = "coil"
     clicks = 2
     last = None
-    HINTS = ("Click the centre on the plane.", "Click a point on the circle (the diameter).")
+    HINTS = (
+        "Click the centre on the plane.",
+        "Click a point on the circle, or type the Diameter and press Enter.",
+    )
 
     def _defaults(self):
         return coil.with_defaults({})
@@ -175,9 +181,7 @@ class CoilPanel(PlacedPanel):
         return self._circle_outline(points, mouse)
 
     def _live(self, points, mouse):
-        if points:
-            r = math.hypot(mouse[0] - points[0][0], mouse[1] - points[0][1])
-            self.set_field(self.diameter, 2.0 * r)
+        self._live_diameter(points, mouse, self.diameter)
 
     def _placed(self, points):
         (cx, cy), (px, py) = points
