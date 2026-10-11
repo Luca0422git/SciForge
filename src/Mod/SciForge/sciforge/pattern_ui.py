@@ -1191,8 +1191,16 @@ class PatternPanel(Panel):
             if body is None:
                 self.message.setText("⚠ Pick a body.")
                 return
-            if self.editing and body is not self.body:
+            if self.editing and self.body is not None and body is not self.body:
                 self.message.setText("⚠ This pattern copies %s." % self.body.Label)
+                return
+            base_feature = getattr(body, "BaseFeature", None)
+            if (
+                self.target is not None
+                and pattern.is_body_copy(base_feature)
+                and base_feature.Pattern is self.target
+            ):
+                self.message.setText("⚠ %s is a copy made by this pattern." % body.Label)
                 return
             self.body = body
             if self.target is None:
@@ -2000,6 +2008,10 @@ PLAIN = (
         "(Pattern Type: Faces).",
     ),
     ("shape is empty", "There is nothing to repeat: the picked feature adds or removes nothing."),
+    (
+        "unknown exception data",
+        "The copies cannot be built here (the geometry kernel failed). Try other values.",
+    ),
 )
 
 

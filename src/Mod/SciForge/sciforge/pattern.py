@@ -373,7 +373,18 @@ def to_global(body, point=None, vector=None):
 
 # -- what is patterned -----------------------------------------------------------------------
 def _features(options):
-    return [obj for obj, sub in options["objects"] if not sub and is_solid_feature(obj)]
+    """The picked features in timeline order, whatever order they were clicked in (FreeCAD
+    repeats them in list order: a boss picked after the hole in it filled the hole)."""
+    found = [obj for obj, sub in options["objects"] if not sub and is_solid_feature(obj)]
+    return in_timeline_order(found)
+
+
+def in_timeline_order(features):
+    body = owner_body(features[0]) if features else None
+    if body is None:
+        return list(features)
+    order = {o.Name: i for i, o in enumerate(body.Group)}
+    return sorted(features, key=lambda o: order.get(o.Name, len(order)))
 
 
 def _faces(options):
@@ -1216,12 +1227,18 @@ class PatternFeature:
         if getattr(obj, WARNING_PROP, "") == ORPHAN_NOTE:
             set_note(obj, "")
         kind = kind_of(obj)
-        options = read_engine(obj)
-        tools = engine_tools(obj, options, base)
-        # A path pattern starts where the dialog's arrow is: nearest the objects' centre.
-        center = objects_center(options)[0] if kind == "path" else None
-        moves = placements(kind, options, tools, center)
-        obj.Shape = apply_tools(base.Shape, tools, moves, kind, refine=obj.Refine)
+        try:
+            options = read_engine(obj)
+            tools = engine_tools(obj, options, base)
+            # A path pattern starts where the dialog's arrow is: nearest the objects' centre.
+            center = objects_center(options)[0] if kind == "path" else None
+            moves = placements(kind, options, tools, center)
+            obj.Shape = apply_tools(base.Shape, tools, moves, kind, refine=obj.Refine)
+        except PatternError:
+            raise
+        except Exception as exc:
+            # OpenCASCADE's own errors read "<unknown exception data>" in the dialog/timeline
+            raise PatternError(kernel_message(exc))
 
     def dumps(self):
         return None
@@ -1231,6 +1248,17 @@ class PatternFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def kernel_message(exc):
+    """A geometry kernel failure said in words (its own text is often empty or internal)."""
+    text = str(exc).strip()
+    if not text or "unknown exception" in text.lower() or text.startswith("{"):
+        return (
+            "The copies cannot be built here (the geometry kernel failed). Try other values, "
+            "or pick the features instead of their faces."
+        )
+    return "The copies cannot be built here: %s" % text
 
 
 def _update_engine(obj, kind, options):
@@ -1407,7 +1435,12 @@ def engine_tools(obj, options, base):
         if owner is not base:
             faces = [_same_face(base.Shape, f) for f in faces]
             shape = base.Shape
-        return [face_tool(shape, faces)]
+        try:
+            return [face_tool(shape, faces)]
+        except PatternError:
+            raise
+        except Exception:  # OpenCASCADE could not close them (a fillet's round face alone)
+            raise PatternError(_NOT_CLOSED)
     if ptype == "bodies":
         return [(base.Shape.copy(), "add")]
     tools = []
@@ -1511,7 +1544,12 @@ def face_tool(shape, faces):
         if not hosts:
             raise PatternError(_NOT_CLOSED)
         host = next(h for e, hs in boundary for h in hs if _face_key(h) in hosts)
-        patches.append(_patch(host, wire))
+        try:
+            patches.append(_patch(host, wire))
+        except PatternError:
+            raise
+        except Exception:  # OpenCASCADE could not trim the surface around it
+            raise PatternError(_NOT_CLOSED)
     try:
         shell = Part.Shell(picked + patches)
         shell.sewShape()  # the patches get their own copies of the boundary edges
@@ -2008,8 +2046,13 @@ class BodyPatternFeature:
 
     def execute(self, obj):
         source = obj.Source
-        if source is None or source.Shape.isNull() or not source.Shape.Solids:
-            raise PatternError("The body to copy has no solid.")
+        if source is None:
+            raise PatternError(
+                "The body it copied was deleted; its copies stay as they are. Delete this step, "
+                "or undo the delete."
+            )
+        if source.Shape.isNull() or not source.Shape.Solids:
+            raise PatternError("%s has no solid to copy." % source.Label)
         copies = body_copy_shapes(obj)
         obj.Shape = Part.makeCompound(copies) if copies else Part.Shape()
 
@@ -2041,6 +2084,9 @@ class BodyCopyFeature:
             # The pattern step was deleted: the copy keeps its shape (pattern_ui removes such
             # orphans right after a delete, as Fusion deletes the copies with the pattern).
             return
+        source = definition.Source
+        if source is None or source.Shape.isNull() or not source.Shape.Solids:
+            return  # the copied body was deleted (the pattern step says so): keep the shape
         copies = body_copy_shapes(definition)
         if obj.Index >= len(copies):
             return  # about to be removed by the pattern (fewer copies now)
