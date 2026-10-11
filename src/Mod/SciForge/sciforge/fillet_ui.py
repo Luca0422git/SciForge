@@ -24,10 +24,20 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import blend, commands, log, ui_icon, ui_icon_path, warn
+from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, DistanceField, Panel
+from .taskui import ArrowDragger, Panel, _end_transaction
 
 GHOST = 75  # transparency (%) of the part before the blend while the preview is shown
+MIN_DRAG = 0.1  # mm: dragging an arrow back through its edge stops here (and it shows "mm")
+# dialog value -> property of the feature that holds its formula
+PROPS = {
+    "radius": "Radius",
+    "distance": "Size",
+    "distance2": "Size2",
+    "angle": "Angle",
+}
+NAMES = {"radius": "Radius", "distance": "Distance", "distance2": "Distance 2", "angle": "Angle"}
 GREEDY = 1  # FreeCAD selection style where a click toggles a pick, like in Fusion's commands
 NORMAL = 0
 PICK_HELP = (
@@ -83,19 +93,16 @@ def _resolve(sel):
 
 def picks_from_selection(body, info, base):
     """What is selected now, as refs on `base` (Fusion: F with edges already selected).
-    Edges/faces of another step are matched by their geometry."""
+    Edges/faces of another step are matched by their geometry. A whole feature that is
+    selected is not a pick: the timeline selects the item it was right-clicked on (to roll
+    the marker there, say), and F then rounded every edge that feature made. Inside the
+    dialog a click on a timeline feature still adds its edges."""
     refs = []
     if base is None or info is None:
         return refs
     for sel in Gui.Selection.getSelectionEx():
         for obj, name in _resolve(sel):
-            if obj is None or obj.TypeId == "PartDesign::Body":
-                continue
-            if not name:
-                if body is not None and obj in body.Group:
-                    for edge in blend.feature_edges(obj, info):
-                        if edge not in refs:
-                            refs.append(edge)
+            if obj is None or not name:
                 continue
             if obj.Name != base.Name:
                 name = _match(obj, name, info)
@@ -268,6 +275,8 @@ class _Gate:
             panel = self.panel
             if panel._closed or panel.base is None or obj is None:
                 return True
+            if obj.Document.Name != panel._doc_name:
+                return False  # another design (its own "Extrude" is not this part's)
             name = (sub or "").split(".")[-1]
             if obj.Name == panel.base.Name:
                 return panel.info.pickable(name) if name else True
@@ -298,6 +307,10 @@ class BlendPanel(Panel):
         self.error = None
         self.options = blend.default_options(self.kind)
         self.arrows = []  # (ArrowDragger, spot, origin, direction) in global coordinates
+        self.fields = {}  # option name -> ValueField
+        self.formula_error = ""
+        self.keep = None  # blend.References of the later steps (kept on their edges)
+        self._saving = None
         self.observer = None
         self.gate = False
         self._style = None
@@ -312,7 +325,6 @@ class BlendPanel(Panel):
         self._watch = None
         self._held = []  # QShortcuts switched off while the dialog is open
         self._doc_name = doc.Name
-        self._bound = False
         self._events = QtCore.QTimer()
         self._events.setSingleShot(True)
         self._events.setInterval(30)
@@ -329,8 +341,19 @@ class BlendPanel(Panel):
             self.base = solid_base(self.body)
         if self.base is not None and not self.base.Shape.isNull():
             self.info = blend.ShapeInfo(self.base.Shape)
+        try:
+            # what the later steps are attached to, before this dialog changes anything
+            self.keep = blend.References(self.body, feature if feature is not None else self.base)
+        except Exception as exc:
+            warn("%s: later steps not tracked: %s" % (self.title, exc))
 
         self._build()
+        if feature is not None:
+            from . import preview
+
+            for key, field in self.fields.items():
+                field.set_formula(preview.formula_of(feature, PROPS[key]))
+            self.show_formulas()
         self.finish_layout()
         try:
             self._start(refs)
@@ -373,18 +396,18 @@ class BlendPanel(Panel):
         )
         self.layout.addRow("Tangent Chain", self.chain)
         self._fields()
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter / formula
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        self.formulas.setVisible(False)  # shown when a box follows a formula
+        self.layout.addRow(self.formulas)
 
     def _fields(self):
         raise NotImplementedError
 
     def _size_field(self, label, what, unit="mm"):
-        field = DistanceField(
-            self.options.get(what, 1.0),
-            unit=unit,
-            on_change=lambda value, w=what: self._typed(w, value),
-        )
-        if unit == "mm":
-            field.widget.setProperty("minimum", 0.0)
+        field = ValueField(self, what, self.options.get(what, 1.0), unit=unit, minimum=0.0)
+        self.fields[what] = field
         caption = QtWidgets.QLabel(label)
         self.layout.addRow(caption, field.widget)
         return field, caption
@@ -426,10 +449,13 @@ class BlendPanel(Panel):
         except Exception as exc:
             warn("%s: Esc key unavailable: %s" % (self.title, exc))
         self._hold_delete(True)
+        try:
+            self._saving = SaveFinishes(self)
+        except Exception as exc:
+            warn("%s: Ctrl+S guard unavailable: %s" % (self.title, exc))
         self._sync()
         self._refs_changed()
         if self.target is not None:
-            self._bind()
             self._show_preview(bool(self.refs))
 
     def _document_event(self, doc, closing):
@@ -563,8 +589,9 @@ class BlendPanel(Panel):
             if self._closed or self.base is None:
                 return
             cleared, self._cleared = self._cleared, False
+            self.help.setText(PICK_HELP)  # (a timeline click below says what it added)
             names, features = [], []
-            for sel in Gui.Selection.getSelectionEx():
+            for sel in Gui.Selection.getSelectionEx(self._doc_name):
                 for obj, name in _resolve(sel):
                     if obj is None:
                         continue
@@ -634,26 +661,78 @@ class BlendPanel(Panel):
 
     # -- values ---------------------------------------------------------------------------
     def _typed(self, what, value):
+        """A new value from a box (typed number, formula, the box's arrows)."""
+        self.formula_error = ""
         self.options[what] = value
+        self._place_arrows(what)
+        self.schedule()
+
+    def _place_arrows(self, what):
+        value = float(self.options.get(what, 0.0))
         for dragger, spot, _origin, _direction in self.arrows:
             if spot["what"] == what:
                 dragger.set_distance(max(value, 0.0) * spot["per_unit"])
-        self.schedule()
 
-    def _dragged(self, spot, distance):
-        value = max(0.01, round(distance / spot["per_unit"], 2))
+    def _dragged(self, spot, distance, released=False):
+        """An arrow moved: the size follows it. Dragged back through its edge the size stops
+        at MIN_DRAG, and when the mouse is let go the arrow comes back to the size shown."""
         what = spot["what"]
+        value = max(MIN_DRAG, round(distance / spot["per_unit"], 2))
+        changed = abs(value - float(self.options.get(what, 0.0))) > 1e-12
         self.options[what] = value
-        field = self._field_for(what)
+        field = self.fields.get(what)
         if field is not None:
             field.set_value(value)
-        self.schedule()
+            if field.formula:  # a dragged size is a plain number again (Fusion)
+                field.formula = ""
+                self._formula_changed(what)
+        if released:
+            self._place_arrows(what)
+        if changed:
+            self.formula_error = ""
+            self.schedule()
 
     def _field_for(self, what):
-        return None
+        return self.fields.get(what)
 
     def _collect(self):
-        """Read the dialog fields into self.options (subclasses)."""
+        """Read the dialog's choices into self.options (subclasses). The value boxes report
+        their values themselves (ValueField), they are not read back here: FreeCAD's box can
+        hold a half-read value while a number is being typed."""
+
+    # -- formulas ----------------------------------------------------------------------------
+    def show_formulas(self):
+        """Fusion shows a formula in its box; FreeCAD's box can only show the number, so the
+        values that follow a parameter are listed under the boxes."""
+        rows = [
+            "%s = %s" % (NAMES.get(key, key), field.formula)
+            for key, field in self.fields.items()
+            if field.formula and field.widget.isVisibleTo(self.form)
+        ]
+        self.formulas.setText("\n".join(rows))
+        self.formulas.setVisible(bool(rows))
+
+    def _formula_changed(self, what):
+        self.formula_error = ""
+        self.show_formulas()
+        self.schedule()
+
+    def _formula_failed(self, what, text):
+        self.formula_error = text
+        self._say("⚠ " + text)
+
+    def _sync_formulas(self):
+        """The formulas typed in the boxes go onto the feature as expressions (and a box
+        that holds a plain number again drops its expression)."""
+        from . import preview
+
+        target = self.target
+        if not _alive(target):
+            return
+        for key, field in self.fields.items():
+            prop = PROPS.get(key)
+            if prop in target.PropertiesList:
+                preview.set_formula(target, prop, field.formula)
 
     # -- arrows ---------------------------------------------------------------------------
     def _remove_arrows(self):
@@ -688,7 +767,7 @@ class BlendPanel(Panel):
                     value * spot["per_unit"],
                     size,
                     on_drag=lambda d, s=spot: self._dragged(s, d),
-                    on_release=lambda d, s=spot: self._dragged(s, d),
+                    on_release=lambda d, s=spot: self._dragged(s, d, True),
                 )
                 self.arrows.append((dragger, spot, origin, direction))
         except Exception as exc:
@@ -758,9 +837,6 @@ class BlendPanel(Panel):
                 pass
 
     # -- preview --------------------------------------------------------------------------
-    def _bind(self):
-        """Typed expressions (=Parameters.r) go onto the feature (feature options)."""
-
     def schedule(self):
         if not self._closed:
             super().schedule()
@@ -779,6 +855,8 @@ class BlendPanel(Panel):
         if not self.refs or self.info is None:
             self.error = None
             self._show_preview(False)
+            if self.created:
+                self._discard_target()
             self.show_status()
             return
         try:
@@ -790,16 +868,45 @@ class BlendPanel(Panel):
             return
         self.error = None
         subs = blend.base_subs(self.info, self.refs)
-        if self.target is None:
-            self.target = blend.make(self.body, self.base, self.refs, self.kind, self.options)
-            self._bind()
-        else:
-            blend.set_refs(self.target, self.base, subs)
-            blend.apply(self.target, self.options)
         with quiet_errors():
-            self.doc.recompute()
+            if self.target is None:
+                self.target = blend.make(self.body, self.base, self.refs, self.kind, self.options)
+                self._sync_formulas()
+            else:
+                blend.set_refs(self.target, self.base, subs)
+                self._sync_formulas()
+                blend.apply(self.target, self.options)
+            # later steps (marker rolled back, or an earlier fillet edited) stay on their edges
+            blend.recompute_keeping(self.doc, self.keep)
         self._show_preview(True)
         self.show_status()
+
+    def _discard_target(self):
+        """Every pick dropped (x, or the last edge clicked again) while making a new blend:
+        the preview step goes away, so the body, the timeline and a measurement are back to
+        the part as it was (it stayed in the body, hidden, and the body still measured it)."""
+        target, self.target = self.target, None
+        if not _alive(target):
+            return
+        self._looks.restore()  # its Coin nodes were changed for the preview
+        self._ghost = False
+        body = self.body
+        try:
+            with quiet_errors():
+                if body is not None and any(o.Name == target.Name for o in body.Group):
+                    body.removeObject(target)
+                self.doc.removeObject(target.Name)
+                if body is not None and _alive(self.base) and body.Tip is not self.base:
+                    body.Tip = self.base
+                blend.recompute_keeping(self.doc, self.keep)
+        except Exception as exc:
+            warn("%s: could not drop the preview: %s" % (self.title, exc))
+        try:
+            # FreeCAD hid the step before when the preview was added: the body shows its Tip
+            self.base.ViewObject.Visibility = True
+            self.base.ViewObject.makeTemporaryVisible(True)
+        except Exception:
+            pass
 
     def _compute_hint(self):
         try:
@@ -821,6 +928,9 @@ class BlendPanel(Panel):
             warn("%s size hint: %s" % (self.title, exc))
 
     def show_status(self):
+        if self.formula_error:
+            self._say("⚠ " + self.formula_error)
+            return
         if self.error:
             self._say("⚠ " + self.error)
             return
@@ -865,6 +975,9 @@ class BlendPanel(Panel):
                     else "⚠ Make a solid first (Create Sketch, then Extrude)."
                 )
                 return False
+            if self.formula_error:  # a box holds text that is no value: fix it first
+                self._say("⚠ " + self.formula_error)
+                return False
             self._preview()
             obj = self.target
             if self.error or obj is None:
@@ -875,7 +988,13 @@ class BlendPanel(Panel):
                 self.show_status()
                 return False
             self._accepted = True
-            return super().accept()
+            # Panel.accept() without its plain recompute: a later step this edit broke (and
+            # the dialog named) would print its failure to the Report view once more.
+            self.cleanup()
+            _end_transaction(self.doc)
+            self._close()
+            log("%s done" % self.title)
+            return True
         except Exception as exc:
             self._accepted = False
             self._say("⚠ %s" % exc)
@@ -906,6 +1025,9 @@ class BlendPanel(Panel):
                 pass
             self.observer = None
         self._hold_delete(False)
+        if self._saving is not None:
+            self._saving.remove()
+            self._saving = None
         if self._watch is not None:
             try:
                 App.removeDocumentObserver(self._watch)
@@ -969,17 +1091,6 @@ class FilletPanel(BlendPanel):
         )
         self.layout.addRow("Corner Type", self.corner)
 
-    def _field_for(self, what):
-        return self.radius if what == "radius" else None
-
-    def _collect(self):
-        self.options["radius"] = self.radius.value()
-
-    def _bind(self):
-        if self.target is not None and not self._bound:
-            self.radius.bind(self.target, "Radius")
-            self._bound = True
-
 
 class ChamferPanel(BlendPanel):
     kind = "chamfer"
@@ -1025,6 +1136,8 @@ class ChamferPanel(BlendPanel):
             widget.setVisible(angle)
         for widget in (self.flip, self.flip_label):
             widget.setVisible(two or angle)
+        if hasattr(self, "formulas"):
+            self.show_formulas()
 
     def _type_changed(self, *_):
         self._update_rows()
@@ -1037,22 +1150,9 @@ class ChamferPanel(BlendPanel):
         self._update_arrows()
         self.schedule()
 
-    def _field_for(self, what):
-        return {"distance": self.distance, "distance2": self.distance2}.get(what)
-
     def _collect(self):
         self.options["chamfer_type"] = self.ctype.currentData()
-        self.options["distance"] = self.distance.value()
-        self.options["distance2"] = self.distance2.value()
-        self.options["angle"] = self.angle.value()
         self.options["flip"] = self.flip.isChecked()
-
-    def _bind(self):
-        if self.target is not None and not self._bound:
-            self.distance.bind(self.target, "Size")
-            self.distance2.bind(self.target, "Size2")
-            self.angle.bind(self.target, "Angle")
-            self._bound = True
 
 
 # -- commands ------------------------------------------------------------------------------
@@ -1089,8 +1189,12 @@ def _selected_body():
 
 def start(panel_class):
     """Run Fillet/Chamfer: with edges/faces already selected it starts with them."""
-    selection = [(s.Object, list(s.SubElementNames)) for s in Gui.Selection.getSelectionEx()]
-    picked_body = _selected_body()
+    selection, picked_body = [], None
+    if not Gui.Control.activeDialog():
+        # (with a dialog open, the selection is that dialog's picks, not the user's: F
+        # pressed inside a Fillet finishes it and starts a new one with nothing picked)
+        selection = [(s.Object, list(s.SubElementNames)) for s in Gui.Selection.getSelectionEx()]
+        picked_body = _selected_body()
     if not commands.finish_open_dialog():
         return None
     doc = App.ActiveDocument

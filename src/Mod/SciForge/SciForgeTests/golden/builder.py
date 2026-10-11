@@ -630,3 +630,4 @@ from . import revolve_ops  # noqa: E402,F401  (registers Builder.op_sf_revolve* 
 from . import pattern_ops  # noqa: E402,F401  (registers the Fusion pattern / mirror steps)
 from . import shell_draft_ops  # noqa: E402,F401  (registers op_sf_shell, op_sf_draft, op_sf_scale)
 from . import bodies_ops  # noqa: E402,F401  (registers the body-tool steps: combine...)
+from . import blend_ops  # noqa: E402,F401  (registers op_blend_insert, op_blend_edit)

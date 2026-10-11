@@ -218,12 +218,23 @@ def timeline_button(title):
     return None
 
 
-def timeline_double_click(title):
+def timeline_double_click(title, click_first=False):
+    """Double-click a timeline step. A bare QTest.mouseDClick never releases the button: Qt
+    then believed the left button was still held, and a dialog that ignores keys while a
+    handle is dragged ignored Esc; the release is sent now.
+    click_first: the full events of a person's double-click (press, release, double-click,
+    release), so the first click also selects the step in the timeline, as with a mouse."""
+    from SciForgeTests.gui import widget_input
+
     button = timeline_button(title)
     if not h.check("timeline shows %s" % title, button is not None, timeline_titles()):
         return False
-    QtTest.QTest.mouseDClick(button, QtCore.Qt.LeftButton)
-    QtWidgets.QApplication.processEvents()
+    if click_first:
+        widget_input.double_click(button)
+    else:
+        QtTest.QTest.mouseDClick(button, QtCore.Qt.LeftButton)
+        QtTest.QTest.mouseRelease(button, QtCore.Qt.LeftButton)
+        QtWidgets.QApplication.processEvents()
     return True
 
 
@@ -260,3 +271,84 @@ def report_has_kernel_errors():
 
 def no_popups(where):
     h.check("no pop-up after %s" % where, not h.popups(), h.popups())
+
+
+def see_through():
+    """Features of the body still drawn see-through (a preview leftover), by name."""
+    found = []
+    body = h.body()
+    if body is None:
+        return found
+    for obj in body.Group:
+        vo = getattr(obj, "ViewObject", None)
+        if vo is None or not obj.isDerivedFrom("PartDesign::Feature"):
+            continue
+        if getattr(vo, "Transparency", 0):
+            found.append(obj.Name)
+            continue
+        try:
+            from pivy import coin
+
+            search = coin.SoSearchAction()
+            search.setType(coin.SoMaterial.getClassTypeId())
+            search.setInterest(coin.SoSearchAction.ALL)
+            search.setSearchingAll(True)
+            search.apply(vo.RootNode)
+            paths = search.getPaths()
+            for i in range(paths.getLength()):
+                node = paths[i].getTail()
+                if node.getName().getString() != "ShapeMaterial":
+                    continue
+                values = node.transparency
+                if any(values[k] > 1e-6 for k in range(values.getNum())):
+                    found.append(obj.Name)
+                    break
+        except Exception:
+            pass
+    return found
+
+
+def top_cut():
+    """How far a front-top bevel/round reaches into the top face and down the front face of
+    the box, (into top, down front) rounded to 1e-4 mm, or None."""
+    shape = h.body().Shape
+    top = [
+        f
+        for f in shape.Faces
+        if f.Surface.TypeId == "Part::GeomPlane"
+        and abs(f.BoundBox.ZMin - 10) < 1e-6
+        and abs(f.BoundBox.ZMax - 10) < 1e-6
+    ]
+    front = [
+        f
+        for f in shape.Faces
+        if f.Surface.TypeId == "Part::GeomPlane"
+        and abs(f.BoundBox.YMin) < 1e-6
+        and abs(f.BoundBox.YMax) < 1e-6
+    ]
+    if len(top) != 1 or len(front) != 1:
+        return None
+    return round(top[0].BoundBox.YMin, 4), round(10 - front[0].BoundBox.ZMax, 4)
+
+
+def click_tab(label_start):
+    """Click the document tab under the 3D view whose title starts with label_start."""
+    from SciForgeTests.gui import widget_input
+
+    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    bar = area.findChild(QtWidgets.QTabBar) if area is not None else None
+    if bar is None:
+        h.check("document tabs exist", False)
+        return False
+    for i in range(bar.count()):
+        if bar.tabText(i).startswith(label_start):
+            widget_input.click(bar, bar.tabRect(i).center())
+            return True
+    h.check("a tab %r" % label_start, False, [bar.tabText(i) for i in range(bar.count())])
+    return False
+
+
+def modified():
+    """True if the design has changes that are not saved."""
+    gdoc = Gui.ActiveDocument
+    return bool(getattr(gdoc, "Modified", False)) if gdoc is not None else False
