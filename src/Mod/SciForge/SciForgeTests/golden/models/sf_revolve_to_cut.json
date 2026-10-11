@@ -1,0 +1,66 @@
+{
+  "id": "sf_revolve_to_cut",
+  "title": "Revolve dialog: a Cut of Type To stops at an origin plane",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "revolve-to",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            30
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            20,
+            15,
+            30,
+            20
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s2",
+      "axis": "Z",
+      "type": "to",
+      "to": {
+        "plane": "YZ"
+      },
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 54585.17235612266,
+    "solids": 1,
+    "source": "analytic",
+    "note": "A r30 h20 disc; the step r 20..30, z 15..20 is cut a quarter turn (to the YZ plane; FreeCAD's Groove with Up To Face gives an empty solid, the angle is measured instead): pi 900 20 - pi (900 - 400) 5 / 4 = 17375 pi."
+  }
+}

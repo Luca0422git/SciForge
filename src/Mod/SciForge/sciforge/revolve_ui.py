@@ -10,9 +10,12 @@ so the two can be picked in any order. Whatever is selected before Revolve start
 taken (profiles and an axis), and the one area of a sketch just finished is taken by
 itself, like Fusion.
 
-The fields follow Fusion's Revolve: Type (Angle / Full), Direction (One Side / Two Sides
-/ Symmetric), Angle (and the angle of side two), Operation (Join / Cut / Intersect / New
-Body). The blue arrow next to the part turns about the axis: drag it to set the angle.
+The fields follow Fusion's Revolve: Type (Angle / To / Full), Direction (One Side / Two
+Sides / Symmetric), Angle (and the angle of side two), Operation (Join / Cut / Intersect /
+New Body). The blue arrow next to the part turns about the axis: drag it to set the angle.
+Type To turns as far as an object: click an origin plane (its square is drawn while the
+Object box waits), a flat face, an edge or a corner of the part, a construction plane or
+point; the revolve stops there and follows the object when it moves.
 Revolving into material switches to Cut, unless you picked the operation yourself.
 Problems are shown in the dialog, which then stays open.
 """
@@ -26,7 +29,7 @@ from . import commands, extrude, log, preview, profile_pick, revolve, ui_icon_pa
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField, Panel
 
-TYPE_LABELS = [("Angle", "angle"), ("Full", "full")]
+TYPE_LABELS = [("Angle", "angle"), ("To", "to"), ("Full", "full")]
 DIRECTION_LABELS = [
     ("One Side", "one_side"),
     ("Two Sides", "two_sides"),
@@ -49,6 +52,9 @@ AXIS_COLORS = {
     "construction": (0.95, 0.62, 0.22),
 }
 AXIS_HOVER = (0.55, 0.80, 1.0)
+PLANE_IDLE = ((0.55, 0.65, 0.80), 0.82)  # the origin squares offered as a To object
+PLANE_HOVER = ((0.55, 0.80, 1.0), 0.6)
+PLANE_PICKED = ((0.30, 0.62, 0.95), 0.78)  # light: it stays shown
 AXIS_PICKED = (0.12, 0.53, 0.90)
 PICK_PIXELS = 8.0  # how near a drawn axis a click must be (viewport pixels)
 ON_LINE_PIXELS = 4.0  # this near, the drawn axis wins over what else is under the mouse
@@ -132,6 +138,96 @@ class SelectionField:
         self.button.setText(text or self.empty)
 
 
+class TypeOverView:
+    """Fusion: with a command open, a number typed while the mouse is over the 3D view goes
+    into the command's value (its box next to the handle) and Enter finishes. FreeCAD
+    took those digits as its view keys (0 isometric, 1 front, 2 top ...): the view jumped
+    and the number was lost, so Enter then made the old angle. Digits, a minus sign and a
+    decimal point typed while the 3D view has the keyboard now go into the dialog's value
+    field (`panel.typing_field()`), replacing its text like Fusion's box; the next keys
+    follow there, and Enter there is OK. remove() when the dialog closes."""
+
+    KEYS = set("0123456789-.,")
+
+    def __init__(self, panel):
+        self.panel = panel
+        guard = self
+
+        class KeyFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                return guard._filter(event)
+
+        self.filter = KeyFilter()
+        QtWidgets.QApplication.instance().installEventFilter(self.filter)
+
+    @staticmethod
+    def _on_view(widget):
+        while widget is not None:
+            name = widget.metaObject().className()
+            if name in ("Gui::View3DInventorViewer", "QOpenGLWidget", "Gui::View3DInventor"):
+                return True
+            if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox)):
+                return False
+            widget = widget.parentWidget()
+        return False
+
+    def _filter(self, event):
+        from .compat import QtGui
+
+        try:
+            kind = event.type()
+            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
+                return False
+            if self.panel is None or getattr(self.panel, "_closed", True):
+                return False
+            if not isinstance(event, QtGui.QKeyEvent):
+                return False
+            mods = event.modifiers()
+            if mods & (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier | QtCore.Qt.MetaModifier):
+                return False
+            text = event.text()
+            if not text or text not in self.KEYS:
+                return False
+            if not self._on_view(QtWidgets.QApplication.focusWidget()):
+                return False
+            field = self.panel.typing_field()
+            if field is None:
+                return False
+            event.accept()  # ShortcutOverride accepted: FreeCAD's view key does not fire
+            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
+                key, typed = event.key(), text
+                QtCore.QTimer.singleShot(0, lambda: self._type(field, key, typed))
+            return True
+        except Exception:
+            return False
+
+    def _type(self, field, key, text):
+        from .compat import QtGui
+
+        try:
+            if self.panel is None or getattr(self.panel, "_closed", True):
+                return
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is None:
+                return
+            field.widget.setFocus()
+            edit.selectAll()
+            # Sent as a key press, so the field reacts as to a person's typing.
+            press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, press)
+            release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, release)
+        except Exception as exc:
+            warn("revolve typing: %s" % exc)
+
+    def remove(self):
+        try:
+            QtWidgets.QApplication.instance().removeEventFilter(self.filter)
+        except Exception:
+            pass
+        self.panel = None
+
+
 # -- the angle handle ----------------------------------------------------------------------------
 class AngleHandle:
     """Fusion's revolve manipulator: a blue ball with an arrow next to the part that
@@ -206,7 +302,8 @@ class AngleHandle:
         self.root.addChild(self._arrow(coin))
         self._paint()
         self._draw()
-        self.view.getSceneGraph().addChild(self.root)
+        self.holder = _skip_fit(coin, self.root)
+        self.view.getSceneGraph().addChild(self.holder)
         self.callbacks = [
             ("SoMouseButtonEvent", self.view.addEventCallback("SoMouseButtonEvent", self._button)),
             ("SoLocation2Event", self.view.addEventCallback("SoLocation2Event", self._moved)),
@@ -408,12 +505,24 @@ class AngleHandle:
                 pass
         self.callbacks = []
         try:
-            self.view.getSceneGraph().removeChild(self.root)
+            self.view.getSceneGraph().removeChild(self.holder)
         except Exception:
             pass
 
 
 _GRAB = {"time": 0.0}  # when a handle last took a press
+
+
+def _skip_fit(coin, node):
+    """`node` inside FreeCAD's SoSkipBoundingGroup: Fit (fit all) then frames the part, not
+    the long axis lines or the handle drawn for picking (FreeCAD does the same for its
+    rotation-centre mark)."""
+    try:
+        group = coin.SoType.fromName("SoSkipBoundingGroup").createInstance()
+        group.addChild(node)
+        return group
+    except Exception:
+        return node
 
 
 def _nearest_turn(raw, near):
@@ -426,8 +535,10 @@ def _nearest_turn(raw, near):
 class AxisPicker:
     """The origin axes (and the construction lines of sketches) as long coloured lines
     you can click, like Create Sketch's big plane squares. They light up under the mouse;
-    a click is matched to them by distance on screen. Drawn on top of the part so an axis
-    inside it can still be seen and clicked."""
+    a click is matched to them by distance on screen. Like Fusion's origin axes they are
+    hidden where the part is in front of them, and a click there is the part's (an edge
+    of the part next to a hidden axis is what the person aims at); they are long enough to
+    stick out of the part, where they can always be clicked."""
 
     def __init__(self, view, lines, on_pick, blocked=None, competing=None):
         from pivy import coin
@@ -438,7 +549,7 @@ class AxisPicker:
         self.blocked = blocked  # (position) -> True when another handle takes the click
         self.competing = competing  # (position) -> True when something else is there
         self.lines = []  # [ref, kind, start, end, switch, material, style]
-        self.root = coin.SoAnnotation()
+        self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
         self.root.addChild(pick)
@@ -450,7 +561,8 @@ class AxisPicker:
         self.usable = lambda line: True
         self.extra = None  # the picked axis when it is not one of the drawn lines
         self.last_click = 0.0
-        view.getSceneGraph().addChild(self.root)
+        self.holder = _skip_fit(coin, self.root)
+        view.getSceneGraph().addChild(self.holder)
         self.callbacks = [
             ("SoMouseButtonEvent", view.addEventCallback("SoMouseButtonEvent", self._button)),
             ("SoLocation2Event", view.addEventCallback("SoLocation2Event", self._moved)),
@@ -563,7 +675,37 @@ class AxisPicker:
             return None
         if best[0] > ON_LINE_PIXELS and self.competing is not None and self.competing(position):
             return None
+        if self._hidden_at(position, best[1]):
+            return None
         return best[1]
+
+    def _hidden_at(self, position, line):
+        """True if the part is in front of the drawn line under the mouse (the line is
+        hidden there, so the click is the part's)."""
+        try:
+            info = self.view.getObjectInfo((int(position[0]), int(position[1])))
+        except Exception:
+            return False
+        if not info or not info.get("Object") or "x" not in info:
+            return False
+        try:
+            hit = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
+            p0, d = profile_pick.mouse_ray(self.view, tuple(position))
+            a, u = App.Vector(line[2]), line[3] - line[2]
+            length = u.Length
+            if length < 1e-9:
+                return False
+            u = u * (1.0 / length)
+            w0 = p0 - a
+            b, dd, e = d.dot(u), d.dot(w0), u.dot(w0)
+            denom = 1.0 - b * b
+            s = 0.0 if denom < 1e-9 else (e - b * dd) / denom  # where the axis passes the ray
+            s = max(0.0, min(length, s))
+            q = a + u * s
+            tol = max(0.01, 1e-4 * length)
+            return (hit - p0).dot(d) < (q - p0).dot(d) - tol
+        except Exception:
+            return False
 
     def _moved(self, info):
         try:
@@ -602,7 +744,7 @@ class AxisPicker:
                 pass
         self.callbacks = []
         try:
-            self.view.getSceneGraph().removeChild(self.root)
+            self.view.getSceneGraph().removeChild(self.holder)
         except Exception:
             pass
         self.lines = []
@@ -612,17 +754,215 @@ class _RegionPicker(profile_pick.ProfilePicker):
     """Extrude's profile picker, except that a click on a line (an axis line or a sketch
     line / part edge under the mouse) is left to the axis: in Revolve those are axes."""
 
-    def __init__(self, view, sketches, on_pick, occluder=None, on_line=None):
+    def __init__(self, view, sketches, on_pick, occluder=None, on_line=None, paused=None):
         self._on_line = on_line
+        self._paused = paused  # () -> True while another box (Type To's object) waits
         super().__init__(view, sketches, on_pick, occluder=occluder)
 
+    def _is_paused(self):
+        try:
+            return bool(self._paused is not None and self._paused())
+        except Exception:
+            return False
+
+    def _moved(self, info):
+        if self._is_paused():
+            if self.hovered is not None:
+                previous, self.hovered = self.hovered, None
+                self._paint(previous)
+            return
+        super()._moved(info)
+
     def _button(self, info):
+        if self._is_paused():
+            return  # the click is for the object to revolve to (the part under the area)
         try:
             if self._on_line is not None and self._on_line(info.get("Position")):
                 return
         except Exception:
             pass
         super()._button(info)
+
+
+class ToPlanes:
+    """Type To: the origin planes that contain the axis, as big squares you can click (like
+    Create Sketch's squares), shown while the Object box waits; and a mark on the object
+    picked (the square turns blue, a point or an edge is drawn blue). Where the part is
+    under the mouse the click is the part's (a face, an edge or a corner to revolve to);
+    the squares are bigger than the part, so each can be clicked beside it."""
+
+    def __init__(self, view, planes, half, on_pick):
+        from pivy import coin
+
+        self.coin = coin
+        self.view = view
+        self.on_pick = on_pick
+        self.planes = []  # [plane object, base, normal, u, v, material, switch]
+        self.half = half
+        self.shown = False
+        self.picked = None
+        self.hovered = None
+        self.last_click = 0.0
+        self.root = coin.SoSeparator()
+        pick = coin.SoPickStyle()
+        pick.style = coin.SoPickStyle.UNPICKABLE
+        self.root.addChild(pick)
+        squares = coin.SoSeparator()
+        squares.addChild(coin.SoPolygonOffset())
+        self.root.addChild(squares)
+        self.mark = coin.SoSeparator()  # the picked point / edge
+        self.root.addChild(self.mark)
+        for plane, base, normal, u, v in planes:
+            material, switch = self._square(squares, base, u, v)
+            self.planes.append([plane, base, normal, u, v, material, switch])
+        self.holder = _skip_fit(coin, self.root)
+        view.getSceneGraph().addChild(self.holder)
+        self.callbacks = [
+            ("SoMouseButtonEvent", view.addEventCallback("SoMouseButtonEvent", self._button)),
+            ("SoLocation2Event", view.addEventCallback("SoLocation2Event", self._moved)),
+        ]
+        self.set_shown(False)
+
+    def _square(self, parent, base, u, v):
+        coin = self.coin
+        h = self.half
+        corners = [base + u * a * h + v * b * h for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        sep = coin.SoSeparator()
+        material = coin.SoMaterial()
+        coords = coin.SoCoordinate3()
+        coords.point.setValues(0, 4, [(p.x, p.y, p.z) for p in corners])
+        faces = coin.SoFaceSet()
+        faces.numVertices.setValue(4)
+        outline_coords = coin.SoCoordinate3()
+        loop = corners + [corners[0]]
+        outline_coords.point.setValues(0, 5, [(p.x, p.y, p.z) for p in loop])
+        outline = coin.SoLineSet()
+        outline.numVertices.setValue(5)
+        for node in (material, coords, faces, outline_coords, outline):
+            sep.addChild(node)
+        switch = coin.SoSwitch()
+        switch.addChild(sep)
+        parent.addChild(switch)
+        return material, switch
+
+    def _paint(self):
+        for entry in self.planes:
+            picked = self.picked is not None and entry[0] is self.picked
+            if picked:
+                look = PLANE_PICKED
+            elif entry is self.hovered:
+                look = PLANE_HOVER
+            else:
+                look = PLANE_IDLE
+            material = entry[5]
+            material.diffuseColor.setValue(*look[0])
+            material.emissiveColor.setValue(*[c * 0.5 for c in look[0]])
+            material.transparency.setValue(look[1])
+            entry[6].whichChild = 0 if self.shown or picked else -1
+
+    def set_shown(self, shown):
+        """The squares are there only while the Object box waits; the picked one stays."""
+        self.shown = bool(shown)
+        if not self.shown:
+            self.hovered = None
+        self._paint()
+
+    def set_target(self, target, points=None, edge=None):
+        """Show what is picked: an origin plane's square in blue, a point or an edge drawn
+        blue (global points)."""
+        self.picked = target[0] if target and not target[1] else None
+        if not any(entry[0] is self.picked for entry in self.planes):
+            self.picked = None
+        self.mark.removeAllChildren()
+        coin = self.coin
+        if points or edge:
+            material = coin.SoMaterial()
+            material.diffuseColor.setValue(*AXIS_PICKED)
+            material.emissiveColor.setValue(*AXIS_PICKED)
+            style = coin.SoDrawStyle()
+            style.pointSize.setValue(9.0)
+            style.lineWidth.setValue(4.0)
+            self.mark.addChild(material)
+            self.mark.addChild(style)
+            drawn = list(edge or points)
+            coords = coin.SoCoordinate3()
+            coords.point.setValues(0, len(drawn), [(p.x, p.y, p.z) for p in drawn])
+            self.mark.addChild(coords)
+            if edge:
+                lines = coin.SoLineSet()
+                lines.numVertices.setValue(len(drawn))
+                self.mark.addChild(lines)
+            else:
+                self.mark.addChild(coin.SoPointSet())
+        self.set_shown(self.shown)
+
+    def plane_at(self, position):
+        """The square under the mouse in front of the part, or None."""
+        if not self.shown:
+            return None
+        best = None
+        for entry in self.planes:
+            _plane, base, normal, u, v = entry[:5]
+            hit = profile_pick.ray_plane(self.view, position, base, normal)
+            if hit is None:
+                continue
+            point, t = hit
+            local = point - base
+            if abs(local.dot(u)) <= self.half and abs(local.dot(v)) <= self.half:
+                if best is None or t < best[1]:
+                    best = (entry, t)
+        if best is None:
+            return None
+        try:
+            info = self.view.getObjectInfo((int(position[0]), int(position[1])))
+        except Exception:
+            info = None
+        if info and str(info.get("Component", "")).startswith(("Face", "Edge", "Vertex")):
+            # The part under the mouse gets the click, as in Create Sketch: its faces, edges
+            # and corners are objects to revolve to as well, and the big squares would hide
+            # them from most views. Each square sticks out of the part, where it is clicked.
+            return None
+        return best[0]
+
+    def _moved(self, info):
+        try:
+            hit = self.plane_at(info["Position"])
+            if hit is not self.hovered:
+                self.hovered = hit
+                self._paint()
+        except Exception as exc:
+            warn("plane hover: %s" % exc)
+
+    def _button(self, info):
+        try:
+            if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
+                return
+            position = tuple(info["Position"])
+            if profile_pick.handle_at(self.view, position):
+                return
+            hit = self.plane_at(position)
+            if hit is not None:
+                self.last_click = time.time()
+                plane = hit[0]
+                QtCore.QTimer.singleShot(0, lambda: self.on_pick(plane, ""))
+        except Exception as exc:
+            warn("plane pick: %s" % exc)
+
+    def clicked_recently(self, seconds=0.6):
+        return time.time() - self.last_click < seconds
+
+    def remove(self):
+        for kind, callback in self.callbacks:
+            try:
+                self.view.removeEventCallback(kind, callback)
+            except Exception:
+                pass
+        self.callbacks = []
+        try:
+            self.view.getSceneGraph().removeChild(self.holder)
+        except Exception:
+            pass
+        self.planes = []
 
 
 # -- what is selected before the command starts ------------------------------------------------
@@ -676,6 +1016,15 @@ def selected(body):
     return extrude.normalize(profiles), axis
 
 
+def _single_region(sketch):
+    """[(sketch, area)] when the sketch has exactly one closed area, else []."""
+    try:
+        found = extrude.regions(sketch)
+    except Exception:
+        return []
+    return [(sketch, found[0][0])] if len(found) == 1 else []
+
+
 def newest_single_region(body):
     """The only area of the newest sketch no feature uses yet (Fusion picks a sketch's
     single profile by itself), or None."""
@@ -699,24 +1048,39 @@ class RevolvePanel(Panel):
     last = None
     auto_pick = True
 
-    def __init__(self, doc, feature=None):
+    def __init__(self, doc, feature=None, sketch=None):
         super().__init__(doc, "Revolve" if feature is None else "Edit Revolve")
         RevolvePanel.last = self
+        # The sketch that was open when Revolve started: its area is the profile (Fusion
+        # revolves the sketch you are in), also when a feature already uses it.
+        self.from_sketch = sketch
+        # Fusion's keys while a command is open: Esc cancels, Enter (also over the 3D view)
+        # is OK, Ctrl+Z cancels the step being made, Ctrl+S/N/O finish the dialog first.
         self.escape = preview.EscapeCancels(self)
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
+        self.typing = TypeOverView(self)
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else revolve.owner_body(feature)
+        if feature is None and sketch is not None and revolve.owner_body(sketch) is not None:
+            self.body = revolve.owner_body(sketch)
         self.profiles = []
         self.axis = None
         self.options = dict(revolve.DEFAULTS)
+        self.options["expressions"] = {}  # formulas typed in the angle fields (FormulaInput)
         self.user_picked_operation = feature is not None
         self.error = ""
+        self.formula_error = ""  # a formula typed in a field that is no value
+        self._last_handle = "angle"  # the handle dragged last (typed numbers go to its value)
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
         self.handles = {}
         self.picker = None
         self.axes = None
+        self.to_planes = None  # Type To: the origin squares and the picked object's mark
+        self._to_planes_key = None
         self._normal = None
         self.observer = None
         self._quiet = False
@@ -782,6 +1146,10 @@ class RevolvePanel(Panel):
         self.type = _combo(TYPE_LABELS, self.options["type"])
         self.type.setObjectName("SciForgeRevolve_type")
         form.addRow("Type", self.type)
+        # Type To: the object the revolve goes to (shown for that type only).
+        self.fields["to"] = SelectionField(self, "to", "Select object")
+        self.to_label = QtWidgets.QLabel("Object")
+        form.addRow(self.to_label, self.fields["to"].widget)
         self.direction = _combo(DIRECTION_LABELS, self.options["direction"])
         self.direction.setObjectName("SciForgeRevolve_direction")
         self.direction_label = QtWidgets.QLabel("Direction")
@@ -803,7 +1171,20 @@ class RevolvePanel(Panel):
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
         self.operation.setObjectName("SciForgeRevolve_operation")
         form.addRow("Operation", self.operation)
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        # Fusion takes a parameter or a formula in every value field ("turn", "turn / 2").
+        self.formula_inputs = [
+            preview.FormulaInput(self, "angle", self.angle),
+            preview.FormulaInput(self, "angle2", self.angle2),
+        ]
+        for key, field in (("angle", self.angle), ("angle2", self.angle2)):
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is not None:
+                edit.textEdited.connect(lambda text, key=key: self._text_edited(key, text))
         self.type.currentIndexChanged.connect(self._kind_changed)
         self.direction.currentIndexChanged.connect(self._kind_changed)
         self.operation.activated.connect(self._operation_picked)
@@ -819,11 +1200,15 @@ class RevolvePanel(Panel):
         finally:
             self._quiet = False
         self._update_visibility()
+        self.show_formulas()
 
     def _update_visibility(self):
-        full = self.type.currentData() == "full"
+        kind = self.type.currentData()
+        full = kind in ("full", "to")  # no direction or angle: the angle comes from the object
         two = self.direction.currentData() == "two_sides"
         for widget, show in (
+            (self.to_label, kind == "to"),
+            (self.fields["to"].widget, kind == "to"),
             (self.direction, not full),
             (self.direction_label, not full),
             (self.side1_label, two and not full),
@@ -835,12 +1220,80 @@ class RevolvePanel(Panel):
         ):
             widget.setVisible(show)
 
+    def typing_field(self):
+        """The value field a number typed over the 3D view goes to (Fusion's box next to
+        the handle), or None: the side-two angle right after its handle was dragged, else
+        the angle; none for a full turn."""
+        if self._closed or self.type.currentData() in ("full", "to"):
+            return None
+        if self._last_handle == "angle2" and self.angle2.widget.isVisible():
+            return self.angle2
+        return self.angle if self.angle.widget.isVisible() else None
+
     def _collect(self):
         self.options["type"] = self.type.currentData()
         self.options["direction"] = self.direction.currentData()
         self.options["angle"] = self.angle.value()
         self.options["angle2"] = self.angle2.value()
         self.options["operation"] = self.operation.currentData()
+
+    # -- formulas (preview.FormulaInput calls formula_typed / _cleared / _failed) -----------------
+    FORMULA_NAMES = {"angle": "Angle", "angle2": "Side Two angle"}
+
+    def formula_of(self, key):
+        """The formula the value field `key` follows, or ''."""
+        return (self.options.get("expressions") or {}).get(key, "")
+
+    def show_formulas(self):
+        """Fusion shows the formula in the field; FreeCAD's number field cannot, so the values
+        that follow a parameter are listed under the fields."""
+        shown = dict(
+            self.options, type=self.type.currentData(), direction=self.direction.currentData()
+        )
+        rows = [
+            "%s = %s" % (self.FORMULA_NAMES.get(k, k), v)
+            for k, v in sorted((self.options.get("expressions") or {}).items())
+            if v and revolve._formula_used(k, shown)  # not for a field that is hidden
+        ]
+        self.formulas.setText("\n".join(rows))
+        self.formulas.setVisible(bool(rows))
+
+    def drop_formula(self, key, update=True):
+        """A plain number typed or a handle dragged: the value no longer follows a formula."""
+        self.formula_error = ""
+        if self.options.setdefault("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            if update:
+                self._changed()
+
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options.setdefault("expressions", {})[key] = text
+        if key == "angle":
+            self._angle_typed(value)
+        else:
+            self._angle2_typed(value)
+        self.show_formulas()
+
+    def formula_cleared(self, key):
+        self.drop_formula(key)
+
+    def formula_failed(self, key, text):
+        # Kept until the field gets a value again (a preview rebuild must not wipe it).
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
+
+    def _text_edited(self, key, text):
+        """A plain number typed over a formula (or over a typo) wins at once: the preview and
+        OK use it without waiting for the field to be left."""
+        try:
+            from . import parameters
+
+            if self._closed or not text.strip() or not parameters.is_plain_number(text):
+                return
+            self.drop_formula(key)  # also forgets a typo typed in a field before
+        except Exception as exc:
+            warn("revolve field: %s" % exc)
 
     # -- selection fields --------------------------------------------------------------------------
     def activate(self, name):
@@ -849,18 +1302,27 @@ class RevolvePanel(Panel):
         self._show_active()
 
     def _show_active(self):
+        if self.active == "to" and self.type.currentData() != "to":
+            self.active = "profiles"
         for name, field in self.fields.items():
             field.set_active(name == self.active)
+        picking_to = self.active == "to"
         if self.axes is not None:
-            self.axes.set_show_all(self.active == "axis" or self.axis is None)
+            self.axes.set_show_all(self.active == "axis" or (self.axis is None and not picking_to))
+        self._show_to_planes()
+
+    def _picking_to(self):
+        """True while the Object box (Type To) waits for a click."""
+        return not self._closed and self.active == "to" and self.type.currentData() == "to"
 
     def clear_field(self, name):
         if name == "profiles":
             self.profiles = []
-            self._picks_changed()
+        elif name == "to":
+            self.options["to"] = None
         else:
             self.axis = None
-            self._picks_changed()
+        self._picks_changed()
         self.activate(name)
 
     # -- start ---------------------------------------------------------------------------------------
@@ -869,7 +1331,11 @@ class RevolvePanel(Panel):
             self.message.setText("Create a sketch first (Create Sketch).")
             return
         profiles, axis = selected(self.body)
-        if not profiles and self.auto_pick:
+        if not profiles and self.from_sketch is not None:
+            # Never "the newest unused sketch" instead: with several areas, the user
+            # clicks the ones wanted in this sketch.
+            profiles = _single_region(self.from_sketch)
+        elif not profiles and self.auto_pick:
             single = newest_single_region(self.body)
             profiles = [single] if single else []
         try:
@@ -896,8 +1362,13 @@ class RevolvePanel(Panel):
             self.activate("profiles")
         elif self.axis is None:
             self.activate("axis")
+        elif self._needs_to():
+            self.activate("to")
         else:
             self.activate("profiles")
+
+    def _needs_to(self):
+        return self.type.currentData() == "to" and not self.options.get("to")
 
     def _watch(self):
         """Wait for clicks: inside a shaded sketch area, on a face, a line, an edge or an
@@ -915,13 +1386,15 @@ class RevolvePanel(Panel):
         extra = [obj for obj, _ in self.profiles if extrude.is_sketch(obj)]
         if self.axis is not None and extrude.is_sketch(self.axis[0]):
             extra.append(self.axis[0])
+        if self.from_sketch is not None:
+            extra.append(self.from_sketch)
         sketches = profile_pick.candidate_sketches(self.body, extra)
         try:
             self.axes = AxisPicker(
                 view,
                 revolve.overlay_lines(self.body, sketches, self._axis_length(sketches)),
                 self._axis_clicked,
-                blocked=self._handle_at,
+                blocked=lambda position: self._picking_to() or self._handle_at(position),
                 competing=self._something_else_at,
             )
         except Exception as exc:
@@ -935,6 +1408,7 @@ class RevolvePanel(Panel):
                 ),
                 occluder=self._occluder,
                 on_line=self._line_under_mouse,
+                paused=self._picking_to,
             )
         except Exception as exc:
             warn("profile shading unavailable: %s" % exc)
@@ -1016,6 +1490,9 @@ class RevolvePanel(Panel):
         if self.axes is not None:
             self.axes.remove()
             self.axes = None
+        if self.to_planes is not None:
+            self.to_planes.remove()
+            self.to_planes = None
 
     # -- picks ------------------------------------------------------------------------------------------
     def _region_clicked(self, sketch, sub):
@@ -1038,12 +1515,19 @@ class RevolvePanel(Panel):
         if self._closed:
             return
         try:
-            picks = profile_pick.picks()
+            # Only this design's objects: a click in another open design is no pick.
+            picks = [pk for pk in profile_pick.picks() if _in_doc(pk[0], self.doc)]
             if not picks:
                 return
             Gui.Selection.clearSelection()
             if any(handle.busy() for handle in self.handles.values()):
                 return  # the click grabbed a handle (the part under it is not a pick)
+            if self.to_planes is not None and self.to_planes.clicked_recently():
+                return  # the click went to an origin square (the object to revolve to)
+            if self._picking_to():
+                obj, short = picks[-1]
+                self._to_picked(obj, short)
+                return
             region = self.picker is not None and self.picker.clicked_region_recently()
             axis = self.axes is not None and self.axes.clicked_recently()
             for obj, short in picks:
@@ -1097,7 +1581,168 @@ class RevolvePanel(Panel):
             return
         self.axis = ref
         self._picks_changed()
+        self.activate("to" if self._needs_to() else "profiles")
+
+    def _to_clicked(self, obj, sub):
+        """An origin square was clicked (deferred from the click)."""
+        if self._closed:
+            return
+        try:
+            self._to_picked(obj, sub)
+        except Exception as exc:
+            warn("revolve to: %s" % exc)
+
+    def _to_picked(self, obj, short):
+        """The object for Type To: a plane, a flat face, an edge or a corner of the part, a
+        construction point... A click on the preview means the part as it was before."""
+        if obj is not None and short and self._is_ours(obj):
+            if short.startswith("Face"):
+                ref = self._base_face(obj, short) or self._coplanar_base_face(obj, short)
+            elif short.startswith("Edge"):
+                ref = self._base_edge(obj, short)
+            elif short.startswith("Vertex"):
+                ref = self._base_vertex(obj, short)
+            else:
+                ref = None
+            if ref is None:
+                self.message.setText(
+                    "⚠ That belongs to this revolve itself. Pick a plane, or a face or a point "
+                    "of the part."
+                )
+                return
+            obj, short = ref
+        try:
+            target = revolve.target_from_pick(obj, short)
+            if self.profiles and self.axis is not None:
+                revolve.stop_angle(revolve.global_faces(self.profiles), self.axis, target)
+        except revolve.RevolveError as exc:
+            self.message.setText("⚠ " + str(exc))
+            return
+        self.options["to"] = target
+        self._refresh_picks()
         self.activate("profiles")
+        self._changed(new_geometry=True)
+
+    def _coplanar_base_face(self, obj, short):
+        """(feature, "FaceN") of the part before this revolve that lies in the plane of the
+        clicked face of the preview (the revolve merged its own side into that face), or
+        None. Type To only needs the plane and the side of the axis the face is on."""
+        base = self._base_feature()
+        face = profile_pick.global_face(obj, short)
+        if base is None or base.Shape.isNull() or face is None:
+            return None
+        if face.Surface.TypeId != "Part::GeomPlane":
+            return None
+        normal = extrude.face_normal(face)
+        origin = face.Vertexes[0].Point
+        size = max(1.0, face.BoundBox.DiagonalLength)
+        inside = extrude.interior_point(face)
+        best = None
+        for i, candidate in enumerate(revolve.to_global(base.Shape, base).Faces, start=1):
+            if candidate.Surface.TypeId != "Part::GeomPlane":
+                continue
+            other = extrude.face_normal(candidate)
+            if abs(abs(other.dot(normal)) - 1.0) > 1e-7:
+                continue
+            if abs((candidate.Vertexes[0].Point - origin).dot(normal)) > 1e-6 * size:
+                continue
+            distance = candidate.distToShape(_vertex(inside))[0]
+            if best is None or distance < best[0]:
+                best = (distance, i)
+        return (base, "Face%d" % best[1]) if best is not None else None
+
+    def _base_vertex(self, obj, short):
+        """(feature, "VertexN") as it was before this revolve, or None if only it has it."""
+        base = self._base_feature()
+        if base is None or base.Shape.isNull():
+            return None
+        try:
+            point = revolve.to_global(obj.Shape.getElement(short), obj).Point
+        except Exception:
+            return None
+        for i, vertex in enumerate(revolve.to_global(base.Shape, base).Vertexes, start=1):
+            if (vertex.Point - point).Length < 1e-6:
+                return (base, "Vertex%d" % i)
+        return None
+
+    def _to_plane_entries(self):
+        """[(plane, base, normal, u, v)] of the origin planes that contain the axis (all
+        three before there is an axis), global."""
+        body = self._source_body()
+        if body is None:
+            return []
+        try:
+            features = body.Origin.OriginFeatures
+        except Exception:
+            return []
+        line = None
+        if self.axis is not None:
+            try:
+                line = revolve.axis_line(self.axis)
+            except Exception:
+                line = None
+        entries = []
+        for plane in features:
+            if plane.TypeId != "App::Plane":
+                continue
+            placement = plane.getGlobalPlacement()
+            rot = placement.Rotation
+            base = App.Vector(placement.Base)
+            normal = rot.multVec(App.Vector(0, 0, 1))
+            if line is not None:
+                point, direction = line
+                if abs(normal.dot(direction)) > 1e-6 or abs((point - base).dot(normal)) > 1e-6:
+                    continue
+            u = rot.multVec(App.Vector(1, 0, 0))
+            v = rot.multVec(App.Vector(0, 1, 0))
+            entries.append((plane, base, normal, u, v))
+        return entries
+
+    def _show_to_planes(self):
+        """Origin squares while the Object box waits, and the mark on the picked object."""
+        wanted = self.type.currentData() == "to" and not self._closed
+        key = None
+        if wanted:
+            body = self._source_body()
+            key = (
+                revolve._ref_json(self.axis) if self.axis is not None else None,
+                body.Name if body is not None else None,
+            )
+        if self.to_planes is not None and (not wanted or key != self._to_planes_key):
+            self.to_planes.remove()
+            self.to_planes = None
+        if not wanted:
+            return
+        if self.to_planes is None:
+            try:
+                view = Gui.ActiveDocument.ActiveView
+                half = max(15.0, self._axis_length(self._sketches_shown()) / 1.4)
+                self.to_planes = ToPlanes(view, self._to_plane_entries(), half, self._to_clicked)
+                self._to_planes_key = key
+            except Exception as exc:
+                warn("origin planes unavailable: %s" % exc)
+                return
+        target = self.options.get("to")
+        points = edge = None
+        if target and target[1]:
+            try:
+                element = revolve.to_global(target[0].Shape.getElement(target[1]), target[0])
+                if target[1].startswith("Vertex"):
+                    points = [element.Point]
+                elif target[1].startswith("Edge"):
+                    edge = element.discretize(24)
+            except Exception:
+                pass
+        elif target and target[0] is not None and target[0].TypeId in revolve.POINT_TYPES:
+            points = [App.Vector(target[0].getGlobalPlacement().Base)]
+        self.to_planes.set_target(target, points, edge)
+        self.to_planes.set_shown(self._picking_to())
+
+    def _sketches_shown(self):
+        sketches = [obj for obj, _ in self.profiles if extrude.is_sketch(obj)]
+        if self.from_sketch is not None:
+            sketches.append(self.from_sketch)
+        return sketches
 
     def _base_feature(self):
         """The body's solid feature just before this revolve."""
@@ -1175,6 +1820,7 @@ class RevolvePanel(Panel):
         count = len(self.profiles)
         self.fields["profiles"].set_text("%d selected" % count if count else "")
         self.fields["axis"].set_text(revolve.axis_label(self.axis))
+        self.fields["to"].set_text(revolve.to_label(self.options.get("to")))
         words = extrude.profile_label(self.profiles) if count else ""
         self.picked_text.setText(words)
         if self.picker is not None:
@@ -1187,6 +1833,11 @@ class RevolvePanel(Panel):
                     face = profile_pick.global_face(obj, sub)
                     if face is not None:
                         faces.append(face)
+            target = self.options.get("to")
+            if self.type.currentData() == "to" and target and target[1].startswith("Face"):
+                face = profile_pick.global_face(target[0], target[1])
+                if face is not None:
+                    faces.append(face)  # the face the revolve goes to, blue as well
             self.picker.show_faces(faces)
         if self.axes is not None:
             self.axes.set_picked(self.axis, self._axis_segment())
@@ -1279,16 +1930,27 @@ class RevolvePanel(Panel):
             a1 = self.angle.value()
             if direction == "symmetric" and abs(a1) > 180.0:
                 self.angle.set_value(180.0 if a1 > 0 else -180.0)
+                self.drop_formula("angle", update=False)
             if direction == "two_sides":
                 a2 = self.angle2.value()
                 if a2 <= 0:
                     a2 = 90.0
                     self.angle2.set_value(a2)
+                    self.drop_formula("angle2", update=False)
                 if abs(a1) + a2 > 360.0:
                     self.angle.set_value(math.copysign(360.0 - a2, a1 if a1 else 1.0))
+                    self.drop_formula("angle", update=False)
         finally:
             self._quiet = False
         self._changed(new_geometry=True)
+        if self.type.currentData() == "to":
+            self._refresh_picks()
+            if self._needs_to() and self.profiles and self.axis is not None:
+                self.activate("to")  # Fusion waits for the object next
+        elif self.active == "to":
+            self.activate("profiles")
+        else:
+            self._refresh_picks()
 
     @_safe
     def _angle_typed(self, value):
@@ -1324,6 +1986,7 @@ class RevolvePanel(Panel):
 
     @_safe
     def _dragged(self, value):
+        self._last_handle = "angle"
         value = round(value, 1)
         if self.direction.currentData() == "symmetric":
             value = min(abs(value), 180.0)
@@ -1337,6 +2000,7 @@ class RevolvePanel(Panel):
             self.angle.set_value(value)
         finally:
             self._quiet = False
+        self.drop_formula("angle", update=False)
         self._changed()
 
     @_safe
@@ -1346,6 +2010,7 @@ class RevolvePanel(Panel):
 
     @_safe
     def _dragged2(self, value):
+        self._last_handle = "angle2"
         value = round(-self._side_sign() * value, 1)
         value = max(0.1, min(360.0 - abs(self.angle.value()), value))
         self._quiet = True
@@ -1353,6 +2018,7 @@ class RevolvePanel(Panel):
             self.angle2.set_value(value)
         finally:
             self._quiet = False
+        self.drop_formula("angle2", update=False)
         self._changed()
 
     def _auto_operation(self):
@@ -1380,6 +2046,7 @@ class RevolvePanel(Panel):
         """Something changed: rebuild the preview shortly (coalesces drags)."""
         self._update_visibility()
         self._collect()
+        self.show_formulas()
         self._auto_operation()
         self.dirty = True
         if new_geometry:
@@ -1387,20 +2054,46 @@ class RevolvePanel(Panel):
         self.schedule()
 
     def _recompute(self):
+        if self._closed:
+            return  # a change that arrived as the dialog closed
+        if self._busy():
+            self._timer.start()  # a long recompute runs timers: never start a second one
+            return
         try:
             if self.dirty:
                 self.dirty = False
                 self._apply()
             preview.recompute(self.doc)
+            if self._closed:
+                return  # finished or cancelled while the recompute ran
             self.show_status()
             if self._geometry_changed or self._handles_wrong():
                 self._geometry_changed = False
                 self._make_handles()
         except Exception as exc:
-            self.message.setText("⚠ %s" % exc)
+            if not self._closed:
+                try:
+                    self.message.setText("⚠ %s" % exc)
+                except RuntimeError:
+                    pass  # the dialog's widgets are gone
+
+    def _busy(self):
+        """True while FreeCAD recomputes: OK, Cancel and another command wait for it."""
+        try:
+            return bool(self.doc.Recomputing)
+        except Exception:
+            return False
 
     def _apply(self):
         if not self.profiles or self.axis is None:
+            return
+        if self.options["type"] == "to" and not self.options.get("to"):
+            # Nothing to show until the object is picked (the old angle would be a lie).
+            self.error = TO_WAIT
+            if self.target is not None and not self.editing:
+                revolve.remove(self.target)
+                self.target = None
+                self._remove_handles()
             return
         try:
             before = self.target
@@ -1432,10 +2125,13 @@ class RevolvePanel(Panel):
         return self.target
 
     def show_status(self):
+        if self.formula_error:
+            self.message.setText("⚠ " + self.formula_error)
+            return
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or revolve.problem(self.target)
         self.message.setText("⚠ " + text if text else "")
 
     # -- handles --------------------------------------------------------------------------------------
@@ -1450,7 +2146,7 @@ class RevolvePanel(Panel):
     def _wanted_handles(self):
         if not self.profiles or self.axis is None or self.target is None:
             return set()
-        if self.options["type"] == "full":
+        if self.options["type"] in ("full", "to"):
             return set()
         if self.options["direction"] == "two_sides":
             return {"angle", "angle2"}
@@ -1530,7 +2226,19 @@ class RevolvePanel(Panel):
             warn("revolve handles unavailable: %s" % exc)
 
     # -- OK / Cancel ----------------------------------------------------------------------------------
+    def finish(self):
+        """Another command is starting: keep the revolve if it is good, else drop it. Not in
+        the middle of a recompute (the other command then says to finish this one first)."""
+        if self._busy():
+            return
+        super().finish()
+
     def accept(self):
+        if self._closed:
+            return True
+        if self._busy():
+            self.message.setText("⚠ Still working out the preview; press OK again in a moment.")
+            return False
         try:
             return self._accept()
         except Exception as exc:
@@ -1539,6 +2247,14 @@ class RevolvePanel(Panel):
             return False
 
     def _accept(self):
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
+            return False
+        self._collect()
+        if self.options["type"] == "to" and not self.options.get("to") and self.profiles:
+            self.message.setText("⚠ " + TO_WAIT)
+            self.activate("to")
+            return False
         if self.target is None:
             if not self.profiles:
                 text = "Pick a profile first: click inside a sketch area or on a flat face."
@@ -1556,14 +2272,16 @@ class RevolvePanel(Panel):
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or revolve.problem(self.target)
         if text:
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
         revolve.hide_sketches(self.profiles)
         self.cleanup()
-        self.doc.commitTransaction()
+        # Also closes the step's name when nothing changed (else the next change anywhere
+        # took that name and threw away the Redo list).
+        preview.end_transaction(self.doc)
         self._close()
         new_body = revolve.owner_body(feature)
         if new_body is not None and new_body is not self.body:
@@ -1575,10 +2293,16 @@ class RevolvePanel(Panel):
         return True
 
     def reject(self):
+        if self._closed:
+            return True
+        if self._busy():
+            QtCore.QTimer.singleShot(200, self.reject)  # once the recompute is over
+            return False
+        body = self.body
         try:
             self._timer.stop()
             self.cleanup()
-            self.doc.abortTransaction()
+            preview.end_transaction(self.doc, abort=True)
             preview.recompute(self.doc)
         except Exception as exc:
             warn("Revolve Cancel: %s" % exc)
@@ -1586,15 +2310,25 @@ class RevolvePanel(Panel):
             self._close()
         except Exception as exc:
             warn("Revolve Cancel: %s" % exc)
+        revolve._show_tip(body)
         return True
 
     def cleanup(self):
         self._unwatch()
-        self.escape.remove()
+        for guard in (self.escape, self.undo_guard, self.enter, self.typing):
+            try:
+                guard.remove()
+            except Exception:
+                pass
         self._remove_handles()
         self._hide_shown()
         super().cleanup()
 
+
+TO_WAIT = (
+    "Click the object to revolve to: an origin plane, a flat face, an edge or a corner of the "
+    "part, or a construction plane or point."
+)
 
 # FreeCAD's failure texts, said the way a Fusion user needs them.
 PLAIN = (
@@ -1610,6 +2344,19 @@ PLAIN = (
     ),
     ("not a solid", "Nothing is left: the revolve does not touch the body here."),
 )
+
+
+def _vertex(point):
+    import Part
+
+    return Part.Vertex(point)
+
+
+def _in_doc(obj, doc):
+    try:
+        return obj.Document.Name == doc.Name
+    except Exception:
+        return False
 
 
 def _plain(text):
@@ -1668,15 +2415,25 @@ class RevolveCommand:
 
     def Activated(self):
         try:
+            sketch = _sketch_in_edit()  # Revolve started in a sketch: revolve that sketch
             if not commands.finish_open_dialog():
                 return
             if commands.find_body() is None:
                 commands.tell("Revolve needs a sketch: use Create Sketch first.")
                 return
-            Gui.Control.showDialog(RevolvePanel(App.ActiveDocument))
+            Gui.Control.showDialog(RevolvePanel(App.ActiveDocument, sketch=sketch))
             log("revolve started")
         except Exception as exc:
             warn("Revolve failed to start: %s" % exc)
+
+
+def _sketch_in_edit():
+    try:
+        edit = Gui.ActiveDocument.getInEdit() if Gui.ActiveDocument is not None else None
+        obj = edit.Object if edit is not None else None
+    except Exception:
+        return None
+    return obj if obj is not None and extrude.is_sketch(obj) else None
 
 
 def edit(feature):

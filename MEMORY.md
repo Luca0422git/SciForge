@@ -145,7 +145,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       handle(s) dragged round the axis; Join / Cut / Intersect / New Body with auto Cut when
       the revolve goes mostly into material (Revolution <-> Groove swap); timeline edit;
       the interim "Revolve (Cut)" ribbon entry removed. 3 scenarios (`revolve_*.py`), 12
-      golden models (`sf_revolve_*`, ops `sf_revolve` / `sf_revolve_edit`). Gap: Type "To".
+      golden models (`sf_revolve_*`, ops `sf_revolve` / `sf_revolve_edit`).
+- [x] Revolve QA pass (branch `sf/revolve-qa`): Type **To** (origin planes drawn as squares
+      to click, flat faces, edges, corners, construction planes/points; follows the object via
+      the hidden `revolve.RevolveTo` helper; Join and Cut), Enter over the view = OK, Ctrl+Z
+      cancels / Ctrl+S finishes first, formulas and parameters in the angle fields, Redo list
+      kept, numbers typed over the 3D view go into the angle box, face profiles found again
+      after earlier edits (`revolve.FaceLink`), Join <-> Cut keeps later steps' links, origin
+      axes hidden behind the part, honest messages for cuts that miss / remove everything /
+      have no solid. 5 QA scenarios (`revolve_qa*.py`, 25 paths), 5 new golden models
+      (`sf_revolve_to_*`, `sf_revolve_face_profile_follows`). Spec: `parity/revolve.md`.
 - [x] Rectangular Pattern, Circular Pattern, Pattern on Path, Mirror, Fusion-style (branch
       `sf/patterns`): Pattern Type Features (FreeCAD's LinearPattern/PolarPattern/Mirrored,
       dress-ups included; a face click takes the feature that made it) / Faces (SciForge's
@@ -484,7 +493,36 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Angle one way and Angle2 the other and **silently gives a wrong solid when the two add up
   to more than 360** (SciForge refuses that in the dialog). `Groove` with `UpToFace` returns
   an **empty solid without any error** (volume 0, both directions), so Fusion's Type "To"
-  is not offered. A disjoint Join is accepted (a body with two lumps, like Fusion's).
+  does not use UpToFace: the hidden `revolve.RevolveTo` helper measures the angle from the
+  profile to the object on every recompute and the revolve's Angle / Reversed follow it by
+  expressions (`abs(RevolveTo.Angle)`, `RevolveTo.Angle < 0 ? 1 : 0`; a ternary works on a
+  PropertyBool). A disjoint Join is accepted (a body with two lumps, like Fusion's).
+- Revolve QA findings (branch `sf/revolve-qa`):
+  - FreeCAD 1.1.4 loses a face's name ("?Face7", "missing element reference") when an
+    earlier step renumbers faces, and also loses vertex names after a sketch edit. A face
+    profile goes through `revolve.FaceLink` and a To object through `revolve.RevolveTo`;
+    both remember where the element is and find it again by place (then by name, then the
+    nearest one). Store element memory, not only `PropertyLinkSub` names.
+  - Swapping Revolution <-> Groove makes a new feature: later steps that link its faces or
+    edges are moved to the new one by geometry (`revolve._relink_users`) before the old one
+    is removed; only moving to a new body is still refused when something uses it.
+  - A formula on a feature that reads a helper must not be read back as the user's formula
+    (`revolve.formulas_of` skips them), and must be dropped before that helper is deleted:
+    otherwise switching To -> Angle left "abs(RevolveTo.Angle)" pointing at nothing.
+  - Typing a number with the mouse over the 3D view fired FreeCAD's view keys (0-6). The
+    revolve dialog filters ShortcutOverride/KeyPress for digits over the view
+    (`revolve_ui.TypeOverView`) and types them into the angle box, like Fusion. The same
+    could serve Extrude/Hole (other owners).
+  - Overlays drawn for picking (long axis lines, handles, To plane squares) go inside
+    `SoSkipBoundingGroup` (`revolve_ui._skip_fit`): Fit then frames the part, not them.
+  - Angle parameters: a user parameter in degrees is a PropertyAngle and refuses values
+    beyond +-360 (a "720 deg" parameter cannot be made). Left for the parameters owner.
+  - Drawing a construction line in the profile's sketch once raised FreeCAD's "Redundant
+    constraint is not an autoconstraint ... Please report!" notification (revolve_qa_more
+    P15, first version; the scenario now clicks the points). Left for the sketch owner.
+  - `blend_steps.choose` (a drop-down picked with arrow keys) failed once in
+    `revolve_qa_part` P9 while another full suite ran on the machine; it passed on the rerun
+    and in every other run.
 - A feature may only link inside its own body ("go out of the allowed scope" error).
   Profiles/edges from another body go through a hidden SubShapeBinder; a construction line,
   construction axis or sketch axis of another body (no shape to bind) through
@@ -1286,13 +1324,47 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Trial merge into `claude/inspiring-cerf-ragp6j` (git merge-tree): only MEMORY.md conflicts.
   That branch hangs a sketch on the step that made the face (not on the pattern); the
   `patterns_qa_edit` check accepts both.
+### 2026-10-11: QA of Revolve (branch `sf/revolve-qa`)
+- Branched with the current main (which holds the merged revolve), so the QA ran against
+  today's product. Luca had not opened issues: the bugs below were found by using Revolve
+  the way a Fusion user does, with real clicks, keys and drags only.
+- 5 new scenarios (25 paths): `revolve_qa.py` (P1-P5: beginner path, axis first, wrong
+  order, Esc mid-pick, values while the preview runs, three timeline edits + undo/redo),
+  `revolve_qa_part.py` (P6-P10: on a part, Press Pull / Extrude around it, save, close,
+  reopen, edit, back face from the rear view), `revolve_qa_more.py` (P11-P16: Revolve from
+  an open sketch, E/Q while open, a cut that misses, the first revolve as a cut, a
+  construction line axis, clearing the axis), `revolve_qa_bodies.py` (P18-P22: New Body
+  edited to Join, edge-on handle drag, Intersect after reopening, a formula through
+  undo/redo, numbers typed over the view), `revolve_qa_to.py` (P23-P26: Type To an origin
+  plane, To <-> Angle with undo/redo, To a corner that moves when the block's sketch is
+  edited, wrong objects refused).
+- Bugs found and fixed (commits on the branch): Enter over the view did nothing; Ctrl+Z
+  in the dialog committed the preview; Ctrl+S could save a half-made revolve; an unchanged
+  dialog threw away the Redo list; formulas typed in the angle fields were dropped;
+  Revolve from an open sketch took another sketch; clicks in another design were taken; a
+  part edge in front of a hidden origin axis picked the axis and Fit framed the long axis
+  lines; silent cuts (miss / remove all / nothing to cut); the preview recompute ran after
+  the dialog closed; a face profile was lost after an earlier edit; Join <-> Cut refused
+  when a later step used the revolve; digits typed over the view moved the camera; Type
+  To was missing (now built, with its own golden models); switching To back to Angle
+  broke the revolve (helper formula left behind); To squares covered the part so its faces
+  and corners could not be clicked; all squares stayed shown after a plane was picked.
+- Teammate scenario changed on purpose: `revolve_basic` expects Type Angle / To / Full.
+- Shared files touched: `SciForgeTests/golden/schema.py` (append-only block: sf_revolve
+  takes "to"), `MEMORY.md`. New spec `docs/sciforge/parity/revolve.md`.
+- Full suite on the branch (no --only, code of commit 52eb1d9d4b, 87 minutes): unit 236 OK,
+  golden 219 pass + 1 xfail (plate_hole_grid, core patch #4 not compiled; the golden
+  `sf_revolve_to_cut`, added after the run started, passed on its own), smoke 70/70,
+  journey 25/25, 93 of 93 scenarios PASS (10064 checks; revolve_qa 342, revolve_qa_more
+  353, revolve_qa_part 306, revolve_qa_to 255, revolve_qa_bodies 228).
 
 ## Next steps (in order)
 
 1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
    inspect (built on `sf/inspect`, merge after review), primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
    then the QA stage for all 12 (including the 4 already merged; hole/thread QA done on
-   `sf/hole-qa`, merge after review). Merge each only after the full suite passes locally.
+   `sf/hole-qa`, revolve QA done on `sf/revolve-qa`, merge after review). Merge each only
+   after the full suite passes locally.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).

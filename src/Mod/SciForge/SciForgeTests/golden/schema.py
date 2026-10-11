@@ -1231,3 +1231,31 @@ def validate(model):  # noqa: F811  (adds the sweep / loft / rib checks to the c
     _validate_before_sweep_loft(model)
     _check_sweep_loft_steps(model)
     return model
+
+
+# -- Revolve Type "To" (revolve QA): "to" names what the revolve goes to ---------------------------
+STEP_KEYS["sf_revolve"] = (STEP_KEYS["sf_revolve"][0], STEP_KEYS["sf_revolve"][1] | {"to"})
+REVOLVE_TYPES = ("angle", "to", "full")
+_REVOLVE_TO_KEYS = ("plane", "face", "edge", "vertex", "construct")
+
+
+def _check_revolve_to(model):
+    for i, step in enumerate(model.get("steps", [])):
+        if step.get("op") != "sf_revolve":
+            continue
+        here = "steps[%d] (sf_revolve)" % i
+        to = step.get("to")
+        if (step.get("type") == "to") != (to is not None):
+            _fail(here, "type 'to' and a 'to' pick go together")
+        picks = set(to) & set(_REVOLVE_TO_KEYS) if isinstance(to, dict) else set()
+        if to is not None and len(picks) != 1:
+            _fail(here, "'to' is one of %s" % (_REVOLVE_TO_KEYS,))
+
+
+_validate_before_revolve_to = validate
+
+
+def validate(model):  # noqa: F811  (adds the revolve "to" checks)
+    _validate_before_revolve_to(model)
+    _check_revolve_to(model)
+    return model

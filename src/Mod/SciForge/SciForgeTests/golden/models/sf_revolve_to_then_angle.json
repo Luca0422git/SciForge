@@ -1,0 +1,59 @@
+{
+  "id": "sf_revolve_to_then_angle",
+  "title": "Revolve dialog: a Type To revolve edited back to Angle keeps working",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "revolve-to"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            0,
+            20,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z",
+      "type": "to",
+      "to": {
+        "plane": "YZ"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1178.0972450961724,
+        "source": "analytic",
+        "note": "a quarter turn: 375 pi"
+      }
+    },
+    {
+      "op": "sf_revolve_edit",
+      "target": "r1",
+      "set": {
+        "type": "angle",
+        "angle": 45
+      }
+    }
+  ],
+  "expect": {
+    "volume": 589.0486225480862,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Type Angle 45 after Type To: the angle no longer follows the plane (the To helper and its formula go). V = pi (20^2 - 10^2) 5 / 8 = 187.5 pi."
+  }
+}

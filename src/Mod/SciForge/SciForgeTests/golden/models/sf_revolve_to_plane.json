@@ -1,0 +1,51 @@
+{
+  "id": "sf_revolve_to_plane",
+  "title": "Revolve dialog: Type To, as far as an origin plane through the axis",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "revolve-to"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            0,
+            20,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z",
+      "type": "to",
+      "to": {
+        "plane": "YZ"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1178.0972450961724,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      20,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "The ring section x 10..20, z 0..5 turns about Z from the XZ plane to the YZ plane: a quarter turn either way, so the positive way (towards +Y). V = pi (20^2 - 10^2) 5 / 4 = 375 pi."
+  }
+}
