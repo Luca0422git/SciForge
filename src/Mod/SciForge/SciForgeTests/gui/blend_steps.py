@@ -187,8 +187,14 @@ def choose(combo, label):
         return False
     combo.setFocus()
     QtTest.QTest.mouseClick(combo, QtCore.Qt.LeftButton)
-    QtWidgets.QApplication.processEvents()
     view = combo.view()
+    # A busy machine opens the list a moment after the click; keys sent before it was there
+    # went to the closed box and the Enter never came (revolve_qa_part P9 under load).
+    for _ in range(20):
+        QtWidgets.QApplication.processEvents()
+        if view.isVisible():
+            break
+        QtTest.QTest.qWait(25)
     target = labels.index(label)
     current = view.currentIndex().row() if view.isVisible() else combo.currentIndex()
     widget = view if view.isVisible() else combo
