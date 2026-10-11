@@ -600,10 +600,120 @@ def _check_shell_draft_steps(model):
             seen[step["id"]] = op
 
 
+# Body tools (golden/bodies_ops.py; sciforge/combine.py, split.py, move.py, delete.py, the same
+# code as their dialogs). Bodies are named by a step that made them.
+STEP_KEYS["combine"] = (
+    {"id", "target", "tools"},
+    {"operation", "new_body", "keep_tools", "comment"},
+)
+STEP_KEYS["split_body"] = ({"id", "body", "tool"}, {"extend", "comment"})
+STEP_KEYS["move_bodies"] = (
+    {"id", "bodies"},
+    {
+        "move_type",
+        "dx",
+        "dy",
+        "dz",
+        "rx",
+        "ry",
+        "rz",
+        "pivot",
+        "axis",
+        "angle",
+        "from_point",
+        "to_point",
+        "px",
+        "py",
+        "pz",
+        "copy",
+        "comment",
+    },
+)
+STEP_KEYS["delete_face"] = ({"id", "faces"}, {"comment"})
+STEP_KEYS["body_tool_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["measure_bodies"] = ({"steps"}, {"comment"})
+STEP_KEYS["delete_bodies"] = ({"steps"}, {"comment"})
+
+BODY_OPERATIONS = ("join", "cut", "intersect")
+MOVE_TYPES = ("free", "translate", "rotate", "point_to_point", "point_to_position")
+
+
+def _check_body_steps(model):
+    """References and choices of the body-tool steps (combine, split_body, move_bodies,
+    delete_face, body_tool_edit, measure_bodies)."""
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (model.get("id", "?"), i)
+        op = step.get("op")
+        if op == "combine":
+            for name in [step["target"]] + list(step["tools"]):
+                if name not in seen:
+                    _fail(here, "combine names unknown step %r" % name)
+            if not step["tools"]:
+                _fail(here, "combine needs at least one tool")
+            if step["target"] in step["tools"]:
+                _fail(here, "the target cannot be a tool")
+            if step.get("operation", "join") not in BODY_OPERATIONS:
+                _fail(here, "'operation' must be one of %s" % (BODY_OPERATIONS,))
+        if op == "split_body":
+            if step["body"] not in seen:
+                _fail(here, "split_body names unknown step %r" % step["body"])
+            tool = step["tool"]
+            if isinstance(tool, str):
+                if tool not in PLANES:
+                    _fail(here, "'tool' plane must be one of %s" % (PLANES,))
+            elif not isinstance(tool, dict) or len(set(tool) & {"face", "body", "sketch"}) != 1:
+                _fail(
+                    here,
+                    "'tool' must be XY/XZ/YZ, {'face': selector, 'of': id}, {'body': id} or "
+                    "{'sketch': id, 'edge': n}",
+                )
+            else:
+                if "sketch" in tool and seen.get(tool["sketch"]) != "sketch":
+                    _fail(here, "'tool' names unknown sketch %r" % tool["sketch"])
+                for key in ("of", "body"):
+                    if key in tool and tool[key] not in seen:
+                        _fail(here, "'tool' names unknown step %r" % tool[key])
+        if op == "move_bodies":
+            if not step["bodies"] or any(b not in seen for b in step["bodies"]):
+                _fail(here, "'bodies' must name earlier steps")
+            kind = step.get("move_type", "free")
+            if kind not in MOVE_TYPES:
+                _fail(here, "'move_type' must be one of %s" % (MOVE_TYPES,))
+            if kind == "rotate" and step.get("axis") not in AXES:
+                _fail(here, "rotate needs 'axis' X, Y or Z")
+            if kind == "point_to_point" and not ("from_point" in step and "to_point" in step):
+                _fail(here, "point_to_point needs 'from_point' and 'to_point'")
+            if kind == "point_to_position" and "from_point" not in step:
+                _fail(here, "point_to_position needs 'from_point' (and px, py, pz)")
+            for key in ("dx", "dy", "dz", "rx", "ry", "rz", "angle", "px", "py", "pz"):
+                if key in step:
+                    _check_number(here + "." + key, step[key])
+        if op in ("body_tool_edit",) and seen.get(step["target"]) not in (
+            "combine",
+            "split_body",
+            "move_bodies",
+        ):
+            _fail(here, "body_tool_edit must name a combine, split_body or move_bodies step")
+        if op in ("measure_bodies", "delete_bodies") and any(s not in seen for s in step["steps"]):
+            _fail(here, "%s names unknown steps" % op)
+        if "id" in step:
+            seen[step["id"]] = op
+
+
 _validate_before_shell_draft = validate
 
 
 def validate(model):  # noqa: F811  (adds the Shell / Draft / Scale checks)
     _validate_before_shell_draft(model)
     _check_shell_draft_steps(model)
+    return model
+
+
+_validate_before_bodies = validate
+
+
+def validate(model):  # noqa: F811  (adds the body-tool checks to the checks above)
+    _validate_before_bodies(model)
+    _check_body_steps(model)
     return model

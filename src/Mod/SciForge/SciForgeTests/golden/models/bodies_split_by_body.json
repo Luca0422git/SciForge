@@ -1,0 +1,80 @@
+{
+  "id": "bodies_split_by_body",
+  "title": "Split Body along a cylinder body: a box with a hole and the plug",
+  "tags": [
+    "bodies",
+    "split",
+    "body-tool"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ],
+          "name": "s2c"
+        }
+      ],
+      "offset": -5
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 20,
+      "operation": "new_body"
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "e1",
+      "tool": {
+        "body": "e2"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 4428.318530717958,
+    "faces": 10,
+    "solids": 2,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "Box with a through hole r5 (3800 + 50 pi, 7 faces) and the plug, a cylinder r5 h10 (2*25 pi + 100 pi = 150 pi, 3 faces)."
+  }
+}

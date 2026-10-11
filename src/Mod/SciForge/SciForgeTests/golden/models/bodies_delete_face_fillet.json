@@ -1,0 +1,81 @@
+{
+  "id": "bodies_delete_face_fillet",
+  "title": "Delete on a fillet face: the sharp edge comes back",
+  "tags": [
+    "bodies",
+    "delete",
+    "delete-face",
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 5,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "delete_face",
+      "id": "d1",
+      "faces": {
+        "type": "cylinder",
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "the box again"
+  }
+}
