@@ -119,7 +119,15 @@ class Watch:
     def slotDeletedObject(self, obj):
         """A Split Body or a copy deleted (the timeline's or the browser's Delete): its
         extra bodies go too, as in Fusion. Only on a delete, never after an undo, so undoing
-        that removal brings them back for good."""
+        that removal brings them back for good.
+
+        A step a Combine uses (a tool body's, or a New Body Combine's target) deleted by any
+        Delete: the Combine keeps it as it was, so it goes on giving the same result. This one
+        is done at once, before FreeCAD drops the link, inside the same undo step."""
+        try:
+            freeze_for(obj)
+        except Exception as exc:
+            warn("body tools: %s" % exc)
         try:
             if bodies.kind(obj) in ("Combine", "SplitBody", "MoveCopy") or bodies.is_body(obj):
                 self._later(obj.Document, orphans=True)
@@ -127,15 +135,12 @@ class Watch:
             pass
 
     def slotCreatedDocument(self, doc):
+        """A new design, or a file being opened. FreeCAD tells Python observers nothing when
+        a file has finished loading, so that is looked at a moment later (_opened)."""
         try:
             bodies.sync_consumed(doc, initial=True)
-        except Exception:
-            pass
-
-    def slotFinishRestoreDocument(self, doc):
-        try:
-            bodies.forget(doc.Name)
-            bodies.sync_consumed(doc, initial=True)
+            name = doc.Name
+            QtCore.QTimer.singleShot(0, lambda: _opened(name))
         except Exception:
             pass
 
@@ -161,6 +166,65 @@ class Watch:
             sync(doc)
         except Exception as exc:
             warn("body tools: %s" % exc)
+
+
+def freeze_for(obj):
+    """Combines that use `obj` (being deleted) keep its solid (combine.freeze_tools). Only
+    for a delete: an undo, a redo or a cancelled dialog rolling objects back changes
+    nothing. Only properties of the Combines are set (no recompute): FreeCAD is in the
+    middle of removing `obj`."""
+    from . import combine
+
+    doc = obj.Document
+    if doc is None or getattr(doc, "Transacting", False) or getattr(doc, "Restoring", False):
+        return
+    for user in list(obj.InList):
+        if not combine.is_combine(user) or user is obj or not bodies.alive(user):
+            continue
+        uses = obj in list(user.Tools) or (user.NewBody and user.Target is obj)
+        if uses:
+            combine.freeze_tools(user, {obj.Name})
+
+
+def _opened(name, tries=0):
+    """A design just created or opened: the bodies used up in it are recorded as they are
+    (nothing is shown or hidden), and the active body is not a used-up one."""
+    try:
+        if name not in App.listDocuments():
+            return
+        doc = App.getDocument(name)
+        if getattr(doc, "Restoring", False) or getattr(doc, "Recomputing", False):
+            if tries < 50:
+                QtCore.QTimer.singleShot(100, lambda: _opened(name, tries + 1))
+            return
+        bodies.forget(name)
+        bodies.sync_consumed(doc, initial=True)
+        _free_body_first(name)
+    except Exception as exc:
+        warn("body tools: %s" % exc)
+
+
+def _free_body_first(name):
+    """A design just opened has no active body, and SciForge's commands then take the first
+    body of the design. When a Combine used that body up (it is hidden), a new sketch and
+    extrude would go into a body nobody sees: the first body that is not used up becomes
+    the active one instead."""
+    try:
+        if name not in App.listDocuments():
+            return
+        doc = App.getDocument(name)
+        if bodies.active_body(doc) is not None:
+            return
+        found = bodies.list_bodies(doc)
+        used = bodies.consumed(doc)
+        if not found or found[0].Name not in used:
+            return
+        for body in found:
+            if body.Name not in used and bodies.has_solid(body):
+                bodies.set_active_body(body)
+                return
+    except Exception as exc:
+        warn("body tools: %s" % exc)
 
 
 def remove_orphans(doc):

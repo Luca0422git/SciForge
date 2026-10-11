@@ -38,7 +38,9 @@ class CombinePanel(BodyPanel):
         if feature is not None:
             self._show_picks()
             self.activate("tools")
-            self._see_through()
+            # The used-up tools show (see-through) while the Combine is edited, as in Fusion,
+            # where editing rolls the design back to before the Combine: they can be clicked.
+            self.after_recompute()
         else:
             self.activate("target")
             self.start_from_selection()
@@ -89,7 +91,7 @@ class CombinePanel(BodyPanel):
 
     # -- clicks -----------------------------------------------------------------------------------
     def picked(self, obj, short, point):
-        body = bodies.body_of(obj)
+        body = self._really_clicked(bodies.body_of(obj), point)
         if body is None or self._made_by_preview(body):
             return
         if self.active == "target":
@@ -114,6 +116,30 @@ class CombinePanel(BodyPanel):
         return (
             feature is not None and bodies.alive(feature) and combine.created_body(feature) is body
         )
+
+    def _really_clicked(self, body, point):
+        """The body a click means. The preview (the target's combined result, or the New
+        Body) is drawn where the see-through tools are, so a click on a tool usually lands on
+        the preview: the body really there under the pointer is the one meant (Fusion's
+        preview cannot be clicked; its bodies can)."""
+        feature = self.target
+        if body is None or point is None or feature is None or not bodies.alive(feature):
+            return body
+        new_body = self._made_by_preview(body)
+        on_target = body is self.options["target"] and not feature.NewBody
+        if not new_body and not on_target:
+            return body
+        try:
+            target = self.options["target"]
+            before = feature.BaseFeature if on_target else target
+            if target is not None and _touches(before, point):
+                return target
+            for tool in self.options["tools"]:
+                if bodies.alive(tool) and _touches(tool, point):
+                    return tool
+        except Exception as exc:
+            warn("Combine pick: %s" % exc)
+        return None if new_body else body
 
     # -- preview ---------------------------------------------------------------------------------
     def apply(self):
@@ -204,6 +230,17 @@ class CombinePanel(BodyPanel):
         feature = self.target
         if ok and feature is not None and bodies.alive(feature) and feature.NewBody:
             bodies.set_active_body(bodies.body_of(feature))
+
+
+def _touches(obj, point, tol=1e-3):
+    """True when `point` (design coordinates) is in or on the solid of `obj` (a body or a
+    step)."""
+    if obj is None or not bodies.alive(obj):
+        return False
+    shape = bodies.global_shape(obj)
+    if shape.isNull() or not shape.Solids:
+        return False
+    return any(solid.isInside(point, tol, True) for solid in shape.Solids)
 
 
 class CombineCommand:

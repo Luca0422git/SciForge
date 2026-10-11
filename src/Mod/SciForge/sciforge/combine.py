@@ -89,6 +89,9 @@ class CombineFeature:
             # Tool bodies deleted later (SciForge's Delete): kept as they were, so the Combine
             # still gives the same result (design coordinates).
             obj.addProperty("Part::PropertyPartShape", "FrozenTools", "Combine", "", 4)
+        if "FrozenTarget" not in obj.PropertiesList:
+            # New Body: the target body deleted later, kept as it was (design coordinates).
+            obj.addProperty("Part::PropertyPartShape", "FrozenTarget", "Combine", "", 4)
         bodies.mark(obj, SCIFORGE_TYPE)
 
     def onDocumentRestored(self, obj):
@@ -97,7 +100,12 @@ class CombineFeature:
     def execute(self, obj):
         body = bodies.body_of(obj)
         base_obj = obj.Target if obj.NewBody else obj.BaseFeature
-        if base_obj is None or base_obj.Shape.isNull() or not base_obj.Shape.Solids:
+        frozen_target = getattr(obj, "FrozenTarget", None) if obj.NewBody else None
+        if base_obj is not None and not base_obj.Shape.isNull() and base_obj.Shape.Solids:
+            base = bodies.global_shape(base_obj)
+        elif base_obj is None and frozen_target is not None and not frozen_target.isNull():
+            base = bodies.as_result([s.copy() for s in frozen_target.Solids], refine=False)
+        else:
             raise CombineError(
                 "There is no solid in the target body to combine with. Edit the Combine and "
                 "pick the target body again."
@@ -112,7 +120,7 @@ class CombineFeature:
             raise CombineError(
                 "Its tool bodies are gone (deleted?). Edit the Combine and pick the tool bodies."
             )
-        result = combine_shapes(bodies.global_shape(base_obj), shapes, obj.Operation.lower())
+        result = combine_shapes(base, shapes, obj.Operation.lower())
         shape = bodies.as_result(result, refine=bool(obj.Refine))
         obj.Shape = bodies.to_local(shape, body)
 
@@ -160,9 +168,21 @@ def combine_shapes(base, tools, operation):
 # -- reading and building ----------------------------------------------------------------------------
 def freeze_tools(feature, gone):
     """Tool steps in `gone` (names of objects about to be deleted) are kept as their shape:
-    the Combine goes on giving the same result without them (SciForge's Delete)."""
+    the Combine goes on giving the same result without them (SciForge's Delete, and any
+    other delete through bodies_gui.Watch). With New Body, the target's step too."""
     import Part
 
+    changed = False
+    target = getattr(feature, "Target", None)
+    if feature.NewBody and target is not None and target.Name in gone:
+        try:
+            solids = bodies.global_shape(target).Solids
+        except Exception:
+            solids = []
+        if solids and "FrozenTarget" in feature.PropertiesList:
+            feature.FrozenTarget = Part.makeCompound(solids)
+            feature.Target = None
+            changed = True
     keep, frozen = [], []
     for step in feature.Tools:
         if step.Name in gone:
@@ -173,7 +193,7 @@ def freeze_tools(feature, gone):
         else:
             keep.append(step)
     if not frozen:
-        return False
+        return changed
     old = feature.FrozenTools
     if old is not None and not old.isNull():
         frozen = list(old.Solids) + frozen
@@ -183,9 +203,10 @@ def freeze_tools(feature, gone):
 
 
 def target_body(feature):
-    """The body the Combine changes (with New Body: the body it was made from)."""
+    """The body the Combine changes (with New Body: the body it was made from; None once that
+    body was deleted)."""
     if feature.NewBody:
-        return bodies.body_of(feature.Target)
+        return bodies.body_of(feature.Target) if feature.Target is not None else None
     return bodies.body_of(feature)
 
 

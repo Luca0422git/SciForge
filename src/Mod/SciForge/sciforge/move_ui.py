@@ -506,17 +506,26 @@ class MovePanel(BodyPanel):
     def _type_changed(self):
         self.options["move_type"] = self.move_type.currentData()
         self._update_visibility()
-        if self.options["move_type"] == "rotate" and self.options["axis_dir"] is None:
-            self.activate("axis")
-        elif (
-            self.options["move_type"] in ("point_to_point", "point_to_position")
-            and self.options["from_point"] is None
-        ):
-            self.activate("from_point")
-        elif self.active not in self._boxes():
-            self.activate("objects")
+        # With no body picked yet the Objects box keeps the clicks: the first click must pick
+        # the body to move, not be taken as an axis or a point (then nothing could move).
+        if not self.options["bodies"] or not self._next_box():
+            if self.active not in self._boxes():
+                self.activate("objects")
+        else:
+            self.activate(self._next_box())
         self._make_handles()
         self.changed()
+
+    def _next_box(self):
+        """The box the move type still waits for once bodies are picked, or None."""
+        kind = self.options["move_type"]
+        if kind == "rotate" and self.options["axis_dir"] is None:
+            return "axis"
+        if kind in ("point_to_point", "point_to_position") and self.options["from_point"] is None:
+            return "from_point"
+        if kind == "point_to_point" and self.options["to_point"] is None:
+            return "to_point"
+        return None
 
     def _boxes(self):
         kind = self.options["move_type"]
@@ -556,12 +565,17 @@ class MovePanel(BodyPanel):
             body = bodies.body_of(obj)
             if body is None or self._is_copy_body(body):
                 return
+            first = not self.options["bodies"]
             if body in self.options["bodies"]:
                 self.options["bodies"].remove(body)
             else:
                 self.options["bodies"].append(body)
             self._new_pivot()
             self._show_picks()
+            if first and self._next_box():
+                # Rotate / Point to Point chosen before the body: on to the axis or point
+                # (click the Objects box to add more bodies).
+                self.activate(self._next_box())
             self._make_handles()
             self.changed()
             return
