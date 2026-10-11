@@ -1,0 +1,86 @@
+{
+  "id": "sf_sweep_rail_stretch",
+  "title": "Sweep: Path + Guide Rail, Profile Scaling Stretch (wider only towards the rail)",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "guide-rail"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            40
+          ]
+        },
+        {
+          "line": [
+            5,
+            0,
+            15,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": {
+        "sketch": "p1",
+        "at": [
+          0,
+          20
+        ]
+      },
+      "rail": {
+        "sketch": "p1",
+        "at": [
+          10,
+          20
+        ]
+      },
+      "type": "rail",
+      "scaling": "stretch"
+    }
+  ],
+  "expect": {
+    "volume": 8000.0,
+    "area": 2824.6211251235322,
+    "faces": 6,
+    "bbox": [
+      -15,
+      -5,
+      0,
+      15,
+      5,
+      40
+    ],
+    "note": "Stretch scales the square only towards the rail (x), 1 to 3: x half-width 5 to 15, y stays 10. A wedge: V = 40 * 10 * (10 + 30) / 2; two slanted x sides 10 x sqrt(40^2 + 10^2), two trapezoid y sides, ends 10 x 10 and 30 x 10.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

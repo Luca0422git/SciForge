@@ -1,0 +1,82 @@
+{
+  "id": "sf_sweep_groove_cut",
+  "title": "Sweep: circle r3 along a line through a box; Fusion picks Cut by itself (a groove)",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -10,
+            20,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            8,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            -25,
+            8,
+            25,
+            8
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1"
+    }
+  ],
+  "expect": {
+    "volume": 6992.925927912146,
+    "faces": 8,
+    "bbox": [
+      -20,
+      -10,
+      0,
+      20,
+      10,
+      10
+    ],
+    "note": "The circle's centre is 2 below the top: the part sticking out is the segment 9 acos(2/3) - 2 sqrt(5); inside the box the groove's section is 9 pi minus that, over the box's 40 mm. The sweep runs mostly inside, so the operation becomes Cut. The top is split in two strips: 8 faces.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

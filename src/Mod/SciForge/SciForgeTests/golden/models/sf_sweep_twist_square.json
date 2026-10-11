@@ -1,0 +1,62 @@
+{
+  "id": "sf_sweep_twist_square",
+  "title": "Sweep: a 10 x 10 square up a straight 50 mm path with a 45 degree twist",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            50
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "twist": 45
+    }
+  ],
+  "expect": {
+    "volume": 5000,
+    "faces": 6,
+    "bbox": [
+      -7.0710678118654755,
+      -7.0710678118654755,
+      0,
+      7.0710678118654755,
+      7.0710678118654755,
+      50
+    ],
+    "note": "Every horizontal section is the 10 x 10 square turned by 45 t / 50 degrees, so V = 100 * 50 (Cavalieri). A corner turned by 45 degrees lies on an axis at 5 sqrt(2) from it: the box reaches +-5 sqrt(2). 4 twisted sides and 2 ends.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

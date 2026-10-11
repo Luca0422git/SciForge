@@ -1,0 +1,76 @@
+{
+  "id": "sf_sweep_face_taper",
+  "title": "Sweep: the end face of a box along a 10 mm line with a 5 degree taper",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -10,
+            20,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 10
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            20,
+            5,
+            30,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "face": {
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "count": 1
+      },
+      "path": "p1",
+      "taper": 5
+    }
+  ],
+  "expect": {
+    "volume": 10370.366030758501,
+    "faces": 10,
+    "bbox": [
+      -20,
+      -11.74977327051848,
+      -0.8748866352592399,
+      30,
+      11.74977327051848,
+      10.87488663525924
+    ],
+    "note": "The 20 x 10 end face is scaled about the path point (its centre) by k = 1 + 10 tan 5 / 5 (its nearest side is 5 away; that side tilts by 5 degrees): a frustum 10 long, V = 10 * 200 (1 + k + k^2) / 3, added to the 40 x 20 x 10 box. Faces: 5 of the box, 4 tilted sides and the new end.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

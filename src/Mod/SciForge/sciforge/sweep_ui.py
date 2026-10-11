@@ -496,9 +496,10 @@ class SweepPanel(Panel):
                         faces.append(face)
             self.picker.show_faces(faces)
         if self.overlay is not None:
+            rail = self.rail if self.type.currentData() == "rail" else []
             for name, refs, color in (
                 ("path", self.path, curve_pick.PATH_COLOR),
-                ("rail", self.rail, curve_pick.RAIL_COLOR),
+                ("rail", rail, curve_pick.RAIL_COLOR),
             ):
                 try:
                     edges = curves.refs_edges(refs)
@@ -589,8 +590,7 @@ class SweepPanel(Panel):
             self.activate("rail")
         elif self.type.currentData() == "single" and self.active == "rail":
             self.activate("path")
-        self._update_layout()
-        self._changed(new_geometry=True)
+        self._picks_changed()  # a guide rail still to pick takes the preview away
 
     @safe
     def _value_typed(self, *_):
@@ -744,7 +744,7 @@ class SweepPanel(Panel):
             return
         try:
             faces = sweep.profile_faces(self.profiles)
-            size = max(2.0, min(faces[0].BoundBox.DiagonalLength * 0.35, 12.0))
+            size = max(2.0, min(faces[0].BoundBox.DiagonalLength * 0.2, 8.0))
             for name in sorted(wanted):
                 value = self.options[name]
                 self.handles[name] = curve_pick.PathHandle(

@@ -1,0 +1,60 @@
+{
+  "id": "sf_sweep_torus_closed",
+  "title": "Sweep: circle r2 round a closed circular path r20 (a torus)",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XY",
+      "curves": [
+        {
+          "circle": [
+            0,
+            0,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1"
+    }
+  ],
+  "expect": {
+    "volume": 1579.1367041742974,
+    "area": 1579.1367041742974,
+    "faces": 1,
+    "bbox": [
+      -22,
+      -22,
+      -2,
+      22,
+      22,
+      2
+    ],
+    "note": "Torus R20 r2: V = 2 pi^2 R r^2, A = 4 pi^2 R r. A closed path leaves no ends.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

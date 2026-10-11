@@ -1,0 +1,62 @@
+{
+  "id": "sf_sweep_parallel_arc",
+  "title": "Sweep: Orientation Parallel keeps the circle level along a quarter arc",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            30,
+            0,
+            30,
+            90,
+            180
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "orientation": "parallel"
+    }
+  ],
+  "expect": {
+    "volume": 376.99111843077515,
+    "faces": 3,
+    "bbox": [
+      -2,
+      -2,
+      0,
+      32,
+      2,
+      30
+    ],
+    "note": "Parallel moves the level circle without turning it: every level section is the r2 disc, from z 0 to 30, so V = pi r^2 30 (Cavalieri). It ends at (30, 0, 30), reaching x 32.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

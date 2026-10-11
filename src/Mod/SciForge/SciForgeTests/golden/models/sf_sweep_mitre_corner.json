@@ -1,0 +1,81 @@
+{
+  "id": "sf_sweep_mitre_corner",
+  "title": "Sweep: circle r2 along an L-shaped path with a sharp corner (mitred joint)",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            30
+          ]
+        },
+        {
+          "line": [
+            0,
+            30,
+            20,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": {
+        "sketch": "p1",
+        "at": [
+          [
+            0,
+            10
+          ],
+          [
+            10,
+            30
+          ]
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "volume": 628.3185307179587,
+    "area": 653.451271946677,
+    "faces": 4,
+    "bbox": [
+      -2,
+      -2,
+      0,
+      20,
+      2,
+      32
+    ],
+    "note": "Fusion mitres a sharp path corner: two cylinders cut by the 45 degree bisector plane. The wedge one cylinder gains on the outside it loses on the inside, so V = pi r^2 (30 + 20) and the side area 2 pi r (30 + 20), plus two end discs. The corner's outside point is (-2, 32).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

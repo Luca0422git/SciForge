@@ -1,0 +1,84 @@
+{
+  "id": "sf_sweep_intersect",
+  "title": "Sweep: Intersect keeps only the rod inside a block",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "intersect"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -10,
+            -10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "operation": "intersect"
+    }
+  ],
+  "expect": {
+    "volume": 251.32741228718345,
+    "area": 276.46015351590177,
+    "faces": 3,
+    "bbox": [
+      -2,
+      -2,
+      0,
+      2,
+      2,
+      20
+    ],
+    "note": "The rod r2 h30 meets the 20 high block in a cylinder r2 h20.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

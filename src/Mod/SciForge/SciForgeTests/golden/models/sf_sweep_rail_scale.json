@@ -1,0 +1,86 @@
+{
+  "id": "sf_sweep_rail_scale",
+  "title": "Sweep: Path + Guide Rail, Profile Scaling Scale (the square grows to 30 x 30)",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "guide-rail"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            40
+          ]
+        },
+        {
+          "line": [
+            5,
+            0,
+            15,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": {
+        "sketch": "p1",
+        "at": [
+          0,
+          20
+        ]
+      },
+      "rail": {
+        "sketch": "p1",
+        "at": [
+          10,
+          20
+        ]
+      },
+      "type": "rail",
+      "scaling": "scale"
+    }
+  ],
+  "expect": {
+    "volume": 17333.333333333332,
+    "area": 4298.484500494129,
+    "faces": 6,
+    "bbox": [
+      -15,
+      -15,
+      0,
+      15,
+      15,
+      40
+    ],
+    "note": "The rail goes from 5 to 15 away from the path: the square is scaled evenly by 1 to 3. Frustum of a square pyramid V = h (A0 + A1 + sqrt(A0 A1)) / 3; each side is a trapezoid (10 + 30) / 2 high sqrt(40^2 + 10^2).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

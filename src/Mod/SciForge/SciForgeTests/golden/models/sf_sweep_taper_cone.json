@@ -1,0 +1,62 @@
+{
+  "id": "sf_sweep_taper_cone",
+  "title": "Sweep: circle r5 up a straight 20 mm path with a 10 degree taper (a cone frustum)",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "taper": 10
+    }
+  ],
+  "expect": {
+    "volume": 2939.1604838356866,
+    "area": 1169.948090761019,
+    "faces": 3,
+    "bbox": [
+      -8.5265396141693,
+      -8.5265396141693,
+      0,
+      8.5265396141693,
+      8.5265396141693,
+      20
+    ],
+    "note": "The side tilts by the taper angle: R = 5 + 20 tan 10. V = pi h (r^2 + r R + R^2) / 3, A = pi (r + R) s + pi r^2 + pi R^2 with s = sqrt(h^2 + (R - r)^2).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}
