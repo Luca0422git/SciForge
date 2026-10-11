@@ -116,7 +116,7 @@ SOLID_MODIFY = group(
         item("Offset Face", "SciForge_PressPull", "offset_face"),
         item("Replace Face", None, "replace_face"),
         item("Split Face", None, "split_face"),
-        item("Split Body", None, "split_body"),
+        item("Split Body", "SciForge_SplitBody", "split_body"),
         item("Silhouette Split", None, "silhouette_split"),
         SEP,
         item("Move/Copy", ("SciForge_Move", "Std_TransformManip"), "move", "M"),
