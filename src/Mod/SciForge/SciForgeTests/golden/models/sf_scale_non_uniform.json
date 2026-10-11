@@ -1,0 +1,55 @@
+{
+  "id": "sf_scale_non_uniform",
+  "title": "Box scaled non uniformly X 2, Y 1, Z 0.5 about the origin",
+  "tags": [
+    "scale",
+    "sciforge-scale"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_scale",
+      "id": "sc1",
+      "factors": [
+        2,
+        1,
+        0.5
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      80,
+      30,
+      5
+    ],
+    "source": "analytic",
+    "note": "V = 12000 * 2 * 1 * 0.5"
+  }
+}

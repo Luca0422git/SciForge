@@ -1,0 +1,60 @@
+{
+  "id": "sf_draft_front_face",
+  "title": "Box, Draft: fixed plane XY, the front face 5 degrees",
+  "tags": [
+    "draft",
+    "sciforge-draft"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "count": 1
+      },
+      "angle": 5
+    }
+  ],
+  "expect": {
+    "volume": 11825.022672948,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "the front face leans in toward the top: a wedge 40 long with legs 10 and 10 tan 5 is removed: V = 12000 - 40 * 100 tan(5) / 2"
+  }
+}

@@ -214,7 +214,8 @@ def build(shape, names, options):
     faces = []
     for name in names:
         try:
-            faces.append(shape.getElement(name))
+            # "?Face3": a reference FreeCAD lost track of; the face with the same number
+            faces.append(shape.getElement(name.lstrip("?")))
         except Exception:
             raise ShellError(
                 "The face %s no longer exists (an earlier step changed the part). "
@@ -468,7 +469,7 @@ class ShellFeature:
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             raise ShellError("Shell needs a solid before it in the timeline.")
         link = obj.Faces
-        names = [s for s in (link[1] if link else []) if s]
+        names = [s.lstrip("?") for s in (link[1] if link else []) if s]
         result = build(base.Shape, names, _fp_options(obj))
         if obj.Refine:
             try:
@@ -613,7 +614,7 @@ def read(feature):
     if feature.TypeId == NATIVE:
         link = feature.Base
         base = feature.BaseFeature or (link[0] if link else None)
-        names = [s for s in (link[1] if link else []) if s]
+        names = [s.lstrip("?") for s in (link[1] if link else []) if s]
         key = "inside" if feature.Reversed else "outside"
         other = "outside" if key == "inside" else "inside"
         value = feature.Value.Value
@@ -629,7 +630,7 @@ def read(feature):
     else:
         link = feature.Faces
         base = feature.BaseFeature or (link[0] if link else None)
-        names = [s for s in (link[1] if link else []) if s]
+        names = [s.lstrip("?") for s in (link[1] if link else []) if s]
         opts.update(_fp_options(feature))
         formulas["inside"] = formula_of(feature, "InsideThickness")
         formulas["outside"] = formula_of(feature, "OutsideThickness")

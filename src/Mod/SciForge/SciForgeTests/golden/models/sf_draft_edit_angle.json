@@ -1,0 +1,68 @@
+{
+  "id": "sf_draft_edit_angle",
+  "title": "Box, Draft of the front face 5 degrees, edited to 3 degrees",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "count": 1
+      },
+      "angle": 5
+    },
+    {
+      "op": "sf_draft_edit",
+      "target": "d1",
+      "set": {
+        "angle": 3
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11895.184441434,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 12000 - 40 * 100 tan(3) / 2"
+  }
+}

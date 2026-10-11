@@ -370,7 +370,8 @@ class ScalePanel(pickpanel.PickPanel):
                     value = float(self.options["factor"])
                 else:
                     value = float(self.options["factors"]["xyz".index(what)])
-                local = spot["origin"] + spot["direction"] * (1.2 * size)
+                # a gap between the corner and the arrow: the corner stays clickable
+                local = spot["origin"] + spot["direction"] * (2.2 * size)
                 origin = placement.multVec(local)
                 direction = placement.Rotation.multVec(spot["direction"])
                 dragger = ArrowDragger(

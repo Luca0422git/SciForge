@@ -116,6 +116,7 @@ def point_of(ref):
         return App.Vector(0, 0, 0)
     obj, sub = ref
     if sub:
+        sub = plain_name(sub)
         try:
             vertex = obj.Shape.getElement(sub)
         except Exception:
@@ -136,12 +137,19 @@ def point_of(ref):
     raise ScaleError("The scale point must be a corner (vertex) or a point.")
 
 
+def plain_name(sub):
+    """FreeCAD marks a reference it lost track of with "?" ("?Vertex6"): its naming loses
+    the corners of a Pad when the Pad's length changes. The corner with the same number is
+    then used (the same corner as long as the part's topology did not change)."""
+    return sub.lstrip("?") if sub else sub
+
+
 def point_label(ref):
     if ref is None or ref[0] is None:
         return "Origin"
     obj, sub = ref
     if sub:
-        return sub
+        return plain_name(sub)
     if obj.TypeId == "App::Point":
         return "Origin"
     return obj.Label
@@ -294,7 +302,7 @@ def read(feature):
     ref = None
     if link and link[0] is not None:
         subs = [s for s in link[1] if s]
-        ref = (link[0], subs[0] if subs else "")
+        ref = (link[0], plain_name(subs[0]) if subs else "")
     formulas = {"factor": shelling.formula_of(feature, "Factor")}
     for axis in "XYZ":
         formulas[axis.lower()] = shelling.formula_of(feature, "Factor" + axis)

@@ -8,6 +8,9 @@ in the browser beforehand, finished with Enter.
 
 Box 40 x 30 x 10 from the origin; a scale by (sx, sy, sz) about a point p multiplies the
 volume by sx * sy * sz and maps each corner c to p + (c - p) * s."""
+import os
+import tempfile
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -327,6 +330,50 @@ def after_second():
     h.shot("7-end")
 
 
+def save():
+    path = os.path.join(tempfile.mkdtemp(prefix="sciforge-scale-"), "scaled.FCStd")
+    s["path"] = path
+    App.ActiveDocument.saveAs(path)
+    h.check("saved", os.path.isfile(path), path)
+
+
+def close():
+    App.closeDocument(App.ActiveDocument.Name)
+
+
+def reopen():
+    App.openDocument(s["path"])
+    h.fit()
+
+
+def reopened():
+    h.check("reopened: same part", sd.close(h.solid_volume(), 40500.0 / 8.0), h.solid_volume())
+    h.check(
+        "both scales in the timeline",
+        "Scale 1" in sd.timeline_titles() and "Scale 2" in sd.timeline_titles(),
+        sd.timeline_titles(),
+    )
+    sd.timeline_double_click("Scale 1")
+
+
+def reopened_edit():
+    p = sd.scale_panel()
+    h.check("Scale 1 opens for editing after reopening", p is not None and p.editing)
+    h.check("factor 1.5 remembered", p is not None and abs(p.factor.value() - 1.5) < 1e-9)
+    if p:
+        sd.type_into(p.factor.widget, "2")
+
+
+def reopened_ok():
+    h.task_button("OK")
+
+
+def reopened_after():
+    v = h.solid_volume()
+    h.check("Scale 1 edited to 2, Scale 2 follows: 96000 / 8", sd.close(v, 12000.0), v)
+    h.check("no errors in the Report view", not sd.report_errors(), sd.report_errors())
+
+
 h.run(
     "shell_draft_scale",
     sd.box_steps("Scale")
@@ -373,5 +420,12 @@ h.run(
         second_started,
         second_enter,
         after_second,
+        save,
+        close,
+        reopen,
+        reopened,
+        reopened_edit,
+        reopened_ok,
+        reopened_after,
     ],
 )

@@ -494,3 +494,91 @@ def validate(model):  # noqa: F811  (adds the revolve checks to the checks above
     _validate_before_revolve(model)
     _check_revolve_steps(model)
     return model
+
+
+# -- Fusion Shell / Draft / Scale (sciforge/shelling.py, drafting.py, scale.py, the dialogs'
+# code; golden/shell_draft_ops.py) ---------------------------------------------------------
+STEP_KEYS["sf_shell"] = (
+    {"id"},
+    {"faces", "body", "inside", "outside", "direction", "shell_type", "comment"},
+)
+STEP_KEYS["sf_shell_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["sf_draft"] = ({"id", "plane", "faces"}, {"angle", "flip", "comment"})
+STEP_KEYS["sf_draft_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["sf_scale"] = ({"id"}, {"factor", "factors", "point", "comment"})
+STEP_KEYS["sf_scale_edit"] = ({"target", "set"}, {"comment"})
+SHELL_EDIT = {"inside", "outside", "direction", "shell_type"}
+DRAFT_EDIT = {"angle", "flip"}
+SCALE_EDIT = {"factor", "factors"}
+
+
+def _check_scale_values(here, spec):
+    if ("factor" in spec) == ("factors" in spec):
+        _fail(here, "give exactly one of 'factor' (uniform) or 'factors' [x, y, z]")
+    values = [spec["factor"]] if "factor" in spec else spec["factors"]
+    if "factors" in spec and (not isinstance(values, list) or len(values) != 3):
+        _fail(here, "'factors' is [x, y, z]")
+    for value in values:
+        _check_number(here + ".factor", value, positive=True)
+
+
+def _check_draft_plane(here, plane):
+    if isinstance(plane, str):
+        if plane not in PLANES:
+            _fail(here, "'plane' must be XY, XZ, YZ or {'face': selector}")
+    elif not isinstance(plane, dict) or set(plane) != {"face"}:
+        _fail(here, "'plane' must be XY, XZ, YZ or {'face': selector}")
+
+
+def _check_shell_draft_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_shell":
+            if ("faces" in step) == bool(step.get("body")):
+                _fail(here, "sf_shell needs exactly one of 'faces' or 'body': true")
+            if step.get("direction", "inside") not in ("inside", "outside", "both"):
+                _fail(here, "'direction' must be inside, outside or both")
+            if step.get("shell_type", "sharp") not in ("sharp", "rounded"):
+                _fail(here, "'shell_type' must be sharp or rounded")
+            for key in ("inside", "outside"):
+                if key in step:
+                    _check_number(here + "." + key, step[key], positive=True)
+        if op == "sf_draft":
+            _check_draft_plane(here, step["plane"])
+            if "angle" in step:
+                _check_number(here + ".angle", step["angle"])
+        if op == "sf_scale":
+            _check_scale_values(here, step)
+            point = step.get("point", "origin")
+            if point != "origin" and (not isinstance(point, list) or len(point) != 3):
+                _fail(here, "'point' is 'origin' or [x, y, z] (a corner of the part)")
+        for edit, made, allowed in (
+            ("sf_shell_edit", "sf_shell", SHELL_EDIT),
+            ("sf_draft_edit", "sf_draft", DRAFT_EDIT),
+            ("sf_scale_edit", "sf_scale", SCALE_EDIT),
+        ):
+            if op != edit:
+                continue
+            if seen.get(step["target"]) != made:
+                _fail(here, "'target' must name an earlier %s step" % made)
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object")
+            unknown = set(step["set"]) - allowed
+            if unknown:
+                _fail(here, "%s cannot set %s" % (edit, sorted(unknown)))
+            if edit == "sf_scale_edit":
+                _check_scale_values(here, step["set"])
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_shell_draft = validate
+
+
+def validate(model):  # noqa: F811  (adds the Shell / Draft / Scale checks)
+    _validate_before_shell_draft(model)
+    _check_shell_draft_steps(model)
+    return model

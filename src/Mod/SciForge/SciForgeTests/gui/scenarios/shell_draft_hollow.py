@@ -10,10 +10,14 @@ follows); undo/redo of that edit. Volumes worked out by hand:
   open box (2 mm walls) hollowed with 0.5 mm:  4512 - (39*29*9 - 37*27*8) = 2325
   after the first shell is Both 2 in / 1 out:  7296 - (41*31*10 - 37*27*8) = 2578
 """
+import os
+import tempfile
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import shell_draft_steps as sd
 
@@ -253,6 +257,93 @@ def after_redo_edit():
     v = h.solid_volume()
     h.check("Ctrl+Y redoes it", sd.close(v, 2578.0), v)
     h.check("valid at the end", h.body().Shape.isValid())
+    from sciforge import parameters
+
+    parameters.add_user(App.ActiveDocument, "wall", "mm", "1.5")  # as in Change Parameters
+
+
+def formula_edit():
+    sd.timeline_double_click("Shell 1")
+
+
+def type_formula():
+    p = sd.shell_panel()
+    h.check("Shell 1 opens again", p is not None and p.editing)
+    if p:
+        ui.type_into(p.inside.widget, "wall")
+
+
+def formula_preview():
+    p = sd.shell_panel()
+    h.check("the parameter's value is used", p is not None and abs(p.inside.value() - 1.5) < 1e-9)
+    h.check(
+        "the formula is shown",
+        p is not None and "Inside Thickness = wall" in p.formula_label.text(),
+        p and p.formula_label.text(),
+    )
+    h.task_button("OK")
+
+
+def formula_kept():
+    v = h.solid_volume()
+    # Shell 1: Both 1.5 in / 1 out = 42*32*11 - 37*27*8.5; Shell 2 hollows it with 0.5 mm:
+    # minus (41*31*10 - 38*28*8.5)
+    expect = (42 * 32 * 11 - 37 * 27 * 8.5) - (41 * 31 * 10 - 38 * 28 * 8.5)
+    h.check("inside wall = wall (1.5 mm)", sd.close(v, expect), (v, expect))
+    sh = sd.shells()[0]
+    h.check(
+        "the step keeps the formula",
+        "Parameters.wall" in dict(sh.ExpressionEngine).get("InsideThickness", ""),
+        sh.ExpressionEngine,
+    )
+    from sciforge import parameters
+
+    parameters.set_user(App.ActiveDocument, "wall", "2")  # as in Change Parameters
+    App.ActiveDocument.recompute()
+
+
+def follows_parameter():
+    v = h.solid_volume()
+    h.check("changing the parameter to 2 changes the shell (2578)", sd.close(v, 2578.0), v)
+
+
+def save():
+    path = os.path.join(tempfile.mkdtemp(prefix="sciforge-shell-"), "hollow.FCStd")
+    s["path"] = path
+    App.ActiveDocument.saveAs(path)
+    h.check("saved", os.path.isfile(path), path)
+
+
+def close():
+    App.closeDocument(App.ActiveDocument.Name)
+
+
+def reopen():
+    App.openDocument(s["path"])
+    h.fit()
+
+
+def reopened():
+    h.check("reopened: same part", sd.close(h.solid_volume(), 2578.0), h.solid_volume())
+    h.check(
+        "both shells in the timeline",
+        "Shell 1" in sd.timeline_titles() and "Shell 2" in sd.timeline_titles(),
+        sd.timeline_titles(),
+    )
+    sd.timeline_double_click("Shell 2")
+
+
+def reopened_edit():
+    p = sd.shell_panel()
+    h.check("SciForge's shell opens for editing after reopening", p is not None and p.editing)
+    h.check("the hollow body is shown", p is not None and p.whole)
+    h.check("0.5 mm remembered", p is not None and abs(p.inside.value() - 0.5) < 1e-9)
+    h.task_button("Cancel")
+
+
+def reopened_cancel():
+    h.check("Cancel changes nothing", sd.close(h.solid_volume(), 2578.0), h.solid_volume())
+    h.check("no errors in the Report view", not sd.report_errors(), sd.report_errors())
 
 
 h.run(
@@ -289,5 +380,16 @@ h.run(
         after_undo_edit,
         redo_edit,
         after_redo_edit,
+        formula_edit,
+        type_formula,
+        formula_preview,
+        formula_kept,
+        follows_parameter,
+        save,
+        close,
+        reopen,
+        reopened,
+        reopened_edit,
+        reopened_cancel,
     ],
 )
