@@ -56,6 +56,17 @@ def nice_floor(value):
     return best
 
 
+def nearest_snap(x, y, snaps, reach):
+    """The snap point (x, y) nearest to the mouse at (x, y) within `reach` (plane units),
+    or None when none is that close."""
+    best = None
+    for sx, sy in snaps:
+        gap = math.hypot(x - sx, y - sy)
+        if gap <= reach and (best is None or gap < best[0]):
+            best = (gap, (sx, sy))
+    return None if best is None else best[1]
+
+
 def round_to(value, step):
     """`value` to the nearest multiple of `step` (halves go up, never to -0.0)."""
     if step <= 0:

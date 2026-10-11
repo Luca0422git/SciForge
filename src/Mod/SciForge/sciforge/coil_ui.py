@@ -34,7 +34,7 @@ SECTION_LABELS = [
 
 
 class CoilPanel(PlacedPanel):
-    FORMULA_KEYS = ("diameter", "height", "pitch", "angle", "section_size")
+    FORMULA_KEYS = ("diameter", "revolutions", "height", "pitch", "angle", "section_size")
     title = "Coil"
     icon = "coil"
     kind = "coil"
@@ -69,12 +69,9 @@ class CoilPanel(PlacedPanel):
         self.rotation.setObjectName("SciForgeCoil_rotation")
         self.rotation.setToolTip("Click to turn the coil the other way")
         form.addRow("Rotation", self.rotation)
-        self.revolutions = QtWidgets.QDoubleSpinBox()
-        self.revolutions.setObjectName("SciForgeCoil_revolutions")
-        self.revolutions.setDecimals(2)
-        self.revolutions.setRange(0.01, 10000.0)
-        self.revolutions_label = QtWidgets.QLabel("Revolutions")
-        form.addRow(self.revolutions_label, self.revolutions)
+        self.revolutions, self.revolutions_label = self.distance_field(
+            form, "Revolutions", "revolutions", unit="", name="SciForgeCoil_revolutions"
+        )
         self.height, self.height_label = self.distance_field(
             form, "Height", "height", name="SciForgeCoil_height"
         )
@@ -97,7 +94,6 @@ class CoilPanel(PlacedPanel):
         self.section.currentIndexChanged.connect(self._choice)
         self.section_position.currentIndexChanged.connect(self._choice)
         self.rotation.clicked.connect(self._rotation_clicked)
-        self.revolutions.valueChanged.connect(self._revolutions_typed)
 
     def _show_fields(self):
         o = self.options
@@ -106,7 +102,7 @@ class CoilPanel(PlacedPanel):
             set_combo(self.type, o["type"])
             self.diameter.set_value(o["diameter"])
             self.rotation.setChecked(not bool(o["clockwise"]))
-            self.revolutions.setValue(float(o["revolutions"]))
+            self.revolutions.set_value(float(o["revolutions"]))
             self.height.set_value(o["height"])
             self.pitch.set_value(o["pitch"])
             self.angle.set_value(o["angle"])
@@ -123,7 +119,7 @@ class CoilPanel(PlacedPanel):
         uses = coil.USES[self.type.currentData() or "rev_height"]
         self.rotation.setText("Counterclockwise" if self.rotation.isChecked() else "Clockwise")
         for widgets, key in (
-            ((self.revolutions, self.revolutions_label), "revolutions"),
+            ((self.revolutions.widget, self.revolutions_label), "revolutions"),
             ((self.height.widget, self.height_label), "height"),
             ((self.pitch.widget, self.pitch_label), "pitch"),
             ((self.angle.widget, self.angle_label), "angle"),
@@ -162,19 +158,16 @@ class CoilPanel(PlacedPanel):
             height = float(old.get("height") or 0.0) or pitch * turns
         self.options.update(revolutions=round(turns, 4), height=height, pitch=pitch)
         self.options["type"] = new_type
+        uses = coil.USES[new_type]
+        for key in ("revolutions", "height", "pitch", "angle"):
+            if key not in uses:  # a hidden field's formula no longer drives anything
+                self.drop_formula(key)
         self._show_fields()
         self._changed(new_geometry=True)
 
     @safe
     def _rotation_clicked(self, *_):
         self._update_visibility()
-        self._changed(new_geometry=True)
-
-    @safe
-    def _revolutions_typed(self, value):
-        if self._quiet:
-            return
-        self.options["revolutions"] = value
         self._changed(new_geometry=True)
 
     # -- placing ----------------------------------------------------------------------------------------

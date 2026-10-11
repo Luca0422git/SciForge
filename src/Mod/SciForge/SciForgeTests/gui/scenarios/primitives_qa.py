@@ -13,6 +13,12 @@ D. Pipe along the box's top front edge, Intersect (SciForge's own step); a Coil 
    away (a new body). Save, close, reopen: same volumes, no errors; edit the coil (3
    revolutions) and the pipe (section 4) after reopening. Delete the pipe and the coil in
    the timeline: their hidden helpers go too (a later dialog tidies what is left).
+E. Parameters in the Torus and Coil fields (d = 20): torus inner 20, torus d "d / 4";
+   edited to Outside; a coil (Height and Pitch) with height "d / 2", pitch 4. d = 60 in
+   Change Parameters: both follow.
+F. A parameter in the coil's Revolutions: edit the coil, type Revolution and Height (the
+   same coil: 7.5 revolutions), Revolutions "n" (n = 3, no unit); OK; n = 5: the coil
+   follows; editing again shows the formula; Esc keeps it.
 
 Hand-derived volumes: box 30*10*10 = 3000, 40*10*10 = 4000, 40*10*20 = 8000;
 cylinder d6 h10 = 90 pi; pipe d2 along a 40 mm edge, Intersect: a quarter tube 10 pi,
@@ -385,7 +391,7 @@ def d_coil_editing():
     if p is None:
         return
     h.check("5 revolutions remembered", near(p.revolutions.value(), 5.0))
-    ui.type_into(p.revolutions, "3")
+    ui.type_into(p.revolutions.widget, "3")
 
 
 def d_coil_edit_ok():
@@ -638,6 +644,99 @@ def e_coil_follows():
     h.shot("formulas")
 
 
+# -- F: a parameter in the coil's Revolutions ----------------------------------------------------
+def coil_volume():
+    torus = [
+        b for b in pi.bodies() if b.Tip is not None and b.Tip.TypeId == "PartDesign::AdditiveTorus"
+    ]
+    return vol() - sum(b.Shape.Volume for b in torus)
+
+
+def f_edit():
+    from sciforge import parameters
+
+    parameters.add_user(doc(), "n", "", "3")
+    doc().recompute()
+    h.check("double-click Coil 1", ui.double_click_timeline("Coil 1"))
+
+
+f_edit.wait_ms = 2500
+
+
+def f_type():
+    p = pi.panel("CoilPanel")
+    h.check("editing the coil", p is not None and p.editing)
+    if p is None:
+        return
+    h.check("Revolution and Height", ui.choose(p.type, "Revolution and Height"))
+
+
+f_type.wait_ms = 2000
+
+
+def f_turns():
+    p = pi.panel("CoilPanel")
+    if p is None:
+        return
+    shown = p.revolutions.value()
+    h.check("the same coil: 7.5 revolutions", near(shown, 7.5, 1e-3), shown)
+    ui.type_into(p.revolutions.widget, "n")
+
+
+f_turns.wait_ms = 2000
+
+
+def f_ok():
+    p = pi.panel("CoilPanel")
+    if p is None:
+        return
+    h.check("Revolutions = n listed", "Revolutions = n" in p.formulas.text(), p.formulas.text())
+    h.check("n = 3 revolutions", near(p.revolutions.value(), 3.0), p.revolutions.value())
+    h.check("3 turns: 54 pi^2", near(coil_volume(), 54.0 * PI * PI, 1e-5), coil_volume())
+    h.task_button("OK")
+
+
+f_ok.wait_ms = 2500
+
+
+def f_n5():
+    from sciforge import parameters
+
+    h.check("dialog closed", pi.no_dialog())
+    parameters.set_user(doc(), "n", "5")
+    doc().recompute()
+
+
+f_n5.wait_ms = 2500
+
+
+def f_follows():
+    h.check("the coil follows n: 5 turns", near(coil_volume(), 90.0 * PI * PI, 1e-5), coil_volume())
+    h.check("double-click Coil 1 again", ui.double_click_timeline("Coil 1"))
+
+
+f_follows.wait_ms = 2500
+
+
+def f_shown_again():
+    p = pi.panel("CoilPanel")
+    h.check("editing again", p is not None and p.editing)
+    if p is None:
+        return
+    h.check("still Revolutions = n", "Revolutions = n" in p.formulas.text(), p.formulas.text())
+    h.check("5 revolutions shown", near(p.revolutions.value(), 5.0), p.revolutions.value())
+    h.press(QtCore.Qt.Key_Escape)
+
+
+f_shown_again.wait_ms = 2000
+
+
+def f_closed():
+    h.check("Esc closed the dialog", pi.no_dialog())
+    h.check("Esc kept the coil", near(coil_volume(), 90.0 * PI * PI, 1e-5), coil_volume())
+    h.shot("revolutions")
+
+
 h.run(
     "primitives_qa",
     [
@@ -717,5 +816,13 @@ h.run(
         e_coil_ok,
         e_d60,
         e_coil_follows,
+        f_edit,
+        f_type,
+        f_turns,
+        f_ok,
+        f_n5,
+        f_follows,
+        f_shown_again,
+        f_closed,
     ],
 )

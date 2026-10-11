@@ -37,6 +37,14 @@ class RoundingTests(unittest.TestCase):
             self.assertAlmostEqual(core.round_to(5.0, step), 5.0, msg=step)
             self.assertAlmostEqual(core.round_to(35.0, step), 35.0, msg=step)
 
+    def test_snap_takes_the_nearest_point_in_reach(self):
+        snaps = [(0.0, 0.0), (40.0, 20.0), (40.5, 20.0)]
+        self.assertEqual(core.nearest_snap(0.3, -0.2, snaps, 1.0), (0.0, 0.0))
+        self.assertEqual(core.nearest_snap(40.4, 20.1, snaps, 1.0), (40.5, 20.0))
+        self.assertIsNone(core.nearest_snap(10.0, 10.0, snaps, 1.0))
+        self.assertIsNone(core.nearest_snap(1.5, 0.0, snaps, 1.0))
+        self.assertIsNone(core.nearest_snap(0.0, 0.0, [], 1.0))
+
     def test_round_halves_up_and_never_minus_zero(self):
         self.assertEqual(core.round_to(7.0, 2.0), 8.0)
         self.assertEqual(core.round_to(-0.1, 1.0), 0.0)

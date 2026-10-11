@@ -280,6 +280,50 @@ def base_shape(body, before=None):
     return shape
 
 
+def snap_points(doc, frame, limit=4000):
+    """The points a click on the plane snaps to, in the plane's own (x, y): its origin
+    first, then the corners, line ends and circle centres of the visible bodies and
+    sketches that lie on the plane (Fusion snaps to them while placing a shape)."""
+    import Part
+
+    inverse = frame.inverse()
+    out = [(0.0, 0.0)]
+    seen = {(0.0, 0.0)}
+
+    def add(point):
+        local = inverse.multVec(point)
+        if abs(local.z) > 1e-4:
+            return
+        key = (round(local.x, 6), round(local.y, 6))
+        if key not in seen:
+            seen.add(key)
+            out.append((local.x, local.y))
+
+    for obj in list(doc.Objects):
+        if len(out) >= limit:
+            break
+        try:
+            if obj.TypeId != "PartDesign::Body" and not obj.isDerivedFrom("Sketcher::SketchObject"):
+                continue
+            if not getattr(obj, "Visibility", True) or is_helper(obj):
+                continue
+            shape = Part.getShape(obj)
+            if shape.isNull():
+                continue
+            for edge in shape.Edges:
+                curve = getattr(edge, "Curve", None)
+                if isinstance(curve, Part.Circle):  # a circle or an arc of one
+                    add(curve.Center)
+                if not edge.isClosed():
+                    add(edge.Vertexes[0].Point)
+                    add(edge.Vertexes[-1].Point)
+                if len(out) >= limit:
+                    break
+        except Exception:
+            continue
+    return out
+
+
 # -- meta and helpers (shared with coil.py and pipe.py) ----------------------------------------------
 def load_meta(obj, prop=META):
     try:

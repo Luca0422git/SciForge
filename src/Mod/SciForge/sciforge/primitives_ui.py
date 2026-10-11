@@ -25,7 +25,7 @@ import FreeCADGui as Gui
 from . import commands, log, preview, primitives, profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
-from .primitives_core import nice_floor, round_to
+from .primitives_core import nearest_snap, nice_floor, round_to
 from .taskui import DistanceField, Panel
 
 OPERATION_LABELS = [
@@ -39,7 +39,7 @@ ACTIVE_STYLE = "QPushButton { background: #1f6fbf; color: white; border: 1px sol
 HANDLE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
 HANDLE_ACTIVE = (0.55, 0.80, 1.0)
 OUTLINE = (0.35, 0.70, 1.0)
-SNAP_PIXELS = 10.0  # a click this near the plane's origin lands on it
+SNAP_PIXELS = 10.0  # a click this near the origin, a corner or a centre on the plane lands on it
 
 
 def combo(pairs, current, name=""):
@@ -418,11 +418,12 @@ class Placer:
 
     POLL_MS = 25
 
-    def __init__(self, view, frame, outline, on_click, on_move=None, blocked=None):
+    def __init__(self, view, frame, outline, on_click, on_move=None, blocked=None, snaps=None):
         from pivy import coin
 
         self.view = view
         self.frame = frame  # global Placement of the plane
+        self.snaps = list(snaps or [(0.0, 0.0)])  # (x, y) on the plane a click lands on
         self.outline = outline
         self.on_click = on_click
         self.on_move = on_move
@@ -465,7 +466,8 @@ class Placer:
 
     def plane_point(self, position):
         """(x, y) on the plane under the mouse, rounded to a step of a few pixels (a plane
-        seen at a slant counts its stretched pixels), or snapped onto the plane's origin."""
+        seen at a slant counts its stretched pixels), or snapped onto the nearest snap
+        point (the plane's origin, corners and centres on the plane) within SNAP_PIXELS."""
         point = self._hit(position)
         if point is None:
             return None
@@ -478,8 +480,9 @@ class Placer:
                 pixel = max(pixel, (other - point).Length / 3.0)
         if pixel <= 0.0:
             pixel = view_scale(self.view, point)
-        if math.hypot(local.x, local.y) <= SNAP_PIXELS * pixel:
-            return (0.0, 0.0)
+        snap = nearest_snap(local.x, local.y, self.snaps, SNAP_PIXELS * pixel)
+        if snap is not None:
+            return snap
         step = nice_floor(6.0 * pixel)
         return (round_to(local.x, step), round_to(local.y, step))
 
@@ -904,13 +907,20 @@ class PlacedPanel(Panel):
         self.points = []
         self.info.setText(self.HINTS[0])
         try:
+            frame = primitives.global_frame(self.ref)
+            try:
+                snaps = primitives.snap_points(self.doc, frame)
+            except Exception as exc:
+                warn("%s snap points unavailable: %s" % (self.title, exc))
+                snaps = None
             self.placer = Placer(
                 Gui.ActiveDocument.ActiveView,
-                primitives.global_frame(self.ref),
+                frame,
                 self._outline,
                 self._clicked,
                 on_move=self._mouse_moved,
                 blocked=self._handle_at,
+                snaps=snaps,
             )
         except Exception as exc:
             warn("%s placing unavailable: %s" % (self.title, exc))

@@ -181,6 +181,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       face, place with the mouse (Box: two corners with a rubber band; Cylinder / Torus /
       Coil: centre + a point on the circle; Sphere: centre), blue on-top arrows for the sizes,
       Operation Join / Cut / Intersect / New Body picked by itself from where the shape is.
+      Clicks snap to the origin, corners, sketch points and circle centres on the plane.
       Coil: 4 types, rotation, angle, 4 sections x 3 positions. Pipe: sketch or model edges
       with Chain Selection, Distance handle, 3 sections, Hollow. Parameters typed in the fields
       keep driving the shape. On FreeCAD's PartDesign primitives / Helix / Pipe (+ SciForge
@@ -610,8 +611,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     body, marked `SciForgeRole` + `SciForgeTimeline = False` so the timeline skips them;
     `primitives.drop_orphans` removes helpers whose step was deleted (when a dialog opens).
   - Mouse placing on a plane: measure what one pixel is *on the plane* and round clicks to
-    nice steps of about 6 pixels (`primitives_core.nice_floor`); snap to the plane origin
-    within 10 px. Screen-pixel rounding was too coarse or too fine depending on the view.
+    nice steps of about 6 pixels (`primitives_core.nice_floor`); within 10 px snap to the
+    plane origin and to corners, line ends, sketch points and circle centres lying on the
+    plane (`primitives.snap_points`, from `Part.getShape` of visible bodies and sketches).
+    Screen-pixel rounding was too coarse or too fine depending on the view.
   - FreeCAD's Helix needs the profile and the axis from one object: the section helper gives
     both (its `V_Axis`). The helix sweeps the upright section, so Pappus (area x 2 pi r x
     turns) is its exact volume. Coil Intersect = `SubtractiveHelix` with `Outside` on.
@@ -857,6 +860,23 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Left for others (see findings): the browser to show a body's material and hide used-up
   bodies, Inspect to read `bodies.mass()`, the timeline a "delete_face" kind and roll-back
   of steps outside bodies (a Move copy).
+
+### 2026-10-11: Box, Cylinder, Sphere, Torus, Coil, Pipe (branch `sf/primitives`)
+- New: `primitives_core.py` (no FreeCAD: rounding and snapping, size checks, volumes, the
+  automatic operation), `primitives.py` / `primitives_ui.py` (Box, Cylinder, Sphere, Torus;
+  shared dialog base `PlacedPanel`, placing tool `Placer`, on-top arrow `LinearHandle`),
+  `coil.py` / `coil_ui.py`, `pipe.py` / `pipe_ui.py`, `undo_links.py` (re-links formulas
+  after undo/redo, see findings). Ribbon: Pipe enabled (one line). No core patch.
+- Tests: scenarios `primitives_box`, `primitives_shapes`, `primitives_coil`,
+  `primitives_pipe`, `primitives_qa` (real input only: nothing selected, a selection taken at
+  once, Cancel, Esc, Enter, Ctrl+Z in a dialog, edit again, undo/redo, second use,
+  parameters incl. the coil's Revolutions, snapping to a corner, re-pick plane, save +
+  reopen + edit, timeline Delete); golden ops in `golden/primitive_ops.py` + 25 models
+  `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil_*`, `sf_pipe_*`
+  (hand-derived; Pappus for coils/pipes); unit tests `test_primitives_core.py`.
+- Spec and gaps: `docs/sciforge/parity/primitives.md`. Gaps: New Component, value boxes on
+  the canvas, snapping along edges / midpoints, Fusion defaults to confirm with Luca.
+- FULL_SUITE_LINE
 
 ## Next steps (in order)
 

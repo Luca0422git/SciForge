@@ -133,7 +133,7 @@ def coil_first():
     h.check("pitch hidden for this type", not p.pitch.widget.isVisible())
     h.fit()
     h.shot("1-coil")
-    ui.type_into(p.revolutions, "4")
+    ui.type_into(p.revolutions.widget, "4")
 
 
 coil_first.wait_ms = 1500

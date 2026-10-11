@@ -14,7 +14,7 @@ not yet signed off**.
 |---|---|
 | Nothing selected: the origin planes show as squares; click one, or click a flat face of the part | Same (the plane picker of Create Sketch). Curved faces are refused with a note in the dialog. A plane or flat face selected before the command is taken at once |
 | The plane box in the dialog: click it to pick another plane | Same ("Plane" field); the shape moves to the new plane, sizes kept |
-| Place with the mouse: the cursor moves on the plane (a blue outline follows it) | Same: the mouse ray meets the plane. Clicks snap to the plane's origin (10 px) and round to steps that suit the zoom (1, 2.5 or 5 x 10^n, about 6 pixels) |
+| Place with the mouse: the cursor moves on the plane (a blue outline follows it) | Same: the mouse ray meets the plane. Within 10 px the mouse snaps onto the plane's origin and onto the corners, line ends, sketch points and circle centres that lie on the plane; elsewhere it rounds to steps that suit the zoom (1, 2.5 or 5 x 10^n, about 6 pixels) |
 | Blue arrows to drag sizes after placing | Same, drawn on top of the part; they show the value while dragging |
 | Typed values in the dialog (and parameters / formulas: `w`, `d / 4`) | Same; a formula keeps driving the shape (an expression), listed under the fields, and follows the parameter in Change Parameters, after undo/redo and after reopening the file |
 | Operation Join / Cut / Intersect / New Body; dragging into the part switches to Cut | Same. Until you pick one yourself: mostly inside the part -> Cut, touching or overlapping -> Join, away from it or no part yet -> New Body |
@@ -51,7 +51,7 @@ ones). Intersect for any of them is SciForge's `PrimitiveFeature` (a
 |---|---|
 | Centre click, a point on the circle (diameter), then the height arrow | Same |
 | Type: Revolution and Height / Revolution and Pitch / Height and Pitch / Spiral | Same; switching type keeps the coil's shape (the value the new type works out is filled in) |
-| Diameter, Revolutions, Height, Pitch, Angle (taper) | Same; the fields the type does not use are hidden |
+| Diameter, Revolutions, Height, Pitch, Angle (taper) | Same; all take parameters (Revolutions too, e.g. a unitless `n`). The fields the type does not use are hidden, and a formula in a field that gets hidden is dropped |
 | Rotation Clockwise / Counterclockwise | Same |
 | Section Circular / Square / Triangular (External) / Triangular (Internal); Section Position Inside / On Center / Outside; Section Size | Same |
 | Operation (Cut when it is inside the part) | Same |
@@ -100,8 +100,7 @@ Golden models `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil
 |---|---|
 | Operation New Component | Components are not built yet (outline 7.2) |
 | Values typed in boxes on the canvas next to the mouse | The live values are in the dialog fields (type there) |
-| Snapping to sketch points and part edges while placing | Snaps to the plane's origin and round steps only |
-| Coil Revolutions with a parameter | A spin box (no formula); the other coil fields take formulas |
+| Snapping onto any point of an edge, midpoints, and points that are not on the plane | Snaps to the origin and to corners, line ends, sketch points and circle centres lying on the plane |
 | Exact Fusion defaults (to confirm with Luca): Torus Position starts On Center; Clockwise = right-hand coil; for square and triangle sections Section Size is the circle round the section; how pipe squares/triangles are turned; the coil starts centred on the plane | Taken from the docs, not compared with a capture |
 | Sharp path corners in Pipe | FreeCAD's "Transformed" corners (Fusion's look may differ) |
 | Coil section | FreeCAD sweeps an upright section along the helix (Fusion's section may lean with the pitch) |

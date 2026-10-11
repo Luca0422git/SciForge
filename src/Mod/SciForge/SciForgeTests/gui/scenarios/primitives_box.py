@@ -8,7 +8,9 @@ solid). Type Height 10; drag the blue height arrow up to about 15; type 12; OK.
 Undo / redo. Double-click Box 1 in the timeline: Length 50, OK.
 
 Second use, starting from a selection: click the top face, then Box: the face is taken
-at once. Corners (10, 5) and (20, 15) on it: a 10 x 10 box on top, Join. Drag the height
+at once. The mouse just inside the face's far corner snaps onto it (Fusion snaps to
+corners, sketch points and centres on the plane). Corners (10, 5) and (20, 15) on it: a
+10 x 10 box on top, Join. Drag the height
 arrow down into the part: Fusion switches to Cut by itself; type -5; OK: a 10 x 10 x 5
 pocket. Then Box, pick the top face, Cancel: nothing changes; Box, Esc: nothing changes.
 
@@ -258,6 +260,25 @@ def face_taken():
     )
 
 
+def snap_hover():
+    pi.hover(V(49.8, 19.8, 12))  # just inside the face's far corner (50, 20, 12)
+
+
+def snapped():
+    from sciforge import primitives
+
+    p = panel()
+    if p is None or p.placer is None:
+        h.check("still placing", False)
+        return
+    corner = primitives.global_frame(p.ref).inverse().multVec(V(50, 20, 12))
+    want = (round(corner.x, 6), round(corner.y, 6))
+    snaps = [(round(x, 6), round(y, 6)) for x, y in p.placer.snaps]
+    h.check("the face's corners are snap points", want in snaps, snaps)
+    got = p.placer.mouse and (round(p.placer.mouse[0], 6), round(p.placer.mouse[1], 6))
+    h.check("the mouse snaps onto the corner", got == want, (got, want))
+
+
 def corner_a():
     h.click(V(10, 5, 12))
 
@@ -397,6 +418,8 @@ h.run(
         select_top,
         box_from_selection,
         face_taken,
+        snap_hover,
+        snapped,
         corner_a,
         corner_b,
         on_top,

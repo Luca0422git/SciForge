@@ -314,6 +314,8 @@ def _formula_targets(feature, section, kind):
     """Dialog field -> [(object, property)] that holds its value, for this coil type."""
     uses = USES[kind]
     targets = {"diameter": [(section, "Diameter")], "section_size": [(section, "SectionSize")]}
+    if "revolutions" in uses:
+        targets["revolutions"] = [(feature, "Turns")]
     if "height" in uses:
         targets["height"] = [(feature, "Height")]
     if "pitch" in uses:
@@ -337,6 +339,7 @@ def _apply_formulas(feature, section, options):
     every = [
         (section, "Diameter"),
         (section, "SectionSize"),
+        (feature, "Turns"),
         (feature, "Height"),
         (feature, "Pitch"),
         (feature, "Growth"),
