@@ -1060,7 +1060,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Teammate scenarios changed on purpose: `hole_edges` (Ctrl+Z in the dialog now cancels,
   Ctrl+Y brings nothing back; the hole is made again), `hole`, `hole_sketch`,
   `hole_tapped`, `hole_thread` use a person's double-click on the timeline.
-- Full suite on the branch: FULLSUITE.
+- Full suite on the branch (no --only, at code commit 24314786f2, 75 minutes): unit 199 OK,
+  golden 190 pass + 1 xfail (plate_hole_grid, core patch #4 not compiled), smoke 70/70,
+  journey 25/25, 83 of 83 scenarios PASS (8146 checks; hole_qa 489, hole_qa_more 362,
+  hole_qa_thread 375, hole_qa_part 257, ribbon_sweep 109).
 - Left for other owners (Known issues): Extrude's `_recompute` has no closed-dialog guard;
   Create Sketch attaches to the Tip's face, so suppressing an unrelated earlier hole also
   suppresses that sketch's holes (see `hole.earliest_face`); helper sketches in the browser.
