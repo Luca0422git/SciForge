@@ -468,6 +468,33 @@ def _TurnDragger(*args, **kwargs):
     from .extrude_ui import AngleDragger
 
     class TurnDragger(AngleDragger):
+        @staticmethod
+        def _arc(coin, radius, width, color):
+            """The taper handle's flat curved band, plus the same band standing up across it.
+            The flat band lies in the plane the handle turns in: where that plane is seen
+            nearly edge-on (the handle at the bottom of its circle on screen) it was a sliver a
+            couple of pixels high, and presses on its middle missed it and hit the part."""
+            sep = AngleDragger._arc(coin, radius, width, color)
+            span = min(0.3, 1.6 * width / max(radius, 1e-6))
+            steps = 12
+            half = width * 0.3
+            points, index = [], []
+            for i in range(steps + 1):
+                a = -span + 2.0 * span * i / steps
+                x, y = radius * math.cos(a), radius * math.sin(a)
+                points.append((x, y, -half))
+                points.append((x, y, half))
+            for i in range(steps):
+                a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2
+                index += [a, b, c, -1, a, c, d, -1]
+            coords = coin.SoCoordinate3()
+            coords.point.setValues(0, len(points), points)
+            faces = coin.SoIndexedFaceSet()
+            faces.coordIndex.setValues(0, len(index), index)
+            sep.addChild(coords)
+            sep.addChild(faces)
+            return sep
+
         def angle(self):
             raw = AngleDragger.angle(self)
             last = getattr(self, "_last", None)
@@ -862,15 +889,23 @@ class PatternPanel(Panel):
 
     def _forget_formula(self, key):
         """Drop the formula of a field without rebuilding (the new value rebuilds)."""
+        had_error = bool(self.formula_error)
+        self.formula_error = ""
         if self.options["expressions"].pop(key, None) is not None:
-            self.formula_error = ""
             self.show_formulas()
+        if had_error:
+            self.show_status()
 
     def drop_formula(self, key):
+        had_error = bool(self.formula_error)
         self.formula_error = ""
         if self.options["expressions"].pop(key, None) is not None:
             self.show_formulas()
             self._changed()
+        elif had_error:
+            # a number typed over a typo: the warning goes even when the number is the one
+            # the field had (no value change, so nothing else would refresh the message)
+            self.show_status()
 
     def formula_typed(self, key, text, value):
         self.formula_error = ""
@@ -900,8 +935,8 @@ class PatternPanel(Panel):
         self.drop_formula(key)
 
     def formula_failed(self, key, text):
-        self.formula_error = text
-        self.message.setText("⚠ " + text)
+        self.formula_error = _plain_formula_error(text)
+        self.message.setText("⚠ " + self.formula_error)
 
     # -- selection boxes --------------------------------------------------------------------------
     def activate(self, name):
@@ -1060,6 +1095,31 @@ class PatternPanel(Panel):
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
+        self._handle_press = False
+        self._press_callback = None
+        try:
+            self._press_callback = self.view.addEventCallback("SoMouseButtonEvent", self._button)
+        except Exception as exc:
+            warn("%s: handle guard unavailable: %s" % (self.title, exc))
+
+    def _button(self, info):
+        """A press on a drag handle (blue arrow, curved handle) is never a pick of the part
+        behind it, also when the handle does not take the press: before, the face under the
+        handle was picked on release and its whole feature joined the objects."""
+        try:
+            if info.get("Button") != "BUTTON1":
+                return
+            if info.get("State") == "DOWN":
+                self._handle_press = bool(
+                    self.handles and profile_pick.handle_at(self.view, tuple(info["Position"]))
+                )
+                if self._handle_press:
+                    self._overlay_time = time.time()
+            elif info.get("State") == "UP" and self._handle_press:
+                self._handle_press = False
+                self._overlay_time = time.time()  # the selection made on this release
+        except Exception as exc:
+            warn("%s handle press: %s" % (self.title, exc))
 
     def _unwatch(self):
         if self.observer is not None:
@@ -1068,6 +1128,12 @@ class PatternPanel(Panel):
             except Exception:
                 pass
             self.observer = None
+        if getattr(self, "_press_callback", None) is not None:
+            try:
+                self.view.removeEventCallback("SoMouseButtonEvent", self._press_callback)
+            except Exception:
+                pass
+            self._press_callback = None
         for picker in (self.axis_picker, self.plane_picker):
             if picker is not None:
                 try:
@@ -1090,6 +1156,9 @@ class PatternPanel(Panel):
                 self._syncing = False
             if self._overlay_clicked_recently():
                 return  # the origin axis/plane drawn over the part took this click
+            if getattr(self, "_handle_press", False):
+                self._handle_press = False
+                return  # released after a press on a drag handle: not a pick
             for obj, short, _point in picks:
                 self._picked(obj, short)
         except Exception as exc:
@@ -1122,8 +1191,16 @@ class PatternPanel(Panel):
             if body is None:
                 self.message.setText("⚠ Pick a body.")
                 return
-            if self.editing and body is not self.body:
+            if self.editing and self.body is not None and body is not self.body:
                 self.message.setText("⚠ This pattern copies %s." % self.body.Label)
+                return
+            base_feature = getattr(body, "BaseFeature", None)
+            if (
+                self.target is not None
+                and pattern.is_body_copy(base_feature)
+                and base_feature.Pattern is self.target
+            ):
+                self.message.setText("⚠ %s is a copy made by this pattern." % body.Label)
                 return
             self.body = body
             if self.target is None:
@@ -1139,6 +1216,8 @@ class PatternPanel(Panel):
                         "⚠ A sketch cannot be patterned here: pick the feature made from it."
                     )
                     return
+                if not self._adopt_body(obj):
+                    return
                 if not self._usable_feature(obj):
                     self.message.setText(
                         "⚠ Pick a feature of %s that comes before this pattern."
@@ -1147,6 +1226,8 @@ class PatternPanel(Panel):
                     return
                 feature = obj
             elif short.startswith("Face"):
+                if not self._adopt_body(obj):
+                    return
                 feature = self._feature_of_face(obj, short)
                 if feature is None:
                     self.message.setText(
@@ -1162,11 +1243,68 @@ class PatternPanel(Panel):
                 if not short:
                     self.message.setText("⚠ Pattern Type is Faces: click faces of the part.")
                 return
+            if not self._adopt_body(obj):
+                return
             ref = self._base_face(obj, short)
             if ref is None:
                 self.message.setText("⚠ That face is one of the copies. Click an original face.")
                 return
             self._toggle(ref)
+
+    def _adopt_body(self, obj):
+        """Fusion has no "active body": a feature or face of any body can be picked, and the
+        pattern goes into that body. FreeCAD's dialog only took the active body's steps, so
+        after an Extrude to a New Body the first body's hole could not be patterned at all.
+        False (with the reason in the dialog) when another body's objects are picked already."""
+        body = pattern.owner_body(obj)
+        if body is None or body is self.body:
+            return True
+        if self.editing and self.body is not None:
+            self.message.setText(
+                "⚠ This pattern is in %s: pick features of %s." % (self.body.Label, self.body.Label)
+            )
+            return False
+        if self.options["objects"]:
+            self.message.setText(
+                "⚠ One body per pattern: features of %s are picked already. Clear the Objects "
+                "box (x) to pattern %s instead." % (self.body.Label, body.Label)
+            )
+            return False
+        tip = body.Tip
+        if tip is None or tip.Shape.isNull():
+            self.message.setText("⚠ %s has no solid to pattern yet." % body.Label)
+            return False
+        old = self.body
+        self.body = body
+        self.base = tip
+        self._move_references(old, body)
+        try:
+            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+        except Exception as exc:
+            warn("could not activate %s: %s" % (body.Label, exc))
+        for picker in (self.axis_picker, self.plane_picker):  # drawn for the other body
+            if picker is not None:
+                picker.remove()
+        self.axis_picker = self.plane_picker = None
+        self._update_pickers()
+        return True
+
+    def _move_references(self, old, new):
+        """Directions, axis, plane picked on the other body: its origin axes / planes become
+        the new body's; its own edges and faces cannot be used in this body and are cleared."""
+        for name in ("direction", "direction2", "axis", "plane", "path"):
+            ref = self.options.get(name)
+            if ref is None or old is None or pattern.owner_body(ref[0]) is not old:
+                continue
+            role = getattr(ref[0], "Role", "")
+            twin = None
+            if role and ref[0] in old.Origin.OriginFeatures:
+                for feature in new.Origin.OriginFeatures:
+                    if getattr(feature, "Role", "") == role:
+                        twin = (feature, "")
+            elif ref[0].TypeId == "Sketcher::SketchObject" and name == "path":
+                twin = ref  # a sketch curve can be followed from any body
+            self.options[name] = twin
 
     def _toggle(self, ref):
         objects = list(self.options["objects"])
@@ -1439,14 +1577,20 @@ class PatternPanel(Panel):
             return
         handle = self.handles.get("angle")
         if handle is not None:
-            handle.set_angle(max(-180.0, min(180.0, value)))
+            # the curved handle turns past half a turn (_TurnDragger): a typed 270 puts it at
+            # 270, not at 180 (dragging it then jumped the angle back to 180)
+            handle.set_angle(max(-360.0, min(360.0, value)))
         self._changed()
 
     def _dragged(self, key, value):
         if self._closed:
             return
-        self.drop_formula(key)
+        self._handle_press = False  # the handle took the press: no selection follows
         value = round(value, 2)
+        field = self._value_fields().get(key)
+        if field is not None and abs(value - round(field.value(), 2)) < 1e-9:
+            return  # a click on the arrow without moving it: the value (and its formula) stays
+        self.drop_formula(key)
         if key == "distance":
             self._distance_set = True
         elif key == "distance2":
@@ -1463,8 +1607,11 @@ class PatternPanel(Panel):
     def _angle_dragged(self, value):
         if self._closed:
             return
-        self.drop_formula("angle")
+        self._handle_press = False
         value = round(value, 1)
+        if abs(value - round(self.angle_field.value(), 1)) < 1e-9:
+            return  # a click on the handle without turning it: the angle (and its formula) stays
+        self.drop_formula("angle")
         if abs(value) < 1.0:
             value = 1.0 if value >= 0 else -1.0
         self._quiet = True
@@ -1566,7 +1713,7 @@ class PatternPanel(Panel):
         names = []
         refs = [self.options.get(n) for n in ("direction", "direction2", "axis", "plane", "path")]
         titles = self._titles() if objects or any(refs) else {}
-        for obj, sub in objects:
+        for obj, sub in self._listed(objects):
             title = titles.get(obj.Name, obj.Label)
             text = title if not sub else "%s of %s" % (sub.rstrip("0123456789"), title)
             if text not in names:
@@ -1576,6 +1723,22 @@ class PatternPanel(Panel):
             if name in self.fields:
                 self.fields[name].set_text(self._ref_text(self.options.get(name), titles))
         self._show_marks()
+
+    @staticmethod
+    def _listed(objects):
+        """The picks in timeline order (they are repeated in that order too)."""
+        order = {}
+        for obj, _sub in objects:
+            body = pattern.owner_body(obj)
+            if body is not None and body.Name not in order:
+                order[body.Name] = {o.Name: i for i, o in enumerate(body.Group)}
+
+        def key(ref):
+            body = pattern.owner_body(ref[0])
+            index = order.get(body.Name, {}) if body is not None else {}
+            return index.get(ref[0].Name, len(index))
+
+        return sorted(objects, key=key)
 
     @staticmethod
     def _ref_text(ref, titles):
@@ -1612,6 +1775,8 @@ class PatternPanel(Panel):
                     face = profile_pick.global_face(obj, sub)
                     if face is not None:
                         faces.append(face)
+                elif not sub:  # a feature or a body: its faces light up, as in Fusion
+                    faces.extend(self._picked_faces(obj))
             size = self._size()
             for name in ("direction", "direction2", "axis", "path"):
                 ref = self.options.get(name)
@@ -1645,6 +1810,37 @@ class PatternPanel(Panel):
             self.marks.show(faces, lines)
         except Exception as exc:
             warn("%s highlight: %s" % (self.title, exc))
+
+    MAX_LIT_FACES = 400  # a body with more faces is not shaded (it would slow every change)
+
+    def _picked_faces(self, obj):
+        """Faces of the part that show a picked feature (the faces it made) or a picked body
+        (all of it), global coordinates. Fusion shades what is picked blue; before, a feature
+        picked in the timeline showed nowhere in the view. Cached: the part before the
+        pattern does not change while the dialog is open."""
+        cache = getattr(self, "_lit_cache", None)
+        if cache is None:
+            cache = self._lit_cache = {}
+        try:
+            if obj.TypeId == "PartDesign::Body":
+                key = ("body", obj.Name, obj.Shape.hashCode())
+                if key not in cache:
+                    shape = obj.Shape
+                    faces = list(shape.Faces) if len(shape.Faces) <= self.MAX_LIT_FACES else []
+                    cache[key] = faces
+                return cache[key]
+            base = self.base
+            if base is None or base.Shape.isNull() or not pattern.is_solid_feature(obj):
+                return []
+            key = ("feature", obj.Name, base.Name, base.Shape.hashCode(), obj.Shape.hashCode())
+            if key not in cache:
+                cache[key] = [
+                    pattern.to_global_shape(self.body, f)
+                    for f in pattern.faces_made_by(obj, base.Shape, self.MAX_LIT_FACES)
+                ]
+            return cache[key]
+        except Exception:
+            return []
 
     # -- handles ---------------------------------------------------------------------------------
     def _remove_handles(self):
@@ -1833,6 +2029,10 @@ PLAIN = (
         "(Pattern Type: Faces).",
     ),
     ("shape is empty", "There is nothing to repeat: the picked feature adds or removes nothing."),
+    (
+        "unknown exception data",
+        "The copies cannot be built here (the geometry kernel failed). Try other values.",
+    ),
 )
 
 
@@ -1841,6 +2041,24 @@ def _plain(text):
         if needle.lower() in (text or "").lower():
             return said
     return text
+
+
+def _plain_formula_error(text):
+    """A value typed in a field that is no number, said without FreeCAD's expression jargon
+    ("Property 'abc' not found in 'abc'")."""
+    text = str(text or "")
+    if " is not a value here: " not in text:
+        return text
+    typed, why = text.split(" is not a value here: ", 1)
+    low = why.lower()
+    if "not found" in low:
+        return (
+            "%s is not a number or a parameter name. Type a number, a parameter "
+            "(Change Parameters) or a formula." % typed
+        )
+    if "unit" in low:
+        return "%s has the wrong unit for this field." % typed
+    return "%s is not a number or a formula that can be worked out." % typed
 
 
 # -- commands ---------------------------------------------------------------------------------------
@@ -2001,6 +2219,7 @@ def install_delete_watch():
 
 try:
     install_delete_watch()
+    pattern.install_orphan_watch()
 except Exception as _exc:  # never let an import fail the commands
     warn("pattern delete watch unavailable: %s" % _exc)
 

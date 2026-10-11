@@ -1,0 +1,124 @@
+{
+  "id": "pattern_edit_keeps_later_fillet",
+  "title": "A hole pattern, a fillet on the patterned part's edge, then one copy suppressed",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "edit",
+    "suppression",
+    "fillet",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            8,
+            8,
+            2
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "distance": 10,
+      "flip": true
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "direction": "X",
+      "quantity": 3,
+      "distance": 24
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "y",
+            "value": 0
+          },
+          {
+            "axis": "z",
+            "value": 10
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11588.672587712817,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "pattern_edit",
+      "target": "p1",
+      "set": {
+        "suppressed": [
+          0
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11714.33629385641,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Plate 40*30*10 = 12000; through holes r2 at x = 8 and 32 (the copy at 20 left out) remove 2 * 40 pi; the round r2 along the front top edge (40 long) removes 40 * 4 * (1 - pi/4). Leaving a copy out rebuilds the pattern as SciForge's feature; the fillet made on the pattern's edge must stay on that edge."
+  }
+}

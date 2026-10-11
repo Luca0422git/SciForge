@@ -1,0 +1,107 @@
+{
+  "id": "pattern_rect_features_any_order",
+  "title": "A boss with a hole in it, picked hole first, repeated along X: each copy keeps its hole",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "features",
+    "order",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            30,
+            15,
+            4
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "b1",
+      "profile": "s2",
+      "distance": 4
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 14,
+      "geometry": [
+        {
+          "circle": [
+            30,
+            15,
+            1.5
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s3",
+      "operation": "cut",
+      "distance": 4,
+      "flip": true
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "c1",
+        "b1"
+      ],
+      "direction": "X",
+      "quantity": 2,
+      "distance": -12,
+      "distribution": "spacing"
+    }
+  ],
+  "expect": {
+    "volume": 12345.575191894877,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      14
+    ],
+    "source": "analytic",
+    "note": "Plate 40*30*10 = 12000; each boss r4 x4 adds 64 pi with a hole r1.5 x4 that removes 9 pi; two of them (x = 30 and 18). The hole is picked before the boss: SciForge repeats the steps in timeline order, so the copied boss does not fill its copied hole."
+  }
+}

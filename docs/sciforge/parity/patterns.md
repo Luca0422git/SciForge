@@ -46,6 +46,12 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | Double-click in the timeline edits it | Same (all four kinds, every Pattern Type) |
 | Deleting a pattern of bodies deletes its bodies | Same (they go a moment later, as their own undo step) |
 | Suppression: a dot on every copy, click one to leave that copy out | Same for Rectangular, Circular and Path patterns (dots drawn over the part; a left-out copy's dot turns grey; clicking it again puts the copy back; unticking Suppression makes every copy again). FreeCAD's pattern features cannot leave a copy out, so a pattern with suppressed copies is built by SciForge's `PatternFeature` (same result otherwise); a pattern of bodies simply makes fewer bodies |
+| Objects picked in any order (the hole in a boss before the boss) | Repeated in timeline order, like Fusion (FreeCAD repeats them in list order: the copied boss filled its own hole) |
+| Fusion has no active body: a feature of any body can be picked | Same: the dialog takes the body of what is clicked (and makes it active); features of two bodies in one pattern are refused with the reason |
+| Picked features and bodies are shaded in the view | Same (blue), also when they are picked in the timeline |
+| Changing a pattern keeps what was built on it (a sketch on its top face, a fillet on its edges, a Press Pull of its face) | Same. When a change needs the other kind of feature (FreeCAD's pattern cannot leave a copy out, follow a parameter in its count or repeat faces) SciForge rebuilds the step and moves every link to it over to the new step, each face / edge found again by where it is |
+| Deleting the feature a pattern repeats | The pattern adds nothing and shows a warning in the timeline (FreeCAD kept the copies of the deleted hole and froze the steps after it); edit it to pick others. Undo brings everything back |
+| Deleting the body a pattern of bodies copies | The step shows why it cannot be computed; the copies keep their shape |
 
 ## Known gaps (never faked: shown greyed with the reason, or listed here)
 
@@ -57,6 +63,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | A pattern of bodies whose references lie in another body with a moved placement | The references are read in the copied body's coordinates |
 | Pattern on Path: an explicit start point | The copies start at the point of the path nearest to the objects |
 | Timeline icon of Pattern on Path | Shown with the generic icon and the name "Pattern On Path" (the timeline module has no entry for it yet) |
+| Patterning a pattern step alone | Repeats the step's copies, not the original it copies (as Fusion's pattern feature stands for its copies); pick the original step too for whole rows |
 
 ## Tests
 
@@ -64,6 +71,16 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
   `patterns_rect.py`, `patterns_circ.py`, `patterns_mirror.py`, `patterns_path.py`,
   `patterns_suppress.py`, `patterns_params.py`, `patterns_qa.py` (wrong picks, Ctrl+Z in the dialog, type switch, timeline delete of a body
   pattern, save and reopen). Volumes and positions checked with hand-derived formulas.
+- QA scenarios (break-and-fix pass, 17 paths): `patterns_qa_paths.py` (beginner with nothing
+  picked, values and direction before the objects, Esc in the middle of a pick, values while
+  the preview runs, arrows dragged far and back, Enter in Quantity), `patterns_qa_edit.py`
+  (three timeline edits with Ctrl+Z inside one, undo/redo through them, a boss on the pattern's
+  top face kept through a rebuild and a taller box, Ctrl+S with the dialog open, reopen and
+  edit), `patterns_qa_part.py` (a second body, a construction plane as mirror plane, the
+  repeated hole deleted, E / F / Delete with a dialog open), `patterns_qa_more.py` (Press Pull
+  after a rebuilt pattern, a pattern of a pattern, Total Angle 270 typed and dragged),
+  `patterns_qa_features.py` (two steps picked in the wrong order, a Faces pattern following the
+  hole, a fillet's face refused in words, the copied body deleted).
 - Golden models (ops `rectangular_pattern`, `circular_pattern`, `path_pattern`,
   `fusion_mirror`, `pattern_edit` in `golden/pattern_ops.py`, the dialogs' code):
   `pattern_rect_hole_grid_fusion`, `pattern_rect_symmetric_bosses`,
@@ -72,7 +89,8 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
   `pattern_bodies_rect_new`, `pattern_path_bosses`, `pattern_path_circle_turned`,
   `pattern_symmetric_parameter`, `pattern_edit_quantity_fusion`, `pattern_rect_suppressed`,
   `pattern_circ_suppressed_bodies`, `pattern_sciforge_extrude`, `mirror_hole_and_its_pattern`,
-  `pattern_quantity_parameter`.
+  `pattern_quantity_parameter`, `pattern_rect_features_any_order`,
+  `pattern_edit_keeps_later_fillet`.
 - Unit tests: `SciForgeTests/unit/test_pattern_core.py`.
 
 ## Lessons for other dialogs
@@ -90,3 +108,13 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 - Keep the word "error" out of scenario step names: the harness reads it in the log line.
 - PartDesign features already have a `Suppressed` (bool) property: a Python feature adding its
   own `Suppressed` list silently keeps the bool (SciForge uses `SuppressedCopies`).
+- Rebuilding a step as a new object drops every link to it (FreeCAD clears links to a deleted
+  object, silently): move them first (`pattern.relink_dependents`, faces found again by place).
+- FreeCAD's pattern features return without touching their shape when nothing is left to
+  repeat (`originals.empty()`): an App observer's `slotRecomputedObject` can set the shape
+  right after (`pattern.OrphanWatch`); setting `Shape` there does not leave the step touched.
+- A flat drag handle is a sliver when its plane is seen nearly edge-on, and a press that misses
+  it lands on the part behind it: give handles some thickness in every direction, and never
+  take the release after a press on a handle as a pick (`PatternPanel._button`).
+- OpenCASCADE's Python errors print as "<unknown exception data>": catch them in a Python
+  feature's `execute` and raise a sentence instead.

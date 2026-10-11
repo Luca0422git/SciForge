@@ -237,6 +237,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       lines). 7 scenarios (`sweep_loft_*.py`), 35 golden models (`sf_sweep_*`, `sf_loft_*`,
       `sf_rib_*`, `sf_web_*`). Gaps: Tangent Edges Merge, Path + Guide Surface, loft end
       conditions.
+      `SciForge_PatternOnPath` (was greyed). QA pass done (branch `sf/patterns-qa`): 17 paths
+      in 5 more scenarios (`patterns_qa_*.py`), 8 bugs fixed (see Known issues).
 
 ## Known issues / findings
 
@@ -843,6 +845,35 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     the sketch plane (the band minus the plane's section of the part), then thickened.
   - A rib / web turned out of a side face (One Side) touches the part only along edges:
     `fuse` then gives two solids. Refused with the reason.
+- **Patterns QA findings (branch `sf/patterns-qa`, break-and-fix pass)**:
+  - **Trap: rebuilding a step as a new object silently drops every link to it.** A pattern
+    edit that needs the other kind of feature (Suppression, a Quantity formula, Faces, a
+    fillet among the objects) replaced FreeCAD's LinearPattern with SciForge's feature; a
+    sketch on its top face, a fillet on its edges or a Press Pull of its face lost their
+    reference without a message. `pattern.relink_dependents(old, new)` moves every link first,
+    each face/edge/vertex found again by place (`pattern.twin_element`). Any feature that
+    swaps its object type needs the same.
+  - **Upstream behaviour:** FreeCAD's Transformed features return without touching their shape
+    when none of their originals is left (`FeatureTransformed.cpp`, `originals.empty()`): after
+    the patterned hole was deleted the copies stayed and everything after the pattern froze.
+    `pattern.OrphanWatch` (an App observer, `slotRecomputedObject`) passes the base shape
+    through and sets the timeline warning (`SciForgeWarning`). Worth reporting upstream.
+  - FreeCAD's pattern features repeat their originals in list (= click) order: a boss picked
+    after the hole in it filled the copied hole. Originals are now sorted in timeline order.
+  - Fusion has no active body: a pattern dialog started while a second body was active
+    ignored the first body's features (clicks did nothing). `PatternPanel._adopt_body`.
+  - **Trap: a flat drag handle is a sliver when its plane is seen nearly edge-on**, and a
+    press that misses a handle selects the part behind it on release (the box's whole
+    feature joined the pattern's objects). The pattern's curved handle got a second, standing
+    band; pattern dialogs ignore the selection that follows a press on a handle. **Not fixed
+    for other dialogs** (owners of `taskui.ArrowDragger` / `extrude_ui.AngleDragger`): the
+    taper handle has the same flat band, and every dialog that picks faces should ignore the
+    release after a press on a handle.
+  - OpenCASCADE's Python exceptions print as "<unknown exception data>"; SciForge's pattern
+    feature now raises sentences (`pattern.kernel_message`).
+  - Not patterns' (seen during QA, sf/patterns base): an Extrude to a New Body from a sketch
+    on another body's face shows a step "ExtrudeNNN profile" in the timeline (extrude /
+    timeline owners).
 
 ## Questions waiting for Luca
 
@@ -1231,6 +1262,29 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Full suite at the end (no --only, 2026-10-11): unit 185 OK (194 with the new schema
   tests, run after); golden 216 pass + 1 xfail (`plate_hole_grid`, needs core patch #4);
   smoke 70/70; journey 25/25; 79 of 79 scenarios PASS (6594 checks).
+
+### 2026-10-11: QA of Patterns and Mirror (branch `sf/patterns-qa`)
+- 5 new scenarios `patterns_qa_paths/edit/part/more/features.py` (17 paths, real input
+  only) found and fixed: a pattern rebuilt by an edit (Suppression, Quantity formula, Faces)
+  dropped the faces / edges later steps hung on (sketch, fillet, Press Pull); a FreeCAD pattern
+  whose holes were all deleted kept their copies and froze the timeline after it; the first
+  body's steps could not be picked while a second body was active; steps picked in the
+  "wrong" order were repeated in click order (the copied boss filled its copied hole); the
+  curved Total Angle handle was a sliver seen edge-on and a missed press picked the part
+  behind it; a typed Total Angle past 180 showed the handle at 180; a plain click on an arrow
+  threw away a typed formula; "<unknown exception data>" for a fillet face as Faces; a Python
+  AttributeError after the patterned body was deleted; an edit could pick the pattern's own
+  copy body; picked steps were not shaded and were listed in click order.
+- 2 golden models: `pattern_rect_features_any_order`, `pattern_edit_keeps_later_fillet`.
+- No shared file changed. Findings for other owners: see "Patterns QA findings" above.
+- Full suite at the end (no --only): unit 153 OK; golden 123 pass + 1 xfail
+  (`plate_hole_grid`); smoke 70/70; journey 25/25; 44 of 45 scenarios PASS, all 12 pattern
+  scenarios among them. `sketch_draw` failed the same 3 checks as on `sf/patterns` ("circle
+  diameter typed: 8" got r 4.97) while another worktree's suite ran, and PASSES alone (86
+  checks): the sketch timing flake fixed on the integration branch (`si.click` rests 80 ms).
+- Trial merge into `claude/inspiring-cerf-ragp6j` (git merge-tree): only MEMORY.md conflicts.
+  That branch hangs a sketch on the step that made the face (not on the pattern); the
+  `patterns_qa_edit` check accepts both.
 
 ## Next steps (in order)
 
