@@ -399,6 +399,7 @@ class BlendPanel(Panel):
         self.formulas = QtWidgets.QLabel("")  # values that follow a parameter / formula
         self.formulas.setWordWrap(True)
         self.formulas.setStyleSheet("color: #b8c7d9;")
+        self.formulas.setVisible(False)  # shown when a box follows a formula
         self.layout.addRow(self.formulas)
 
     def _fields(self):
@@ -588,6 +589,7 @@ class BlendPanel(Panel):
             if self._closed or self.base is None:
                 return
             cleared, self._cleared = self._cleared, False
+            self.help.setText(PICK_HELP)  # (a timeline click below says what it added)
             names, features = [], []
             for sel in Gui.Selection.getSelectionEx(self._doc_name):
                 for obj, name in _resolve(sel):

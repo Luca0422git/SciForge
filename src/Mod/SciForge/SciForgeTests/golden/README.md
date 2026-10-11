@@ -68,6 +68,8 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `chamfer` | `id`, `edges`, `distance`, `distance2` or `angle` | Chamfer |
 | `blend_fillet` | `id`, `radius`, and `edges` / `faces` (every sharp edge around them) / `features` (step ids: the edges each made) | Fillet dialog (`sciforge/blend.py`, the F command's code) |
 | `blend_chamfer` | `id`, `distance`, `chamfer_type` (equal/two/angle), `distance2`, `angle`, `flip`, and `edges` / `faces` / `features` | Chamfer dialog |
+| `blend_insert` | `id`, `kind` (fillet/chamfer), the options above, `edges` / `faces` | Fillet / Chamfer made with the timeline marker rolled back (after a `roll`): later blends keep their edges (`golden/blend_ops.py`) |
+| `blend_edit` | `target`, `add_edges` / `add_faces` (selectors on the shape it is applied to), `set` {options} | double-click a Fillet / Chamfer in the timeline, pick more edges, change sizes; later blends keep their edges |
 | `shell` | `id`, `faces` (faces to remove), `thickness`, `direction` (inside/outside) | Shell |
 | `hole` | `id`, `sketch` (hole centres = its circles' centres), `diameter`, `depth` or `through_all`, `counterbore {diameter, depth}` or `countersink {diameter, angle}` | Hole |
 | `pattern_rect` | `id`, `features`, `direction`, `count`, `spacing`, optional second direction `direction2`, `count2`, `spacing2` | Rectangular Pattern |

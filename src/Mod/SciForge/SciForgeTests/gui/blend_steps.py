@@ -218,16 +218,23 @@ def timeline_button(title):
     return None
 
 
-def timeline_double_click(title):
-    """The events of a real double-click (press, release, double-click, release). A bare
-    QTest.mouseDClick never releases the button: Qt then believed the left button was
-    still held, and a dialog that ignores keys while a handle is dragged ignored Esc."""
+def timeline_double_click(title, click_first=False):
+    """Double-click a timeline step. A bare QTest.mouseDClick never releases the button: Qt
+    then believed the left button was still held, and a dialog that ignores keys while a
+    handle is dragged ignored Esc; the release is sent now.
+    click_first: the full events of a person's double-click (press, release, double-click,
+    release), so the first click also selects the step in the timeline, as with a mouse."""
     from SciForgeTests.gui import widget_input
 
     button = timeline_button(title)
     if not h.check("timeline shows %s" % title, button is not None, timeline_titles()):
         return False
-    widget_input.double_click(button)
+    if click_first:
+        widget_input.double_click(button)
+    else:
+        QtTest.QTest.mouseDClick(button, QtCore.Qt.LeftButton)
+        QtTest.QTest.mouseRelease(button, QtCore.Qt.LeftButton)
+        QtWidgets.QApplication.processEvents()
     return True
 
 

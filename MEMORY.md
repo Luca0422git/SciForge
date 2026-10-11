@@ -148,6 +148,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Spec + gaps: `docs/sciforge/parity/patterns.md`. 6 scenarios (`patterns*.py`), 16 golden
       models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
       `SciForge_PatternOnPath` (was greyed).
+- [x] Fillet (F) and Chamfer, Fusion-style, plus a QA pass (branch `sf/fillet-qa`): picks of
+      edges / faces / timeline features, Tangent Chain, blue arrows, live preview, errors in
+      the dialog, timeline edit; QA added mm-safe value boxes with parameters/formulas,
+      Ctrl+S/N/O finishing the dialog, later fillets kept on their edges after an insert or
+      an edit (`blend.References`), two-solid bodies, angle limits. Spec + gaps:
+      `docs/sciforge/parity/fillet.md`. Scenarios `fillet*.py` (8 files), 10 golden models
+      `blend_*`, unit tests `test_blend_core.py`.
 
 ## Known issues / findings
 
@@ -450,6 +457,51 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
     kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
     `"PatternOnPath"` to it in `KIND_BY_SCIFORGE_TYPE`.
+- **Fillet / Chamfer QA findings (branch `sf/fillet-qa`)**:
+  - **Trap: FreeCAD's number box reads a bare number in the unit it shows.** Below 0.1 mm
+    `Gui::QuantitySpinBox` shows micrometres; after a drag down to 0.01 mm ("10.00 µm") a
+    typed "1.5" became 1.5 µm and every later value was a thousand times too small. The
+    Fillet/Chamfer boxes (`blend_field.ValueField`) read the text themselves (bare number =
+    mm / degrees, "0.1 in" works, names and formulas become expressions). **The shared
+    `taskui.DistanceField` (Extrude, Press Pull, every dialog) has the same trap**: owner of
+    taskui, give it the same reading (or make drags stop at 0.1 mm). Its `autoNormalize`
+    also swallows the first Enter after a sum ("2*0.25"): set the property False.
+  - **Timeline Delete of the last step hides the whole part** (timeline owner,
+    `timeline_ops.delete`): FreeCAD already moved `body.Tip` back when the step was removed,
+    so `_set_tips()` sees no change and skips `_show_only_tip()`; the new Tip keeps
+    Visibility False. Fix: call `_show_only_tip(body, body.Tip)` after the removal whatever
+    the Tip was. Reported as KNOWN in `fillet_qa_more.py` (P19).
+  - FreeCAD's element names do not survive an edge that an earlier change trims: a fillet
+    inserted with the marker rolled back, or an earlier fillet edited to round one more
+    edge, broke the later fillets ("Invalid edge link" in the Report view). Edits that keep
+    the topology (sketch dimensions, extrude length, Press Pull distance, fillet radius)
+    were fine. `blend.References` keeps later dress-ups' edges/faces as geometry and
+    `recompute_keeping` puts them back on the same (possibly shorter) edge.
+  - OpenCASCADE's tangent chain also runs through edges an *earlier* change made tangent:
+    after a round is inserted, a later fillet's edge that now meets that round's end arc
+    tangentially continues round the arc and down the next edge (Fusion's Tangent Chain does
+    the same; volumes in the QA account for it).
+  - A body may hold several solids (two profiles extruded apart); the old "would cut the part
+    into pieces" check compared with 1 solid instead of the body's own count.
+  - `QTest.mouseDClick` never releases the button: Qt then believes the left button is held
+    (`QApplication.mouseButtons()`), and dialogs that ignore keys while a handle is dragged
+    ignored Esc. `blend_steps.timeline_double_click` now sends the release, and with
+    `click_first=True` (the fillet QA scenarios) the events of a person's double-click:
+    press, release (the timeline selects the step), double-click, release.
+  - **Hole (hole owner, `hole_ui.py`)**: with a person's double-click on "Hole 1" in the
+    timeline (the first click selects the Hole step), the edit dialog then picks nothing
+    when a reference edge is clicked (`hole.py` scenario run with `click_first=True`:
+    "one reference edge" ... 7 checks fail, every time). Probably the whole-feature
+    selection the timeline click left behind; the hole scenarios pass only with the bare
+    double-click. Switch `hole.py` to `click_first=True` and fix the dialog.
+  - A selected timeline item is a whole-feature selection: F after a right-click on the
+    timeline (Roll History Marker Here) rounded every edge that feature made. Whole features
+    are no longer taken as picks when F starts (a timeline click *inside* the dialog still
+    adds the feature's edges).
+  - A Coin `SoSearchAction` / `Edge.Curve` on a degenerated edge (where three rounds meet)
+    raises `TypeError: undefined curve type`: guard every `.Curve` read.
+  - Display parity notes: FreeCAD draws a cylinder's seam as a line (Fusion does not), and the
+    overlay title bar of the Tasks dock sometimes shows as a white strip in screenshots.
 
 ## Questions waiting for Luca
 
@@ -618,6 +670,27 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `sketch_draw` failed 3 checks ("circle diameter typed: 8" got r 4.97) while another
   worktree's suite ran at the same time, and PASSES alone (86 checks): timing-sensitive,
   sketch owner to look at.
+
+### 2026-10-11: QA of Fillet and Chamfer (branch `sf/fillet-qa`)
+- Broke the merged Fillet/Chamfer on purpose with 4 new scenarios, only real input, 22 paths:
+  `fillet_qa.py` (beginner, wrong order, Esc mid-pick, fast typing, far/negative drags,
+  three timeline edits + undo/redo, E/Q/F/Ctrl+S inside the dialog, save-close-reopen-edit),
+  `fillet_qa_part.py` (a real part: sketch, extrude, boss fillet, Press Pull of the round, a
+  pocket, a chamfer, then the first extrude made taller; history edits and an insert with the
+  marker rolled back; a two-solid body; a radius from a parameter), `fillet_qa_chamfer.py`,
+  `fillet_qa_more.py` (marking menu, two designs, two bodies, keys in the box, x button,
+  timeline Delete, empty design, Press Pull edited under a fillet, design closed under the
+  dialog). 2 golden models + ops `blend_insert` / `blend_edit` (`golden/blend_ops.py`).
+- Bugs fixed (see Known issues "Fillet / Chamfer QA findings" and `parity/fillet.md`): µm
+  reading of typed numbers after a drag, no parameters/formulas (and a FreeCAD pop-up on
+  "="), Enter swallowed after a sum, Ctrl+S saving a half-made fillet, later fillets broken by
+  an insert / an edit ("Invalid edge link"), two-solid bodies refused, 90° chamfer angle with
+  a kernel message, F after a timeline right-click rounding a whole feature, F inside a
+  dialog reusing its picks, a hidden fillet left in the body after dropping every pick,
+  clicks in another design taken as picks, the drag arrow left behind the edge.
+- Reported, not mine to fix: timeline Delete of the last step hides the whole part
+  (`timeline_ops.delete`); `taskui.DistanceField` has the µm trap in every other dialog.
+- Full suite: FULL_SUITE_RESULT
 
 ## Next steps (in order)
 

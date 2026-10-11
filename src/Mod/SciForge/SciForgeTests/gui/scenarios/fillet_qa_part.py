@@ -264,7 +264,7 @@ def p8_chamfer_done():
     h.check("P8 chamfer kept", b.close(h.solid_volume(), s["v"]), h.solid_volume())
     h.shot("p8-part")
     h.fit()
-    b.timeline_double_click("Extrude 1")
+    b.timeline_double_click("Extrude 1", click_first=True)
 
 
 def p8_edit_base():
@@ -330,7 +330,7 @@ def p9_two_fillets():
     s["v"] = v
     s["fillets"] = [f.Name for f in b.blends()]
     h.fit()
-    b.timeline_double_click("Fillet 1")
+    b.timeline_double_click("Fillet 1", click_first=True)
 
 
 def p9_editing():
@@ -574,7 +574,7 @@ def p11_followed():
     v = s["v"] - 10 * b.spandrel(2)
     h.check("P11 r = 1: the round is r 2 now", b.close(h.solid_volume(), v), (h.solid_volume(), v))
     h.fit()
-    b.timeline_double_click("Fillet 2")
+    b.timeline_double_click("Fillet 2", click_first=True)
 
 
 def p11_editing():

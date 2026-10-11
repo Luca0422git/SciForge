@@ -10,8 +10,8 @@ Path 3, Esc in the middle of picking: the part comes back exactly as it was (no
 Path 4, values while the preview runs: three radii typed back to back, the arrow dragged
         far out (too big: said in the dialog, OK refused) and back through the edge
         (the radius stops at its smallest and the arrow comes back to it).
-Path 5, edit from the timeline three times (add an edge, drop it again, Cancel), then
-        undo / redo through the edits.
+Path 5, edit from the timeline three times (add an edge, drop it again, a radius typed in
+        inches and Cancel), then undo / redo through the edits.
 Path 6, another command's key while the dialog is open: E keeps a good fillet and opens
         Extrude; Q drops a fillet that does not fit and opens Press Pull; F again keeps
         the fillet and starts a new one with nothing picked (not the old picks).
@@ -79,6 +79,7 @@ def p1_f():
 def p1_ok():
     p = b.blend_panel()
     h.check("P1 F with nothing selected opens Fillet", p is not None and dialog_open())
+    h.check("P1 no empty formula line in the dialog", p is not None and not p.formulas.isVisible())
     b.no_popups("F with nothing selected")
     h.task_button("OK")
 
@@ -324,7 +325,7 @@ def p4_done():
 
 # -- Path 5: edit from the timeline three times, undo / redo through the edits -----------------
 def p5_edit1():
-    b.timeline_double_click("Fillet 1")
+    b.timeline_double_click("Fillet 1", click_first=True)
 
 
 def p5_editing1():
@@ -353,7 +354,7 @@ def p5_edit2():
     s["two"] = h.solid_volume()
     h.check("P5 still one fillet", len(b.blends()) == 1)
     h.fit()
-    b.timeline_double_click("Fillet 1")
+    b.timeline_double_click("Fillet 1", click_first=True)
 
 
 def p5_editing2():
@@ -371,7 +372,7 @@ def p5_dropped():
 def p5_edit3():
     h.check("P5 one edge r 2 now", b.close(h.solid_volume(), one_edge(2)), h.solid_volume())
     h.fit()
-    b.timeline_double_click("Fillet 1")
+    b.timeline_double_click("Fillet 1", click_first=True)
 
 
 def p5_editing3():
@@ -554,7 +555,7 @@ def p7_reopened():
     h.check("P7 reopened: same part", b.close(h.solid_volume(), s["v"]), h.solid_volume())
     h.check("P7 four fillets in the file", len(b.blends()) == 4, b.blends())
     h.check("P7 all of them computed", all("Invalid" not in f.State for f in b.blends()))
-    b.timeline_double_click("Fillet 1")
+    b.timeline_double_click("Fillet 1", click_first=True)
 
 
 def p7_editing():

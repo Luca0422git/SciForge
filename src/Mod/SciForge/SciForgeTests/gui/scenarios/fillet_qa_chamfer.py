@@ -225,7 +225,7 @@ def p12_done():
 
 # -- Path 13: edit twice, undo / redo, save / reopen --------------------------------------------
 def p13_edit():
-    b.timeline_double_click("Chamfer 1")
+    b.timeline_double_click("Chamfer 1", click_first=True)
 
 
 def p13_editing():
@@ -258,7 +258,7 @@ def p13_ok():
 def p13_edit2():
     h.check("P13 edit kept", not dialog_open())
     h.fit()
-    b.timeline_double_click("Chamfer 1")
+    b.timeline_double_click("Chamfer 1", click_first=True)
 
 
 def p13_add():
@@ -304,7 +304,7 @@ def p13_open():
 
 def p13_reopened():
     h.check("P13 reopened", b.close(h.solid_volume(), s["v"]), h.solid_volume())
-    b.timeline_double_click("Chamfer 1")
+    b.timeline_double_click("Chamfer 1", click_first=True)
 
 
 def p13_editing_reopened():

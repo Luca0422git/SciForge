@@ -399,7 +399,7 @@ def p19_ok():
 def p19_edit():
     h.check("P19 fillet r 1", b.close(h.solid_volume(), one_edge(1)), h.solid_volume())
     h.fit()
-    b.timeline_double_click("Fillet 1")
+    b.timeline_double_click("Fillet 1", click_first=True)
 
 
 def p19_edit_value():
@@ -523,7 +523,7 @@ def p21_edit_pull():
     v = 1200.0 * 12 - 40 * b.spandrel(1)
     h.check("P21 fillet on the pulled part", b.close(h.solid_volume(), v), h.solid_volume())
     h.fit()
-    b.timeline_double_click("Press Pull 1")
+    b.timeline_double_click("Press Pull 1", click_first=True)
 
 
 def p21_pull_more():
