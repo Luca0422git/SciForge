@@ -31,6 +31,17 @@ FEATURE_PROPS = {
     "PartDesign::PolarPattern": [("Occurrences", "Quantity"), ("Angle", "Angle")],
     "PartDesign::Draft": [("Angle", "Angle")],
 }
+# SciForge's own features (their SciForgeType) -> [(property, label)], shown the same way.
+SCIFORGE_PROPS = {
+    "PressPull": [("Distance", "Distance")],
+    "Shell": [("InsideThickness", "Inside Thickness"), ("OutsideThickness", "Outside Thickness")],
+    "Scale": [
+        ("Factor", "Scale Factor"),
+        ("FactorX", "X Scale"),
+        ("FactorY", "Y Scale"),
+        ("FactorZ", "Z Scale"),
+    ],
+}
 DIMENSION_TYPES = {"Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle"}
 
 
@@ -115,10 +126,12 @@ def model_parameters(doc):
                     continue  # hidden or read-only for this feature's mode
                 value = getattr(obj, prop)
                 rows.append(_row(obj, prop, label, value, expressions.get(prop, "")))
-        elif getattr(obj, "SciForgeType", "") == "PressPull":
-            rows.append(
-                _row(obj, "Distance", "Distance", obj.Distance, expressions.get("Distance", ""))
-            )
+        elif getattr(obj, "SciForgeType", "") in SCIFORGE_PROPS:
+            for prop, label in SCIFORGE_PROPS[obj.SciForgeType]:
+                if prop not in obj.PropertiesList or obj.getEditorMode(prop):
+                    continue  # hidden: not used by this feature's choices
+                value = getattr(obj, prop)
+                rows.append(_row(obj, prop, label, value, expressions.get(prop, "")))
         elif obj.TypeId == "Sketcher::SketchObject":
             for i, constraint in enumerate(obj.Constraints):
                 if constraint.Type not in DIMENSION_TYPES or not constraint.Driving:

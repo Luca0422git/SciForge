@@ -79,6 +79,26 @@ def matrix(point, factors):
     return back.multiply(m)
 
 
+def _keep_names(shape, result):
+    """FreeCAD's non-uniform transform gives a shape without element names, and the
+    uniform one names its faces differently: a sketch on a face of the scaled part (or
+    any later step using its faces) lost its face as soon as the factors were edited
+    ("?Face6"). Both keep every face, edge and corner in the same order, so the part's
+    own names carry over one to one, whatever the factors."""
+    try:
+        if (
+            len(result.Faces) == len(shape.Faces)
+            and len(result.Edges) == len(shape.Edges)
+            and len(result.Vertexes) == len(shape.Vertexes)
+        ):
+            names = shape.ElementMap
+            if names:
+                result.ElementMap = names
+                result.Tag = shape.Tag  # FreeCAD tags the names with it (one way for both)
+    except Exception:
+        pass
+
+
 def scaled(shape, point, factors):
     """A scaled copy of `shape` about `point` (body coordinates). Raises ScaleError."""
     sx, sy, sz = factors
@@ -90,6 +110,7 @@ def scaled(shape, point, factors):
             result.scale(sx, point)  # exact: planes stay planes, circles stay circles
         else:
             result = shape.transformGeometry(matrix(point, factors))
+        _keep_names(shape, result)
     except Exception as exc:
         raise ScaleError("The part could not be scaled: %s" % exc)
     if result.isNull() or not result.Solids or not result.isValid():
@@ -190,9 +211,26 @@ class ScaleFeature:
         if "SciForgeType" not in obj.PropertiesList:
             obj.addProperty("App::PropertyString", "SciForgeType", "Base", "", 4)  # hidden
             obj.SciForgeType = KIND
+        ScaleFeature.show_used(obj)
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+
+    def onChanged(self, obj, prop):
+        if prop == "ScaleType":
+            ScaleFeature.show_used(obj)
+
+    @staticmethod
+    def show_used(obj):
+        """Only the factors the scale type uses are shown (property editor, Change
+        Parameters), like the dialog's fields."""
+        try:
+            uniform = str(obj.ScaleType) == "Uniform"
+            obj.setEditorMode("Factor", 0 if uniform else 2)
+            for axis in "XYZ":
+                obj.setEditorMode("Factor" + axis, 2 if uniform else 0)
+        except Exception:
+            pass
 
     def execute(self, obj):
         base = obj.BaseFeature

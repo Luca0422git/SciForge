@@ -1,0 +1,95 @@
+{
+  "id": "sf_shell_both_edit_presspull",
+  "title": "Shell Both 2 in / 1 out, Press Pull on its outside front wall, the shell edited to 2 out: the Press Pull keeps its wall",
+  "tags": [
+    "shell",
+    "sciforge-shell",
+    "edit",
+    "press-pull",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "direction": "both",
+      "inside": 2,
+      "outside": 1
+    },
+    {
+      "op": "press_pull",
+      "id": "pp1",
+      "faces": {
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "at": {
+          "axis": "y",
+          "value": -1
+        },
+        "count": 1
+      },
+      "distance": 2
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 8220,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "sf_shell_edit",
+      "target": "sh1",
+      "set": {
+        "outside": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11520,
+    "bbox": [
+      -2,
+      -4,
+      -2,
+      42,
+      32,
+      10
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Both 2/1: 42*32*11 - 36*26*8 = 7296, wall pulled 2: + 42*11*2 = 8220. Both 2/2: 44*34*12 - 36*26*8 = 10464, the wall (now at y = -2, 44 x 12) pulled 2: + 1056 = 11520. Before the QA fix the Press Pull lost its face (FreeCAD's names of the two joined walls changed with every thickness)."
+  }
+}

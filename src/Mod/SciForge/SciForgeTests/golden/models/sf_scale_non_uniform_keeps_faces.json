@@ -1,0 +1,84 @@
+{
+  "id": "sf_scale_non_uniform_keeps_faces",
+  "title": "Scale 2, Press Pull the top 5, the scale edited to Non Uniform 2 / 1 / 1: the Press Pull keeps the top",
+  "tags": [
+    "scale",
+    "edit",
+    "press-pull",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_scale",
+      "id": "sc1",
+      "factor": 2
+    },
+    {
+      "op": "press_pull",
+      "id": "pp1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "distance": 5
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 120000,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "sf_scale_edit",
+      "target": "sc1",
+      "set": {
+        "factors": [
+          2,
+          1,
+          1
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "volume": 36000,
+    "bbox": [
+      0,
+      0,
+      0,
+      80,
+      30,
+      15
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "80 x 60 x 20 pulled up 5: 80*60*25 = 120000; Non Uniform 2/1/1: 80 x 30 x 10 pulled up 5: 80*30*15 = 36000. Before the QA fix the non-uniform scale gave its faces new names and the Press Pull lost the top."
+  }
+}
