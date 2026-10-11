@@ -9,8 +9,8 @@ list's x (no loft until two are picked again), click it again. Closed with only 
 says why in the dialog; clear it; OK. Undo / redo. Double-click it in the timeline, choose
 Cut: the dialog says the cut does not touch the box and stays open; Cancel leaves the part.
 
-Second use: a sketch on XZ with a point at (0, 45). Loft: click the round top face of the
-first loft, then the point: a cone on top. OK. Esc cancels a third Loft.
+Second use: a sketch on XZ with a point at (0, 45). Click the round top face of the first
+loft, then CREATE > Loft: the face is taken; click the point: a cone on top. OK. Esc cancels a third Loft.
 
 Hand-derived: a loft between a square of half-side s and a circle of radius r (both centred,
 h apart) blends matching points in a straight line (OpenCASCADE puts the circle's points
@@ -18,6 +18,7 @@ across from the square's corners), so a section at t is (1-t) P + t Q and
 V = h (A_P / 3 + A_Q / 3 + M / 6) with M = 16 sqrt(2) s r / pi; here s = r = 10, h = 20.
 Cone on a circle r10, 15 high: pi 100 15 / 3.
 """
+
 import math
 
 import FreeCAD as App
@@ -348,21 +349,23 @@ def finish_point():
     h.ribbon("Finish Sketch")
 
 
-def loft_point():
+def select_round_face():
     h.fit()
     h.click_empty()
-    st.menu("Loft")
-
-
-def click_round_face():
-    h.fit()
     h.click(V(-4, 4, 30))
+
+
+def loft_point():
+    h.check("the round face is selected", len(Gui.Selection.getSelectionEx()) == 1)
+    st.menu("Loft")
 
 
 def click_point():
     p = panel()
     h.check(
-        "the round top face is profile 1", p is not None and len(p.profiles) == 1, p and p.profiles
+        "the round top face, clicked before the command, is profile 1",
+        p is not None and len(p.profiles) == 1,
+        p and p.profiles,
     )
     h.click(V(0, 0, 45))
 
@@ -443,8 +446,8 @@ h.run(
         pick_xz,
         draw_point,
         finish_point,
+        select_round_face,
         loft_point,
-        click_round_face,
         click_point,
         cone,
         cone_kept,
