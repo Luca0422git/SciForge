@@ -562,6 +562,8 @@ class PressPullPanel(Panel):
             self.message.setText("⚠ %s" % exc)
 
     def _recompute(self):
+        if self._closed:
+            return  # a change that arrived as the dialog closed
         try:
             preview.recompute(self.doc)
             self.show_status()

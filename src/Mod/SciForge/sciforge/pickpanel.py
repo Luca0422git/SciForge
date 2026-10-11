@@ -274,9 +274,7 @@ class PickPanel(Panel):
                         Gui.Selection.addSelection(obj)
                 except Exception:
                     continue
-            self._shown = [
-                (obj.Name, short) for obj, short, _p in selection_entries(self.doc)
-            ]
+            self._shown = [(obj.Name, short) for obj, short, _p in selection_entries(self.doc)]
         finally:
             self._syncing = False
 
@@ -391,6 +389,8 @@ class PickPanel(Panel):
             super().schedule()
 
     def _recompute(self):
+        if self._closed:
+            return  # a change that arrived as the dialog closed
         try:
             self._preview()
         except Exception as exc:

@@ -1041,6 +1041,8 @@ class PlacedPanel(Panel):
         self.schedule()
 
     def _recompute(self):
+        if self._closed:
+            return  # a change that arrived as the dialog closed
         try:
             if self.doc.Recomputing:
                 self._timer.start()  # FreeCAD is still busy: try again shortly

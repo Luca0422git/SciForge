@@ -1052,6 +1052,8 @@ class ExtrudePanel(Panel):
 
     def _recompute(self):
         """Apply the dialog's values to the document and rebuild the preview."""
+        if self._closed:
+            return  # a change that arrived as the dialog closed
         try:
             if self.dirty:
                 self.dirty = False
