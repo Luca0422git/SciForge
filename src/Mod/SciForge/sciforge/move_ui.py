@@ -37,6 +37,7 @@ MOVE_TYPES = [
     ("Translate", "translate"),
     ("Rotate", "rotate"),
     ("Point to Point", "point_to_point"),
+    ("Point to Position", "point_to_position"),
 ]
 AXES = (App.Vector(1, 0, 0), App.Vector(0, 1, 0), App.Vector(0, 0, 1))
 COLORS = ((0.90, 0.30, 0.30), (0.35, 0.80, 0.35), (0.30, 0.55, 1.0))
@@ -406,7 +407,7 @@ class MovePanel(BodyPanel):
         self.distance_fields = []
         self.distance_captions = []
         for key, label in (("dx", "X Distance"), ("dy", "Y Distance"), ("dz", "Z Distance")):
-            field = DistanceField(self.options[key], on_change=lambda v, k=key: self._typed(k, v))
+            field = DistanceField(self.options[key], on_change=lambda v, k=key: self._field(k, v))
             caption = QtWidgets.QLabel(label)
             self.layout.addRow(caption, field.widget)
             self.distance_fields.append(field)
@@ -415,7 +416,7 @@ class MovePanel(BodyPanel):
         self.angle_captions = []
         for key, label in (("rx", "X Angle"), ("ry", "Y Angle"), ("rz", "Z Angle")):
             field = DistanceField(
-                self.options[key], unit="deg", on_change=lambda v, k=key: self._typed(k, v)
+                self.options[key], unit="deg", on_change=lambda v, k=key: self._field(k, v)
             )
             caption = QtWidgets.QLabel(label)
             self.layout.addRow(caption, field.widget)
@@ -423,12 +424,20 @@ class MovePanel(BodyPanel):
             self.angle_captions.append(caption)
         self.selection_box("axis", "Axis")
         self.angle = DistanceField(
-            self.options["angle"], unit="deg", on_change=lambda v: self._typed("angle", v)
+            self.options["angle"], unit="deg", on_change=lambda v: self._field("angle", v)
         )
         self.angle_caption = QtWidgets.QLabel("Angle")
         self.layout.addRow(self.angle_caption, self.angle.widget)
         self.selection_box("from_point", "Origin Point")
         self.selection_box("to_point", "Target Point")
+        self.position_fields = []
+        self.position_captions = []
+        for key, label in (("px", "X"), ("py", "Y"), ("pz", "Z")):
+            field = DistanceField(self.options[key], on_change=lambda v, k=key: self._field(k, v))
+            caption = QtWidgets.QLabel(label)
+            self.layout.addRow(caption, field.widget)
+            self.position_fields.append(field)
+            self.position_captions.append(caption)
         self.copy, _ = self.check_box(
             "Create Copy",
             self.options["copy"],
@@ -447,6 +456,8 @@ class MovePanel(BodyPanel):
             for field, key in zip(self.angle_fields, ("rx", "ry", "rz")):
                 field.set_value(self.options[key])
             self.angle.set_value(self.options["angle"])
+            for field, key in zip(self.position_fields, ("px", "py", "pz")):
+                field.set_value(self.options[key])
             self.copy.setChecked(bool(self.options["copy"]))
         finally:
             self._quiet = False
@@ -461,8 +472,14 @@ class MovePanel(BodyPanel):
             self.show_row(field.widget, caption, kind == "free")
         self.show_row(self.fields["axis"].widget, self.captions["axis"], kind == "rotate")
         self.show_row(self.angle.widget, self.angle_caption, kind == "rotate")
-        for name in ("from_point", "to_point"):
-            self.show_row(self.fields[name].widget, self.captions[name], kind == "point_to_point")
+        points = kind in ("point_to_point", "point_to_position")
+        self.show_row(self.fields["from_point"].widget, self.captions["from_point"], points)
+        self.captions["from_point"].setText("Origin Point" if kind == "point_to_point" else "Point")
+        self.show_row(
+            self.fields["to_point"].widget, self.captions["to_point"], kind == "point_to_point"
+        )
+        for field, caption in zip(self.position_fields, self.position_captions):
+            self.show_row(field.widget, caption, kind == "point_to_position")
 
     def _show_picks(self):
         from . import bodies_gui
@@ -476,6 +493,9 @@ class MovePanel(BodyPanel):
             self.options["to_label"] if self.options["to_point"] else ""
         )
 
+    def _field(self, key, value):
+        self._guarded(lambda: self._typed(key, value))
+
     def _typed(self, key, value):
         if self._quiet or self._closed:
             return
@@ -488,7 +508,10 @@ class MovePanel(BodyPanel):
         self._update_visibility()
         if self.options["move_type"] == "rotate" and self.options["axis_dir"] is None:
             self.activate("axis")
-        elif self.options["move_type"] == "point_to_point" and self.options["from_point"] is None:
+        elif (
+            self.options["move_type"] in ("point_to_point", "point_to_position")
+            and self.options["from_point"] is None
+        ):
             self.activate("from_point")
         elif self.active not in self._boxes():
             self.activate("objects")
@@ -502,6 +525,8 @@ class MovePanel(BodyPanel):
             boxes.append("axis")
         if kind == "point_to_point":
             boxes += ["from_point", "to_point"]
+        if kind == "point_to_position":
+            boxes.append("from_point")
         return boxes
 
     def _copy_toggled(self):
@@ -542,6 +567,10 @@ class MovePanel(BodyPanel):
             return
         if self.active == "axis":
             found = move.axis_of(obj, short)
+            step = self._step_of(bodies.body_of(obj))
+            if found is not None and step is not None and not move.is_copy(step):
+                back = step.Movement.inverse()  # an edge of the moved preview: where it was
+                found = (back.multVec(found[0]), back.Rotation.multVec(found[1]))
             if found is None:
                 self.message.setText(
                     "Pick an axis: an origin axis, a straight edge or a round edge or face."
@@ -558,9 +587,18 @@ class MovePanel(BodyPanel):
             self.options[self.active.replace("point", "label")] = _ref_text(obj, short)
             self._show_picks()
             self.message.setText("")
-            if self.active == "from_point" and self.options["to_point"] is None:
+            if self.options["move_type"] == "point_to_position" and self.active == "from_point":
+                self._start_position(found)
+            elif self.active == "from_point" and self.options["to_point"] is None:
                 self.activate("to_point")
             self.changed()
+
+    def _start_position(self, found):
+        """Point to Position: X / Y / Z start at where the point is (nothing moves until
+        a value is changed), like Fusion."""
+        for field, key, value in zip(self.position_fields, ("px", "py", "pz"), found):
+            self.options[key] = float(value)
+            field.set_value(float(value))
 
     def _point(self, obj, short, point):
         """A clicked point, as it is before this move (a click on the moved preview is taken
@@ -574,7 +612,9 @@ class MovePanel(BodyPanel):
         step = self._step_of(body)
         if step is not None and not move.is_copy(step):
             found = step.Movement.inverse().multVec(found)
-        return found
+        # 1e-9 mm: what a turn and back leaves behind is not a real offset (fields show -35,
+        # not -34.99999999999999)
+        return App.Vector(*[round(c, 9) + 0.0 for c in found])
 
     def _step_of(self, body):
         for step in self.steps:

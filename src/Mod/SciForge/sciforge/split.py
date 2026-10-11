@@ -8,8 +8,11 @@ Options (dict, see DEFAULTS):
              (origin plane or construction plane, "")   an endless plane
              (feature, "FaceN")                        a face of a body (this one or another)
              (body, "")                                another body: split along its faces
-  extend   Extend Splitting Tool: a flat face is taken as its whole plane, a round face as
-           its whole cylinder (Fusion's default, on). Off: only where the face is.
+             (sketch, "EdgeN")                         a sketch curve, cut straight through
+                                                       along the sketch's normal
+  extend   Extend Splitting Tool: a flat face (a sketch line) is taken as its whole plane, a
+           round face (a sketch arc) as its whole cylinder (Fusion's default, on). Off: only
+           where the face (curve) is.
 
 What is built: a "Split Body" step (SciForgeType "SplitBody", SplitFeature below) in the body
 to split; the body keeps one piece (the biggest; for equal pieces the one nearest the origin
@@ -65,6 +68,10 @@ def tool_shape(tool, extend, around):
         place = obj.getGlobalPlacement()
         normal = place.Rotation.multVec(App.Vector(0, 0, 1))
         return _plane_face(place.Base, normal, around, size)
+    if obj.TypeId == "Sketcher::SketchObject":
+        if not sub.startswith("Edge"):
+            raise SplitError("Pick a curve of the sketch (a line, an arc...).")
+        return _sketch_tool(obj, sub, extend, around, size)
     if bodies.is_body(obj) or (not sub and obj.isDerivedFrom("Part::Feature")):
         shape = bodies.global_shape(obj)
         if shape.isNull() or not shape.Solids:
@@ -84,6 +91,27 @@ def tool_shape(tool, extend, around):
             base = center - axis * size
             return Part.makeCylinder(surface.Radius, 2 * size, base, axis).Faces[0]
     return face
+
+
+def _sketch_tool(sketch, sub, extend, around, size):
+    """A sketch curve cuts straight through, along the sketch's normal (Fusion). Extend
+    Splitting Tool: a line is taken as its whole plane, an arc as its whole cylinder."""
+    edge = _global_face(sketch, sub)
+    normal = sketch.getGlobalPlacement().Rotation.multVec(App.Vector(0, 0, 1))
+    curve = edge.Curve
+    if extend and curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment"):
+        start = edge.valueAt(edge.FirstParameter)
+        end = edge.valueAt(edge.LastParameter)
+        if (end - start).Length < 1e-9:
+            raise SplitError("That sketch line has no length.")
+        side = (end - start).normalize().cross(normal)
+        return _plane_face(start, side, around, size)
+    if extend and hasattr(curve, "Radius") and hasattr(curve, "Center"):
+        center = App.Vector(curve.Center)
+        return Part.makeCylinder(curve.Radius, 2 * size, center - normal * size, normal).Faces[0]
+    swept = edge.copy()
+    swept.translate(normal * -size)
+    return swept.extrude(normal * (2 * size))
 
 
 def _far(obj, around):
@@ -108,11 +136,12 @@ def _plane_face(point, normal, around, size):
 
 
 def _global_face(obj, sub):
+    """Element `sub` of `obj` (a face, or a sketch's edge) in design coordinates."""
     try:
         face = obj.Shape.getElement(sub)
     except Exception:
         raise SplitError(
-            "The splitting face no longer exists (an earlier step changed the model). Edit the "
+            "The splitting tool no longer exists (an earlier step changed the model). Edit the "
             "Split Body and pick the splitting tool again."
         )
     face = face.copy()
@@ -267,7 +296,9 @@ def check(options):
     if body is None:
         raise NeedsPick("Select the body to split.")
     if tool is None:
-        raise NeedsPick("Select the splitting tool: a plane, a face or another body.")
+        raise NeedsPick(
+            "Select the splitting tool: a plane, a face, another body or a sketch curve."
+        )
     if not bodies.has_solid(body):
         raise SplitError("%s has no solid to split." % body.Label)
     obj, sub = tool

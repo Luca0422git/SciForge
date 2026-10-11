@@ -148,6 +148,18 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Spec + gaps: `docs/sciforge/parity/patterns.md`. 6 scenarios (`patterns*.py`), 16 golden
       models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
       `SciForge_PatternOnPath` (was greyed).
+- [x] Body tools, Fusion-style (branch `sf/bodies`): Combine (Target / Tool Bodies, Join /
+      Cut / Intersect, New Body, Keep Tools; used-up tools hidden while the step is part of
+      the design), Split Body (origin/construction plane, face with Extend Splitting Tool,
+      another body; every piece a body), Move/Copy M (Free Move with an on-top manipulator:
+      3 arrows + 3 turn handles; Translate; Rotate about an axis with a blue handle; Point to
+      Point snapping to corners; typed distances/angles; Create Copy), Delete Del (bodies,
+      steps with dependants re-linked or flagged, faces -> "Delete Face" step, sketch curves),
+      Appearance (library + custom colour, bodies or faces, drag a swatch onto the part),
+      Physical Material (FreeCAD's library, mass shown; `bodies.mass()` for Inspect).
+      `bodies.py` helpers for every multi-body tool. Spec + gaps: `docs/sciforge/parity/
+      bodies.md`. 6 scenarios (`bodies_*.py`), 21 golden models (`bodies_*`), unit tests
+      `test_bodies_schema.py`. Ribbon: Split Body runs `SciForge_SplitBody` (was greyed).
 
 ## Known issues / findings
 
@@ -451,6 +463,40 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
     `"PatternOnPath"` to it in `KIND_BY_SCIFORGE_TYPE`.
 
+- **Body tools findings (branch `sf/bodies`)**:
+  - FreeCAD's `PartDesign::Boolean` adopts its tool bodies as children (GeoFeatureGroup): they
+    then move with the target body and their parent is no longer the document. SciForge's
+    Combine is its own `PartDesign::FeaturePython` (`combine.CombineFeature`) that links each
+    tool body's end step (`PropertyLinkListGlobal`), so the timeline, edits and undo work.
+  - A step that "uses up" bodies (Combine without Keep Tools) registers in
+    `bodies.CONSUMERS`; `bodies_gui.Watch` hides/shows bodies only on a *change* of that state
+    (after recompute, undo/redo, delete), so a body the user shows on purpose stays shown.
+    Body-tool dialogs pause it (`bodies.pause`) while they show the bodies they work on.
+  - Deleting a step (SciForge's Delete): steps that used its edges/faces are re-pointed at the
+    same edges/faces of the step before it (`delete._relink_to_base`, matched by geometry),
+    so a fillet survives deleting the boss under it. The timeline's own Delete does not do
+    this yet (timeline owner: `delete.delete_steps` can be called without a transaction).
+  - A manipulator that follows the bodies while dragged must measure the drag from where it
+    was grabbed (`move_ui.Triad._drag_center`), else every drag moves half the distance.
+  - An origin `App::Line` runs along its own **X** (its placement's X), not Z
+    (`pattern._line_of_datum` knew; `move.axis_of` does it too).
+  - Enter in a QLineEdit of a task panel presses the panel's OK (dialog closes): a field that
+    takes Enter itself needs an event filter that eats it (`appearance_ui._EnterTakes`).
+  - `doc.addObject("PartDesign::Body")` before computing the next "BodyN" label counted the new
+    body twice (Body3 for the second body): compute the label first (`bodies.new_body`).
+  - FreeCAD materials: a body's `ShapeMaterial` propagates to its features; FreeCAD's Default
+    material weighs 1 kg/m^3 (Fusion starts in Steel: `material.effective` counts Default as
+    Steel); Brass and GrayCastIron have no density in FreeCAD's library (not offered).
+    Setting `ViewObject.ShapeAppearance` on a body copies it to every feature, but a feature
+    added later starts grey: SciForge stores looks on the body (JSON, undoable) and puts
+    them on every step after each recompute (`appearance.sync`, cached by shape hash).
+  - FreeCAD's `Document.openTransaction` commits any open transaction (no nesting): a command
+    that must be one undo step cannot call `timeline_ops.delete` (it opens its own).
+  - Requests for other owners: browser (show a body's physical material, hide used-up
+    bodies), inspect (mass from `bodies.mass(body)`), timeline (a kind "delete_face" with
+    the delete icon for `SciForge::DeleteFace`; steps outside bodies such as a Move copy never
+    roll back with the marker).
+
 ## Questions waiting for Luca
 
 
@@ -618,6 +664,24 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `sketch_draw` failed 3 checks ("circle diameter typed: 8" got r 4.97) while another
   worktree's suite ran at the same time, and PASSES alone (86 checks): timing-sensitive,
   sketch owner to look at.
+
+### 2026-10-11: Body tools (branch `sf/bodies`)
+- New: `bodies.py` (helpers any multi-body tool can call: `list_bodies`, `new_body`,
+  `active_body`/`set_active_body`/`find_body`, `body_of`, `global_shape`/`to_local`,
+  `mass`), `combine.py`/`combine_ui.py` (Combine), `split.py`/`split_ui.py` (Split Body,
+  incl. sketch lines/arcs as tools), `move.py`/`move_ui.py` (Move/Copy: Free Move
+  manipulator `Triad`, Translate, Rotate, Point to Point, Point to Position, Create Copy),
+  `delete.py`/`delete_ui.py` (Delete, Delete Face step and its edit dialog),
+  `appearance.py`/`appearance_ui.py`, `material.py`/`material_ui.py`, `bodies_panel.py`
+  (shared dialog base), `bodies_gui.py` (step view provider + document watch).
+  Ribbon: Split Body enabled (one line). No core patch.
+- Tests: scenarios `bodies_combine`, `bodies_split`, `bodies_move`, `bodies_delete`,
+  `bodies_look`, `bodies_timeline` (real input only; timeline roll/suppress/delete, Ctrl+Z
+  in a dialog, save + reopen); golden ops in `golden/bodies_ops.py` (combine, split_body,
+  move_bodies, delete_face, body_tool_edit, measure_bodies) + 24 models `bodies_*`; unit
+  tests `test_bodies_schema.py`.
+- Spec and gaps: `docs/sciforge/parity/bodies.md`.
+- Full suite at the end: see the result below (FULL_SUITE_RESULT).
 
 ## Next steps (in order)
 

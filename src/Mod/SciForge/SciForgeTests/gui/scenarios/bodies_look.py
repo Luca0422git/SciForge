@@ -320,6 +320,55 @@ def f_cancelled():
         h.check("Cancel: top face blue again", same(cols[top], BLUE), cols)
 
 
+# -- G: drag and drop ----------------------------------------------------------------------------
+def g_open():
+    h.click_empty()
+    s.menu("MODIFY", "Appearance")
+
+
+def g_drop_rubber():
+    """Drag the black rubber swatch onto the body (the drop events a drag ends with)."""
+    from PySide import QtGui, QtWidgets
+
+    from sciforge import appearance_ui
+
+    p = s.panel()
+    if not h.check("dialog open", p is not None):
+        return
+    item = p.item_for("Rubber, black")
+    mime = p.library.mimeData([item])
+    h.check("a swatch drag carries its look", appearance_ui.look_of(mime) is not None)
+    widget = h.gl_widget()
+    pos = h.screen_point(V(35, 25, 10))
+    actions = QtCore.Qt.CopyAction
+    enter = QtGui.QDragEnterEvent(pos, actions, mime, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(widget, enter)
+    h.check("the 3D view takes the swatch", enter.isAccepted())
+    drop = QtGui.QDropEvent(
+        QtCore.QPointF(pos), actions, mime, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier
+    )
+    QtWidgets.QApplication.sendEvent(widget, drop)
+    QtWidgets.QApplication.processEvents()
+
+
+def g_black():
+    cols = colors()
+    h.check(
+        "dropped: body is black rubber",
+        cols and all(same(c, (0.08, 0.08, 0.08)) for c in cols),
+        cols,
+    )
+
+
+def g_ok():
+    h.task_button("OK")
+
+
+def g_kept():
+    cols = colors()
+    h.check("OK: black rubber kept", cols and all(same(c, (0.08, 0.08, 0.08)) for c in cols), cols)
+
+
 h.run(
     "bodies_look",
     [s.new_design("Look")]
@@ -366,5 +415,10 @@ h.run(
         f_custom,
         f_cancel,
         f_cancelled,
+        g_open,
+        g_drop_rubber,
+        g_black,
+        g_ok,
+        g_kept,
     ],
 )

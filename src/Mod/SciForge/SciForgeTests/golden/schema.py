@@ -546,6 +546,9 @@ STEP_KEYS["move_bodies"] = (
         "angle",
         "from_point",
         "to_point",
+        "px",
+        "py",
+        "pz",
         "copy",
         "comment",
     },
@@ -555,7 +558,7 @@ STEP_KEYS["body_tool_edit"] = ({"target", "set"}, {"comment"})
 STEP_KEYS["measure_bodies"] = ({"steps"}, {"comment"})
 
 BODY_OPERATIONS = ("join", "cut", "intersect")
-MOVE_TYPES = ("free", "translate", "rotate", "point_to_point")
+MOVE_TYPES = ("free", "translate", "rotate", "point_to_point", "point_to_position")
 
 
 def _check_body_steps(model):
@@ -582,9 +585,15 @@ def _check_body_steps(model):
             if isinstance(tool, str):
                 if tool not in PLANES:
                     _fail(here, "'tool' plane must be one of %s" % (PLANES,))
-            elif not isinstance(tool, dict) or len(set(tool) & {"face", "body"}) != 1:
-                _fail(here, "'tool' must be XY/XZ/YZ, {'face': selector, 'of': id} or {'body': id}")
+            elif not isinstance(tool, dict) or len(set(tool) & {"face", "body", "sketch"}) != 1:
+                _fail(
+                    here,
+                    "'tool' must be XY/XZ/YZ, {'face': selector, 'of': id}, {'body': id} or "
+                    "{'sketch': id, 'edge': n}",
+                )
             else:
+                if "sketch" in tool and seen.get(tool["sketch"]) != "sketch":
+                    _fail(here, "'tool' names unknown sketch %r" % tool["sketch"])
                 for key in ("of", "body"):
                     if key in tool and tool[key] not in seen:
                         _fail(here, "'tool' names unknown step %r" % tool[key])
@@ -598,7 +607,9 @@ def _check_body_steps(model):
                 _fail(here, "rotate needs 'axis' X, Y or Z")
             if kind == "point_to_point" and not ("from_point" in step and "to_point" in step):
                 _fail(here, "point_to_point needs 'from_point' and 'to_point'")
-            for key in ("dx", "dy", "dz", "rx", "ry", "rz", "angle"):
+            if kind == "point_to_position" and "from_point" not in step:
+                _fail(here, "point_to_position needs 'from_point' (and px, py, pz)")
+            for key in ("dx", "dy", "dz", "rx", "ry", "rz", "angle", "px", "py", "pz"):
                 if key in step:
                     _check_number(here + "." + key, step[key])
         if op in ("body_tool_edit",) and seen.get(step["target"]) not in (

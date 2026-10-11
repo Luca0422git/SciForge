@@ -25,6 +25,7 @@ from . import bodies
 
 PROP = "SciForgeAppearance"
 _COLORED = {}  # document name -> {names of bodies given a look on screen}
+_APPLIED = {}  # (document, step) -> what the step's look was made from (skips repeats)
 
 # (key, label, group, (r, g, b), shininess, transparency)
 LIBRARY = [
@@ -281,6 +282,7 @@ def apply(body):
         return
     _COLORED.setdefault(body.Document.Name, set()).add(body.Name)
     base = material_of(whole) if whole else _default_material()
+    text = getattr(body, PROP, "")
     for step in body.Group:
         if not step.isDerivedFrom("PartDesign::Feature"):
             continue
@@ -291,6 +293,10 @@ def apply(body):
             shape = step.Shape
             if shape.isNull():
                 continue
+            key = (body.Document.Name, step.Name)
+            stamp = (shape.hashCode(), text, len(vobj.ShapeAppearance))
+            if _APPLIED.get(key) == stamp:
+                continue  # nothing changed since the look was put on (big designs stay quick)
             if data["faces"]:
                 per_face = face_looks(shape, data)
                 if any(per_face):
@@ -302,6 +308,7 @@ def apply(body):
             current = list(vobj.ShapeAppearance)
             if not _same_materials(current, wanted):
                 vobj.ShapeAppearance = wanted
+            _APPLIED[key] = (shape.hashCode(), text, len(vobj.ShapeAppearance))
         except Exception:
             continue
 
@@ -329,6 +336,7 @@ def reset_view(body):
         return
     base = _default_material()
     for step in body.Group:
+        _APPLIED.pop((body.Document.Name, step.Name), None)
         vobj = getattr(step, "ViewObject", None)
         if vobj is None or "ShapeAppearance" not in vobj.PropertiesList:
             continue

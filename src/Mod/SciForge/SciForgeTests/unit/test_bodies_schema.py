@@ -64,9 +64,17 @@ class BodiesSchemaTests(unittest.TestCase):
             "XZ",
             {"face": {"normal": [0, -1, 0], "count": 1}, "of": "e2"},
             {"body": "e2"},
+            {"sketch": "s2", "edge": 1},
         ):
             schema.validate(model(5, tool=tool))
-        for tool in ("AB", {"face": {}, "of": "zz"}, {"body": "zz"}, {"plane": "XY"}, 3):
+        for tool in (
+            "AB",
+            {"face": {}, "of": "zz"},
+            {"body": "zz"},
+            {"plane": "XY"},
+            {"sketch": "e1"},
+            3,
+        ):
             with self.assertRaises(schema.ModelError, msg=str(tool)):
                 schema.validate(model(5, tool=tool))
 

@@ -1,0 +1,64 @@
+{
+  "id": "bodies_move_point_to_position",
+  "title": "Move/Copy Point to Position: the corner (0, 0, 0) goes to X 10, Y 20, Z 30",
+  "tags": [
+    "bodies",
+    "move",
+    "point-to-position"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "point_to_position",
+      "from_point": [
+        0,
+        0,
+        0
+      ],
+      "px": 10,
+      "py": 20,
+      "pz": 30
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      10,
+      20,
+      30,
+      50,
+      50,
+      40
+    ],
+    "source": "analytic",
+    "note": "moved by (10, 20, 30)"
+  }
+}

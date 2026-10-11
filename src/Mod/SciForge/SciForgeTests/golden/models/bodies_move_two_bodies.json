@@ -1,0 +1,89 @@
+{
+  "id": "bodies_move_two_bodies",
+  "title": "Move/Copy of two bodies at once: both go up 10 (one Move per body, edited together)",
+  "tags": [
+    "bodies",
+    "move",
+    "multi-body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            70,
+            30
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1",
+        "e2"
+      ],
+      "move_type": "translate",
+      "dz": 5
+    },
+    {
+      "op": "body_tool_edit",
+      "target": "m1",
+      "set": {
+        "dz": 10
+      }
+    }
+  ],
+  "expect": {
+    "volume": 24000,
+    "area": 7600,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      10,
+      70,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "Two 40x30x10 boxes (x 0..40 and 30..70), both moved up 10 (the edit changes both)."
+  }
+}

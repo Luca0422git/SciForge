@@ -33,6 +33,7 @@ class SplitPanel(BodyPanel):
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self.plane_picker = None
+        self._planes_wanted = True
         self._overlay_time = 0.0
         super().__init__(
             doc, "Split Body" if feature is None else "Edit Split Body", feature is not None
@@ -40,9 +41,9 @@ class SplitPanel(BodyPanel):
         self.target = feature
         self._show_picks()
         if feature is not None:
-            self.activate("tool")
+            self._go("tool")
         else:
-            self.activate("body")
+            self._go("body")
             self.start_from_selection()
             self.dirty = True
             self._timer.stop()
@@ -72,13 +73,25 @@ class SplitPanel(BodyPanel):
         self.options[name] = None
         self._show_picks()
 
+    def activate(self, name):
+        """A box clicked (or cleared) by the user: it takes the next click, the origin
+        squares show for the tool box."""
+        self._planes_wanted = True
+        super().activate(name)
+
+    def _go(self, name):
+        """The dialog moves on to a box by itself: the squares show only while no tool is
+        picked (they would cover the part)."""
+        self._planes_wanted = self.options["tool"] is None
+        BodyPanel.activate(self, name)
+
     def activated(self, name):
         self._update_planes()
 
     def _update_planes(self):
-        """The three big origin squares while the Splitting Tool box waits (FreeCAD's own
-        origin planes are small and hidden)."""
-        wants = self.active == "tool" and not self._closed
+        """The three big origin squares while the Splitting Tool box waits for a tool
+        (FreeCAD's own origin planes are small and hidden)."""
+        wants = self.active == "tool" and self._planes_wanted and not self._closed
         body = self.options["body"] or bodies.find_body(self.doc)
         if wants and self.plane_picker is None and body is not None:
             try:
@@ -110,11 +123,14 @@ class SplitPanel(BodyPanel):
             if self.options["tool"] is not None and self._tool_body() is body:
                 self.options["tool"] = None
             self._show_picks()
-            self.activate("tool")
+            self._go("tool")
             self.changed()
             return
         if obj.TypeId in split.PLANE_TYPES:
             self._take_tool((obj, ""))
+            return
+        if obj.TypeId == "Sketcher::SketchObject" and short.startswith("Edge"):
+            self._take_tool((obj, short))  # a sketch line or arc cuts straight through
             return
         if short.startswith("Face"):
             ref = self._face_ref(obj, short)
@@ -130,7 +146,7 @@ class SplitPanel(BodyPanel):
                 return
             self._take_tool((body, ""))
             return
-        self.message.setText("Split with a plane, a face or a body.")
+        self.message.setText("Split with a plane, a face, a body or a sketch curve.")
 
     def _face_ref(self, obj, short):
         """A face clicked on the preview (the split's own result) is the same face of the
@@ -163,6 +179,8 @@ class SplitPanel(BodyPanel):
             self.options["tool"] = ref
             self._show_picks()
             self.message.setText("")
+            self._planes_wanted = False  # picked: the squares go (click the box to pick again)
+            self._update_planes()
             self.changed()
         except Exception as exc:
             warn("Split Body pick: %s" % exc)
@@ -238,6 +256,8 @@ def _tool_text(tool):
         return obj.Label
     body = bodies.body_of(obj)
     where = body.Label if body is not None else obj.Label
+    if obj.TypeId == "Sketcher::SketchObject":
+        return "Curve of %s" % obj.Label
     if sub:
         return "%s of %s" % (sub.rstrip("0123456789"), where)
     return where

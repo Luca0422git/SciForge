@@ -10,14 +10,16 @@ Bodies are named by a step that made them (its body): "e1" is the body of extrud
       Measured: the target body (with new_body: the new body).
 
   {"op": "split_body", "id": "s1", "body": "e1",
-   "tool": "XY" | "XZ" | "YZ" | {"face": selector, "of": "e2"} | {"body": "e2"},
+   "tool": "XY" | "XZ" | "YZ" | {"face": selector, "of": "e2"} | {"body": "e2"} |
+           {"sketch": "s3", "edge": 1} (a sketch curve, cut straight through),
    "extend": true}
       Measured: every body the split leaves (the split body and the new ones).
 
   {"op": "move_bodies", "id": "m1", "bodies": ["e1"], "move_type": "free" | "translate" |
    "rotate" | "point_to_point", "dx", "dy", "dz", "rx", "ry", "rz", "pivot": [x, y, z],
    "axis": "X" | "Y" | "Z" (rotate about that origin axis), "angle",
-   "from_point": [x, y, z], "to_point": [x, y, z], "copy": false}
+   "from_point": [x, y, z], "to_point": [x, y, z], "px", "py", "pz" (point_to_position:
+   where from_point goes), "copy": false}
       Measured: the moved bodies (and the copies).
 
   {"op": "delete_face", "id": "d1", "faces": selector}
@@ -33,7 +35,7 @@ import Part
 from . import selectors
 from .builder import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
 
-MOVE_KEYS = ("move_type", "dx", "dy", "dz", "rx", "ry", "rz", "angle", "copy")
+MOVE_KEYS = ("move_type", "dx", "dy", "dz", "rx", "ry", "rz", "angle", "px", "py", "pz", "copy")
 
 
 def _body(builder, step_id):
@@ -103,6 +105,11 @@ def _split_tool(self, step, body):
         return (_origin(body, _PLANE_ROLE, spec), "")
     if "body" in spec:
         return (_body(self, spec["body"]), "")
+    if "sketch" in spec:
+        sketch = self.objects.get(spec["sketch"])
+        if sketch is None:
+            raise BuildError("split_body %r: unknown sketch %r" % (step["id"], spec["sketch"]))
+        return (sketch, "Edge%d" % int(spec.get("edge", 1)))
     if "face" in spec:
         owner = _body(self, spec["of"]) if "of" in spec else body
         tip = owner.Tip

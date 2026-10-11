@@ -321,10 +321,29 @@ class BodyPanel(Panel):
             except Exception:
                 pass
         self.remove_handles()
+        try:
+            self.restore_view()
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
         super().cleanup()
+        # However the dialog ended (OK, Cancel, Esc, Ctrl+Z, another command): the view is
+        # brought in line with the design a moment later.
+        name = self.doc.Name
+        QtCore.QTimer.singleShot(0, lambda: _sync_later(name))
+
+    def restore_view(self):
+        """Undo what the dialog changed in the view only (see-through bodies...)."""
 
     def remove_handles(self):
         pass
+
+
+def _sync_later(name):
+    try:
+        if name in App.listDocuments():
+            bodies_gui.sync(App.getDocument(name))
+    except Exception as exc:
+        warn("body tools: %s" % exc)
 
 
 PLAIN = (

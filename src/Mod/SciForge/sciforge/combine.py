@@ -276,6 +276,13 @@ def _create(options, name):
     if options["new_body"]:
         body = bodies.new_body(doc, like=target)
         made_body = body
+        try:  # the result is made of what the target was made of, and looks like it
+            body.ShapeMaterial = target.ShapeMaterial
+            from . import appearance
+
+            appearance.copy_body_appearance(target, body)
+        except Exception:
+            pass
     else:
         body = target
         made_body = None

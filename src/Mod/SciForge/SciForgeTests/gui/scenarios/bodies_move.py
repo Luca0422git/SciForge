@@ -17,6 +17,8 @@ Body = rectangle 0..40 x 0..30, extruded 10 (12000); its middle (the pivot) is (
      (-35, 10, 30), then the corner (-5, 10, 30): a copy 30 to the right, the original stays.
      OK: two bodies; Ctrl+Z removes the copy.
   F  Cancel: M, click the body, X Distance 30, Cancel: nothing moved. Esc the same.
+  G  Point to Position: click the corner (-35, 10, 30): X / Y / Z show it; type X 0: the body
+     moves 35 to the right. OK.
 """
 import math
 
@@ -435,6 +437,54 @@ def f_escaped():
     box_is("Esc: not moved", bbox(), [-35, 10, 20, -5, 50, 30])
 
 
+# -- G: Point to Position --------------------------------------------------------------------------
+def g_open():
+    h.click_empty()
+    h.fit()
+    h.press("m")
+
+
+def g_click_body():
+    h.click(V(-20, 30, 30))
+
+
+def g_type():
+    p = s.panel()
+    if h.check("dialog open", p is not None):
+        b.choose(p.move_type, "Point to Position")
+        h.check("point box waits", p.active == "from_point", p.active)
+
+
+def g_click_corner():
+    h.click(V(-34.5, 10, 30))
+
+
+def g_prefilled():
+    p = s.panel()
+    if h.check("dialog open", p is not None):
+        got = [p.options[k] for k in ("px", "py", "pz")]
+        h.check(
+            "X / Y / Z start at the corner",
+            all(abs(a - c) < 1e-9 for a, c in zip(got, [-35, 10, 30])),
+            got,
+        )
+        box_is("nothing moved yet", bbox(), [-35, 10, 20, -5, 50, 30])
+        s.type_value(p.position_fields[0].widget, "0")
+
+
+def g_moved():
+    box_is("corner moved to X 0", bbox(), [0, 10, 20, 30, 50, 30])
+
+
+def g_ok():
+    h.task_button("OK")
+
+
+def g_done():
+    box_is("kept", bbox(), [0, 10, 20, 30, 50, 30])
+    h.check("four Move steps", len(moves()) == 4, moves())
+
+
 h.run(
     "bodies_move",
     [s.new_design("Move")]
@@ -496,5 +546,13 @@ h.run(
         f_escape_open,
         f_escape,
         f_escaped,
+        g_open,
+        g_click_body,
+        g_type,
+        g_click_corner,
+        g_prefilled,
+        g_moved,
+        g_ok,
+        g_done,
     ],
 )

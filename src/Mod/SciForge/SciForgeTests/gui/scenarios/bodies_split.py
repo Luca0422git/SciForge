@@ -7,8 +7,8 @@ Body1 = rectangle -20..20 x -15..15, extruded 10 (12000), so the origin planes c
      Body1, then the big YZ origin square: the preview splits it at x = 0 into two bodies of
      6000 (Body1 keeps x < 0, the new body x > 0, both 6 faces); OK. Ctrl+Z gives one body
      of 12000 back, Ctrl+Y the two halves.
-  B  double-click the Split Body in the timeline, click the XZ square: now split at y = 0
-     (Body1 keeps y < 0). OK.
+  B  double-click the Split Body in the timeline, click the Splitting Tool box (the origin
+     squares show again), click the XZ square: now split at y = 0 (Body1 keeps y < 0). OK.
   C  Cancel: Split Body, click Body1, click the XY square... the bottom face plane does not
      cut; the reason is in the dialog; Cancel leaves the model unchanged.
   D  a second body (New Body, 25..35 x -5..5, 20 high) as the tool owner: Body1 selected
@@ -16,6 +16,8 @@ Body1 = rectangle -20..20 x -15..15, extruded 10 (12000), so the origin planes c
      the face does not reach Body1, the reason is shown; tick Extend: the plane y = -5
      splits Body1 (y -15..0) into 4000 (kept) and 2000 (new body). OK.
   E  Esc cancels an open Split Body.
+  F  a new design: a box 40 x 30 x 10, a sketch on its top with a line from corner to corner,
+     Finish Sketch; Split Body, click the box, click the line: two wedges of 6000 (5 faces).
 """
 import FreeCAD as App
 from PySide import QtCore
@@ -119,10 +121,18 @@ def b_edit():
     s.timeline_double_click(splits()[0])
 
 
-def b_click_xz():
+def b_click_box():
     p = s.panel()
     if h.check("edit dialog open", p is not None and p.editing, p):
-        h.check("edit waits for the tool", p.active == "tool", p.active)
+        h.check("edit: the tool box is the active one", p.active == "tool", p.active)
+        h.check("no squares over the part while a tool is picked", p.plane_picker is None)
+    s.click_box("tool")
+
+
+def b_click_xz():
+    p = s.panel()
+    if p is not None:
+        h.check("clicking the box shows the squares", p.plane_picker is not None)
     h.click(V(15, 0, 18))
 
 
@@ -258,6 +268,79 @@ def e_closed():
     h.check("Esc: four bodies", len(s.bodies()) == 4)
 
 
+# -- F: a sketch line as the splitting tool (a new design) -----------------------------------------
+def f_sketch():
+    h.click_empty()
+    h.fit()
+    h.ribbon("Create Sketch")
+
+
+def f_click_top():
+    h.click(V(30, 25, 10))
+
+
+def f_line():
+    import Part
+
+    sk = h.in_sketch()
+    if h.check("sketch on the top face", sk is not None):
+        a = h.to_sketch(sk, V(0, 0, 10))
+        b = h.to_sketch(sk, V(40, 30, 10))
+        sk.addGeometry(Part.LineSegment(V(a[0], a[1], 0), V(b[0], b[1], 0)))
+        App.ActiveDocument.recompute()
+        state["line_sketch"] = sk
+
+
+def f_finish():
+    h.ribbon("Finish Sketch")
+
+
+def f_open():
+    h.click_empty()
+    h.fit()
+    h.ribbon("Split Body")
+
+
+def f_click_body():
+    h.click(V(32, 6, 10))
+
+
+def f_click_line():
+    h.check("the sketch is shown", s.shown(state["line_sketch"]))
+    h.click_edge(V(20, 15, 10))
+
+
+def f_preview():
+    p = s.panel()
+    if h.check("dialog open", p is not None):
+        tool = p.options["tool"]
+        h.check(
+            "the sketch line is the tool",
+            tool is not None and tool[0] is state["line_sketch"],
+            tool,
+        )
+    found = s.bodies()
+    h.check("two wedges", len(found) == 2, [b.Label for b in found])
+    h.check(
+        "6000 each", all(s.close(s.volume(b), 6000) for b in found), [s.volume(b) for b in found]
+    )
+    h.check(
+        "5 faces each",
+        all(len(b.Shape.Faces) == 5 for b in found),
+        [len(b.Shape.Faces) for b in found],
+    )
+    h.shot("F-sketch-line")
+
+
+def f_ok():
+    h.task_button("OK")
+
+
+def f_done():
+    h.check("dialog closed", s.panel() is None)
+    h.check("two bodies", len(s.bodies()) == 2)
+
+
 h.run(
     "bodies_split",
     [s.new_design("Split")]
@@ -275,6 +358,7 @@ h.run(
         a_redo,
         a_redone,
         b_edit,
+        b_click_box,
         b_click_xz,
         b_preview,
         b_ok,
@@ -301,5 +385,19 @@ h.run(
         e_open,
         e_escape,
         e_closed,
+        s.new_design("SplitLine"),
+    ]
+    + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + [
+        f_sketch,
+        f_click_top,
+        f_line,
+        f_finish,
+        f_open,
+        f_click_body,
+        f_click_line,
+        f_preview,
+        f_ok,
+        f_done,
     ],
 )

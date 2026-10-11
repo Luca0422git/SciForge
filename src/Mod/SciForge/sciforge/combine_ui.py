@@ -180,7 +180,7 @@ class CombinePanel(BodyPanel):
         except Exception:
             pass
 
-    def before_close(self, ok):
+    def restore_view(self):
         for name in list(self._looks):
             self._restore(name)
         try:

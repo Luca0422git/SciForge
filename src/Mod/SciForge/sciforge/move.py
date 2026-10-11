@@ -4,7 +4,7 @@ the golden-model builder both call build().
 
 Options (dict, see DEFAULTS):
   bodies       the bodies to move (Move Object: Bodies)
-  move_type    free | translate | rotate | point_to_point
+  move_type    free | translate | rotate | point_to_point | point_to_position
   dx, dy, dz   distances along the design's X, Y, Z (free, translate)
   rx, ry, rz   angles about X, Y, Z through the pivot, in degrees (free); turned about X
                first, then Y, then Z
@@ -12,6 +12,7 @@ Options (dict, see DEFAULTS):
   axis_point, axis_dir   [x, y, z] the rotate axis (rotate); axis_label names it
   angle        degrees about the axis, right-handed (rotate)
   from_point, to_point   [x, y, z] (point_to_point); from_label / to_label name them
+  px, py, pz   where from_point goes (point_to_position), design coordinates
   copy         Create Copy: new bodies are moved, the originals stay
 
 What is built (one step per body, all sharing a MoveId, so the dialog edits them together):
@@ -34,7 +35,7 @@ TYPE = "PartDesign::FeaturePython"
 COPY_TYPE = "Part::FeaturePython"
 SCIFORGE_TYPE = "MoveCopy"
 META = "SciForgeMove"
-MOVE_TYPES = ("free", "translate", "rotate", "point_to_point")
+MOVE_TYPES = ("free", "translate", "rotate", "point_to_point", "point_to_position")
 
 DEFAULTS = {
     "bodies": [],
@@ -54,9 +55,12 @@ DEFAULTS = {
     "to_point": None,
     "from_label": "",
     "to_label": "",
+    "px": 0.0,
+    "py": 0.0,
+    "pz": 0.0,
     "copy": False,
 }
-NUMBERS = ("dx", "dy", "dz", "rx", "ry", "rz", "angle")
+NUMBERS = ("dx", "dy", "dz", "rx", "ry", "rz", "angle", "px", "py", "pz")
 POINTS = ("pivot", "axis_point", "axis_dir", "from_point", "to_point")
 
 
@@ -128,6 +132,12 @@ def transform(options):
             raise NeedsPick("Select the point to move from (a corner, a circle's centre...).")
         if end is None:
             raise NeedsPick("Select the point to move to.")
+        return App.Placement(end - start, App.Rotation())
+    if kind == "point_to_position":
+        start = _vec(options["from_point"])
+        if start is None:
+            raise NeedsPick("Select the point to move (a corner, a circle's centre...).")
+        end = App.Vector(options["px"], options["py"], options["pz"])
         return App.Placement(end - start, App.Rotation())
     raise MoveError("Unknown move type %r." % kind)
 

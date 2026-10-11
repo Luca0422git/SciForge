@@ -65,6 +65,87 @@ class _EnterTakes(QtCore.QObject):
         return False
 
 
+MIME = "application/x-sciforge-look"
+
+
+def look_of(mime):
+    """The look carried by a drag (a swatch of the Appearance dialog), or None."""
+    import json
+
+    try:
+        if mime is None or not mime.hasFormat(MIME):
+            return None
+        return json.loads(bytes(mime.data(MIME)).decode("utf-8"))
+    except Exception:
+        return None
+
+
+def mime_of(look):
+    import json
+
+    mime = QtCore.QMimeData()
+    mime.setData(MIME, QtCore.QByteArray(json.dumps(look).encode("utf-8")))
+    return mime
+
+
+class _SwatchList(QtWidgets.QListWidget):
+    """Swatches; dragging one carries its look (drop it on a body or a face)."""
+
+    def mimeTypes(self):
+        return [MIME]
+
+    def mimeData(self, items):
+        look = items[0].data(QtCore.Qt.UserRole) if items else None
+        return mime_of(dict(look)) if look else QtCore.QMimeData()
+
+
+class _DropTaker(QtCore.QObject):
+    """Event filter on the 3D view's drawing widget: accepts a swatch dragged from the
+    Appearance dialog and hands the drop to the dialog."""
+
+    def __init__(self, panel):
+        super().__init__()
+        self.panel = panel
+
+    def eventFilter(self, obj, event):
+        try:
+            kind = event.type()
+            if kind not in (QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove, QtCore.QEvent.Drop):
+                return False
+            panel = self.panel
+            if panel is None or panel._closed:
+                return False
+            look = look_of(event.mimeData())
+            if look is None:
+                return False
+            if kind == QtCore.QEvent.Drop:
+                position = event.position().toPoint()
+                QtCore.QTimer.singleShot(
+                    0, lambda: panel._guarded(lambda: panel.dropped(look, position))
+                )
+            event.setDropAction(QtCore.Qt.CopyAction)
+            event.accept()
+            return True
+        except Exception as exc:
+            warn("appearance drop: %s" % exc)
+            return False
+
+
+def _gl_widget():
+    import FreeCADGui as Gui
+
+    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    if area is None:
+        return None
+    sub = area.activeSubWindow() or (area.subWindowList() or [None])[-1]
+    if sub is None:
+        return None
+    for widget in sub.findChildren(QtWidgets.QWidget):
+        if widget.metaObject().className() == "QOpenGLWidget":
+            return widget
+    return None
+
+
 class AppearancePanel(BodyPanel):
     title = "Appearance"
     icon = "appearance"
@@ -81,8 +162,11 @@ class AppearancePanel(BodyPanel):
 
             hole_common.set_combo(self.apply_to, "faces")
         self._fill_design()
+        self._drop_widget = None
+        self._install_drop()
         self.info.setText(
-            "Pick a look, then click bodies (or faces) to give them that look."
+            "Pick a look, then click bodies (or faces) to give them that look (or drag it "
+            "onto them)."
             if not self.pending
             else "Pick a look for the selection."
         )
@@ -133,7 +217,7 @@ class AppearancePanel(BodyPanel):
         self.layout.addRow("Look", self.chosen)
 
     def _list(self, rows):
-        view = QtWidgets.QListWidget()
+        view = _SwatchList()
         view.setViewMode(QtWidgets.QListView.IconMode)
         view.setIconSize(QtCore.QSize(SWATCH, SWATCH))
         view.setGridSize(QtCore.QSize(SWATCH + 14, SWATCH + 14))
@@ -142,6 +226,8 @@ class AppearancePanel(BodyPanel):
         view.setFixedHeight(rows * (SWATCH + 14) + 8)
         view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         view.itemClicked.connect(lambda item: self._guarded(lambda: self._swatch_clicked(item)))
+        view.setDragEnabled(True)  # Fusion: drag a look onto a body or a face
+        view.setDragDropMode(QtWidgets.QAbstractItemView.DragOnly)
         return view
 
     def _add(self, view, look):
@@ -256,6 +342,53 @@ class AppearancePanel(BodyPanel):
 
     def can_finish(self):
         return ""
+
+    # -- drag and drop -------------------------------------------------------------------------------
+    def _install_drop(self):
+        """The 3D view takes a swatch dropped on it (Fusion drags looks onto the part)."""
+        try:
+            widget = _gl_widget()
+            if widget is None:
+                return
+            self._drop_widget = widget
+            self._drop_filter = _DropTaker(self)
+            self._drop_accepted = widget.acceptDrops()
+            widget.setAcceptDrops(True)
+            widget.installEventFilter(self._drop_filter)
+        except Exception as exc:
+            warn("appearance drag and drop unavailable: %s" % exc)
+
+    def remove_handles(self):
+        widget = getattr(self, "_drop_widget", None)
+        if widget is not None:
+            try:
+                widget.removeEventFilter(self._drop_filter)
+                widget.setAcceptDrops(self._drop_accepted)
+            except Exception:
+                pass
+            self._drop_widget = None
+
+    def dropped(self, look, position):
+        """A swatch dropped at widget pixel `position`: the body or face there takes it."""
+        widget = self._drop_widget
+        if widget is None:
+            return False
+        ratio = widget.devicePixelRatioF()
+        info = self.view.getObjectInfo(
+            (position.x() * ratio, (widget.height() - position.y()) * ratio)
+        )
+        if not info or not info.get("Object"):
+            self.message.setText("Drop the look on a body or a face.")
+            return False
+        obj = self.doc.getObject(info["Object"])
+        if obj is None:
+            return False
+        from . import hole_common
+
+        obj, short = hole_common.resolve(obj, info.get("Component", "") or "")
+        self._choose(look)
+        self._give(obj, short)
+        return True
 
     def after_close(self, ok):
         super().after_close(ok)

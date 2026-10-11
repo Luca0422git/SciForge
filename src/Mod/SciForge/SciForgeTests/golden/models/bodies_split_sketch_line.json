@@ -1,0 +1,83 @@
+{
+  "id": "bodies_split_sketch_line",
+  "title": "Split Body with a sketch line across the box's diagonal: two wedges",
+  "tags": [
+    "bodies",
+    "split",
+    "sketch-tool"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              30
+            ],
+            [
+              40,
+              0
+            ]
+          ]
+        }
+      ],
+      "comment": "its first curve is the diagonal (0, 0) - (40, 30)"
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "e1",
+      "tool": {
+        "sketch": "s2",
+        "edge": 1
+      },
+      "extend": false
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 4800,
+    "faces": 10,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Two triangular prisms of 6000; each: 2 triangles (2*600) + 40x10 + 30x10 + the diagonal 50x10 = 2400."
+  }
+}
