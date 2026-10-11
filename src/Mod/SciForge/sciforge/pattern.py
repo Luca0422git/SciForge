@@ -24,6 +24,7 @@ lists itself, so two-direction patterns are right on stock FreeCAD and in old fi
 """
 import json
 import math
+import re
 
 import FreeCAD as App
 import Part
@@ -523,6 +524,11 @@ def build(kind, options, feature=None, name=None):
     if feature is not None and alive(feature):
         label = feature.Label
         was_tip = owner_body(feature) is not None and owner_body(feature).Tip is feature
+        _same_visibility(feature, new)
+        # Later steps built on the old pattern (a sketch on its top face, a fillet on its
+        # edges, another pattern of it) move over to the new one; FreeCAD would just drop
+        # those references when the old one is deleted.
+        relink_dependents(feature, new)
         _delete(feature)
         new.Label = label
         if was_tip:
@@ -578,6 +584,287 @@ def _delete(obj):
         doc.removeObject(obj.Name)
     except Exception:
         pass
+
+
+def _same_visibility(old, new):
+    """A pattern rebuilt in the middle of the timeline stays hidden like the step it replaces
+    (FreeCAD shows a new feature, which drew it over the part)."""
+    if not App.GuiUp:
+        return
+    try:
+        new.ViewObject.Visibility = bool(old.ViewObject.Visibility)
+    except Exception:
+        pass
+
+
+# -- later steps that use a pattern which is rebuilt as another feature -------------------------
+# Changing a pattern can need the other kind of feature (FreeCAD's LinearPattern cannot leave a
+# copy out, follow a parameter in its count or repeat faces; SciForge's PatternFeature can), so
+# the step is rebuilt as a new object. Fusion keeps everything that was built on the pattern: a
+# sketch on its top face, a fillet on its edges. FreeCAD clears links to a deleted object, so
+# before the old one goes, every link to it is moved to the new one, each face / edge / vertex
+# found again on the new shape by where it is.
+_CHAIN = {"BaseFeature", "_Body", "Group", "Tip", "Origin"}
+_ELEMENT = re.compile(r"^(Face|Edge|Vertex)(\d+)$")
+
+
+def _quiet():
+    from .preview import quiet
+
+    return quiet()
+
+
+def _computed(obj):
+    """obj recomputed on its own (its base is up to date), quietly: (True if it has a shape)."""
+    try:
+        with _quiet():
+            obj.recompute()
+    except Exception:
+        pass
+    try:
+        return not obj.Shape.isNull()
+    except Exception:
+        return False
+
+
+def _sample_points(element):
+    """A few points that lie on `element` (inside a face, along an edge)."""
+    kind = element.ShapeType
+    if kind == "Vertex":
+        return [element.Point]
+    if kind == "Edge":
+        a, b = element.FirstParameter, element.LastParameter
+        return [element.valueAt(a + (b - a) * t) for t in (0.5, 0.31, 0.73)]
+    points = []
+    try:
+        u0, u1, v0, v1 = element.ParameterRange
+        for fu, fv in ((0.5, 0.5), (0.31, 0.37), (0.71, 0.67), (0.29, 0.73), (0.73, 0.27)):
+            p = element.valueAt(u0 + (u1 - u0) * fu, v0 + (v1 - v0) * fv)
+            if element.isInside(p, 1e-6, True):
+                points.append(p)
+    except Exception:
+        pass
+    if not points:  # a narrow face (a ring, a sliver): the middles of its facets
+        try:
+            vertices, triangles = element.tessellate(0.5)
+            surface = element.Surface
+            for a, b, c in triangles[:5]:
+                middle = (vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0)
+                points.append(surface.value(*surface.parameter(middle)))
+        except Exception:
+            points = []
+    return points or [element.CenterOfMass]
+
+
+def _size(element):
+    kind = element.ShapeType
+    if kind == "Face":
+        return element.Area
+    if kind == "Edge":
+        return element.Length
+    return 0.0
+
+
+def twin_element(shape, element, tol=1e-6):
+    """Name ("Face7") of the element of `shape` at the place of `element` (the same plane
+    and spot, the same edge line...), or None. When a face was split or grew (a copy left
+    out), the one covering most of it wins."""
+    kind = element.ShapeType
+    pool = {"Face": shape.Faces, "Edge": shape.Edges, "Vertex": shape.Vertexes}.get(kind)
+    if not pool:
+        return None
+    points = _sample_points(element)
+    probes = [Part.Vertex(p) for p in points]
+    size = _size(element)
+    best = None
+    for i, candidate in enumerate(pool, start=1):
+        try:
+            if kind == "Face" and candidate.Surface.TypeId != element.Surface.TypeId:
+                continue
+            if kind == "Edge" and candidate.Curve.TypeId != element.Curve.TypeId:
+                continue
+            box = candidate.BoundBox
+            box.enlarge(10 * tol)
+            if not any(box.isInside(p) for p in points):
+                continue
+            hits = sum(1 for v in probes if candidate.distToShape(v)[0] < 10 * tol)
+        except Exception:
+            continue
+        if not hits:
+            continue
+        key = (hits, -abs(_size(candidate) - size))
+        if best is None or key > best[0]:
+            best = (key, i)
+    return "%s%d" % (kind, best[1]) if best is not None else None
+
+
+def _mapped(sub, old_shape, new_shape, cache):
+    """`sub` of the old pattern ("Face5", or a long name ending in it) as the same place on
+    the new shape; the old name when it cannot be found."""
+    if not sub or new_shape is None:
+        return sub
+    short = sub.split(".")[-1]
+    if not _ELEMENT.match(short):
+        return sub
+    if short not in cache:
+        found = None
+        try:
+            found = twin_element(new_shape, old_shape.getElement(short))
+        except Exception:
+            found = None
+        cache[short] = found or short
+    return cache[short]
+
+
+def _swapped(value, old, new, old_shape, new_shape, cache):
+    """(value with `old` replaced by `new` and its element names mapped, changed?)."""
+    if value is None:
+        return value, False
+    if hasattr(value, "TypeId"):  # a single link
+        return (new, True) if value is old else (value, False)
+    if isinstance(value, tuple) and len(value) == 2 and hasattr(value[0], "TypeId"):
+        obj, subs = value
+        if obj is not old:
+            return value, False
+        if isinstance(subs, str):
+            return (new, _mapped(subs, old_shape, new_shape, cache)), True
+        return (new, [_mapped(s, old_shape, new_shape, cache) for s in subs]), True
+    if isinstance(value, (list, tuple)):
+        out, changed = [], False
+        for item in value:
+            swapped, did = _swapped(item, old, new, old_shape, new_shape, cache)
+            out.append(swapped)
+            changed = changed or did
+        return out, changed
+    return value, False
+
+
+def relink_dependents(old, new):
+    """Point every object that links to `old` (except the body's own history chain) at `new`,
+    with its faces/edges/vertices found again on `new`'s shape. Returns the objects changed."""
+    if old is None or new is None or old is new:
+        return []
+    users = [o for o in old.InList if o is not new and o.TypeId != "PartDesign::Body"]
+    if not users:
+        return []
+    old_shape = None
+    try:
+        old_shape = old.Shape if not old.Shape.isNull() else None
+    except Exception:
+        old_shape = None
+    new_shape = new.Shape if _computed(new) else None
+    cache = {}
+    changed = []
+    for user in users:
+        for prop in user.PropertiesList:
+            if prop in _CHAIN:
+                continue
+            try:
+                kind = user.getTypeIdOfProperty(prop)
+            except Exception:
+                continue
+            if not kind.startswith(("App::PropertyLink", "App::PropertyXLink")):
+                continue
+            try:
+                value = getattr(user, prop)
+            except Exception:
+                continue
+            if old_shape is None:
+                swapped, did = _swapped(value, old, new, None, None, cache)
+            else:
+                swapped, did = _swapped(value, old, new, old_shape, new_shape, cache)
+            if not did:
+                continue
+            try:
+                setattr(user, prop, swapped)
+                if user not in changed:
+                    changed.append(user)
+            except Exception:
+                pass
+    return changed
+
+
+# -- a pattern whose features were all deleted -----------------------------------------------------
+# FreeCAD's pattern features return without touching their shape when none of the features they
+# repeat is left (FeatureTransformed.cpp: "originals.empty() -> StdReturn"): the part kept the
+# copies of a deleted hole, and froze there (a later change of the box never reached the steps
+# after the pattern). Fusion shows such a pattern with a warning and it adds nothing: SciForge
+# passes the shape before it through and says why in the timeline.
+WARNING_PROP = "SciForgeWarning"  # the timeline shows this text as the step's warning
+ORPHAN_NOTE = (
+    "Nothing to repeat: the features it used were deleted or suppressed. Edit it to pick "
+    "others, or delete it."
+)
+
+
+def live_originals(obj):
+    return [o for o in (getattr(obj, "Originals", None) or []) if alive(o) and not _suppressed(o)]
+
+
+def _suppressed(obj):
+    try:
+        return bool(getattr(obj, "Suppressed", False))
+    except Exception:
+        return False
+
+
+def orphaned(obj):
+    """True for a pattern of features (FreeCAD's or SciForge's) with nothing left to repeat."""
+    try:
+        if kind_of(obj) is None or is_body_pattern(obj) or _suppressed(obj):
+            return False
+        if obj.TypeId == ENGINE:
+            if _enum_get(obj, "PatternType") != "features":
+                return False
+        elif getattr(obj, "TransformMode", "Features") != "Features":
+            return False
+        return not live_originals(obj)
+    except Exception:
+        return False
+
+
+def set_note(obj, text):
+    """The warning the timeline shows on a step ('' clears it); never marks it for recompute."""
+    if WARNING_PROP not in obj.PropertiesList:
+        if not text:
+            return
+        # 4 = hidden, 16 = changing it does not mark the step for recompute
+        obj.addProperty("App::PropertyString", WARNING_PROP, "SciForge", "Timeline warning", 4 | 16)
+    if getattr(obj, WARNING_PROP) != text:
+        setattr(obj, WARNING_PROP, text)
+
+
+def _base_shape(obj):
+    base = getattr(obj, "BaseFeature", None)
+    if base is not None and not base.Shape.isNull():
+        return base.Shape.copy()
+    return Part.Shape()
+
+
+class OrphanWatch:
+    """Document observer: right after FreeCAD recomputes one of its pattern features that has
+    nothing left to repeat, its shape becomes the shape before it (see above)."""
+
+    def slotRecomputedObject(self, obj):
+        try:
+            if obj.TypeId not in KIND_OF_TYPE:
+                return
+            if orphaned(obj):
+                obj.Shape = _base_shape(obj)
+                set_note(obj, ORPHAN_NOTE)
+            elif getattr(obj, WARNING_PROP, "") == ORPHAN_NOTE:
+                set_note(obj, "")
+        except Exception:
+            pass
+
+
+_ORPHANS = {"observer": None}
+
+
+def install_orphan_watch():
+    if _ORPHANS["observer"] is None:
+        _ORPHANS["observer"] = OrphanWatch()
+        App.addDocumentObserver(_ORPHANS["observer"])
 
 
 def show_tip(body):
@@ -922,6 +1209,12 @@ class PatternFeature:
         base = obj.BaseFeature
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             raise PatternError("A pattern needs a solid before it in the timeline.")
+        if orphaned(obj):  # every feature it repeated was deleted: it adds nothing
+            obj.Shape = base.Shape.copy()
+            set_note(obj, ORPHAN_NOTE)
+            return
+        if getattr(obj, WARNING_PROP, "") == ORPHAN_NOTE:
+            set_note(obj, "")
         kind = kind_of(obj)
         options = read_engine(obj)
         tools = engine_tools(obj, options, base)
@@ -1548,6 +1841,37 @@ def objects_center(options, base=None):
     return (box.Center if box is not None else App.Vector()), box
 
 
+def to_global_shape(body, shape):
+    """A copy of a body-coordinate shape in global coordinates."""
+    copy = shape.copy()
+    place = body.getGlobalPlacement() if body is not None else App.Placement()
+    if not place.isIdentity():
+        copy.transformShape(place.toMatrix())
+    return copy
+
+
+def faces_made_by(feature, shape, limit=400):
+    """Faces of `shape` (the part, body coordinates) that `feature` made: they lie on what it
+    added or removed (a hole's wall, a boss's sides and top, a fillet's round). For the
+    highlight of a picked feature."""
+    try:
+        tools = [tool for tool, _how in feature_tools(feature)]
+    except Exception:
+        return []
+    if not tools or len(shape.Faces) > limit:
+        return []
+    found = []
+    for face in shape.Faces:
+        box = face.BoundBox
+        near = [t for t in tools if t.BoundBox.intersect(box)]
+        if not near:
+            continue
+        points = _sample_points(face)[:3]
+        if all(any(t.distToShape(Part.Vertex(p))[0] < 1e-5 for t in near) for p in points):
+            found.append(face)
+    return found
+
+
 def feature_of_face(body, face, until=None):
     """The step of `body` that made `face` (body coordinates): the last feature before `until`
     whose tool shape has the face on its boundary. None if the face is from the first step
@@ -1827,6 +2151,11 @@ def _build_body_copies(kind, options, feature, name=None):
     if feature is not None and alive(feature):
         if not (is_body_pattern(feature) and kind_of(feature) == kind):
             label = feature.Label
+            base = None if is_body_pattern(feature) else getattr(feature, "BaseFeature", None)
+            if base is not None:
+                # the copies leave the body: what was built on the pattern stays on the step
+                # before it (its top face is still there, without the copies)
+                relink_dependents(feature, base)
             remove(feature)
             feature = None
     else:
