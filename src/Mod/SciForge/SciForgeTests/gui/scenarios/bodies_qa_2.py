@@ -28,6 +28,10 @@ the timeline, typing into the dialog fields.
      plane (picked in the browser): 7200 + 4800. Undo.
   Q  Appearance on the top face only (blue), then Move/Copy (X 50, Z 5, Z Angle 90): the top
      face is still the blue one after the move (a face keeps its look when it moves). Undo.
+  R  Combine Join, then Press Pull (Q) on the joined top face +5 (31500); the Combine edited
+     to Cut from the timeline: the merged top face is made another way now, so the Press Pull
+     says in the timeline that its face must be picked again (FreeCAD's naming, the same with
+     its own Boolean; no Report-view error, no pop-up). Undo: joined and pulled again.
 """
 import math
 
@@ -843,6 +847,107 @@ def q_undone():
     h.check("undo: the top face is blue", len(found) == 1 and is_top(found[0], 10), found)
 
 
+# == R: Press Pull after a Combine, then the Combine edited under it ===============================
+def presspull_panel():
+    from sciforge import presspull_ui
+
+    p = presspull_ui.PressPullPanel.last
+    return p if p is not None and not p._closed else None
+
+
+def r_combine():
+    h.click_empty()
+    h.fit()
+    h.ribbon("Combine")
+
+
+def r_target():
+    h.click(V(10, 15, 10))
+
+
+def r_tool():
+    h.click(V(60, 15, 10))
+
+
+def r_combine_ok():
+    h.task_button("OK")
+
+
+def r_press_q():
+    h.check("joined 21000", s.close(s.volume(s.bodies()[0]), 21000), s.volume(s.bodies()[0]))
+    h.click_empty()
+    h.fit()
+    h.press("q")
+
+
+def r_top():
+    h.click(V(50, 15, 10))  # where Body2 was: the joined top face
+
+
+def r_distance():
+    p = presspull_panel()
+    if h.check("Press Pull on the joined top face", p is not None and p.target is not None, p):
+        s.type_value(p.field.widget, "5")
+
+
+def r_presspull_ok():
+    h.task_button("OK")
+
+
+r_presspull_ok.wait_ms = 1200
+
+
+def r_pulled():
+    got = s.volume(s.bodies()[0])
+    h.check("pulled up 5: 21000 + 70 x 30 x 5", s.close(got, 31500), got)
+    no_problems("Press Pull after a Combine")
+
+
+def r_edit_combine():
+    s.timeline_double_click(combines()[0])
+
+
+def r_cut():
+    p = s.panel()
+    if h.check("Combine edit open", p is not None and p.editing, p):
+        b.choose(p.operation, "Cut")
+
+
+def r_cut_ok():
+    h.task_button("OK")
+
+
+r_cut_ok.wait_ms = 1500
+
+
+def r_followed():
+    """Known limit (FreeCAD's naming, the same with FreeCAD's own Boolean): the joined top
+    face was made by merging two faces; Cut makes the top face another way, so the Press
+    Pull loses it. It must say so in the timeline (select the face again), never as an
+    error in the Report view or a pop-up; the Combine itself is a Cut now."""
+    from sciforge import timeline_ops
+
+    combine = combines()[0]
+    h.check("the Combine is a Cut now", combine.Operation == "Cut", combine.Operation)
+    h.check("the Combine itself is fine", "Invalid" not in list(combine.State), combine.State)
+    found = [o for o in s.bodies()[0].Group if getattr(o, "SciForgeType", "") == "PressPull"]
+    if h.check("the Press Pull is still there", len(found) == 1, found):
+        kind, why = timeline_ops.problem(found[0])
+        h.check("the timeline says why", kind == "error" and "face" in why.lower(), (kind, why))
+    h.check("no pop-up", not h.popups(), h.popups())
+    h.fit()
+    h.shot("R-presspull-after-combine")
+
+
+def r_undo():
+    s.undo()
+
+
+def r_undone():
+    got = s.volume(s.bodies()[0])
+    h.check("undo: joined and pulled again", s.close(got, 31500), got)
+
+
 h.run(
     "bodies_qa_2",
     [s.new_design("QA_Multi")]
@@ -985,5 +1090,25 @@ h.run(
         q_moved_blue,
         q_undo,
         q_undone,
+    ]
+    + [s.new_design("QA_PressPull")]
+    + s.box_steps("pp_body1", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("pp_body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
+    + [
+        r_combine,
+        r_target,
+        r_tool,
+        r_combine_ok,
+        r_press_q,
+        r_top,
+        r_distance,
+        r_presspull_ok,
+        r_pulled,
+        r_edit_combine,
+        r_cut,
+        r_cut_ok,
+        r_followed,
+        r_undo,
+        r_undone,
     ],
 )

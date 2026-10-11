@@ -98,6 +98,13 @@ class CombineFeature:
         self.ensure_properties(obj)
 
     def execute(self, obj):
+        try:
+            self._build(obj)
+        except Exception:
+            bodies.pass_through(obj)  # shown as the body was before it, the step red
+            raise
+
+    def _build(self, obj):
         body = bodies.body_of(obj)
         base_obj = obj.Target if obj.NewBody else obj.BaseFeature
         frozen_target = getattr(obj, "FrozenTarget", None) if obj.NewBody else None

@@ -320,6 +320,22 @@ def show_tip(body):
     set_shown(tip, True)
 
 
+def pass_through(obj):
+    """A step that cannot be built shows the body as it was before it, the way Fusion skips a
+    failed step (red in the timeline) instead of showing the result it had before the change
+    that broke it. Steps call this right before raising their error."""
+    try:
+        import Part
+
+        base = getattr(obj, "BaseFeature", None)
+        if base is not None and not base.Shape.isNull():
+            obj.Shape = base.Shape.copy()
+        else:
+            obj.Shape = Part.Shape()
+    except Exception:
+        pass
+
+
 def solid_steps(body):
     """The steps of a body that make its solid (sketches and planes left out)."""
     return [o for o in body.Group if "BaseFeature" in o.PropertiesList]

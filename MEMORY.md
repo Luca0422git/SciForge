@@ -163,6 +163,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       `bodies.py` helpers for every multi-body tool. Spec + gaps: `docs/sciforge/parity/
       bodies.md`. 6 scenarios (`bodies_*.py`), 24 golden models (`bodies_*`), unit tests
       `test_bodies_schema.py`. Ribbon: Split Body runs `SciForge_SplitBody` (was greyed).
+- [x] Body tools QA pass (branch `sf/bodies-qa`): 11 bugs fixed (used-up body left active,
+      Combine edit hiding its tools, tool clicks swallowed by the Join preview, Move type
+      chosen first eating the body click, browser/timeline Delete breaking Combines, New Body
+      target deletion, reopened files activating a used-up body, round-edge snap to the
+      circle seam, face looks lost on Move, lavender instead of grey, materials not
+      draggable). Scenarios `bodies_qa.py` (8 paths) and `bodies_qa_2.py` (11 paths), golden
+      `bodies_combine_new_body_target_deleted`.
 
 ## Known issues / findings
 
@@ -499,6 +506,39 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     bodies), inspect (mass from `bodies.mass(body)`), timeline (a kind "delete_face" with
     the delete icon for `SciForge::DeleteFace`; steps outside bodies such as a Move copy never
     roll back with the marker).
+
+- **Body tools QA findings (branch `sf/bodies-qa`)**:
+  - **FreeCAD's Python document observers never get `slotFinishRestoreDocument`** (not in
+    `App/DocumentObserverPython.cpp`; there is no "restore finished" slot at all). Use
+    `slotCreatedDocument` plus a `QTimer` that waits while `doc.Restoring`
+    (`bodies_gui._opened`). `thread_ui.py` (hole owner) still has a dead
+    `slotFinishRestoreDocument`.
+  - `slotDeletedObject` is emitted *before* FreeCAD breaks the links to the object
+    (`Document::_removeObject`: signal, then `breakDependency`): an observer can still read
+    the object and the objects linking to it, and property changes made there go into the
+    same undo step. `doc.Transacting` is True while undo/redo/abort roll objects back (skip
+    those). `bodies_gui.freeze_for` uses this so ANY Delete (browser, timeline) of a body a
+    Combine uses keeps the Combine's result.
+  - A used-up body must never stay the active body: sketches on origin planes and extrudes
+    went into the hidden body (looked like "Extrude did nothing"). `bodies.leave_used_up`
+    after every sync; a reopened file whose first body is used up activates a free one.
+  - The Combine preview is drawn exactly where the see-through tools are (coplanar faces):
+    a click on a tool lands on the preview. `combine_ui._really_clicked` resolves a click on
+    the preview to the body really under the pointer (`solid.isInside(point, tol, True)`).
+  - App.Material() is FreeCAD's built-in lavender (0.8, 0.8, 0.9), not the grey parts are
+    drawn in: the default look comes from the Part colour preferences
+    (`View/DefaultShapeColor`...), as `Materials::MaterialManager::defaultAppearance()`
+    does (`appearance._default_material`).
+  - OpenCASCADE gives a full circle one vertex (its seam) and a cylinder face a seam line:
+    neither is a corner a person sees (`move_ui._corners`), a click there must snap to the
+    centre.
+  - FreeCAD 1.1 element maps survive SciForge's Python features: a sketch on a face of a
+    Combine / Move / Split result stays on that face when an earlier step changes (tested
+    headless: face index changed, the sketch followed). Limit: a face a Join merged
+    (refine, ";RFI" in its name) is named differently once the Combine is switched to Cut;
+    a Press Pull on it then fails with "select the face again" (FreeCAD's own Boolean
+    loses it the same way). Fixing it would need SciForge's own face names for Combine
+    results (faces lying on a target face named after it).
 
 ## Questions waiting for Luca
 
