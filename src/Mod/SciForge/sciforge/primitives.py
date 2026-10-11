@@ -125,6 +125,49 @@ def check_ref(ref):
     return (obj, sub)
 
 
+def earliest_ref(ref):
+    """A flat face clicked on the part, as the same face of the step that made it: a box on
+    the top of a block with a hole drilled in it hangs on the block, not on the hole. Fusion
+    leaves it alone when that unrelated hole is suppressed, deleted or edited; on the
+    hole's face it was suppressed with the hole and froze when the hole was deleted
+    (found by the primitives QA). Planes and anything else come back unchanged."""
+    obj, sub = ref
+    if obj is None or is_plane(obj) or not (sub or "").startswith("Face"):
+        return ref
+    try:
+        from . import hole
+
+        face = obj.Shape.getElement(sub)
+        if face.Surface.TypeId != "Part::GeomPlane":
+            return ref
+        point = point_on(face)
+        if point is None:
+            return ref
+        step, name = hole.earliest_face(obj, sub, point)
+        if step is None or not name or owner_body(step) is not owner_body(obj):
+            return ref
+        return (step, name)
+    except Exception:
+        return ref
+
+
+def point_on(face):
+    """A point that lies on the face (its centre can be in a hole of it)."""
+    centre = face.CenterOfMass
+    try:
+        if face.isInside(centre, 1e-6, True):
+            return centre
+        u0, u1, v0, v1 = face.ParameterRange
+        for i in range(1, 8):
+            for j in range(1, 8):
+                point = face.valueAt(u0 + (u1 - u0) * i / 8.0, v0 + (v1 - v0) * j / 8.0)
+                if face.isInside(point, 1e-6, True):
+                    return point
+    except Exception:
+        pass
+    return None
+
+
 def frame(ref):
     """Placement of the plane's frame in its body's coordinates: FreeCAD's FlatFace
     attachment (the frame a sketch on that plane gets)."""
@@ -418,6 +461,45 @@ def show_tip(body):
 def has_solid(body, before=None):
     tip = before.BaseFeature if before is not None else body.Tip
     return tip is not None and not tip.Shape.isNull() and bool(tip.Shape.Solids)
+
+
+def problem(feature, what="it"):
+    """What is wrong with a computed step that FreeCAD accepts without a word, or ''.
+    FreeCAD's Subtractive box / helix / pipe that misses the part changes nothing, one that
+    takes all of it leaves an empty body, and a joined shape away from the part (or a cut
+    through it) leaves separate solids in one body: all "valid" for FreeCAD. Fusion says so
+    (like SciForge's Extrude), so the dialog does too and OK waits. `what`: "the box"..."""
+    try:
+        if feature is None or "Invalid" in list(feature.State) or "Error" in list(feature.State):
+            return ""  # FreeCAD's own failure text is shown instead
+        base = feature.BaseFeature
+        has_base = base is not None and not base.Shape.isNull() and bool(base.Shape.Solids)
+        shape = feature.Shape
+        subtractive = feature.TypeId.startswith("PartDesign::Subtractive")
+        keeps_inside = subtractive and bool(getattr(feature, "Outside", False))
+        if not has_base:
+            return ""
+        if shape.isNull() or not shape.Solids or shape.Volume < TOL:
+            if keeps_inside:
+                return "%s does not overlap the body, so Intersect would leave nothing." % (
+                    what[:1].upper() + what[1:]
+                )
+            return "This cut would remove the whole body. Make %s smaller or move it." % what
+        if len(shape.Solids) > 1:
+            return (
+                "This would leave %d separate pieces in one body. Use New Body, or change "
+                "the size or the position so it stays one piece." % len(shape.Solids)
+            )
+        if subtractive and not keeps_inside:
+            before = base.Shape.Volume
+            if abs(before - shape.Volume) <= 1e-9 * max(1.0, before):
+                return (
+                    "The cut does not touch the body. Move %s into the part, or use Join or "
+                    "New Body." % what
+                )
+    except Exception:
+        return ""
+    return ""
 
 
 def insert(body, type_id, name, before=None):

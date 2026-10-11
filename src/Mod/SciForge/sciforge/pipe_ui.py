@@ -53,6 +53,9 @@ class PathHandle(LinearHandle):
             name="distance",
         )
 
+    def snap(self, value):
+        return value  # a fraction of the path: the dialog rounds it to 0.01
+
     def _segment(self, fraction):
         goal = max(0.0, min(1.0, float(fraction))) * self.total
         for i in range(1, len(self.lengths)):
