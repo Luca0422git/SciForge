@@ -75,19 +75,20 @@ def with_defaults(options):
 
 
 # -- the section ---------------------------------------------------------------------------------
-def section_shape(options):
-    """The section as a closed wire in the upright plane (local coordinates)."""
+def section_shape(options, axial=0.0):
+    """The section as a closed wire in the upright plane (local coordinates), `axial` along
+    the axis from the plane's origin."""
     import Part
 
     points = section_points(options)
     if points is None:
         circle = Part.Circle(
-            App.Vector(section_radius(options), 0, 0),
+            App.Vector(section_radius(options), axial, 0),
             App.Vector(0, 0, 1),
             float(options["section_size"]) / 2.0,
         )
         return Part.Wire(circle.toShape())
-    vectors = [App.Vector(x, y, 0) for x, y in points]
+    vectors = [App.Vector(x, y + axial, 0) for x, y in points]
     return Part.makePolygon(vectors + [vectors[0]])
 
 
@@ -176,21 +177,59 @@ class CoilSection:
             obj.Diameter = 20.0
         if add("App::PropertyLength", "SectionSize", "Diameter of the circle round it"):
             obj.SectionSize = 2.0
+        # What a coil that narrows as it rises needs to start at its narrow end (see
+        # narrow_end): the angle as typed, the signed height, the turns, the hand.
+        add("App::PropertyAngle", "Taper", "The coil's angle (negative: it narrows)")
+        add("App::PropertyDistance", "Rise", "The coil's height, signed")
+        if add("App::PropertyFloat", "Turns", "The coil's revolutions"):
+            obj.Turns = 1.0
+        add("App::PropertyBool", "LeftHanded", "Counterclockwise coil")
+        if add("App::PropertyPlacement", "BaseOffset", "Where the coil starts on its plane"):
+            obj.setEditorMode("BaseOffset", 2)
+            if "AttachmentOffset" in obj.PropertiesList:
+                obj.BaseOffset = obj.AttachmentOffset  # a coil saved before this existed
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
 
     def execute(self, obj):
-        obj.positionBySupport()
         options = {
             "section": obj.Section,
             "section_position": obj.SectionPosition,
             "diameter": obj.Diameter.Value,
             "section_size": obj.SectionSize.Value,
         }
-        shape = section_shape(options)
+        offset = obj.BaseOffset
+        end = narrow_end(obj.Taper.Value, obj.Rise.Value, obj.Turns, obj.LeftHanded)
+        if end is not None:
+            shift, turn, narrower = end
+            options["diameter"] -= narrower
+            # The attachment places the section (and its V_Axis, where the helix starts):
+            # a Placement set here would be overwritten by it.
+            offset = offset.multiply(
+                App.Placement(App.Vector(0, shift, 0), App.Rotation(App.Vector(0, 1, 0), turn))
+            )
+        axial = 0.0
+        if abs(obj.Taper.Value) > 1e-9:
+            # FreeCAD's tapered helix is only right when its axis starts level with the
+            # body's origin: on a raised face the coil drifted (1.5 mm at the end of a 20 mm
+            # coil, its volume 0.8 % short; found by the primitives QA). The section's own
+            # origin goes down the axis to that level and the outline is drawn where it is.
+            self._place(obj, offset)
+            n = obj.Placement.Rotation.multVec(App.Vector(0, 1, 0))
+            axial = obj.Placement.Base.dot(n)
+            if abs(axial) > 1e-12:
+                offset = offset.multiply(App.Placement(App.Vector(0, -axial, 0), App.Rotation()))
+        self._place(obj, offset)
+        shape = section_shape(options, axial)
         shape.Placement = obj.Placement
         obj.Shape = shape
+
+    @staticmethod
+    def _place(obj, offset):
+        if not obj.AttachmentOffset.isSame(offset, 1e-12):
+            obj.AttachmentOffset = offset
+        obj.positionBySupport()
 
     def dumps(self):
         return None
@@ -203,6 +242,29 @@ class CoilSection:
 
 
 UPRIGHT = App.Rotation(App.Vector(1, 0, 0), 90)  # plane frame -> the coil's upright plane
+
+
+def narrows(options):
+    """True for a coil that narrows as it rises (a negative angle)."""
+    if options.get("type") == "spiral" or "angle" not in USES.get(options.get("type"), ()):
+        return False
+    return float(options.get("angle", 0.0)) < -1e-9
+
+
+def narrow_end(taper, rise, turns, left_handed):
+    """FreeCAD's helix always widens away from its section: a negative angle gave the mirror
+    image (the coil went down through the plane instead of narrowing as it rose; found by
+    the primitives QA). A coil that narrows is therefore swept from its narrow end back to
+    the plane: the section stands at the far end (`rise` along the axis), that much nearer
+    the axis, turned on by the coil's own turns so the coil still begins on the plane where
+    it was clicked. Returns (shift along the axis, turn in degrees about it, how much
+    smaller the diameter is there), or None for a coil that does not narrow."""
+    if taper > -1e-9 or abs(rise) < 1e-9:
+        return None
+    narrower = 2.0 * abs(rise) * math.tan(math.radians(-taper))
+    hand = -1.0 if left_handed else 1.0
+    up = 1.0 if rise > 0 else -1.0
+    return rise, 360.0 * float(turns) * hand * up, narrower
 
 
 def _section(body, feature, old):
@@ -274,20 +336,27 @@ def _update(feature, body, ref, options):
     primitives.set_support(section, support)
     offset = App.Placement(App.Vector(float(options["x"]), float(options["y"]), 0), UPRIGHT)
     offset = primitives.attachment_offset(body, support, ref, offset)
-    if not section.AttachmentOffset.isSame(offset, 1e-12):
-        section.AttachmentOffset = offset
+    if not section.BaseOffset.isSame(offset, 1e-12):
+        section.BaseOffset = offset  # execute() adds a narrowing coil's far end (narrow_end)
     for prop, value in (
         ("Section", options["section"]),
         ("SectionPosition", options["section_position"]),
     ):
         if getattr(section, prop) != value:
             setattr(section, prop, value)
+    turns, height, _pitch = resolved(options)
     for prop, value in (
         ("Diameter", float(options["diameter"])),
         ("SectionSize", float(options["section_size"])),
+        ("Taper", float(options["angle"]) if "angle" in USES[options["type"]] else 0.0),
+        ("Rise", height),
     ):
         if abs(getattr(section, prop).Value - value) > 1e-12:
             setattr(section, prop, value)
+    if abs(section.Turns - turns) > 1e-12:
+        section.Turns = turns
+    if section.LeftHanded != (not bool(options.get("clockwise", True))):
+        section.LeftHanded = not bool(options.get("clockwise", True))
     primitives.hide(section)
     section.recompute()
     if feature.Profile is None or feature.Profile[0] is not section:
@@ -311,7 +380,8 @@ def _update(feature, body, ref, options):
 
 
 def _formula_targets(feature, section, kind):
-    """Dialog field -> [(object, property)] that holds its value, for this coil type."""
+    """Dialog field -> [(object, property)] that holds its value, for this coil type (the
+    section also holds the angle, height and turns: it places itself by them)."""
     uses = USES[kind]
     targets = {"diameter": [(section, "Diameter")], "section_size": [(section, "SectionSize")]}
     if "revolutions" in uses:
@@ -322,6 +392,12 @@ def _formula_targets(feature, section, kind):
         targets["pitch"] = [(feature, "Growth" if kind == "spiral" else "Pitch")]
     if "angle" in uses:
         targets["angle"] = [(feature, "Angle")]
+    if "angle" in uses:
+        targets["angle"] = targets["angle"] + [(section, "Taper")]
+    if "height" in uses:
+        targets["height"] = targets["height"] + [(section, "Rise")]
+    if "revolutions" in uses:
+        targets["revolutions"] = targets["revolutions"] + [(section, "Turns")]
     return targets
 
 
@@ -329,16 +405,26 @@ def _apply_formulas(feature, section, options):
     """A parameter typed in a field keeps driving the coil (Fusion): an expression on the
     property that holds the value. Properties the type works out itself carry none."""
     formulas = options.get("expressions") or {}
+    narrowing = narrows(options)
     wanted = {}
     for key, objs in _formula_targets(feature, section, options["type"]).items():
         text = formulas.get(key, "")
-        if text and key == "height" and float(options.get("height", 1.0)) < 0:
-            text = "-(%s)" % text
         for obj, prop in objs:
-            wanted[(obj.Name, prop)] = (obj, prop, text)
+            value = text
+            if not text or obj is section and prop in ("Taper", "Rise"):
+                pass  # the section keeps the signs as typed
+            elif key == "height" and float(options.get("height", 1.0)) < 0:
+                value = "-(%s)" % text  # FreeCAD's Height is positive; Reversed has the sign
+            elif key == "angle" and narrowing:
+                value = "-(%s)" % text  # swept from the narrow end: a widening angle
+            wanted[(obj.Name, prop)] = (obj, prop, value)
+    _derived_formulas(section, options, formulas, wanted)
     every = [
         (section, "Diameter"),
         (section, "SectionSize"),
+        (section, "Taper"),
+        (section, "Rise"),
+        (section, "Turns"),
         (feature, "Turns"),
         (feature, "Height"),
         (feature, "Pitch"),
@@ -346,6 +432,24 @@ def _apply_formulas(feature, section, options):
         (feature, "Angle"),
     ]
     primitives.set_formulas([wanted.get((o.Name, p), (o, p, "")) for o, p in every])
+
+
+def _derived_formulas(section, options, formulas, wanted):
+    """The section's height or turns when the coil type works them out (Revolution and
+    Pitch: height = revolutions x pitch; Height and Pitch: turns = height / pitch) and a
+    parameter drives one of the values they come from."""
+    kind = options["type"]
+    turns_text = formulas.get("revolutions", "")
+    if kind == "rev_pitch" and (turns_text or formulas.get("pitch")):
+        sign = "-" if float(options.get("height", 1.0)) < 0 else ""
+        turns = "(%s)" % turns_text if turns_text else repr(float(options["revolutions"]))
+        pitch = primitives.term(options, "pitch", section)
+        wanted[(section.Name, "Rise")] = (section, "Rise", "%s%s * %s" % (sign, turns, pitch))
+    if kind == "height_pitch" and (formulas.get("height") or formulas.get("pitch")):
+        height = primitives.term(options, "height", section)
+        pitch = primitives.term(options, "pitch", section)
+        text = "abs(%s) / %s" % (height, pitch)
+        wanted[(section.Name, "Turns")] = (section, "Turns", text)
 
 
 def _set(obj, prop, value):
@@ -375,13 +479,15 @@ def _apply(feature, options):
             "rev_pitch": "pitch-turns-angle",
             "height_pitch": "pitch-height-angle",
         }[kind]
+        narrowing = narrows(options)
         _set(feature, "Mode", mode)
-        _set(feature, "Angle", angle)
+        _set(feature, "Angle", -angle if narrowing else angle)
         _set(feature, "Turns", turns)
         _set(feature, "Height", abs(height))
         _set(feature, "Pitch", pitch)
         _set(feature, "Growth", 0.0)
-        _set(feature, "Reversed", height < 0)
+        # A narrowing coil is swept from its far end back to the plane (narrow_end).
+        _set(feature, "Reversed", (height > 0) if narrowing else (height < 0))
     _set(feature, "LeftHanded", not bool(options.get("clockwise", True)))
     if feature.TypeId == "PartDesign::SubtractiveHelix":
         _set(feature, "Outside", options["operation"] == "intersect")
@@ -416,14 +522,21 @@ def read(feature):
         options["diameter"] = section.Diameter.Value
         options["section_size"] = section.SectionSize.Value
     kind = options["type"]
-    sign = -1.0 if feature.Reversed else 1.0
+    narrowing = (
+        section is not None
+        and kind != "spiral"
+        and "Taper" in section.PropertiesList
+        and section.Taper.Value < -1e-9
+    )
+    reversed_ = bool(feature.Reversed) != narrowing  # a narrowing coil is swept back
+    sign = -1.0 if reversed_ else 1.0
     options["revolutions"] = float(feature.Turns)
     if kind == "spiral":
         options["pitch"] = feature.Growth.Value
     else:
         options["height"] = sign * feature.Height.Value
         options["pitch"] = feature.Pitch.Value
-        options["angle"] = feature.Angle.Value
+        options["angle"] = section.Taper.Value if narrowing else feature.Angle.Value
     if section is not None:
         targets = _formula_targets(feature, section, kind)
         options["expressions"] = primitives.kept_formulas(meta, targets)

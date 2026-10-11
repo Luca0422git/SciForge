@@ -39,6 +39,13 @@ PATH_ROLE = "PipePath"
 SECTION_ROLE = "PipeSection"
 FP_TYPE = "PartDesign::FeaturePython"
 TANGENT_TOL = 1e-3  # radians: edges this close to tangent continue a chain
+# Sharp corners of the path are mitred, like Fusion's pipe (the section is cut on the corner's
+# bisecting plane: volume = section area x path length). FreeCAD's default "Transformed"
+# failed on every sharp corner ("A fatal error occurred when making the pipe"), and
+# OpenCASCADE's matching sweep mode silently swept only the first leg (found by the
+# primitives QA: a pipe along two edges of a block).
+CORNERS = "Right corner"
+CORNER_MODE = 1  # makePipeShell's number for it (0 transformed, 1 right, 2 round)
 JOIN_TOL = 1e-6
 
 DEFAULTS = {
@@ -428,14 +435,14 @@ class PipeSection:
 
 def sweep(path_wire, section_shape):
     """The pipe's solid: the section's outer wire swept along the path, minus the inner
-    one (hollow). The same sweep PartDesign's pipe makes (corrected Frenet, transformed
-    corners)."""
+    one (hollow). The same sweep PartDesign's pipe makes (corrected Frenet, mitred
+    corners: see CORNERS)."""
     wires = list(section_shape.Wires)
     if not wires:
         raise PrimitiveError("The pipe has no section.")
 
     def one(w):
-        solid = path_wire.makePipeShell([w], True, False, 0)
+        solid = path_wire.makePipeShell([w], True, False, CORNER_MODE)
         if solid.Volume < 0:
             solid.reverse()
         return solid
@@ -630,8 +637,8 @@ def _update(feature, body, path, options):
             feature.Profile = (section, [""])
         if feature.Mode != "Standard":
             feature.Mode = "Standard"
-        if feature.Transition != "Transformed":
-            feature.Transition = "Transformed"
+        if feature.Transition != CORNERS:
+            feature.Transition = CORNERS
         if not feature.Refine:
             feature.Refine = True
     meta.update(

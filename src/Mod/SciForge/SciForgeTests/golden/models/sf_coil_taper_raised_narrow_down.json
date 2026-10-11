@@ -1,0 +1,57 @@
+{
+  "id": "sf_coil_taper_raised_narrow_down",
+  "title": "Block 60x60x30, a coil d20 on the middle of its top face going down 20, angle -10 (it narrows as it goes), New Body (measured alone)",
+  "tags": [
+    "primitive",
+    "coil",
+    "taper",
+    "new-body",
+    "face"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "x": -30,
+      "y": -30,
+      "length": 60,
+      "width": 60,
+      "height": 30
+    },
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "diameter": 20,
+      "type": "rev_height",
+      "revolutions": 4,
+      "height": -20,
+      "section": "circular",
+      "section_position": "inside",
+      "section_size": 2,
+      "plane": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "angle": -10,
+      "operation": "new_body",
+      "x": 30,
+      "y": 30
+    }
+  ],
+  "expect": {
+    "volume": 571.3893132919486,
+    "rel_tol": 0.0001,
+    "solids": 1,
+    "note": "V = pi x 2 pi x 4 x (9 - 10 tan 10), swept from its narrow end 20 below the face. The helix is an approximation, hence rel_tol 1e-4.",
+    "source": "analytic"
+  }
+}

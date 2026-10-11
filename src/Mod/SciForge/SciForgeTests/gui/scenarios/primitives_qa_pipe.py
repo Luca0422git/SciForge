@@ -8,7 +8,10 @@ Q2. A 40 x 30 x 10 block. Pipe with nothing selected: OK says to pick the path, 
     Cut. Hollow with a wall of 1 (as thick as the radius): said, OK waits; 0.5: a hollow
     groove. The top right edge clicked too: the pipe turns the corner. Clicked again:
     dropped. 5 typed with the mouse over the 3D view: Section Size 5 (Fusion's box next
-    to the handle; FreeCAD's key 5 would have turned the view). OK.
+    to the handle; FreeCAD's key 5 would have turned the view). OK. Picking or dropping
+    curves keeps the section size and the typed wall (they were worked out again from
+    the path's length: the wall 0.5 became 0.2), and the corner is mitred like Fusion's
+    (FreeCAD's default corner failed: "A fatal error occurred when making the pipe").
 Q3. Extrude 1 edited to 20: the pipe follows its edge up (the groove stays on the top
     edge). Ctrl+Z.
 Q4. Pipe 1 edited from the timeline: the path box shows 1 selected; its x clears it: said,
@@ -17,7 +20,10 @@ Q4. Pipe 1 edited from the timeline: the path box shows 1 selected; its x clears
 Hand-derived volumes (pi = PI): block 12000; along a 40 mm edge a d2 pipe is 40 pi, a
 quarter of it inside: Join adds 30 pi, Cut takes 10 pi; hollow d2 wall 0.5: a ring of
 pi (1 - 0.25) = 0.75 pi, a quarter of it x 40 = 7.5 pi; d5 wall 0.5: pi (6.25 - 4) x 40 / 4
-= 22.5 pi; block 20 high: 24000. Triangular (circumscribed d5, a corner up) hollow:
+= 22.5 pi; block 20 high: 24000. Mitred corner (front 40 + right 30, the cut on the
+bisecting plane): each leg's quarter minus the wedge the mitre takes off, the integral of
+the distance across the leg over the quarter ring = (1^3 - 0.5^3) / 3, twice:
+0.75 pi / 4 x 70 - 7 / 12 = 13.125 pi - 7 / 12. Triangular (circumscribed d5, a corner up) hollow:
 area 3 sqrt(3) / 16 (5^2 - 3^2) = 3 sqrt(3); the part inside the block is bounded.
 """
 import math
@@ -173,8 +179,12 @@ def q2_corner():
     p = panel()
     h.check("Q2 two edges", p is not None and len(p.path) == 2, p and p.path)
     h.check("Q2 no message", msg(p) == "", msg(p))
+    h.check("Q2 the section size stays d2", near(p.size.value(), 2.0), p and p.size.value())
+    h.check("Q2 the wall stays 0.5", near(p.thickness.value(), 0.5), p and p.thickness.value())
     h.check(
-        "Q2 the groove turns the corner (more removed)", vol() < 12000.0 - 7.5 * PI - 1.0, vol()
+        "Q2 the groove turns the corner, mitred: - (13.125 pi - 7 / 12)",
+        near(vol(), 12000.0 - 13.125 * PI + 7.0 / 12.0, 1e-5),
+        vol(),
     )
     h.click_edge(RIGHT)
 

@@ -200,6 +200,7 @@ class PipePanel(Panel):
         self._geometry_changed = False
         self._shown = []
         self.size_set = feature is not None  # the section size was chosen (not a default)
+        self.thickness_set = feature is not None  # the wall was typed (not a default)
         if feature is not None:
             try:
                 self.path, read = pipe.read(feature)
@@ -246,7 +247,7 @@ class PipePanel(Panel):
         self.hollow = QtWidgets.QCheckBox("Hollow")
         self.hollow.setObjectName("SciForgePipe_hollow")
         form.addRow(self.hollow)
-        self.thickness = DistanceField(self.options["thickness"], on_change=self._typed)
+        self.thickness = DistanceField(self.options["thickness"], on_change=self._thickness_typed)
         self.thickness.widget.setObjectName("SciForgePipe_thickness")
         self.thickness.enter_filter = EnterTakesNumber(self.thickness)
         self.thickness_label = QtWidgets.QLabel("Section Thickness")
@@ -310,6 +311,8 @@ class PipePanel(Panel):
         self.options.setdefault("expressions", {})[key] = text
         if key == "section_size":
             self.size_set = True
+        if key == "thickness":
+            self.thickness_set = True
         self._quiet = True
         try:
             self.formula_fields[key].set_value(value)
@@ -523,17 +526,23 @@ class PipePanel(Panel):
             self.message.setText("⚠ " + self.error)
             return
         if not self.size_set:
-            # A first section that suits the path (a twentieth of its length), until the
-            # size is typed or dragged.
+            # A first section that suits the path (a twentieth of its length), chosen once
+            # from the first path: curves picked later keep it, and a wall typed before
+            # stays (both changed with every pick before: a typed wall of 0.5 became 0.2
+            # when a curve was dropped; found by the primitives QA).
+            self.size_set = True
             try:
                 length = pipe.path_length(self.path)
                 size = primitives.nice(max(length / 20.0, 0.1))
                 self.options["section_size"] = size
-                self.options["thickness"] = primitives.nice(size / 10.0)
                 self._quiet = True
-                self.size.set_value(size)
-                self.thickness.set_value(self.options["thickness"])
-                self._quiet = False
+                try:
+                    self.size.set_value(size)
+                    if not self.thickness_set:
+                        self.options["thickness"] = primitives.nice(size / 10.0)
+                        self.thickness.set_value(self.options["thickness"])
+                finally:
+                    self._quiet = False
             except Exception:
                 pass
         self.message.setText("")
@@ -555,6 +564,13 @@ class PipePanel(Panel):
             return
         self._update_visibility()
         self._changed(new_geometry=True)
+
+    @safe
+    def _thickness_typed(self, *_):
+        if self._quiet:
+            return
+        self.thickness_set = True
+        self._typed()
 
     @safe
     def _size_typed(self, *_):
