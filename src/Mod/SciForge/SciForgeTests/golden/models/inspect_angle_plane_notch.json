@@ -1,0 +1,108 @@
+{
+  "id": "inspect_angle_plane_notch",
+  "title": "Box, Plane at Angle 90 about the front top edge, a circle r 5 on the edge cut symmetric 10",
+  "tags": [
+    "construct",
+    "plane-at-angle",
+    "sketch-on-plane"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "construct",
+      "id": "a1",
+      "preset": "PlaneAtAngle",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "y",
+                "value": 0
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "values": {
+        "angle": 90
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "a1",
+      "point": [
+        20,
+        0,
+        10
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct_extrude",
+      "id": "e3",
+      "plane": "a1",
+      "circles": [
+        [
+          20,
+          0,
+          10,
+          5
+        ]
+      ],
+      "distance": 10,
+      "direction": "symmetric",
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 11803.650459150638,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "0 degrees lies in the front face; 90 turns it level with the top (z = 10). The cut is a cylinder r 5 about the edge's middle from z = 5 to 15: inside the box a half cylinder 5 deep, pi*25/2*5"
+  }
+}

@@ -539,14 +539,26 @@ def face_of(ref):
     return element(obj, sub)
 
 
+def upward(v):
+    """`v` turned to point "up": its Z part positive, else its Y part, else its X part.
+    Angles turn right-handed about such an axis, so they do not depend on which way
+    OpenCASCADE happens to run an edge or a surface's axis."""
+    v = _unit(v)
+    for part in (v.z, v.y, v.x):
+        if abs(part) > 1e-9:
+            return v if part > 0 else v * -1.0
+    return v
+
+
 def revolution_of(ref):
-    """(centre, axis, kind) of a cylinder / cone / torus / sphere face or a circular edge."""
+    """(centre, axis, kind) of a cylinder / cone / torus / sphere face or a circular edge;
+    the axis points up (see upward)."""
     obj, sub = ref[0], ref[1]
     if sub.startswith("Edge"):
         edge = element(obj, sub)
         if not is_circular(edge):
             raise ConstructError("%s is not round: pick a round face or a circle." % describe(*ref))
-        return V(edge.Curve.Center), _unit(edge.Curve.Axis), "Circle"
+        return V(edge.Curve.Center), upward(edge.Curve.Axis), "Circle"
     face = face_of(ref)
     surface = face.Surface
     kind = _surface_kind(face)
@@ -555,7 +567,7 @@ def revolution_of(ref):
             "%s is not round: pick a cylinder, cone, torus or ball face." % describe(*ref)
         )
     centre = V(surface.Apex) if kind == "Cone" else V(surface.Center)
-    return centre, _unit(surface.Axis), kind
+    return centre, upward(surface.Axis), kind
 
 
 # -- frames ------------------------------------------------------------------------------
@@ -673,10 +685,16 @@ def _c_OffsetPlane(refs, points, values, spec):
     return frame(origin + normal * d, normal, base.Rotation.multVec(V(1, 0, 0)))
 
 
-def _c_PlaneAtAngle(refs, points, values, spec):
-    p, d, length = line_of(refs[0])
+def angle_line(ref):
+    """(middle point, upward direction) of the line Plane at Angle turns about."""
+    p, d, length = line_of(ref)
     if length:
         p = p + d * (length / 2.0)
+    return p, upward(d), length
+
+
+def _c_PlaneAtAngle(refs, points, values, spec):
+    p, d, length = angle_line(refs[0])
     n0 = zero_normal(refs[0], d)
     n = App.Rotation(d, float(values.get("angle", 0.0))).multVec(n0)
     return frame(p, n, d)

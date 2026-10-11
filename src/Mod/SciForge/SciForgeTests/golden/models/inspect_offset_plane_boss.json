@@ -1,0 +1,102 @@
+{
+  "id": "inspect_offset_plane_boss",
+  "title": "Box, Offset Plane 5 above the top, a circle r 5 sketched on it extruded 5 down (join)",
+  "tags": [
+    "construct",
+    "offset-plane",
+    "sketch-on-plane"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "construct",
+      "id": "p1",
+      "preset": "OffsetPlane",
+      "refs": [
+        {
+          "face": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": 10
+            },
+            "count": 1
+          }
+        }
+      ],
+      "values": {
+        "distance": 5
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "p1",
+      "point": [
+        20,
+        15,
+        15
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct_extrude",
+      "id": "e3",
+      "plane": "p1",
+      "circles": [
+        [
+          20,
+          15,
+          15,
+          5
+        ]
+      ],
+      "distance": 5,
+      "flip": true,
+      "operation": "join"
+    }
+  ],
+  "expect": {
+    "volume": 12392.699081698724,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "40*30*10 + pi*5^2*5 (the boss from z=15 down to the top at z=10); box 6 faces + boss side + boss top"
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "id": "inspect_midplane_hole",
+  "title": "Box, Midplane of front and back faces, a circle r 3 on it cut symmetric 40 (a hole along Y)",
+  "tags": [
+    "construct",
+    "midplane",
+    "sketch-on-plane"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "construct",
+      "id": "m1",
+      "preset": "Midplane",
+      "refs": [
+        {
+          "face": {
+            "normal": [
+              0,
+              -1,
+              0
+            ],
+            "count": 1
+          }
+        },
+        {
+          "face": {
+            "normal": [
+              0,
+              1,
+              0
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "m1",
+      "point": [
+        20,
+        15,
+        5
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "op": "construct_extrude",
+      "id": "e3",
+      "plane": "m1",
+      "circles": [
+        [
+          20,
+          15,
+          5,
+          3
+        ]
+      ],
+      "distance": 40,
+      "direction": "symmetric",
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 11151.769983530756,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "the midplane is y = 15; the hole r 3 runs through all 30 mm of the box: 12000 - pi*9*30"
+  }
+}

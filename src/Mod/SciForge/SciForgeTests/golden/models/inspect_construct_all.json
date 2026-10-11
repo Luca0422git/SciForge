@@ -1,0 +1,1075 @@
+{
+  "id": "inspect_construct_all",
+  "title": "Box with a round boss; every CONSTRUCT entry built on it and checked",
+  "tags": [
+    "construct"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            5
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10
+    },
+    {
+      "op": "construct",
+      "id": "a1",
+      "preset": "AxisCylinder",
+      "refs": [
+        {
+          "face": {
+            "type": "cylinder",
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a1",
+      "point": [
+        10,
+        10,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "a2",
+      "preset": "AxisNormal",
+      "refs": [
+        {
+          "face": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": 10
+            },
+            "count": 1
+          }
+        }
+      ],
+      "points": [
+        [
+          30,
+          20,
+          10
+        ]
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a2",
+      "point": [
+        30,
+        20,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "a3",
+      "preset": "AxisNormal",
+      "refs": [
+        {
+          "face": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": 10
+            },
+            "count": 1
+          }
+        },
+        {
+          "vertex": [
+            40,
+            0,
+            10
+          ]
+        }
+      ],
+      "points": [
+        [
+          30,
+          20,
+          10
+        ],
+        null
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a3",
+      "point": [
+        40,
+        0,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "a4",
+      "preset": "AxisTwoPlanes",
+      "refs": [
+        {
+          "face": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": 10
+            },
+            "count": 1
+          }
+        },
+        {
+          "face": {
+            "normal": [
+              0,
+              -1,
+              0
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a4",
+      "point": [
+        0,
+        0,
+        10
+      ],
+      "direction": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "a5",
+      "preset": "AxisTwoPlanes",
+      "refs": [
+        {
+          "plane": "XY"
+        },
+        {
+          "plane": "XZ"
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a5",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "direction": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "a6",
+      "preset": "AxisTwoPoints",
+      "refs": [
+        {
+          "vertex": [
+            40,
+            0,
+            10
+          ]
+        },
+        {
+          "vertex": [
+            40,
+            30,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a6",
+      "point": [
+        40,
+        0,
+        10
+      ],
+      "direction": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "a7",
+      "preset": "AxisEdge",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "x",
+                "value": 40
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a7",
+      "point": [
+        40,
+        0,
+        10
+      ],
+      "direction": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "a8",
+      "preset": "AxisEdge",
+      "refs": [
+        {
+          "axis": "Z"
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "a8",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p1",
+      "preset": "PointVertex",
+      "refs": [
+        {
+          "vertex": [
+            40,
+            30,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "p1",
+      "point": [
+        40,
+        30,
+        10
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p2",
+      "preset": "PointTwoEdges",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "y",
+                "value": 0
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        },
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "x",
+                "value": 40
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "p2",
+      "point": [
+        40,
+        0,
+        10
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p3",
+      "preset": "PointThreePlanes",
+      "refs": [
+        {
+          "face": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": 10
+            },
+            "count": 1
+          }
+        },
+        {
+          "face": {
+            "normal": [
+              0,
+              -1,
+              0
+            ],
+            "count": 1
+          }
+        },
+        {
+          "face": {
+            "normal": [
+              1,
+              0,
+              0
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "p3",
+      "point": [
+        40,
+        0,
+        10
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p4",
+      "preset": "PointCenter",
+      "refs": [
+        {
+          "edge": {
+            "type": "circle",
+            "at": {
+              "axis": "z",
+              "value": 20
+            },
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "p4",
+      "point": [
+        10,
+        10,
+        20
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p5",
+      "preset": "PointEdgePlane",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              0,
+              0,
+              1
+            ],
+            "at": [
+              {
+                "axis": "x",
+                "value": 40
+              },
+              {
+                "axis": "y",
+                "value": 0
+              }
+            ],
+            "count": 1
+          }
+        },
+        {
+          "plane": "XY"
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "p5",
+      "point": [
+        40,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p6",
+      "preset": "PointAlongPath",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "y",
+                "value": 0
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "values": {
+        "fraction": 0.5
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "p6",
+      "point": [
+        20,
+        0,
+        10
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p7",
+      "preset": "PointThreePlanes",
+      "refs": [
+        {
+          "plane": "XY"
+        },
+        {
+          "plane": "XZ"
+        },
+        {
+          "plane": "YZ"
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "p7",
+      "point": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "p8",
+      "preset": "PointVertex",
+      "refs": [
+        {
+          "origin": true
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "p8",
+      "point": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q1",
+      "preset": "PlaneThreePoints",
+      "refs": [
+        {
+          "vertex": [
+            40,
+            0,
+            10
+          ]
+        },
+        {
+          "vertex": [
+            40,
+            30,
+            10
+          ]
+        },
+        {
+          "vertex": [
+            0,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "q1",
+      "point": [
+        0,
+        0,
+        10
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q2",
+      "preset": "PlaneTwoEdges",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "y",
+                "value": 0
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        },
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "x",
+                "value": 40
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "q2",
+      "point": [
+        0,
+        0,
+        10
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q3",
+      "preset": "PlaneAtPoint",
+      "refs": [
+        {
+          "face": {
+            "type": "cylinder",
+            "count": 1
+          }
+        },
+        {
+          "vertex": [
+            40,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "q3",
+      "point": [
+        14.743416490252569,
+        8.418861169915811,
+        10
+      ],
+      "normal": [
+        3,
+        -1,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q4",
+      "preset": "TangentPlane",
+      "refs": [
+        {
+          "face": {
+            "type": "cylinder",
+            "count": 1
+          }
+        }
+      ],
+      "values": {
+        "angle": 0
+      },
+      "points": [
+        [
+          15,
+          10,
+          15
+        ]
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "q4",
+      "point": [
+        15,
+        10,
+        15
+      ],
+      "normal": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q5",
+      "preset": "TangentPlane",
+      "refs": [
+        {
+          "face": {
+            "type": "cylinder",
+            "count": 1
+          }
+        }
+      ],
+      "values": {
+        "angle": 90
+      },
+      "points": [
+        [
+          15,
+          10,
+          15
+        ]
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "q5",
+      "point": [
+        10,
+        15,
+        15
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q6",
+      "preset": "PlaneAlongPath",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "y",
+                "value": 0
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "values": {
+        "fraction": 0.5
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "q6",
+      "point": [
+        20,
+        0,
+        10
+      ],
+      "normal": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q7",
+      "preset": "Midplane",
+      "refs": [
+        {
+          "face": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": 10
+            },
+            "count": 1
+          }
+        },
+        {
+          "face": {
+            "normal": [
+              1,
+              0,
+              0
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "construct_expect",
+      "target": "q7",
+      "point": [
+        40,
+        0,
+        10
+      ],
+      "normal": [
+        -1,
+        0,
+        1
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q8",
+      "preset": "PlaneAtAngle",
+      "refs": [
+        {
+          "axis": "X"
+        }
+      ],
+      "values": {
+        "angle": 30
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "q8",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "normal": [
+        0,
+        -0.5,
+        0.8660254037844386
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q9",
+      "preset": "OffsetPlane",
+      "refs": [
+        {
+          "plane": "YZ"
+        }
+      ],
+      "values": {
+        "distance": 7
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "q9",
+      "point": [
+        7,
+        0,
+        0
+      ],
+      "normal": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q10",
+      "preset": "OffsetPlane",
+      "refs": [
+        {
+          "construct": "q9"
+        }
+      ],
+      "values": {
+        "distance": 3
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "q10",
+      "point": [
+        10,
+        0,
+        0
+      ],
+      "normal": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "construct",
+      "id": "q11",
+      "preset": "PlaneAlongPath",
+      "refs": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "y",
+                "value": 0
+              },
+              {
+                "axis": "z",
+                "value": 10
+              }
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "values": {
+        "distance_type": "physical",
+        "distance": 0
+      }
+    },
+    {
+      "op": "construct_expect",
+      "target": "q11",
+      "point": [
+        0,
+        0,
+        10
+      ],
+      "normal": [
+        1,
+        0,
+        0
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 12785.398163397449,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "constructions do not change the part: box 40x30x10 + boss pi*25*10; each construct_expect is worked out by hand from the picks (corners, edges, faces of the box at x 0..40, y 0..30, z 0..10, boss r 5 about (10, 10) from z 10 to 20); Tangent Plane 90 turns about the boss axis; Plane at Angle 30 about X starts from XY"
+  }
+}

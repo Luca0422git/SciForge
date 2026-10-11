@@ -705,9 +705,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         """(centre, axis, zero direction, radius) of the angle handle: the ball stays in the
         plane (Plane at Angle) or just outside the round face (Tangent Plane)."""
         if self.key == "PlaneAtAngle":
-            p, d, length = construct.line_of(refs[0])
-            if length:
-                p = p + d * (length / 2.0)
+            p, d, length = construct.angle_line(refs[0])
             n0 = construct.zero_normal(refs[0], d)
             zero = n0.cross(d)
             radius = max(self._handle_size() * 2.0, (length or 0.0) * 0.35)
