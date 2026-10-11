@@ -1,0 +1,72 @@
+{
+  "id": "sf_loft_cone_point",
+  "title": "Loft: a circle r5 to a sketch point 20 above (a cone)",
+  "tags": [
+    "loft",
+    "fusion-loft"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XY",
+      "offset": 20,
+      "curves": [
+        {
+          "point": [
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "point": {
+            "sketch": "p1",
+            "at": [
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 523.5987755982989,
+    "area": 402.3677749251246,
+    "faces": 2,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      5,
+      5,
+      20
+    ],
+    "note": "Cone r5 h20: V = pi r^2 h / 3, A = pi r^2 + pi r s with s = sqrt(r^2 + h^2).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

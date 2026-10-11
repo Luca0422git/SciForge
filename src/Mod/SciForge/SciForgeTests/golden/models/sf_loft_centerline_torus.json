@@ -1,0 +1,84 @@
+{
+  "id": "sf_loft_centerline_torus",
+  "title": "Loft: two circles r5 square to a quarter-arc centerline (a quarter torus)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "centerline"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            30,
+            5
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_curves",
+      "id": "c1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            30,
+            0,
+            30,
+            90,
+            180
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "centerline": "c1"
+    }
+  ],
+  "expect": {
+    "volume": 3701.101650408509,
+    "area": 1637.5202928428932,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      30,
+      5,
+      35
+    ],
+    "note": "The profiles stay square to the arc (radius 30 about (30, 0, 0)) from the origin to (30, 0, 30): a quarter torus, V = pi r^2 (pi/2 R), side 2 pi r (pi/2 R) (Pappus), plus the two end discs. No face count: OpenCASCADE splits the side where the two circles' start points do not line up (a cosmetic seam).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

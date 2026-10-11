@@ -1,0 +1,104 @@
+{
+  "id": "sf_loft_edit_intersect",
+  "title": "Loft edited from the timeline: Join -> Intersect inside a block",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 30
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "operation": "join"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12000,
+        "source": "analytic",
+        "note": "the loft lies inside the 20 x 20 x 30 block"
+      }
+    },
+    {
+      "op": "sf_loft_edit",
+      "target": "l1",
+      "set": {
+        "operation": "intersect"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 10742.857918218218,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      30
+    ],
+    "note": "Join adds nothing (the square-to-circle loft lies inside the 20 x 20 x 30 block); Intersect keeps just the loft: V as in sf_loft_square_circle.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

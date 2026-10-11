@@ -24,6 +24,15 @@ builder.py is imported.
 
   {"op": "sf_sweep_edit", "target": "w1", "set": {"distance": 0.5, ...}}
       double-click the sweep in the timeline and change these options.
+
+  {"op": "sf_loft", "id": "l1", "profiles": [<profile>, ...], "rails": [<curves>, ...],
+   "centerline": <curves>, "guide": "rails" | "centerline", "closed": false,
+   "operation": "auto" | join | cut | intersect | new_body}
+      profiles in loft order: {"profile": "s1"} (its one area, else the whole sketch),
+      {"profile": "s1", "region": [x, y]}, {"face": selector}, {"point": {"sketch": "p1",
+      "at": [x, y]}} (a sketch point, first or last only). Each rails entry is one rail.
+
+  {"op": "sf_loft_edit", "target": "l1", "set": {"closed": true, ...}}
 """
 import math
 
@@ -193,6 +202,59 @@ def op_sf_sweep_edit(self, step):
     return _edit(self, step, "sf_sweep", sweep, (sweep.SweepError, curves.CurveError))
 
 
+def _loft_profile(builder, spec, where):
+    """One loft profile: {"profile": sketch} (its one area, else the whole sketch),
+    {"profile": sketch, "region": [x, y]}, {"face": selector}, {"point": {"sketch", "at"}}."""
+    if "point" in spec:
+        sketch = _sketch(builder, spec["point"]["sketch"], where)
+        x, y = spec["point"]["at"]
+        where_pt = sketch.getGlobalPlacement().multVec(App.Vector(x, y, 0))
+        for i, vertex in enumerate(sketch.Shape.Vertexes, start=1):
+            if (vertex.Point - where_pt).Length < 1e-6:
+                return (sketch, "Vertex%d" % i)
+        raise BuildError("%s: no point of %s at %s" % (where, spec["point"]["sketch"], [x, y]))
+    if "region" in spec:
+        sketch = _sketch(builder, spec["profile"], where)
+        return builder._region({"id": where}, [sketch], spec["region"])
+    return profiles_of(builder, spec, where)[0]
+
+
+LOFT_KEYS = ("guide", "closed", "operation")
+
+
+def op_sf_loft(self, step):
+    from sciforge import curves, loft
+
+    where = "sf_loft %r" % step["id"]
+    profiles = [_loft_profile(self, spec, where) for spec in step["profiles"]]
+    rails = []
+    for spec in step.get("rails", []):
+        rails += curves_of(self, spec, where)
+    line = curves_of(self, step["centerline"], where) if "centerline" in step else []
+    options = {k: step[k] for k in LOFT_KEYS if k in step}
+    if "centerline" in step:
+        options.setdefault("guide", "centerline")
+    if options.get("operation", "auto") == "auto":
+        tip = self.body.Tip
+        base = None
+        if tip is not None and not tip.Shape.isNull():
+            base = curves.to_global(tip.Shape, tip)
+        options["operation"] = loft.auto_operation(base, profiles, rails, line, options)
+    try:
+        feature = loft.make(profiles, options, rails, line, step["id"])
+    except (loft.LoftError, curves.CurveError) as exc:
+        raise BuildError("%s: %s" % (where, exc))
+    return _settle(self, step, feature, loft.owner_body)
+
+
+def op_sf_loft_edit(self, step):
+    from sciforge import curves, loft
+
+    return _edit(self, step, "sf_loft", loft, (loft.LoftError, curves.CurveError))
+
+
 Builder.op_sf_curves = op_sf_curves
 Builder.op_sf_sweep = op_sf_sweep
 Builder.op_sf_sweep_edit = op_sf_sweep_edit
+Builder.op_sf_loft = op_sf_loft
+Builder.op_sf_loft_edit = op_sf_loft_edit

@@ -1,0 +1,80 @@
+{
+  "id": "sf_loft_one_rail",
+  "title": "Loft: two 10 x 10 squares 40 apart with one bulging rail (the loft leans out to it)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "rails"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ],
+      "offset": 40
+    },
+    {
+      "op": "sf_curves",
+      "id": "r1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            -60.166666666666664,
+            20,
+            68.16666666666666,
+            -17.061531219896267,
+            17.061531219896267
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "rails": [
+        "r1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 4000,
+    "rel_tol": 0.0001,
+    "note": "One rail moves each section without changing it, so every level section is still the 10 x 10 square: V = 100 * 40 (Cavalieri). SciForge fits sections every 40/9 mm to the rail (hence the tolerance).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

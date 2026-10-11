@@ -1,0 +1,69 @@
+{
+  "id": "sf_loft_frustum",
+  "title": "Loft: a 20 x 20 square to a 10 x 10 square 30 higher (a pyramid frustum)",
+  "tags": [
+    "loft",
+    "fusion-loft"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 7000.0,
+    "area": 2324.828759089466,
+    "faces": 6,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      30
+    ],
+    "note": "Frustum V = h (A1 + A2 + sqrt(A1 A2)) / 3; four trapezoid sides (20 + 10) / 2 wide and sqrt(30^2 + 5^2) high, plus the two squares.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

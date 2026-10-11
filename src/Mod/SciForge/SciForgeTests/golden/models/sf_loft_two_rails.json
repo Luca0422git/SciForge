@@ -1,0 +1,111 @@
+{
+  "id": "sf_loft_two_rails",
+  "title": "Loft: two 10 x 10 squares 40 apart between two bulging rails (a barrel)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "rails"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ],
+      "offset": 40
+    },
+    {
+      "op": "sf_curves",
+      "id": "r1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            -60.166666666666664,
+            20,
+            68.16666666666666,
+            -17.061531219896267,
+            17.061531219896267
+          ]
+        },
+        {
+          "arc": [
+            60.166666666666664,
+            20,
+            68.16666666666666,
+            162.93846878010373,
+            197.06153121989627
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "rails": [
+        {
+          "sketch": "r1",
+          "at": [
+            8,
+            20
+          ]
+        },
+        {
+          "sketch": "r1",
+          "at": [
+            -8,
+            20
+          ]
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 7987.272836354412,
+    "rel_tol": 0.002,
+    "bbox": [
+      -8,
+      -8,
+      0,
+      8,
+      8,
+      40
+    ],
+    "abs_tol": 0.02,
+    "note": "The rails are arcs through (+-5, 0), (+-8, 20), (+-5, 40) (circle centre x = -361/6 at z 20); each section is the square scaled to touch both: 2 x(z) wide. V = integral of 4 x(z)^2 dz (Simpson, 4000 steps). SciForge fits sections every 40/9 mm, so the loft matches to about 0.1 %.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}
