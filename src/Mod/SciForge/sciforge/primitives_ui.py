@@ -132,10 +132,25 @@ def view_scale(view, point):
         return 0.1
 
 
+def nice_floor(value):
+    """The largest round step (1, 2.5, 5 x 10^n) not above `value`: clicks land on values
+    a person would type (every multiple of 5 mm is reachable at any normal zoom), and the
+    step is never finer than the few pixels a hand misses by."""
+    value = abs(float(value))
+    if value < 1e-9:
+        return 0.0
+    power = 10.0 ** math.floor(math.log10(value))
+    best = power
+    for step in (1.0, 2.5, 5.0):
+        if step * power <= value * 1.0001:
+            best = step * power
+    return best
+
+
 def round_to(value, step):
     if step <= 0:
         return value
-    out = round(value / step) * step
+    out = math.floor(value / step + 0.5) * step
     return round(out, 9) + 0.0
 
 
@@ -486,7 +501,7 @@ class Placer:
             pixel = view_scale(self.view, point)
         if math.hypot(local.x, local.y) <= SNAP_PIXELS * pixel:
             return (0.0, 0.0)
-        step = primitives.nice(3.0 * pixel)
+        step = nice_floor(6.0 * pixel)
         return (round_to(local.x, step), round_to(local.y, step))
 
     def _button(self, info):

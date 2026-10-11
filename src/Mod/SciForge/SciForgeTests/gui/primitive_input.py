@@ -18,6 +18,14 @@ def menu(label):
     return sketch_input.menu_item("CREATE", label)
 
 
+def tick(box):
+    """Click a check box on its box, as a person does (Qt ignores a click beside the box
+    and its text, e.g. in the middle of a wide form row)."""
+    from SciForgeTests.gui import widget_input
+
+    widget_input.click(box, QtCore.QPoint(8, box.height() // 2))
+
+
 def panel(cls_name=None):
     """The primitive dialog that is open (Box, Cylinder... or the class named), or None."""
     from sciforge import primitives_ui

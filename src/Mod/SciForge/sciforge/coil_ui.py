@@ -159,6 +159,8 @@ class CoilPanel(PlacedPanel):
             turns, height, pitch = old["revolutions"], old["height"], old["pitch"]
         if new_type == "spiral":
             pitch = max(pitch, primitives.nice(sum(coil.section_extent(old)[:2]) * 1.5))
+        elif abs(height) < 1e-9:  # from a flat spiral: rise one pitch per turn
+            height = float(old.get("height") or 0.0) or pitch * turns
         self.options.update(revolutions=round(turns, 4), height=height, pitch=pitch)
         self.options["type"] = new_type
         self._show_fields()

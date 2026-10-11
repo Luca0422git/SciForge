@@ -162,7 +162,20 @@ def ref_label(ref):
                 return text
         return obj.Label
     if sub:
-        return "Face of %s" % obj.Label
+        return "Face of %s" % step_name(obj)
+    return step_name(obj)
+
+
+def step_name(obj):
+    """What the timeline calls a step ("Extrude 2"), or its label."""
+    try:
+        from . import timeline_ops
+
+        for item in timeline_ops.timeline(obj.Document, deps=False).items:
+            if item.name == obj.Name:
+                return item.display
+    except Exception:
+        pass
     return obj.Label
 
 
