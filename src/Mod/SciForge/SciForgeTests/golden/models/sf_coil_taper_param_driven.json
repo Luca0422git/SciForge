@@ -1,0 +1,70 @@
+{
+  "id": "sf_coil_taper_param_driven",
+  "title": "Narrowing coil (Revolution and Height) whose angle, height and revolutions are parameters; the parameters change",
+  "tags": [
+    "primitive",
+    "coil",
+    "taper",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "taper",
+      "value": -10,
+      "unit": "deg"
+    },
+    {
+      "op": "parameter",
+      "name": "rise",
+      "value": 20,
+      "unit": "mm"
+    },
+    {
+      "op": "parameter",
+      "name": "turns",
+      "value": 4,
+      "unit": ""
+    },
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "diameter": 20,
+      "section_size": 2,
+      "section": "circular",
+      "section_position": "inside",
+      "type": "rev_height",
+      "revolutions": 4,
+      "height": 20,
+      "angle": -10,
+      "expressions": {
+        "angle": "taper",
+        "height": "rise",
+        "revolutions": "turns"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "taper",
+      "value": -8
+    },
+    {
+      "op": "parameter",
+      "name": "rise",
+      "value": 30
+    },
+    {
+      "op": "parameter",
+      "name": "turns",
+      "value": 3
+    }
+  ],
+  "expect": {
+    "volume": 408.12121799479075,
+    "rel_tol": 0.0001,
+    "solids": 1,
+    "note": "After the change: 3 turns over 30 mm narrowing by 8 deg; Pappus with the mean radius 9 - 15 tan 8: V = pi x 2 pi x 3 x (9 - 15 tan 8). The section (which stands at the narrow end) follows the parameters too. The helix is an approximation, hence rel_tol 1e-4.",
+    "source": "analytic"
+  }
+}

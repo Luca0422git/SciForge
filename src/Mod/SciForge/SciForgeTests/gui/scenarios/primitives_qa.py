@@ -242,7 +242,10 @@ def c_replane():
 def c_planes_shown():
     p = pi.panel("CylinderPanel")
     h.check("the planes show again", p.state == "replane" and p.planes is not None, p.state)
-    h.click(V(-15, -15, 0))
+    # Where XY is in front: the squares are as big as the design, and from the iso view
+    # (-15, -15, 0) lies behind the YZ square (the front square takes the click, as in
+    # Fusion).
+    h.click(V(15, -15, 0))
 
 
 c_planes_shown.wait_ms = 1500
@@ -318,8 +321,10 @@ def d_coil():
 def d_coil_plane():
     p = pi.panel("CoilPanel")
     h.check("Coil waits", p is not None and p.state == "plane")
-    # the XZ square, left of the part (nothing in front of it there)
-    h.click(V(-20, 0, 10))
+    # The XZ square above the part: nothing is in front of it there (left of the part, at
+    # (-20, 0, 10), the YZ square is in front from the iso view since the squares are as big
+    # as the design).
+    h.click(V(20, 0, 30))
 
 
 def d_coil_centre():

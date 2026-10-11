@@ -1,0 +1,58 @@
+{
+  "id": "sf_coil_taper_height_pitch_param",
+  "title": "Narrowing coil (Height and Pitch, angle -10) whose height and pitch are parameters; the parameters change",
+  "tags": [
+    "primitive",
+    "coil",
+    "taper",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "rise_h",
+      "value": 20,
+      "unit": "mm"
+    },
+    {
+      "op": "parameter",
+      "name": "pitch_q",
+      "value": 5,
+      "unit": "mm"
+    },
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "diameter": 20,
+      "section_size": 2,
+      "section": "circular",
+      "section_position": "inside",
+      "type": "height_pitch",
+      "height": 20,
+      "pitch": 5,
+      "angle": -10,
+      "expressions": {
+        "height": "rise_h",
+        "pitch": "pitch_q"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "rise_h",
+      "value": 24
+    },
+    {
+      "op": "parameter",
+      "name": "pitch_q",
+      "value": 6
+    }
+  ],
+  "expect": {
+    "volume": 543.5448725746517,
+    "rel_tol": 0.0001,
+    "solids": 1,
+    "note": "After the change: 24 mm of pitch 6 = 4 turns, narrowing by 10 deg: V = pi x 2 pi x 4 x (9 - 12 tan 10). The section's turns are worked out from the two parameters (height / pitch), so it still ends where the coil begins. The helix is an approximation, hence rel_tol 1e-4.",
+    "source": "analytic"
+  }
+}
