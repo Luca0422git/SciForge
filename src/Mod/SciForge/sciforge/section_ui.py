@@ -575,7 +575,11 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         return [(self.ref[0], [self.ref[1]] if self.ref[1] else [])]
 
     def picks_changed(self, added, dropped):
-        if any(h.busy() for h in self.handles.values()):
+        # A handle's press or release is not a pick: FreeCAD also selected the face under
+        # the mouse then. Letting go of the arrow far down selected the bottom face (seen
+        # from inside the cut) and the section jumped onto it; the handles are made anew
+        # when a drag ends, so ask handles3d (it remembers it for every handle).
+        if handles3d.just_used() or any(h.busy() for h in self.handles.values()):
             return False
         if self.planes is not None and self.planes.clicked_recently():
             added = []
@@ -704,10 +708,9 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         return base, moved, after_x
 
     def _size(self):
-        size = 50.0
-        for _o, shape in cut_shapes(self.doc):
-            size = max(10.0, shape.BoundBox.DiagonalLength)
-        return size
+        """How big the handles are drawn: from the biggest body the section cuts."""
+        sizes = [shape.BoundBox.DiagonalLength for _o, shape in cut_shapes(self.doc)]
+        return max([10.0] + sizes) if sizes else 50.0
 
     def _rebuild_handles(self):
         self._remove_handles()

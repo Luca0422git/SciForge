@@ -643,8 +643,8 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         return False
 
     def picks_changed(self, added, dropped):
-        if self.handle is not None and self.handle.busy():
-            return False  # the press was on the handle, not a pick
+        if handles3d.just_used() or (self.handle is not None and self.handle.busy()):
+            return False  # the press or release was the handle's, not a pick
         changed = False
         for obj, short, _point in dropped:
             obj, short = construct.normalize_pick(obj, short)

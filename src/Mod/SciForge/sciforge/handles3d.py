@@ -25,6 +25,21 @@ from .compat import QtCore
 BLUE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
 BLUE_ACTIVE = (0.55, 0.80, 1.0)
 GRAB = {"time": 0.0}  # one press moves one handle
+USED = {"time": 0.0}  # when any handle was last pressed, dragged or let go
+JUST_USED_S = 0.6
+
+
+def touch():
+    USED["time"] = time.time()
+
+
+def just_used(seconds=JUST_USED_S):
+    """True while a handle is in use and just after. FreeCAD's selection also takes the
+    press and the release of a handle's drag as a click on what is under the mouse (the
+    face behind the handle, or the face under the mouse where the drag ends): that is not
+    a pick. A dialog often makes new handles when a drag ends (the old one's own memory of
+    the drag is gone then), so this is remembered here, for every handle."""
+    return time.time() - USED["time"] < seconds
 
 
 def _mouse_ray(view, position):
@@ -79,6 +94,7 @@ class ReleaseWatch:
             handle._drag = False
             handle._released = True
             handle._last_event = time.time()
+            touch()
         self.remove()
 
     def remove(self):
@@ -186,12 +202,14 @@ class _Handle:
                     GRAB["time"] = time.time()
                     self._drag = True
                     self._last_event = time.time()
+                    touch()
                     self._press(position)
                     watch_release(self)
             elif self._drag:
                 self._drag = False
                 self._released = True
                 self._last_event = time.time()
+                touch()
                 stop_watching(self)
         except Exception as exc:
             warn("handle: %s" % exc)
@@ -203,6 +221,7 @@ class _Handle:
                 self._hover = self.hit(position)
                 return
             self._last_event = time.time()
+            touch()
             value = self._drag_to(position)
             if value is not None:
                 self._pending = value
@@ -236,6 +255,7 @@ class _Handle:
             if self._released and not self._drag:
                 self._released = False
                 self._pending = None
+                touch()  # also a release found from Qt's mouse state (pickpanel.Arrow)
                 if self.on_release:
                     self.on_release(self.value())
         except Exception as exc:
@@ -266,15 +286,29 @@ def angle_handle(*args, **kwargs):
 
     class WatchedAngleHandle(AngleHandle):
         def _button(self, info):
+            try:
+                pressed = info.get("Button") == "BUTTON1" and info.get("State") == "DOWN"
+                if pressed and not self._drag and time.time() - GRAB["time"] <= 0.05:
+                    return  # an arrow of this dialog took this press (one press, one handle)
+            except Exception:
+                pass
             was = self._drag
             super()._button(info)
             try:
                 if self._drag and not was:
+                    GRAB["time"] = time.time()
+                    touch()
                     watch_release(self)
                 elif was and not self._drag:
+                    touch()
                     stop_watching(self)
             except Exception as exc:
                 warn("handle: %s" % exc)
+
+        def _moved(self, info):
+            super()._moved(info)
+            if self._drag:
+                touch()
 
         def remove(self):
             stop_watching(self)
