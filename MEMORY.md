@@ -163,12 +163,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       `bodies.py` helpers for every multi-body tool. Spec + gaps: `docs/sciforge/parity/
       bodies.md`. 6 scenarios (`bodies_*.py`), 24 golden models (`bodies_*`), unit tests
       `test_bodies_schema.py`. Ribbon: Split Body runs `SciForge_SplitBody` (was greyed).
-- [x] Body tools QA pass (branch `sf/bodies-qa`): 11 bugs fixed (used-up body left active,
+- [x] Body tools QA pass (branch `sf/bodies-qa`): 12 problems fixed (used-up body left active,
       Combine edit hiding its tools, tool clicks swallowed by the Join preview, Move type
       chosen first eating the body click, browser/timeline Delete breaking Combines, New Body
       target deletion, reopened files activating a used-up body, round-edge snap to the
       circle seam, face looks lost on Move, lavender instead of grey, materials not
-      draggable). Scenarios `bodies_qa.py` (8 paths) and `bodies_qa_2.py` (11 paths), golden
+      draggable, a failed step showing its old result). Scenarios `bodies_qa.py` (8 paths) and
+      `bodies_qa_2.py` (10 paths), golden
       `bodies_combine_new_body_target_deleted`.
 
 ## Known issues / findings
@@ -731,6 +732,38 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Left for others (see findings): the browser to show a body's material and hide used-up
   bodies, Inspect to read `bodies.mass()`, the timeline a "delete_face" kind and roll-back
   of steps outside bodies (a Move copy).
+
+### 2026-10-11: QA of the body tools (branch `sf/bodies-qa`)
+- Used the six body tools like Luca would (wrong pick order, OK with nothing picked, Esc
+  half way, values typed while the preview runs, handles dragged far and negative, edits
+  from the timeline twice, undo/redo, save/close/reopen/edit, Create Sketch/Extrude/Press
+  Pull before and after, a part of several features, another command's key while a dialog
+  is open). Scenarios `bodies_qa.py` (paths A-H) and `bodies_qa_2.py` (paths I-R).
+- Bugs fixed (all in the bodies files): (1) after a Combine the used-up tool body stayed the
+  active body, so the next sketch/extrude went into a hidden body; (2) the same after
+  reopening a file (the observer slot the teammate used never fires); (3) editing a Combine
+  from the timeline did not show its tools; (4) a click on a picked tool under the Join
+  preview landed on the preview and could not drop it; (5) Move: choosing Point to Point or
+  Rotate before the body took the body click as the point/axis; (6) the browser's and the
+  timeline's own Delete of a used-up tool body broke the Combine (now kept, same undo step);
+  (7) deleting a New Body Combine's target body broke it (FrozenTarget), and such Combines
+  can be edited; (8) Point to Point on a round edge snapped to the circle's seam point;
+  (9) face looks were lost when the body was moved; (10) faces without a look (and bodies
+  after Esc/undo of a look) turned lavender instead of the usual grey; (11) a failed
+  Combine/Move/Delete Face kept showing its last result; plus Physical Material by drag and
+  drop (Fusion's way).
+- Known limit found: a Press Pull on a face a Join merged loses it when the Combine is
+  switched to Cut (FreeCAD naming; FreeCAD's own Boolean does the same) and then keeps
+  showing its last result (Press Pull owner).
+- Full suite at the end (no --only, 4 CPUs shared with another agent's GUI tests): "all
+  passed". Unit 166 OK; golden 158 pass + 1 xfail (`plate_hole_grid`, core patch #4);
+  smoke 70/70; journey 25/25; 58 of 58 scenarios PASS, 4930 checks (bodies_qa 312,
+  bodies_qa_2 225, the teammate's six unchanged: combine 90, split 82, move 85, delete 63,
+  look 58, timeline 64; ribbon_sweep 104).
+- For other owners: Press Pull (re-find a face like the sketch attacher does; a failed Press
+  Pull should show the body without it), browser (material, hide used-up bodies), Inspect
+  (mass via `bodies.mass`), timeline (roll back steps outside bodies), hole
+  (`thread_ui.py`'s `slotFinishRestoreDocument` never fires).
 
 ## Next steps (in order)
 

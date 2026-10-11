@@ -15,7 +15,8 @@ the timeline, typing into the dialog fields.
      Tool): a plug r 3 through the whole part becomes its own body. Undo.
   K  Combine with two tool bodies; a click on a picked tool drops it again (it is drawn
      solid again and stays in the design after OK). Edited from the timeline: the dropped
-     body clicked back in.
+     body clicked back in. Edited again to Intersect (the two tools share nothing): the reason
+     is in the dialog and the body is drawn as it was before the Combine; Esc.
   L  Rotate about a straight edge of the body (the vertical edge at x 40, y 0), -90
      typed: the body turns about that edge.
   M  Combine with Body2 as the target (the first body used up), saved, closed, opened again;
@@ -416,6 +417,37 @@ def k_added():
         h.check("two tools again", len(p.options["tools"]) == 2, p.options)
     h.check("23000 again", s.close(s.volume(s.bodies()[0]), 23000), s.volume(s.bodies()[0]))
     h.task_button("OK")
+
+
+def k_edit_intersect():
+    s.timeline_double_click(combines()[0])
+
+
+def k_intersect():
+    p = s.panel()
+    if h.check("Combine edit open", p is not None and p.editing, p):
+        b.choose(p.operation, "Intersect")  # Body2 and Body3 share nothing: nothing is left
+
+
+def k_intersect_refused():
+    p = s.panel()
+    if h.check("dialog still open", p is not None):
+        text = p.message.text().lower()
+        h.check("the reason is in the dialog", "overlap" in text or "nothing" in text, text)
+    tip = s.bodies()[0].Tip
+    got = tip.Shape.Volume if not tip.Shape.isNull() else 0
+    h.check(
+        "the body is drawn as before the Combine (12000), not the last result",
+        s.close(got, 12000),
+        got,
+    )
+    h.shot("K-intersect-nothing")
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def k_intersect_cancelled():
+    h.check("Esc closed the dialog", s.panel() is None)
+    h.check("23000 again", s.close(s.volume(s.bodies()[0]), 23000), s.volume(s.bodies()[0]))
 
 
 def k_added_done():
@@ -1022,6 +1054,10 @@ h.run(
         k_add_back,
         k_added,
         k_added_done,
+        k_edit_intersect,
+        k_intersect,
+        k_intersect_refused,
+        k_intersect_cancelled,
     ]
     + [s.new_design("QA_Rotate")]
     + s.box_steps("rotate_box", (0, 0, 40, 30), 10, V(12, -8, 0))
