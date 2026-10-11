@@ -9,8 +9,10 @@ sketched on its top face at x = 30 .. 50, y = 20 .. 40 and extruded 5 down as a 
     = (22.857, 17.143, 5.357); of body 1 alone: (20, 15, 5)
   interference of the two: x 30 .. 40, y 20 .. 30, z 5 .. 10 = 10 * 10 * 5 = 500
 Paths: nothing selected (all visible bodies), a body clicked, OK, the Analysis folder,
-undo / redo, edited again from the browser, Cancel; Interference: two bodies clicked, Compute,
-Include Coincident Faces, OK, edited again, Esc."""
+undo / redo, edited again from the browser, Cancel; a second one with nothing picked follows
+the design: body 2 hidden (centre of body 1), shown again, its extrude edited to 10 deep
+(body 2 4000, centre (40, 30, 5): both (25, 18.75, 5)), undo; Interference: two bodies
+clicked, Compute, Include Coincident Faces, OK, edited again, Esc."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -197,6 +199,99 @@ def com_cancelled():
     h.check("still one", len(kinds(obj.SciForgeType)) == 1)
 
 
+# -- a Center of Mass of all visible bodies follows the design -----------------------------------
+BOTH = V(320000.0 / 14000, 240000.0 / 14000, 75000.0 / 14000)
+
+
+def com2():
+    obj = App.ActiveDocument.getObject(st.get("com2", ""))
+    return obj
+
+
+def com_all_start():
+    h.click_empty()
+    s.menu("INSPECT", "Center of Mass")
+
+
+def com_all_ok():
+    p = b.active_panel()
+    text = p.box.button.text() if p is not None and hasattr(p, "box") else None
+    h.check("nothing picked: all visible bodies", text == "All visible bodies", text)
+    h.task_button("OK")
+
+
+def com_all_kept():
+    from sciforge import analysis
+
+    found = [o for o in kinds(analysis.COM_KIND) if o.Name != st["com"]]
+    h.check("Center of Mass2 kept", [o.Label for o in found] == ["Center of Mass2"], found)
+    if not found:
+        return
+    st["com2"] = found[0].Name
+    h.check("no bodies stored (all visible)", not found[0].Bodies, found[0].Bodies)
+    h.check("at the centre of both", s.near(found[0].Position, BOTH, 1e-9), found[0].Position)
+    s.eye(App.ActiveDocument.getObject(st["b2"]).Label)
+
+
+def com_follows_hidden():
+    h.check("body 2 hidden", not App.ActiveDocument.getObject(st["b2"]).ViewObject.Visibility)
+    h.check(
+        "body 2 hidden: the centre of body 1 alone",
+        com2() is not None and s.near(com2().Position, V(20, 15, 5), 1e-9),
+        com2() and com2().Position,
+    )
+    s.eye(App.ActiveDocument.getObject(st["b2"]).Label)
+
+
+def com_follows_shown():
+    h.check(
+        "body 2 shown again: the centre of both",
+        com2() is not None and s.near(com2().Position, BOTH, 1e-9),
+        com2() and com2().Position,
+    )
+    h.click_empty()
+    s.double_click_timeline(App.ActiveDocument.getObject(st["b2"]).Tip)
+
+
+def com_edit_extrude():
+    p = b.active_panel()
+    field = getattr(getattr(p, "distance", None), "widget", None)
+    h.check("body 2's extrude opens to edit", field is not None, p)
+    if field is not None:
+        s.type_into(field, "-10")
+
+
+def com_extrude_ok():
+    h.task_button("OK")
+
+
+def com_follows_edit():
+    """Body 2 now 20 x 20 x 10 (4000, centre (40, 30, 5)): both (25, 18.75, 5)."""
+    v = App.ActiveDocument.getObject(st["b2"]).Shape.Volume
+    h.check("body 2 is 4000", s.close(v, 4000.0), v)
+    h.check(
+        "the all-bodies centre moved: (25, 18.75, 5)",
+        com2() is not None and s.near(com2().Position, V(25, 18.75, 5), 1e-9),
+        com2() and com2().Position,
+    )
+    first = App.ActiveDocument.getObject(st["com"])
+    h.check("body 1's centre stays", s.near(first.Position, V(20, 15, 5), 1e-9), first.Position)
+    bad = [o.Label for o in App.ActiveDocument.Objects if "Invalid" in o.State]
+    h.check("nothing broken", not bad, bad)
+    h.shot("2-com-follows")
+    s.undo()
+
+
+def com_follows_undo():
+    v = App.ActiveDocument.getObject(st["b2"]).Shape.Volume
+    h.check("Undo: body 2 is 2000 again", s.close(v, 2000.0), v)
+    h.check(
+        "Undo: the centre of both again",
+        com2() is not None and s.near(com2().Position, BOTH, 1e-9),
+        com2() and com2().Position,
+    )
+
+
 # -- Interference -----------------------------------------------------------------------------------------
 def int_start():
     h.click_empty()
@@ -319,6 +414,15 @@ h.run(
         com_edit_dialog,
         com_edit_both,
         com_cancelled,
+        com_all_start,
+        com_all_ok,
+        com_all_kept,
+        com_follows_hidden,
+        com_follows_shown,
+        com_edit_extrude,
+        com_extrude_ok,
+        com_follows_edit,
+        com_follows_undo,
         int_start,
         int_waits,
         int_second,

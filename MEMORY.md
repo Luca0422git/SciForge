@@ -93,7 +93,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       is open). **Slot order unconfirmed.**
 - [x] Browser panel with Fusion's structure (7.2), eye toggles, rename, activate
 - [x] Change Parameters (7.4): user params (App::VarSet "Parameters"), model params, bare names
-- [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed)
+- [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed);
+      replaced by the CONSTRUCT / INSPECT pass below (branch `sf/inspect`)
 - [x] Timeline marker drag + playback; ViewCube colours; 3D Print (3MF/STL) export
 - [ ] Unified Revolve / Hole / Fillet dialogs Fusion-style (FreeCAD's dialogs used meanwhile)
 - [ ] ViewCube shape, doc tabs in the app bar, floating command dialogs (Sketch Palette: done)
@@ -161,6 +162,23 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       corner, arrows that move with the part. Shared dialog base `pickpanel.py`. Ribbon: Scale
       now runs `SciForge_Scale` (was greyed). 6 scenarios (`shell_draft*.py`), 20 golden models
       (`sf_shell_*`, `sf_draft_*`, `sf_scale_*`), unit tests `test_shell_draft_core.py`.
+- [x] CONSTRUCT and INSPECT, Fusion-style (branch `sf/inspect`; spec + gaps in
+      `docs/sciforge/parity/inspect.md`). CONSTRUCT (`construct.py` / `construct_ui.py`): all
+      19 menu entries (8 planes, 5 axes, 6 points) in one dialog kind: boxes that wait blue,
+      origin squares / axes / point drawn to click while a box waits, pre-selection used, live
+      datum, blue arrow (Offset Plane), curved handle (Plane at Angle, Tangent Plane), sliding
+      dot (Along Path), parameters/formulas, timeline edit, errors in the dialog. The
+      "Perpendicular Plane" placeholder became Fusion's "Plane Tangent to Face at Point".
+      Construction geometry works in Create Sketch, Extrude To Object, Revolve's axis and other
+      constructs; editing a plane moves what is built on it. Measure (I, `measure.py` /
+      `measure_ui.py`): one or two picks, minimum distance, angle, delta X/Y/Z, area, length,
+      volume, position, radius; Selection Filter, Precision, Show Snap Points, click to copy,
+      design units. Section Analysis (`section.py` / `section_ui.py`): face/plane, distance
+      arrow, X/Y angle handles, Flip, colour + hatch, stored in the browser's Analysis folder
+      (eye shows/hides). Center of Mass (`analysis.py` / `com_ui.py`) and Interference
+      (`interference_ui.py`): stored in the Analysis folder, follow the design. 7 scenarios
+      (`inspect*.py`), 6 golden models (`inspect_*`), unit tests `test_inspect_core.py`. Ribbon:
+      Interference and Center of Mass now run SciForge commands (were greyed).
 
 ## Known issues / findings
 
@@ -530,6 +548,30 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - Draggers inside a see-through part cannot be grabbed (Coin gives the click to the part's
     face in front): the Draft handle sits on the face's continuation outside the part, the
     Scale arrow keeps a gap from the corner it sits on (the corner stays clickable).
+- **CONSTRUCT / INSPECT findings (2026-10-11, branch `sf/inspect`):**
+  - FreeCAD's attacher cannot express most Fusion constructions (angle about an edge, tangent
+    at a clicked spot, a fraction along a curve). SciForge attaches those datums to a hidden
+    helper in the body (`construct.ConstructionFrame`, `SciForgeTimeline = False`,
+    `SciForgeRole`) that works out the exact frame on every recompute; Offset Plane of a face
+    of the same body stays FreeCAD's own FlatFace + offset (its distance is an expression).
+  - `PropertyLinkSubList` groups consecutive picks on the same object into one entry with
+    several sub-names: read it back with `construct.expand()` or picks get lost.
+  - Clicking a cylinder in the view often hits its seam edge: construct turns a seam edge into
+    the face (`construct.seam_face`).
+  - Angles about an edge must not depend on which way OpenCASCADE runs the edge: they turn
+    about the "upward" direction (`construct.upward`).
+  - Datum planes are big and in front: a scenario that clicks a face behind one hides it with
+    the browser eye first (that is what a person would do too).
+  - Section Analysis cuts with a Coin clip plane (`SciForgeSectionClip`) inserted first in each
+    body's view root, found again on every refresh (never keep a pointer); cut faces are
+    `shape.common(big face)`, drawn by the analysis' own view provider.
+  - A Center of Mass with nothing picked links to no body, so FreeCAD never recomputes it: a
+    document observer measures it again after recomputes, visibility changes and undo/redo
+    (`analysis.follow`, values marked Output so writing them does not touch the object).
+  - The browser's Analysis folder opens collapsed; scenarios open it with the keyboard
+    (row click + Right).
+  - Run `black` only on your own files: a reformatted shared file broke another agent's text
+    replacements.
 
 ## Questions waiting for Luca
 
@@ -743,10 +785,30 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   not list SciForge's own Shell (hollow/Both) and Scale values (`parameters.py` knows only
   Press Pull among SciForge's features). Not checked by Luca yet.
 
+### 2026-10-11: CONSTRUCT and INSPECT (branch `sf/inspect`)
+- Reworked all 19 CONSTRUCT entries (see the Phase 1 checkbox) and built Fusion's Measure,
+  Section Analysis, Center of Mass and Interference. New modules: `construct.py` (rewritten),
+  `construct_ui.py` (rewritten), `handles3d.py` (arrow, path dot, clickable dots, overlay),
+  `measure.py`, `measure_ui.py`, `section.py`, `section_ui.py`, `analysis.py`, `com_ui.py`,
+  `interference_ui.py`, `bodypick.py`. Shared edits: four ribbon lines (Plane Tangent to Face
+  at Point, Axis Perpendicular to Face at Point, Interference, Center of Mass), append-only
+  golden ops (`schema.py`, one import line in `builder.py`, ops in `golden/inspect_ops.py`).
+- Tests (only real input): `inspect_construct` (Offset Plane: nothing selected, click, arrow
+  drag, typed value, undo/redo, timeline edit, Cancel, Esc, preselected + Enter, origin
+  square, sketch on the plane also over the part, extrude from it), `inspect_construct_planes`
+  and `inspect_construct_axes` (every other entry), `inspect_construct_use` (Extrude To Object
+  a construction plane, Revolve about a construction axis, editing the plane moves both),
+  `inspect_measure`, `inspect_section`, `inspect_com_interference`. 6 golden models, unit
+  tests `test_inspect_core.py`.
+- Gaps (see `parity/inspect.md`): Tangent Plane reference plane, Along Path on a chain,
+  Offset Plane To Object, browser double-click/right-click Edit for Analysis items (browser
+  owner), one material for Center of Mass, Component filter, Interference "create bodies".
+  Not checked by Luca yet.
+
 ## Next steps (in order)
 
 1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
-   inspect, primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
+   inspect (built on `sf/inspect`, merge after review), primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
    then the QA stage for all 12 (including the 4 already merged). Merge each only after the full
    suite passes locally.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable

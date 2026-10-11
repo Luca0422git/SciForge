@@ -24,6 +24,78 @@ def _units(doc):
         return "mm"
 
 
+_FOLLOW = {"observer": None, "docs": set(), "armed": False}
+
+
+def _follow_now():
+    _FOLLOW["armed"] = False
+    names, _FOLLOW["docs"] = _FOLLOW["docs"], set()
+    for name in names:
+        try:
+            doc = App.getDocument(name)
+        except Exception:
+            continue
+        try:
+            if doc.Recomputing:
+                _follow_later(doc)
+                continue
+            analysis.follow(doc)
+        except Exception as exc:
+            warn("Center of Mass: %s" % exc)
+
+
+def _follow_later(doc):
+    """Measure the "all visible bodies" analyses of `doc` again a moment later (never inside
+    FreeCAD's own callbacks)."""
+    try:
+        if not analysis.of_kind(doc, analysis.COM_KIND):
+            return
+        _FOLLOW["docs"].add(doc.Name)
+    except Exception:
+        return
+    if not _FOLLOW["armed"]:
+        _FOLLOW["armed"] = True
+        QtCore.QTimer.singleShot(30, _follow_now)
+
+
+class _FollowWatch:
+    """What can move an "all visible bodies" centre of mass: a recompute, a body shown,
+    hidden or deleted, undo / redo."""
+
+    def slotRecomputedDocument(self, doc):
+        _follow_later(doc)
+
+    def slotChangedObject(self, obj, prop):
+        try:
+            if prop == "Visibility" and analysis.body_of(obj) is obj:
+                _follow_later(obj.Document)
+        except Exception:
+            pass
+
+    def slotDeletedObject(self, obj):
+        try:
+            if obj.TypeId == "PartDesign::Body":
+                _follow_later(obj.Document)
+        except Exception:
+            pass
+
+    def slotUndoDocument(self, doc):
+        _follow_later(doc)
+
+    def slotRedoDocument(self, doc):
+        _follow_later(doc)
+
+
+def ensure_follow():
+    if _FOLLOW["observer"] is None:
+        try:
+            _FOLLOW["observer"] = _FollowWatch()
+            App.addDocumentObserver(_FOLLOW["observer"])
+        except Exception as exc:
+            _FOLLOW["observer"] = None
+            warn("Center of Mass: %s" % exc)
+
+
 class ViewProviderCenterOfMass:
     """The marker. Saved documents store "sciforge.com_ui.ViewProviderCenterOfMass"."""
 
@@ -33,6 +105,7 @@ class ViewProviderCenterOfMass:
     def attach(self, vobj):
         from pivy import coin
 
+        ensure_follow()
         self.Object = vobj.Object
         self.root = coin.SoSeparator()
         bodypick.on_top(self.root)

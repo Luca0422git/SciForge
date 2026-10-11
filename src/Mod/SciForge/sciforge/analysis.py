@@ -133,6 +133,8 @@ class CenterOfMassAnalysis:
         for name in ("Position", "Volume"):
             try:
                 obj.setEditorMode(name, 1)
+                # worked-out values: writing them (follow) must not mark the analysis touched
+                obj.setPropertyStatus(name, "Output")
             except Exception:
                 pass
 
@@ -154,6 +156,25 @@ class CenterOfMassAnalysis:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def follow(doc):
+    """A Center of Mass with no bodies picked counts every visible body, so it links to none
+    and a recompute never reaches it: work its values out again (called after a recompute,
+    a body shown or hidden, undo / redo). Returns the analyses that moved."""
+    moved = []
+    for obj in of_kind(doc, COM_KIND):
+        try:
+            if [o for o in obj.Bodies if o is not None]:
+                continue
+            centre, volume = center_of_mass([solid_of(o) for o in _targets(obj)])
+        except Exception:
+            continue  # nothing to measure: the analysis keeps its last values
+        if (obj.Position - centre).Length > 1e-9 or abs(obj.Volume - volume) > 1e-9:
+            obj.Position = centre
+            obj.Volume = volume
+            moved.append(obj)
+    return moved
 
 
 # -- Interference --------------------------------------------------------------------------------
