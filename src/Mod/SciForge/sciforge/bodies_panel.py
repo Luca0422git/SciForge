@@ -372,9 +372,40 @@ def start(panel_class, *args, **kwargs):
         return None
     if not commands.finish_open_dialog():
         return None
-    panel = panel_class(App.ActiveDocument, *args, **kwargs)
-    Gui.Control.showDialog(panel)
+    return _open(panel_class, App.ActiveDocument, *args, **kwargs)
+
+
+def _open(panel_class, doc, *args, **kwargs):
+    """Make the dialog and show it; if that fails half way, nothing is left behind (no open
+    undo step, the body watch running again)."""
+    try:
+        panel = panel_class(doc, *args, **kwargs)
+    except Exception:
+        _undo_half_open(doc)
+        raise
+    try:
+        Gui.Control.showDialog(panel)
+    except Exception:
+        try:
+            panel.reject()
+        except Exception:
+            _undo_half_open(doc)
+        raise
     return panel
+
+
+def _undo_half_open(doc):
+    from . import taskui
+
+    bodies.resume(doc)
+    try:
+        doc.abortTransaction()
+        App.closeActiveTransaction(True)
+    except Exception:
+        pass
+    current = taskui._OPEN.get("dialog")
+    if current is not None and getattr(current, "doc", None) is doc:
+        taskui.set_current(None)
 
 
 def edit(panel_class, feature, **kwargs):
@@ -384,9 +415,7 @@ def edit(panel_class, feature, **kwargs):
     try:
         if Gui.Control.activeDialog() and not commands.finish_open_dialog():
             return None
-        panel = panel_class(feature.Document, feature=feature, **kwargs)
-        Gui.Control.showDialog(panel)
-        return panel
+        return _open(panel_class, feature.Document, feature=feature, **kwargs)
     except Exception as exc:
         warn("could not edit %s: %s" % (feature.Label, exc))
         return None

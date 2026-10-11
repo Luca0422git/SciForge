@@ -684,7 +684,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   move_bodies, delete_face, delete_bodies, body_tool_edit, measure_bodies) + 24 models
   `bodies_*`; unit tests `test_bodies_schema.py`.
 - Spec and gaps: `docs/sciforge/parity/bodies.md`.
-- Full suite at the end: see the result below (FULL_SUITE_RESULT).
+- Full suite at the end (no --only, 2026-10-11, 4 CPUs shared with another agent's GUI
+  tests): unit 166 OK; golden 157 pass + 1 xfail (`plate_hole_grid`, needs core patch #4);
+  smoke 70/70; journey 25/25; 56 of 56 scenarios PASS (4393 checks; bodies_combine 90,
+  bodies_split 82, bodies_move 85, bodies_delete 63, bodies_look 58, bodies_timeline 64).
+- Left for others (see findings): the browser to show a body's material and hide used-up
+  bodies, Inspect to read `bodies.mass()`, the timeline a "delete_face" kind and roll-back
+  of steps outside bodies (a Move copy).
 
 ## Next steps (in order)
 
