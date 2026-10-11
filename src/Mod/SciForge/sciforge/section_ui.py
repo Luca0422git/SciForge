@@ -163,21 +163,49 @@ def visible_sections(doc):
     return found
 
 
+def solid_displays(obj):
+    """The objects whose display shows the solid of `obj`: a body's solid features (one of
+    them is shown, the Tip or the step the timeline is rolled back to), or a loose solid
+    itself. Only these are cut: a body's sketches, construction planes, axes and points stay
+    whole, as in Fusion (a construction plane lying in the cut was drawn half-clipped)."""
+    if obj.TypeId != "PartDesign::Body":
+        return [obj]
+    found = []
+    for feature in obj.Group:
+        try:
+            if feature.isDerivedFrom("PartDesign::Feature"):
+                found.append(feature)
+        except Exception:
+            continue
+    return found
+
+
+def clips_on(obj):
+    """Clip nodes cutting the displayed solid of a body (its Tip) or of a loose solid."""
+    shown = obj.Tip if obj.TypeId == "PartDesign::Body" else obj
+    return _clip_nodes(_root(shown)) if shown is not None else []
+
+
 def refresh(doc):
-    """Clip planes on every body for the visible sections, cut faces drawn again."""
+    """Clip planes on every body's solid for the visible sections, cut faces drawn again."""
     if App.GuiUp is False or Gui.getDocument(doc.Name) is None:
         return
     shown = visible_sections(doc)
     for obj in section.clipped_objects(doc):
-        root = _root(obj)
-        if root is None:
-            continue
-        for node in _clip_nodes(root):
-            root.removeChild(node)
-        if not obj.ViewObject.Visibility:
-            continue
-        for analysis in shown:
-            root.insertChild(_clip_node(analysis.CutPlacement), 0)
+        own = _root(obj)
+        for node in _clip_nodes(own):  # an earlier SciForge clipped the whole body
+            own.removeChild(node)
+        cut = bool(obj.ViewObject is not None and obj.ViewObject.Visibility)
+        for target in solid_displays(obj):
+            root = _root(target)
+            if root is None:
+                continue
+            for node in _clip_nodes(root):
+                root.removeChild(node)
+            if not cut:
+                continue
+            for analysis in shown:
+                root.insertChild(_clip_node(analysis.CutPlacement), 0)
     for analysis in section.sections(doc):
         proxy = getattr(analysis.ViewObject, "Proxy", None) if analysis.ViewObject else None
         if isinstance(proxy, ViewProviderSection):
@@ -497,6 +525,9 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         self.hatch.toggled.connect(self._hatch_toggled)
         self.layout.addRow(self.hatch)
         self._show_swatches()
+        from .construct_ui import EnterAfterSum
+
+        self._enter_sum = EnterAfterSum(self, [self.distance, self.x_angle, self.y_angle])
         self.finish_layout()
 
     def _show_box(self):
@@ -583,11 +614,29 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
                 body = commands.find_body()
                 if body is not None:
                     self.planes = cls(Gui.ActiveDocument.ActiveView, body, self._plane_clicked)
+                    self.planes.takes = self._takes_under
             except Exception as exc:
                 warn("Section Analysis: origin planes unavailable: %s" % exc)
         elif not want and self.planes is not None:
             self.planes.remove()
             self.planes = None
+
+    def _takes_under(self, position):
+        """True when what FreeCAD picks under the mouse can be cut along (it then gets the
+        click); anything else lets the origin square behind it take it, like Fusion."""
+        try:
+            from .construct_ui import _resolve_gate
+
+            info = Gui.ActiveDocument.ActiveView.getObjectInfo(tuple(position))
+            if not info or not info.get("Object"):
+                return False
+            top = self.doc.getObject(info["Object"])
+            if top is None:
+                return False
+            obj, short = _resolve_gate(top, str(info.get("Component", "")))
+            return bool(self.allow(obj, short))
+        except Exception:
+            return False
 
     # -- values ------------------------------------------------------------------------------
     @_safe
@@ -664,8 +713,6 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         self._remove_handles()
         if self.ref is None or self.error:
             return
-        from .revolve_ui import AngleHandle
-
         size = self._size()
         base, moved, after_x = self._frames()
         n = base.Rotation.multVec(App.Vector(0, 0, 1))
@@ -679,7 +726,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         )
         x_axis = moved.Rotation.multVec(App.Vector(1, 0, 0))
         y_axis = moved.Rotation.multVec(App.Vector(0, 1, 0))
-        self.handles["x"] = AngleHandle(
+        self.handles["x"] = handles3d.angle_handle(
             moved.Base,
             x_axis,
             y_axis,
@@ -691,7 +738,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         )
         y_axis_x = after_x.Rotation.multVec(App.Vector(0, 1, 0))
         x_axis_x = after_x.Rotation.multVec(App.Vector(1, 0, 0))
-        self.handles["y"] = AngleHandle(
+        self.handles["y"] = handles3d.angle_handle(
             moved.Base,
             y_axis_x,
             x_axis_x,
@@ -758,7 +805,11 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
                     pass
                 self.analysis = None
                 schedule(self.doc)
-            self.hint("Click a plane or a flat face to cut along.")
+            gone = section.problem(self.analysis) if self.analysis is not None else ""
+            if gone:
+                self.say(gone)
+            else:
+                self.hint("Click a plane or a flat face to cut along.")
             return
         try:
             section.cut_frame(self.ref, **self._frame_options())
@@ -782,7 +833,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         schedule(self.doc)
         if not any(h.dragging() for h in self.handles.values()):
             self._rebuild_handles()
-        problem = preview.failure(self.analysis)
+        problem = section.problem(self.analysis) or preview.failure(self.analysis)
         if problem:
             self.say(problem)
         else:
@@ -839,6 +890,10 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
 
     def cleanup(self):
         self._remove_handles()
+        enter = getattr(self, "_enter_sum", None)
+        if enter is not None:
+            enter.remove()
+            self._enter_sum = None
         if self.planes is not None:
             try:
                 self.planes.remove()

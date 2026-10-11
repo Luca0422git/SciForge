@@ -193,6 +193,7 @@ class SectionAnalysis:
             ("App::PropertyFloat", "PivotU", "Section", "Where in the plane the cut turns (u)"),
             ("App::PropertyFloat", "PivotV", "Section", "Where in the plane the cut turns (v)"),
             ("App::PropertyPlacement", "CutPlacement", "Section", "The cut (worked out)"),
+            ("App::PropertyString", "Problem", "Section", "Why the cut stays where it was"),
         ]
         for kind, name, group, doc in add:
             if name not in props:
@@ -207,6 +208,7 @@ class SectionAnalysis:
         try:
             obj.setEditorMode("CutPlacement", 1)
             obj.setEditorMode("SciForgeType", 2)
+            obj.setPropertyStatus("Problem", ["Output", "Hidden"])
         except Exception:
             pass
 
@@ -214,22 +216,20 @@ class SectionAnalysis:
         self.ensure_properties(obj)
 
     def execute(self, obj):
-        link = obj.Plane
-        if link is None:
-            raise SectionError("The plane of this section is gone. Edit it and pick one.")
-        target, subs = link if isinstance(link, tuple) else (link, [""])
-        sub = (subs[0] if isinstance(subs, (list, tuple)) and subs else subs) or ""
-        from . import construct
-
-        ref = construct.normalize_pick(target, sub)
-        obj.CutPlacement = cut_frame(
-            ref,
-            obj.Distance.Value,
-            obj.XAngle.Value,
-            obj.YAngle.Value,
-            obj.Flip,
-            (obj.PivotU, obj.PivotV),
-        )
+        """Work the cut out again. When the plane or face it was made on is gone (deleted,
+        or changed by an edit) the cut stays where it was and Problem says why: it never
+        fails (a failed analysis printed errors after every later change)."""
+        try:
+            place = cut_of(obj)
+        except Exception as exc:
+            text = str(exc) or GONE
+            if obj.Problem != text:
+                obj.Problem = text
+            return
+        if obj.Problem:
+            obj.Problem = ""
+        if not obj.CutPlacement.isSame(place, 1e-12):
+            obj.CutPlacement = place
 
     def allowDuplicateLabel(self, obj):
         """Yes only while SciForge sets the label it worked out (see labels.py)."""
@@ -243,6 +243,36 @@ class SectionAnalysis:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+GONE = "The plane or face of this section is gone. Edit it and pick one."
+
+
+def cut_of(obj):
+    """The cut placement of a section analysis from its stored plane and values."""
+    from . import construct
+
+    link = obj.Plane
+    if not link:
+        raise SectionError(GONE)
+    target, subs = link if isinstance(link, tuple) else (link, [""])
+    if not construct.alive(target):
+        raise SectionError(GONE)
+    sub = (subs[0] if isinstance(subs, (list, tuple)) and subs else subs) or ""
+    ref = construct.normalize_pick(target, sub)
+    return cut_frame(
+        ref,
+        obj.Distance.Value,
+        obj.XAngle.Value,
+        obj.YAngle.Value,
+        obj.Flip,
+        (obj.PivotU, obj.PivotV),
+    )
+
+
+def problem(obj):
+    """Why a section analysis keeps its old cut, or ''."""
+    return getattr(obj, "Problem", "") or ""
 
 
 def next_label(doc, base="Section"):

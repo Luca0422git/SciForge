@@ -160,6 +160,9 @@ class InterferencePanel(bodypick.BodyPickPanel):
         self.layout.addRow(self.compute)
         self.table = QtWidgets.QTreeWidget()
         self.table.setObjectName("SciForgeInterference_results")
+        from .measure_ui import RESULTS_STYLE
+
+        self.table.setStyleSheet(RESULTS_STYLE)
         self.table.setColumnCount(4)
         self.table.setHeaderLabels(["#", "Body 1", "Body 2", "Volume"])
         self.table.setRootIsDecorated(False)
@@ -222,8 +225,9 @@ class InterferencePanel(bodypick.BodyPickPanel):
             if bool(self.target.IncludeCoincident) != self.coincident.isChecked():
                 self.target.IncludeCoincident = self.coincident.isChecked()
         preview.recompute(self.doc)
-        problem = preview.failure(self.target)
+        problem = analysis.problem(self.target) or preview.failure(self.target)
         if problem:
+            self.table.clear()
             self.say(problem)
             return False
         self.computed = True
@@ -238,7 +242,10 @@ class InterferencePanel(bodypick.BodyPickPanel):
             QtWidgets.QTreeWidgetItem(self.table, [str(i), a, b, text])
         for column in range(4):
             self.table.resizeColumnToContents(column)
-        if found:
+        problem = analysis.problem(self.target) if self.target is not None else ""
+        if problem:
+            self.say(problem)
+        elif found:
             self.hint("%d interference%s found." % (len(found), "" if len(found) == 1 else "s"))
         else:
             self.hint("No interference: the bodies do not overlap.")

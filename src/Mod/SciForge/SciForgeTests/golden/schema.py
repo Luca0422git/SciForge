@@ -1259,3 +1259,29 @@ def validate(model):  # noqa: F811  (adds the revolve "to" checks)
     _validate_before_revolve_to(model)
     _check_revolve_to(model)
     return model
+
+
+# -- Physical Material of a body (inspect QA: a Center of Mass weighs bodies by their material) --
+STEP_KEYS["body_material"] = ({"feature", "material"}, {"comment"})
+
+
+def _check_body_material(model):
+    seen = set()
+    for i, step in enumerate(model.get("steps", [])):
+        here = "steps[%d] (%s)" % (i, step.get("op"))
+        if step.get("op") == "body_material":
+            if step["feature"] not in seen:
+                _fail(here, "'feature' names unknown step %r" % step["feature"])
+            if not isinstance(step["material"], str) or not step["material"]:
+                _fail(here, "'material' is a key of sciforge/material.py LIBRARY")
+        if "id" in step:
+            seen.add(step["id"])
+
+
+_validate_before_body_material = validate
+
+
+def validate(model):  # noqa: F811  (adds the body_material checks)
+    _validate_before_body_material(model)
+    _check_body_material(model)
+    return model

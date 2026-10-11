@@ -1,0 +1,119 @@
+{
+  "id": "inspect_com_materials",
+  "title": "Center of Mass of a steel and an aluminium box (mass-weighted)",
+  "tags": [
+    "inspect",
+    "center-of-mass",
+    "material"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "steel"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            70,
+            30
+          ],
+          "name": "aluminium"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "com_expect",
+      "point": [
+        33.333333333333336,
+        15,
+        5
+      ],
+      "comment": "both still on FreeCAD's Default, which counts as Steel: the volume centroid"
+    },
+    {
+      "op": "body_material",
+      "feature": "e2",
+      "material": "aluminium"
+    },
+    {
+      "op": "com_expect",
+      "point": [
+        25.837837837837839,
+        15,
+        5
+      ],
+      "comment": "(12000 * 7900 * 20 + 6000 * 2700 * 60) / (12000 * 7900 + 6000 * 2700) = 2868 / 111"
+    },
+    {
+      "op": "com_expect",
+      "features": [
+        "e2"
+      ],
+      "point": [
+        60,
+        15,
+        5
+      ],
+      "comment": "one body alone: its own centre, whatever it is made of"
+    },
+    {
+      "op": "body_material",
+      "feature": "e1",
+      "material": "aluminium"
+    },
+    {
+      "op": "com_expect",
+      "point": [
+        33.333333333333336,
+        15,
+        5
+      ],
+      "comment": "both aluminium: the volume centroid again"
+    }
+  ],
+  "expect": {
+    "volume": 6000,
+    "faces": 6,
+    "bbox": [
+      50,
+      0,
+      0,
+      70,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "body 2 is 20*30*10 at x 50..70 (the part measured last). Steel-Generic 7900 kg/m^3, Aluminum-Generic 2700 kg/m^3 (FreeCAD's library); the centre of mass weighs each box by volume * density: x = (12000*7900*20 + 6000*2700*60) / (12000*7900 + 6000*2700) = 25.8378"
+  }
+}

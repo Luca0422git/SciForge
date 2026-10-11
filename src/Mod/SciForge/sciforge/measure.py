@@ -156,6 +156,53 @@ def entity(obj, sub="", point=None, whole_body=False):
     raise MeasureError("%s cannot be measured." % obj.Label)
 
 
+def sketch_entity(sketch, name, point=None):
+    """The Entity for a pick in a sketch that is open for editing. The sketch editor names
+    its picks after the sketch's own lists, not after its shape: "Edge2" is the second curve
+    (construction lines count, the shape leaves them out), "Vertex3" the third sketch point,
+    "RootPoint" / "H_Axis" / "V_Axis" the sketch's origin and axes, "ExternalEdge1" the
+    first projected curve."""
+    name = (name or "").split(".")[-1]
+    place = sketch.getGlobalPlacement()
+    label = "%s %s" % (
+        sketch.Label,
+        "point" if "Vertex" in name or name == "RootPoint" else "curve",
+    )
+    try:
+        if name == "RootPoint":
+            return Entity("point", sketch, name, point=place.Base, label="%s origin" % sketch.Label)
+        if name in ("H_Axis", "V_Axis"):
+            local = V(1, 0, 0) if name == "H_Axis" else V(0, 1, 0)
+            return Entity(
+                "axis",
+                sketch,
+                name,
+                point=place.Base,
+                direction=place.Rotation.multVec(local),
+                label="%s %s axis"
+                % (sketch.Label, "horizontal" if name == "H_Axis" else "vertical"),
+            )
+        if name.startswith("Vertex"):
+            geo, pos = sketch.getGeoVertexIndex(int(name[6:]) - 1)
+            if geo < -1999:
+                raise MeasureError("That sketch point is no longer there.")
+            p = place.multVec(sketch.getPoint(geo, pos))
+            return Entity("point", sketch, name, shape=None, point=p, label=label)
+        if name.startswith("ExternalEdge"):
+            curve = list(sketch.ExternalGeo)[int(name[12:]) + 1]
+        elif name.startswith("Edge"):
+            curve = list(sketch.Geometry)[int(name[4:]) - 1]
+        else:
+            raise MeasureError("%s cannot be measured." % name)
+        shape = curve.toShape()
+        shape.transformShape(place.toMatrix())
+        return Entity("edge", sketch, name, shape=shape, label=label)
+    except MeasureError:
+        raise
+    except Exception:
+        raise MeasureError("That sketch element is no longer there.")
+
+
 def snap_entity(point, label="Point"):
     return Entity("point", None, "", point=V(point), label=label)
 
@@ -208,7 +255,7 @@ def properties(e):
         if _round_kind(e.shape, "face"):
             r = e.shape.Surface.Radius
             rows += [("Radius", r, "length"), ("Diameter", 2 * r, "length")]
-        rows.append(("Perimeter", sum(edge.Length for edge in e.shape.OuterWire.Edges), "length"))
+        rows.append(("Perimeter", perimeter(e.shape), "length"))
     elif e.kind == "body":
         rows += [("Volume", e.shape.Volume, "volume"), ("Area", e.shape.Area, "area")]
     elif e.kind == "plane":
@@ -218,6 +265,25 @@ def properties(e):
         p = e.point
         rows += [("X", p.x, "coordinate"), ("Y", p.y, "coordinate"), ("Z", p.z, "coordinate")]
     return rows
+
+
+def perimeter(face):
+    """Length of a face's boundary: every edge of its outer wire except a seam (the line
+    where a cylinder's or cone's surface closes on itself is no boundary: a round side of
+    radius 5 and height 10 has the perimeter of its two circles, 62.832, not 72.832)."""
+    total = 0.0
+    seen = []
+    for edge in face.OuterWire.Edges:
+        try:
+            if edge.isSeam(face):
+                continue
+        except Exception:
+            pass
+        if any(edge.isSame(other) for other in seen):
+            continue
+        seen.append(edge)
+        total += edge.Length
+    return total
 
 
 # -- what two entities measure together ----------------------------------------------------------

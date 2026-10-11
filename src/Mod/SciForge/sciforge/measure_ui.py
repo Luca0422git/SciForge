@@ -9,7 +9,11 @@ nearest points. A third click starts a new measurement with it; clicking a picke
 drops it. Selection Filter: faces / edges / corners, or whole bodies. Precision: the decimals
 shown. Show Snap Points: the ends, middle and centres of the edge or face under the mouse
 are drawn as dots to click (centre to centre of two holes). Click a value to copy it.
-Values are in the design's units. Measure changes nothing in the design (no undo step)."""
+Values are in the design's units. Measure changes nothing in the design (no undo step).
+
+In a sketch (Fusion's SKETCH tab has INSPECT > Measure too) the sketch stays open: Measure
+shows at the top of the sketch's panel, measures the sketch's curves and points, and Close
+or Esc ends Measure only. It also ends when the sketch is finished."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -27,6 +31,67 @@ DOT = (0.98, 0.78, 0.25)
 SNAP = (0.55, 0.85, 0.55)
 GREEDY = 1
 NORMAL = 0
+# Results lists: light text on the dark panel like Fusion's (FreeCAD's task panel drew the
+# items in a dark grey that could hardly be read there).
+RESULTS_STYLE = (
+    "QTreeWidget { color: #f5f5f5; background: #2f3540; }"
+    " QTreeWidget::item { color: #f5f5f5; }"
+    " QTreeWidget::item:selected { background: #56647a; color: #ffffff; }"
+    " QHeaderView::section { color: #c3cad4; }"
+)
+IN_SKETCH_STYLE = """
+#SciForgeMeasureInSketch { background: #3b4453; border: 1px solid #56606f; border-radius: 2px; }
+#SciForgeMeasureInSketch QLabel[role="title"] { color: #f5f5f5; font-weight: bold;
+    letter-spacing: 0.5px; padding: 6px 8px; background: #2f3643; }
+"""
+
+
+def editing_sketch():
+    """The sketch open for editing in the active design, or None."""
+    try:
+        gdoc = Gui.ActiveDocument
+        edit = gdoc.getInEdit() if gdoc is not None else None
+        obj = edit.Object if edit is not None else None
+        if obj is not None and obj.TypeId == "Sketcher::SketchObject":
+            return obj
+    except Exception:
+        pass
+    return None
+
+
+class _EscCloses(QtCore.QObject):
+    """Esc while Measure is open in a sketch ends Measure (the command in progress), not
+    the sketch's drawing tool or its selection: Fusion's Esc ends the active command."""
+
+    def __init__(self, panel):
+        super().__init__()
+        self.panel = panel
+        QtWidgets.QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        try:
+            if (
+                self.panel is not None
+                and event.type() == QtCore.QEvent.KeyPress
+                and event.key() == QtCore.Qt.Key_Escape
+                and not event.isAutoRepeat()
+                and QtWidgets.QApplication.activePopupWidget() is None
+                and QtWidgets.QApplication.activeModalWidget() is None
+            ):
+                panel = self.panel
+                self.panel = None
+                QtCore.QTimer.singleShot(0, panel.close)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def remove(self):
+        self.panel = None
+        try:
+            QtWidgets.QApplication.instance().removeEventFilter(self)
+        except Exception:
+            pass
 
 
 def _units(doc):
@@ -92,9 +157,13 @@ class MeasurePanel:
     title = "Measure"
     last = None
 
-    def __init__(self, doc, initial=()):
+    def __init__(self, doc, initial=(), sketch=None):
         self.doc = doc
         self._closed = False
+        self.sketch = sketch  # the sketch open for editing Measure runs in, or None
+        self.frame = None
+        self._esc = None
+        self._poll = None
         MeasurePanel.last = self
         self.entities = []
         self.relation = None
@@ -108,6 +177,7 @@ class MeasurePanel:
         self._hover_key = None
         self.dots = None
         self.snaps = []
+        self.com_dots = None
         self.view = Gui.ActiveDocument.ActiveView
         self.form = QtWidgets.QWidget()
         self.form.setWindowTitle(self.title)
@@ -127,18 +197,21 @@ class MeasurePanel:
             self._add(obj, short, point, quiet=True)
         self.observer = _Observer(self)
         Gui.Selection.addObserver(self.observer)
-        self.gate = _Gate(self)
-        try:
-            Gui.Selection.addSelectionGate(self.gate)
-        except Exception as exc:
-            warn("Measure: selection filter unavailable: %s" % exc)
-            self.gate = None
-        try:
-            self._style = NORMAL
-            Gui.Selection.setSelectionStyle(GREEDY)
-        except Exception:
-            self._style = None
-        self._hold_delete(True)
+        self.gate = None
+        if sketch is None:
+            # In a sketch the sketch editor does its own picking: no gate, its own style.
+            self.gate = _Gate(self)
+            try:
+                Gui.Selection.addSelectionGate(self.gate)
+            except Exception as exc:
+                warn("Measure: selection filter unavailable: %s" % exc)
+                self.gate = None
+            try:
+                self._style = NORMAL
+                Gui.Selection.setSelectionStyle(GREEDY)
+            except Exception:
+                self._style = None
+            self._hold_delete(True)
         self.callbacks = []
         try:
             self.callbacks.append(
@@ -148,7 +221,10 @@ class MeasurePanel:
             warn("Measure: snap points unavailable: %s" % exc)
         self._guards = []
         try:
-            self._guards = [preview.EscapeCancels(self), preview.EnterFinishes(self)]
+            if sketch is None:
+                self._guards = [preview.EscapeCancels(self), preview.EnterFinishes(self)]
+            else:
+                self._esc = _EscCloses(self)
         except Exception as exc:
             warn("Measure: keys unavailable: %s" % exc)
         self.watch = None
@@ -158,7 +234,70 @@ class MeasurePanel:
             self.watch = None
         self._sync()
         self._refresh()
-        taskui.set_current(self)
+        self._show_com_dots()
+        if sketch is None:
+            taskui.set_current(self)
+        else:
+            self._embed()
+
+    # -- in a sketch ---------------------------------------------------------------------------
+    def _embed(self):
+        """Show the dialog at the top of the open sketch's panel (above the sketch palette),
+        with its own Close button; the sketch's panel stays as it is below it."""
+        from . import sketch_palette
+
+        host = sketch_palette.sketch_panel()
+        if host is None:
+            self.cleanup()
+            raise RuntimeError("the sketch's panel is not there")
+        frame = QtWidgets.QFrame()
+        frame.setObjectName("SciForgeMeasureInSketch")
+        frame.setStyleSheet(IN_SKETCH_STYLE)
+        box = QtWidgets.QVBoxLayout(frame)
+        box.setContentsMargins(0, 0, 0, 6)
+        box.setSpacing(4)
+        title = QtWidgets.QLabel("MEASURE")
+        title.setProperty("role", "title")
+        box.addWidget(title)
+        box.addWidget(self.form)
+        row = QtWidgets.QHBoxLayout()
+        row.setContentsMargins(8, 0, 8, 0)
+        row.addStretch(1)
+        close = QtWidgets.QPushButton("Close")
+        close.setObjectName("SciForgeMeasure_close")
+        close.setToolTip("End Measure (Esc); the sketch stays open")
+        close.clicked.connect(self.close)
+        row.addWidget(close)
+        box.addLayout(row)
+        host.layout().insertWidget(0, frame)
+        self.frame = frame
+        self._poll = QtCore.QTimer()
+        self._poll.setInterval(250)
+        self._poll.timeout.connect(self._still_in_sketch)
+        self._poll.start()
+
+    def _still_in_sketch(self):
+        """Measure ends with the sketch it was started in (Finish Sketch, undo...)."""
+        try:
+            if self._closed:
+                return
+            gone = editing_sketch() is not self.sketch
+            if not gone:
+                try:
+                    gone = self.frame is None or not self.frame.isVisible()
+                except RuntimeError:
+                    gone = True  # the sketch's panel went, and the dialog with it
+            if gone:
+                self.close()
+        except Exception as exc:
+            warn("Measure: %s" % exc)
+
+    def entity(self, obj, short, point=None, whole_body=False):
+        """measure.Entity of a pick; picks in the sketch being edited are named by the
+        sketch editor (measure.sketch_entity)."""
+        if self.sketch is not None and obj is self.sketch and not whole_body:
+            return measure.sketch_entity(obj, short, point)
+        return measure.entity(obj, short, point, whole_body=whole_body)
 
     # -- the dialog --------------------------------------------------------------------------
     def _build(self):
@@ -189,6 +328,7 @@ class MeasurePanel:
         layout.addRow(self.snap)
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setObjectName("SciForgeMeasure_results")
+        self.tree.setStyleSheet(RESULTS_STYLE)
         self.tree.setColumnCount(2)
         self.tree.setHeaderHidden(True)
         self.tree.setRootIsDecorated(False)
@@ -326,8 +466,10 @@ class MeasurePanel:
         return False
 
     def _add(self, obj, short, point, quiet=False):
+        if self.sketch is not None and str(short).startswith("Constraint"):
+            return False  # a sketch dimension or constraint symbol: nothing to measure
         try:
-            e = measure.entity(obj, short, point, whole_body=self.mode() == "body")
+            e = self.entity(obj, short, point, whole_body=self.mode() == "body")
         except measure.MeasureError as exc:
             if not quiet:
                 self.say(str(exc))
@@ -359,9 +501,10 @@ class MeasurePanel:
             if self._closed:
                 return
             cleared, self._cleared = self._cleared, False
-            if self.dots is not None and self.dots.clicked_recently():
-                self._sync()  # the snap dot took that click, not what is behind it
-                return
+            for dots in (self.dots, self.com_dots):
+                if dots is not None and dots.clicked_recently():
+                    self._sync()  # the dot took that click, not what is behind it
+                    return
             now = [
                 (obj, short, point)
                 for obj, short, point in hole_common.picks()
@@ -471,7 +614,7 @@ class MeasurePanel:
                 return
             self._hover_key = key
             try:
-                e = measure.entity(obj, short)
+                e = self.entity(obj, short)
             except measure.MeasureError:
                 return
             self.snaps = measure.snap_points(e)
@@ -492,6 +635,49 @@ class MeasurePanel:
         except Exception as exc:
             warn("Measure snap: %s" % exc)
 
+    # -- Center of Mass markers -----------------------------------------------------------------
+    def _show_com_dots(self):
+        """The centre of a Center of Mass analysis can be clicked like a corner (Fusion
+        measures from its centre-of-mass sign): a dot at each shown marker."""
+        self._drop_com_dots()
+        try:
+            from . import analysis
+
+            dots = []
+            for obj in analysis.of_kind(self.doc, analysis.COM_KIND):
+                vobj = obj.ViewObject
+                if analysis.problem(obj) or vobj is None or not vobj.Visibility:
+                    continue
+                dots.append((obj.Name, App.Vector(obj.Position), DOT))
+            if dots:
+                self.com_dots = handles3d.PointDots(
+                    self.view, dots, self._com_picked, size=self._dot_size() * 2.5
+                )
+        except Exception as exc:
+            warn("Measure: centre of mass: %s" % exc)
+
+    def _com_picked(self, name):
+        try:
+            obj = self.doc.getObject(name)
+            if self._closed or obj is None:
+                return
+            e = measure.snap_entity(obj.Position, obj.Label)
+            if len(self.entities) >= 2:
+                self.entities = []
+            self.entities.append(e)
+            self._sync()
+            self._refresh()
+        except Exception as exc:
+            warn("Measure: centre of mass: %s" % exc)
+
+    def _drop_com_dots(self):
+        if self.com_dots is not None:
+            try:
+                self.com_dots.remove()
+            except Exception:
+                pass
+            self.com_dots = None
+
     def _drop_dots(self):
         if self.dots is not None:
             try:
@@ -503,7 +689,10 @@ class MeasurePanel:
     # -- the document changed under the dialog ------------------------------------------------
     def document_event(self, closing):
         if closing:
-            hole_common.abandon(self)
+            if self.sketch is not None:
+                self.close()
+            else:
+                hole_common.abandon(self)
             return
         QtCore.QTimer.singleShot(0, self._revalidate)
 
@@ -520,12 +709,13 @@ class MeasurePanel:
                 if not hole_common.alive(e.obj):
                     continue
                 try:
-                    fresh.append(measure.entity(e.obj, e.sub, e.point, whole_body=e.kind == "body"))
+                    fresh.append(self.entity(e.obj, e.sub, e.point, whole_body=e.kind == "body"))
                 except measure.MeasureError:
                     continue
             self.entities = fresh
             self._sync()
             self._refresh()
+            self._show_com_dots()
         except Exception as exc:
             warn("Measure: %s" % exc)
 
@@ -547,6 +737,14 @@ class MeasurePanel:
         if self._closed:
             return True
         self.cleanup()
+        if self.sketch is not None:
+            self._unembed()
+            try:
+                Gui.Selection.clearSelection()
+            except Exception:
+                pass
+            log("Measure closed (the sketch stays open)")
+            return True
         if taskui.current() is self:
             taskui.set_current(None)
         try:
@@ -560,9 +758,25 @@ class MeasurePanel:
         log("Measure closed")
         return True
 
+    def _unembed(self):
+        frame, self.frame = self.frame, None
+        if frame is None:
+            return
+        try:
+            frame.hide()
+            frame.setParent(None)
+            frame.deleteLater()
+        except RuntimeError:
+            pass  # already gone with the sketch's panel
+
     def cleanup(self):
         self._closed = True
-        for timer in (self._events, self._hover):
+        if self._esc is not None:
+            self._esc.remove()
+            self._esc = None
+        for timer in (self._events, self._hover, self._poll):
+            if timer is None:
+                continue
             try:
                 timer.stop()
             except Exception:
@@ -599,13 +813,33 @@ class MeasurePanel:
             self._style = None
         self._hold_delete(False)
         self._drop_dots()
+        self._drop_com_dots()
         try:
             self.overlay.remove()
         except Exception:
             pass
 
 
+def start_in_sketch(sketch):
+    """Measure in the sketch being edited, which stays open (see the module text)."""
+    last = MeasurePanel.last
+    if last is not None and not last._closed and last.sketch is sketch:
+        last._restart()  # I again: a new measurement
+        return last
+    picks = [p for p in hole_common.picks(sketch.Document) if p[0] is sketch]
+    panel = MeasurePanel(sketch.Document, initial=picks, sketch=sketch)
+    log("Measure started in %s" % sketch.Label)
+    return panel
+
+
 def start():
+    sketch = editing_sketch()
+    if sketch is not None:
+        try:
+            return start_in_sketch(sketch)
+        except Exception as exc:
+            warn("Measure in the sketch: %s" % exc)
+            return None
     picks = hole_common.picks()
     if not commands.finish_open_dialog():
         return None

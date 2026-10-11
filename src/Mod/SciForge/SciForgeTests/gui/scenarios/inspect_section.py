@@ -65,10 +65,10 @@ def cap_area(obj=None):
 
 
 def clips():
+    """Clip planes on the displayed solid of the body (its Tip)."""
     from sciforge import section_ui
 
-    root = h.body().ViewObject.RootNode
-    return section_ui._clip_nodes(root)
+    return section_ui.clips_on(h.body())
 
 
 def start():

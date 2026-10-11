@@ -45,6 +45,75 @@ def _segment_distance(px, py, ax, ay, bx, by):
     return math.hypot(px - (ax + dx * t), py - (ay + dy * t))
 
 
+class ReleaseWatch:
+    """Ends a handle's drag on any left-button release in the application. FreeCAD's
+    selection keeps the release of a drag that ends over a face (it selects the face and
+    marks the event handled), so a view callback never saw it: the handle stayed "grabbed",
+    followed the mouse with no button down and swallowed every later pick. Qt sees every
+    release first: this filter is installed while the button is down on the handle."""
+
+    def __init__(self, handle):
+        from .compat import QtWidgets
+
+        self.handle = handle
+        self.filter = None
+        watch = self
+
+        class _Filter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                try:
+                    if event.type() == QtCore.QEvent.MouseButtonRelease and (
+                        event.button() == QtCore.Qt.LeftButton
+                    ):
+                        watch.released()
+                except Exception:
+                    pass
+                return False
+
+        self.filter = _Filter()
+        QtWidgets.QApplication.instance().installEventFilter(self.filter)
+
+    def released(self):
+        handle = self.handle
+        if handle is not None and getattr(handle, "_drag", False):
+            handle._drag = False
+            handle._released = True
+            handle._last_event = time.time()
+        self.remove()
+
+    def remove(self):
+        from .compat import QtWidgets
+
+        self.handle = None
+        if self.filter is not None:
+            try:
+                QtWidgets.QApplication.instance().removeEventFilter(self.filter)
+            except Exception:
+                pass
+            # deleted later, never inside its own eventFilter call
+            QtCore.QTimer.singleShot(0, self.filter.deleteLater)
+            self.filter = None
+
+
+def watch_release(handle):
+    """Start watching for the release of a drag on `handle` (see ReleaseWatch)."""
+    old = getattr(handle, "_release_watch", None)
+    if old is not None:
+        old.remove()
+    try:
+        handle._release_watch = ReleaseWatch(handle)
+    except Exception as exc:
+        handle._release_watch = None
+        warn("handle: %s" % exc)
+
+
+def stop_watching(handle):
+    old = getattr(handle, "_release_watch", None)
+    if old is not None:
+        old.remove()
+    handle._release_watch = None
+
+
 def _rotation_y_to(direction):
     """Rotation that turns +Y (Coin's cylinder/cone axis) onto `direction`."""
     return App.Rotation(App.Vector(0, 1, 0), App.Vector(direction))
@@ -118,10 +187,12 @@ class _Handle:
                     self._drag = True
                     self._last_event = time.time()
                     self._press(position)
+                    watch_release(self)
             elif self._drag:
                 self._drag = False
                 self._released = True
                 self._last_event = time.time()
+                stop_watching(self)
         except Exception as exc:
             warn("handle: %s" % exc)
 
@@ -171,6 +242,7 @@ class _Handle:
             warn("handle drag: %s" % exc)
 
     def remove(self):
+        stop_watching(self)
         try:
             self._timer.stop()
         except Exception:
@@ -185,6 +257,30 @@ class _Handle:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+
+
+def angle_handle(*args, **kwargs):
+    """revolve_ui.AngleHandle (the blue ball turning about a line) whose drag also ends on a
+    release FreeCAD's selection kept (see ReleaseWatch)."""
+    from .revolve_ui import AngleHandle
+
+    class WatchedAngleHandle(AngleHandle):
+        def _button(self, info):
+            was = self._drag
+            super()._button(info)
+            try:
+                if self._drag and not was:
+                    watch_release(self)
+                elif was and not self._drag:
+                    stop_watching(self)
+            except Exception as exc:
+                warn("handle: %s" % exc)
+
+        def remove(self):
+            stop_watching(self)
+            super().remove()
+
+    return WatchedAngleHandle(*args, **kwargs)
 
 
 class LinearHandle(_Handle):
