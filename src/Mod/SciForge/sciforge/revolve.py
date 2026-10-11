@@ -17,7 +17,12 @@ Axis (what it turns about), one (object, sub-element):
 
 Options (dict, see DEFAULTS):
   operation  join | cut | intersect | new_body
-  type       angle | full          (full = 360 degrees, no direction)
+  type       angle | to | full     (full = 360 degrees, no direction; to = as far as the
+             object in "to": a plane or flat face that contains the axis, or a point)
+  to         (object, sub-element) the revolve goes to (type "to"): an origin or
+             construction plane, a flat face of a body, a vertex, a construction point or
+             a straight edge; it stops at the half-plane through the axis that the object
+             marks, turning the shorter way (and follows the object when it moves)
   direction  one_side | two_sides | symmetric
   angle      degrees. One side: signed, a negative angle turns the other way.
              Symmetric: the angle on each side (the whole revolve is twice that, like
@@ -49,7 +54,7 @@ import FreeCAD as App
 from . import extrude
 
 OPERATIONS = ("join", "cut", "intersect", "new_body")
-TYPES = ("angle", "full")
+TYPES = ("angle", "to", "full")
 DIRECTIONS = ("one_side", "two_sides", "symmetric")
 
 DEFAULTS = {
@@ -58,12 +63,15 @@ DEFAULTS = {
     "direction": "one_side",
     "angle": 360.0,
     "angle2": 90.0,
+    "to": None,
 }
 
 META = "SciForgeRevolve"
 ROLE = "SciForgeRole"
 FP_TYPE = "PartDesign::FeaturePython"
 LINE_TYPES = ("App::Line", "PartDesign::Line", "Part::DatumLine")
+PLANE_TYPES = ("App::Plane", "PartDesign::Plane", "Part::DatumPlane")
+POINT_TYPES = ("PartDesign::Point", "Part::DatumPoint")
 SKETCH_AXES = ("H_Axis", "V_Axis", "N_Axis")
 X = App.Vector(1, 0, 0)
 Y = App.Vector(0, 1, 0)
@@ -231,6 +239,29 @@ def axis_label(ref):
     return obj.Label
 
 
+def to_label(target):
+    """The object a Type "To" revolve goes to, in words, for the dialog."""
+    if not target or target[0] is None:
+        return ""
+    obj, sub = target
+    if obj.TypeId == "App::Plane":
+        role = getattr(obj, "Role", "") or obj.Name
+        return role.replace("_Plane", " Plane")
+    if not sub:
+        return obj.Label
+    if is_sketch(obj):
+        return ("Line of %s" if sub.startswith("Edge") else "Point of %s") % obj.Label
+    # A face, edge or corner of the part: named after its body (what the browser shows),
+    # not after the step that happened to make it.
+    body = owner_body(obj)
+    name = body.Label if body is not None else obj.Label
+    if sub.startswith("Vertex"):
+        return "Corner of %s" % name
+    if sub.startswith("Edge"):
+        return "Edge of %s" % name
+    return "Face of %s" % name
+
+
 def origin_axes(body):
     """{"X": line, "Y": line, "Z": line} of a body's origin."""
     found = {}
@@ -363,6 +394,13 @@ def check_options(options):
     """Raise RevolveError for angles Fusion's dialog would refuse."""
     if options["type"] == "full":
         return
+    if options["type"] == "to":
+        if not options.get("to") or options["to"][0] is None:
+            raise RevolveError(
+                "Select the object to revolve to: a plane or flat face through the axis, or a "
+                "point."
+            )
+        return
     a1, a2 = options["angle"], options["angle2"]
     if abs(a1) < 1e-6:
         raise RevolveError("The angle must not be zero.")
@@ -417,7 +455,300 @@ def revolve_faces(faces, point, direction, options):
 def tool_shape(profiles, axis, options):
     """The revolved solid (global coordinates), as the preview would add or remove it."""
     point, direction = axis_line(axis)
-    return revolve_faces(global_faces(profiles), point, direction, options)
+    return revolve_faces(
+        global_faces(profiles), point, direction, resolved(profiles, axis, options)
+    )
+
+
+def resolved(profiles, axis, options):
+    """Options with Type "To" turned into the angle it comes to (one side)."""
+    options = options_with_defaults(options)
+    if options["type"] != "to":
+        return options
+    angle = stop_angle(global_faces(profiles), axis, options["to"])
+    return dict(options, type="angle", direction="one_side", angle=angle)
+
+
+# -- Type "To": as far as an object --------------------------------------------------------------
+def target_from_pick(obj, sub):
+    """The "To" object for something clicked, or raise RevolveError saying why not."""
+    if obj is None:
+        raise RevolveError(TO_HINT)
+    if obj.TypeId in PLANE_TYPES or obj.TypeId in POINT_TYPES:
+        return (obj, "")
+    if sub.startswith(("Face", "Edge", "Vertex")):
+        try:
+            element = obj.Shape.getElement(sub)
+        except Exception:
+            raise RevolveError("That no longer exists. Pick the object again.")
+        if sub.startswith("Face") and element.Surface.TypeId != "Part::GeomPlane":
+            raise RevolveError("Pick a flat face, a plane or a point to revolve to.")
+        if sub.startswith("Edge") and not is_line_edge(element):
+            raise RevolveError("Pick a straight edge, a flat face, a plane or a point.")
+        return (obj, sub)
+    raise RevolveError(TO_HINT)
+
+
+TO_HINT = "Pick a plane or a flat face that contains the axis, or a point, to revolve to."
+
+
+def _radial(p, point, direction, what):
+    v = p - point
+    v = v - direction * v.dot(direction)
+    if v.Length < 1e-7:
+        raise RevolveError("%s lies on the axis: pick another object to revolve to." % what)
+    v.normalize()
+    return v
+
+
+def _plane_halves(normal, origin, point, direction, size):
+    """The two directions (perpendicular to the axis) of a plane that contains the axis."""
+    normal = App.Vector(normal)
+    normal.normalize()
+    if abs(normal.dot(direction)) > 1e-6 or abs((origin - point).dot(normal)) > 1e-6 * size:
+        raise RevolveError(
+            "The revolve can go to a plane or a flat face that contains the axis, or to a "
+            "point. Pick another object."
+        )
+    w = normal.cross(direction)
+    w.normalize()
+    return [w, w * -1.0]
+
+
+def target_directions(target, point, direction):
+    """Unit directions (from the axis, square to it) of the half-planes the object marks:
+    one for a point, an edge or a face, both halves for an endless plane."""
+    obj, sub = target
+    if obj is None:
+        raise RevolveError(TO_HINT)
+    if obj.TypeId in PLANE_TYPES:
+        placement = obj.getGlobalPlacement()
+        normal = placement.Rotation.multVec(Z)
+        return _plane_halves(normal, App.Vector(placement.Base), point, direction, 100.0)
+    if obj.TypeId in POINT_TYPES:
+        where = App.Vector(obj.getGlobalPlacement().Base)
+        return [_radial(where, point, direction, "The point")]
+    try:
+        element = to_global(obj.Shape.getElement(sub), obj)
+    except Exception:
+        raise RevolveError("The object to revolve to is gone. Pick it again.")
+    if sub.startswith("Vertex"):
+        return [_radial(element.Point, point, direction, "The point")]
+    if sub.startswith("Edge"):
+        middle = element.valueAt(element.FirstParameter + element.Length / 2.0)
+        return [_radial(middle, point, direction, "The edge")]
+    if element.Surface.TypeId != "Part::GeomPlane":
+        raise RevolveError(TO_HINT)
+    size = max(1.0, element.BoundBox.DiagonalLength)
+    halves = _plane_halves(
+        extrude.face_normal(element), element.Vertexes[0].Point, point, direction, size
+    )
+    inside = extrude.interior_point(element) - point
+    return [w for w in halves if w.dot(inside) > 0][:1] or halves
+
+
+def stop_angle(faces, axis, target):
+    """Signed degrees from the profile to the object, the shorter way round."""
+    import math
+
+    point, direction = axis_line(axis)
+    if not faces:
+        raise RevolveError("Select a profile to revolve.")
+    start = _radial(extrude.interior_point(faces[0]), point, direction, "The profile")
+    best = None
+    for w in target_directions(target, point, direction):
+        angle = math.degrees(math.atan2(direction.dot(start.cross(w)), start.dot(w)))
+        if abs(angle) < 1e-6:
+            continue
+        shorter = best is None or abs(angle) < abs(best) - 1e-9
+        if shorter or (abs(abs(angle) - abs(best)) <= 1e-9 and angle > best):
+            best = angle  # half a turn either way: the positive way, like the handle
+    if best is None:
+        raise RevolveError(
+            "The object is where the profile already is. Pick one the revolve turns to."
+        )
+    return best
+
+
+class RevolveTo:
+    """A hidden helper that works out, on every recompute, how far a Type "To" revolve
+    turns: from its profile to the object it goes to. The revolve's angle follows it (an
+    expression), so moving the plane, the face or the corner moves the revolve's end too.
+    A face, edge or corner of the part is remembered by where it is and found again when
+    FreeCAD renames it (an edit before it can renumber them), like FaceLink.
+    Saved documents store "sciforge.revolve.RevolveTo": keep the name stable."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        def add(kind, name, doc, flags=0):
+            if name not in obj.PropertiesList:
+                obj.addProperty(kind, name, "To", doc, flags)
+                if kind == "App::PropertyString":
+                    obj.setEditorMode(name, 2)
+
+        add("App::PropertyLinkGlobal", "Target", "The object the revolve goes to")
+        add("App::PropertyString", "TargetSub", "Which part of it", 16)
+        add("App::PropertyString", "TargetData", "Where that part is", 16)
+        add("App::PropertyLinkGlobal", "AxisSource", "The axis' object")
+        add("App::PropertyString", "AxisSub", "Which axis of it")
+        add("App::PropertyLinkListGlobal", "Sources", "The profiles' objects")
+        add("App::PropertyString", "SourceSubs", "The profiles turned")
+        add("App::PropertyFloat", "Angle", "Signed degrees to the object", 16)
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        import Part
+
+        faces = []
+        for name, sub in json.loads(obj.SourceSubs or "[]"):
+            linked = obj.Document.getObject(name)
+            if linked is not None:
+                faces += [to_global(f, linked) for f in local_faces(linked, sub)]
+        if obj.AxisSource is None:
+            raise RevolveError("The axis this revolve turns about is gone. Pick it again.")
+        if obj.Target is None:
+            raise RevolveError("The object this revolve goes to is gone. Pick it again.")
+        axis = (obj.AxisSource, obj.AxisSub)
+        sub = obj.TargetSub
+        if sub:
+            memory = json.loads(obj.TargetData or "{}")
+            found = _refind_element(obj.Target.Shape, sub, memory)
+            if found is None:
+                raise RevolveError(
+                    "The object this revolve goes to is gone from the part. Edit the revolve "
+                    "and pick it again."
+                )
+            name, fresh = found
+            if name != sub:
+                obj.TargetSub = name
+                sub = name
+            text = json.dumps(fresh, sort_keys=True)
+            if text != obj.TargetData:
+                obj.TargetData = text
+        angle = stop_angle(faces, axis, (obj.Target, sub))
+        if abs(obj.Angle - angle) > 1e-12:
+            obj.Angle = angle
+        point, direction = axis_line(axis)
+        body = owner_body(obj)
+        inverse = body.getGlobalPlacement().inverse() if body is not None else App.Placement()
+        a = inverse.multVec(point)
+        d = inverse.Rotation.multVec(direction)
+        obj.Shape = Part.LineSegment(a, a + d).toShape()
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _element_memory(element, kind):
+    """Where an element of a part is (its own body's coordinates), to find it again."""
+    if kind == "Vertex":
+        p = element.Point
+        return {"kind": kind, "point": [p.x, p.y, p.z]}
+    if kind == "Edge":
+        p = element.valueAt(element.FirstParameter + element.Length / 2.0)
+        return {"kind": kind, "point": [p.x, p.y, p.z], "length": element.Length}
+    entry = _face_entry(_Named(""), "", element)
+    entry["kind"] = kind
+    return entry
+
+
+def _refind_element(shape, sub, memory):
+    """(name, fresh memory) of the remembered vertex / edge / face in `shape`, or None: the
+    one still at the remembered place, else the one of that name (it moved with the part),
+    else the nearest one of its kind."""
+    kind = sub.lstrip("?").rstrip("0123456789")
+    name = sub.lstrip("?")
+    if kind not in ("Vertex", "Edge", "Face"):
+        return None
+    if kind == "Face" and memory.get("point"):
+        found = _find_face(shape, dict(memory, sub=name, obj=""))
+        if found is None:
+            return None
+        face, fresh = found
+        return fresh["sub"], _element_memory(face, kind)
+    items = shape.Vertexes if kind == "Vertex" else shape.Edges
+    if not items:
+        return None
+
+    def where(item):
+        if kind == "Vertex":
+            return item.Point
+        return item.valueAt(item.FirstParameter + item.Length / 2.0)
+
+    size = max(1.0, shape.BoundBox.DiagonalLength)
+    index = int(name[len(kind) :]) if name[len(kind) :].isdigit() else 0
+    pick = None
+    if memory.get("point"):
+        old = _vec(memory["point"])
+        same = [
+            i for i, item in enumerate(items, start=1) if (where(item) - old).Length < 1e-7 * size
+        ]
+        if index in same:
+            pick = index
+        elif same:
+            pick = same[0]
+        elif 0 < index <= len(items):
+            pick = index
+        else:
+            pick = min(range(1, len(items) + 1), key=lambda i: (where(items[i - 1]) - old).Length)
+    elif 0 < index <= len(items):
+        pick = index
+    if pick is None:
+        return None
+    return "%s%d" % (kind, pick), _element_memory(items[pick - 1], kind)
+
+
+def _to_link(body, feature, fp_profiles, axis, target, angle, existing=None):
+    """A hidden RevolveTo in `body`, just before `feature`."""
+    link = existing
+    if link is None or not isinstance(getattr(link, "Proxy", None), RevolveTo):
+        link = body.Document.addObject("Part::Part2DObjectPython", "RevolveTo")
+        RevolveTo(link)
+        body.insertObject(link, feature, False)
+        _mark(link, "RevolveTo")
+    link.Label = "%s to" % feature.Label
+    obj, sub = target
+    memory = ""
+    if sub:
+        kind = sub.rstrip("0123456789")
+        try:
+            memory = json.dumps(_element_memory(obj.Shape.getElement(sub), kind), sort_keys=True)
+        except Exception:
+            raise RevolveError("The object to revolve to is gone. Pick it again.")
+    if link.Target is not obj:
+        link.Target = obj
+    if link.TargetSub != sub or link.TargetData != memory:
+        link.TargetSub = sub
+        link.TargetData = memory
+        link.touch()
+    if link.AxisSource is not axis[0]:
+        link.AxisSource = axis[0]
+    if link.AxisSub != axis[1]:
+        link.AxisSub = axis[1]
+    sources = []
+    for source, _sub in fp_profiles:
+        if source not in sources:
+            sources.append(source)
+    if list(link.Sources) != sources:
+        link.Sources = sources
+    subs = json.dumps([[source.Name, sub] for source, sub in fp_profiles])
+    if link.SourceSubs != subs:
+        link.SourceSubs = subs
+    link.Angle = angle
+    _hide(link)
+    return link
 
 
 def auto_operation(base_shape, profiles, axis, options):
@@ -487,7 +818,7 @@ def _mark(obj, role):
 
 
 def is_helper(obj):
-    return getattr(obj, ROLE, "") in ("RevolveProfile", "RevolveAxis", "RevolveFace")
+    return getattr(obj, ROLE, "") in ("RevolveProfile", "RevolveAxis", "RevolveFace", "RevolveTo")
 
 
 def is_intersect(obj):
@@ -1197,10 +1528,26 @@ def _update(feature, body, profiles, axis, options, hide=True):
         link = _direct_profile(direct)
         fp_profiles = list(direct)
     axis_link = _local_axis(body, feature, axis, helpers, old_axis)
+    to_helper = None
+    if options["type"] == "to":
+        # How far it turns is worked out again on every recompute (the object can move).
+        angle = stop_angle(global_faces(profiles), axis, options["to"])
+        old_to = [h for h in old if getattr(h, ROLE, "") == "RevolveTo"]
+        to_helper = _to_link(
+            body, feature, fp_profiles, axis, options["to"], angle, old_to[0] if old_to else None
+        )
+        helpers.append(to_helper)
+        options = dict(options, angle=angle)
     keep = {h.Name for h in helpers}
-    for name in old_names:
+    gone = [name for name in old_names if name not in keep]
+    # A formula on the revolve that reads a helper about to go (Type To's angle, when the
+    # type changes back to Angle) is dropped first: it would point at nothing.
+    for prop, expr in list(dict(feature.ExpressionEngine).items()):
+        if any(name in expr for name in gone):
+            feature.setExpression(prop, None)
+    for name in gone:
         helper = doc.getObject(name)
-        if name not in keep and helper is not None:
+        if helper is not None:
             _delete(helper)
     if is_intersect(feature):
         feature.Profiles = [(obj, [sub]) for obj, sub in fp_profiles]
@@ -1209,7 +1556,7 @@ def _update(feature, body, profiles, axis, options, hide=True):
         if hasattr(feature, "AllowMultiFace"):
             feature.AllowMultiFace = True
     feature.ReferenceAxis = (axis_link[0], [axis_link[1]])
-    _apply(feature, options)
+    _apply(feature, options, to_helper)
     meta.update(
         {
             "v": 1,
@@ -1220,6 +1567,7 @@ def _update(feature, body, profiles, axis, options, hide=True):
             "angle2": float(options["angle2"]),
             "profiles": [[obj.Name, sub] for obj, sub in profiles],
             "axis": _ref_json(axis),
+            "to": _ref_json(options.get("to")) if options["type"] == "to" else None,
             "helpers": [h.Name for h in helpers],
         }
     )
@@ -1233,7 +1581,7 @@ FORMULAS = {"angle": "Angle", "angle2": "Angle2"}
 
 
 def _formula_used(key, options):
-    if options["type"] == "full":
+    if options["type"] in ("full", "to"):
         return False
     if key == "angle2":
         return options["direction"] == "two_sides"
@@ -1288,17 +1636,21 @@ def formulas_of(feature):
         engine = dict(feature.ExpressionEngine)
     except Exception:
         return {}
+    # The angle a Type To revolve gets from its helper is no formula the user typed.
+    helpers = load_meta(feature).get("helpers", [])
     found = {}
     for key, prop in FORMULAS.items():
-        if prop in engine:
+        if prop in engine and not any(name in engine[prop] for name in helpers):
             found[key] = _unwrap(key, parameters_core.from_freecad(engine[prop]))
     return found
 
 
-def _apply(feature, options):
+def _apply(feature, options, to_helper=None):
     """Type / angles / direction onto a Revolution, Groove or intersect feature."""
     a1, a2 = float(options["angle"]), float(options["angle2"])
-    if options["type"] == "full":
+    if options["type"] == "to":
+        kind, angle, angle2, mid, rev = "Angle", abs(a1), 0.0, False, a1 < 0
+    elif options["type"] == "full":
         kind, angle, angle2, mid, rev = "Angle", 360.0, 0.0, False, False
     elif options["direction"] == "symmetric":
         kind, angle, angle2, mid, rev = "Angle", min(2.0 * abs(a1), 360.0), 0.0, True, False
@@ -1317,6 +1669,16 @@ def _apply(feature, options):
     if hasattr(feature, "Refine"):
         feature.Refine = True
     _apply_expressions(feature, options)
+    engine = dict(feature.ExpressionEngine)
+    if to_helper is not None:
+        for prop, expr in (
+            ("Angle", "abs(%s.Angle)" % to_helper.Name),
+            ("Reversed", "%s.Angle < 0 ? 1 : 0" % to_helper.Name),
+        ):
+            if engine.get(prop) != expr:
+                feature.setExpression(prop, expr)
+    elif "Reversed" in engine:
+        feature.setExpression("Reversed", None)
 
 
 def hide_sketches(profiles):
@@ -1530,5 +1892,15 @@ def read(feature):
         options["angle"] = float(meta.get("angle", 360.0))
     if options["direction"] != "two_sides" and "angle2" in meta:
         options["angle2"] = float(meta["angle2"])
+    if meta.get("type") == "to":
+        options["type"] = "to"
+        options["direction"] = "one_side"
+        options["to"] = _ref_load(feature.Document, meta.get("to"))
+        # The helper has the element's name as it is now (FreeCAD can renumber them).
+        for name in meta.get("helpers", []):
+            helper = feature.Document.getObject(name)
+            if helper is not None and getattr(helper, ROLE, "") == "RevolveTo":
+                if helper.Target is not None:
+                    options["to"] = (helper.Target, helper.TargetSub)
     options["expressions"] = formulas_of(feature)
     return profiles_of(feature), axis_of(feature), options

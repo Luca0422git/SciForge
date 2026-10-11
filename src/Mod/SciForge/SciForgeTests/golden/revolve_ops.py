@@ -17,7 +17,10 @@ imported.
                                                       dimension "n.x" an edit can change)
                 {"sketch": id, "axis": "H" | "V"}     the sketch's own axis
                 {"edge": selector}                    a straight edge of the part
-      type      angle (default) | full
+      type      angle (default) | to | full
+      to        (type "to") what the revolve goes to, a pick as in inspect_ops:
+                {"plane": "XY"|"XZ"|"YZ"}, {"face": selector}, {"edge": selector},
+                {"vertex": [x, y, z]} (a corner of the part) or {"construct": id}
       direction one_side (default) | two_sides | symmetric
       angle     degrees (one side: signed; symmetric: each side), default 360
       angle2    degrees of side two
@@ -108,6 +111,10 @@ def op_sf_revolve(self, step):
     profiles = _profiles(self, step)
     axis = _axis(self, step)
     options = {k: step[k] for k in OPTION_KEYS if k in step}
+    if "to" in step:
+        from .inspect_ops import _ref
+
+        options["to"] = _ref(self, step["to"], "sf_revolve %r 'to'" % step["id"])
     if options.get("operation", "auto") == "auto":
         tip = self.body.Tip
         base = None

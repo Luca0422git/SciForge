@@ -87,6 +87,25 @@ class RevolveSchemaTests(unittest.TestCase):
             with self.assertRaises(schema.ModelError, msg=key):
                 schema.validate(model(**{key: value}))
 
+    def test_type_to(self):
+        for to in (
+            {"plane": "YZ"},
+            {"vertex": [40, 30, 10]},
+            {"face": {"normal": [0, 1, 0]}},
+            {"edge": {"type": "line", "count": 1}},
+            {"construct": "p1"},
+        ):
+            schema.validate(model(**{"1__type": "to", "1__to": to}))
+        for bad in (
+            {"1__type": "to"},  # no object to go to
+            {"1__to": {"plane": "YZ"}},  # an object without Type To
+            {"1__type": "to", "1__to": {}},
+            {"1__type": "to", "1__to": {"plane": "YZ", "vertex": [0, 0, 0]}},
+            {"1__type": "to", "1__to": "YZ"},
+        ):
+            with self.assertRaises(schema.ModelError, msg=str(bad)):
+                schema.validate(model(**bad))
+
     def test_edit(self):
         for bad in ({}, {"distance": 3}, {"angle": -500}):
             with self.assertRaises(schema.ModelError, msg=str(bad)):
@@ -101,6 +120,9 @@ class RevolveSchemaTests(unittest.TestCase):
             "sf_revolve_cone",
             "sf_revolve_torus",
             "sf_revolve_groove_auto_cut",
+            "sf_revolve_to_plane",
+            "sf_revolve_to_vertex_follows",
+            "sf_revolve_face_profile_follows",
         ):
             self.assertIn(name, ids)
 

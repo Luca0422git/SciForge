@@ -103,7 +103,7 @@ def dialog_open():
     h.check("no solid before the axis is picked", h.solid_volume() == 0.0, h.solid_volume())
     h.check(
         "Fusion's fields",
-        [p.type.itemText(i) for i in range(p.type.count())] == ["Angle", "Full"]
+        [p.type.itemText(i) for i in range(p.type.count())] == ["Angle", "To", "Full"]
         and [p.direction.itemText(i) for i in range(p.direction.count())]
         == ["One Side", "Two Sides", "Symmetric"]
         and [p.operation.itemText(i) for i in range(p.operation.count())]

@@ -1,0 +1,85 @@
+{
+  "id": "sf_revolve_to_vertex_follows",
+  "title": "Revolve dialog: Type To a corner of the part follows when the part changes",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "revolve-to",
+    "reference-stability"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            60,
+            0,
+            70,
+            5
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s2",
+      "axis": "Z",
+      "type": "to",
+      "to": {
+        "vertex": [
+          40,
+          30,
+          10
+        ]
+      },
+      "operation": "join"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 14091.378603578174,
+        "source": "analytic",
+        "note": "the ring section r 60..70 h5 turns atan(30/40) = 36.87 degrees, to the half-plane of the corner (40, 30): 12000 + pi (70^2 - 60^2) 5 * 36.87 / 360"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "s1",
+      "constraint": "b.height",
+      "value": 40
+    }
+  ],
+  "expect": {
+    "volume": 18552.544031041707,
+    "solids": 2,
+    "source": "analytic",
+    "note": "The block grows to 40 x 40: its corner is now at (40, 40), 45 degrees round, and the revolve follows it: 40*40*10 + pi (70^2 - 60^2) 5 / 8 (two separate lumps)."
+  }
+}
