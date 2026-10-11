@@ -23,6 +23,9 @@ Options (dict, see DEFAULTS):
              Symmetric: the angle on each side (the whole revolve is twice that, like
              Fusion's symmetric revolve). Two sides: side one (its sign picks the side).
   angle2     degrees of side two (two sides), turning the other way
+  expressions {"angle": formula, "angle2": formula}: values typed as a parameter or a
+             formula ("turn", "turn / 2 + 10"); they become expressions on the feature, so
+             the revolve follows the parameter (Fusion takes formulas in every value field)
 
 A positive angle turns right-handed about the axis direction, which is FreeCAD's own
 direction for that reference (an origin axis points along +X/+Y/+Z, a line from its
@@ -350,6 +353,9 @@ def options_with_defaults(options):
         raise RevolveError("unknown direction %r" % merged["direction"])
     merged["angle"] = float(merged["angle"])
     merged["angle2"] = float(merged["angle2"])
+    merged["expressions"] = {
+        k: v for k, v in dict(merged.get("expressions") or {}).items() if v and k in FORMULAS
+    }
     return merged
 
 
@@ -896,6 +902,73 @@ def _update(feature, body, profiles, axis, options, hide=True):
         hide_sketches(profiles)
 
 
+# Dialog value -> the feature property its formula drives.
+FORMULAS = {"angle": "Angle", "angle2": "Angle2"}
+
+
+def _formula_used(key, options):
+    if options["type"] == "full":
+        return False
+    if key == "angle2":
+        return options["direction"] == "two_sides"
+    return True
+
+
+def _wrap(key, expr, options):
+    """The property's expression for a formula typed in the dialog: FreeCAD's Angle is the
+    whole positive turn (a symmetric revolve's is twice the angle of one side; a negative
+    angle is a reversed revolve of the positive one)."""
+    if key != "angle":
+        return expr
+    negative = float(options["angle"]) < 0
+    if options["direction"] == "symmetric":
+        return "%s * (%s)" % ("-2" if negative else "2", expr)
+    return "-(%s)" % expr if negative else expr
+
+
+def _unwrap(key, expr):
+    if key == "angle":
+        for head in ("-2 * (", "2 * (", "-("):
+            if expr.startswith(head) and expr.endswith(")"):
+                return expr[len(head) : -1]
+    return expr
+
+
+def _apply_expressions(feature, options):
+    """Formulas typed in the dialog become expressions on the feature's properties; a value
+    typed as a plain number (or dragged) removes the formula again."""
+    from . import parameters, parameters_core
+
+    typed = options.get("expressions") or {}
+    names = parameters.user_names(feature.Document)
+    engine = dict(feature.ExpressionEngine)
+    for key, prop in FORMULAS.items():
+        if prop not in feature.PropertiesList:
+            continue
+        text = (typed.get(key) or "").strip()
+        if text and _formula_used(key, options):
+            expr = _wrap(key, parameters_core.to_freecad(text, names), options)
+            if engine.get(prop) != expr:
+                feature.setExpression(prop, expr)
+        elif prop in engine:
+            feature.setExpression(prop, None)
+
+
+def formulas_of(feature):
+    """{"angle": formula, ...} driving an existing revolve (bare parameter names)."""
+    from . import parameters_core
+
+    try:
+        engine = dict(feature.ExpressionEngine)
+    except Exception:
+        return {}
+    found = {}
+    for key, prop in FORMULAS.items():
+        if prop in engine:
+            found[key] = _unwrap(key, parameters_core.from_freecad(engine[prop]))
+    return found
+
+
 def _apply(feature, options):
     """Type / angles / direction onto a Revolution, Groove or intersect feature."""
     a1, a2 = float(options["angle"]), float(options["angle2"])
@@ -917,6 +990,7 @@ def _apply(feature, options):
         feature.Reversed = rev
     if hasattr(feature, "Refine"):
         feature.Refine = True
+    _apply_expressions(feature, options)
 
 
 def hide_sketches(profiles):
@@ -984,6 +1058,33 @@ def _show_tip(body):
         pass
 
 
+def problem(feature):
+    """What is wrong with a computed revolve that FreeCAD accepts without a word, or ''.
+    FreeCAD's Groove that misses the part changes nothing, and one that takes everything
+    leaves an empty body, both "valid"; Fusion says so (like SciForge's Extrude)."""
+    try:
+        if feature is None or feature.TypeId != "PartDesign::Groove":
+            return ""
+        if "Invalid" in list(feature.State) or "Error" in list(feature.State):
+            return ""  # FreeCAD's own failure text is shown instead
+        base = feature.BaseFeature
+        if base is None or base.Shape.isNull() or not base.Shape.Solids:
+            # FreeCAD's Groove then shows the revolved solid itself, as if it were a Join
+            return "There is no solid to cut yet: this revolve makes the first one. Use New Body."
+        shape = feature.Shape
+        if shape.isNull() or not shape.Solids or shape.Volume < TOL:
+            return "This cut would remove the whole body. Make the profile smaller or turn it less."
+        before = base.Shape.Volume
+        if abs(before - shape.Volume) <= 1e-9 * max(1.0, before):
+            return (
+                "The cut does not touch the body. Turn it the other way, pick another profile "
+                "or use Join."
+            )
+    except Exception:
+        return ""
+    return ""
+
+
 def make(profiles, axis, options, name="Revolve"):
     """New revolve with Fusion-style options (see the module text for the forms)."""
     return build(normalize(profiles), axis, options, name)
@@ -993,7 +1094,14 @@ def update(feature, profiles=None, axis=None, options=None):
     """Rebuild an existing revolve; what is not given stays as it is."""
     old_profiles, old_axis, old_options = read(feature)
     merged = dict(old_options)
-    merged.update(options or {})
+    options = dict(options or {})
+    formulas = dict(old_options.get("expressions") or {})
+    for key in FORMULAS:
+        if key in options:
+            formulas.pop(key, None)  # a plain value replaces the formula, as in the dialog
+    formulas.update(options.pop("expressions", None) or {})
+    merged.update(options)
+    merged["expressions"] = formulas
     return build(
         normalize(profiles) if profiles is not None else old_profiles,
         axis if axis is not None else old_axis,
@@ -1081,4 +1189,5 @@ def read(feature):
         options["angle"] = float(meta.get("angle", 360.0))
     if options["direction"] != "two_sides" and "angle2" in meta:
         options["angle2"] = float(meta["angle2"])
+    options["expressions"] = formulas_of(feature)
     return profiles_of(feature), axis_of(feature), options

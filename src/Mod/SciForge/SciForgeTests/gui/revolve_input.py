@@ -75,3 +75,65 @@ def shown(body):
         )
     except Exception:
         return False
+
+
+# -- QA helpers (scenarios/revolve_qa*.py) ------------------------------------------------------
+def regions(sketch):
+    """[(sub, face in global coordinates)] of a sketch's closed areas."""
+    from sciforge import extrude
+
+    return extrude.regions(sketch)
+
+
+def pappus(face, point, direction, angle=360.0):
+    """Volume a flat face sweeps turning `angle` degrees about the axis line (Pappus:
+    area x the path of its centroid). The face must not cross the axis."""
+    import math
+
+    d = App.Vector(direction)
+    d.normalize()
+    c = face.CenterOfMass - point
+    r = (c - d * c.dot(d)).Length
+    return face.Area * 2.0 * math.pi * r * abs(angle) / 360.0
+
+
+def visible_point(face, shape=None, margin=0.8):
+    """A point inside a flat face (global) that the camera sees: no solid of `shape` in
+    front of it and at least `margin` mm from the face's edges, the one nearest the
+    middle. What a person aims at to click inside a sketch area."""
+    from sciforge import profile_pick
+
+    direction = h.view().getViewDirection()
+    u0, u1, v0, v1 = face.ParameterRange
+    centre = face.CenterOfMass
+    best = None
+    n = 24
+    edges = face.OuterWire
+    for i in range(1, n):
+        for j in range(1, n):
+            p = face.valueAt(u0 + (u1 - u0) * i / float(n), v0 + (v1 - v0) * j / float(n))
+            if not face.isInside(p, 1e-6, True):
+                continue
+            import Part
+
+            if edges.distToShape(Part.Vertex(p))[0] < margin:
+                continue
+            if any(w.distToShape(Part.Vertex(p))[0] < margin for w in face.Wires if w is not edges):
+                continue
+            if shape is not None and profile_pick.hidden_by(shape, p, direction):
+                continue
+            if best is None or (p - centre).Length < (best - centre).Length:
+                best = p
+    return best
+
+
+def body_shape():
+    """The part as shown (global), or None."""
+    b = h.body()
+    if b is None or b.Shape.isNull():
+        return None
+    return b.Shape
+
+
+def handle_screen(handle, degrees=None):
+    return h.screen_point(handle.point_at(handle.angle() if degrees is None else degrees))

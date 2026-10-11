@@ -206,7 +206,8 @@ class AngleHandle:
         self.root.addChild(self._arrow(coin))
         self._paint()
         self._draw()
-        self.view.getSceneGraph().addChild(self.root)
+        self.holder = _skip_fit(coin, self.root)
+        self.view.getSceneGraph().addChild(self.holder)
         self.callbacks = [
             ("SoMouseButtonEvent", self.view.addEventCallback("SoMouseButtonEvent", self._button)),
             ("SoLocation2Event", self.view.addEventCallback("SoLocation2Event", self._moved)),
@@ -408,12 +409,24 @@ class AngleHandle:
                 pass
         self.callbacks = []
         try:
-            self.view.getSceneGraph().removeChild(self.root)
+            self.view.getSceneGraph().removeChild(self.holder)
         except Exception:
             pass
 
 
 _GRAB = {"time": 0.0}  # when a handle last took a press
+
+
+def _skip_fit(coin, node):
+    """`node` inside FreeCAD's SoSkipBoundingGroup: Fit (fit all) then frames the part, not
+    the long axis lines or the handle drawn for picking (FreeCAD does the same for its
+    rotation-centre mark)."""
+    try:
+        group = coin.SoType.fromName("SoSkipBoundingGroup").createInstance()
+        group.addChild(node)
+        return group
+    except Exception:
+        return node
 
 
 def _nearest_turn(raw, near):
@@ -426,8 +439,10 @@ def _nearest_turn(raw, near):
 class AxisPicker:
     """The origin axes (and the construction lines of sketches) as long coloured lines
     you can click, like Create Sketch's big plane squares. They light up under the mouse;
-    a click is matched to them by distance on screen. Drawn on top of the part so an axis
-    inside it can still be seen and clicked."""
+    a click is matched to them by distance on screen. Like Fusion's origin axes they are
+    hidden where the part is in front of them, and a click there is the part's (an edge
+    of the part next to a hidden axis is what the person aims at); they are long enough to
+    stick out of the part, where they can always be clicked."""
 
     def __init__(self, view, lines, on_pick, blocked=None, competing=None):
         from pivy import coin
@@ -438,7 +453,7 @@ class AxisPicker:
         self.blocked = blocked  # (position) -> True when another handle takes the click
         self.competing = competing  # (position) -> True when something else is there
         self.lines = []  # [ref, kind, start, end, switch, material, style]
-        self.root = coin.SoAnnotation()
+        self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
         self.root.addChild(pick)
@@ -450,7 +465,8 @@ class AxisPicker:
         self.usable = lambda line: True
         self.extra = None  # the picked axis when it is not one of the drawn lines
         self.last_click = 0.0
-        view.getSceneGraph().addChild(self.root)
+        self.holder = _skip_fit(coin, self.root)
+        view.getSceneGraph().addChild(self.holder)
         self.callbacks = [
             ("SoMouseButtonEvent", view.addEventCallback("SoMouseButtonEvent", self._button)),
             ("SoLocation2Event", view.addEventCallback("SoLocation2Event", self._moved)),
@@ -563,7 +579,37 @@ class AxisPicker:
             return None
         if best[0] > ON_LINE_PIXELS and self.competing is not None and self.competing(position):
             return None
+        if self._hidden_at(position, best[1]):
+            return None
         return best[1]
+
+    def _hidden_at(self, position, line):
+        """True if the part is in front of the drawn line under the mouse (the line is
+        hidden there, so the click is the part's)."""
+        try:
+            info = self.view.getObjectInfo((int(position[0]), int(position[1])))
+        except Exception:
+            return False
+        if not info or not info.get("Object") or "x" not in info:
+            return False
+        try:
+            hit = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
+            p0, d = profile_pick.mouse_ray(self.view, tuple(position))
+            a, u = App.Vector(line[2]), line[3] - line[2]
+            length = u.Length
+            if length < 1e-9:
+                return False
+            u = u * (1.0 / length)
+            w0 = p0 - a
+            b, dd, e = d.dot(u), d.dot(w0), u.dot(w0)
+            denom = 1.0 - b * b
+            s = 0.0 if denom < 1e-9 else (e - b * dd) / denom  # where the axis passes the ray
+            s = max(0.0, min(length, s))
+            q = a + u * s
+            tol = max(0.01, 1e-4 * length)
+            return (hit - p0).dot(d) < (q - p0).dot(d) - tol
+        except Exception:
+            return False
 
     def _moved(self, info):
         try:
@@ -602,7 +648,7 @@ class AxisPicker:
                 pass
         self.callbacks = []
         try:
-            self.view.getSceneGraph().removeChild(self.root)
+            self.view.getSceneGraph().removeChild(self.holder)
         except Exception:
             pass
         self.lines = []
@@ -676,6 +722,15 @@ def selected(body):
     return extrude.normalize(profiles), axis
 
 
+def _single_region(sketch):
+    """[(sketch, area)] when the sketch has exactly one closed area, else []."""
+    try:
+        found = extrude.regions(sketch)
+    except Exception:
+        return []
+    return [(sketch, found[0][0])] if len(found) == 1 else []
+
+
 def newest_single_region(body):
     """The only area of the newest sketch no feature uses yet (Fusion picks a sketch's
     single profile by itself), or None."""
@@ -699,18 +754,29 @@ class RevolvePanel(Panel):
     last = None
     auto_pick = True
 
-    def __init__(self, doc, feature=None):
+    def __init__(self, doc, feature=None, sketch=None):
         super().__init__(doc, "Revolve" if feature is None else "Edit Revolve")
         RevolvePanel.last = self
+        # The sketch that was open when Revolve started: its area is the profile (Fusion
+        # revolves the sketch you are in), also when a feature already uses it.
+        self.from_sketch = sketch
+        # Fusion's keys while a command is open: Esc cancels, Enter (also over the 3D view)
+        # is OK, Ctrl+Z cancels the step being made, Ctrl+S/N/O finish the dialog first.
         self.escape = preview.EscapeCancels(self)
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else revolve.owner_body(feature)
+        if feature is None and sketch is not None and revolve.owner_body(sketch) is not None:
+            self.body = revolve.owner_body(sketch)
         self.profiles = []
         self.axis = None
         self.options = dict(revolve.DEFAULTS)
+        self.options["expressions"] = {}  # formulas typed in the angle fields (FormulaInput)
         self.user_picked_operation = feature is not None
         self.error = ""
+        self.formula_error = ""  # a formula typed in a field that is no value
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
@@ -803,7 +869,20 @@ class RevolvePanel(Panel):
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
         self.operation.setObjectName("SciForgeRevolve_operation")
         form.addRow("Operation", self.operation)
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        # Fusion takes a parameter or a formula in every value field ("turn", "turn / 2").
+        self.formula_inputs = [
+            preview.FormulaInput(self, "angle", self.angle),
+            preview.FormulaInput(self, "angle2", self.angle2),
+        ]
+        for key, field in (("angle", self.angle), ("angle2", self.angle2)):
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is not None:
+                edit.textEdited.connect(lambda text, key=key: self._text_edited(key, text))
         self.type.currentIndexChanged.connect(self._kind_changed)
         self.direction.currentIndexChanged.connect(self._kind_changed)
         self.operation.activated.connect(self._operation_picked)
@@ -819,6 +898,7 @@ class RevolvePanel(Panel):
         finally:
             self._quiet = False
         self._update_visibility()
+        self.show_formulas()
 
     def _update_visibility(self):
         full = self.type.currentData() == "full"
@@ -841,6 +921,61 @@ class RevolvePanel(Panel):
         self.options["angle"] = self.angle.value()
         self.options["angle2"] = self.angle2.value()
         self.options["operation"] = self.operation.currentData()
+
+    # -- formulas (preview.FormulaInput calls formula_typed / _cleared / _failed) -----------------
+    FORMULA_NAMES = {"angle": "Angle", "angle2": "Side Two angle"}
+
+    def formula_of(self, key):
+        """The formula the value field `key` follows, or ''."""
+        return (self.options.get("expressions") or {}).get(key, "")
+
+    def show_formulas(self):
+        """Fusion shows the formula in the field; FreeCAD's number field cannot, so the values
+        that follow a parameter are listed under the fields."""
+        rows = [
+            "%s = %s" % (self.FORMULA_NAMES.get(k, k), v)
+            for k, v in sorted((self.options.get("expressions") or {}).items())
+            if v
+        ]
+        self.formulas.setText("\n".join(rows))
+        self.formulas.setVisible(bool(rows))
+
+    def drop_formula(self, key, update=True):
+        """A plain number typed or a handle dragged: the value no longer follows a formula."""
+        self.formula_error = ""
+        if self.options.setdefault("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            if update:
+                self._changed()
+
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options.setdefault("expressions", {})[key] = text
+        if key == "angle":
+            self._angle_typed(value)
+        else:
+            self._angle2_typed(value)
+        self.show_formulas()
+
+    def formula_cleared(self, key):
+        self.drop_formula(key)
+
+    def formula_failed(self, key, text):
+        # Kept until the field gets a value again (a preview rebuild must not wipe it).
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
+
+    def _text_edited(self, key, text):
+        """A plain number typed over a formula (or over a typo) wins at once: the preview and
+        OK use it without waiting for the field to be left."""
+        try:
+            from . import parameters
+
+            if self._closed or not text.strip() or not parameters.is_plain_number(text):
+                return
+            self.drop_formula(key)  # also forgets a typo typed in a field before
+        except Exception as exc:
+            warn("revolve field: %s" % exc)
 
     # -- selection fields --------------------------------------------------------------------------
     def activate(self, name):
@@ -869,7 +1004,11 @@ class RevolvePanel(Panel):
             self.message.setText("Create a sketch first (Create Sketch).")
             return
         profiles, axis = selected(self.body)
-        if not profiles and self.auto_pick:
+        if not profiles and self.from_sketch is not None:
+            # Never "the newest unused sketch" instead: with several areas, the user
+            # clicks the ones wanted in this sketch.
+            profiles = _single_region(self.from_sketch)
+        elif not profiles and self.auto_pick:
             single = newest_single_region(self.body)
             profiles = [single] if single else []
         try:
@@ -915,6 +1054,8 @@ class RevolvePanel(Panel):
         extra = [obj for obj, _ in self.profiles if extrude.is_sketch(obj)]
         if self.axis is not None and extrude.is_sketch(self.axis[0]):
             extra.append(self.axis[0])
+        if self.from_sketch is not None:
+            extra.append(self.from_sketch)
         sketches = profile_pick.candidate_sketches(self.body, extra)
         try:
             self.axes = AxisPicker(
@@ -1038,7 +1179,8 @@ class RevolvePanel(Panel):
         if self._closed:
             return
         try:
-            picks = profile_pick.picks()
+            # Only this design's objects: a click in another open design is no pick.
+            picks = [pk for pk in profile_pick.picks() if _in_doc(pk[0], self.doc)]
             if not picks:
                 return
             Gui.Selection.clearSelection()
@@ -1279,13 +1421,16 @@ class RevolvePanel(Panel):
             a1 = self.angle.value()
             if direction == "symmetric" and abs(a1) > 180.0:
                 self.angle.set_value(180.0 if a1 > 0 else -180.0)
+                self.drop_formula("angle", update=False)
             if direction == "two_sides":
                 a2 = self.angle2.value()
                 if a2 <= 0:
                     a2 = 90.0
                     self.angle2.set_value(a2)
+                    self.drop_formula("angle2", update=False)
                 if abs(a1) + a2 > 360.0:
                     self.angle.set_value(math.copysign(360.0 - a2, a1 if a1 else 1.0))
+                    self.drop_formula("angle", update=False)
         finally:
             self._quiet = False
         self._changed(new_geometry=True)
@@ -1337,6 +1482,7 @@ class RevolvePanel(Panel):
             self.angle.set_value(value)
         finally:
             self._quiet = False
+        self.drop_formula("angle", update=False)
         self._changed()
 
     @_safe
@@ -1353,6 +1499,7 @@ class RevolvePanel(Panel):
             self.angle2.set_value(value)
         finally:
             self._quiet = False
+        self.drop_formula("angle2", update=False)
         self._changed()
 
     def _auto_operation(self):
@@ -1387,17 +1534,35 @@ class RevolvePanel(Panel):
         self.schedule()
 
     def _recompute(self):
+        if self._closed:
+            return  # a change that arrived as the dialog closed
+        if self._busy():
+            self._timer.start()  # a long recompute runs timers: never start a second one
+            return
         try:
             if self.dirty:
                 self.dirty = False
                 self._apply()
             preview.recompute(self.doc)
+            if self._closed:
+                return  # finished or cancelled while the recompute ran
             self.show_status()
             if self._geometry_changed or self._handles_wrong():
                 self._geometry_changed = False
                 self._make_handles()
         except Exception as exc:
-            self.message.setText("⚠ %s" % exc)
+            if not self._closed:
+                try:
+                    self.message.setText("⚠ %s" % exc)
+                except RuntimeError:
+                    pass  # the dialog's widgets are gone
+
+    def _busy(self):
+        """True while FreeCAD recomputes: OK, Cancel and another command wait for it."""
+        try:
+            return bool(self.doc.Recomputing)
+        except Exception:
+            return False
 
     def _apply(self):
         if not self.profiles or self.axis is None:
@@ -1432,10 +1597,13 @@ class RevolvePanel(Panel):
         return self.target
 
     def show_status(self):
+        if self.formula_error:
+            self.message.setText("⚠ " + self.formula_error)
+            return
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or revolve.problem(self.target)
         self.message.setText("⚠ " + text if text else "")
 
     # -- handles --------------------------------------------------------------------------------------
@@ -1530,7 +1698,19 @@ class RevolvePanel(Panel):
             warn("revolve handles unavailable: %s" % exc)
 
     # -- OK / Cancel ----------------------------------------------------------------------------------
+    def finish(self):
+        """Another command is starting: keep the revolve if it is good, else drop it. Not in
+        the middle of a recompute (the other command then says to finish this one first)."""
+        if self._busy():
+            return
+        super().finish()
+
     def accept(self):
+        if self._closed:
+            return True
+        if self._busy():
+            self.message.setText("⚠ Still working out the preview; press OK again in a moment.")
+            return False
         try:
             return self._accept()
         except Exception as exc:
@@ -1539,6 +1719,9 @@ class RevolvePanel(Panel):
             return False
 
     def _accept(self):
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
+            return False
         if self.target is None:
             if not self.profiles:
                 text = "Pick a profile first: click inside a sketch area or on a flat face."
@@ -1556,14 +1739,16 @@ class RevolvePanel(Panel):
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or revolve.problem(self.target)
         if text:
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
         revolve.hide_sketches(self.profiles)
         self.cleanup()
-        self.doc.commitTransaction()
+        # Also closes the step's name when nothing changed (else the next change anywhere
+        # took that name and threw away the Redo list).
+        preview.end_transaction(self.doc)
         self._close()
         new_body = revolve.owner_body(feature)
         if new_body is not None and new_body is not self.body:
@@ -1575,10 +1760,16 @@ class RevolvePanel(Panel):
         return True
 
     def reject(self):
+        if self._closed:
+            return True
+        if self._busy():
+            QtCore.QTimer.singleShot(200, self.reject)  # once the recompute is over
+            return False
+        body = self.body
         try:
             self._timer.stop()
             self.cleanup()
-            self.doc.abortTransaction()
+            preview.end_transaction(self.doc, abort=True)
             preview.recompute(self.doc)
         except Exception as exc:
             warn("Revolve Cancel: %s" % exc)
@@ -1586,11 +1777,16 @@ class RevolvePanel(Panel):
             self._close()
         except Exception as exc:
             warn("Revolve Cancel: %s" % exc)
+        revolve._show_tip(body)
         return True
 
     def cleanup(self):
         self._unwatch()
-        self.escape.remove()
+        for guard in (self.escape, self.undo_guard, self.enter):
+            try:
+                guard.remove()
+            except Exception:
+                pass
         self._remove_handles()
         self._hide_shown()
         super().cleanup()
@@ -1610,6 +1806,13 @@ PLAIN = (
     ),
     ("not a solid", "Nothing is left: the revolve does not touch the body here."),
 )
+
+
+def _in_doc(obj, doc):
+    try:
+        return obj.Document.Name == doc.Name
+    except Exception:
+        return False
 
 
 def _plain(text):
@@ -1668,15 +1871,25 @@ class RevolveCommand:
 
     def Activated(self):
         try:
+            sketch = _sketch_in_edit()  # Revolve started in a sketch: revolve that sketch
             if not commands.finish_open_dialog():
                 return
             if commands.find_body() is None:
                 commands.tell("Revolve needs a sketch: use Create Sketch first.")
                 return
-            Gui.Control.showDialog(RevolvePanel(App.ActiveDocument))
+            Gui.Control.showDialog(RevolvePanel(App.ActiveDocument, sketch=sketch))
             log("revolve started")
         except Exception as exc:
             warn("Revolve failed to start: %s" % exc)
+
+
+def _sketch_in_edit():
+    try:
+        edit = Gui.ActiveDocument.getInEdit() if Gui.ActiveDocument is not None else None
+        obj = edit.Object if edit is not None else None
+    except Exception:
+        return None
+    return obj if obj is not None and extrude.is_sketch(obj) else None
 
 
 def edit(feature):
