@@ -305,7 +305,9 @@ class ThreadPanel(Panel):
             if owner is not None:
                 self._use_body(owner)
         if self.base is None:
-            self.message.setText("⚠ Make a solid first: Create Sketch, then Extrude.")
+            if not common.has_solid(self.doc):
+                self.message.setText("⚠ Make a solid first: Create Sketch, then Extrude.")
+            # else: the active body is empty, a face of another body can still be clicked
             self._refresh()
             return
         for obj, short, point in faces:
@@ -470,7 +472,7 @@ class ThreadPanel(Panel):
                 "%s thread, %s %.3g mm, %.3g mm long"
                 % ("Inside" if c.internal else "Outside", "⌀", c.diameter, c.length)
             )
-        if self.base is None and self.target is None:
+        if self.base is None and self.target is None and not common.has_solid(self.doc):
             self.what.setText("Make a solid first (Create Sketch, then Extrude).")
         self._update_visibility()
 

@@ -353,15 +353,78 @@ def _origin_plane(body, role="XY_Plane"):
     raise HoleError("The body has no %s." % role)
 
 
+def _history(feature):
+    """The steps before `feature` in its body, newest first (its BaseFeature chain)."""
+    seen = set()
+    obj = getattr(feature, "BaseFeature", None)
+    while obj is not None and obj.Name not in seen:
+        seen.add(obj.Name)
+        yield obj
+        obj = getattr(obj, "BaseFeature", None)
+
+
+def earliest_face(base, face_name, point):
+    """(step, 'FaceN'): the earliest step in `base`'s history that already has the flat face
+    `face_name` of `base` where `point` (body coordinates) is: the step that made the face,
+    not the hole drilled in it just before. A hole hangs its sketch (and its To target) on
+    that step, so suppressing, deleting or editing an unrelated earlier hole leaves it alone,
+    as in Fusion; a step that moved the face (Press Pull, a taller extrude) stops the search."""
+    try:
+        face = base.Shape.getElement(face_name)
+    except Exception:
+        return base, face_name
+    if face.Surface.TypeId != "Part::GeomPlane":
+        return base, face_name
+    normal = face_normal_at(face, point)
+    best = (base, face_name)
+    for obj in _history(base):
+        try:
+            if obj.Shape.isNull():
+                break
+            name = base_face_at(obj, point, normal_hint=normal, loose=0.0)
+            if name is None:
+                break
+            other = obj.Shape.getElement(name)
+        except Exception:
+            break
+        if other.Surface.TypeId != "Part::GeomPlane":
+            break
+        if face_normal_at(other, point).dot(normal) < 1.0 - 1e-9:
+            break
+        best = (obj, name)
+    return best
+
+
+def earliest_edge(base, edge_name):
+    """(step, 'EdgeN'): the earliest step in `base`'s history with the same straight edge
+    (or the longer edge it lies on): a reference measured from it then does not depend on
+    the holes drilled in between (see earliest_face)."""
+    try:
+        edge = base.Shape.getElement(edge_name)
+    except Exception:
+        return base, edge_name
+    best = (base, edge_name)
+    for obj in _history(base):
+        try:
+            name = base_edge_like(obj, edge)
+        except Exception:
+            name = None
+        if name is None:
+            break
+        best = (obj, name)
+    return best
+
+
 def _attach(sketch, body, base, face_name, point):
     """Put the sketch flat on the face (planar faces: parametric attachment, the sketch
-    follows the face). On a curved face the sketch is tangent to the face at `point`
-    (body coordinates), its normal the face's outward normal there."""
+    follows the face, on the step that made it: earliest_face). On a curved face the sketch
+    is tangent to the face at `point` (body coordinates), its normal the face's outward
+    normal there."""
     face = base.Shape.getElement(face_name)
     point = snap_to_face(face, point)
     if face.Surface.TypeId == "Part::GeomPlane":
         sketch.AttachmentOffset = App.Placement()
-        sketch.AttachmentSupport = [(base, face_name)]
+        sketch.AttachmentSupport = [earliest_face(base, face_name, point)]
         sketch.MapMode = "FlatFace"
         return "planar"
     normal = face_normal_at(face, point)
@@ -504,14 +567,20 @@ def set_position(hole, base, face_name, point, refs=None):
         raise HoleError("This hole is placed from a sketch; edit that sketch to move it.")
     body = owner_body(hole)
     try:
-        point = snap_to_face(base.Shape.getElement(face_name), point)
+        face = base.Shape.getElement(face_name)
+        point = snap_to_face(face, point)
     except Exception:
         raise HoleError("That face is gone. Click a face of the part.")
     current = sketch.AttachmentSupport
+    if face.Surface.TypeId == "Part::GeomPlane":
+        src, src_name = earliest_face(base, face_name, point)
+    else:
+        src, src_name = None, ""  # a curved face: always placed again (tangent plane)
     same_face = (
-        current
-        and current[0][0] is base
-        and list(current[0][1]) == [face_name]
+        src is not None
+        and current
+        and current[0][0] is src
+        and list(current[0][1]) == [src_name]
         and sketch.MapMode == "FlatFace"
         and sketch.AttachmentOffset.isIdentity()
     )
@@ -521,6 +590,8 @@ def set_position(hole, base, face_name, point, refs=None):
     xy = _sketch_xy(sketch, point)
     wanted, lines = [], []
     for ref, distance in refs or []:
+        if ref[0] is not None and owner_body(ref[0]) is body:
+            ref = earliest_edge(ref[0], ref[1])  # on the step that made the edge
         line = _line_xy(sketch, ref)
         if line is None or any(_parallel(line, other) for other in lines):
             continue

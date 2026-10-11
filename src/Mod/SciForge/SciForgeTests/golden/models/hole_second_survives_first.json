@@ -1,0 +1,136 @@
+{
+  "id": "hole_second_survives_first",
+  "title": "Two single holes on the top face; the first suppressed, then deleted: the second stays",
+  "tags": [
+    "hole",
+    "single",
+    "suppress",
+    "delete"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        10,
+        15,
+        10
+      ],
+      "diameter": 6,
+      "depth": 5,
+      "drill_point": "flat"
+    },
+    {
+      "op": "hole_at",
+      "id": "h2",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "at": [
+        30,
+        15,
+        10
+      ],
+      "diameter": 4,
+      "depth": 5,
+      "drill_point": "flat"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11795.796477516664,
+        "source": "analytic",
+        "note": "12000 - pi 9 5 - pi 4 5"
+      }
+    },
+    {
+      "op": "suppress",
+      "target": "h1"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11937.168146928204,
+        "source": "analytic",
+        "note": "the first hole off: only the second is left, where it was (12000 - pi 4 5)"
+      }
+    },
+    {
+      "op": "unsuppress",
+      "target": "h1"
+    },
+    {
+      "op": "delete",
+      "target": "h1"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11937.168146928204,
+        "faces": 8,
+        "source": "analytic",
+        "note": "the first hole deleted: 12000 - pi 4 5; box 6 faces + hole wall + bottom"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "distance": 16
+      }
+    }
+  ],
+  "expect": {
+    "volume": 19137.168146928205,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      16
+    ],
+    "source": "analytic",
+    "note": "Fusion keeps each hole on its face: the second hole's sketch hangs on the face of the extrude (the step that made it), not on the first hole, so the first one can go without moving or breaking it, and the hole still rides on the top when the plate grows to 16 (a sketch left frozen where the deleted hole was would leave a closed pocket inside: 9 faces); 19200 - pi 4 5"
+  }
+}

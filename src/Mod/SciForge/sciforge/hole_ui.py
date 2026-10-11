@@ -38,6 +38,7 @@ DIRECTION_LABELS = [("Right hand", "right"), ("Left hand", "left")]
 BLUE = (0.30, 0.62, 0.95)
 LINE_TYPES = ("Part::GeomLine", "Part::GeomLineSegment")
 MIN_DIAMETER = 0.1  # mm: the diameter arrow stops here
+TO_WAITING = "Click the face or plane the hole goes to (in the 3D view or the browser)."
 MISSES = "The hole misses the part. Drag it (or type X / Y) back onto a face of the part."
 
 
@@ -676,8 +677,10 @@ class HolePanel(Panel):
             text = (
                 "Click points and circles of a sketch: a hole at each. Click one again to drop it."
             )
-        if self.target is None and self.base is None:
+        if self.target is None and self.base is None and not common.has_solid(self.doc):
             text = "Make a solid first (Create Sketch, then Extrude)."
+        elif self.extent.currentData() == "to" and not self.options.get("to"):
+            text = TO_WAITING  # what the dialog waits for, not a problem
         self.what.setText(text)
         self._update_visibility()
 
@@ -710,7 +713,9 @@ class HolePanel(Panel):
                 self._use_body(owner)
         if self.base is None:
             self._refresh_fields()
-            self.message.setText("⚠ Make a solid first: Create Sketch, then Extrude.")
+            if not common.has_solid(self.doc):
+                self.message.setText("⚠ Make a solid first: Create Sketch, then Extrude.")
+            # else: the active body is empty, a face of another body can still be clicked
             return
         if sketch_picks:
             self._quiet = True
@@ -776,7 +781,7 @@ class HolePanel(Panel):
         if obj.isDerivedFrom(hole.SKETCH_TYPE):
             if hole.is_helper(obj) or self.active == "to":
                 return
-            if self.base is None:
+            if self.base is None and not common.has_solid(self.doc):
                 return
             if self.placement.currentData() != "sketch":
                 if self.editing:
@@ -879,7 +884,7 @@ class HolePanel(Panel):
         if name is None:
             self.message.setText("That edge is made by this hole. Pick an edge of the part.")
             return
-        ref = (self.base, name)
+        ref = hole.earliest_edge(self.base, name)  # the step that made the edge
         sketch = hole.helper_sketch(self.target)
         why = hole.check_reference(sketch, ref)
         if why:
@@ -994,7 +999,7 @@ class HolePanel(Panel):
                 if name is None:
                     self.message.setText("That face is made by this hole. Pick a face of the part.")
                     return
-                ref = (self.base, name)
+                ref = hole.earliest_face(self.base, name, local)  # the step that made it
             else:
                 ref = (obj, short)
         else:
@@ -1246,8 +1251,13 @@ class HolePanel(Panel):
         if self.target is None:
             return
         self._collect()
+        options = dict(self.options)
+        if options["extent"] == "to" and not options.get("to"):
+            # Fusion: the To box waits for its click, nothing is wrong yet; the hole keeps its
+            # depth meanwhile (the dialog says what it waits for).
+            options["extent"] = "distance"
         try:
-            hole.apply(self.target, self.options)
+            hole.apply(self.target, options)
             self.error = ""
         except hole.HoleError as exc:
             self.error = str(exc)
@@ -1468,6 +1478,9 @@ class HolePanel(Panel):
         if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
             self.message.setText("⚠ " + self.formula_error)
             return False
+        if self.extent.currentData() == "to" and not self.options.get("to"):
+            self.message.setText("⚠ " + TO_WAITING)
+            return False
         self._timer.stop()
         if self.dirty:
             self.dirty = False
@@ -1528,14 +1541,20 @@ class HolePanel(Panel):
 
 
 def _ref_text(ref):
+    """What a selection box shows: "Face of Extrude 1" (the step's name in the timeline,
+    not FreeCAD's internal label), or a plane's name."""
     if not ref or ref[0] is None:
         return ""
     obj, sub = ref
-    if obj.TypeId in hole.PLANE_TYPES:
-        return obj.Label
+    try:
+        if obj.TypeId in hole.PLANE_TYPES:
+            return obj.Label
+        name = hole.display_name(obj)
+    except Exception:
+        return ""  # the object went with an undo
     if sub:
-        return "%s of %s" % (sub.rstrip("0123456789") or sub, obj.Label)
-    return obj.Label
+        return "%s of %s" % (sub.rstrip("0123456789") or sub, name)
+    return name
 
 
 class HoleCommand:

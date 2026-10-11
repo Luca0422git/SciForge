@@ -168,7 +168,7 @@ def after_redo():
 
 
 def edit():
-    b.timeline_double_click("Hole 1")
+    b.timeline_double_click("Hole 1", click_first=True)
 
 
 def edit_open():

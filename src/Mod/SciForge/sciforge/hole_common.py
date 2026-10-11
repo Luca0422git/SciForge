@@ -149,6 +149,19 @@ def picks(doc=None):
     return found
 
 
+def has_solid(doc):
+    """True when some body of the design has a solid (a face to drill or thread can be
+    clicked, also when the active body is still empty)."""
+    try:
+        for body in doc.findObjects("PartDesign::Body"):
+            tip = body.Tip
+            if tip is not None and not tip.Shape.isNull() and tip.Shape.Solids:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def global_shape(obj, short):
     """Element `short` of `obj` in global coordinates (a copy), or None."""
     try:

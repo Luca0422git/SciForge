@@ -271,7 +271,7 @@ def after_ok():
 
 
 def edit():
-    b.timeline_double_click("Hole 1")
+    b.timeline_double_click("Hole 1", click_first=True)
 
 
 def edit_open():

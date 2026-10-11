@@ -130,6 +130,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       or hole faces: size from the diameter, full/partial length (+ blue length arrow), cosmetic
       (dashed helix overlay, also for tapped holes) or modeled (own ISO 68-1 groove sweep,
       `thread_core.py`). 6 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
+- [x] Hole / Thread QA pass (branch `sf/hole-qa`): Enter over the view = OK, Ctrl+Z cancels
+      / Ctrl+S finishes first (`preview.UndoCancels`), formulas and parameters in every value
+      field, Redo list kept after an unchanged dialog, Extents To follows its face
+      (`hole.HoleToDistance` helper), hole that misses the part refused, arrows stop at sane
+      limits, timeline edits with a person's double-click, picks only from the dialog's own
+      design, OK/Cancel/other keys wait for a running recompute, a thread's lost face found
+      again by geometry. 4 QA scenarios (`hole_qa*.py`, 28 paths), golden
+      `hole_to_face_follows`. Spec: `parity/hole-thread.md`.
 - [x] Fusion-style Revolve (branch `sf/revolve`, `revolve.py` / `revolve_ui.py`): profile =
       sketch areas or flat faces; axis = origin axis (drawn as long X/Y/Z lines to click),
       sketch line, construction line (drawn dashed), straight part edge, construction axis;
@@ -686,10 +694,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     press, release (the timeline selects the step), double-click, release.
   - **Hole (hole owner, `hole_ui.py`)**: with a person's double-click on "Hole 1" in the
     timeline (the first click selects the Hole step), the edit dialog then picks nothing
-    when a reference edge is clicked (`hole.py` scenario run with `click_first=True`:
-    "one reference edge" ... 7 checks fail, every time). Probably the whole-feature
-    selection the timeline click left behind; the hole scenarios pass only with the bare
-    double-click. Switch `hole.py` to `click_first=True` and fix the dialog.
+    when a reference edge is clicked. **Fixed on `sf/hole-qa`**: the Hole and Thread edit
+    dialogs clear that whole-feature selection when they open; every hole scenario now
+    uses `click_first=True`.
   - A selected timeline item is a whole-feature selection: F after a right-click on the
     timeline (Roll History Marker Here) rounded every edge that feature made. Whole features
     are no longer taken as picks when F starts (a timeline click *inside* the dialog still
@@ -698,6 +705,40 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     raises `TypeError: undefined curve type`: guard every `.Curve` read.
   - Display parity notes: FreeCAD draws a cylinder's seam as a line (Fusion does not), and the
     overlay title bar of the Tasks dock sometimes shows as a white strip in screenshots.
+- **Hole / Thread QA findings (branch `sf/hole-qa`)**:
+  - The Hole and Thread dialogs were built before main's shared dialog rules and missed
+    them all: Enter over the 3D view (`preview.EnterFinishes`), Ctrl+Z / Ctrl+S / closing the
+    design (`preview.UndoCancels`; the old `hole_common.DocumentWatch` committed the preview
+    and undid it, so Ctrl+Y brought a "cancelled" hole back), `preview.end_transaction` (an
+    unchanged dialog threw away the Redo list), `preview.FormulaInput` (a parameter typed in
+    Depth was silently dropped), showing the Tip after removing a preview by code. **A new
+    dialog should start from `pickpanel.py` or copy these five.**
+  - `preview.FormulaInput` only sees the text when the field is left (Tab, Enter, a click
+    elsewhere). A plain number typed over a formula must win at once (else the preview and
+    OK still used the formula): the Hole / Thread fields watch `textEdited` and drop the
+    formula as soon as the text is a plain number (`parameters.is_plain_number`).
+    `QPushButton.click()` (the harness's `task_button`) does not move the keyboard focus, so
+    in tests a field typed with `hole_steps.type_into` (no Tab) is never "left"; use
+    `dialog_input.type_into` (types, then Tab) for formulas.
+  - FreeCAD's Hole has no "up to face" depth. Extents To is now a hidden
+    `Part::Part2DObjectPython` in the body just before the hole (`hole.HoleToDistance`,
+    role `HoleTo`, `SciForgeTimeline = False`): it measures the depth from the hole's start
+    to the target on every recompute and the hole's Depth is the expression
+    `<helper>.Distance`. Removed with the hole (`hole.remove`, timeline Delete via
+    `_helpers_of`); an orphan is dropped by the next hole. Typed formulas never touch Depth
+    while Extents is To.
+  - A long recompute (modeled thread / tapped hole) runs timers inside it; a test step that
+    pressed H or OK then closed the dialog under the running recompute (traceback: "Internal
+    C++ object (QLabel) already deleted"). Hole / Thread `_recompute` stop once closed, and
+    OK / Cancel / another command wait while `doc.Recomputing`. Extrude has the same unguarded
+    `_recompute` (extrude owner: add `if self._closed: return` after `preview.recompute` and
+    guard the `setText` in its `except`); seen when OK followed a typed value within ~1 s on a
+    part with a modeled thread.
+  - In the iso view, a click point behind a taller feature hits that feature: compute the view
+    ray (camera +x -y +z) before choosing click points next to a boss (hole_qa_more P18).
+  - The browser lists Single Hole helper sketches ("Hole 1 Sketch", hidden; double-click opens
+    the hole). Fusion shows no sketch for a single hole: to confirm with Luca whether they
+    should leave the browser (browser owner + `hole.py` scenario's browser step).
 
 ## Questions waiting for Luca
 
