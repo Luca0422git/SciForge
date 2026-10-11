@@ -120,15 +120,15 @@ def is_cylinder(face):
 
 
 def refind(shape, record, tol=1e-6):
-    """The full cylinder of `shape` that is the one a thread was on (`record`: what its
-    last recompute stored: base, axis, radius, internal), or None. The one sharing most of
-    the old length wins."""
+    """(Cylinder, "FaceN"): the full cylinder of `shape` that is the one a thread was on
+    (`record`: what its last recompute stored: base, axis, radius, internal), or None. The
+    one sharing most of the old length wins."""
     if not record:
         return None
     axis = App.Vector(*record["axis"])
     base = App.Vector(*record["base"])
     best, overlap_best = None, 0.0
-    for face in shape.Faces:
+    for index, face in enumerate(shape.Faces, start=1):
         if not is_cylinder(face):
             continue
         try:
@@ -147,7 +147,7 @@ def refind(shape, record, tol=1e-6):
         lo, hi = min(a, b), max(a, b)
         overlap = min(hi, record["z1"]) - max(lo, record["z0"])
         if overlap > overlap_best + tol:
-            best, overlap_best = c, overlap
+            best, overlap_best = (c, "Face%d" % index), overlap
     return best
 
 
@@ -324,17 +324,23 @@ class ThreadFeature:
         source, names = link[0], list(link[1])
         shape = source.Shape
         before = computed(obj).get("threads", [])
-        cylinders = []
+        cylinders, found_names = [], []
         for i, name in enumerate(names):
             try:
                 cylinders.append(cylinder_of(shape, name))
+                found_names.append(name)
             except ThreadError:
                 # An earlier step changed the part and FreeCAD lost the face's name: find
                 # the same cylinder again by where it is (Fusion keeps the thread on it).
                 found = refind(shape, before[i] if i < len(before) else None)
                 if found is None:
                     raise
-                cylinders.append(found)
+                cylinders.append(found[0])
+                found_names.append(found[1])
+        if found_names != names:
+            # Point the link at the face found, so FreeCAD stops reporting the lost name on
+            # every recompute (changes made inside execute() are not a new change).
+            obj.Faces = (source, found_names)
         options = read(obj)
         designation = resolve(options, cylinders[0])
         spans = [

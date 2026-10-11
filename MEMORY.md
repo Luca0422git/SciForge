@@ -736,6 +736,20 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     part with a modeled thread.
   - In the iso view, a click point behind a taller feature hits that feature: compute the view
     ray (camera +x -y +z) before choosing click points next to a boss (hole_qa_more P18).
+  - A thread's face link becomes `?FaceN` when an earlier step splits that face (a modeled
+    thread before it): FreeCAD prints "missing element reference" and the thread failed.
+    `ThreadFeature.execute` now finds the cylinder again from its last `Computed` record
+    (same axis line and radius, most overlap: `thread.refind`) and points the link at it
+    inside `execute()` (changes made there are purged, nothing new to undo), so the message
+    comes once, not on every recompute.
+  - A sketch attached to a face of the step just before it depends on that step: deleting the
+    step turns the attachment off ("stays where it was") and the sketch no longer follows the
+    part (a hole then sat frozen inside a plate made taller). `hole.earliest_face` /
+    `earliest_edge` walk the BaseFeature chain back to the step that made the same flat face
+    (same plane, holding the point) or the same edge, and attach there; a step that moved the
+    face stops the walk. Create Sketch (sketch owner) attaches to the Tip's face and has the
+    same weakness: suppressing Hole 1 also suppressed the holes of a sketch drawn after it
+    (timeline suppress takes dependents along).
   - The browser lists Single Hole helper sketches ("Hole 1 Sketch", hidden; double-click opens
     the hole). Fusion shows no sketch for a single hole: to confirm with Luca whether they
     should leave the browser (browser owner + `hole.py` scenario's browser step).
@@ -1025,13 +1039,38 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Offset Plane To Object, browser double-click/right-click Edit for Analysis items (browser
   owner), one material for Center of Mass, Component filter, Interference "create bodies".
   Not checked by Luca yet.
+### 2026-10-11: QA of Hole and Thread (branch `sf/hole-qa`)
+- Branched from `sf/hole` and merged the current main into it first (the hole branch was
+  older than every shared dialog rule), so the QA ran against today's product.
+- 4 new scenarios with only real input (28 paths): `hole_qa.py` (8 paths), `hole_qa_part.py`
+  (7), `hole_qa_thread.py` (7), `hole_qa_more.py` (6). Bugs found and fixed (details in
+  Known issues and the commits): Enter over the view did nothing; an unchanged dialog threw
+  away the Redo list; Ctrl+S saved a half-made hole/thread; Ctrl+Z in the dialog committed
+  the preview; parameters/formulas typed in fields were dropped; the diameter arrow pulled
+  through the centre grew the hole again; a hole dragged off the part was accepted; a
+  person's timeline double-click left the edit dialog unable to pick edges; clearing a
+  preview hid the part; clicks in another design were taken; Extents To did not follow its
+  face (now a helper measures it); choosing To warned before the face was picked; a later
+  hole's sketch hung on the hole before it and froze when that hole was deleted; OK / H
+  during a modeled-thread recompute left a traceback; the thread length arrow ran past the
+  face; a thread whose face lost its name failed (found again by geometry).
+- Golden models `hole_to_face_follows`, `hole_second_survives_first` (fails with the old
+  attachment: 9 faces, a closed pocket), `thread_second_after_modeled` (errors without the
+  geometric re-find; golden `edit` can now set a thread's `modeled`).
+- Teammate scenarios changed on purpose: `hole_edges` (Ctrl+Z in the dialog now cancels,
+  Ctrl+Y brings nothing back; the hole is made again), `hole`, `hole_sketch`,
+  `hole_tapped`, `hole_thread` use a person's double-click on the timeline.
+- Full suite on the branch: FULLSUITE.
+- Left for other owners (Known issues): Extrude's `_recompute` has no closed-dialog guard;
+  Create Sketch attaches to the Tip's face, so suppressing an unrelated earlier hole also
+  suppresses that sketch's holes (see `hole.earliest_face`); helper sketches in the browser.
 
 ## Next steps (in order)
 
 1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
    inspect (built on `sf/inspect`, merge after review), primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
-   then the QA stage for all 12 (including the 4 already merged). Merge each only after the full
-   suite passes locally.
+   then the QA stage for all 12 (including the 4 already merged; hole/thread QA done on
+   `sf/hole-qa`, merge after review). Merge each only after the full suite passes locally.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).
