@@ -1,0 +1,34 @@
+{
+  "id": "sf_coil_basic",
+  "title": "Coil on XY: diameter 20, 4 revolutions, height 20, circular section 2 inside the diameter",
+  "tags": [
+    "primitive",
+    "coil"
+  ],
+  "steps": [
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "diameter": 20,
+      "revolutions": 4,
+      "height": 20,
+      "section_size": 2
+    }
+  ],
+  "expect": {
+    "volume": 710.6115168784338,
+    "bbox": [
+      -10,
+      -10,
+      -1,
+      10,
+      10,
+      21
+    ],
+    "abs_tol": 0.001,
+    "note": "Pappus: the upright section (area pi 1^2) turns 4 times round the axis at r = 10 - 1 = 9 (rising adds no volume): V = 72 pi^2. bbox: the section reaches r 10, z from -1 (start) to 21 (end).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

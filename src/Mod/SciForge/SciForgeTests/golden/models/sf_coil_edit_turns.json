@@ -1,0 +1,42 @@
+{
+  "id": "sf_coil_edit_turns",
+  "title": "Coil edited in the timeline: 2 revolutions instead of 4",
+  "tags": [
+    "primitive",
+    "coil",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "diameter": 20,
+      "revolutions": 4,
+      "height": 20,
+      "section_size": 2
+    },
+    {
+      "op": "sf_primitive_edit",
+      "target": "c1",
+      "set": {
+        "revolutions": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 355.3057584392169,
+    "bbox": [
+      -10,
+      -10,
+      -1,
+      10,
+      10,
+      21
+    ],
+    "abs_tol": 0.001,
+    "note": "As sf_coil_basic with 2 turns in the same height: V = 36 pi^2.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

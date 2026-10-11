@@ -1,0 +1,36 @@
+{
+  "id": "sf_cylinder_xz",
+  "title": "Cylinder d10 h10 on XZ (it grows along -Y, the XZ plane's normal)",
+  "tags": [
+    "primitive",
+    "cylinder",
+    "plane-frame"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "c1",
+      "kind": "cylinder",
+      "plane": "XZ",
+      "diameter": 10,
+      "height": 10
+    }
+  ],
+  "expect": {
+    "volume": 785.3981633974482,
+    "area": 471.23889803846896,
+    "faces": 3,
+    "edges": 3,
+    "bbox": [
+      -5,
+      -10,
+      -5,
+      5,
+      0,
+      5
+    ],
+    "note": "V = pi 25 10; A = 2 pi 25 + 2 pi 5 10; faces: side + 2 discs; edges: 2 circles + seam.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "id": "sf_pipe_edge_cut",
+  "title": "Box 40x20x10 and a Pipe d2 along its top front edge, Cut: a quarter-round groove",
+  "tags": [
+    "primitive",
+    "pipe",
+    "cut",
+    "model-edges"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "edges": {
+          "type": "line",
+          "parallel": [
+            1,
+            0,
+            0
+          ],
+          "at": [
+            {
+              "axis": "y",
+              "value": 0
+            },
+            {
+              "axis": "z",
+              "value": 10
+            }
+          ],
+          "count": 1
+        }
+      },
+      "section_size": 2,
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 7968.584073464102,
+    "area": 2781.2610567450006,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "note": "A quarter of a tube r1 along the 40 mm edge is inside: V = 8000 - pi 40/4; A = 2800 - two 1 x 40 strips + the quarter cylinder 2 pi 40/4 - 2 quarter discs at the ends; faces 6 + the groove.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

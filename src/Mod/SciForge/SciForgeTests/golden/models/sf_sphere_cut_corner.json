@@ -1,0 +1,55 @@
+{
+  "id": "sf_sphere_cut_corner",
+  "title": "Box 40x20x10 and a Sphere d8 centred on the top face's corner (40, 20), Cut: an eighth taken away",
+  "tags": [
+    "primitive",
+    "sphere",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_primitive",
+      "id": "s1",
+      "kind": "sphere",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "x": 40,
+      "y": 20,
+      "diameter": 8,
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 7966.489678361709,
+    "area": 2787.433629385641,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "note": "An eighth of a sphere r4 at the corner: V = 8000 - (4/3 pi 64)/8; A = 2800 - 3 quarter discs pi 16/4 + an eighth of 4 pi 16; faces 6 + the spherical one.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

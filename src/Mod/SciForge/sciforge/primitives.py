@@ -37,15 +37,15 @@ timeline. Fusion-only data (the corners as clicked, the operation) is kept as JS
 hidden property "SciForgePrimitive", so the timeline edit shows the dialog as it was left.
 """
 import json
-import math
 
 import FreeCAD as App
 
 from . import extrude
+from . import primitives_core as core
 
-KINDS = ("box", "cylinder", "sphere", "torus")
-OPERATIONS = ("join", "cut", "intersect", "new_body")
-POSITIONS = ("inside", "center", "outside")
+KINDS = core.KINDS
+OPERATIONS = core.OPERATIONS
+POSITIONS = core.POSITIONS
 NATIVE = {"box": "Box", "cylinder": "Cylinder", "sphere": "Sphere", "torus": "Torus"}
 TITLES = dict(NATIVE)
 FP_TYPE = "PartDesign::FeaturePython"
@@ -87,8 +87,9 @@ FORMULA_PROPS = {
 }
 
 
-class PrimitiveError(ValueError):
-    """The primitive cannot be built as asked; the message says why and what to do."""
+PrimitiveError = core.PrimitiveError
+nice = core.nice
+torus_radii = core.torus_radii
 
 
 owner_body = extrude.owner_body
@@ -187,82 +188,9 @@ def with_defaults(kind, options):
     return out
 
 
-def nice(value):
-    """A round number near `value` (1, 2, 2.5, 5 x 10^n): Fusion's defaults look like that."""
-    value = abs(float(value))
-    if value < 1e-9:
-        return 1.0
-    power = 10.0 ** math.floor(math.log10(value))
-    for step in (1.0, 2.0, 2.5, 5.0, 10.0):
-        if value <= step * power * 1.0001:
-            return step * power
-    return 10.0 * power
-
-
-def torus_radii(options):
-    """(major radius, minor radius) of a torus from Fusion's fields."""
-    inner = float(options["inner_diameter"]) / 2.0
-    minor = float(options["torus_diameter"]) / 2.0
-    position = options.get("position", "center")
-    if position == "inside":
-        return inner - minor, minor
-    if position == "outside":
-        return inner + minor, minor
-    return inner, minor
-
-
 def check(kind, options):
     """Raise PrimitiveError when the values cannot make a solid (said in the dialog)."""
-    if kind not in KINDS:
-        raise PrimitiveError("Unknown primitive %r." % kind)
-    if options.get("operation") not in OPERATIONS:
-        raise PrimitiveError("Unknown operation %r." % options.get("operation"))
-
-    def positive(key, what):
-        try:
-            value = float(options[key])
-        except Exception:
-            raise PrimitiveError("%s must be a number." % what)
-        if abs(value) < 1e-6:
-            raise PrimitiveError("%s cannot be 0. Type a size or drag the arrow." % what)
-        return value
-
-    if kind == "box":
-        if positive("length", "Length") < 0 or positive("width", "Width") < 0:
-            raise PrimitiveError("Length and Width are sizes: type positive values.")
-        positive("height", "Height")
-    elif kind == "cylinder":
-        if positive("diameter", "Diameter") < 0:
-            raise PrimitiveError("The diameter must be positive.")
-        positive("height", "Height")
-    elif kind == "sphere":
-        if positive("diameter", "Diameter") < 0:
-            raise PrimitiveError("The diameter must be positive.")
-    elif kind == "torus":
-        if positive("inner_diameter", "Inner Diameter") < 0:
-            raise PrimitiveError("The inner diameter must be positive.")
-        if positive("torus_diameter", "Torus Diameter") < 0:
-            raise PrimitiveError("The torus diameter must be positive.")
-        if options.get("position") not in POSITIONS:
-            raise PrimitiveError("Position must be Inside, On Center or Outside.")
-        major, minor = torus_radii(options)
-        if major <= minor + 1e-6:
-            raise PrimitiveError(
-                "The ring is too thick for its diameter: it would close up in the middle. "
-                "Make the torus diameter smaller (under %.4g mm here) or the inner diameter "
-                "larger." % _thickest_torus(options)
-            )
-    return options
-
-
-def _thickest_torus(options):
-    inner = float(options["inner_diameter"])
-    position = options.get("position", "center")
-    if position == "inside":
-        return inner / 2.0  # R = D/2 - r > r  ->  2r < D/2
-    if position == "outside":
-        return float("inf")
-    return inner  # R = D/2 > r  ->  2r < D
+    return core.check_sizes(kind, options)
 
 
 def local_offset(kind, options):
@@ -270,11 +198,8 @@ def local_offset(kind, options):
     attached to the plane itself)."""
     x, y = float(options["x"]), float(options["y"])
     if kind == "box":
-        length, width = abs(float(options["length"])), abs(float(options["width"]))
-        x0 = x if float(options.get("sx", 1.0)) >= 0 else x - length
-        y0 = y if float(options.get("sy", 1.0)) >= 0 else y - width
-        height = float(options["height"])
-        return App.Placement(App.Vector(x0, y0, min(height, 0.0)), App.Rotation())
+        x0, y0, z0 = core.box_corner(options)
+        return App.Placement(App.Vector(x0, y0, z0), App.Rotation())
     if kind == "cylinder":
         height = float(options["height"])
         return App.Placement(App.Vector(x, y, min(height, 0.0)), App.Rotation())
@@ -327,23 +252,20 @@ def corners(kind, ref, options):
 def auto_operation(base_shape, tool):
     """Fusion's choice when the user did not pick one: a primitive mostly inside the part
     cuts it, one touching or overlapping it joins, one away from every solid (or the first
-    solid) is a new body."""
+    solid) is a new body (core.operation_for)."""
     if base_shape is None or base_shape.isNull() or not base_shape.Solids or tool is None:
         return "new_body"
     try:
         inside = base_shape.common(tool).Volume
     except Exception:
         return "join"
-    outside = tool.Volume - inside
-    if inside > outside + 1e-6 * max(1.0, tool.Volume):
-        return "cut"
-    if inside > 1e-9:
-        return "join"
-    try:
-        gap = base_shape.distToShape(tool)[0]
-    except Exception:
-        gap = 0.0
-    return "join" if gap < 1e-6 else "new_body"
+    gap = 0.0
+    if inside <= 1e-9:
+        try:
+            gap = base_shape.distToShape(tool)[0]
+        except Exception:
+            gap = 0.0
+    return core.operation_for(True, inside, tool.Volume - inside, gap)
 
 
 def base_shape(body, before=None):

@@ -1,0 +1,30 @@
+{
+  "id": "sf_coil_square_spiral",
+  "title": "Coil, Spiral: diameter 20, 3 revolutions, pitch 5, square section 2 on center",
+  "tags": [
+    "primitive",
+    "coil",
+    "spiral"
+  ],
+  "steps": [
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "type": "spiral",
+      "diameter": 20,
+      "revolutions": 3,
+      "pitch": 5,
+      "section": "square",
+      "section_position": "center",
+      "section_size": 2
+    }
+  ],
+  "expect": {
+    "volume": 659.7344572538566,
+    "rel_tol": 0.0001,
+    "note": "Square section in a circle d2: side sqrt 2, area 2. Its centre moves out from r 10 by 5 per turn: mean radius 10 + 5*3/2 = 17.5; V = 2 * 2 pi 17.5 * 3 (Pappus; the spiral's swept surfaces are approximations, hence rel_tol 1e-4).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -251,7 +251,11 @@ def face_taken():
     if p is None:
         return
     h.check("the selected face is taken at once", p.state == "place", p.state)
-    h.check("Face of ...", p.plane_field.button.text().startswith("Face of"), p.plane_field.button.text())
+    h.check(
+        "Face of ...",
+        p.plane_field.button.text().startswith("Face of"),
+        p.plane_field.button.text(),
+    )
 
 
 def corner_a():
@@ -270,7 +274,9 @@ def on_top():
     if p is None:
         return
     h.check("10 x 10 on the face", (p.length.value(), p.width.value()) == (10.0, 10.0))
-    h.check("on top of the part: Join", p.operation.currentText() == "Join", p.operation.currentText())
+    h.check(
+        "on top of the part: Join", p.operation.currentText() == "Join", p.operation.currentText()
+    )
     h.check("joined", near(vol(), 12000.0 + 1000.0), vol())
     h.fit()
 

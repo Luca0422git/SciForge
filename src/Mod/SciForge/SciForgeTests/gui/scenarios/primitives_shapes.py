@@ -103,7 +103,9 @@ def cylinder_hover():
 
 def cylinder_live():
     p = cyl_panel()
-    h.check("the diameter follows the mouse", near(p.diameter.value(), 10.0, 1e-3), p.diameter.value())
+    h.check(
+        "the diameter follows the mouse", near(p.diameter.value(), 10.0, 1e-3), p.diameter.value()
+    )
     h.shot("1-cylinder-circle")
     h.click(V(10, 0, 0))
 
@@ -155,7 +157,9 @@ def cylinder_kept():
     h.check("dialog closed", pi.no_dialog())
     h.check("kept", near(vol(), 1200.0 * PI), vol())
     h.check("an AdditiveCylinder", len(pi.steps_of("AdditiveCylinder")) == 1)
-    h.check("Cylinder 1 in the timeline", "Cylinder 1" in ui.timeline_titles(), ui.timeline_titles())
+    h.check(
+        "Cylinder 1 in the timeline", "Cylinder 1" in ui.timeline_titles(), ui.timeline_titles()
+    )
 
 
 def cylinder_undo():
@@ -242,7 +246,9 @@ def cylinder2_cut():
 def cylinder2_kept():
     h.check("kept", near(vol(), CUP), vol())
     h.check("a SubtractiveCylinder", len(pi.steps_of("SubtractiveCylinder")) == 1)
-    h.check("Cylinder 2 in the timeline", "Cylinder 2" in ui.timeline_titles(), ui.timeline_titles())
+    h.check(
+        "Cylinder 2 in the timeline", "Cylinder 2" in ui.timeline_titles(), ui.timeline_titles()
+    )
     h.fit()
 
 
@@ -275,7 +281,9 @@ def sphere_built():
 
 def sphere_join():
     p = sphere_panel()
-    h.check("half out of the part: Join", p.operation.currentText() == "Join", p.operation.currentText())
+    h.check(
+        "half out of the part: Join", p.operation.currentText() == "Join", p.operation.currentText()
+    )
     h.check("adds the upper half", near(vol(), CUP + HALF2), vol())
     h.check("choose Intersect", ui.choose(p.operation, "Intersect"))
 
@@ -283,7 +291,10 @@ def sphere_join():
 def sphere_intersect():
     p = sphere_panel()
     h.check("Intersect keeps the half inside", near(vol(), HALF2), vol())
-    h.check("the intersect step", p.target is not None and p.target.TypeId == "PartDesign::FeaturePython")
+    h.check(
+        "the intersect step",
+        p.target is not None and p.target.TypeId == "PartDesign::FeaturePython",
+    )
     h.shot("4-intersect")
     h.check("choose Cut", ui.choose(p.operation, "Cut"))
 
@@ -361,7 +372,10 @@ def torus_built():
     h.check("away from the part: New Body", p.operation.currentText() == "New Body")
     h.check("a second body", len(pi.bodies()) == 2, pi.bodies())
     h.check("torus R20 r5", near(vol() - s["volume"], 1000.0 * PI * PI), vol() - s["volume"])
-    h.check("Fusion's positions", [p.position.itemText(i) for i in range(3)] == ["Inside", "On Center", "Outside"])
+    h.check(
+        "Fusion's positions",
+        [p.position.itemText(i) for i in range(3)] == ["Inside", "On Center", "Outside"],
+    )
     h.fit()
     h.shot("5-torus")
     h.check("choose Outside", ui.choose(p.position, "Outside"))

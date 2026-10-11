@@ -1,0 +1,71 @@
+{
+  "id": "sf_pipe_hollow_half",
+  "title": "Pipe d2 hollow (wall 0.25) half way along the same path",
+  "tags": [
+    "primitive",
+    "pipe",
+    "hollow"
+  ],
+  "steps": [
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "line": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ]
+        },
+        {
+          "arc": [
+            20,
+            10,
+            10,
+            -90,
+            0
+          ]
+        },
+        {
+          "line": [
+            [
+              30,
+              10
+            ],
+            [
+              30,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "section_size": 2,
+      "hollow": true,
+      "thickness": 0.25,
+      "distance": 0.5
+    }
+  ],
+  "expect": {
+    "volume": 38.283815532602176,
+    "area": 309.0194178327085,
+    "faces": 6,
+    "note": "Ring r 0.75..1 along L/2: V = pi (1 - 0.75^2) L/2; A = outer 2 pi L/2 + inner 2 pi 0.75 L/2 + 2 end rings; faces: outer and inner (straight + bent) + 2 rings.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

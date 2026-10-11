@@ -1,0 +1,65 @@
+{
+  "id": "sf_box_pocket_edit_join",
+  "title": "The pocket box edited in the timeline: height +3, Join (SubtractiveBox becomes AdditiveBox)",
+  "tags": [
+    "primitive",
+    "box",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_primitive",
+      "id": "b2",
+      "kind": "box",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "x": 10,
+      "y": 5,
+      "length": 10,
+      "width": 10,
+      "height": -5
+    },
+    {
+      "op": "sf_primitive_edit",
+      "target": "b2",
+      "set": {
+        "height": 3,
+        "operation": "join"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8300.0,
+    "area": 2920.0,
+    "faces": 11,
+    "edges": 24,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      13
+    ],
+    "note": "A 10x10x3 boss on top: V = 8000 + 300; A = 2800 + 4 walls 10*3; faces 6 + 4 + 1; edges 12 + 12.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

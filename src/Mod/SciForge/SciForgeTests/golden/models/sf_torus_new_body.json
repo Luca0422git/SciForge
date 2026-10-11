@@ -1,0 +1,48 @@
+{
+  "id": "sf_torus_new_body",
+  "title": "Box, then a Torus away from it on XY (inner 20, torus 4, Outside): the dialog makes a new body",
+  "tags": [
+    "primitive",
+    "torus",
+    "new-body",
+    "auto-operation"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_primitive",
+      "id": "t1",
+      "kind": "torus",
+      "plane": "XY",
+      "x": 100,
+      "y": 0,
+      "inner_diameter": 20,
+      "torus_diameter": 4,
+      "position": "outside"
+    }
+  ],
+  "expect": {
+    "volume": 947.4820225045784,
+    "area": 947.4820225045784,
+    "faces": 1,
+    "bbox": [
+      86,
+      -14,
+      -2,
+      114,
+      14,
+      2
+    ],
+    "note": "Outside the inner circle r10: ring radius R = 10 + 2, section r = 2. V = 2 pi^2 R r^2; A = 4 pi^2 R r. Measured: the new body only.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

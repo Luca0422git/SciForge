@@ -25,6 +25,7 @@ import FreeCADGui as Gui
 from . import commands, log, preview, primitives, profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
+from .primitives_core import nice_floor, round_to
 from .taskui import DistanceField, Panel
 
 OPERATION_LABELS = [
@@ -130,28 +131,6 @@ def view_scale(view, point):
         return max((a - b).Length / 10.0, 1e-6)
     except Exception:
         return 0.1
-
-
-def nice_floor(value):
-    """The largest round step (1, 2.5, 5 x 10^n) not above `value`: clicks land on values
-    a person would type (every multiple of 5 mm is reachable at any normal zoom), and the
-    step is never finer than the few pixels a hand misses by."""
-    value = abs(float(value))
-    if value < 1e-9:
-        return 0.0
-    power = 10.0 ** math.floor(math.log10(value))
-    best = power
-    for step in (1.0, 2.5, 5.0):
-        if step * power <= value * 1.0001:
-            best = step * power
-    return best
-
-
-def round_to(value, step):
-    if step <= 0:
-        return value
-    out = math.floor(value / step + 0.5) * step
-    return round(out, 9) + 0.0
 
 
 _GRAB = {"time": 0.0}  # when a handle last took a press (one press moves one handle)

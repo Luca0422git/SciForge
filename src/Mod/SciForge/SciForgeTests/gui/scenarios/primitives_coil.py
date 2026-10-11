@@ -177,7 +177,10 @@ counterclockwise.wait_ms = 1500
 
 def spiral():
     p = panel()
-    h.check("Spiral takes revolutions and pitch", p.pitch.widget.isVisible() and not p.height.widget.isVisible())
+    h.check(
+        "Spiral takes revolutions and pitch",
+        p.pitch.widget.isVisible() and not p.height.widget.isVisible(),
+    )
     h.check("pitch 5 (the coil's own)", near(p.pitch.value(), 5.0), p.pitch.value())
     h.check("flat spiral: 320 pi", near(vol(), 320.0 * PI, 1e-4), vol())
     h.check("no height handle for a spiral", set(p.handles) == {"diameter"}, list(p.handles))
@@ -214,7 +217,11 @@ def dragged():
     p = panel()
     height = p.height.value()
     h.check("dragging changed the height", 22.0 < height < 30.0, height)
-    h.check("turns follow (height / pitch)", near(vol(), 2 * 2 * PI * 10 * height / 5.0, 1e-4), (vol(), height))
+    h.check(
+        "turns follow (height / pitch)",
+        near(vol(), 2 * 2 * PI * 10 * height / 5.0, 1e-4),
+        (vol(), height),
+    )
     ui.type_into(p.height.widget, "20")
 
 
@@ -233,9 +240,14 @@ def coil_kept():
     h.check("dialog closed", pi.no_dialog())
     h.check("kept", near(vol(), 160.0 * PI, 1e-5), vol())
     h.check("Coil 1 in the timeline", "Coil 1" in ui.timeline_titles(), ui.timeline_titles())
-    h.check("its section is hidden and no step", all(
-        not o.ViewObject.Visibility for o in App.ActiveDocument.Objects if getattr(o, "SciForgeRole", "") == "CoilSection"
-    ))
+    h.check(
+        "its section is hidden and no step",
+        all(
+            not o.ViewObject.Visibility
+            for o in App.ActiveDocument.Objects
+            if getattr(o, "SciForgeRole", "") == "CoilSection"
+        ),
+    )
     h.check("Undo button", ui.quick_access("Undo"))
 
 
@@ -360,7 +372,11 @@ coil2_down.wait_ms = 2500
 
 def coil2_cut():
     p = panel()
-    h.check("running into the block: Cut by itself", p.operation.currentText() == "Cut", p.operation.currentText())
+    h.check(
+        "running into the block: Cut by itself",
+        p.operation.currentText() == "Cut",
+        p.operation.currentText(),
+    )
     removed = s["before"] - vol()
     whole = 90.0 * PI * PI  # circle d2 inside D20, 5 turns
     h.check("nearly the whole coil is cut out", 0.93 * whole < removed < whole, (removed, whole))

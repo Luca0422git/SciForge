@@ -28,9 +28,10 @@ import math
 import FreeCAD as App
 
 from . import primitives
+from . import primitives_core as core
 from .primitives import PrimitiveError
 
-SECTIONS = ("circular", "square", "triangular")
+SECTIONS = core.PIPE_SECTIONS
 OPERATIONS = primitives.OPERATIONS
 META = "SciForgePipe"
 KIND = "Pipe"
@@ -293,51 +294,8 @@ def section_wires(options):
     return wires
 
 
-def section_area(options):
-    size = float(options["section_size"])
-    kind = options["section"]
-    t = float(options.get("thickness", 0.0)) if options.get("hollow") else 0.0
-
-    def area(s):
-        if kind == "square":
-            return s * s / 2.0
-        if kind == "triangular":
-            return 3.0 * math.sqrt(3.0) / 16.0 * s * s
-        return math.pi * s * s / 4.0
-
-    if not t:
-        return area(size)
-    inner = {"square": size - 2.0 * math.sqrt(2.0) * t, "triangular": size - 4.0 * t}.get(
-        kind, size - 2.0 * t
-    )
-    return area(size) - area(inner)
-
-
-def check(options):
-    for key, values in (("section", SECTIONS), ("operation", OPERATIONS)):
-        if options.get(key) not in values:
-            raise PrimitiveError("Unknown %s %r." % (key, options.get(key)))
-    distance = float(options["distance"])
-    if distance <= 1e-6 or distance > 1.0 + 1e-9:
-        raise PrimitiveError("The distance goes from 0 (start) to 1 (the whole path).")
-    size = float(options["section_size"])
-    if size <= 1e-6:
-        raise PrimitiveError("The section size must be larger than 0.")
-    if options.get("hollow"):
-        t = float(options.get("thickness", 0.0))
-        if t <= 1e-6:
-            raise PrimitiveError("The section thickness must be larger than 0.")
-        inner = {
-            "circular": size / 2.0,  # radius
-            "square": size / (2.0 * math.sqrt(2.0)),  # half side
-            "triangular": size / 4.0,  # inradius
-        }[options["section"]]
-        if t >= inner - 1e-6:
-            raise PrimitiveError(
-                "The wall is as thick as the section, so nothing would be hollow. Make the "
-                "thickness smaller than %.4g mm." % inner
-            )
-    return options
+section_area = core.pipe_section_area
+check = core.pipe_check
 
 
 # -- the helper objects -------------------------------------------------------------------------------

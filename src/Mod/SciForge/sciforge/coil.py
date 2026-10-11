@@ -31,11 +31,12 @@ import math
 import FreeCAD as App
 
 from . import primitives
+from . import primitives_core as core
 from .primitives import PrimitiveError
 
-TYPES = ("rev_height", "rev_pitch", "height_pitch", "spiral")
-SECTIONS = ("circular", "square", "tri_ext", "tri_int")
-POSITIONS = ("inside", "center", "outside")
+TYPES = core.COIL_TYPES
+SECTIONS = core.COIL_SECTIONS
+POSITIONS = core.POSITIONS
 OPERATIONS = primitives.OPERATIONS
 META = "SciForgeCoil"
 KIND = "Coil"
@@ -57,13 +58,13 @@ DEFAULTS = {
     "operation": "join",
 }
 
-# Which values each type takes from the dialog (the others are worked out).
-USES = {
-    "rev_height": ("revolutions", "height", "angle"),
-    "rev_pitch": ("revolutions", "pitch", "angle"),
-    "height_pitch": ("height", "pitch", "angle"),
-    "spiral": ("revolutions", "pitch"),
-}
+USES = core.COIL_USES
+section_extent = core.coil_section_extent
+section_radius = core.coil_section_radius
+section_points = core.coil_section_points
+resolved = core.coil_resolved
+check = core.coil_check
+volume = core.coil_volume
 
 
 def with_defaults(options):
@@ -74,52 +75,6 @@ def with_defaults(options):
 
 
 # -- the section ---------------------------------------------------------------------------------
-def section_extent(options):
-    """(how far the section reaches outward, inward, along the axis) from its centre."""
-    size = float(options["section_size"])
-    kind = options["section"]
-    if kind == "square":
-        half = size / (2.0 * math.sqrt(2.0))
-        return half, half, 2.0 * half
-    if kind in ("tri_ext", "tri_int"):
-        r = size / 2.0  # the circle round the triangle
-        side = r * math.sqrt(3.0)
-        return (r, r / 2.0, side) if kind == "tri_ext" else (r / 2.0, r, side)
-    return size / 2.0, size / 2.0, size
-
-
-def section_radius(options):
-    """Distance of the section's centre from the axis (the path radius at the start)."""
-    out, inward, _ = section_extent(options)
-    half = float(options["diameter"]) / 2.0
-    position = options["section_position"]
-    if position == "inside":
-        return half - out
-    if position == "outside":
-        return half + inward
-    return half
-
-
-def section_points(options):
-    """Outline of the section in the coil's upright plane: x away from the axis, y along it
-    (None for the circle)."""
-    rc = section_radius(options)
-    size = float(options["section_size"])
-    kind = options["section"]
-    if kind == "square":
-        h = size / (2.0 * math.sqrt(2.0))
-        return [(rc - h, -h), (rc + h, -h), (rc + h, h), (rc - h, h)]
-    if kind in ("tri_ext", "tri_int"):
-        r = size / 2.0
-        sign = 1.0 if kind == "tri_ext" else -1.0
-        return [
-            (rc + sign * r, 0.0),
-            (rc - sign * r / 2.0, r * math.sqrt(3.0) / 2.0),
-            (rc - sign * r / 2.0, -r * math.sqrt(3.0) / 2.0),
-        ]
-    return None
-
-
 def section_shape(options):
     """The section as a closed wire in the upright plane (local coordinates)."""
     import Part
@@ -137,80 +92,6 @@ def section_shape(options):
 
 
 # -- values -----------------------------------------------------------------------------------------
-def resolved(options):
-    """(revolutions, height, pitch) as the coil will have them, whatever the type."""
-    kind = options["type"]
-    turns = float(options["revolutions"])
-    height = float(options["height"])
-    pitch = float(options["pitch"])
-    if kind == "rev_height":
-        pitch = abs(height) / turns if turns > 0 else 0.0
-    elif kind == "rev_pitch":
-        height = turns * pitch * (-1.0 if height < 0 else 1.0)
-    elif kind == "height_pitch":
-        turns = abs(height) / pitch if pitch > 0 else 0.0
-    else:
-        height = 0.0
-    return turns, height, pitch
-
-
-def check(options):
-    """Raise PrimitiveError with what to change when the values cannot make a coil."""
-    for key, values in (
-        ("type", TYPES),
-        ("section", SECTIONS),
-        ("section_position", POSITIONS),
-        ("operation", OPERATIONS),
-    ):
-        if options.get(key) not in values:
-            raise PrimitiveError("Unknown %s %r." % (key.replace("_", " "), options.get(key)))
-    kind = options["type"]
-    if float(options["diameter"]) <= 1e-6:
-        raise PrimitiveError("The diameter must be larger than 0.")
-    if float(options["section_size"]) <= 1e-6:
-        raise PrimitiveError("The section size must be larger than 0.")
-    uses = USES[kind]
-    if "revolutions" in uses and float(options["revolutions"]) <= 1e-6:
-        raise PrimitiveError("Revolutions must be more than 0.")
-    if "height" in uses and abs(float(options["height"])) <= 1e-6:
-        raise PrimitiveError("The height cannot be 0.")
-    if "pitch" in uses and float(options["pitch"]) <= 1e-6:
-        raise PrimitiveError("The pitch must be more than 0.")
-    angle = float(options.get("angle", 0.0)) if "angle" in uses else 0.0
-    if abs(angle) >= 89.0:
-        raise PrimitiveError("The angle must stay between -89 and 89 degrees.")
-    out, inward, along = section_extent(options)
-    rc = section_radius(options)
-    if rc - inward <= 1e-6:
-        raise PrimitiveError(
-            "The section reaches the coil's axis: make the section smaller than the coil "
-            "or place it outside the diameter."
-        )
-    turns, height, pitch = resolved(options)
-    if kind == "spiral":
-        if pitch <= out + inward + 1e-6:
-            raise PrimitiveError(
-                "The turns of the spiral touch each other: the pitch must be larger than the "
-                "section (%.4g mm)." % (out + inward)
-            )
-    else:
-        # Turns closer than the section would cut into each other (OpenCASCADE then fails).
-        axial = pitch * math.cos(math.radians(angle))
-        if turns > 1.0 + 1e-9 and axial <= along + 1e-6:
-            raise PrimitiveError(
-                "The turns touch each other: the pitch (%.4g mm) must be larger than the "
-                "section (%.4g mm). Make the coil taller, use fewer revolutions or a smaller "
-                "section." % (pitch, along)
-            )
-        top = rc + abs(height) * math.tan(math.radians(angle))
-        if top - inward <= 1e-6:
-            raise PrimitiveError(
-                "With this angle the coil narrows to its axis before the end. Make the "
-                "angle smaller or the coil shorter."
-            )
-    return options
-
-
 def helix_points(ref, options, count=None):
     """Points along the coil's middle line (global), for picking an operation."""
     turns, height, pitch = resolved(options)
@@ -507,29 +388,3 @@ def remove(feature):
     body = primitives.owner_body(feature)
     primitives.remove_step(feature, keep_body=False, prop=META)
     primitives.show_tip(body)
-
-
-def volume(options):
-    """The coil's volume by Pappus (a section turned round an axis): area x the path its
-    centre of area travels round the axis. FreeCAD's helix sweeps the upright section, so
-    rising does not add volume. For hand-checks and the golden models."""
-    out, inward, along = section_extent(options)
-    size = float(options["section_size"])
-    kind = options["section"]
-    rc = section_radius(options)
-    if kind == "circular":
-        area = math.pi * size * size / 4.0
-        centroid = rc
-    elif kind == "square":
-        area = size * size / 2.0
-        centroid = rc
-    else:
-        r = size / 2.0
-        area = 3.0 * math.sqrt(3.0) / 4.0 * r * r
-        centroid = rc  # the circle's centre is the triangle's centroid
-    turns, height, pitch = resolved(options)
-    if options["type"] == "spiral":
-        mean = centroid + pitch * turns / 2.0
-    else:
-        mean = centroid + abs(height) / 2.0 * math.tan(math.radians(float(options["angle"])))
-    return area * 2.0 * math.pi * mean * turns

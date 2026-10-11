@@ -1,0 +1,38 @@
+{
+  "id": "sf_box_xz_flipped",
+  "title": "Box on XZ, going left (sx -1) and to the other side of the plane (height -3)",
+  "tags": [
+    "primitive",
+    "box",
+    "plane-frame"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XZ",
+      "sx": -1,
+      "length": 5,
+      "width": 5,
+      "height": -3
+    }
+  ],
+  "expect": {
+    "volume": 75.0,
+    "area": 110.0,
+    "faces": 6,
+    "edges": 12,
+    "bbox": [
+      -5,
+      0,
+      0,
+      0,
+      3,
+      5
+    ],
+    "note": "XZ's frame: x = X, y = Z, normal -Y (FreeCAD's XZ plane). Length 5 to -X, width 5 up, height -3 = +Y 0..3. V = 75; A = 2(25 + 15 + 15).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

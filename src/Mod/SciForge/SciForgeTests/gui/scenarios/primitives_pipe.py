@@ -213,7 +213,9 @@ hollow.wait_ms = 1500
 
 def hollow_on():
     p = panel()
-    h.check("Hollow shows Section Thickness", p.hollow.isChecked() and p.thickness.widget.isVisible())
+    h.check(
+        "Hollow shows Section Thickness", p.hollow.isChecked() and p.thickness.widget.isVisible()
+    )
     ui.type_into(p.thickness.widget, "0.25")
 
 

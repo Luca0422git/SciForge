@@ -1,0 +1,77 @@
+{
+  "id": "sf_pipe_square",
+  "title": "Pipe with a square section (circle round it d2) along the same path",
+  "tags": [
+    "primitive",
+    "pipe",
+    "square"
+  ],
+  "steps": [
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "line": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ]
+        },
+        {
+          "arc": [
+            20,
+            10,
+            10,
+            -90,
+            0
+          ]
+        },
+        {
+          "line": [
+            [
+              30,
+              10
+            ],
+            [
+              30,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "section_size": 2,
+      "section": "square"
+    }
+  ],
+  "expect": {
+    "volume": 111.41592653589794,
+    "area": 319.1318287428626,
+    "faces": 10,
+    "bbox": [
+      0,
+      -0.7071067811865476,
+      -0.7071067811865476,
+      30.707106781186546,
+      30,
+      0.7071067811865476
+    ],
+    "note": "Side sqrt 2 (circle round it d2), square to the path with sides along the sketch normal: area 2; V = 2 L; the 4 walls have mean length L: A = 4 sqrt2 L + 2*2; faces: top and bottom are flat all along (1 each), 2 walls per piece of path (6), 2 ends.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

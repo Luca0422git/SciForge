@@ -1,0 +1,75 @@
+{
+  "id": "sf_pipe_triangle_edit",
+  "title": "Pipe edited in the timeline: Triangular section, whole path",
+  "tags": [
+    "primitive",
+    "pipe",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "line": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ]
+        },
+        {
+          "arc": [
+            20,
+            10,
+            10,
+            -90,
+            0
+          ]
+        },
+        {
+          "line": [
+            [
+              30,
+              10
+            ],
+            [
+              30,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "section_size": 2,
+      "distance": 0.25
+    },
+    {
+      "op": "sf_primitive_edit",
+      "target": "pp",
+      "set": {
+        "section": "triangular",
+        "distance": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 72.36676707470127,
+    "note": "Equilateral triangle in a circle d2: area 3 sqrt3 / 4 r^2 with r = 1, along L.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}
