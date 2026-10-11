@@ -1,0 +1,114 @@
+{
+  "id": "inspect_com_interference",
+  "title": "Two bodies overlapping 10x10x5: centre of mass and interference",
+  "tags": [
+    "inspect",
+    "center-of-mass",
+    "interference"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "rect": [
+            30,
+            20,
+            50,
+            40
+          ],
+          "name": "b2"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5,
+      "operation": "new_body"
+    },
+    {
+      "op": "com_expect",
+      "features": [
+        "e1"
+      ],
+      "point": [
+        20,
+        15,
+        5
+      ]
+    },
+    {
+      "op": "com_expect",
+      "features": [
+        "e2"
+      ],
+      "point": [
+        40,
+        30,
+        7.5
+      ]
+    },
+    {
+      "op": "com_expect",
+      "features": [
+        "e1",
+        "e2"
+      ],
+      "point": [
+        22.857142857142858,
+        17.142857142857142,
+        5.357142857142857
+      ]
+    },
+    {
+      "op": "interference_expect",
+      "features": [
+        "e1",
+        "e2"
+      ],
+      "volume": 500,
+      "pairs": 1
+    }
+  ],
+  "expect": {
+    "volume": 2000,
+    "faces": 6,
+    "bbox": [
+      30,
+      20,
+      5,
+      50,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "body 2 is 20*20*5 at z 5..10 (the part measured last). centre of mass of both (one material) = (12000*(20,15,5) + 2000*(40,30,7.5)) / 14000; overlap x 30..40, y 20..30, z 5..10 = 500"
+  }
+}

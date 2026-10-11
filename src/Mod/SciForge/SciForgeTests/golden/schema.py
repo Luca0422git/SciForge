@@ -758,3 +758,110 @@ def validate(model):  # noqa: F811  (adds the blend history checks to the checks
     _validate_before_blend(model)
     _check_blend_steps(model)
     return model
+
+
+# CONSTRUCT and INSPECT (golden/inspect_ops.py: sciforge/construct.py, measure.py, section.py,
+# analysis.py, the code the dialogs use)
+STEP_KEYS["construct"] = ({"id", "preset", "refs"}, {"values", "points", "comment"})
+STEP_KEYS["construct_expect"] = ({"target", "point"}, {"normal", "direction", "comment"})
+STEP_KEYS["construct_extrude"] = (
+    {"id", "plane", "circles"},
+    {"distance", "operation", "direction", "flip", "comment"},
+)
+STEP_KEYS["measure_expect"] = ({"a", "b"}, {"distance", "angle", "comment"})
+STEP_KEYS["section_expect"] = (
+    {"plane"},
+    {"distance", "x_angle", "y_angle", "flip", "kept_volume", "cap_area", "comment"},
+)
+STEP_KEYS["com_expect"] = ({"point"}, {"features", "comment"})
+STEP_KEYS["interference_expect"] = (
+    {"features"},
+    {"include_coincident", "volume", "pairs", "comment"},
+)
+INSPECT_REF_KEYS = ("plane", "axis", "origin", "face", "edge", "vertex", "construct")
+
+
+def _check_inspect_ref(here, spec, seen):
+    if not isinstance(spec, dict) or len(spec) != 1 or not set(spec) <= set(INSPECT_REF_KEYS):
+        _fail(here, "a pick is one of %s" % (INSPECT_REF_KEYS,))
+    if "plane" in spec and spec["plane"] not in PLANES:
+        _fail(here, "'plane' must be one of %s" % (PLANES,))
+    if "axis" in spec and spec["axis"] not in AXES:
+        _fail(here, "'axis' must be one of %s" % (AXES,))
+    if "vertex" in spec:
+        _check_point(here + ".vertex", spec["vertex"])
+    if "construct" in spec and seen.get(spec["construct"]) != "construct":
+        _fail(here, "'construct' must name an earlier construct step")
+
+
+def _check_point(here, value):
+    if not isinstance(value, list) or len(value) != 3:
+        _fail(here, "expected [x, y, z]")
+    for v in value:
+        _check_number(here, v)
+
+
+def _check_inspect_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "construct":
+            if not isinstance(step["preset"], str) or not step["preset"]:
+                _fail(here, "'preset' is a CONSTRUCT entry (sciforge/construct.py SPECS)")
+            if not isinstance(step["refs"], list) or not step["refs"]:
+                _fail(here, "'refs' is a non-empty list of picks")
+            for j, spec in enumerate(step["refs"]):
+                _check_inspect_ref("%s.refs[%d]" % (here, j), spec, seen)
+            for j, point in enumerate(step.get("points", [])):
+                if point is not None:
+                    _check_point("%s.points[%d]" % (here, j), point)
+        if op == "construct_expect":
+            if seen.get(step["target"]) != "construct":
+                _fail(here, "'target' must name an earlier construct step")
+            _check_point(here + ".point", step["point"])
+            for key in ("normal", "direction"):
+                if key in step:
+                    _check_point(here + "." + key, step[key])
+        if op == "construct_extrude":
+            if seen.get(step["plane"]) != "construct":
+                _fail(here, "'plane' must name an earlier construct step (a plane)")
+            circles = step["circles"]
+            if not isinstance(circles, list) or not circles:
+                _fail(here, "'circles' is a list of [x, y, z, r] (centre on the plane, global)")
+            for j, circle in enumerate(circles):
+                if not isinstance(circle, list) or len(circle) != 4:
+                    _fail("%s.circles[%d]" % (here, j), "expected [x, y, z, r]")
+                _check_number("%s.circles[%d].r" % (here, j), circle[3], positive=True)
+            if step.get("operation", "join") not in OPERATIONS:
+                _fail(here, "'operation' must be one of %s" % (OPERATIONS,))
+            if step.get("direction", "one_side") not in ("one_side", "symmetric"):
+                _fail(here, "'direction' must be one_side or symmetric")
+            _check_number(here + ".distance", step.get("distance", 1.0), positive=True)
+        if op == "measure_expect":
+            _check_inspect_ref(here + ".a", step["a"], seen)
+            _check_inspect_ref(here + ".b", step["b"], seen)
+            if "distance" not in step and "angle" not in step:
+                _fail(here, "measure_expect checks 'distance' and/or 'angle'")
+        if op == "section_expect":
+            _check_inspect_ref(here + ".plane", step["plane"], seen)
+            if "kept_volume" not in step and "cap_area" not in step:
+                _fail(here, "section_expect checks 'kept_volume' and/or 'cap_area'")
+        if op == "com_expect":
+            _check_point(here + ".point", step["point"])
+        if op in ("com_expect", "interference_expect"):
+            for name in step.get("features", []):
+                if name not in seen:
+                    _fail(here, "'features' names unknown step %r" % name)
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_inspect = validate
+
+
+def validate(model):  # noqa: F811  (adds the CONSTRUCT / INSPECT checks)
+    _validate_before_inspect(model)
+    _check_inspect_steps(model)
+    return model

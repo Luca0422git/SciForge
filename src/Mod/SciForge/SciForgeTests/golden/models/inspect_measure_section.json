@@ -1,0 +1,238 @@
+{
+  "id": "inspect_measure_section",
+  "title": "Box with a round boss: Measure distances / angles and Section Analysis cuts",
+  "tags": [
+    "inspect",
+    "measure",
+    "section"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            5
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10
+    },
+    {
+      "op": "measure_expect",
+      "a": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "at": {
+            "axis": "z",
+            "value": 10
+          },
+          "count": 1
+        }
+      },
+      "b": {
+        "face": {
+          "normal": [
+            1,
+            0,
+            0
+          ],
+          "count": 1
+        }
+      },
+      "distance": 0,
+      "angle": 90
+    },
+    {
+      "op": "measure_expect",
+      "a": {
+        "edge": {
+          "type": "line",
+          "parallel": [
+            1,
+            0,
+            0
+          ],
+          "at": [
+            {
+              "axis": "y",
+              "value": 0
+            },
+            {
+              "axis": "z",
+              "value": 10
+            }
+          ],
+          "count": 1
+        }
+      },
+      "b": {
+        "edge": {
+          "type": "circle",
+          "at": {
+            "axis": "z",
+            "value": 20
+          },
+          "count": 1
+        }
+      },
+      "distance": 11.180339887498949
+    },
+    {
+      "op": "measure_expect",
+      "a": {
+        "vertex": [
+          0,
+          0,
+          10
+        ]
+      },
+      "b": {
+        "vertex": [
+          40,
+          30,
+          10
+        ]
+      },
+      "distance": 50
+    },
+    {
+      "op": "measure_expect",
+      "a": {
+        "plane": "XY"
+      },
+      "b": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "at": {
+            "axis": "z",
+            "value": 10
+          },
+          "count": 1
+        }
+      },
+      "distance": 10,
+      "angle": 0
+    },
+    {
+      "op": "measure_expect",
+      "a": {
+        "axis": "Z"
+      },
+      "b": {
+        "face": {
+          "type": "cylinder",
+          "count": 1
+        }
+      },
+      "distance": 9.142135623730951,
+      "angle": 0
+    },
+    {
+      "op": "section_expect",
+      "plane": {
+        "plane": "XZ"
+      },
+      "distance": -15,
+      "kept_volume": 6000,
+      "cap_area": 400
+    },
+    {
+      "op": "section_expect",
+      "plane": {
+        "plane": "XZ"
+      },
+      "distance": -15,
+      "flip": true,
+      "kept_volume": 6785.398163397448,
+      "cap_area": 400
+    },
+    {
+      "op": "section_expect",
+      "plane": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "at": {
+            "axis": "z",
+            "value": 10
+          },
+          "count": 1
+        }
+      },
+      "distance": -5,
+      "kept_volume": 6000,
+      "cap_area": 1200
+    },
+    {
+      "op": "section_expect",
+      "plane": {
+        "plane": "XY"
+      },
+      "distance": 15,
+      "kept_volume": 12392.699081698724,
+      "cap_area": 78.53981633974483
+    }
+  ],
+  "expect": {
+    "volume": 12785.398163397449,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "measure: touching faces 0 at 90 deg; front top edge to boss top circle sqrt(5^2+10^2); corners 50; XY to top 10; Z axis to boss sqrt(200)-5. sections: y = 15 keeps 40*15*10 (boss y 5..15 all cut) with a 40x10 cut face; flipped keeps 6000 + the boss; 5 below the top keeps 40*30*5 (cut face 40*30); XY + 15 cuts the boss in half (cut face its disc)"
+  }
+}
