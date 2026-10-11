@@ -370,7 +370,10 @@ def handle_spots(shape, point, options):
     """Where the blue arrows go: [{"what", "origin", "direction", "length"}] in body
     coordinates. Each sits on the side of the part farthest from the scale point and
     moves with that side: dragging it by d changes the factor by d / length."""
-    box = shape.BoundBox
+    try:
+        box = shape.optimalBoundingBox(False, False)  # not the display triangles' box
+    except Exception:
+        box = shape.BoundBox
     spots = []
     if options.get("uniform", True):
         corners = [

@@ -42,6 +42,9 @@ def op_sf_shell(self, step):
     from sciforge import shelling
 
     base = self._tip()
+    # The 3D view has drawn the part before Shell is used: its triangles change what
+    # BoundBox returns (a round part's box gets a little smaller). Do the same here.
+    base.Shape.tessellate(0.1)
     names = [] if step.get("body") else selectors.select(base.Shape, step["faces"], "faces")
     options = {k: step[k] for k in SHELL_OPTIONS if k in step}
     try:

@@ -11,10 +11,18 @@ Path 3, Scale Non Uniform (Z 2) at the end, the part picked in the browser first
 Path 4, the shell deleted from the timeline: the boss and the scale stay; Ctrl+Z brings
         the shell back.
 Path 5, the shell suppressed and unsuppressed from the timeline.
+Path 6, the design saved, then Ctrl+S while a second Scale (0.5) previews: the scale is
+        kept (like starting any command) and the file holds it, nothing left unsaved.
+Path 7, a cup for the printer: a circle r 10, E 20, Shell taking the top away (1 mm); the
+        arrow sits on the round rim; Tangent Chain keeps the flat top alone.
 
 Volumes by hand: open box (bottom away) 12000 - (40-2t)(30-2t)(10-t); boss 500; a scale
-by (1, 1, 2) doubles the volume.
+by (1, 1, 2) doubles the volume; a cup pi (10^2 20 - 9^2 19).
 """
+import math
+import os
+import tempfile
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -216,7 +224,9 @@ def p4_delete():
 def p4_deleted():
     sd.no_popups("deleting the shell")
     v = h.solid_volume()
-    h.check("P4 no shell: the solid box and boss, scaled", sd.close(v, 2 * (sd.BOX + BOSS), 1e-5), v)
+    h.check(
+        "P4 no shell: the solid box and boss, scaled", sd.close(v, 2 * (sd.BOX + BOSS), 1e-5), v
+    )
     h.check("P4 Shell 1 gone", "Shell 1" not in sd.timeline_titles(), sd.timeline_titles())
     part_ok("P4")
     h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
@@ -244,6 +254,76 @@ def p5_back():
     part_ok("P5")
     h.check("P5 nothing in the Report view", not sd.report_errors(), sd.report_errors())
     h.shot("p5-end")
+
+
+# -- Path 6: Ctrl+S while a dialog is open --------------------------------------------------------
+def p6_save_first():
+    path = os.path.join(tempfile.mkdtemp(prefix="sciforge-mix-qa-"), "mix_qa.FCStd")
+    s["path"] = path
+    doc().saveAs(path)
+    h.check("P6 saved", os.path.isfile(path), path)
+    Gui.Selection.clearSelection()
+    h.ribbon("Scale")
+
+
+def p6_body():
+    h.fit()
+    h.click(V(40, 15, 10))
+
+
+def p6_type():
+    p = sd.scale_panel()
+    h.check("P6 the body is taken", p is not None and p.base is not None)
+    if p:
+        ui.type_into(p.factor.widget, "0.5")
+
+
+def p6_ctrl_s():
+    h.check("P6 previewed", sd.close(h.solid_volume(), s["v3"] / 8, 1e-5), h.solid_volume())
+    h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
+
+
+def p6_saved():
+    h.check("P6 Ctrl+S finished the dialog first", not dialog_open())
+    h.check("P6 the scale was kept", sd.close(h.solid_volume(), s["v3"] / 8, 1e-5))
+    h.check("P6 Scale 2 in the timeline", "Scale 2" in sd.timeline_titles(), sd.timeline_titles())
+    h.check("P6 nothing left unsaved", not doc().isTouched() and not b.modified())
+    sd.no_popups("Ctrl+S with Scale open")
+    part_ok("P6")
+
+
+# -- Path 7: a cup -------------------------------------------------------------------------------
+def p7_cup():
+    h.check("P7 a cylinder r 10 x 20", sd.close(h.solid_volume(), math.pi * 2000), h.solid_volume())
+    Gui.Selection.clearSelection()
+    h.ribbon("Shell")
+
+
+def p7_top():
+    h.fit()
+    h.click(V(3, 2, 20))
+
+
+def p7_picked():
+    p = sd.shell_panel()
+    h.check("P7 just the flat top (its edge is sharp)", p is not None and len(p.names()) == 1)
+    h.check("P7 an arrow on the round rim", p is not None and len(p.arrows) == 1)
+    v = h.solid_volume()
+    expect = math.pi * (100 * 20 - 81 * 19)
+    h.check("P7 a cup with 1 mm walls", sd.close(v, expect), (v, expect, msg(p)))
+    h.check("P7 no message", msg(p) == "", msg(p))
+    h.shot("p7-cup")
+    h.task_button("OK")
+
+
+def p7_done():
+    h.check("P7 kept", sd.close(h.solid_volume(), math.pi * (100 * 20 - 81 * 19)))
+    part_ok("P7")
+    h.check("P7 nothing in the Report view", not sd.report_errors(), sd.report_errors())
+
+
+def circle(sketch):
+    h.draw_circle(sketch, 0, 0, 10)
 
 
 h.run(
@@ -281,6 +361,13 @@ h.run(
             p5_suppress,
             p5_suppressed,
             p5_back,
+            p6_save_first,
+            p6_body,
+            p6_type,
+            p6_ctrl_s,
+            p6_saved,
         ]
+        + b.box_steps("CupQA", height=20, profile=circle)
+        + [p7_cup, p7_top, p7_picked, p7_done]
     ),
 )

@@ -38,6 +38,7 @@ KIND = "Shell"
 META = "SciForgeShell"  # hidden JSON on the feature: what FreeCAD's Thickness cannot hold
 TOL = 1e-7
 TAG_BASE = 1 << 40  # wall tags (see _tagged): far from FreeCAD's object ids
+RIM_SPOTS = (0.5, 0.375, 0.625, 0.25, 0.75, 0.125, 0.875, 0.0)  # where an arrow may sit
 SMOOTH = math.radians(1.0)
 DIRECTIONS = ("inside", "outside", "both")
 SHELL_TYPES = ("sharp", "rounded")
@@ -178,6 +179,17 @@ def _offset(solid, offset, join, what):
     return result.Solids[0]
 
 
+def _box(shape):
+    """The exact bounding box. shape.BoundBox comes from the display triangles once the
+    part has been drawn: a round part's box is then a little too small (a cylinder of
+    radius 10 measured 9.997), and a 1 mm cup wall looked like "sticking out of the part"
+    (it was refused as too thick)."""
+    try:
+        return shape.optimalBoundingBox(False, False)
+    except Exception:
+        return shape.BoundBox
+
+
 def _inside_box(inner, outer, margin):
     tol = margin + 1e-6 * max(1.0, outer.DiagonalLength)
     return (
@@ -262,7 +274,7 @@ def build(shape, names, options, tags=None):
     else:
         inner = _offset(solid, -inside, join, "inside") if inside > 0 else solid
         outer = _offset(solid, outside, join, "outside") if outside > 0 else solid
-        if inside > 0 and not _inside_box(inner.BoundBox, solid.BoundBox, 0.0):
+        if inside > 0 and not _inside_box(_box(inner), _box(solid), 0.0):
             raise ShellError(too_thick("inside", inside))
         if inside > 0 and outside > 0:
             _tagged((outer, inner), tags)
@@ -286,7 +298,7 @@ def _check(solid, result, inside, outside, opened):
         )
     if not result.isValid():
         raise ShellError(too_thick(what, biggest))
-    if not _inside_box(result.BoundBox, solid.BoundBox, outside):
+    if not _inside_box(_box(result), _box(solid), outside):
         raise ShellError(too_thick(what, biggest))
     volume = result.Volume
     if volume <= TOL:
@@ -343,22 +355,26 @@ def arrow_spots(shape, names, options, toward=None):
             opening = shape.getElement(names[0])
         except Exception:
             return spots
-        best = None  # (score, point, wall normal, opening normal): the rim edge facing you
+        best = None  # (score, point, wall normal, opening normal): the rim spot facing you
         for edge in opening.Edges:
             for i, face in enumerate(solid.Faces, start=1):
                 if "Face%d" % i in names or not any(e.isSame(edge) for e in face.Edges):
                     continue
-                mid = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
-                try:
-                    wall = _normal_at(face, mid)
-                    up = _normal_at(opening, mid)
-                except Exception:
-                    continue
-                if wall.Length < 0.5 or up.Length < 0.5:
-                    continue
-                score = wall.dot(toward) if toward is not None else 0.0
-                if best is None or score > best[0] + 1e-9:
-                    best = (score, mid, wall, up)
+                # several spots along the edge: a round rim (a cup) is one edge whose middle
+                # is not the side turned toward you; the middle wins a tie (a straight edge)
+                for fraction in RIM_SPOTS:
+                    t = edge.FirstParameter + (edge.LastParameter - edge.FirstParameter) * fraction
+                    mid = edge.valueAt(t)
+                    try:
+                        wall = _normal_at(face, mid)
+                        up = _normal_at(opening, mid)
+                    except Exception:
+                        continue
+                    if wall.Length < 0.5 or up.Length < 0.5:
+                        continue
+                    score = wall.dot(toward) if toward is not None else 0.0
+                    if best is None or score > best[0] + 1e-9:
+                        best = (score, mid, wall, up)
         if best is not None:
             _score, mid, wall, up = best
             if inside:

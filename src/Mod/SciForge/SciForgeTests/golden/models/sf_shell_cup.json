@@ -1,0 +1,59 @@
+{
+  "id": "sf_shell_cup",
+  "title": "A cup: cylinder r 10 x 20, Shell taking the top away, 1 mm walls (the part drawn on screen first)",
+  "tags": [
+    "shell",
+    "round"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "inside": 1
+    }
+  ],
+  "expect": {
+    "volume": 1448.2742133048946,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      20
+    ],
+    "faces": 5,
+    "solids": 1,
+    "source": "analytic",
+    "note": "pi (10^2 * 20 - 9^2 * 19) = 461 pi. Before the QA fix a cylinder drawn on screen (triangulated) had a bounding box 0.003 mm too small and the 1 mm wall was refused as too thick."
+  }
+}
