@@ -66,7 +66,7 @@ SOLID_CREATE = group(
         item("Sphere", ("SciForge_Sphere", "PartDesign_CompPrimitiveAdditive#2"), "sphere"),
         item("Torus", ("SciForge_Torus", "PartDesign_CompPrimitiveAdditive#5"), "torus"),
         item("Coil", ("SciForge_Coil", "PartDesign_AdditiveHelix"), "coil"),
-        item("Pipe", None, "pipe"),
+        item("Pipe", "SciForge_Pipe", "pipe"),
         SEP,
         sub(
             "Pattern",
