@@ -18,7 +18,8 @@ FreeCAD's view providers are looked up fresh every time, never kept.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, construct, handles3d, hole_common, log, pickpanel, preview, section, warn
+from . import bodypick, commands, construct, handles3d, hole_common, log, pickpanel
+from . import preview, section, warn
 from . import ui_icon_path
 from .compat import QtCore, QtGui, QtWidgets
 from .taskui import DistanceField
@@ -392,7 +393,7 @@ class _Gate:
             return False
 
 
-class SectionPanel(pickpanel.PickPanel):
+class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
     title = "Section Analysis"
     icon = "section"
     last = None
@@ -513,7 +514,7 @@ class SectionPanel(pickpanel.PickPanel):
         self.repick = True
         self._show_box()
         self._update_planes()
-        self.say("Click a plane or a flat face to cut along.")
+        self.hint("Click a plane or a flat face to cut along.")
 
     @_safe
     def clear_field(self, _index):
@@ -757,7 +758,7 @@ class SectionPanel(pickpanel.PickPanel):
                     pass
                 self.analysis = None
                 schedule(self.doc)
-            self.say("Click a plane or a flat face to cut along.")
+            self.hint("Click a plane or a flat face to cut along.")
             return
         try:
             section.cut_frame(self.ref, **self._frame_options())
@@ -782,7 +783,10 @@ class SectionPanel(pickpanel.PickPanel):
         if not any(h.dragging() for h in self.handles.values()):
             self._rebuild_handles()
         problem = preview.failure(self.analysis)
-        self.say(problem)
+        if problem:
+            self.say(problem)
+        else:
+            self.hint("")
 
     def _frame_options(self):
         return {

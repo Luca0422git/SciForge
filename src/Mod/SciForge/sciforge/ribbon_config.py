@@ -178,7 +178,7 @@ INSPECT = group(
     ["Measure", "Section Analysis"],
     [
         item("Measure", ("SciForge_Measure", "Std_Measure"), "measure", "I"),
-        item("Interference", None, "interference"),
+        item("Interference", "SciForge_Interference", "interference"),
         item("Curvature Comb Analysis", None, "curvature"),
         item("Zebra Analysis", None, "zebra"),
         item("Draft Analysis", None, "draft"),
@@ -188,7 +188,7 @@ INSPECT = group(
             ("SciForge_SectionAnalysis", "Part_SectionCut", "Std_ToggleClipPlane"),
             "section",
         ),
-        item("Center of Mass", None, "center_of_mass"),
+        item("Center of Mass", "SciForge_CenterOfMass", "center_of_mass"),
     ],
 )
 

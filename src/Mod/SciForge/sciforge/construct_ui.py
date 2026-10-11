@@ -20,7 +20,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, construct, handles3d, hole_common, log, pickpanel, preview, warn
+from . import bodypick, commands, construct, handles3d, hole_common, log, pickpanel, preview, warn
 from . import ui_icon_path
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField
@@ -204,7 +204,7 @@ def _size_of(body):
         return 50.0
 
 
-class ConstructPanel(pickpanel.PickPanel):
+class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
     """One CONSTRUCT entry's dialog (see the module text)."""
 
     last = None
@@ -342,9 +342,9 @@ class ConstructPanel(pickpanel.PickPanel):
         if not self._complete():
             spec = self.inputs[self.active] if self.active is not None else None
             if spec is not None:
-                self.say("Click %s." % spec["hint"])
+                self.hint("Click %s." % spec["hint"])
             return
-        self.say("")
+        self.hint("")
 
     def _complete(self):
         return all(
