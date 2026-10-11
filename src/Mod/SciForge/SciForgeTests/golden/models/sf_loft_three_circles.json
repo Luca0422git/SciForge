@@ -1,0 +1,85 @@
+{
+  "id": "sf_loft_three_circles",
+  "title": "Loft: three equal circles r5 at z 0, 20, 40 (a cylinder)",
+  "tags": [
+    "loft",
+    "fusion-loft"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ],
+      "offset": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ],
+      "offset": 40
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        },
+        {
+          "profile": "s3"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 3141.5926535897934,
+    "area": 1413.7166941154069,
+    "faces": 3,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      5,
+      5,
+      40
+    ],
+    "note": "A smooth loft through equal coaxial circles is the cylinder r5 h40.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

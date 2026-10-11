@@ -1,0 +1,89 @@
+{
+  "id": "sf_rib_depth",
+  "title": "Rib: Depth 5 instead of To Next: a strip 5 wide along the corner line",
+  "tags": [
+    "rib",
+    "fusion-rib"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              5
+            ],
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            5,
+            25,
+            25,
+            5
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "sf_rib",
+      "id": "rib",
+      "curves": "r",
+      "thickness": 2,
+      "depth_type": "depth",
+      "depth": 5
+    }
+  ],
+  "expect": {
+    "volume": 7732.8427124746195,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      40
+    ],
+    "note": "An L bracket (legs 40 long, 5 thick) on XZ extruded 20 (to y -20): (40 * 5 + 35 * 5) * 20 = 7500. A strip 20 sqrt(2) long (the line) and d = 5 wide towards the corner; at each end it runs into a leg, where a right triangle with legs d (area d^2 / 2) is already material: (20 sqrt(2) d - d^2) * 2 thick.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "id": "sf_web_arc",
+  "title": "Web: a half circle r10 on the rim, its free ends carried on to the near wall",
+  "tags": [
+    "web",
+    "fusion-web"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            -18,
+            -18,
+            18,
+            18
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s1",
+      "distance": 8,
+      "flip": true,
+      "operation": "cut"
+    },
+    {
+      "op": "sf_curves",
+      "id": "w",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "arc": [
+            0,
+            0,
+            10,
+            0,
+            180
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_rib",
+      "id": "web",
+      "kind": "web",
+      "curves": "w"
+    }
+  ],
+  "expect": {
+    "volume": 6710.654824574367,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      10
+    ],
+    "note": "A tray: 40 x 40 x 10 less a 36 x 36 pocket 8 deep: 16000 - 10368 = 5632. The arc from (10, 0) to (-10, 0) through (0, 10) leaves both ends heading -Y; they are carried on 18 to the wall y = -18. Plan area: half an annulus r9 to r11, pi (121 - 81) / 2 = 20 pi, and two 2 x 18 strips = 72; 8 high.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -223,6 +223,21 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       `sf_sphere_*`, `sf_torus_*`, `sf_coil_*`, `sf_pipe_*`), unit tests
       `test_primitives_core.py`.
 
+- [x] Sweep, Loft, Rib and Web, Fusion-style (branch `sf/sweep_loft`; spec + gaps in
+      `docs/sciforge/parity/sweep-loft-rib.md`). Sweep (`sweep.py` / `sweep_ui.py`): Single
+      Path / Path + Guide Rail, profile = sketch area or flat face, path/rail = sketch curves
+      or part edges with Chain Selection, profile anywhere on the path (Distance / Distance
+      One + Two, blue balls), Orientation, Taper, Twist, Profile Scaling, Join / Cut /
+      Intersect / New Body with auto Cut. Loft (`loft.py` / `loft_ui.py`): ordered profiles
+      (areas, faces, points; up / down / remove), Rails / Centerline, Closed, operations.
+      Rib and Web (`rib.py` / `rib_ui.py`, FreeCAD has neither): Symmetric / One Side,
+      Thickness and Depth arrows, To Next / Depth, Flip, Extend Curves. FreeCAD's own Pipe /
+      Loft when they give Fusion's result, SciForge's FeaturePython otherwise (swapped in
+      place on edit). Shared: `curves.py`, `curve_pick.py`. Ribbon: Rib and Web enabled (two
+      lines). 7 scenarios (`sweep_loft_*.py`), 35 golden models (`sf_sweep_*`, `sf_loft_*`,
+      `sf_rib_*`, `sf_web_*`). Gaps: Tangent Edges Merge, Path + Guide Surface, loft end
+      conditions.
+
 ## Known issues / findings
 
 - **Lesson (2026-10-10): green tests, unusable product.** Luca's first real session: Create Sketch
@@ -797,6 +812,31 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     the hole). Fusion shows no sketch for a single hole: to confirm with Luca whether they
     should leave the browser (browser owner + `hole.py` scenario's browser step).
 
+- **Sweep / Loft / Rib / Web findings (branch `sf/sweep_loft`)**:
+  - **Trap: OpenCASCADE's volume of a merged smooth B-spline side can be wrong.** A loft of
+    a slot to the same slot with Tangent Edges Merge gave 7551 mm³ by `Shape.Volume`
+    (GProp) instead of 8356 (the meshed shape and the formula agree on 8356). So the loft
+    keeps one side face per profile curve, and the Merge box is greyed with the reason.
+    Watch for this with any feature that makes B-spline faces (surface tools later).
+  - For a big plane face centred on a point (to slice a part), use
+    `Part.Plane(point, normal).toShape(-r, r, -r, r)`. The first way tried did not cover
+    the point, and a rail then seemed not to touch the profile.
+  - FreeCAD's Loft wants whole sketches in `Sections` as `(sketch, "")`; the first way
+    tried failed with "At least one section is needed".
+  - FreeCAD's AdditivePipe needs Transition "Right corner" to give Fusion's mitred corner
+    on a path with a sharp bend, and Mode "Standard" for Perpendicular, "Fixed" for
+    Parallel.
+  - A native SubtractivePipe / SubtractiveLoft that misses the part silently changes
+    nothing. The dialogs now say "does not touch the part" instead (`_misses()`).
+  - OCC `MakePipeShell.setAuxiliarySpine(wire, True, 0)` with a helix-like guide gives the
+    twist; for a curved path the guide comes from rotation-minimizing frames (double
+    reflection), which keeps the profile from rolling.
+  - Rib (gusset): thickening the band first and cutting it by the part left the rib
+    unbounded wherever its thickness ran past the part's side. The outline is now found in
+    the sketch plane (the band minus the plane's section of the part), then thickened.
+  - A rib / web turned out of a side face (One Side) touches the part only along edges:
+    `fuse` then gives two solids. Refused with the reason.
+
 ## Questions waiting for Luca
 
 
@@ -1160,6 +1200,30 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Left for other owners (Known issues): Extrude's `_recompute` has no closed-dialog guard;
   Create Sketch attaches to the Tip's face, so suppressing an unrelated earlier hole also
   suppresses that sketch's holes (see `hole.earliest_face`); helper sketches in the browser.
+
+### 2026-10-11: Sweep, Loft, Rib and Web (branch `sf/sweep_loft`)
+- New: `curves.py` (connected paths with a direction, tangent chains, rotation-minimizing
+  frames, twist guides), `curve_pick.py` (sketch-area picker, curve highlight, the blue
+  distance ball `PathHandle`, value box that takes a decimal comma), `sweep.py` /
+  `sweep_ui.py` (Sweep), `loft.py` / `loft_ui.py` (Loft), `rib.py` / `rib_ui.py` (Rib and
+  Web). Commands `SciForge_Sweep`, `SciForge_Loft`, `SciForge_Rib`, `SciForge_Web`. Ribbon:
+  Rib and Web enabled (two lines in `ribbon_config.py`). No core patch.
+- In plain words: Sweep moves a profile along a path (all of it or part of it, both ways
+  when the profile sits inside the path), optionally guided by a rail, tapered or twisted;
+  Loft blends profiles in the order you click them, optionally along rails or a
+  centerline; Rib fills a corner with a plate drawn as one line; Web makes a grid of plates
+  from several lines. FreeCAD's own Pipe / Loft are used when they give Fusion's result,
+  SciForge's own feature otherwise.
+- Tests: scenarios `sweep_loft_sweep`, `sweep_loft_sweep_cut`, `sweep_loft_sweep_rail`,
+  `sweep_loft_loft`, `sweep_loft_loft_guides`, `sweep_loft_rib`, `sweep_loft_web` (real
+  input only); golden ops in `golden/sweep_loft_ops.py` (`sf_curves`, `sf_sweep(_edit)`,
+  `sf_loft(_edit)`, `sf_rib(_edit)`) + 35 analytic models; unit tests
+  `test_sweep_loft_schema.py`.
+- Spec and gaps: `docs/sciforge/parity/sweep-loft-rib.md` (main gaps: Tangent Edges Merge
+  because of the B-spline volume trap, Path + Guide Surface, loft end conditions).
+- Full suite at the end (no --only, 2026-10-11): unit 185 OK (194 with the new schema
+  tests, run after); golden 216 pass + 1 xfail (`plate_hole_grid`, needs core patch #4);
+  smoke 70/70; journey 25/25; 79 of 79 scenarios PASS (6594 checks).
 
 ## Next steps (in order)
 

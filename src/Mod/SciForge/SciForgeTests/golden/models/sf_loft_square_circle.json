@@ -1,0 +1,66 @@
+{
+  "id": "sf_loft_square_circle",
+  "title": "Loft: a 20 x 20 square up into a circle r10, 30 mm higher",
+  "tags": [
+    "loft",
+    "fusion-loft"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 10742.857918218218,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      30
+    ],
+    "note": "Between two profiles a loft joins matching points by straight lines; OpenCASCADE matches the square's corners with the circle's points at 45 degrees and runs each side and its quarter arc at even speed. A section at height t h is (1-t) P + t Q, of area (1-t)^2 A_P + t^2 A_Q + t (1-t) M with M = 16 sqrt(2) s r / pi (s the half side), so V = h (A_P / 3 + A_Q / 3 + M / 6).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

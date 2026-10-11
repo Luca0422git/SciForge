@@ -1,0 +1,63 @@
+{
+  "id": "sf_sweep_both_sides",
+  "title": "Sweep: the profile inside the path, Distance One 0.5 and Distance Two 0.25",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            -10,
+            0,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "distance": 0.5,
+      "distance2": 0.25
+    }
+  ],
+  "expect": {
+    "volume": 157.07963267948966,
+    "area": 182.212373908208,
+    "faces": 3,
+    "bbox": [
+      -2,
+      -2,
+      -2.5,
+      2,
+      2,
+      10
+    ],
+    "note": "The path runs from z -10 to 20 and crosses the profile at z 0. Side one (towards the path's end) 0.5 * 20 = 10, side two 0.25 * 10 = 2.5: a cylinder r2 from z -2.5 to 10.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

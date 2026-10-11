@@ -1,0 +1,78 @@
+{
+  "id": "sf_sweep_edit_distance",
+  "title": "Sweep edited from the timeline: Distance 1 -> 0.5",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 376.99111843077515,
+        "faces": 3,
+        "source": "analytic",
+        "note": "cylinder r2 h30"
+      }
+    },
+    {
+      "op": "sf_sweep_edit",
+      "target": "w1",
+      "set": {
+        "distance": 0.5,
+        "taper": 0
+      }
+    }
+  ],
+  "expect": {
+    "volume": 188.49555921538757,
+    "faces": 3,
+    "bbox": [
+      -2,
+      -2,
+      0,
+      2,
+      2,
+      15
+    ],
+    "note": "Cylinder r2 h30 (FreeCAD's own pipe), then half the path (SciForge's sweep takes its place): r2 h15.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

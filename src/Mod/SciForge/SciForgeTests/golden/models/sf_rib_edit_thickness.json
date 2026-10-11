@@ -1,0 +1,94 @@
+{
+  "id": "sf_rib_edit_thickness",
+  "title": "Rib: the corner gusset, then edited to 4 thick",
+  "tags": [
+    "rib",
+    "fusion-rib"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              5
+            ],
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            5,
+            25,
+            25,
+            5
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "sf_rib",
+      "id": "rib",
+      "curves": "r",
+      "thickness": 2
+    },
+    {
+      "op": "sf_rib_edit",
+      "target": "rib",
+      "set": {
+        "thickness": 4
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8300.0,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      40
+    ],
+    "note": "An L bracket (legs 40 long, 5 thick) on XZ extruded 20 (to y -20): (40 * 5 + 35 * 5) * 20 = 7500. Triangle 200 * 4 thick = 800.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "id": "sf_web_cross",
+  "title": "Web: a cross of two 20 long lines on the tray's rim, To Next, extended to the walls",
+  "tags": [
+    "web",
+    "fusion-web"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            -18,
+            -18,
+            18,
+            18
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s1",
+      "distance": 8,
+      "flip": true,
+      "operation": "cut"
+    },
+    {
+      "op": "sf_curves",
+      "id": "w",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "line": [
+            -10,
+            0,
+            10,
+            0
+          ]
+        },
+        {
+          "line": [
+            0,
+            -10,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_rib",
+      "id": "web",
+      "kind": "web",
+      "curves": "w"
+    }
+  ],
+  "expect": {
+    "volume": 6752.0,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      10
+    ],
+    "note": "A tray: 40 x 40 x 10 less a 36 x 36 pocket 8 deep: 16000 - 10368 = 5632. Each line is carried on to the walls (36 long), 2 thick, down to the floor (8): two plates 36 * 2 * 8 sharing a 2 x 2 x 8 post: 1152 - 32 = 1120.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

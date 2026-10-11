@@ -1,0 +1,87 @@
+{
+  "id": "sf_rib_one_side",
+  "title": "Rib: the gusset line on the bracket's side face y = 0, One Side 3 thick",
+  "tags": [
+    "rib",
+    "fusion-rib"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              5
+            ],
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            5,
+            25,
+            25,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_rib",
+      "id": "rib",
+      "curves": "r",
+      "thickness": 3,
+      "thickness_side": "one_side"
+    }
+  ],
+  "expect": {
+    "volume": 8100.0,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      0,
+      40
+    ],
+    "note": "An L bracket (legs 40 long, 5 thick) on XZ extruded 20 (to y -20): (40 * 5 + 35 * 5) * 20 = 7500. One Side grows along the sketch normal (-Y for XZ): y 0 to -3, inside the bracket's span (YMax stays 0; Symmetric would stand 1.5 out). 200 * 3.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

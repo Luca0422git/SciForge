@@ -1,0 +1,84 @@
+{
+  "id": "sf_sweep_tube_bend",
+  "title": "Sweep: circle r2 along a line, a bend of radius 10 and a line (a bent tube)",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            20
+          ]
+        },
+        {
+          "arc": [
+            10,
+            20,
+            10,
+            90,
+            180
+          ]
+        },
+        {
+          "line": [
+            10,
+            30,
+            30,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": {
+        "sketch": "p1",
+        "at": [
+          0,
+          10
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "volume": 700.0469125961541,
+    "area": 725.1796538248725,
+    "faces": 5,
+    "bbox": [
+      -2,
+      -2,
+      0,
+      30,
+      2,
+      32
+    ],
+    "note": "Path length L = 20 + 10 pi/2 + 20 (Chain Selection takes the 3 smooth curves). V = pi r^2 L, A = 2 pi r L + 2 pi r^2 (Pappus: the circle's centre runs on the path). Faces: 2 cylinders, 1 torus piece, 2 end discs. The bend's outside reaches z = 30 + 2.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

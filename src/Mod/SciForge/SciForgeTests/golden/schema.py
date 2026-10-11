@@ -1027,3 +1027,207 @@ def validate(model):  # noqa: F811  (adds the primitive / coil / pipe checks)
     _validate_before_primitives(model)
     _check_primitive_steps(model)
     return model
+
+
+# -- Fusion Sweep / Loft / Rib / Web (golden/sweep_loft_ops.py; sciforge/sweep.py, loft.py,
+# rib.py, the same code as their dialogs) ------------------------------------------------------
+STEP_KEYS["sf_curves"] = ({"id", "plane", "curves"}, {"offset", "comment"})
+STEP_KEYS["sf_sweep"] = (
+    {"id", "path"},
+    {
+        "profile",
+        "regions",
+        "face",
+        "rail",
+        "type",
+        "distance",
+        "distance2",
+        "taper",
+        "twist",
+        "orientation",
+        "scaling",
+        "operation",
+        "comment",
+    },
+)
+STEP_KEYS["sf_sweep_edit"] = ({"target", "set"}, {"comment"})
+SWEEP_SET = {
+    "type",
+    "distance",
+    "distance2",
+    "taper",
+    "twist",
+    "orientation",
+    "scaling",
+    "operation",
+}
+SWEEP_CHOICES = {
+    "type": ("single", "rail"),
+    "orientation": ("perpendicular", "parallel"),
+    "scaling": ("scale", "stretch", "none"),
+    "operation": ("auto", "join", "cut", "intersect", "new_body"),
+}
+CURVE_SKETCHES = ("sketch", "sf_curves")
+
+
+def _check_curves_spec(here, spec, seen):
+    if isinstance(spec, str):
+        if seen.get(spec) not in CURVE_SKETCHES:
+            _fail(here, "a curve sketch must name an earlier sketch / sf_curves step")
+        return
+    if not isinstance(spec, dict) or not ({"sketch", "edge"} & set(spec)):
+        _fail(here, "curves are a sketch id, {'sketch', 'at'} or {'edge': selector}")
+    if "sketch" in spec:
+        if seen.get(spec["sketch"]) not in CURVE_SKETCHES:
+            _fail(here, "'sketch' must name an earlier sketch / sf_curves step")
+        if "at" not in spec:
+            _fail(here, "{'sketch'} needs 'at': [x, y] (or a list of points)")
+
+
+def _check_sweep_options(here, options):
+    for key, allowed in SWEEP_CHOICES.items():
+        if key in options and options[key] not in allowed:
+            _fail(here, "'%s' must be one of %s" % (key, allowed))
+    for key in ("distance", "distance2"):
+        if key in options:
+            _check_number(here + "." + key, options[key])
+            if not 0.0 <= options[key] <= 1.0:
+                _fail(here, "'%s' goes from 0 to 1" % key)
+    for key in ("taper", "twist"):
+        if key in options:
+            _check_number(here + "." + key, options[key])
+
+
+def _check_sweep_loft_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_curves":
+            if step["plane"] not in PLANES:
+                _fail(here, "'plane' must be one of %s" % (PLANES,))
+            if not isinstance(step["curves"], list) or not step["curves"]:
+                _fail(here, "'curves' is a non-empty list")
+            kinds = {"line", "arc", "circle", "point", "polyline"}
+            for item in step["curves"]:
+                if not isinstance(item, dict) or len(set(item) & kinds) != 1:
+                    _fail(here, "each curve is one of %s" % sorted(kinds))
+        if op == "sf_sweep":
+            if ("face" in step) == ("profile" in step):
+                _fail(here, "sf_sweep needs exactly one of 'profile' (a sketch) or 'face'")
+            if "profile" in step and seen.get(step["profile"]) not in CURVE_SKETCHES:
+                _fail(here, "'profile' must name an earlier sketch step")
+            _check_curves_spec(here + ".path", step["path"], seen)
+            if "rail" in step:
+                _check_curves_spec(here + ".rail", step["rail"], seen)
+            if step.get("type") == "rail" and "rail" not in step:
+                _fail(here, "type 'rail' needs a 'rail'")
+            _check_sweep_options(here, step)
+        if op == "sf_sweep_edit":
+            if seen.get(step["target"]) != "sf_sweep":
+                _fail(here, "'target' must name an earlier sf_sweep step")
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object")
+            unknown = set(step["set"]) - SWEEP_SET
+            if unknown:
+                _fail(here, "sf_sweep_edit cannot set %s" % sorted(unknown))
+            _check_sweep_options(here, step["set"])
+        if op == "sf_loft":
+            _check_loft_step(here, step, seen)
+        if op == "sf_rib":
+            _check_curves_spec(here + ".curves", step["curves"], seen)
+            _check_rib_options(here, step)
+        for edit, made, allowed, check in (
+            ("sf_loft_edit", "sf_loft", LOFT_SET, _check_loft_options),
+            ("sf_rib_edit", "sf_rib", RIB_SET, _check_rib_options),
+        ):
+            if op != edit:
+                continue
+            if seen.get(step["target"]) != made:
+                _fail(here, "'target' must name an earlier %s step" % made)
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object")
+            unknown = set(step["set"]) - allowed
+            if unknown:
+                _fail(here, "%s cannot set %s" % (edit, sorted(unknown)))
+            check(here, step["set"])
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+STEP_KEYS["sf_loft"] = (
+    {"id", "profiles"},
+    {"rails", "centerline", "guide", "closed", "operation", "comment"},
+)
+STEP_KEYS["sf_loft_edit"] = ({"target", "set"}, {"comment"})
+LOFT_SET = {"guide", "closed", "operation"}
+STEP_KEYS["sf_rib"] = (
+    {"id", "curves"},
+    {
+        "kind",
+        "thickness",
+        "thickness_side",
+        "flip_side",
+        "depth_type",
+        "depth",
+        "flip",
+        "extend",
+        "comment",
+    },
+)
+STEP_KEYS["sf_rib_edit"] = ({"target", "set"}, {"comment"})
+RIB_SET = {"thickness", "thickness_side", "flip_side", "depth_type", "depth", "flip", "extend"}
+
+
+def _check_loft_options(here, options):
+    if options.get("guide", "rails") not in ("rails", "centerline"):
+        _fail(here, "'guide' must be rails or centerline")
+    if options.get("operation", "auto") not in SWEEP_CHOICES["operation"]:
+        _fail(here, "'operation' must be one of %s" % (SWEEP_CHOICES["operation"],))
+    if "closed" in options and not isinstance(options["closed"], bool):
+        _fail(here, "'closed' is true or false")
+
+
+def _check_loft_step(here, step, seen):
+    profiles = step["profiles"]
+    if not isinstance(profiles, list) or len(profiles) < 2:
+        _fail(here, "'profiles' lists at least two profiles, in loft order")
+    for k, spec in enumerate(profiles):
+        where = "%s.profiles[%d]" % (here, k)
+        if not isinstance(spec, dict) or len({"profile", "face", "point"} & set(spec)) != 1:
+            _fail(where, "a profile is {'profile'}, {'face'} or {'point'}")
+        if "profile" in spec and seen.get(spec["profile"]) not in CURVE_SKETCHES:
+            _fail(where, "'profile' must name an earlier sketch step")
+        if "point" in spec:
+            _check_curves_spec(where, spec["point"], seen)
+    for k, rail in enumerate(step.get("rails", [])):
+        _check_curves_spec("%s.rails[%d]" % (here, k), rail, seen)
+    if "centerline" in step:
+        _check_curves_spec(here + ".centerline", step["centerline"], seen)
+    _check_loft_options(here, step)
+
+
+def _check_rib_options(here, options):
+    for key, allowed in (
+        ("kind", ("rib", "web")),
+        ("thickness_side", ("symmetric", "one_side")),
+        ("depth_type", ("to_next", "depth")),
+    ):
+        if key in options and options[key] not in allowed:
+            _fail(here, "'%s' must be one of %s" % (key, allowed))
+    for key in ("thickness", "depth"):
+        if key in options:
+            _check_number(here + "." + key, options[key], positive=True)
+    for key in ("flip", "flip_side", "extend"):
+        if key in options and not isinstance(options[key], bool):
+            _fail(here, "'%s' is true or false" % key)
+
+
+_validate_before_sweep_loft = validate
+
+
+def validate(model):  # noqa: F811  (adds the sweep / loft / rib checks to the checks above)
+    _validate_before_sweep_loft(model)
+    _check_sweep_loft_steps(model)
+    return model

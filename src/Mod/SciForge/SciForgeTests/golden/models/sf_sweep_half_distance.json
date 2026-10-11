@@ -1,0 +1,62 @@
+{
+  "id": "sf_sweep_half_distance",
+  "title": "Sweep: Distance 0.5 sweeps half of a 30 mm path",
+  "tags": [
+    "sweep",
+    "fusion-sweep"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "distance": 0.5
+    }
+  ],
+  "expect": {
+    "volume": 188.49555921538757,
+    "area": 213.62830044410592,
+    "faces": 3,
+    "bbox": [
+      -2,
+      -2,
+      0,
+      2,
+      2,
+      15
+    ],
+    "note": "Distance is the share of the path: 0.5 of 30 = 15 mm. Cylinder r2 h15.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}
