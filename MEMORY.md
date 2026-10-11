@@ -876,7 +876,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   (hand-derived; Pappus for coils/pipes); unit tests `test_primitives_core.py`.
 - Spec and gaps: `docs/sciforge/parity/primitives.md`. Gaps: New Component, value boxes on
   the canvas, snapping along edges / midpoints, Fusion defaults to confirm with Luca.
-- FULL_SUITE_LINE
+- Full suite at the end (no --only, 2026-10-11, commit 168c2b7a48): unit 219 OK; golden
+  204 pass + 1 xfail (`plate_hole_grid`, needs core patch #4); smoke 70/70; journey 25/25;
+  72 of 72 scenarios PASS (6245 checks; primitives_box 78, primitives_shapes 99,
+  primitives_coil 70, primitives_pipe 73, primitives_qa 107, ribbon_sweep 106).
+- For every owner: `undo_links.py` is installed when the SciForge commands load and fixes
+  formula links after undo/redo for all features, not only these (see findings).
 
 ## Next steps (in order)
 
