@@ -458,6 +458,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   open (`bodies.PAUSED`) they stay listed so they can be picked. `bodies_combine` checks it.
 - Browser: an analysis (Section, Center of Mass, Interference) is edited by double-click or
   right-click Edit Feature, like Fusion (found by the inspect agent; `inspect_section`).
+- Create Sketch on a flat face attaches to the step that made the face (`hole.earliest_face`,
+  `sketch_ui._earliest`), not to the last step (a hole drilled in it): suppressing an
+  unrelated earlier hole no longer takes the sketch and what is built on it along.
+  Scenario `sketch_earliest_face` (found by the hole QA). Dialog `_recompute` methods return
+  once the dialog is closed (all but revolve_ui, which its QA pass owns).
+- Open question for Luca: a Single Hole's hidden helper sketch is listed in the browser as
+  "Hole 1 Sketch" (double-click opens the hole); Fusion lists no sketch for a single hole.
 - `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
   `palette_check.svg` (check-box tick) would have been deleted; it is now in its `RAW` table.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not

@@ -217,6 +217,7 @@ def create_sketch(body, target):
             Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
         except Exception as exc:
             warn("could not activate %s: %s" % (body.Label, exc))
+    target = _earliest(target)
     doc = body.Document
     doc.openTransaction("Create Sketch")
     try:
@@ -229,6 +230,40 @@ def create_sketch(body, target):
         raise
     doc.commitTransaction()
     return sketch
+
+
+def _earliest(target):
+    """A flat face clicked on the part belongs to the step that made it, not to the last
+    step that touched the part: a sketch on the top of a block with a hole drilled in it
+    hangs on the block, so suppressing or deleting the unrelated hole leaves the sketch
+    (and what is built on it) alone, as in Fusion (found by the hole QA)."""
+    obj, name = target
+    if not name.startswith("Face"):
+        return target
+    try:
+        from . import hole
+
+        face = obj.Shape.getElement(name)
+        point = _point_on(face)
+        if point is None:
+            return target
+        return hole.earliest_face(obj, name, point)
+    except Exception:
+        return target
+
+
+def _point_on(face):
+    """A point that lies on the face (its centre can be in a hole of it)."""
+    centre = face.CenterOfMass
+    if face.isInside(centre, 1e-6, True):
+        return centre
+    u0, u1, v0, v1 = face.ParameterRange
+    for i in range(1, 8):
+        for j in range(1, 8):
+            point = face.valueAt(u0 + (u1 - u0) * i / 8.0, v0 + (v1 - v0) * j / 8.0)
+            if face.isInside(point, 1e-6, True):
+                return point
+    return None
 
 
 def open_sketch(sketch):
