@@ -204,3 +204,16 @@ def boss_steps():
         h.fit()
 
     return [sketch_top, click_top, circle, finish, extrude, distance, ok, boss_made]
+
+
+def expand_folder(label):
+    """Open a browser folder like a person with the keyboard: click its row, press Right."""
+    from SciForgeTests.gui import timeline_input as ti
+    from SciForgeTests.gui import widget_input as w
+
+    t, pos = ti.row_point(label)
+    if pos is None:
+        return False
+    w.click(t.viewport(), pos)
+    w.key(t, QtCore.Qt.Key_Right)
+    return True

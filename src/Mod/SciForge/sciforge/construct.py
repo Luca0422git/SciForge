@@ -480,6 +480,23 @@ def plane_of(ref):
     return origin, normal
 
 
+def plane_frame(ref):
+    """The frame of a plane or flat face (global): local Z its normal (out of the part for a
+    face), local X the plane's own X (an origin or construction plane) or the face's."""
+    obj, sub = ref[0], ref[1]
+    if obj.TypeId in PLANE_TYPES:
+        gp = obj.getGlobalPlacement()
+        return App.Placement(gp.Base, gp.Rotation)
+    origin, normal = plane_of(ref)
+    x = None
+    try:
+        surface = element(obj, sub).Surface
+        x = V(surface.value(1.0, 0.0)) - V(surface.value(0.0, 0.0))  # the face's u direction
+    except Exception:
+        x = None
+    return frame(origin, normal, x)
+
+
 def line_of(ref):
     """(point, direction, length or None) of a straight edge, sketch line or axis."""
     obj, sub = ref[0], ref[1]
