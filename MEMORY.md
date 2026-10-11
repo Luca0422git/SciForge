@@ -340,6 +340,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   run_tests.sh now starts scenarios through `SciForgeTests/gui/scenario_launcher.py`, which
   writes a failed result ("the scenario file loads") and quits. Scenarios import QtTest
   from `PySide6` (FreeCAD's `PySide` shim has no QtTest).
+- **FreeCAD 1.1 floats the Tasks panel over the 3D view (its "overlay") with title bars of
+  its own**: an empty "Tasks" header with 3 buttons stayed over the view with no command
+  open (FreeCAD auto-hides an overlay only when it holds 2+ panels) and a white strip sat
+  above every dialog. `shell._hide_overlay_titles` keeps overlay title bars at zero height
+  (FreeCAD re-shows them and builds new ones, so an event filter on the overlay containers
+  flattens new ones). Docked panels use the same `Gui::OverlayTitleBar` class (the BROWSER
+  header): only bars inside `Gui::OverlayTabWidget`/`OverlaySplitter` are flattened.
+  Scenario `overlay_title` (fails without the fix, checked).
 - `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
   `palette_check.svg` (check-box tick) would have been deleted; it is now in its `RAW` table.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
