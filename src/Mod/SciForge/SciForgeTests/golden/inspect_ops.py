@@ -26,6 +26,9 @@ A pick ("ref") is one of:
   {"op": "section_expect", "plane": ref, "distance": 0, "x_angle": 0, "y_angle": 0,
    "flip": false, "kept_volume": v, "cap_area": a}
   {"op": "com_expect", "features": ["e1"] (their bodies; none = every body), "point": [x, y, z]}
+  {"op": "body_material", "feature": "e2", "material": "aluminium"}
+      the Physical Material of that step's body (a key of sciforge/material.py LIBRARY), set
+      the way the Physical Material dialog does (material.assign)
   {"op": "interference_expect", "features": ["e1", "e2"], "include_coincident": false,
    "volume": v, "pairs": n}
 """
@@ -241,6 +244,17 @@ def op_com_expect(self, step):
             raise BuildError("com_expect: centre at %s, expected %s" % (obj.Position, point))
     finally:
         self.doc.removeObject(obj.Name)
+
+
+def op_body_material(self, step):
+    from sciforge import material
+
+    bodies = _bodies(self, {"op": step["op"], "features": [step["feature"]]})
+    try:
+        material.assign(bodies[0], step["material"])
+    except material.MaterialError as exc:
+        raise BuildError("body_material: %s" % exc)
+    self.doc.recompute()
 
 
 def op_interference_expect(self, step):
