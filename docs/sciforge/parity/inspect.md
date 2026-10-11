@@ -72,7 +72,7 @@ computes the exact frame on every recompute from the picks; the datum carries `S
 | Distance arrow, X Angle / Y Angle rotate handles, Flip | Same (blue arrow + two curved handles at the middle of the part). |
 | Section colour (from body / custom swatches), Show Hatch | Same: From Body or Custom, 7 swatches, hatch lines on the cut faces. |
 | Stored in the browser's Analysis folder, eye to show/hide, several at once | Same: `Section1`, `Section2` ... are document objects (`SciForgeType = "SectionAnalysis"`); hiding one removes its cut. Several sections cut together. |
-| Edit the analysis | Select it in the browser and run Section Analysis: the dialog opens with its values (see gaps). |
+| Edit the analysis | Double-click it (or right-click Edit) in the browser, or select it and run Section Analysis: the dialog opens with its values. |
 | OK / Cancel / Esc, undo | Same; Cancel leaves no analysis behind. |
 
 ## Center of Mass
@@ -108,10 +108,11 @@ computes the exact frame on every recompute from the picks; the datum carries `S
 - Plane / Point Along Path take one edge (not a chain); Physical distance on a non-uniform
   spline is measured along the curve once (not re-measured when the curve changes shape).
 - Offset Plane has no "To Object" extent.
-- Section Analysis, Center of Mass and Interference are edited by selecting them in the browser
-  and running the command again; double-click / right-click Edit in the browser for Analysis
-  items belongs to the browser (the dialogs declare `EDITORS` for it). The Analysis folder opens
-  collapsed.
+- The browser's Analysis folder opens collapsed (its items are edited by double-click or
+  right-click Edit, or by selecting one and running the command again).
+- Measure inside a sketch measures the sketch's own curves and points (lines, circles,
+  their ends, the sketch origin and axes, projected curves); Show Snap Points inside a sketch
+  is not covered by a scenario yet.
 - Measure: Component filter greyed (no components yet); selection boxes show what was picked
   in words rather than "1 selected".
 - Interference: "Create bodies from interferences" is not built.

@@ -222,7 +222,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       (eye shows/hides). Center of Mass (`analysis.py` / `com_ui.py`) and Interference
       (`interference_ui.py`): stored in the Analysis folder, follow the design. 7 scenarios
       (`inspect*.py`), 6 golden models (`inspect_*`), unit tests `test_inspect_core.py`. Ribbon:
-      Interference and Center of Mass now run SciForge commands (were greyed).
+      Interference and Center of Mass now run SciForge commands (were greyed). QA pass
+      (branch `sf/inspect-qa-2`, 5 scenarios `inspect_qa*.py`, 35 paths): Measure inside a
+      sketch (I keeps the sketch open), Center of Mass weighted by Physical Material and
+      measurable, one Enter after a sum, picks through what the box cannot take, held
+      handles, deleted references (warnings, no errors), see the session log.
 - [x] Box, Cylinder, Sphere, Torus, Coil, Pipe, Fusion-style (branch `sf/primitives`; spec +
       gaps in `docs/sciforge/parity/primitives.md`). Pick an origin plane (squares) or a flat
       face, place with the mouse (Box: two corners with a rubber band; Cylinder / Torus /
@@ -740,10 +744,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - Angles about an edge must not depend on which way OpenCASCADE runs the edge: they turn
     about the "upward" direction (`construct.upward`).
   - Datum planes are big and in front: a scenario that clicks a face behind one hides it with
-    the browser eye first (that is what a person would do too).
-  - Section Analysis cuts with a Coin clip plane (`SciForgeSectionClip`) inserted first in each
-    body's view root, found again on every refresh (never keep a pointer); cut faces are
-    `shape.common(big face)`, drawn by the analysis' own view provider.
+    the browser eye first (that is what a person would do too). In CONSTRUCT dialogs the
+    datums the blue box cannot take let clicks through (see Inspect QA findings).
+  - Section Analysis cuts with a Coin clip plane (`SciForgeSectionClip`) inserted first in the
+    view root of each solid step of a body (not the body's own root: that cut its sketches
+    and construction planes too), found again on every refresh (never keep a pointer); cut
+    faces are `shape.common(big face)`, drawn by the analysis' own view provider.
   - A Center of Mass with nothing picked links to no body, so FreeCAD never recomputes it: a
     document observer measures it again after recomputes, visibility changes and undo/redo
     (`analysis.follow`, values marked Output so writing them does not touch the object).
@@ -759,6 +765,39 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     features with Python view providers (Press Pull, Shell, Scale ...) have the same leak.
   - Run `black` only on your own files: a reformatted shared file broke another agent's text
     replacements.
+  - **Inspect QA findings (branch `sf/inspect-qa-2`)**:
+    - FreeCAD's selection keeps the mouse release of a drag that ends over a face (it selects
+      the face and marks the event handled): `handles3d` handles now also end their drag on
+      any left-button release Qt sees (`handles3d.ReleaseWatch`, an application event
+      filter installed only while the button is down on the handle; `angle_handle()` wraps
+      revolve_ui's turning ball the same way).
+    - FreeCAD's number box (autoNormalize, kept at integration) takes the first Enter after a
+      sum ("70 + 5", and also "-15": the minus counts) only to rewrite the text. CONSTRUCT and
+      Section Analysis install `construct_ui.EnterAfterSum` on their value boxes: after such
+      an Enter the formula is taken and OK runs. Other dialogs still need two Enters (shared
+      `taskui.DistanceField`; owner: taskui).
+    - Fusion picks through what the active selection box cannot take. Origin squares / axes
+      drawn by SciForge used to yield to anything under the mouse; they now yield only to
+      something the box accepts (`_takes_under`), and construction planes / axes / points the
+      box cannot take are made unpickable while it waits (`ConstructPanel._pick_through`, a
+      `pickpanel.Looks` put back when the box changes or the dialog closes).
+    - pattern_ui's Mirror plane picker counted only faces / edges / corners in front of an
+      origin square: a construction plane in front lost the click (`_part_depth` counts
+      "Plane" now; one line, found by `inspect_qa3` M).
+    - Sketcher names its picks after the sketch's lists, not its shape: "Edge2" is the second
+      curve counting construction lines (the shape leaves those out), "Vertex3" goes through
+      `getGeoVertexIndex`, plus "RootPoint", "H_Axis", "V_Axis", "ExternalEdgeN" (ExternalGeo
+      index N + 1). `measure.sketch_entity()` reads them.
+    - Measure in a sketch cannot be a task dialog (the sketch's is open): it is a frame put at
+      the top of the sketch's panel (`sketch_palette.sketch_panel()`), never
+      `taskui.current()` (else other commands would close it and then refuse to start), no
+      selection gate / greedy style (the sketch editor picks), Esc through an application key
+      filter, ended by a timer when the sketch is no longer edited.
+    - Center of Mass weighs each body with `material.effective(body)` (Steel while on
+      FreeCAD's Default). Its marker stays unpickable (it would steal clicks on faces); Measure
+      draws a clickable dot on it instead (`MeasurePanel._show_com_dots`).
+    - The Measure / Interference result lists drew their items in a dark grey on the dark
+      panel: they set light text themselves (`measure_ui.RESULTS_STYLE`).
 
 - **Body tools findings (branch `sf/bodies`)**:
   - FreeCAD's `PartDesign::Boolean` adopts its tool bodies as children (GeoFeatureGroup): they
@@ -1518,6 +1557,48 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Pull should show the body without it), browser (material, hide used-up bodies), Inspect
   (mass via `bodies.mass`), timeline (roll back steps outside bodies), hole
   (`thread_ui.py`'s `slotFinishRestoreDocument` never fires).
+
+### 2026-10-11: QA of CONSTRUCT and INSPECT (branch `sf/inspect-qa-2`)
+- `sf/inspect` was already merged into main: the QA branch starts from the current main
+  (6e2231074e). `sf/inspect-qa` was still checked out by an earlier, interrupted session's
+  worktree, so the work is on `sf/inspect-qa-2` (that session's uncommitted work was carried
+  over and finished here).
+- Used the 19 CONSTRUCT entries, Measure, Section Analysis, Center of Mass and Interference
+  like Luca would. 5 scenarios, only real input, 35 paths: `inspect_qa` (CONSTRUCT: OK with
+  nothing picked, Esc after the first pick, picks the wrong way round, Plane at Angle typed /
+  dragged far and negative / a formula, two timeline edits + undo/redo, Along Path dragged
+  past the end, I with the dialog open, Ctrl+Z / Delete / Enter inside it, a drag that ends
+  over the part, Press Pull before and after, a part of several features, save / reopen /
+  edit), `inspect_qa2` (Measure: Delete, a third pick, a round face, inches, E with Measure
+  open; Section on a construction plane that is edited and deleted, on a face dragged far
+  both ways, features made after it, eyes, save / reopen / edit, undo / redo, delete),
+  `inspect_qa3` (the boss deleted under an axis, a point and a section; Midplane + Mirror
+  about it; Interference / Center of Mass across save / reopen and a deleted body; one body
+  only), `inspect_qa4` (Measure inside a sketch; Measure from the Center of Mass sign;
+  materials; Press Pull into another body + Interference; Esc while the arrow is held; a sum
+  + one Enter; Point at Vertex through a construction plane; Section + Q), `inspect_qa5`
+  (Plane Along Path on a sketch line + a sketch on that plane + edit; Measure with a sketch
+  line picked first; E with Interference open; Q with Center of Mass open).
+- Bugs fixed (details in Known issues, "Inspect QA findings"): (1) arrows / turning balls
+  stayed held after a drag that ended over the part (every later pick was ignored, the
+  known lead from the shell/draft QA); (2) Enter right after a sum or a minus ("70 + 5",
+  "-15") only rewrote the box (regression since the integration kept FreeCAD's normalising);
+  (3) the origin squares / axes lost clicks to an axis or a face the box cannot take, and
+  construction geometry in front blocked picks behind it; (4) Create Sketch and (5) Mirror
+  took the origin square behind a construction plane clicked in front of it (`pattern_ui`:
+  one line); (6) a construction whose face/edge was deleted stopped its body from computing
+  (the part vanished, errors after every change); (7) Section / (8) Interference / (9) Center
+  of Mass whose plane or bodies were deleted printed errors after every change, and the
+  Center of Mass silently switched to "all bodies"; (10) Measure counted a round face's seam
+  in its perimeter; (11) Section Analysis cut sketches and construction planes too; (12) I in
+  a sketch closed the sketch (Measure now runs inside it, Fusion's SKETCH tab has it);
+  (13) Center of Mass ignored materials (now mass-weighted); (14) the Center of Mass sign
+  could not be measured from; (15) Measure / Interference result lists were dark grey on
+  the dark panel.
+- Shared change: `pattern_ui._part_depth` (a construction plane in front of an origin square
+  is a Mirror Plane). No core patch.
+- Full suite at the end: FULLSUITE
+- For other owners: taskui (one Enter after a sum in every other dialog, see the finding).
 
 ## Next steps (in order)
 
