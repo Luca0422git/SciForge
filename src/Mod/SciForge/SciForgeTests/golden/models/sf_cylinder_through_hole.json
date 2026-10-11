@@ -1,0 +1,57 @@
+{
+  "id": "sf_cylinder_through_hole",
+  "title": "Box 40x20x10 and a Cylinder d6 going 10 down from the top face: a through hole (Cut picked)",
+  "tags": [
+    "primitive",
+    "cylinder",
+    "cut",
+    "auto-operation"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_primitive",
+      "id": "c1",
+      "kind": "cylinder",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "x": 20,
+      "y": 10,
+      "diameter": 6,
+      "height": -10
+    }
+  ],
+  "expect": {
+    "volume": 7717.256661176919,
+    "area": 2931.9468914507715,
+    "faces": 7,
+    "edges": 15,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "note": "V = 8000 - pi 3^2 10; A = 2800 - 2 pi 9 + 2 pi 3 10; faces 6 + the hole's wall; edges 12 + 2 circles + seam.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

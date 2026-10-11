@@ -865,3 +865,165 @@ def validate(model):  # noqa: F811  (adds the CONSTRUCT / INSPECT checks)
     _validate_before_inspect(model)
     _check_inspect_steps(model)
     return model
+
+
+# Fusion's Box, Cylinder, Sphere, Torus, Coil and Pipe (golden/primitive_ops.py; sciforge/
+# primitives.py, coil.py and pipe.py, the same code as their dialogs).
+_PRIMITIVE_OPTIONS = {
+    "x",
+    "y",
+    "sx",
+    "sy",
+    "length",
+    "width",
+    "height",
+    "diameter",
+    "inner_diameter",
+    "torus_diameter",
+    "position",
+    "operation",
+}
+_COIL_OPTIONS = {
+    "x",
+    "y",
+    "type",
+    "diameter",
+    "clockwise",
+    "revolutions",
+    "height",
+    "pitch",
+    "angle",
+    "section",
+    "section_position",
+    "section_size",
+    "operation",
+}
+_PIPE_OPTIONS = {"distance", "section", "section_size", "hollow", "thickness", "operation"}
+STEP_KEYS["sf_primitive"] = (
+    {"id", "kind"},
+    {"plane", "expressions", "comment"} | _PRIMITIVE_OPTIONS,
+)
+STEP_KEYS["sf_coil"] = ({"id"}, {"plane", "expressions", "comment"} | _COIL_OPTIONS)
+STEP_KEYS["sf_path_sketch"] = ({"id", "segments"}, {"plane", "comment"})
+STEP_KEYS["sf_pipe"] = ({"id", "path"}, {"chain", "expressions", "comment"} | _PIPE_OPTIONS)
+STEP_KEYS["sf_primitive_edit"] = ({"target", "set"}, {"comment"})
+PRIMITIVE_KINDS = ("box", "cylinder", "sphere", "torus")
+PRIMITIVE_OPERATIONS = ("auto",) + OPERATIONS
+
+
+def _check_primitive_plane(here, step):
+    plane = step.get("plane", "XY")
+    if isinstance(plane, str):
+        if plane not in PLANES:
+            _fail(here, "'plane' must be XY, XZ, YZ or {'face': selector}")
+    elif not isinstance(plane, dict) or set(plane) != {"face"}:
+        _fail(here, "'plane' must be XY, XZ, YZ or {'face': selector}")
+
+
+def _check_primitive_values(here, values, allowed):
+    for key, value in values.items():
+        if key not in allowed:
+            _fail(here, "cannot set %r" % key)
+        if key == "operation" and value not in PRIMITIVE_OPERATIONS:
+            _fail(here, "'operation' must be one of %s" % (PRIMITIVE_OPERATIONS,))
+        elif key in ("position", "section_position") and value not in (
+            "inside",
+            "center",
+            "outside",
+        ):
+            _fail(here, "'%s' must be inside, center or outside" % key)
+        elif key in ("hollow", "clockwise") and not isinstance(value, bool):
+            _fail(here, "'%s' is true or false" % key)
+        elif key == "type" and value not in ("rev_height", "rev_pitch", "height_pitch", "spiral"):
+            _fail(here, "'type' must be rev_height, rev_pitch, height_pitch or spiral")
+        elif key == "section" and value not in (
+            "circular",
+            "square",
+            "triangular",
+            "tri_ext",
+            "tri_int",
+        ):
+            _fail(here, "unknown section %r" % value)
+        elif key not in (
+            "operation",
+            "position",
+            "section_position",
+            "hollow",
+            "clockwise",
+            "type",
+            "section",
+        ):
+            _check_number(here + "." + key, value)
+
+
+def _check_primitive_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_primitive":
+            if step["kind"] not in PRIMITIVE_KINDS:
+                _fail(here, "'kind' must be one of %s" % (PRIMITIVE_KINDS,))
+            _check_primitive_plane(here, step)
+            values = {k: v for k, v in step.items() if k in _PRIMITIVE_OPTIONS}
+            _check_primitive_values(here, values, _PRIMITIVE_OPTIONS)
+        if op == "sf_coil":
+            _check_primitive_plane(here, step)
+            values = {k: v for k, v in step.items() if k in _COIL_OPTIONS}
+            _check_primitive_values(here, values, _COIL_OPTIONS)
+        if op == "sf_path_sketch":
+            if step.get("plane", "XY") not in PLANES:
+                _fail(here, "'plane' must be one of %s" % (PLANES,))
+            segments = step["segments"]
+            if not isinstance(segments, list) or not segments:
+                _fail(here, "'segments' is a non-empty list of lines and arcs")
+            for segment in segments:
+                if not isinstance(segment, dict) or len(set(segment) & {"line", "arc"}) != 1:
+                    _fail(here, "a segment is {'line': [[x0, y0], [x1, y1]]} or {'arc': [...]}")
+                if "arc" in segment and len(segment["arc"]) != 5:
+                    _fail(here, "an arc is [cx, cy, radius, start degrees, end degrees]")
+        if op == "sf_pipe":
+            path = step["path"]
+            if not isinstance(path, dict) or not (
+                set(path) == {"edges"} or {"sketch"} <= set(path) <= {"sketch", "edge"}
+            ):
+                _fail(here, "'path' is {'sketch': id, 'edge': n} or {'edges': selector}")
+            if "sketch" in path and seen.get(path["sketch"]) not in ("sketch", "sf_path_sketch"):
+                _fail(here, "'path' names unknown sketch %r" % path["sketch"])
+            values = {k: v for k, v in step.items() if k in _PIPE_OPTIONS}
+            _check_primitive_values(here, values, _PIPE_OPTIONS)
+        if "expressions" in step and op in ("sf_primitive", "sf_coil", "sf_pipe"):
+            allowed = {
+                "sf_primitive": _PRIMITIVE_OPTIONS,
+                "sf_coil": _COIL_OPTIONS,
+                "sf_pipe": _PIPE_OPTIONS,
+            }[op]
+            formulas = step["expressions"]
+            if not isinstance(formulas, dict) or any(
+                k not in allowed or not isinstance(v, str) for k, v in formulas.items()
+            ):
+                _fail(here, "'expressions' is {field: formula} for this step's own fields")
+        if op == "sf_primitive_edit":
+            kind = seen.get(step["target"])
+            allowed = {
+                "sf_primitive": _PRIMITIVE_OPTIONS,
+                "sf_coil": _COIL_OPTIONS,
+                "sf_pipe": _PIPE_OPTIONS,
+            }.get(kind)
+            if allowed is None:
+                _fail(here, "'target' must name an earlier sf_primitive, sf_coil or sf_pipe step")
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object of options")
+            _check_primitive_values(here, step["set"], allowed)
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_primitives = validate
+
+
+def validate(model):  # noqa: F811  (adds the primitive / coil / pipe checks)
+    _validate_before_primitives(model)
+    _check_primitive_steps(model)
+    return model

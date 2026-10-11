@@ -1,0 +1,93 @@
+{
+  "id": "sf_pipe_param_driven",
+  "title": "Hollow Pipe along the sketch path: Section Size dia, wall dia / 8; then dia changes from 2 to 4",
+  "tags": [
+    "primitive",
+    "pipe",
+    "hollow",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "dia",
+      "value": 2,
+      "unit": "mm"
+    },
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "line": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ]
+        },
+        {
+          "arc": [
+            20,
+            10,
+            10,
+            -90,
+            0
+          ]
+        },
+        {
+          "line": [
+            [
+              30,
+              10
+            ],
+            [
+              30,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "section_size": 2,
+      "hollow": true,
+      "thickness": 0.25,
+      "expressions": {
+        "section_size": "dia",
+        "thickness": "dia / 8"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "dia",
+      "value": 4
+    }
+  ],
+  "expect": {
+    "volume": 306.2705242608174,
+    "area": 1236.077671330834,
+    "bbox": [
+      0,
+      -2,
+      -2,
+      32,
+      30,
+      2
+    ],
+    "note": "dia = 4: a ring r 1.5..2 along L = 40 + 5 pi: V = pi (2^2 - 1.5^2) L; A = outer 2 pi 2 L + inner 2 pi 1.5 L + the 2 end rings.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

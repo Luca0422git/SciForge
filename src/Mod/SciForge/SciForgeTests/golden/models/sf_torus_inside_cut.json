@@ -1,0 +1,58 @@
+{
+  "id": "sf_torus_inside_cut",
+  "title": "Box 40x40x20 around the origin, a Torus on XY (inner 30, torus 6, Inside) cut into it",
+  "tags": [
+    "primitive",
+    "torus",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "x": -20,
+      "y": -20,
+      "length": 40,
+      "width": 40,
+      "height": 20
+    },
+    {
+      "op": "sf_primitive",
+      "id": "t1",
+      "kind": "torus",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "x": 20,
+      "y": 20,
+      "inner_diameter": 30,
+      "torus_diameter": 6,
+      "position": "inside",
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 30934.08272468235,
+    "area": 6658.222174761503,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      20
+    ],
+    "note": "On the top face (its frame starts at the box corner (-20, -20, 20), so (20, 20) is the middle) a torus R = 15 - 3 = 12, r = 3 is half in the box: V = 32000 - half of 2 pi^2 12 9; A = 2(1600 + 800 + 800) + half the torus area 4 pi^2 12 3 - the ring opening pi(15^2 - 9^2).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

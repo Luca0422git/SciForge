@@ -1,0 +1,62 @@
+{
+  "id": "sf_pipe_edge_auto_join",
+  "title": "Box 40x20x10 and a Pipe d2 along its top front edge: mostly outside, the dialog picks Join",
+  "tags": [
+    "primitive",
+    "pipe",
+    "join",
+    "auto-operation",
+    "model-edges"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "edges": {
+          "type": "line",
+          "parallel": [
+            1,
+            0,
+            0
+          ],
+          "at": [
+            {
+              "axis": "y",
+              "value": 0
+            },
+            {
+              "axis": "z",
+              "value": 10
+            }
+          ],
+          "count": 1
+        }
+      },
+      "section_size": 2
+    }
+  ],
+  "expect": {
+    "volume": 8094.247779607694,
+    "bbox": [
+      0,
+      -1,
+      0,
+      40,
+      20,
+      11
+    ],
+    "note": "Three quarters of a tube r1 along the edge stick out: V = 8000 + 3/4 pi 40.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

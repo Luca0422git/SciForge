@@ -1,0 +1,36 @@
+{
+  "id": "sf_box_basic",
+  "title": "Box on XY: corner at the origin, 40 x 20 x 10 (first solid: new body)",
+  "tags": [
+    "primitive",
+    "box"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    }
+  ],
+  "expect": {
+    "volume": 8000.0,
+    "area": 2800.0,
+    "faces": 6,
+    "edges": 12,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "note": "V = 40*20*10; A = 2(40*20 + 40*10 + 20*10).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

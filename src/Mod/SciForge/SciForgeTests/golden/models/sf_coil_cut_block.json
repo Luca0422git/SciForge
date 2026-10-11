@@ -1,0 +1,57 @@
+{
+  "id": "sf_coil_cut_block",
+  "title": "Block 40x40x35 (two boxes, z -5..30), a coil d20, 4 turns, height 20 inside it: the dialog picks Cut",
+  "tags": [
+    "primitive",
+    "coil",
+    "cut",
+    "auto-operation"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "x": -20,
+      "y": -20,
+      "length": 40,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "op": "sf_primitive",
+      "id": "b2",
+      "kind": "box",
+      "plane": "XY",
+      "x": -20,
+      "y": -20,
+      "length": 40,
+      "width": 40,
+      "height": -5
+    },
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "diameter": 20,
+      "revolutions": 4,
+      "height": 20,
+      "section_size": 2
+    }
+  ],
+  "expect": {
+    "volume": 55289.38848312157,
+    "bbox": [
+      -20,
+      -20,
+      -5,
+      20,
+      20,
+      30
+    ],
+    "note": "The second box joins the first (they touch): a block 40*40*35 = 56000. The coil (72 pi^2, see sf_coil_basic) lies inside it and is cut out.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

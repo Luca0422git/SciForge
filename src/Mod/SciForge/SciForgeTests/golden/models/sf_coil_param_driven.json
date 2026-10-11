@@ -1,0 +1,73 @@
+{
+  "id": "sf_coil_param_driven",
+  "title": "Coil whose Diameter is coil_d, Height rise and Revolutions turns (20, 20, 4, then 30, 40, 3), section 2",
+  "tags": [
+    "primitive",
+    "coil",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "coil_d",
+      "value": 20,
+      "unit": "mm"
+    },
+    {
+      "op": "parameter",
+      "name": "rise",
+      "value": 20,
+      "unit": "mm"
+    },
+    {
+      "op": "parameter",
+      "name": "turns",
+      "value": 4,
+      "unit": ""
+    },
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "diameter": 20,
+      "revolutions": 4,
+      "height": 20,
+      "section_size": 2,
+      "expressions": {
+        "diameter": "coil_d",
+        "height": "rise",
+        "revolutions": "turns"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "coil_d",
+      "value": 30
+    },
+    {
+      "op": "parameter",
+      "name": "rise",
+      "value": 40
+    },
+    {
+      "op": "parameter",
+      "name": "turns",
+      "value": 3
+    }
+  ],
+  "expect": {
+    "volume": 829.046769691506,
+    "bbox": [
+      -15,
+      -15,
+      -1,
+      15,
+      15,
+      41
+    ],
+    "abs_tol": 0.001,
+    "note": "As sf_coil_basic with the axis radius 15 - 1 = 14 and 3 turns: V = pi 1^2 * 2 pi 14 * 3 = 84 pi^2 (the rise adds no volume); the coil now goes up to 40 + 1.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "sf_sphere_intersect",
+  "title": "Box 40x20x10 and a Sphere d16 centred on the bottom (XY) at (20, 10), Intersect: the upper half",
+  "tags": [
+    "primitive",
+    "sphere",
+    "intersect"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_primitive",
+      "id": "s1",
+      "kind": "sphere",
+      "plane": "XY",
+      "x": 20,
+      "y": 10,
+      "diameter": 16,
+      "operation": "intersect"
+    }
+  ],
+  "expect": {
+    "volume": 1072.330292425316,
+    "area": 603.1857894892403,
+    "faces": 2,
+    "bbox": [
+      12,
+      2,
+      0,
+      28,
+      18,
+      8
+    ],
+    "note": "Half of a sphere r8 lies in the box (it reaches y 2..18, z 0..8): V = 2/3 pi 8^3; A = 2 pi 8^2 + pi 8^2; faces: dome + disc.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

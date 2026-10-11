@@ -201,6 +201,19 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       (`interference_ui.py`): stored in the Analysis folder, follow the design. 7 scenarios
       (`inspect*.py`), 6 golden models (`inspect_*`), unit tests `test_inspect_core.py`. Ribbon:
       Interference and Center of Mass now run SciForge commands (were greyed).
+- [x] Box, Cylinder, Sphere, Torus, Coil, Pipe, Fusion-style (branch `sf/primitives`; spec +
+      gaps in `docs/sciforge/parity/primitives.md`). Pick an origin plane (squares) or a flat
+      face, place with the mouse (Box: two corners with a rubber band; Cylinder / Torus /
+      Coil: centre + a point on the circle; Sphere: centre), blue on-top arrows for the sizes,
+      Operation Join / Cut / Intersect / New Body picked by itself from where the shape is.
+      Clicks snap to the origin, corners, sketch points and circle centres on the plane.
+      Coil: 4 types, rotation, angle, 4 sections x 3 positions. Pipe: sketch or model edges
+      with Chain Selection, Distance handle, 3 sections, Hollow. Parameters typed in the fields
+      keep driving the shape. On FreeCAD's PartDesign primitives / Helix / Pipe (+ SciForge
+      FeaturePython steps for Intersect). Ribbon: Pipe runs `SciForge_Pipe` (was greyed).
+      5 scenarios (`primitives_*.py`), 25 golden models (`sf_box_*`, `sf_cylinder_*`,
+      `sf_sphere_*`, `sf_torus_*`, `sf_coil_*`, `sf_pipe_*`), unit tests
+      `test_primitives_core.py`.
 
 ## Known issues / findings
 
@@ -700,11 +713,43 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     raises `TypeError: undefined curve type`: guard every `.Curve` read.
   - Display parity notes: FreeCAD draws a cylinder's seam as a line (Fusion does not), and the
     overlay title bar of the Tasks dock sometimes shows as a white strip in screenshots.
+- **Primitives findings (branch `sf/primitives`)**:
+  - **Upstream bug: undo + redo loses a formula's link.** Undo a step whose value carries a
+    formula (an expression on a parameter), then redo it: the expression is back but the link
+    to the Parameters object is not (`OutList` lacks it), so changing the parameter does
+    nothing until the file is reopened. Pad, the PartDesign primitives and
+    `Part::Part2DObjectPython` all do it (plain `App::FeaturePython` does not).
+    `undo_links.py` (installed when the primitive commands load) sets the same expression
+    again after every undo/redo where the link is missing, outside the undo history. It helps
+    every feature; worth reporting upstream.
+  - FreeCAD expressions refuse "mm minus a plain number" (`Parameters.d / 2 - 6 / 2`: Unit
+    mismatch): composed expressions need units (`6 mm / 2`), a unitless parameter `* 1 mm`
+    (`primitives.term`). Found by golden model `sf_torus_param_driven`.
+  - A feature's frame before recompute: `Part.AttachEngine("Attacher::AttachEngine3D")` with
+    the same support and mode. The XZ origin plane's normal is -Y; a box's top-face frame
+    starts at that face's corner, not at the body origin.
+  - Helper objects (coil section, pipe path and section) are `Part::Part2DObjectPython` in the
+    body, marked `SciForgeRole` + `SciForgeTimeline = False` so the timeline skips them;
+    `primitives.drop_orphans` removes helpers whose step was deleted (when a dialog opens).
+  - Mouse placing on a plane: measure what one pixel is *on the plane* and round clicks to
+    nice steps of about 6 pixels (`primitives_core.nice_floor`); within 10 px snap to the
+    plane origin and to corners, line ends, sketch points and circle centres lying on the
+    plane (`primitives.snap_points`, from `Part.getShape` of visible bodies and sketches).
+    Screen-pixel rounding was too coarse or too fine depending on the view.
+  - FreeCAD's Helix needs the profile and the axis from one object: the section helper gives
+    both (its `V_Axis`). The helix sweeps the upright section, so Pappus (area x 2 pi r x
+    turns) is its exact volume. Coil Intersect = `SubtractiveHelix` with `Outside` on.
+  - Golden steps `sf_primitive`, `sf_coil`, `sf_path_sketch`, `sf_pipe`, `sf_primitive_edit`
+    (`golden/primitive_ops.py`); the first three take `expressions` {field: formula}.
 
 ## Questions waiting for Luca
 
 
 (See outline section 12. Also:)
+
+- Primitives (`docs/sciforge/parity/primitives.md`): which defaults does your Fusion show for
+  Torus Position, Coil Rotation (Clockwise?) and Section Position, and is Section Size of a
+  square/triangle section the circle round it or its side?
 
 ## Session log
 
@@ -986,6 +1031,27 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Offset Plane To Object, browser double-click/right-click Edit for Analysis items (browser
   owner), one material for Center of Mass, Component filter, Interference "create bodies".
   Not checked by Luca yet.
+### 2026-10-11: Box, Cylinder, Sphere, Torus, Coil, Pipe (branch `sf/primitives`)
+- New: `primitives_core.py` (no FreeCAD: rounding and snapping, size checks, volumes, the
+  automatic operation), `primitives.py` / `primitives_ui.py` (Box, Cylinder, Sphere, Torus;
+  shared dialog base `PlacedPanel`, placing tool `Placer`, on-top arrow `LinearHandle`),
+  `coil.py` / `coil_ui.py`, `pipe.py` / `pipe_ui.py`, `undo_links.py` (re-links formulas
+  after undo/redo, see findings). Ribbon: Pipe enabled (one line). No core patch.
+- Tests: scenarios `primitives_box`, `primitives_shapes`, `primitives_coil`,
+  `primitives_pipe`, `primitives_qa` (real input only: nothing selected, a selection taken at
+  once, Cancel, Esc, Enter, Ctrl+Z in a dialog, edit again, undo/redo, second use,
+  parameters incl. the coil's Revolutions, snapping to a corner, re-pick plane, save +
+  reopen + edit, timeline Delete); golden ops in `golden/primitive_ops.py` + 25 models
+  `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil_*`, `sf_pipe_*`
+  (hand-derived; Pappus for coils/pipes); unit tests `test_primitives_core.py`.
+- Spec and gaps: `docs/sciforge/parity/primitives.md`. Gaps: New Component, value boxes on
+  the canvas, snapping along edges / midpoints, Fusion defaults to confirm with Luca.
+- Full suite at the end (no --only, 2026-10-11, commit 168c2b7a48): unit 219 OK; golden
+  204 pass + 1 xfail (`plate_hole_grid`, needs core patch #4); smoke 70/70; journey 25/25;
+  72 of 72 scenarios PASS (6245 checks; primitives_box 78, primitives_shapes 99,
+  primitives_coil 70, primitives_pipe 73, primitives_qa 107, ribbon_sweep 106).
+- For every owner: `undo_links.py` is installed when the SciForge commands load and fixes
+  formula links after undo/redo for all features, not only these (see findings).
 
 ## Next steps (in order)
 

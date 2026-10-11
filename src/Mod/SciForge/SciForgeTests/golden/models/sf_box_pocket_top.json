@@ -1,0 +1,58 @@
+{
+  "id": "sf_box_pocket_top",
+  "title": "Box 40x20x10, then a Box on its top face 10x10 going 5 down: the dialog picks Cut",
+  "tags": [
+    "primitive",
+    "box",
+    "cut",
+    "auto-operation"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_primitive",
+      "id": "b2",
+      "kind": "box",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "x": 10,
+      "y": 5,
+      "length": 10,
+      "width": 10,
+      "height": -5
+    }
+  ],
+  "expect": {
+    "volume": 7500.0,
+    "area": 3000.0,
+    "faces": 11,
+    "edges": 24,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "note": "The top face's frame is the XY frame at z = 10. V = 8000 - 10*10*5; A = 2800 + 4 pocket walls 10*5 (the floor replaces the opening); faces 6 + 4 walls + floor; edges 12 + 12.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}
