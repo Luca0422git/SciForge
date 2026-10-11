@@ -515,6 +515,29 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   worktree's suite ran at the same time, and PASSES alone (86 checks): timing-sensitive,
   sketch owner to look at.
 
+### 2026-10-11: QA of Patterns and Mirror (branch `sf/patterns-qa`)
+- 5 new scenarios `patterns_qa_paths/edit/part/more/features.py` (17 paths, real input
+  only) found and fixed: a pattern rebuilt by an edit (Suppression, Quantity formula, Faces)
+  dropped the faces / edges later steps hung on (sketch, fillet, Press Pull); a FreeCAD pattern
+  whose holes were all deleted kept their copies and froze the timeline after it; the first
+  body's steps could not be picked while a second body was active; steps picked in the
+  "wrong" order were repeated in click order (the copied boss filled its copied hole); the
+  curved Total Angle handle was a sliver seen edge-on and a missed press picked the part
+  behind it; a typed Total Angle past 180 showed the handle at 180; a plain click on an arrow
+  threw away a typed formula; "<unknown exception data>" for a fillet face as Faces; a Python
+  AttributeError after the patterned body was deleted; an edit could pick the pattern's own
+  copy body; picked steps were not shaded and were listed in click order.
+- 2 golden models: `pattern_rect_features_any_order`, `pattern_edit_keeps_later_fillet`.
+- No shared file changed. Findings for other owners: see "Patterns QA findings" above.
+- Full suite at the end (no --only): unit 153 OK; golden 123 pass + 1 xfail
+  (`plate_hole_grid`); smoke 70/70; journey 25/25; 44 of 45 scenarios PASS, all 12 pattern
+  scenarios among them. `sketch_draw` failed the same 3 checks as on `sf/patterns` ("circle
+  diameter typed: 8" got r 4.97) while another worktree's suite ran, and PASSES alone (86
+  checks): the sketch timing flake fixed on the integration branch (`si.click` rests 80 ms).
+- Trial merge into `claude/inspiring-cerf-ragp6j` (git merge-tree): only MEMORY.md conflicts.
+  That branch hangs a sketch on the step that made the face (not on the pattern); the
+  `patterns_qa_edit` check accepts both.
+
 ## Next steps (in order)
 
 1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
