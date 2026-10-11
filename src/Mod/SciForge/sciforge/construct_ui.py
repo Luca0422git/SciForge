@@ -209,6 +209,12 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
 
     last = None
 
+    @property
+    def field(self):
+        """The dialog's value box (the name the first CONSTRUCT dialogs used; other dialogs'
+        tests and code still type into `panel.field`)."""
+        return self.distance if self.distance is not None else self.angle
+
     def __init__(self, doc, key, datum=None, initial=()):
         self.key = key
         self.spec = construct.SPECS[key]
