@@ -179,3 +179,26 @@ def shown(body):
         )
     except Exception:
         return False
+
+
+def add_arc3(sketch, a, b, c):
+    """Arc through three sketch points [(x, y), (x, y), (x, y)]."""
+    index = sketch.addGeometry(Part.Arc(V(a[0], a[1], 0), V(b[0], b[1], 0), V(c[0], c[1], 0)))
+    App.ActiveDocument.recompute()
+    return index
+
+
+def hide_in_browser(obj):
+    """Click the eye of `obj`'s row in the browser."""
+    from SciForgeTests.gui import timeline_input as ti
+
+    return ti.click_eye(obj.Label)
+
+
+def simpson(f, a, b, n=2000):
+    """Integral of f from a to b (Simpson's rule, n even)."""
+    hstep = (b - a) / n
+    total = f(a) + f(b)
+    for k in range(1, n):
+        total += f(a + k * hstep) * (4 if k % 2 else 2)
+    return total * hstep / 3.0

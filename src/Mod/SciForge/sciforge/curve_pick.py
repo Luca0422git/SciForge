@@ -100,6 +100,16 @@ class RegionPicker(profile_pick.ProfilePicker):
     def __init__(self, view, sketches, on_pick, occluder=None, skip=None):
         self._skip = skip
         super().__init__(view, sketches, on_pick, occluder=occluder)
+        # The shading lies on the preview's own end face (a sweep or loft starts there);
+        # pulled towards the viewer it shows cleanly instead of in flickering stripes.
+        try:
+            for i in range(self.root.getNumChildren()):
+                node = self.root.getChild(i)
+                if node.isOfType(self.coin.SoPolygonOffset.getClassTypeId()):
+                    node.factor.setValue(-1.0)
+                    node.units.setValue(-4.0)
+        except Exception:
+            pass
 
     def _button(self, info):
         try:

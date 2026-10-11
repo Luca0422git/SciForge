@@ -662,7 +662,7 @@ class SweepPanel(Panel):
                 feature=self.target,
                 hide=False,
             )
-            self.error = ""
+            self.error = self._misses()
             if before is None or self.target is not before:
                 self._geometry_changed = True
         except (sweep.SweepError, curves.CurveError) as exc:
@@ -682,6 +682,27 @@ class SweepPanel(Panel):
             return sweep.read(self.target)[3]["operation"]
         except Exception:
             return self.options["operation"]
+
+    def _misses(self):
+        """Fusion refuses a Cut or Intersect that does not reach into the part (FreeCAD's own
+        pipe would just leave the part as it was); the reason, or ''."""
+        operation = self.options["operation"]
+        if operation not in ("cut", "intersect"):
+            return ""
+        base = self._base_feature()
+        if base is None or base.Shape.isNull() or not base.Shape.Solids:
+            return "There is no part to %s yet." % operation
+        try:
+            tool = sweep.tool_shape(self.profiles, self.path, self.rail, self.options)
+            inside = curves.to_global(base.Shape, base).common(tool).Volume
+        except Exception:
+            return ""
+        if inside < 1e-6:
+            return (
+                "The sweep does not reach into the part, so %s would change nothing. Move the "
+                "profile or the path, or use Join." % ("Cut" if operation == "cut" else "Intersect")
+            )
+        return ""
 
     def feature(self):
         return self.target

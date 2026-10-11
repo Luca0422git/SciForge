@@ -152,9 +152,10 @@ def station(path, faces):
     center = extrude.interior_point(face)
     normal = _profile_normal(face)
     reach = path.wire().BoundBox.DiagonalLength + face.BoundBox.DiagonalLength + 10.0
+    reach += (path.start - center).Length
     best = None
     try:
-        plane = Part.makePlane(2 * reach, 2 * reach, center - _spread(normal, reach), normal)
+        plane = Part.Plane(center, normal).toShape(-reach, reach, -reach, reach)
         hits = path.wire().section(plane).Vertexes
         for vertex in hits:
             d = (vertex.Point - center).Length
@@ -169,13 +170,6 @@ def station(path, faces):
         except Exception:
             point = path.start
     return path.length_at(point), point
-
-
-def _spread(normal, reach):
-    """Offset from the centre of a square plane of half-size `reach` to its corner."""
-    u = curves.any_normal(normal)
-    v = normal.cross(u)
-    return u * reach + v * reach
 
 
 class Plan:
