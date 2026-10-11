@@ -30,6 +30,9 @@ try:
     V = App.Vector
 except ImportError:  # the ribbon's unit tests read SPECS without FreeCAD
     App = V = None
+
+from . import labels  # noqa: E402
+
 EPS = 1e-9
 TOL = 1e-6  # mm: "on", "meets", "in one plane"
 
@@ -1064,8 +1067,8 @@ def _native(key, body, refs):
     return owner_body(obj) is body
 
 
-def next_label(doc, type_id):
-    """Fusion's names: Plane1, Plane2, ... Axis1, Point1."""
+def next_number(doc, type_id):
+    """The number of the next Plane / Axis / Point (Fusion: Plane1, Plane2, ...)."""
     import re
 
     base = SHORT_NAMES[type_id]
@@ -1076,7 +1079,12 @@ def next_label(doc, type_id):
         match = re.match(r"^%s\s*(\d+)$" % base, obj.Label or "")
         if match:
             used = max(used, int(match.group(1)))
-    return "%s%d" % (base, used + 1)
+    return used + 1
+
+
+def next_label(doc, type_id):
+    """Fusion's names: Plane1, Plane2, ... Axis1, Point1."""
+    return "%s%d" % (SHORT_NAMES[type_id], next_number(doc, type_id))
 
 
 def default_values(key):
@@ -1107,7 +1115,7 @@ def make(body, key, refs, values=None, points=None, offset=None):
     spec = SPECS[key]
     doc = body.Document
     datum = body.newObject(spec["type"], SHORT_NAMES[spec["type"]])
-    datum.Label = next_label(doc, spec["type"])
+    labels.set_free(datum, SHORT_NAMES[spec["type"]], next_number(doc, spec["type"]))
     _mark(datum, key)
     update(datum, key, refs, values, points)
     return datum

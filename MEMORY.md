@@ -570,6 +570,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     (`analysis.follow`, values marked Output so writing them does not touch the object).
   - The browser's Analysis folder opens collapsed; scenarios open it with the keyboard
     (row click + Right).
+  - **FreeCAD 1.1 label leak:** a Python view provider's attach() calls `Label.touch()`,
+    which counts the object's label a second time in the document's unique-label registry
+    (`DocumentObject::onChanged` with a stale `oldLabel`). After the object is deleted or
+    its preview cancelled, the label stays "taken" and FreeCAD renames the next object
+    (a cancelled Section1 made the next one "Section3"). SciForge's analyses answer
+    `allowDuplicateLabel` with yes only while SciForge sets the label it worked out
+    (`labels.set_exact`); datums take the next free number (`labels.set_free`). Other
+    features with Python view providers (Press Pull, Shell, Scale ...) have the same leak.
   - Run `black` only on your own files: a reformatted shared file broke another agent's text
     replacements.
 
@@ -790,16 +798,19 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Section Analysis, Center of Mass and Interference. New modules: `construct.py` (rewritten),
   `construct_ui.py` (rewritten), `handles3d.py` (arrow, path dot, clickable dots, overlay),
   `measure.py`, `measure_ui.py`, `section.py`, `section_ui.py`, `analysis.py`, `com_ui.py`,
-  `interference_ui.py`, `bodypick.py`. Shared edits: four ribbon lines (Plane Tangent to Face
-  at Point, Axis Perpendicular to Face at Point, Interference, Center of Mass), append-only
-  golden ops (`schema.py`, one import line in `builder.py`, ops in `golden/inspect_ops.py`).
+  `interference_ui.py`, `bodypick.py`, `labels.py` (exact Fusion-style names, see Known
+  issues). Shared edits: four ribbon lines (Plane Tangent to Face at Point, Axis
+  Perpendicular to Face at Point, Interference, Center of Mass), append-only golden ops
+  (`schema.py`, one import line in `builder.py`, ops in `golden/inspect_ops.py`).
 - Tests (only real input): `inspect_construct` (Offset Plane: nothing selected, click, arrow
   drag, typed value, undo/redo, timeline edit, Cancel, Esc, preselected + Enter, origin
   square, sketch on the plane also over the part, extrude from it), `inspect_construct_planes`
   and `inspect_construct_axes` (every other entry), `inspect_construct_use` (Extrude To Object
   a construction plane, Revolve about a construction axis, editing the plane moves both),
-  `inspect_measure`, `inspect_section`, `inspect_com_interference`. 6 golden models, unit
-  tests `test_inspect_core.py`.
+  `inspect_measure`, `inspect_section` (also a second section started with a face
+  selected), `inspect_com_interference` (an all-bodies Center of Mass following a hidden
+  body and an edited extrude; a second Interference started with both bodies selected).
+  6 golden models, unit tests `test_inspect_core.py`.
 - Gaps (see `parity/inspect.md`): Tangent Plane reference plane, Along Path on a chain,
   Offset Plane To Object, browser double-click/right-click Edit for Analysis items (browser
   owner), one material for Center of Mass, Component filter, Interference "create bodies".

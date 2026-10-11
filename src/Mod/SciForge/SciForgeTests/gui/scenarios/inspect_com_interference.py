@@ -12,9 +12,11 @@ Paths: nothing selected (all visible bodies), a body clicked, OK, the Analysis f
 undo / redo, edited again from the browser, Cancel; a second one with nothing picked follows
 the design: body 2 hidden (centre of body 1), shown again, its extrude edited to 10 deep
 (body 2 4000, centre (40, 30, 5): both (25, 18.75, 5)), undo; Interference: two bodies
-clicked, Compute, Include Coincident Faces, OK, edited again, Esc."""
+clicked, Compute, Include Coincident Faces, OK, edited again, Esc; a second one started with
+both bodies selected (Ctrl+click), Compute, OK, undo."""
 import FreeCAD as App
 import FreeCADGui as Gui
+from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as di
@@ -389,6 +391,61 @@ def esc_closed():
     h.shot("3-end")
 
 
+# -- a second Interference, started with both bodies selected ------------------------------------
+def int2_select():
+    h.click_empty()
+    h.fit()
+    h.click(V(5, 5, 10))
+
+
+def int2_select_second():
+    h.click(V(45, 35, 10), QtCore.Qt.ControlModifier)
+
+
+def int2_start():
+    sel = s.selection()
+    h.check("two things selected", len(sel) == 2, sel)
+    s.menu("INSPECT", "Interference")
+
+
+def int2_dialog():
+    from sciforge import interference_ui
+
+    p = b.active_panel()
+    h.check(
+        "a new Interference (not an edit)",
+        isinstance(p, interference_ui.InterferencePanel) and not p.editing,
+    )
+    if not isinstance(p, interference_ui.InterferencePanel):
+        return
+    names = sorted(o.Name for o in p.picked)
+    h.check("both bodies taken from the selection", names == sorted([st["b1"], st["b2"]]), names)
+    di.click(p.compute)
+
+
+def int2_result():
+    p = b.active_panel()
+    rows = p.rows()
+    h.check("the same 500 overlap", len(rows) == 1 and rows[0][3] == "500.000 mm^3", rows)
+    h.task_button("OK")
+
+
+def int2_kept():
+    from sciforge import analysis
+
+    found = [o.Label for o in kinds(analysis.INTERFERENCE_KIND)]
+    h.check("Interference2 kept", found == ["Interference1", "Interference2"], found)
+    s.undo()
+
+
+def int2_undone():
+    from sciforge import analysis
+
+    found = [o.Label for o in kinds(analysis.INTERFERENCE_KIND)]
+    h.check("Undo removes Interference2", found == ["Interference1"], found)
+    h.check("no pop-ups at the end", not h.popups(), h.popups())
+
+
 h.run(
     "inspect_com_interference",
     b.box_steps("InspectCOM")
@@ -435,5 +492,12 @@ h.run(
         int_edit,
         int_edit_dialog,
         esc_closed,
+        int2_select,
+        int2_select_second,
+        int2_start,
+        int2_dialog,
+        int2_result,
+        int2_kept,
+        int2_undone,
     ],
 )

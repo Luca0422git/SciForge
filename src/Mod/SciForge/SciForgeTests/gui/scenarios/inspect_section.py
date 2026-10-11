@@ -2,7 +2,8 @@
 """INSPECT > Section Analysis with real input: nothing selected (the origin squares wait), the
 XZ square clicked, the blue arrow dragged, a typed distance, Flip, a custom colour swatch,
 Show Hatch, X Angle, OK; the analysis in the browser's Analysis folder, its eye; undo / redo;
-edited again (selected in the browser, Section Analysis again); Cancel and Esc leave nothing.
+edited again (selected in the browser, Section Analysis again); Cancel and Esc leave nothing;
+a second section started with the right face selected, both cutting at once, undo.
 
 Part (real input): box 40 x 30 x 10 from the origin with a round boss r = 5 on top, centre
 (10, 10), 10 high. Hand-derived values (what stays visible = the part on the kept side):
@@ -13,7 +14,9 @@ Part (real input): box 40 x 30 x 10 from the origin with a round boss r = 5 on t
     (pi * 25 / 2 * 10) = 4392.699; cut face 400 + 10 * 10 (the boss) = 500
   X Angle 90: the cut turns about the XZ plane's X axis through the middle of the part
     (20, 15, 10): horizontal at z = 10, so what stays is the box (12000) or the boss
-    (pi * 25 * 10 = 785.398)"""
+    (pi * 25 * 10 = 785.398)
+  right face (normal +X), distance -10: the cut is at x = 30, x > 30 is cut away:
+    kept 30 * 30 * 10 + the boss (x = 5 .. 15) = 9000 + 250 pi; cut face 30 * 10 = 300"""
 import math
 
 import FreeCAD as App
@@ -317,6 +320,53 @@ def escaped():
     h.shot("3-end")
 
 
+# -- a second section, started with a face already selected -------------------------------------
+def preselect_right_face():
+    """Section1 keeps y < 10: the right face (x = 40) is still there at y = 5."""
+    h.click_empty()
+    h.fit()
+    h.click(V(40, 5, 5))
+
+
+def preselected_start():
+    sel = s.selection()
+    h.check("the right face is selected", sel and sel[0][1] and "Face" in sel[0][1][0], sel)
+    h.ribbon("Section Analysis")
+
+
+def preselected_cut():
+    p = panel()
+    h.check("a new section (not an edit)", p is not None and p.analysis is not None)
+    if p is None or p.analysis is None:
+        return
+    h.check("on the selected face", "face" in p.box.button.text().lower(), p.box.button.text())
+    h.check("named Section2", p.analysis.Label == "Section2", p.analysis.Label)
+    h.check("at the face nothing is cut away", s.close(kept(), FULL), kept())
+    s.type_into(p.distance.widget, "-10")
+
+
+def preselected_10_in():
+    """Cut at x = 30, x > 30 cut away: 30 x 30 x 10 + the whole boss; cut face 30 x 10."""
+    v = kept()
+    h.check("x > 30 cut away: 9000 + 250 pi", s.close(v, 9000 + math.pi * 250), v)
+    h.check("cut face 300", s.close(cap_area(), 300.0), cap_area())
+    h.check("both sections cut the body", len(clips()) == 2, clips())
+    ok()
+
+
+def two_sections():
+    found = analyses()
+    h.check("two analyses", [o.Label for o in found] == ["Section1", "Section2"], found)
+    h.check("two clips", len(clips()) == 2, clips())
+    s.undo()
+
+
+def second_undone():
+    h.check("Undo removes Section2", [o.Label for o in analyses()] == ["Section1"], analyses())
+    h.check("one clip again", len(clips()) == 1, clips())
+    h.check("no pop-ups at the end", not h.popups(), h.popups())
+
+
 h.run(
     "inspect_section",
     b.box_steps("InspectSection")
@@ -353,5 +403,11 @@ h.run(
         esc_pick,
         esc_press,
         escaped,
+        preselect_right_face,
+        preselected_start,
+        preselected_cut,
+        preselected_10_in,
+        two_sections,
+        second_undone,
     ],
 )

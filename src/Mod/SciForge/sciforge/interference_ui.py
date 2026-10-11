@@ -296,11 +296,16 @@ def start():
 
 
 def edit(target):
-    if not commands.finish_open_dialog():
+    """Open a stored Interference again (browser double-click, EDITORS). Never raises."""
+    try:
+        if not commands.finish_open_dialog():
+            return None
+        panel = InterferencePanel(target.Document, target=target)
+        Gui.Control.showDialog(panel)
+        return panel
+    except Exception as exc:
+        warn("Interference could not open: %s" % exc)
         return None
-    panel = InterferencePanel(target.Document, target=target)
-    Gui.Control.showDialog(panel)
-    return panel
 
 
 class InterferenceCommand:

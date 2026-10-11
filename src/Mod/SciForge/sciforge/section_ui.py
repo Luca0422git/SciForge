@@ -876,12 +876,17 @@ def start():
 
 
 def edit(analysis):
-    if not commands.finish_open_dialog():
+    """Open a stored section again (browser double-click, EDITORS). Never raises."""
+    try:
+        if not commands.finish_open_dialog():
+            return None
+        panel = SectionPanel(analysis.Document, analysis=analysis)
+        Gui.Control.showDialog(panel)
+        log("editing %s" % analysis.Label)
+        return panel
+    except Exception as exc:
+        warn("Section Analysis could not open: %s" % exc)
         return None
-    panel = SectionPanel(analysis.Document, analysis=analysis)
-    Gui.Control.showDialog(panel)
-    log("editing %s" % analysis.Label)
-    return panel
 
 
 class SectionCommand:

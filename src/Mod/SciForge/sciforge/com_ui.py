@@ -351,11 +351,16 @@ def start():
 
 
 def edit(target):
-    if not commands.finish_open_dialog():
+    """Open a stored Center of Mass again (browser double-click, EDITORS). Never raises."""
+    try:
+        if not commands.finish_open_dialog():
+            return None
+        panel = CenterOfMassPanel(target.Document, target=target)
+        Gui.Control.showDialog(panel)
+        return panel
+    except Exception as exc:
+        warn("Center of Mass could not open: %s" % exc)
         return None
-    panel = CenterOfMassPanel(target.Document, target=target)
-    Gui.Control.showDialog(panel)
-    return panel
 
 
 class CenterOfMassCommand:

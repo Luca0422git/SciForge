@@ -20,6 +20,8 @@ try:
 except ImportError:
     App = V = None
 
+from . import labels  # noqa: E402
+
 COM_KIND = "CenterOfMassAnalysis"
 INTERFERENCE_KIND = "InterferenceAnalysis"
 VOLUME_EPS = 1e-6  # mm^3: less than this does not count as an overlap
@@ -148,6 +150,10 @@ class CenterOfMassAnalysis:
         obj.Position = centre
         obj.Volume = volume
 
+    def allowDuplicateLabel(self, obj):
+        """Yes only while SciForge sets the label it worked out (see labels.py)."""
+        return labels.allow_duplicate()
+
     def dumps(self):
         return None
 
@@ -259,6 +265,10 @@ class InterferenceAnalysis:
         shapes = [s for _a, _b, _v, s in found]
         obj.Overlap = Part.Compound(shapes) if shapes else Part.Shape()
 
+    def allowDuplicateLabel(self, obj):
+        """Yes only while SciForge sets the label it worked out (see labels.py)."""
+        return labels.allow_duplicate()
+
     def dumps(self):
         return None
 
@@ -297,7 +307,7 @@ def next_label(doc, base):
 def make_com(doc, picked=()):
     obj = doc.addObject("App::FeaturePython", "CenterOfMass")
     CenterOfMassAnalysis(obj)
-    obj.Label = next_label(doc, "Center of Mass")
+    labels.set_exact(obj, next_label(doc, "Center of Mass"))
     set_bodies(obj, picked)
     return obj
 
@@ -305,7 +315,7 @@ def make_com(doc, picked=()):
 def make_interference(doc, picked=(), include_coincident=False):
     obj = doc.addObject("App::FeaturePython", "Interference")
     InterferenceAnalysis(obj)
-    obj.Label = next_label(doc, "Interference")
+    labels.set_exact(obj, next_label(doc, "Interference"))
     set_bodies(obj, picked)
     if bool(obj.IncludeCoincident) != bool(include_coincident):
         obj.IncludeCoincident = bool(include_coincident)

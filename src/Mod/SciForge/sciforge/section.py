@@ -19,6 +19,8 @@ try:
 except ImportError:
     App = V = None
 
+from . import labels  # noqa: E402
+
 KIND = "SectionAnalysis"
 COLOR_MODES = ["From Body", "Custom"]
 
@@ -229,6 +231,10 @@ class SectionAnalysis:
             (obj.PivotU, obj.PivotV),
         )
 
+    def allowDuplicateLabel(self, obj):
+        """Yes only while SciForge sets the label it worked out (see labels.py)."""
+        return labels.allow_duplicate()
+
     def dumps(self):
         return None
 
@@ -254,7 +260,7 @@ def make(doc, ref, options=None):
     """A new section analysis on `ref` (plane object, "" or feature, "FaceN")."""
     obj = doc.addObject("App::FeaturePython", "Section")
     SectionAnalysis(obj)
-    obj.Label = next_label(doc)
+    labels.set_exact(obj, next_label(doc))
     update(obj, ref, options)
     return obj
 
