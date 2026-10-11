@@ -468,6 +468,33 @@ def _TurnDragger(*args, **kwargs):
     from .extrude_ui import AngleDragger
 
     class TurnDragger(AngleDragger):
+        @staticmethod
+        def _arc(coin, radius, width, color):
+            """The taper handle's flat curved band, plus the same band standing up across it.
+            The flat band lies in the plane the handle turns in: where that plane is seen
+            nearly edge-on (the handle at the bottom of its circle on screen) it was a sliver a
+            couple of pixels high, and presses on its middle missed it and hit the part."""
+            sep = AngleDragger._arc(coin, radius, width, color)
+            span = min(0.3, 1.6 * width / max(radius, 1e-6))
+            steps = 12
+            half = width * 0.3
+            points, index = [], []
+            for i in range(steps + 1):
+                a = -span + 2.0 * span * i / steps
+                x, y = radius * math.cos(a), radius * math.sin(a)
+                points.append((x, y, -half))
+                points.append((x, y, half))
+            for i in range(steps):
+                a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2
+                index += [a, b, c, -1, a, c, d, -1]
+            coords = coin.SoCoordinate3()
+            coords.point.setValues(0, len(points), points)
+            faces = coin.SoIndexedFaceSet()
+            faces.coordIndex.setValues(0, len(index), index)
+            sep.addChild(coords)
+            sep.addChild(faces)
+            return sep
+
         def angle(self):
             raw = AngleDragger.angle(self)
             last = getattr(self, "_last", None)
@@ -1068,6 +1095,31 @@ class PatternPanel(Panel):
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
+        self._handle_press = False
+        self._press_callback = None
+        try:
+            self._press_callback = self.view.addEventCallback("SoMouseButtonEvent", self._button)
+        except Exception as exc:
+            warn("%s: handle guard unavailable: %s" % (self.title, exc))
+
+    def _button(self, info):
+        """A press on a drag handle (blue arrow, curved handle) is never a pick of the part
+        behind it, also when the handle does not take the press: before, the face under the
+        handle was picked on release and its whole feature joined the objects."""
+        try:
+            if info.get("Button") != "BUTTON1":
+                return
+            if info.get("State") == "DOWN":
+                self._handle_press = bool(
+                    self.handles and profile_pick.handle_at(self.view, tuple(info["Position"]))
+                )
+                if self._handle_press:
+                    self._overlay_time = time.time()
+            elif info.get("State") == "UP" and self._handle_press:
+                self._handle_press = False
+                self._overlay_time = time.time()  # the selection made on this release
+        except Exception as exc:
+            warn("%s handle press: %s" % (self.title, exc))
 
     def _unwatch(self):
         if self.observer is not None:
@@ -1076,6 +1128,12 @@ class PatternPanel(Panel):
             except Exception:
                 pass
             self.observer = None
+        if getattr(self, "_press_callback", None) is not None:
+            try:
+                self.view.removeEventCallback("SoMouseButtonEvent", self._press_callback)
+            except Exception:
+                pass
+            self._press_callback = None
         for picker in (self.axis_picker, self.plane_picker):
             if picker is not None:
                 try:
@@ -1098,6 +1156,9 @@ class PatternPanel(Panel):
                 self._syncing = False
             if self._overlay_clicked_recently():
                 return  # the origin axis/plane drawn over the part took this click
+            if getattr(self, "_handle_press", False):
+                self._handle_press = False
+                return  # released after a press on a drag handle: not a pick
             for obj, short, _point in picks:
                 self._picked(obj, short)
         except Exception as exc:
@@ -1516,6 +1577,7 @@ class PatternPanel(Panel):
     def _dragged(self, key, value):
         if self._closed:
             return
+        self._handle_press = False  # the handle took the press: no selection follows
         self.drop_formula(key)
         value = round(value, 2)
         if key == "distance":
@@ -1534,6 +1596,7 @@ class PatternPanel(Panel):
     def _angle_dragged(self, value):
         if self._closed:
             return
+        self._handle_press = False
         self.drop_formula("angle")
         value = round(value, 1)
         if abs(value) < 1.0:
