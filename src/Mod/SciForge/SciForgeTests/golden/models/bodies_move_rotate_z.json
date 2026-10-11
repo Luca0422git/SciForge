@@ -1,0 +1,58 @@
+{
+  "id": "bodies_move_rotate_z",
+  "title": "Move/Copy Rotate 90 degrees about the Z axis",
+  "tags": [
+    "bodies",
+    "move",
+    "rotate"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "rotate",
+      "axis": "Z",
+      "angle": 90
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      -30,
+      0,
+      0,
+      0,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "(x, y) -> (-y, x): x 0..40 -> y 0..40, y 0..30 -> x -30..0"
+  }
+}

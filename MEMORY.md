@@ -89,14 +89,17 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       models (2 documented gaps: sloped neighbours, shared corners -> need C++ per-face offset, 9.1)
 - [x] Fusion-style Extrude (E): join/cut/new body, one side/two sides/symmetric, distance/all,
       taper, drag arrow, auto-switch to Cut when dragged into material
-- [x] Right-click marking menu (8 slots + list, Repeat last command). **Slot order unconfirmed.**
+- [x] Right-click marking menu (8 slots + list, Repeat last command; OK/Cancel while a command
+      is open). **Slot order unconfirmed.**
 - [x] Browser panel with Fusion's structure (7.2), eye toggles, rename, activate
 - [x] Change Parameters (7.4): user params (App::VarSet "Parameters"), model params, bare names
-- [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed)
+- [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed);
+      replaced by the CONSTRUCT / INSPECT pass below (branch `sf/inspect`)
 - [x] Timeline marker drag + playback; ViewCube colours; 3D Print (3MF/STL) export
 - [ ] Unified Revolve / Hole / Fillet dialogs Fusion-style (FreeCAD's dialogs used meanwhile)
 - [ ] ViewCube shape, doc tabs in the app bar, floating command dialogs (Sketch Palette: done)
-- [ ] Timeline: reorder by drag, suppress, groups (7.3)
+- [x] Timeline: reorder by drag, suppress, groups (7.3); QA pass done (branch
+      `sf/timeline_browser-qa`, 4 QA scenarios, spec `docs/sciforge/parity/timeline-browser.md`)
 - [ ] Sketcher parity (7.5): inference, glyphs, Fusion dimension tool feel (needs captures)
 - [x] Sketch workspace, first parity pass (branch `sf/sketch`): Fusion keys in sketches (L R C D T
       X O P E, Esc / Esc), on-screen dimension box (type the value, Enter; double-click a
@@ -107,6 +110,17 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       Include 3D Geometry, Mirror / patterns / scale / move starting with nothing selected,
       Rectangular Pattern panel, double-click a sketch in browser/timeline to edit it.
       7 scenarios (`sketch_*.py`), 3 golden models (`sketch_*`), core patch #7 (trim)
+- [x] Sketch QA pass (branch `sf/sketch-qa`): L takes typed length/angle and chains lines
+      (`sketch_line.py`), dimension box refuses 0/negative/text, redundant dimension -> driven,
+      sketch fillet radius box, right-click sketch marking menu (`sketch_marking.py`), M / Del /
+      Ctrl+C/X/V on sketch curves, construction mode shown in the palette, palette keeps no
+      keyboard focus, one Ctrl+Z after Finish Sketch, curved faces refused by Create Sketch,
+      typed circumscribed polygon size fixed, FreeCAD balloons off, one Enter after a typed
+      value draws the line/rectangle/polygon, constraint tools with an unfitting selection
+      start and wait for picks (`SciForge_Sketch<Constraint>` in the ribbon), sketch keys
+      work with a real keyboard (in the view and in FreeCAD's value fields). Spec:
+      `parity/sketch.md`. Scenarios `sketch_qa.py` (12 paths), `sketch_qa_part.py`,
+      `sketch_qa_keys.py`
 - [x] Hole (H) and Thread, Fusion-style (branch `sf/hole`): Single Hole where you click a face
       (flat or curved; hidden helper sketch "Hole N Sketch", X/Y fields, two edge references with
       distances, draggable blue centre dot), From Sketch points/circle centres (auto-flip into
@@ -116,6 +130,77 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       or hole faces: size from the diameter, full/partial length (+ blue length arrow), cosmetic
       (dashed helix overlay, also for tapped holes) or modeled (own ISO 68-1 groove sweep,
       `thread_core.py`). 6 scenarios (`hole*.py`), 16 golden models (`hole_*`, `thread_*`).
+- [x] Fusion-style Revolve (branch `sf/revolve`, `revolve.py` / `revolve_ui.py`): profile =
+      sketch areas or flat faces; axis = origin axis (drawn as long X/Y/Z lines to click),
+      sketch line, construction line (drawn dashed), straight part edge, construction axis;
+      Type Angle / Full; One Side / Two Sides / Symmetric (per side, like Fusion's API); blue
+      handle(s) dragged round the axis; Join / Cut / Intersect / New Body with auto Cut when
+      the revolve goes mostly into material (Revolution <-> Groove swap); timeline edit;
+      the interim "Revolve (Cut)" ribbon entry removed. 3 scenarios (`revolve_*.py`), 12
+      golden models (`sf_revolve_*`, ops `sf_revolve` / `sf_revolve_edit`). Gap: Type "To".
+- [x] Rectangular Pattern, Circular Pattern, Pattern on Path, Mirror, Fusion-style (branch
+      `sf/patterns`): Pattern Type Features (FreeCAD's LinearPattern/PolarPattern/Mirrored,
+      dress-ups included; a face click takes the feature that made it) / Faces (SciForge's
+      `PatternFeature` closes the faces into the hole or boss they bound) / Bodies (one new body
+      per copy; Mirror: New Body or Join). Quantity, Distance, Extent/Spacing, One Direction/
+      Symmetric per direction, Direction 2 offered at right angles, Full/Angle/Symmetric,
+      Identical/Path Direction, Suppression (click the dot on a copy); origin axes and planes
+      drawn to click; blue arrows and a curved angle handle; parameters/formulas; live preview;
+      errors in the dialog; timeline edit.
+      Spec + gaps: `docs/sciforge/parity/patterns.md`. 6 scenarios (`patterns*.py`), 16 golden
+      models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
+      `SciForge_PatternOnPath` (was greyed).
+- [x] Fusion-style Shell, Draft, Scale (branch `sf/shell_draft`; spec + gaps in
+      `docs/sciforge/parity/shell-draft-scale.md`). Shell (`shelling.py` / `shell_ui.py`):
+      faces to take away or the body (hollow), Inside / Outside Thickness, Direction Inside /
+      Outside / Both, Shell Type Sharp / Rounded, Tangent Chain, blue arrows, too-thick walls
+      explained with the thickest that fits; FreeCAD's Thickness where it can, SciForge's
+      `ShellFeature` for hollow/Both (swapped in place). Draft (`drafting.py` / `draft_ui.py`):
+      Fixed Plane (origin squares or a flat face), pull arrow + Flip, faces, Tangent Chain,
+      angle field + curved handle, on FreeCAD's Draft. Scale (`scale.py` / `scale_ui.py`):
+      SciForge's `ScaleFeature` in the body, Uniform / Non Uniform about the origin or a
+      corner, arrows that move with the part. Shared dialog base `pickpanel.py`. Ribbon: Scale
+      now runs `SciForge_Scale` (was greyed). 6 scenarios (`shell_draft*.py`), 20 golden models
+      (`sf_shell_*`, `sf_draft_*`, `sf_scale_*`), unit tests `test_shell_draft_core.py`.
+- [x] Body tools, Fusion-style (branch `sf/bodies`): Combine (Target / Tool Bodies, Join /
+      Cut / Intersect, New Body, Keep Tools; used-up tools hidden while the step is part of
+      the design), Split Body (origin/construction plane, face with Extend Splitting Tool,
+      another body; every piece a body), Move/Copy M (Free Move with an on-top manipulator:
+      3 arrows + 3 turn handles; Translate; Rotate about an axis with a blue handle; Point to
+      Point snapping to corners; typed distances/angles; Create Copy), Delete Del (bodies,
+      steps with dependants re-linked or flagged, faces -> "Delete Face" step, sketch curves),
+      Appearance (library + custom colour, bodies or faces, drag a swatch onto the part),
+      Physical Material (FreeCAD's library, mass shown; `bodies.mass()` for Inspect).
+      Split Body also takes sketch lines/arcs; Move also Point to Position. Deleting keeps
+      dependants working (fillets re-pointed at the step before, Combines/copies re-routed,
+      a deleted tool body kept frozen in its Combine).
+      `bodies.py` helpers for every multi-body tool. Spec + gaps: `docs/sciforge/parity/
+      bodies.md`. 6 scenarios (`bodies_*.py`), 24 golden models (`bodies_*`), unit tests
+      `test_bodies_schema.py`. Ribbon: Split Body runs `SciForge_SplitBody` (was greyed).
+- [x] Fillet (F) and Chamfer, Fusion-style, plus a QA pass (branch `sf/fillet-qa`): picks of
+      edges / faces / timeline features, Tangent Chain, blue arrows, live preview, errors in
+      the dialog, timeline edit; QA added mm-safe value boxes with parameters/formulas,
+      Ctrl+S/N/O finishing the dialog, later fillets kept on their edges after an insert or
+      an edit (`blend.References`), two-solid bodies, angle limits. Spec + gaps:
+      `docs/sciforge/parity/fillet.md`. Scenarios `fillet*.py` (8 files), 10 golden models
+      `blend_*`, unit tests `test_blend_core.py`.
+- [x] CONSTRUCT and INSPECT, Fusion-style (branch `sf/inspect`; spec + gaps in
+      `docs/sciforge/parity/inspect.md`). CONSTRUCT (`construct.py` / `construct_ui.py`): all
+      19 menu entries (8 planes, 5 axes, 6 points) in one dialog kind: boxes that wait blue,
+      origin squares / axes / point drawn to click while a box waits, pre-selection used, live
+      datum, blue arrow (Offset Plane), curved handle (Plane at Angle, Tangent Plane), sliding
+      dot (Along Path), parameters/formulas, timeline edit, errors in the dialog. The
+      "Perpendicular Plane" placeholder became Fusion's "Plane Tangent to Face at Point".
+      Construction geometry works in Create Sketch, Extrude To Object, Revolve's axis and other
+      constructs; editing a plane moves what is built on it. Measure (I, `measure.py` /
+      `measure_ui.py`): one or two picks, minimum distance, angle, delta X/Y/Z, area, length,
+      volume, position, radius; Selection Filter, Precision, Show Snap Points, click to copy,
+      design units. Section Analysis (`section.py` / `section_ui.py`): face/plane, distance
+      arrow, X/Y angle handles, Flip, colour + hatch, stored in the browser's Analysis folder
+      (eye shows/hides). Center of Mass (`analysis.py` / `com_ui.py`) and Interference
+      (`interference_ui.py`): stored in the Analysis folder, follow the design. 7 scenarios
+      (`inspect*.py`), 6 golden models (`inspect_*`), unit tests `test_inspect_core.py`. Ribbon:
+      Interference and Center of Mass now run SciForge commands (were greyed).
 
 ## Known issues / findings
 
@@ -263,6 +348,356 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Single Hole helper sketches are listed in the browser's Sketches folder as "Hole N Sketch"
   (hidden); double-clicking one, or timeline "Edit Profile Sketch" on the hole, opens the Hole
   dialog (`SciForgeType = "HoleSketch"` + `hole_ui.EDITORS`).
+- **Extrude/Press Pull QA findings (branch `sf/extrude_presspull-qa`)**, rules for every dialog:
+  - FreeCAD's selection takes the left-button *release* and stops it there
+    (`SoFCUnifiedSelection` sets handled): a `view.addEventCallback` never sees the release of
+    a click that selected something. Pick on the press, and skip presses on a drag handle
+    (`profile_pick.handle_at`, a Coin ray pick that finds an `SoDragger`), or a press on an
+    arrow drops the sketch area behind it.
+  - FreeCAD draws a body through its Tip, and a new feature hides the one before it. Code that
+    removes a feature (not FreeCAD's Delete) must show the new Tip again
+    (`extrude.show_tip`), or the whole part vanishes from the view.
+  - Ctrl+Z with a dialog open made FreeCAD commit the preview and undo it under the dialog;
+    Ctrl+S saved the half-made preview; closing the design left a dialog on a deleted document
+    that blocked every later command. `preview.UndoCancels(panel)` handles all of these (and
+    other designs' clicks are filtered out of picks). Use it in every feature dialog.
+  - FreeCAD's Pad/Pocket silently ignore a taper up to a face and a Pad's up-to-last: the
+    SciForge extrude feature (`ExtrudeFeature`, property `Operation`) builds those.
+  - OpenCASCADE cannot offset a whole sphere ("no closed bounds"): Press Pull builds the shell.
+  - `doc.commitTransaction()`/`abortTransaction()` leave the step name opened by
+    `doc.openTransaction(name)` pending when nothing changed: the next change anywhere (even
+    right after an Undo) opens a step under that name and the Redo list is lost. Close it
+    with `App.closeActiveTransaction()` (`preview.end_transaction`; `taskui._end_transaction`
+    for every `taskui.Panel` dialog since c76d6ac7d2).
+  - FreeCAD's Pad "up to shape" with a whole body fails ("please select faces") and an empty
+    face list silently extrudes nothing: hand over the faces facing the extrusion
+    (`extrude.facing_faces`).
+  - FreeCAD's number field (QuantitySpinBox) silently drops a parameter name; formulas typed
+    in Extrude/Press Pull fields go through `preview.FormulaInput` (expression on the feature).
+    FreeCAD's own ExpressionBinding made a field read-only once it had a formula.
+  - Fixed since (main branch): rolling the timeline marker shows exactly the step at the
+    marker (`timeline_ops._show_only_tip`, scenario `timeline_roll_view`); a sketch on a face
+    or plane of another body goes into that body and makes it active
+    (`sketch_ui.create_sketch`, scenario `sketch_other_body`); the marking menu offers OK
+    (top slot) and Cancel (first list row) while a dialog is open (`taskui.dialog_button`
+    clicks FreeCAD's own panel button, scenario `marking_menu_command`); E pressed while a
+    sketch is open extrudes that sketch even when an extrude already uses it (it took "the
+    newest unused sketch" instead; `ExtrudePanel(sketch=...)`, scenario
+    `extrude_from_edited_sketch`).
+- **Marking-menu list rows never ran their command** (found 2026-10-11): `_list_clicked`
+  closed the menu first (WA_DeleteOnClose deletes it and the row's QAction) and PySide
+  silently drops a `QTimer.singleShot(0, action.trigger)` whose QObject is gone. The menu is
+  now hidden, the action triggered, then closed. Trap for everything: a singleShot to a
+  bound method of a Qt object is cancelled when that object is deleted.
+- **A scenario that fails to import kept FreeCAD open for the runner's 15-minute timeout.**
+  run_tests.sh now starts scenarios through `SciForgeTests/gui/scenario_launcher.py`, which
+  writes a failed result ("the scenario file loads") and quits. Scenarios import QtTest
+  from `PySide6` (FreeCAD's `PySide` shim has no QtTest).
+- **FreeCAD 1.1 floats the Tasks panel over the 3D view (its "overlay") with title bars of
+  its own**: an empty "Tasks" header with 3 buttons stayed over the view with no command
+  open (FreeCAD auto-hides an overlay only when it holds 2+ panels) and a white strip sat
+  above every dialog. `shell._hide_overlay_titles` keeps overlay title bars at zero height
+  (FreeCAD re-shows them and builds new ones, so an event filter on the overlay containers
+  flattens new ones). Docked panels use the same `Gui::OverlayTitleBar` class (the BROWSER
+  header): only bars inside `Gui::OverlayTabWidget`/`OverlaySplitter` are flattened.
+  Scenario `overlay_title` (fails without the fix, checked).
+- **Failed preview vs. refused value (rule since the timeline QA merge)**: a step whose
+  compute fails adds nothing, also inside its own dialog (`timeline_ops.settle` passes the
+  step before it through; the dialog says why and OK waits), like Fusion. A value the
+  dialog refuses before applying it (fillet radius, shell thickness, scale factor) keeps
+  the last good preview. `patterns_path` expected the old FreeCAD behaviour (a failed step
+  keeps its old shape) and was updated.
+- **Value boxes: a plain number is mm (or degrees), always** (2026-10-11, all dialogs via
+  `taskui.DistanceField`): FreeCAD's QuantitySpinBox reads a bare number in the unit it
+  *shows*; after a value below 0.1 mm it showed µm and "4" became 4 µm. The box also had
+  `autoNormalize` on, which swallowed the first Enter after a sum ("2*0.25"). Trap found
+  while fixing it: leaving a box "finishes" it, also while its dialog closes, so anything
+  connected to `editingFinished` must not report to a closed dialog (`Panel._recompute`
+  now returns once closed). Scenario `value_box_units`.
+- Timeline Delete of a body's last step hid the whole part: FreeCAD moves the Tip back by
+  itself, so `_set_tips` saw nothing to do and the new Tip stayed hidden. `delete()` now
+  shows each touched body's Tip (`fillet_qa_more` P19 checks it).
+- Bodies used up by a Combine (no Keep Tools) are no longer listed in the browser, like
+  Fusion (`browser_ui._used_up_bodies`, `bodies.consumed`); while a body-tool dialog is
+  open (`bodies.PAUSED`) they stay listed so they can be picked. `bodies_combine` checks it.
+- `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
+  `palette_check.svg` (check-box tick) would have been deleted; it is now in its `RAW` table.
+  - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
+    clickable (compute what is in front); the disc at the bottom of a hole is only visible
+    from the top.
+- **Coin draggers cannot be grabbed behind the part** (Coin gives a click to the nearest
+  object only). The revolve handle sat behind the preview solid at 90 degrees and could not
+  be dragged. `revolve_ui.AngleHandle` is drawn in an `SoAnnotation` (on top) and handles the
+  mouse itself: FreeCAD's `view.addEventCallback` only records the mouse, a QTimer applies
+  it (no pivy callbacks). Revit-style left drag does not move the camera, so this is safe.
+- Revolve facts (FreeCAD 1.1.4): a positive Angle turns right-handed about the reference's
+  own direction (origin axis = +X/+Y/+Z, edge = its curve direction, construction line =
+  start -> end), Reversed flips it. `Midplane` splits the whole angle; `TwoAngles` turns
+  Angle one way and Angle2 the other and **silently gives a wrong solid when the two add up
+  to more than 360** (SciForge refuses that in the dialog). `Groove` with `UpToFace` returns
+  an **empty solid without any error** (volume 0, both directions), so Fusion's Type "To"
+  is not offered. A disjoint Join is accepted (a body with two lumps, like Fusion's).
+- A feature may only link inside its own body ("go out of the allowed scope" error).
+  Profiles/edges from another body go through a hidden SubShapeBinder; a construction line,
+  construction axis or sketch axis of another body (no shape to bind) through
+  `revolve.AxisLink` (a hidden Part2DObjectPython with a global link that rebuilds the line
+  every recompute, so the revolve follows edits). Helpers carry `SciForgeTimeline = False`.
+- FreeCAD hides the previous tip when a feature is added and shows it again only when the
+  feature is deleted with its own command: after removing/moving a preview feature from
+  Python, show the body's Tip again (`revolve._show_tip`), or the body looks empty.
+- Scenario step names must not contain "error"/"failed"/"invalid": the harness reads the
+  step's own progress line in the Report view as an error.
+- **Trap (sketch QA): the scenarios' FreeCAD-notification check never looked.**
+  `Gui::NotificationArea` has no Q_OBJECT, so Qt calls it "QPushButton" (the class-name test
+  never matched), its list is a widget the menu's action *creates* (not `defaultWidget()`), new
+  messages sit aside until the menu opens (`aboutToShow`), and items compute their text per
+  column. `sketch_input.notifications()` now handles all four; steps can declare expected
+  messages (`step.notes_ok`), `QUIET` lists harmless ones ("Autoconstraints cause redundancy").
+- FreeCAD's balloons are off while SciForge is on (`MaxOpenNotifications` 0). Messages still
+  go to its list and the Report view; SciForge says what matters via `commands.tell`.
+  **Trap: never set `NonIntrusiveNotificationsEnabled` to False**: FreeCAD then shows its user
+  warnings ("Wrong selection"...) as *blocking message boxes* (`Gui/Notifications.h`); it hung
+  sketch_qa. SciForge sets it True.
+- **Trap (keys): a real keyboard sends keys to the focus widget, not to the GL drawing area.**
+  That is `Gui::View3DInventorViewer` (the GL widget's parent; `h.press` sends to the GL widget
+  and the key bubbles up to it), or, while a drawing tool runs, FreeCAD's on-screen value field
+  (`Gui::QuantitySpinBox`, a child of the MDI view). FreeCAD's `DrawSketchKeyboardManager`
+  keeps digits, Enter, Esc... in that field (for 2 s after a digit or Enter) and passes other
+  keys to the viewer. SciForge's sketch keys sit on the viewer (`_KeyFilter`) and on each value
+  field when it gets the focus (`SketchSession._focus_changed`): Enter there sends FreeCAD's own
+  Ctrl+Enter (accept all fields), Esc stops the tool, a tool letter switches tools unless a
+  value was typed into that field (then letters are a unit, "12 mm"). Tests that mean "the
+  keyboard" use `si.key` / `si.type_text` (focus widget); `sketch_qa_keys.py` covers it.
+- FreeCAD's sketch finds what is under the pointer when it redraws after a mouse move: a test
+  press in the same instant as the move selected nothing on a busy machine. `si.click` rests
+  80 ms on the spot first. A dimension-placing click on (or within a few pixels of) another
+  curve or an axis picks that curve instead (made `sketch_draw` fail 1 run in 4).
+- Sketcher_LeaveSketch records its recompute as a separate undo step ("Sketch recompute"):
+  `sketch_mode._merge_recompute_step` undoes/redoes it together with the step before it.
+- A dimension added on an already-set size stays *driving* in FreeCAD (sketch over-constrained,
+  red). `RedundantConstraints`/`ConflictingConstraints` are 1-based; SciForge makes it driven.
+- FreeCAD's polygon tool puts a typed size on the LAST curve as a Radius: SciForge's
+  circumscribed polygon now ends with the circle touching the edges (`circle_indices()`).
+- New-style Sketcher tools take typed values (on-screen fields) but the line tool draws one
+  line per two clicks; `sketch_line.LineChain` clicks the end of each new line for the user
+  (synthetic Qt mouse events on the GL widget, from a timer after FreeCAD's commit).
+- Palette widgets must not take keyboard focus (Esc went to a check box and did nothing);
+  Esc in the sketch's side panel is forwarded to `SketchSession.escape`.
+- Construction mode (Toggle Construction with nothing selected) lives only in C++; it shows on
+  the command's icon, so `sketch_mode.construction_mode()` compares that icon with
+  `Gui.getIcon("Sketcher_ToggleConstruction_Constr")`. Every new sketch starts in normal mode.
+- Unexplained: in one sketch_qa screenshot (path F) the task panel was drawn see-through (3D
+  view visible behind the palette); not reproduced alone. Probably FreeCAD's overlay dock.
+- **Patterns findings (branch `sf/patterns`)**:
+  - FreeCAD's LinearPattern/PolarPattern read a spacing of exactly -1 as "use Offset"; a
+    symmetric pattern is a walk of gaps (0, s, .. then a jump back) that must never contain -1
+    (moved by a nanometre). List properties take a whole-list expression
+    (`list(Offset.Value; ...)`), not per-element ones: that keeps symmetric copies following a
+    parameter.
+  - FreeCAD 1.1 bodies allow several solids (`Body.AllowCompound` is on by default), and its
+    pattern features repeat dress-ups (fillets) too.
+  - A PartDesign body takes its BaseFeature's shape without the shape's placement: bake the
+    placement in (`shape.transformShape(matrix, True)`), or the copy lands on the original.
+  - A top-level `Part::FeaturePython` linking into a body needs `App::PropertyLink(Sub)Global`,
+    else "Link(s) ... go out of the allowed scope" is printed.
+  - An overlay drawn over the part (origin axes/planes) gets the press, but FreeCAD still
+    selects the part on the release: remember the overlay click and ignore that selection.
+  - `sketch_ui.PlanePicker` leaves every click over the part to the part (fine for Create
+    Sketch); pattern_ui subclasses it so a square in front of the part wins (Mirror Plane).
+  - Harness trap: a scenario step whose name contains "error" fails the step (the harness
+    reads its own "step: ..." log line in the Report view).
+  - **To confirm with Luca:** Fusion's Symmetric (rectangular and circular) is implemented as
+    "quantity and distance/angle per side, the original shared"; Direction 2 is offered at
+    right angles after Direction 1; Mirror of a body defaults to New Body.
+  - PartDesign features already own a `Suppressed` bool: a Python feature's own property of
+    that name is silently not added (use another name: `SuppressedCopies`).
+  - Quantity fields take parameters/formulas (`pattern_ui.CountBox`): FreeCAD's pattern
+    features cannot change their copy count from an expression cleanly, so such a pattern is
+    built by `PatternFeature` (expression `round(...)` on its `Quantity`). The spin arrows
+    drop the formula (a plain number again). Bodies refuse a quantity formula.
+  - A pattern has at most 2500 instances (`pattern_core.MAX_INSTANCES`, checked in
+    `pattern.check` and when the copies are computed): measured here, a LinearPattern of
+    50 x 40 holes took 14 s, 30 x 30 4 s; 5000 overlapping holes hung a scenario. The
+    Quantity box has keyboard tracking off (typing 900 must not build 9 and 90 on the way).
+  - The Total Angle handle counts on past 180 deg (`pattern_ui._TurnDragger` unwraps
+    extrude_ui.AngleDragger's -180..180 reading against the last one); drag up to 360.
+  - Theme (not patterns' file): an UNCHECKED QCheckBox indicator is practically invisible on
+    the dark task panel (the tick shows once checked). Affects Suppression and every other
+    dialog's check boxes: theme owner, give `QCheckBox::indicator` a visible border.
+  - Not done (gaps, see the parity doc): Compute Option Optimized/Adjust,
+    Components, face copies that heal into different
+    surroundings, an explicit start point on a path. Pattern on Path now has its timeline
+    kind (`pattern_path`: "Pattern on Path", pattern icon), added 2026-10-11.
+- **Timeline/browser QA findings (branch `sf/timeline_browser-qa`)**, rules for everyone:
+  - `Document.openTransaction` **commits the undo step that is open** (FreeCAD's
+    `setActiveTransaction` commits every document's). Anything that opens an undo step while
+    a command dialog is open (timeline/browser actions, playback) committed the dialog's
+    preview, and Cancel could no longer remove it. End the open command first
+    (`commands.finish_open_dialog()`), or do not change the document.
+  - A step inserted before a fillet/chamfer/shell (marker rolled back) or the step before it
+    deleted: FreeCAD re-links its `Base` to the new base with the old edge names ("Invalid
+    edge link", or silently other edges). `timeline_ops.settle()` (after every recompute,
+    via the timeline's document observer) finds the same edges again by place and size.
+  - A failed PartDesign step keeps its old shape and FreeCAD skips the body, so the 3D view
+    showed geometry that no longer existed after an edit in any dialog; `settle()` passes the
+    base shape through (Fusion: a red step adds nothing).
+  - Setting a sketch's `MapMode` attaches at once and prints "PositionBySupport: subshape not
+    found" (Report view + balloon) when the face is not there yet; the harness's word list
+    misses that line (`timeline_input.MORE_ERRORS` catches it).
+  - A right-click on a timeline step/browser row selected it, and a command waiting for picks
+    (Fillet takes whole features) used it. Right-clicks no longer pick while a command is open.
+  - SciForge helpers (objects with `SciForgeRole`, or `SciForgeTimeline = False`) are not
+    timeline steps; extrude.py's profile binders lacked the flag and showed as steps.
+  - Test input: release a drag with `QTest.mouseRelease` (through the window); a release
+    sent with `sendEvent` left the button "down" and the next click went to the dragged widget.
+  - Fixed since: while rolled back before a fillet, Extrude could not switch to Cut ("... is
+    used by Fillet"): `extrude.dependents()` now skips a dress-up's `Base` when it is its
+    `BaseFeature` (the history chain; `settle()` re-finds the edges). Scenario
+    `timeline_rolled_cut` (fails without the fix, checked).
+- **Shell / Draft / Scale findings (branch `sf/shell_draft`)**:
+  - FreeCAD's `PartDesign::Thickness` with no faces just copies the part (it cannot hollow a
+    closed body) and has one thickness (no Both): SciForge's `ShellFeature` does those
+    (offset inward + cut; two thick solids fused). Join "Intersection" = Fusion's sharp
+    corners, "Arc" = rounded.
+  - **OpenCASCADE's thick solid gives wrong parts without complaint** when the wall is too
+    thick: the plain solid back (box 10 high, wall 16), or an invalid solid sticking out of
+    the part (wall 20). `shelling._check` refuses those (valid, one solid, inside the part's
+    box, something hollowed) and the dialog bisects for the thickest wall that fits.
+  - `PartDesign::Draft` pulls along the neutral plane's own axis (a box's bottom face has axis
+    +Z, not its outward -Z) and passes `Reversed` on as "retry": a face it cannot tilt is
+    skipped with only a Report-view line, and many failures have an empty status string; a
+    new Draft that fails has a null Shape (`isValid()` raises). `drafting.check` /
+    `undrafted` catch these. Fusion's pull direction is out of a picked face.
+  - `Shape.transformShape(matrix)` silently ignores a non-uniform scale; `transformGeometry`
+    does it but turns faces into NURBS: exact (ellipse error 1e-15), yet FreeCAD's volume of
+    curved NURBS faces is ~1 % off. A sketch still attaches to a flat NURBS face.
+  - FreeCAD's naming loses a Pad's corner vertex when the Pad's length changes (the link
+    becomes `?Vertex6`, "missing element reference" in the log); SciForge uses the same
+    number then (`scale.plain_name`).
+  - **A selection gate also filters `Gui.Selection.addSelection` from code**: a dialog that
+    re-selects its own picks must allow them in its gate, or (pickpanel) read back what was
+    really selected; otherwise the next click looked like "that pick was clicked away".
+  - **FreeCAD's task box takes its height when it opens and does not grow** when a label's
+    minimum height is raised later: a 3-line error was cut off. `pickpanel` reserves room
+    for the message at layout time (the Fillet dialog has the same cut-off for its hint).
+  - Draggers inside a see-through part cannot be grabbed (Coin gives the click to the part's
+    face in front): the Draft handle sits on the face's continuation outside the part, the
+    Scale arrow keeps a gap from the corner it sits on (the corner stays clickable).
+- **CONSTRUCT / INSPECT findings (2026-10-11, branch `sf/inspect`):**
+  - FreeCAD's attacher cannot express most Fusion constructions (angle about an edge, tangent
+    at a clicked spot, a fraction along a curve). SciForge attaches those datums to a hidden
+    helper in the body (`construct.ConstructionFrame`, `SciForgeTimeline = False`,
+    `SciForgeRole`) that works out the exact frame on every recompute; Offset Plane of a face
+    of the same body stays FreeCAD's own FlatFace + offset (its distance is an expression).
+  - `PropertyLinkSubList` groups consecutive picks on the same object into one entry with
+    several sub-names: read it back with `construct.expand()` or picks get lost.
+  - Clicking a cylinder in the view often hits its seam edge: construct turns a seam edge into
+    the face (`construct.seam_face`).
+  - Angles about an edge must not depend on which way OpenCASCADE runs the edge: they turn
+    about the "upward" direction (`construct.upward`).
+  - Datum planes are big and in front: a scenario that clicks a face behind one hides it with
+    the browser eye first (that is what a person would do too).
+  - Section Analysis cuts with a Coin clip plane (`SciForgeSectionClip`) inserted first in each
+    body's view root, found again on every refresh (never keep a pointer); cut faces are
+    `shape.common(big face)`, drawn by the analysis' own view provider.
+  - A Center of Mass with nothing picked links to no body, so FreeCAD never recomputes it: a
+    document observer measures it again after recomputes, visibility changes and undo/redo
+    (`analysis.follow`, values marked Output so writing them does not touch the object).
+  - The browser's Analysis folder opens collapsed; scenarios open it with the keyboard
+    (row click + Right).
+  - **FreeCAD 1.1 label leak:** a Python view provider's attach() calls `Label.touch()`,
+    which counts the object's label a second time in the document's unique-label registry
+    (`DocumentObject::onChanged` with a stale `oldLabel`). After the object is deleted or
+    its preview cancelled, the label stays "taken" and FreeCAD renames the next object
+    (a cancelled Section1 made the next one "Section3"). SciForge's analyses answer
+    `allowDuplicateLabel` with yes only while SciForge sets the label it worked out
+    (`labels.set_exact`); datums take the next free number (`labels.set_free`). Other
+    features with Python view providers (Press Pull, Shell, Scale ...) have the same leak.
+  - Run `black` only on your own files: a reformatted shared file broke another agent's text
+    replacements.
+
+- **Body tools findings (branch `sf/bodies`)**:
+  - FreeCAD's `PartDesign::Boolean` adopts its tool bodies as children (GeoFeatureGroup): they
+    then move with the target body and their parent is no longer the document. SciForge's
+    Combine is its own `PartDesign::FeaturePython` (`combine.CombineFeature`) that links each
+    tool body's end step (`PropertyLinkListGlobal`), so the timeline, edits and undo work.
+  - A step that "uses up" bodies (Combine without Keep Tools) registers in
+    `bodies.CONSUMERS`; `bodies_gui.Watch` hides/shows bodies only on a *change* of that state
+    (after recompute, undo/redo, delete), so a body the user shows on purpose stays shown.
+    Body-tool dialogs pause it (`bodies.pause`) while they show the bodies they work on.
+  - Deleting a step (SciForge's Delete): steps that used its edges/faces are re-pointed at the
+    same edges/faces of the step before it (`delete._relink_to_base`, matched by geometry),
+    so a fillet survives deleting the boss under it. The timeline's own Delete does not do
+    this yet (timeline owner: `delete.delete_steps` can be called without a transaction).
+  - A manipulator that follows the bodies while dragged must measure the drag from where it
+    was grabbed (`move_ui.Triad._drag_center`), else every drag moves half the distance.
+  - An origin `App::Line` runs along its own **X** (its placement's X), not Z
+    (`pattern._line_of_datum` knew; `move.axis_of` does it too).
+  - Enter in a QLineEdit of a task panel presses the panel's OK (dialog closes): a field that
+    takes Enter itself needs an event filter that eats it (`appearance_ui._EnterTakes`).
+  - `doc.addObject("PartDesign::Body")` before computing the next "BodyN" label counted the new
+    body twice (Body3 for the second body): compute the label first (`bodies.new_body`).
+  - FreeCAD materials: a body's `ShapeMaterial` propagates to its features; FreeCAD's Default
+    material weighs 1 kg/m^3 (Fusion starts in Steel: `material.effective` counts Default as
+    Steel); Brass and GrayCastIron have no density in FreeCAD's library (not offered).
+    Setting `ViewObject.ShapeAppearance` on a body copies it to every feature, but a feature
+    added later starts grey: SciForge stores looks on the body (JSON, undoable) and puts
+    them on every step after each recompute (`appearance.sync`, cached by shape hash).
+  - FreeCAD's `Document.openTransaction` commits any open transaction (no nesting): a command
+    that must be one undo step cannot call `timeline_ops.delete` (it opens its own).
+  - Requests for other owners: browser (show a body's physical material, hide used-up
+    bodies), inspect (mass from `bodies.mass(body)`), timeline (a kind "delete_face" with
+    the delete icon for `SciForge::DeleteFace`; steps outside bodies such as a Move copy never
+    roll back with the marker).
+    surroundings, an explicit start point on a path. The timeline module has no entry for
+    `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
+    kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
+    `"PatternOnPath"` to it in `KIND_BY_SCIFORGE_TYPE`.
+- **Fillet / Chamfer QA findings (branch `sf/fillet-qa`)**:
+  - **Trap: FreeCAD's number box reads a bare number in the unit it shows.** Below 0.1 mm
+    `Gui::QuantitySpinBox` shows micrometres; after a drag down to 0.01 mm ("10.00 µm") a
+    typed "1.5" became 1.5 µm and every later value was a thousand times too small. The
+    Fillet/Chamfer boxes (`blend_field.ValueField`) read the text themselves (bare number =
+    mm / degrees, "0.1 in" works, names and formulas become expressions). **The shared
+    `taskui.DistanceField` (Extrude, Press Pull, every dialog) has the same trap**: owner of
+    taskui, give it the same reading (or make drags stop at 0.1 mm). Its `autoNormalize`
+    also swallows the first Enter after a sum ("2*0.25"): set the property False.
+  - **Timeline Delete of the last step hides the whole part** (timeline owner,
+    `timeline_ops.delete`): FreeCAD already moved `body.Tip` back when the step was removed,
+    so `_set_tips()` sees no change and skips `_show_only_tip()`; the new Tip keeps
+    Visibility False. Fix: call `_show_only_tip(body, body.Tip)` after the removal whatever
+    the Tip was. Reported as KNOWN in `fillet_qa_more.py` (P19).
+  - FreeCAD's element names do not survive an edge that an earlier change trims: a fillet
+    inserted with the marker rolled back, or an earlier fillet edited to round one more
+    edge, broke the later fillets ("Invalid edge link" in the Report view). Edits that keep
+    the topology (sketch dimensions, extrude length, Press Pull distance, fillet radius)
+    were fine. `blend.References` keeps later dress-ups' edges/faces as geometry and
+    `recompute_keeping` puts them back on the same (possibly shorter) edge.
+  - OpenCASCADE's tangent chain also runs through edges an *earlier* change made tangent:
+    after a round is inserted, a later fillet's edge that now meets that round's end arc
+    tangentially continues round the arc and down the next edge (Fusion's Tangent Chain does
+    the same; volumes in the QA account for it).
+  - A body may hold several solids (two profiles extruded apart); the old "would cut the part
+    into pieces" check compared with 1 solid instead of the body's own count.
+  - `QTest.mouseDClick` never releases the button: Qt then believes the left button is held
+    (`QApplication.mouseButtons()`), and dialogs that ignore keys while a handle is dragged
+    ignored Esc. `blend_steps.timeline_double_click` now sends the release, and with
+    `click_first=True` (the fillet QA scenarios) the events of a person's double-click:
+    press, release (the timeline selects the step), double-click, release.
+  - **Hole (hole owner, `hole_ui.py`)**: with a person's double-click on "Hole 1" in the
+    timeline (the first click selects the Hole step), the edit dialog then picks nothing
+    when a reference edge is clicked (`hole.py` scenario run with `click_first=True`:
+    "one reference edge" ... 7 checks fail, every time). Probably the whole-feature
+    selection the timeline click left behind; the hole scenarios pass only with the bare
+    double-click. Switch `hole.py` to `click_first=True` and fix the dialog.
+  - A selected timeline item is a whole-feature selection: F after a right-click on the
+    timeline (Roll History Marker Here) rounded every edge that feature made. Whole features
+    are no longer taken as picks when F starts (a timeline click *inside* the dialog still
+    adds the feature's edges).
+  - A Coin `SoSearchAction` / `Edge.Curve` on a degenerated edge (where three rounds meet)
+    raises `TypeError: undefined curve type`: guard every `.Curve` read.
+  - Display parity notes: FreeCAD draws a cylinder's seam as a line (Fusion does not), and the
+    overlay title bar of the Tasks dock sometimes shows as a white strip in screenshots.
 
 ## Questions waiting for Luca
 
@@ -343,6 +778,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   session it can resume with resumeFromRunId "wf_4a2277cc-81f". (The fillet build agent never
   returned a report; its committed branch was merged as is.)
 - ribbon_sweep KNOWN list: only "Shell" left (shell_draft fixes it); remove when fixed.
+  (Done on `sf/shell_draft`: the list is empty.)
 
 ### 2026-10-10: Hole and Thread (branch `sf/hole`)
 - Continued the parked WIP patch (applied, reviewed, mostly rewritten; patch removed). New:
@@ -361,11 +797,198 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   cosmetic threads are a dashed helix, not a texture; a hole on a curved face keeps its spot
   (helper sketch placed in the body, not attached to the face); depth is measured to the
   drill point's shoulder (Fusion's default to confirm with Luca).
+### 2026-10-10: QA of Extrude and Press Pull (branch `sf/extrude_presspull-qa`)
+- 7 new scenarios `extrude_presspull_qa*.py` (28 paths, real input only) found and fixed:
+  a press on the drag arrow dropped the sketch area behind it; after a New Body switch or
+  dropping the only pick the whole part vanished (hidden Tip); Ctrl+Z in a dialog left it
+  working on deleted objects; Ctrl+S saved a half-made preview; closing a design under a
+  dialog blocked every later command; clicks in another open design were taken as picks;
+  To Object a body extruded nothing; an unchanged dialog threw away the Redo list; a
+  double-click on the timeline icon of the step being made printed a ReferenceError
+  (one-line guard in `taskui.edit_object`); Press Pull only worked on the active body; a
+  ball's face could not be Press Pulled; "To Object" showed a warning while waiting.
+- New Fusion behaviour: taper with To Object / join through All (SciForge's
+  `ExtrudeFeature`, property `Operation`); parameters and formulas typed in Extrude and
+  Press Pull fields; Enter is OK over the 3D view; clicking the end of a preview drops the
+  profile it came from; Symmetric no longer offers To Object. 3 golden models (tapers).
+### 2026-10-10: Revolve (branch `sf/revolve`)
+- Built Fusion's Revolve (see the Phase 1 checkbox): `sciforge/revolve.py` (Qt-free core, used
+  by the dialog and the golden builder), `sciforge/revolve_ui.py` (dialog, clickable origin
+  axes and construction lines, on-top angle handle, editors for Revolution / Groove /
+  SciForge::Revolve). Ribbon: one line removed ("Revolve (Cut)").
+- Tests: scenarios `revolve_basic` (nothing selected, Z axis click, Full/Angle, handle drag,
+  Symmetric, Two Sides, OK, undo/redo, timeline edit, auto-Cut groove, Cancel, Esc),
+  `revolve_axes` (sketch line axis, Join/Intersect/New Body, face + edge selected first,
+  auto Cut by direction, edit, undo/redo, construction line, angle error kept in the
+  dialog), `revolve_edit` (a FreeCAD-made revolve edited, side-two handle, Esc in an edit,
+  two profiles toggled, axis cleared and re-picked). 12 golden models `sf_revolve_*`
+  (cylinder, cone, torus, groove auto-cut, intersect, new body about a construction line,
+  the same following the line when it is moved, two sides, symmetric, sketch line axis,
+  face + edge, edit Groove <-> Revolution), schema unit tests `test_revolve_schema.py`.
+- Gap: Fusion's Type "To" (FreeCAD's Groove up to a face gives an empty solid, see Known
+  issues). Not checked by Luca yet.
+
+### 2026-10-10: Sketch QA (branch `sf/sketch-qa`)
+- Broke the merged sketch workspace on purpose with 3 new scenarios (only real input):
+  `sketch_qa.py` (12 paths: typed lines, timeline edits, undo/redo, save/reopen, broken
+  profile, bad values, Esc everywhere, tool switching, marking menu, Del/M/Ctrl+C/V,
+  construction, fillet, polygon, constraint tools), `sketch_qa_part.py` (multi-feature part
+  with Press Pull and sketch edits), `sketch_qa_keys.py` (keys sent where a real keyboard
+  sends them). About 30 bugs fixed; the list with how each was found is in the branch's
+  commits and `parity/sketch.md`.
+- Biggest finds: every SciForge sketch key only worked in tests (keys went to the GL widget;
+  a real keyboard sends them to the viewer or FreeCAD's value field, see Known issues);
+  `NonIntrusiveNotificationsEnabled` False turned FreeCAD warnings into blocking boxes;
+  Up/Down in the dimension box recursed ~1000 deep; the notification check never looked.
+- Full suite on the branch (no --only): unit 134 OK, golden 99 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 29 scenarios
+  PASS (2762 checks; sketch_qa 457, sketch_qa_keys 119, sketch_qa_part 104).
+- Left open: Fusion's angle typed relative to the previous line, tangent arc by dragging from
+  a line end, greyed sketch tools, Fusion's constraint glyph look; sketch_polygon failed once
+  ("second use") and never again; one see-through task panel screenshot (path F).
+
+### 2026-10-10: Patterns and Mirror (branch `sf/patterns`)
+- New: `pattern_core.py` (where copies go, pure), `pattern.py` (document side: FreeCAD's
+  pattern features with both spacing lists written, symmetric gap walks, SciForge's
+  `PatternFeature` for faces / paths / anything FreeCAD cannot repeat, new-body copies for
+  Bodies), `pattern_ui.py` (Rectangular / Circular / Pattern on Path dialogs, origin-axis and
+  front-plane pickers, highlight overlay, arrows, angle handle, editors, delete watch for body
+  patterns), `mirror_ui.py` (Mirror). Ribbon: Pattern on Path enabled (one line).
+- Later the same day: Suppression (dots on the copies), Quantity from a parameter/formula,
+  SciForge's own extrude / a pattern step as mirror and pattern objects.
+- Tests: scenarios `patterns_rect`, `patterns_circ`, `patterns_mirror`, `patterns_path`,
+  `patterns_suppress`, `patterns_params`, `patterns_qa` (real input only); golden ops
+  `rectangular_pattern`, `circular_pattern`, `path_pattern`, `fusion_mirror`, `pattern_edit`
+  (`golden/pattern_ops.py`) + 19 models;
+  unit tests `test_pattern_core.py` (17).
+- Parity doc `docs/sciforge/parity/patterns.md` (assumptions to confirm with Luca, gaps).
+- Full suite at the end: unit 153 OK; golden 121 pass + 1 xfail (`plate_hole_grid`, needs
+  core patch #4); smoke 70/70; journey 25/25; 39 of 40 scenarios PASS in the full run,
+  `sketch_draw` failed 3 checks ("circle diameter typed: 8" got r 4.97) while another
+  worktree's suite ran at the same time, and PASSES alone (86 checks): timing-sensitive,
+  sketch owner to look at.
+### 2026-10-11: QA of the timeline and browser (branch `sf/timeline_browser-qa`)
+- 4 new scenarios `timeline_browser_qa*.py` (24 paths, real input only; balloons and the extra
+  Report-view words watched) found and fixed: an edit that broke a later step left the old
+  shape on screen; a step added at the rolled-back marker or deleted before a fillet broke the
+  fillet; editing a step after the marker showed nothing (now rolls to it and back); Play kept
+  rolling under an opened dialog (committed its preview); Unsuppress printed "subshape not
+  found"; suppressed steps showed yellow; Suppress greyed for several steps; the marker could
+  not stand before a sketch (now saved in the document) and sketches after it stayed drawn;
+  step numbers changed when steps moved (now by creation order: FreeCAD's label numbers
+  also count cancelled previews, so they are not usable); an extrude's binder showed as a step; a right-click
+  during Fillet made a fillet; rename/activate/find opened undo steps inside a command; two
+  origins after reopening; Esc did not drop a drag; long timelines hid the marker; "Hide
+  Timeline" had no way back. New: hovering a step lights up the faces it made (Fusion).
+  2 golden models (`tl_delete_before_fillet`,
+  `tl_insert_before_fillet`), unit tests for the marker, numbering, origin, suppressed rows.
+- Left for others: Extrude cannot switch to Cut while rolled back before a fillet (extrude),
+  the floating empty "Tasks" header over the 3D view (shell), browser vs timeline names
+  (shared smoke test).
+- Trap: the timeline's height sets the 3D view's size; 8 px more moved where a scenario's
+  click lands (sketch_polygon's snap) - keep the dock height.
+### 2026-10-11: Shell, Draft, Scale (branch `sf/shell_draft`)
+- Built Fusion's Shell, Draft and Scale (see the Phase 1 checkbox and Known issues). New
+  modules: `shelling.py` / `shell_ui.py`, `drafting.py` / `draft_ui.py`, `scale.py` /
+  `scale_ui.py`, shared dialog base `pickpanel.py` (picking with toggling clicks, see-through
+  "before" part + solid preview, Esc/Enter/Ctrl+Z guards, Delete held). Shared edits: one
+  ribbon line (Scale -> `SciForge_Scale`), ribbon_sweep `KNOWN` emptied (Shell fixed),
+  append-only golden ops (`schema.py`, one import line in `builder.py`).
+- Tests (only real input): `shell_draft` (nothing selected, picks/drops, typed value, arrow
+  drag, Both / Outside / Rounded, too thick + hint, OK, undo/redo, timeline edit to Both,
+  Cancel, Esc), `shell_draft_hollow` (body picked in the browser, preselected face + Enter,
+  second shell on the result, Ctrl+Z inside, editing the first of two shells, a parameter
+  formula, save/reopen), `shell_draft_draft` (origin square, faces, handle, flip, refused
+  face, too steep, edit, Cancel, Esc, second draft with a preselected face),
+  `shell_draft_scale` (body click, arrow drag, corner point, Non Uniform, factor 0, edit,
+  Cancel, Esc, preselected body + Enter, save/reopen), `shell_draft_qa` (rounded block:
+  tangent runs, a second body followed by Draft and Shell). 20 golden models, unit tests.
+- Full suite on the branch (no --only): unit 149 OK, golden 134 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 45 scenarios
+  PASS (3847 checks).
+- Gaps: Draft Parting Line / Two Sides / Symmetric (greyed: FreeCAD's Draft cannot split
+  faces), Scale of sketches/components, several bodies in one step, Change Parameters does
+  not list SciForge's own Shell (hollow/Both) and Scale values (`parameters.py` knows only
+  Press Pull among SciForge's features). Not checked by Luca yet.
+
+### 2026-10-11: Body tools (branch `sf/bodies`)
+- New: `bodies.py` (helpers any multi-body tool can call: `list_bodies`, `new_body`,
+  `active_body`/`set_active_body`/`find_body`, `body_of`, `global_shape`/`to_local`,
+  `mass`), `combine.py`/`combine_ui.py` (Combine), `split.py`/`split_ui.py` (Split Body,
+  incl. sketch lines/arcs as tools), `move.py`/`move_ui.py` (Move/Copy: Free Move
+  manipulator `Triad`, Translate, Rotate, Point to Point, Point to Position, Create Copy),
+  `delete.py`/`delete_ui.py` (Delete, Delete Face step and its edit dialog),
+  `appearance.py`/`appearance_ui.py`, `material.py`/`material_ui.py`, `bodies_panel.py`
+  (shared dialog base), `bodies_gui.py` (step view provider + document watch).
+  Ribbon: Split Body enabled (one line). No core patch.
+- Tests: scenarios `bodies_combine`, `bodies_split`, `bodies_move`, `bodies_delete`,
+  `bodies_look`, `bodies_timeline` (real input only; timeline roll/suppress/delete, Ctrl+Z
+  in a dialog, save + reopen); golden ops in `golden/bodies_ops.py` (combine, split_body,
+  move_bodies, delete_face, delete_bodies, body_tool_edit, measure_bodies) + 24 models
+  `bodies_*`; unit tests `test_bodies_schema.py`.
+- Spec and gaps: `docs/sciforge/parity/bodies.md`.
+- Full suite at the end (no --only, 2026-10-11, 4 CPUs shared with another agent's GUI
+  tests): unit 166 OK; golden 157 pass + 1 xfail (`plate_hole_grid`, needs core patch #4);
+  smoke 70/70; journey 25/25; 56 of 56 scenarios PASS (4393 checks; bodies_combine 90,
+  bodies_split 82, bodies_move 85, bodies_delete 63, bodies_look 58, bodies_timeline 64).
+- Left for others (see findings): the browser to show a body's material and hide used-up
+  bodies, Inspect to read `bodies.mass()`, the timeline a "delete_face" kind and roll-back
+  of steps outside bodies (a Move copy).
+
+### 2026-10-11: QA of Fillet and Chamfer (branch `sf/fillet-qa`)
+- Broke the merged Fillet/Chamfer on purpose with 4 new scenarios, only real input, 22 paths:
+  `fillet_qa.py` (beginner, wrong order, Esc mid-pick, fast typing, far/negative drags,
+  three timeline edits + undo/redo, E/Q/F/Ctrl+S inside the dialog, save-close-reopen-edit),
+  `fillet_qa_part.py` (a real part: sketch, extrude, boss fillet, Press Pull of the round, a
+  pocket, a chamfer, then the first extrude made taller; history edits and an insert with the
+  marker rolled back; a two-solid body; a radius from a parameter), `fillet_qa_chamfer.py`,
+  `fillet_qa_more.py` (marking menu, two designs, two bodies, keys in the box, x button,
+  timeline Delete, empty design, Press Pull edited under a fillet, design closed under the
+  dialog). 2 golden models + ops `blend_insert` / `blend_edit` (`golden/blend_ops.py`).
+- Bugs fixed (see Known issues "Fillet / Chamfer QA findings" and `parity/fillet.md`): µm
+  reading of typed numbers after a drag, no parameters/formulas (and a FreeCAD pop-up on
+  "="), Enter swallowed after a sum, Ctrl+S saving a half-made fillet, later fillets broken by
+  an insert / an edit ("Invalid edge link"), two-solid bodies refused, 90° chamfer angle with
+  a kernel message, F after a timeline right-click rounding a whole feature, F inside a
+  dialog reusing its picks, a hidden fillet left in the body after dropping every pick,
+  clicks in another design taken as picks, the drag arrow left behind the edge.
+- Reported, not mine to fix: timeline Delete of the last step hides the whole part
+  (`timeline_ops.delete`); `taskui.DistanceField` has the µm trap in every other dialog.
+- Full suite at the end (no --only): unit 161 OK; golden 135 pass + 1 xfail
+  (`plate_hole_grid`, needs core patch #4); smoke 70/70; journey 25/25; 54 of 54 scenarios
+  PASS (4310 checks; fillet_qa 112, fillet_qa_part 96, fillet_qa_more 90,
+  fillet_qa_chamfer 62; the teammate's fillet 67, fillet_chamfer 48, fillet_features 23,
+  fillet_chain 14 unchanged).
+### 2026-10-11: CONSTRUCT and INSPECT (branch `sf/inspect`)
+- Reworked all 19 CONSTRUCT entries (see the Phase 1 checkbox) and built Fusion's Measure,
+  Section Analysis, Center of Mass and Interference. New modules: `construct.py` (rewritten),
+  `construct_ui.py` (rewritten), `handles3d.py` (arrow, path dot, clickable dots, overlay),
+  `measure.py`, `measure_ui.py`, `section.py`, `section_ui.py`, `analysis.py`, `com_ui.py`,
+  `interference_ui.py`, `bodypick.py`, `labels.py` (exact Fusion-style names, see Known
+  issues). Shared edits: four ribbon lines (Plane Tangent to Face at Point, Axis
+  Perpendicular to Face at Point, Interference, Center of Mass), append-only golden ops
+  (`schema.py`, one import line in `builder.py`, ops in `golden/inspect_ops.py`).
+- Tests (only real input): `inspect_construct` (Offset Plane: nothing selected, click, arrow
+  drag, typed value, undo/redo, timeline edit, Cancel, Esc, preselected + Enter, origin
+  square, sketch on the plane also over the part, extrude from it), `inspect_construct_planes`
+  and `inspect_construct_axes` (every other entry), `inspect_construct_use` (Extrude To Object
+  a construction plane, Revolve about a construction axis, editing the plane moves both),
+  `inspect_measure`, `inspect_section` (also a second section started with a face
+  selected), `inspect_com_interference` (an all-bodies Center of Mass following a hidden
+  body and an edited extrude; a second Interference started with both bodies selected).
+  6 golden models, unit tests `test_inspect_core.py`.
+- Full suite on the branch (no --only): unit 192 OK, golden 161 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 68 scenarios
+  PASS (5847 checks), ribbon_sweep included.
+- Gaps (see `parity/inspect.md`): Tangent Plane reference plane, Along Path on a chain,
+  Offset Plane To Object, browser double-click/right-click Edit for Analysis items (browser
+  owner), one material for Center of Mass, Component filter, Interference "create bodies".
+  Not checked by Luca yet.
 
 ## Next steps (in order)
 
 1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
-   inspect, primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
+   inspect (built on `sf/inspect`, merge after review), primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
    then the QA stage for all 12 (including the 4 already merged). Merge each only after the full
    suite passes locally.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable

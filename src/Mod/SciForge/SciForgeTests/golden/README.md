@@ -62,15 +62,24 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `sketch` | `id`, `plane` (XY/XZ/YZ), `offset`, `geometry` | Create Sketch (on an offset plane) |
 | `extrude` | `id`, `profile`, `distance`, `operation` (join/cut/new_body), `direction` (one_side/symmetric/two_sides), `distance2`, `extent` (distance/through_all), `taper`, `flip` | Extrude |
 | `revolve` | `id`, `profile`, `axis` (X/Y/Z/sketch_h/sketch_v), `angle`, `operation` | Revolve |
+| `sf_revolve` | `id`, `profile` (+ `regions`) or `face`, `axis` (X/Y/Z, `{"sketch", "at"}`, `{"sketch", "construction"}`, `{"sketch", "axis": "H"/"V"}`, `{"edge": selector}`), `type` (angle/full), `direction` (one_side/two_sides/symmetric), `angle`, `angle2`, `operation` (auto = the dialog's own choice) | Revolve dialog (`sciforge/revolve.py`, details in `golden/revolve_ops.py`) |
+| `sf_revolve_edit` | `target`, `set` {revolve options} | double-click a revolve in the timeline and change it |
 | `fillet` | `id`, `edges` (selector), `radius` | Fillet |
 | `chamfer` | `id`, `edges`, `distance`, `distance2` or `angle` | Chamfer |
 | `blend_fillet` | `id`, `radius`, and `edges` / `faces` (every sharp edge around them) / `features` (step ids: the edges each made) | Fillet dialog (`sciforge/blend.py`, the F command's code) |
 | `blend_chamfer` | `id`, `distance`, `chamfer_type` (equal/two/angle), `distance2`, `angle`, `flip`, and `edges` / `faces` / `features` | Chamfer dialog |
+| `blend_insert` | `id`, `kind` (fillet/chamfer), the options above, `edges` / `faces` | Fillet / Chamfer made with the timeline marker rolled back (after a `roll`): later blends keep their edges (`golden/blend_ops.py`) |
+| `blend_edit` | `target`, `add_edges` / `add_faces` (selectors on the shape it is applied to), `set` {options} | double-click a Fillet / Chamfer in the timeline, pick more edges, change sizes; later blends keep their edges |
 | `shell` | `id`, `faces` (faces to remove), `thickness`, `direction` (inside/outside) | Shell |
 | `hole` | `id`, `sketch` (hole centres = its circles' centres), `diameter`, `depth` or `through_all`, `counterbore {diameter, depth}` or `countersink {diameter, angle}` | Hole |
 | `pattern_rect` | `id`, `features`, `direction`, `count`, `spacing`, optional second direction `direction2`, `count2`, `spacing2` | Rectangular Pattern |
 | `pattern_circ` | `id`, `features`, `axis`, `count`, `angle` | Circular Pattern |
 | `mirror` | `id`, `features`, `plane` | Mirror |
+| `rectangular_pattern` | `id`, one of `features` (step ids) / `faces` (selector) / `body: true`, `direction` (X/Y/Z or `{"edge": sel}` / `{"face": sel}`), `quantity`, `distance`, `distribution` (extent/spacing), `direction_type` (one/symmetric), `direction2`, `quantity2`, `distance2`, `direction_type2`, `expressions` | Rectangular Pattern dialog (`golden/pattern_ops.py`, `sciforge/pattern.py`: the dialog's code). Bodies make new bodies; the model is then measured over every body |
+| `circular_pattern` | `id`, what (as above), `axis` (X/Y/Z, edge or round face), `quantity`, `type` (full/angle/symmetric), `angle` | Circular Pattern dialog |
+| `path_pattern` | `id`, what, `path` `{"sketch": id}` or `{"sketch": id, "edge": n}`, `quantity`, `distance`, `distribution`, `direction_type`, `orientation` (identical/path) | Pattern on Path dialog |
+| `fusion_mirror` | `id`, what, `plane` (XY/XZ/YZ or `{"face": sel}`), `operation` (join/new_body, bodies) | Mirror dialog |
+| `pattern_edit` | `target`, `set` {dialog field: value} | double-click a pattern in the timeline and change its fields |
 | `edit` | `target`, `set` {option: value} or `constraint` + `value` | double-click a timeline item and change it |
 | `check` | `expect` | measure the part at this point (before an edit, for example) |
 | `sketch_polygon` | `sketch`, `center`, `point` (middle of an edge, or a corner), `sides`, `circumscribed`, `diameter`, `name` | Circumscribed / Inscribed Polygon in a sketch (golden/sketch_ops.py) |

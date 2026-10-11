@@ -47,6 +47,17 @@ class ClassifyTests(unittest.TestCase):
 
     def test_sciforge_types(self):
         self.assertEqual(core.classify("SciForge::PressPull"), "presspull")
+        self.assertEqual(core.classify("SciForge::PatternOnPath"), "pattern_path")
+        self.assertEqual(
+            core.title_base("SciForge::PatternOnPath", "pattern_path"), "Pattern on Path"
+        )
+        self.assertEqual(core.icon_for("pattern_path"), "pattern_rect")
+        self.assertEqual(core.classify("SciForge::Mirror"), "mirror")
+        self.assertEqual(core.classify("SciForge::DeleteFace"), "delete_face")
+        self.assertEqual(core.icon_for("delete_face"), "delete")
+        self.assertEqual(core.classify("SciForge::Combine"), "combine")
+        self.assertEqual(core.classify("SciForge::SplitBody"), "split_body")
+        self.assertEqual(core.classify("SciForge::MoveCopy"), "move")
         self.assertEqual(core.classify("SciForge::Coil"), "coil")
         self.assertEqual(core.classify("SciForge::SplitBody"), "split_body")
         self.assertEqual(core.classify("SciForge::WeirdThing"), "other")
@@ -70,6 +81,54 @@ class BuildTests(unittest.TestCase):
             [i.title for i in tl.items],
             ["Sketch 1", "Extrude 1", "Sketch 2", "Extrude 2", "Fillet 1"],
         )
+
+    def test_numbers_stay_when_steps_move(self):
+        """Fusion names a step when it is made: moving it or adding a step before it
+        never renames it."""
+        rows = one_body()
+        moved = [rows[0], rows[1], rows[4], rows[2], rows[3]]  # fillet before the boss
+        self.assertEqual(
+            [i.display for i in core.build(moved, {"Body": "Pad001"}).items],
+            ["Sketch 1", "Extrude 1", "Fillet 1", "Sketch 2", "Extrude 2"],
+        )
+        # A third extrude inserted at the marker, before the second one.
+        inserted = rows[:2] + [feat("Sketch002", SKETCH, 6), feat("Pad002", PAD, 7)] + rows[2:]
+        titles = [i.display for i in core.build(inserted, {"Body": "Fillet"}).items]
+        self.assertEqual(titles[2:5], ["Sketch 3", "Extrude 3", "Sketch 2"])
+        # Numbers count the steps that exist (FreeCAD also counts cancelled previews).
+        gone = [r for r in rows if r["name"] != "Pad"]
+        self.assertIn("Extrude 1", [i.display for i in core.build(gone, {"Body": "Fillet"}).items])
+        skipped = [dict(r) for r in rows]
+        skipped[3].update(name="Pad004", label="Pad004")  # four previews were cancelled
+        titles = [i.display for i in core.build(skipped, {"Body": "Fillet"}).items]
+        self.assertEqual(titles[3], "Extrude 2")
+
+    def test_a_step_rebuilt_as_another_kind_keeps_its_number(self):
+        # SciForge's extrude turned into a cut is a new object that keeps the old label.
+        rows = [
+            feat("Sketch", SKETCH, 1),
+            feat("Extrude002", "PartDesign::Pocket", 9, label="Extrude"),
+            feat("Sketch001", SKETCH, 3),
+            feat("Extrude001", PAD, 4),
+        ]
+        titles = [i.display for i in core.build(rows, {"Body": "Extrude001"}).items]
+        self.assertEqual(titles, ["Sketch 1", "Extrude 1", "Sketch 2", "Extrude 2"])
+
+    def test_clashing_labels_get_free_numbers(self):
+        rows = one_body()
+        rows[3] = feat("Extrude", PAD, 4, label="Extrude")  # Pad and Extrude: both "1"
+        titles = [i.display for i in core.build(rows, {"Body": "Fillet"}).items]
+        self.assertEqual(titles.count("Extrude 1"), 1, titles)
+        self.assertIn("Extrude 2", titles)
+        self.assertEqual(core.label_number("Sketch", "Sketch"), 0)
+        self.assertEqual(core.label_number("Sketch004", "Sketch004"), 4)
+        self.assertIsNone(core.label_number("Base plate", "Pad"))
+
+    def test_renamed_step_keeps_its_place_in_the_count(self):
+        rows = one_body()
+        rows[1]["label"] = "Base"
+        tl = core.build(rows, {"Body": "Fillet"})
+        self.assertEqual([tl.items[1].title, tl.items[3].title], ["Extrude 1", "Extrude 2"])
 
     def test_renamed_step_shows_its_name(self):
         rows = one_body()
@@ -187,6 +246,45 @@ class MarkerTests(unittest.TestCase):
     def test_nothing_before_the_first_solid(self):
         self.assertIsNone(core.tips_for_step(build(tip="Pad"), "prev"))
         self.assertIsNone(core.tips_for_step(build(tip="Pad"), "start"))
+
+    def test_marker_before_a_sketch(self):
+        """Fusion: the marker may stand before a sketch that follows the last active
+        solid step; that sketch is then rolled back too."""
+        tl = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
+        self.assertEqual(tl.marker, 2)
+        self.assertEqual(tl.before, "Sketch001")
+        self.assertEqual(tl.find("Sketch001").state, "rolled_back")
+        self.assertEqual(tl.find("Pad").state, "done")
+
+    def test_marker_note_that_does_not_fit_the_tips_is_ignored(self):
+        # After an undo the Tips moved on: the note no longer applies.
+        tl = core.build(one_body(), {"Body": "Fillet"}, "Sketch001")
+        self.assertTrue(tl.at_end)
+        self.assertEqual(tl.before, "")
+        # A solid step is never "before the marker" by note.
+        tl = core.build(one_body(), {"Body": "Pad"}, "Pad001")
+        self.assertEqual(tl.marker, 3)
+        self.assertEqual(tl.before, "")
+        self.assertEqual(core.build(one_body(), {"Body": "Pad"}, "Gone").marker, 3)
+
+    def test_drop_before_a_sketch(self):
+        tips, before = core.marker_for_slot(build(), 2)
+        self.assertEqual(tips, {"Body": "Pad"})
+        self.assertEqual(before, "Sketch001")
+        # Just before the next solid: the default spot, no note.
+        self.assertEqual(core.marker_for_slot(build(), 3), ({"Body": "Pad"}, None))
+        # Same Tips, only the side of the sketch changes.
+        rolled = core.build(one_body(), {"Body": "Pad"})
+        self.assertEqual(core.marker_for_slot(rolled, 2), (None, "Sketch001"))
+        noted = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
+        self.assertEqual(core.marker_for_slot(noted, 3), (None, None))
+        # Before the first solid still snaps after it (FreeCAD needs a Tip).
+        self.assertEqual(core.marker_for_slot(build(), 0), ({"Body": "Pad"}, None))
+
+    def test_marker_note_changes_the_signature(self):
+        a = core.build(one_body(), {"Body": "Pad"})
+        b = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
+        self.assertNotEqual(core.signature(a), core.signature(b))
 
 
 class MoveTests(unittest.TestCase):

@@ -1,0 +1,60 @@
+{
+  "id": "bodies_move_copy",
+  "title": "Move/Copy with Create Copy: a copy 50 to the right as a new body",
+  "tags": [
+    "bodies",
+    "move",
+    "copy",
+    "new-body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "translate",
+      "dx": 50,
+      "copy": true
+    }
+  ],
+  "expect": {
+    "volume": 24000,
+    "area": 7600,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      90,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Measured over the original (0..40) and the copy (50..90)."
+  }
+}

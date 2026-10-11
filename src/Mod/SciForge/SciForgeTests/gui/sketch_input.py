@@ -101,42 +101,77 @@ def notifications():
     balloon; they do not reach the Report view the harness watches)."""
     found = []
     for widget in Gui.getMainWindow().findChildren(QtWidgets.QPushButton):
-        if widget.metaObject().className() != "Gui::NotificationArea":
-            continue
+        # Gui::NotificationArea has no Q_OBJECT of its own, so Qt names it "QPushButton"
+        # (looking for its class name never found it: every check passed without looking).
+        # It is the push button whose menu holds the message list.
         menu = widget.menu()
-        if menu is None:
+        if menu is None or not menu.findChildren(QtWidgets.QTreeWidget):
             continue
-        for action in menu.actions():
-            tree = getattr(action, "defaultWidget", lambda: None)()
-            if isinstance(tree, QtWidgets.QTreeWidget):
+        # FreeCAD keeps new messages aside and moves them into its list only while its menu
+        # is open (aboutToShow); aboutToHide moves them aside again. Without this the list
+        # read here never had the new messages, and every check passed.
+        try:
+            menu.aboutToShow.emit()
+        except Exception:
+            pass
+        try:
+            # The list is made by the menu's widget action (createWidget, not a default
+            # widget: looking for defaultWidget() never found it, so nothing was ever read).
+            for tree in menu.findChildren(QtWidgets.QTreeWidget):
                 for i in range(tree.topLevelItemCount()):
                     item = tree.topLevelItem(i)
-                    found.append(" | ".join(item.text(c) for c in range(item.columnCount())))
+                    # FreeCAD's items compute their text (data()): ask per column of the list
+                    texts = [item.text(c) for c in range(tree.columnCount())]
+                    found.append(" | ".join(t for t in texts if t) or "(message)")
+        finally:
+            try:
+                menu.aboutToHide.emit()
+            except Exception:
+                pass
     return found
+
+
+def balloons():
+    """Texts of FreeCAD's pop-up balloons on screen now."""
+    return [
+        w.text()
+        for w in QtWidgets.QApplication.topLevelWidgets()
+        if w.isVisible() and w.metaObject().className() == "Gui::NotificationLabel"
+    ]
 
 
 _seen = {"count": None}
 
+# FreeCAD messages that are not a problem and never pop up while SciForge sketches
+# (sketch_mode.quiet_balloons): a snap that duplicated another one was dropped.
+QUIET = ("Autoconstraints cause redundancy",)
 
-def check_notifications(where):
+
+def check_notifications(where, allowed=()):
+    """Fail on FreeCAD messages new since the last check (except QUIET ones and the
+    `allowed` ones a step expects, e.g. a feature that cannot be rebuilt on purpose)."""
     msgs = notifications()
     if _seen["count"] is None:
         _seen["count"] = 0
     fresh = msgs[: len(msgs) - _seen["count"]] if len(msgs) > _seen["count"] else []
     _seen["count"] = len(msgs)
-    return h.check("No FreeCAD notification (pop-up balloon) after %s" % where, not fresh, fresh)
+    fresh = [m for m in fresh if not any(q in m for q in QUIET + tuple(allowed))]
+    shown = balloons()
+    ok = h.check("No FreeCAD notification after %s" % where, not fresh, fresh)
+    return h.check("No pop-up balloon after %s" % where, not shown, shown) and ok
 
 
 def watched(steps):
     """The steps, each also checking FreeCAD's notification balloons of the step before
     (the harness only reads the Report view), plus a last check at the end."""
     wrapped = []
-    previous = ["start"]
+    previous = ["start", ()]
     for step in steps:
 
         def run(step=step):
-            check_notifications(previous[0])
-            previous[0] = step.__name__
+            check_notifications(previous[0], previous[1])
+            # a step may expect FreeCAD messages: step.notes_ok = ("text", ...)
+            previous[:] = [step.__name__, tuple(getattr(step, "notes_ok", ()))]
             step()
 
         run.__name__ = step.__name__
@@ -146,7 +181,7 @@ def watched(steps):
         wrapped.append(run)
 
     def notifications_at_the_end():
-        check_notifications(previous[0])
+        check_notifications(previous[0], previous[1])
 
     wrapped.append(notifications_at_the_end)
     return wrapped
@@ -189,6 +224,11 @@ def click(point, approach=App.Vector(1.0, 0.6, 0)):
     sketch tools pick what is under the pointer from the moves), then click it."""
     for f in (3.0, 1.5, 0.5):
         h.move(h.screen_point(point + approach * f))
+    h.move(h.screen_point(point))
+    # A hand rests a moment on the spot before pressing. FreeCAD's sketch finds what is
+    # under the pointer when it redraws after a move; a press in the same instant (a busy
+    # machine) found nothing and the click selected nothing.
+    QtTest.QTest.qWait(80)
     return h.click(point)
 
 
@@ -294,7 +334,17 @@ def dimension_label(sketch, index):
     """Global 3D point where a length dimension's text is drawn (FreeCAD puts it
     LabelDistance away from the measured points, at their middle)."""
     c = sketch.Constraints[index]
-    if c.Second >= 0 or c.Second < -2:
+    if c.Type in ("Radius", "Diameter"):
+        # beyond the circle at the angle LabelPosition (10: not set, 0 for a circle)
+        import math
+
+        g = sketch.Geometry[c.First]
+        angle = 0.0 if c.LabelPosition == 10 else c.LabelPosition
+        direction = App.Vector(math.cos(angle), math.sin(angle), 0)
+        return sketch.getGlobalPlacement().multVec(
+            g.Center + direction * (g.Radius + c.LabelDistance)
+        )
+    if c.Second >= 0 or -2000 < c.Second < -2:  # -2000: no second element (a line's length)
         p1, p2 = _point(sketch, c.First, c.FirstPos), _point(sketch, c.Second, c.SecondPos)
     else:
         g = sketch.Geometry[c.First]
@@ -340,3 +390,76 @@ def near(a, b, tol=1e-6):
 
 def vnear(p, q, tol=1e-6):
     return (App.Vector(p) - App.Vector(q)).Length <= tol
+
+
+def tab():
+    """Press Tab on the keyboard (next on-screen value field while drawing)."""
+    key(QtCore.Qt.Key_Tab)
+
+
+def key(k, modifiers=QtCore.Qt.NoModifier):
+    """Press a key on the keyboard: it goes wherever the keyboard focus is (h.press puts
+    the focus on the 3D view first, which a real keyboard does not). k: a Qt.Key or a
+    letter. While a drawing tool runs, FreeCAD's on-screen value field has the focus."""
+    target = QtWidgets.QApplication.focusWidget() or h.gl_widget()
+    if isinstance(k, str):
+        QtTest.QTest.keyClicks(target, k, modifiers)
+    else:
+        QtTest.QTest.keyClick(target, k, modifiers)
+    QtWidgets.QApplication.processEvents()
+
+
+def focus_class():
+    """The C++ class of the widget with the keyboard focus (for checks)."""
+    widget = QtWidgets.QApplication.focusWidget()
+    return widget.metaObject().className() if widget is not None else ""
+
+
+def tooltip():
+    """The text next to the mouse pointer (commands.tell), or ""."""
+    return QtWidgets.QToolTip.text() if QtWidgets.QToolTip.isVisible() else ""
+
+
+def marking_menu():
+    """The marking menu on screen (right click), or None."""
+    pop = QtWidgets.QApplication.activePopupWidget()
+    if pop is not None and pop.objectName() == "SciForgeMarkingMenu":
+        return pop
+    return None
+
+
+def marking_labels():
+    menu = marking_menu()
+    if menu is None:
+        return []
+    return [b.text() for b in menu.findChildren(QtWidgets.QToolButton)]
+
+
+def marking_slot(label):
+    """Click the ring button `label` of the open marking menu with the mouse."""
+    menu = marking_menu()
+    if menu is None:
+        h.check("marking menu open for %s" % label, False)
+        return False
+    for button in menu.findChildren(QtWidgets.QToolButton):
+        if button.text() == label:
+            QtTest.QTest.mouseMove(button, button.rect().center())
+            QtTest.QTest.mouseClick(button, QtCore.Qt.LeftButton)
+            QtWidgets.QApplication.processEvents()
+            return True
+    h.check("marking menu has %s" % label, False, marking_labels())
+    menu.close()
+    return False
+
+
+def drawing():
+    """True while a sketch tool runs (FreeCAD's drawing cursor on the 3D view)."""
+    return h.gl_widget().cursor().shape() != QtCore.Qt.ArrowCursor
+
+
+def move_towards(point, direction, steps=(3.0, 2.0, 1.0)):
+    """Move the mouse in a few steps to `point`, coming along `direction` (a hand showing
+    the way a line goes before its length is typed)."""
+    for f in steps:
+        h.move(h.screen_point(point - direction * f))
+    h.move(h.screen_point(point))

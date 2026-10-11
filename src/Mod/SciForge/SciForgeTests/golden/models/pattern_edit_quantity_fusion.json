@@ -1,0 +1,98 @@
+{
+  "id": "pattern_edit_quantity_fusion",
+  "title": "Hole pattern edited in the dialog from 3 over 20 mm to 5 over 40 mm",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "edit",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            20
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            2
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "direction": "X",
+      "quantity": 3,
+      "distance": 20
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 5811.504440784613,
+        "faces": 9,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "pattern_edit",
+      "target": "p1",
+      "set": {
+        "quantity": 5,
+        "distance": 40
+      }
+    }
+  ],
+  "expect": {
+    "volume": 5685.84073464102,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "Holes r2 at x = 10, 20, 30, 40, 50: V = 60*20*5 - 5*pi*4*5."
+  }
+}

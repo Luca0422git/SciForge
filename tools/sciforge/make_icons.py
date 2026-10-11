@@ -1176,6 +1176,11 @@ def _():
     return circle(24, 24, 16, GREEN) + path("M15 24 L22 31 L34 17", WHITE, 4)
 
 
+@icon("cancel")
+def _():
+    return circle(24, 24, 16, RED) + path("M17 17 L31 31 M31 17 L17 31", WHITE, 4)
+
+
 # ---- chrome: quick access, timeline, navigation ----------------------------------------
 @icon("qa_menu")
 def _():
@@ -1384,17 +1389,32 @@ def _():
     return circle(24, 24, 14, "none", "#7d8593", 2.4) + line(14, 34, 34, 14, "#7d8593", 2.4)
 
 
+# Icons kept exactly as drawn (main() empties the folder first, so they live here too).
+# palette_check: the tick of a ticked check box (theme.py, sketch_palette.py), 14 px.
+RAW = {
+    "palette_check": (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14">\n'
+        '  <path d="M3 7.2 L5.8 10 L11 4" fill="none" stroke="#ffffff" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round"/>\n'
+        "</svg>\n"
+    ),
+}
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name in os.listdir(OUT):
         if name.endswith(".svg"):
             os.remove(os.path.join(OUT, name))
+    for name, text in sorted(RAW.items()):
+        with open(os.path.join(OUT, name + ".svg"), "w", encoding="utf-8") as handle:
+            handle.write(text)
     for name, fn in sorted(ICONS.items()):
         _BOUNDS.clear()
         body = fn()
         with open(os.path.join(OUT, name + ".svg"), "w", encoding="utf-8") as handle:
             handle.write(svg(body, list(_BOUNDS)))
-    print("[SciForge] wrote %d icons to %s" % (len(ICONS), os.path.normpath(OUT)))
+    print("[SciForge] wrote %d icons to %s" % (len(ICONS) + len(RAW), os.path.normpath(OUT)))
     return 0
 
 

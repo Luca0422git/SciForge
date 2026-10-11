@@ -1,0 +1,80 @@
+{
+  "id": "bodies_move_then_cut",
+  "title": "A body moved, then cut: the cut sketch stays where it was drawn (Fusion)",
+  "tags": [
+    "bodies",
+    "move",
+    "extrude"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "translate",
+      "dx": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            30,
+            15,
+            5
+          ],
+          "name": "s2c"
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "cut",
+      "flip": true
+    }
+  ],
+  "expect": {
+    "volume": 11214.601836602551,
+    "faces": 7,
+    "bbox": [
+      20,
+      0,
+      0,
+      60,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Box moved to x 20..60; a circle r5 at (30, 15) cuts a through hole in it."
+  }
+}

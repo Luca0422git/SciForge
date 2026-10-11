@@ -1,0 +1,93 @@
+{
+  "id": "mirror_hole_and_its_pattern",
+  "title": "A hole and its Rectangular Pattern mirrored together across YZ",
+  "tags": [
+    "mirror",
+    "pattern",
+    "features",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            5,
+            2
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "direction": "X",
+      "quantity": 2,
+      "distance": 10,
+      "distribution": "spacing"
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "features": [
+        "c1",
+        "p1"
+      ],
+      "plane": "YZ"
+    }
+  ],
+  "expect": {
+    "volume": 11748.672587712817,
+    "area": 5950.7964473723105,
+    "faces": 10,
+    "bbox": [
+      -30,
+      -20,
+      0,
+      30,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "Holes r2 at x = 10, 20 and, mirrored, -10, -20 (y = 5). A pattern step is not a feature FreeCAD can mirror, so SciForge's pattern feature mirrors what it removed. V = 12000 - 4*pi*4*5; A = 5800 - 8*4pi + 4*2pi*2*5; faces 6 + 4 walls."
+  }
+}

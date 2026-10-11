@@ -1,0 +1,55 @@
+{
+  "id": "sf_draft_cylinder",
+  "title": "Cylinder r10 h10, Draft of its round face 5 degrees about XY: a cone frustum",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "round"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "type": "cylinder",
+        "count": 1
+      },
+      "angle": 5
+    }
+  ],
+  "expect": {
+    "volume": 2874.754439853,
+    "faces": 3,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "frustum pi h/3 (R^2 + R r + r^2), R = 10, r = 10 - 10 tan5"
+  }
+}

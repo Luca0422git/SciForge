@@ -1,0 +1,99 @@
+{
+  "id": "pattern_path_circle_turned",
+  "title": "A 4x2 boss repeated 4 times round a circle path, Orientation Path Direction",
+  "tags": [
+    "pattern",
+    "path",
+    "orientation",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "rect": [
+            18,
+            -1,
+            22,
+            1
+          ],
+          "name": "tab"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "b1",
+      "profile": "s2",
+      "distance": 3
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            20
+          ],
+          "name": "path"
+        }
+      ]
+    },
+    {
+      "op": "path_pattern",
+      "id": "p1",
+      "features": [
+        "b1"
+      ],
+      "path": {
+        "sketch": "s3"
+      },
+      "quantity": 4,
+      "distance": 94.24777960769379,
+      "orientation": "path"
+    }
+  ],
+  "expect": {
+    "volume": 8096,
+    "bbox": [
+      -22,
+      -22,
+      0,
+      22,
+      22,
+      8
+    ],
+    "source": "analytic",
+    "note": "Copies every quarter of the circle (Extent 30pi = three quarters of 2pi*20), turned with the path: the copies at 90 and 270 degrees stand 4 mm along y, so the box reaches y = +-22 (Identical would stop at +-21). V = 40*40*5 + 4*(4*2*3)."
+  }
+}

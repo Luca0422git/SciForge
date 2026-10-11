@@ -393,3 +393,475 @@ STEP_KEYS["thread"] = (
         "comment",
     },
 )
+
+# -- Fusion Revolve (sciforge/revolve.py, the Revolve dialog's code; golden/revolve_ops.py) ---
+STEP_KEYS["sf_revolve"] = (
+    {"id", "axis"},
+    {
+        "profile",
+        "regions",
+        "face",
+        "type",
+        "direction",
+        "angle",
+        "angle2",
+        "operation",
+        "comment",
+    },
+)
+STEP_KEYS["sf_revolve_edit"] = ({"target", "set"}, {"comment"})
+REVOLVE_TYPES = ("angle", "full")
+REVOLVE_DIRECTIONS = ("one_side", "two_sides", "symmetric")
+REVOLVE_OPERATIONS = ("auto",) + OPERATIONS
+REVOLVE_OPTIONS = ("type", "direction", "angle", "angle2", "operation")
+
+
+def _check_revolve_options(here, options):
+    if options.get("type", "angle") not in REVOLVE_TYPES:
+        _fail(here, "'type' must be one of %s" % (REVOLVE_TYPES,))
+    if options.get("direction", "one_side") not in REVOLVE_DIRECTIONS:
+        _fail(here, "'direction' must be one of %s" % (REVOLVE_DIRECTIONS,))
+    if options.get("operation", "auto") not in REVOLVE_OPERATIONS:
+        _fail(here, "'operation' must be one of %s" % (REVOLVE_OPERATIONS,))
+    for key in ("angle", "angle2"):
+        if key in options:
+            _check_number(here + "." + key, options[key])
+            if abs(options[key]) > 360:
+                _fail(here, "'%s' must be between -360 and 360 degrees" % key)
+
+
+def _check_revolve_axis(here, axis, seen):
+    if isinstance(axis, str):
+        if axis not in AXES:
+            _fail(here, "'axis' must be X, Y, Z or an object (see golden/README.md)")
+        return
+    if not isinstance(axis, dict):
+        _fail(here, "'axis' must be X, Y, Z or an object")
+    if "edge" in axis:
+        if set(axis) != {"edge"}:
+            _fail(here, "an edge axis is {'edge': selector}")
+        return
+    if seen.get(axis.get("sketch")) != "sketch":
+        _fail(here, "the axis 'sketch' must name an earlier sketch step")
+    kinds = [k for k in ("at", "construction", "axis") if k in axis]
+    extra = {"name"} if kinds == ["construction"] else set()
+    if len(kinds) != 1 or not {"sketch", kinds[0]} <= set(axis) <= {"sketch", kinds[0]} | extra:
+        _fail(here, "a sketch axis needs exactly one of 'at', 'construction', 'axis'")
+    if "name" in axis and not isinstance(axis["name"], str):
+        _fail(here, "a construction line's 'name' is a string")
+    if "axis" in axis and axis["axis"] not in ("H", "V"):
+        _fail(here, "a sketch's own axis is 'H' or 'V'")
+    if "at" in axis and (not isinstance(axis["at"], list) or len(axis["at"]) != 2):
+        _fail(here, "'at' is an [x, y] point in sketch coordinates")
+    if "construction" in axis:
+        line = axis["construction"]
+        if not isinstance(line, list) or len(line) != 2 or any(len(p) != 2 for p in line):
+            _fail(here, "'construction' is [[x1, y1], [x2, y2]] in sketch coordinates")
+
+
+def _check_revolve_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_revolve":
+            if ("profile" in step) == ("face" in step):
+                _fail(here, "sf_revolve needs exactly one of 'profile' (a sketch) or 'face'")
+            if "profile" in step and seen.get(step["profile"]) != "sketch":
+                _fail(here, "'profile' must name an earlier sketch step, got %r" % step["profile"])
+            if "regions" in step and "profile" not in step:
+                _fail(here, "'regions' go with 'profile'")
+            _check_revolve_axis(here, step["axis"], seen)
+            _check_revolve_options(here, step)
+        if op == "sf_revolve_edit":
+            if seen.get(step["target"]) != "sf_revolve":
+                _fail(here, "'target' must name an earlier sf_revolve step")
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object of revolve options")
+            unknown = set(step["set"]) - set(REVOLVE_OPTIONS)
+            if unknown:
+                _fail(here, "sf_revolve_edit cannot set %s" % sorted(unknown))
+            _check_revolve_options(here, step["set"])
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_revolve = validate
+
+
+def validate(model):  # noqa: F811  (adds the revolve checks to the checks above)
+    _validate_before_revolve(model)
+    _check_revolve_steps(model)
+    return model
+
+
+# Fusion-style Rectangular / Circular Pattern, Pattern on Path and Mirror (golden/pattern_ops.py;
+# sciforge/pattern.py, the same code as their dialogs). What is patterned: one of "features"
+# (step ids), "faces" (a selector) or "body": true.
+_PATTERN_WHAT = {"features", "faces", "body", "expressions", "suppressed", "comment"}
+STEP_KEYS["rectangular_pattern"] = (
+    {"id", "direction"},
+    _PATTERN_WHAT
+    | {
+        "quantity",
+        "distance",
+        "distribution",
+        "direction_type",
+        "direction2",
+        "quantity2",
+        "distance2",
+        "direction_type2",
+    },
+)
+STEP_KEYS["circular_pattern"] = ({"id", "axis"}, _PATTERN_WHAT | {"quantity", "type", "angle"})
+STEP_KEYS["path_pattern"] = (
+    {"id", "path"},
+    _PATTERN_WHAT | {"quantity", "distance", "distribution", "direction_type", "orientation"},
+)
+STEP_KEYS["fusion_mirror"] = ({"id", "plane"}, _PATTERN_WHAT | {"operation"})
+STEP_KEYS["pattern_edit"] = ({"target", "set"}, {"comment"})
+# -- Fusion Shell / Draft / Scale (sciforge/shelling.py, drafting.py, scale.py, the dialogs'
+# code; golden/shell_draft_ops.py) ---------------------------------------------------------
+STEP_KEYS["sf_shell"] = (
+    {"id"},
+    {"faces", "body", "inside", "outside", "direction", "shell_type", "comment"},
+)
+STEP_KEYS["sf_shell_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["sf_draft"] = ({"id", "plane", "faces"}, {"angle", "flip", "comment"})
+STEP_KEYS["sf_draft_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["sf_scale"] = ({"id"}, {"factor", "factors", "point", "comment"})
+STEP_KEYS["sf_scale_edit"] = ({"target", "set"}, {"comment"})
+SHELL_EDIT = {"inside", "outside", "direction", "shell_type"}
+DRAFT_EDIT = {"angle", "flip"}
+SCALE_EDIT = {"factor", "factors"}
+
+
+def _check_scale_values(here, spec):
+    if ("factor" in spec) == ("factors" in spec):
+        _fail(here, "give exactly one of 'factor' (uniform) or 'factors' [x, y, z]")
+    values = [spec["factor"]] if "factor" in spec else spec["factors"]
+    if "factors" in spec and (not isinstance(values, list) or len(values) != 3):
+        _fail(here, "'factors' is [x, y, z]")
+    for value in values:
+        _check_number(here + ".factor", value, positive=True)
+
+
+def _check_draft_plane(here, plane):
+    if isinstance(plane, str):
+        if plane not in PLANES:
+            _fail(here, "'plane' must be XY, XZ, YZ or {'face': selector}")
+    elif not isinstance(plane, dict) or set(plane) != {"face"}:
+        _fail(here, "'plane' must be XY, XZ, YZ or {'face': selector}")
+
+
+def _check_shell_draft_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_shell":
+            if ("faces" in step) == bool(step.get("body")):
+                _fail(here, "sf_shell needs exactly one of 'faces' or 'body': true")
+            if step.get("direction", "inside") not in ("inside", "outside", "both"):
+                _fail(here, "'direction' must be inside, outside or both")
+            if step.get("shell_type", "sharp") not in ("sharp", "rounded"):
+                _fail(here, "'shell_type' must be sharp or rounded")
+            for key in ("inside", "outside"):
+                if key in step:
+                    _check_number(here + "." + key, step[key], positive=True)
+        if op == "sf_draft":
+            _check_draft_plane(here, step["plane"])
+            if "angle" in step:
+                _check_number(here + ".angle", step["angle"])
+        if op == "sf_scale":
+            _check_scale_values(here, step)
+            point = step.get("point", "origin")
+            if point != "origin" and (not isinstance(point, list) or len(point) != 3):
+                _fail(here, "'point' is 'origin' or [x, y, z] (a corner of the part)")
+        for edit, made, allowed in (
+            ("sf_shell_edit", "sf_shell", SHELL_EDIT),
+            ("sf_draft_edit", "sf_draft", DRAFT_EDIT),
+            ("sf_scale_edit", "sf_scale", SCALE_EDIT),
+        ):
+            if op != edit:
+                continue
+            if seen.get(step["target"]) != made:
+                _fail(here, "'target' must name an earlier %s step" % made)
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object")
+            unknown = set(step["set"]) - allowed
+            if unknown:
+                _fail(here, "%s cannot set %s" % (edit, sorted(unknown)))
+            if edit == "sf_scale_edit":
+                _check_scale_values(here, step["set"])
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+# Body tools (golden/bodies_ops.py; sciforge/combine.py, split.py, move.py, delete.py, the same
+# code as their dialogs). Bodies are named by a step that made them.
+STEP_KEYS["combine"] = (
+    {"id", "target", "tools"},
+    {"operation", "new_body", "keep_tools", "comment"},
+)
+STEP_KEYS["split_body"] = ({"id", "body", "tool"}, {"extend", "comment"})
+STEP_KEYS["move_bodies"] = (
+    {"id", "bodies"},
+    {
+        "move_type",
+        "dx",
+        "dy",
+        "dz",
+        "rx",
+        "ry",
+        "rz",
+        "pivot",
+        "axis",
+        "angle",
+        "from_point",
+        "to_point",
+        "px",
+        "py",
+        "pz",
+        "copy",
+        "comment",
+    },
+)
+STEP_KEYS["delete_face"] = ({"id", "faces"}, {"comment"})
+STEP_KEYS["body_tool_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["measure_bodies"] = ({"steps"}, {"comment"})
+STEP_KEYS["delete_bodies"] = ({"steps"}, {"comment"})
+
+BODY_OPERATIONS = ("join", "cut", "intersect")
+MOVE_TYPES = ("free", "translate", "rotate", "point_to_point", "point_to_position")
+
+
+def _check_body_steps(model):
+    """References and choices of the body-tool steps (combine, split_body, move_bodies,
+    delete_face, body_tool_edit, measure_bodies)."""
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (model.get("id", "?"), i)
+        op = step.get("op")
+        if op == "combine":
+            for name in [step["target"]] + list(step["tools"]):
+                if name not in seen:
+                    _fail(here, "combine names unknown step %r" % name)
+            if not step["tools"]:
+                _fail(here, "combine needs at least one tool")
+            if step["target"] in step["tools"]:
+                _fail(here, "the target cannot be a tool")
+            if step.get("operation", "join") not in BODY_OPERATIONS:
+                _fail(here, "'operation' must be one of %s" % (BODY_OPERATIONS,))
+        if op == "split_body":
+            if step["body"] not in seen:
+                _fail(here, "split_body names unknown step %r" % step["body"])
+            tool = step["tool"]
+            if isinstance(tool, str):
+                if tool not in PLANES:
+                    _fail(here, "'tool' plane must be one of %s" % (PLANES,))
+            elif not isinstance(tool, dict) or len(set(tool) & {"face", "body", "sketch"}) != 1:
+                _fail(
+                    here,
+                    "'tool' must be XY/XZ/YZ, {'face': selector, 'of': id}, {'body': id} or "
+                    "{'sketch': id, 'edge': n}",
+                )
+            else:
+                if "sketch" in tool and seen.get(tool["sketch"]) != "sketch":
+                    _fail(here, "'tool' names unknown sketch %r" % tool["sketch"])
+                for key in ("of", "body"):
+                    if key in tool and tool[key] not in seen:
+                        _fail(here, "'tool' names unknown step %r" % tool[key])
+        if op == "move_bodies":
+            if not step["bodies"] or any(b not in seen for b in step["bodies"]):
+                _fail(here, "'bodies' must name earlier steps")
+            kind = step.get("move_type", "free")
+            if kind not in MOVE_TYPES:
+                _fail(here, "'move_type' must be one of %s" % (MOVE_TYPES,))
+            if kind == "rotate" and step.get("axis") not in AXES:
+                _fail(here, "rotate needs 'axis' X, Y or Z")
+            if kind == "point_to_point" and not ("from_point" in step and "to_point" in step):
+                _fail(here, "point_to_point needs 'from_point' and 'to_point'")
+            if kind == "point_to_position" and "from_point" not in step:
+                _fail(here, "point_to_position needs 'from_point' (and px, py, pz)")
+            for key in ("dx", "dy", "dz", "rx", "ry", "rz", "angle", "px", "py", "pz"):
+                if key in step:
+                    _check_number(here + "." + key, step[key])
+        if op in ("body_tool_edit",) and seen.get(step["target"]) not in (
+            "combine",
+            "split_body",
+            "move_bodies",
+        ):
+            _fail(here, "body_tool_edit must name a combine, split_body or move_bodies step")
+        if op in ("measure_bodies", "delete_bodies") and any(s not in seen for s in step["steps"]):
+            _fail(here, "%s names unknown steps" % op)
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_shell_draft = validate
+
+
+def validate(model):  # noqa: F811  (adds the Shell / Draft / Scale checks)
+    _validate_before_shell_draft(model)
+    _check_shell_draft_steps(model)
+    return model
+
+
+_validate_before_bodies = validate
+
+
+def validate(model):  # noqa: F811  (adds the body-tool checks to the checks above)
+    _validate_before_bodies(model)
+    _check_body_steps(model)
+    return model
+
+
+# History edits around Fusion-style Fillet / Chamfer (golden/blend_ops.py, the dialogs' code):
+# a blend made with the timeline marker rolled back, and a blend edited to pick more edges.
+_BLEND_OPTIONS = {"radius", "distance", "chamfer_type", "distance2", "angle", "flip"}
+STEP_KEYS["blend_insert"] = ({"id", "kind"}, _BLEND_OPTIONS | {"edges", "faces", "comment"})
+STEP_KEYS["blend_edit"] = ({"target"}, {"add_edges", "add_faces", "set", "comment"})
+
+
+def _check_blend_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "blend_insert":
+            if step["kind"] not in ("fillet", "chamfer"):
+                _fail(here, "'kind' must be fillet or chamfer")
+            size = "radius" if step["kind"] == "fillet" else "distance"
+            _check_number(here + "." + size, step.get(size), positive=True)
+            if "edges" not in step and "faces" not in step:
+                _fail(here, "blend_insert needs 'edges' and/or 'faces'")
+        if op == "blend_edit":
+            if seen.get(step["target"]) not in ("blend_fillet", "blend_chamfer", "blend_insert"):
+                _fail(here, "'target' must name an earlier blend_fillet/blend_chamfer step")
+            unknown = set(step.get("set", {})) - _BLEND_OPTIONS
+            if unknown:
+                _fail(here, "blend_edit cannot set %s" % sorted(unknown))
+            if not ({"add_edges", "add_faces", "set"} & set(step)):
+                _fail(here, "blend_edit needs 'add_edges', 'add_faces' or 'set'")
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_blend = validate
+
+
+def validate(model):  # noqa: F811  (adds the blend history checks to the checks above)
+    _validate_before_blend(model)
+    _check_blend_steps(model)
+    return model
+
+
+# CONSTRUCT and INSPECT (golden/inspect_ops.py: sciforge/construct.py, measure.py, section.py,
+# analysis.py, the code the dialogs use)
+STEP_KEYS["construct"] = ({"id", "preset", "refs"}, {"values", "points", "comment"})
+STEP_KEYS["construct_expect"] = ({"target", "point"}, {"normal", "direction", "comment"})
+STEP_KEYS["construct_extrude"] = (
+    {"id", "plane", "circles"},
+    {"distance", "operation", "direction", "flip", "comment"},
+)
+STEP_KEYS["measure_expect"] = ({"a", "b"}, {"distance", "angle", "comment"})
+STEP_KEYS["section_expect"] = (
+    {"plane"},
+    {"distance", "x_angle", "y_angle", "flip", "kept_volume", "cap_area", "comment"},
+)
+STEP_KEYS["com_expect"] = ({"point"}, {"features", "comment"})
+STEP_KEYS["interference_expect"] = (
+    {"features"},
+    {"include_coincident", "volume", "pairs", "comment"},
+)
+INSPECT_REF_KEYS = ("plane", "axis", "origin", "face", "edge", "vertex", "construct")
+
+
+def _check_inspect_ref(here, spec, seen):
+    if not isinstance(spec, dict) or len(spec) != 1 or not set(spec) <= set(INSPECT_REF_KEYS):
+        _fail(here, "a pick is one of %s" % (INSPECT_REF_KEYS,))
+    if "plane" in spec and spec["plane"] not in PLANES:
+        _fail(here, "'plane' must be one of %s" % (PLANES,))
+    if "axis" in spec and spec["axis"] not in AXES:
+        _fail(here, "'axis' must be one of %s" % (AXES,))
+    if "vertex" in spec:
+        _check_point(here + ".vertex", spec["vertex"])
+    if "construct" in spec and seen.get(spec["construct"]) != "construct":
+        _fail(here, "'construct' must name an earlier construct step")
+
+
+def _check_point(here, value):
+    if not isinstance(value, list) or len(value) != 3:
+        _fail(here, "expected [x, y, z]")
+    for v in value:
+        _check_number(here, v)
+
+
+def _check_inspect_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "construct":
+            if not isinstance(step["preset"], str) or not step["preset"]:
+                _fail(here, "'preset' is a CONSTRUCT entry (sciforge/construct.py SPECS)")
+            if not isinstance(step["refs"], list) or not step["refs"]:
+                _fail(here, "'refs' is a non-empty list of picks")
+            for j, spec in enumerate(step["refs"]):
+                _check_inspect_ref("%s.refs[%d]" % (here, j), spec, seen)
+            for j, point in enumerate(step.get("points", [])):
+                if point is not None:
+                    _check_point("%s.points[%d]" % (here, j), point)
+        if op == "construct_expect":
+            if seen.get(step["target"]) != "construct":
+                _fail(here, "'target' must name an earlier construct step")
+            _check_point(here + ".point", step["point"])
+            for key in ("normal", "direction"):
+                if key in step:
+                    _check_point(here + "." + key, step[key])
+        if op == "construct_extrude":
+            if seen.get(step["plane"]) != "construct":
+                _fail(here, "'plane' must name an earlier construct step (a plane)")
+            circles = step["circles"]
+            if not isinstance(circles, list) or not circles:
+                _fail(here, "'circles' is a list of [x, y, z, r] (centre on the plane, global)")
+            for j, circle in enumerate(circles):
+                if not isinstance(circle, list) or len(circle) != 4:
+                    _fail("%s.circles[%d]" % (here, j), "expected [x, y, z, r]")
+                _check_number("%s.circles[%d].r" % (here, j), circle[3], positive=True)
+            if step.get("operation", "join") not in OPERATIONS:
+                _fail(here, "'operation' must be one of %s" % (OPERATIONS,))
+            if step.get("direction", "one_side") not in ("one_side", "symmetric"):
+                _fail(here, "'direction' must be one_side or symmetric")
+            _check_number(here + ".distance", step.get("distance", 1.0), positive=True)
+        if op == "measure_expect":
+            _check_inspect_ref(here + ".a", step["a"], seen)
+            _check_inspect_ref(here + ".b", step["b"], seen)
+            if "distance" not in step and "angle" not in step:
+                _fail(here, "measure_expect checks 'distance' and/or 'angle'")
+        if op == "section_expect":
+            _check_inspect_ref(here + ".plane", step["plane"], seen)
+            if "kept_volume" not in step and "cap_area" not in step:
+                _fail(here, "section_expect checks 'kept_volume' and/or 'cap_area'")
+        if op == "com_expect":
+            _check_point(here + ".point", step["point"])
+        if op in ("com_expect", "interference_expect"):
+            for name in step.get("features", []):
+                if name not in seen:
+                    _fail(here, "'features' names unknown step %r" % name)
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_inspect = validate
+
+
+def validate(model):  # noqa: F811  (adds the CONSTRUCT / INSPECT checks)
+    _validate_before_inspect(model)
+    _check_inspect_steps(model)
+    return model

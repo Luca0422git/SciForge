@@ -1,0 +1,76 @@
+{
+  "id": "mirror_features_yz_fusion",
+  "title": "Plate 40x30x10 centred, a boss r3x6 at (10, 5) mirrored across YZ (Mirror dialog)",
+  "tags": [
+    "mirror",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            5,
+            3
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 6
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "features": [
+        "e2"
+      ],
+      "plane": "YZ"
+    }
+  ],
+  "expect": {
+    "volume": 12339.292006587697,
+    "faces": 10,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      16
+    ],
+    "source": "analytic",
+    "note": "V = 40*30*10 + 2*pi*3^2*6; faces 6 + 2*(wall + top)."
+  }
+}

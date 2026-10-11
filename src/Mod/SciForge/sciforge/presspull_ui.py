@@ -128,6 +128,8 @@ class PressPullPanel(Panel):
         super().__init__(doc, "Press Pull" if feature is None else "Edit Press Pull")
         PressPullPanel.last = self
         self.escape = preview.EscapeCancels(self)
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
         self.body, self.tip = _body_and_tip()
         self.mode = None  # "faces" | "fillet" | "edit_blend"
         self.target = feature  # the feature being created or edited
@@ -156,7 +158,16 @@ class PressPullPanel(Panel):
         self.field_label = QtWidgets.QLabel("Distance")
         self.field = DistanceField(0.0, on_change=self._typed)
         self.layout.addRow(self.field_label, self.field.widget)
+        self.formula = ""  # the value as a formula of parameters ("wall * 2"), or ""
+        self.formula_error = ""  # a formula typed that is no value (OK waits)
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setWordWrap(True)
+        self.formula_label.setStyleSheet("color: #b8c7d9;")
+        self.layout.addRow(self.formula_label)
         self.finish_layout()
+        # Fusion: a parameter or formula typed in the field; a number typed over it wins.
+        # (FreeCAD's own expression binding made the field read-only once a formula was set.)
+        self.formula_input = preview.FormulaInput(self, "value", self.field)
 
         if feature is not None:
             self.mode = "faces"
@@ -164,7 +175,7 @@ class PressPullPanel(Panel):
             self.base = feature.BaseFeature
             self.names = list(feature.Faces[1]) if feature.Faces else []
             self.field.set_value(feature.Distance.Value)
-            self.field.bind(feature, "Distance")
+            self._show_formula(preview.formula_of(feature, "Distance"))
             self._describe()
             self._make_dragger()
         else:
@@ -227,12 +238,11 @@ class PressPullPanel(Panel):
 
     # -- starting --------------------------------------------------------------------------
     def _start_from_selection(self):
-        if self.body is None or self.tip is None or self.tip.Shape.isNull():
-            self.message.setText("Make a solid first (Create Sketch, then Extrude).")
-            return
         picks = _picks()
         if picks:
             self._take(picks)
+        elif self.body is None or self.tip is None or self.tip.Shape.isNull():
+            self.message.setText("Make a solid first (Create Sketch, then Extrude).")
         try:
             Gui.Selection.clearSelection()
         except Exception:
@@ -268,9 +278,22 @@ class PressPullPanel(Panel):
         except Exception as exc:
             warn("press pull on a sketch: %s" % exc)
 
+    def _follow_body(self, obj):
+        """The first pick decides the body (Fusion: Press Pull works on any body, not only
+        the active one); the feature goes into that body's timeline."""
+        if self.mode is not None or self.editing:
+            return
+        from . import extrude
+
+        body = extrude.owner_body(obj)
+        if body is None or body is self.body or body.Tip is None or body.Tip.Shape.isNull():
+            return
+        self.body, self.tip, self.base = body, body.Tip, None
+
     def _face_picked(self, obj, short, point):
         if self.mode == "edit_blend":
             return
+        self._follow_body(obj)
         if self.mode == "fillet":
             self.message.setText(
                 "This Press Pull rounds edges; click edges, or OK and start again."
@@ -309,6 +332,7 @@ class PressPullPanel(Panel):
             if self.mode == "faces":
                 self.message.setText("This Press Pull moves faces; click faces to add or drop.")
             return
+        self._follow_body(obj)
         base = self.base or self.tip
         if base is None:
             return
@@ -350,7 +374,7 @@ class PressPullPanel(Panel):
         if self.mode == "faces":
             if self.target is None:
                 self.target = presspull.make(self.body, self.base, self.names, self.field.value())
-                self.field.bind(self.target, "Distance")
+                self._apply_formula()
             else:
                 self.target.Faces = (self.base, list(self.names))
             self._describe()
@@ -364,7 +388,7 @@ class PressPullPanel(Panel):
                 self.target = fillet
                 self.field_label.setText("Fillet radius")
                 self.field.set_value(1.0)
-                self.field.bind(fillet, "Radius")
+                self._show_formula("")
             self.target.Base = (self.base, list(self.names))
             self.what.setText("%d edge(s): fillet" % len(self.names))
         self.schedule()
@@ -381,6 +405,9 @@ class PressPullPanel(Panel):
                 if self.base is not None:
                     body.Tip = self.base
             self.doc.removeObject(target.Name)
+            from . import extrude
+
+            extrude.show_tip(body)  # the part before it was hidden by the new feature
         except Exception as exc:
             warn("press pull: could not remove the preview: %s" % exc)
         self.field_label.setText("Distance")
@@ -393,7 +420,7 @@ class PressPullPanel(Panel):
         self.prop = prop
         self.field_label.setText("Fillet radius" if prop == "Radius" else "Chamfer distance")
         self.field.set_value(getattr(blend, prop).Value)
-        self.field.bind(blend, prop)
+        self._show_formula(preview.formula_of(blend, prop))
         self.what.setText("Editing %s (it stays one step in the timeline)" % blend.Label)
         self.selection_field.set_text(blend.Label)
 
@@ -450,7 +477,8 @@ class PressPullPanel(Panel):
         if self._closed:
             return
         try:
-            picks = _picks()
+            # Only this design's objects: a click in another open document is not a pick.
+            picks = [pk for pk in _picks() if pk[0].Document.Name == self.doc.Name]
             if not picks:
                 return
             Gui.Selection.clearSelection()
@@ -458,10 +486,9 @@ class PressPullPanel(Panel):
                 self.body, self.tip = _body_and_tip()
             if self.picker is not None and self.picker.clicked_region_recently():
                 return  # the click was on a sketch area: Extrude takes over
-            if self.tip is None or self.tip.Shape.isNull():
+            self._take(picks)  # a face of any body, also when the active body is empty
+            if self.mode is None and (self.tip is None or self.tip.Shape.isNull()):
                 self.message.setText("Make a solid first (Create Sketch, then Extrude).")
-                return
-            self._take(picks)
             if self.mode is not None:
                 self._unshade()  # faces or edges chosen: sketch areas no longer apply
         except Exception as exc:
@@ -487,9 +514,52 @@ class PressPullPanel(Panel):
         self.schedule()
 
     def _dragged(self, value):
+        self.formula_cleared("value")  # a drag gives a plain number
         value = round(value, 2)
         self.field.set_value(value)
         self._typed(value)
+
+    # -- formulas (preview.FormulaInput calls the first three) --------------------------------
+    def formula_typed(self, key, text, value):
+        self.error = ""
+        self.formula_error = ""
+        self._show_formula(text)
+        self._typed(value)
+        self._apply_formula()
+
+    def formula_cleared(self, key):
+        self.formula_error = ""
+        if self.formula:
+            self._show_formula("")
+            self._apply_formula()
+            self._typed(self.field.value())  # the number typed, not the formula's last value
+
+    def formula_failed(self, key, text):
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
+
+    def _show_formula(self, text):
+        self.formula = text or ""
+        name = self.field_label.text()
+        self.formula_label.setText("%s = %s" % (name, self.formula) if self.formula else "")
+
+    def _value_property(self):
+        if self.mode == "faces":
+            return "Distance"
+        if self.mode == "fillet":
+            return "Radius"
+        if self.mode == "edit_blend":
+            return self.prop
+        return None
+
+    def _apply_formula(self):
+        prop = self._value_property()
+        if self.target is None or prop is None:
+            return
+        try:
+            preview.set_formula(self.target, prop, self.formula)
+        except Exception as exc:
+            self.message.setText("⚠ %s" % exc)
 
     def _recompute(self):
         try:
@@ -499,6 +569,9 @@ class PressPullPanel(Panel):
             self.message.setText("⚠ %s" % exc)
 
     def show_status(self):
+        if self.formula_error:  # stays until the field gets a value again
+            self.message.setText("⚠ " + self.formula_error)
+            return
         text = preview.failure(self.target)
         if text:
             self.message.setText("⚠ " + text)
@@ -510,6 +583,9 @@ class PressPullPanel(Panel):
         if self.target is None:
             self.message.setText("⚠ Nothing selected yet: click faces or edges of the part.")
             return False
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
+            return False
         if self.mode in ("faces", "fillet") and not self.names:
             self.message.setText("⚠ Pick at least one face or edge.")
             return False
@@ -520,7 +596,7 @@ class PressPullPanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         self.cleanup()
-        self.doc.commitTransaction()
+        preview.end_transaction(self.doc)
         self._close()
         log("%s done" % self.title)
         return True
@@ -528,7 +604,7 @@ class PressPullPanel(Panel):
     def reject(self):
         self._timer.stop()
         self.cleanup()
-        self.doc.abortTransaction()
+        preview.end_transaction(self.doc, abort=True)
         preview.recompute(self.doc)
         self._close()
         return True
@@ -537,6 +613,8 @@ class PressPullPanel(Panel):
         self._unwatch()
         self._unshade()
         self.escape.remove()
+        self.undo_guard.remove()
+        self.enter.remove()
         self._remove_dragger()
         super().cleanup()
 

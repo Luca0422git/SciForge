@@ -43,6 +43,21 @@ def quiet():
                 pass
 
 
+def end_transaction(doc, abort=False):
+    """Close the dialog's undo step. FreeCAD's doc.commitTransaction()/abortTransaction()
+    only close a step that holds changes; a dialog OK'd or cancelled without any change
+    left its name pending, and the next change anywhere (even right after an Undo) opened a
+    step under that name and threw away the Redo list. The pending name is closed too."""
+    if abort:
+        doc.abortTransaction()
+    else:
+        doc.commitTransaction()
+    try:
+        App.closeActiveTransaction(abort)
+    except Exception:
+        pass
+
+
 def recompute(doc):
     """doc.recompute() without FreeCAD's failure messages in the Report view."""
     with quiet():
@@ -88,6 +103,329 @@ class EscapeCancels:
         except Exception:
             pass
         self.panel = None
+
+
+class FormulaInput:
+    """Fusion's value fields take a parameter or a formula ("width", "width*2 + 5 mm"), and
+    the value then follows the parameter. FreeCAD's number field only takes numbers (it
+    silently put the old value back), so the text typed in `field` (a taskui.DistanceField)
+    is caught here and handed to the panel:
+
+      panel.formula_typed(key, text, value)   a formula, already evaluated (field shows value)
+      panel.formula_cleared(key)              a plain number typed: no formula any more
+      panel.formula_failed(key, message)      no value (a typo, wrong units...)
+    """
+
+    def __init__(self, panel, key, field):
+        from .compat import QtWidgets
+
+        self.panel = panel
+        self.key = key
+        self.field = field
+        self.raw = None
+        edit = field.widget.findChild(QtWidgets.QLineEdit)
+        if edit is not None:
+            edit.textEdited.connect(self._edited)
+        field.widget.editingFinished.connect(self._finished)
+
+    def _edited(self, text):
+        self.raw = text
+
+    def _finished(self):
+        raw, self.raw = self.raw, None
+        panel = self.panel
+        if raw is None or getattr(panel, "_closed", True):
+            return
+        text = raw.strip().lstrip("=").strip()
+        try:
+            from . import extrude, parameters
+
+            if not text or parameters.is_plain_number(text):
+                panel.formula_cleared(self.key)
+                return
+            try:
+                value = extrude.evaluate(panel.doc, text)
+            except extrude.ExtrudeError as exc:
+                panel.formula_failed(self.key, str(exc))
+                return
+            self.field.set_value(value)
+            panel.formula_typed(self.key, text, value)
+        except Exception as exc:
+            from . import warn
+
+            warn("formula %r: %s" % (text, exc))
+
+
+def set_formula(obj, prop, text):
+    """Put a formula typed in a dialog (bare parameter names) on obj.prop as an expression,
+    or remove the expression when `text` is empty."""
+    from . import parameters, parameters_core
+
+    if obj is None or prop not in obj.PropertiesList:
+        return
+    engine = dict(obj.ExpressionEngine)
+    if text:
+        expr = parameters_core.to_freecad(text, parameters.user_names(obj.Document))
+        if engine.get(prop) != expr:
+            obj.setExpression(prop, expr)
+    elif prop in engine:
+        obj.setExpression(prop, None)
+
+
+def formula_of(obj, prop):
+    """The formula (bare parameter names) driving obj.prop, or ''."""
+    from . import parameters_core
+
+    try:
+        expr = dict(obj.ExpressionEngine).get(prop, "")
+    except Exception:
+        return ""
+    return parameters_core.from_freecad(expr) if expr else ""
+
+
+class EnterFinishes:
+    """Fusion: Enter finishes the command (OK), also with the mouse over the 3D view.
+    FreeCAD's task panel only sees Enter while one of its fields has the keyboard focus
+    (it then presses OK itself); this catches it over the 3D view. OK that is not
+    possible yet keeps the dialog open and says why. remove() when the dialog closes."""
+
+    def __init__(self, panel):
+        import FreeCADGui as Gui
+
+        self.panel = panel
+        self.view = None
+        self.callback = None
+        try:
+            self.view = Gui.ActiveDocument.ActiveView
+            self.callback = self.view.addEventCallback("SoKeyboardEvent", self._key)
+        except Exception:
+            self.view = None
+
+    def _key(self, info):
+        from .compat import QtCore, QtWidgets
+
+        try:
+            if info.get("State") != "UP" or info.get("Key") not in ("RETURN", "PAD_ENTER", "ENTER"):
+                return
+            if QtWidgets.QApplication.mouseButtons() != QtCore.Qt.NoButton:
+                return  # never while a handle is being dragged
+            QtCore.QTimer.singleShot(0, self._ok)
+        except Exception as exc:
+            from . import warn
+
+            warn("Enter: %s" % exc)
+
+    def _ok(self):
+        try:
+            panel = self.panel
+            if panel is not None and not getattr(panel, "_closed", True):
+                panel.accept()
+        except Exception as exc:
+            from . import warn
+
+            warn("Enter: %s" % exc)
+
+    def remove(self):
+        if self.view is not None and self.callback is not None:
+            try:
+                self.view.removeEventCallback("SoKeyboardEvent", self.callback)
+            except Exception:
+                pass
+        self.view = self.callback = None
+        self.panel = None
+
+
+class UndoCancels:
+    """Keys and document events that would pull the document from under an open dialog.
+
+    Ctrl+Z: the step being made is what gets undone, so the dialog is cancelled (its
+      preview removed). Before, FreeCAD committed the unfinished preview and undid it under
+      the open dialog, which then worked on deleted objects. Text fields keep Ctrl+Z.
+    Ctrl+Y: nothing to redo inside a command; ignored while the dialog is open.
+    Ctrl+S, Ctrl+N, Ctrl+O: like starting any other command, the open dialog is finished
+      first (OK if possible, else cancelled), so a file never holds a half-made preview.
+    Undo/Redo from the toolbar still reach FreeCAD: the dialog then closes as cancelled.
+    The document closed under the dialog: the dialog closes (it was left working on a
+    deleted document). remove() when the dialog closes."""
+
+    FINISH_FIRST = {"S": "Std_Save", "N": "Std_New", "O": "Std_Open"}
+
+    def __init__(self, panel):
+        from .compat import QtCore, QtWidgets
+
+        self.panel = panel
+        guard = self
+
+        class KeyFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                return guard._filter(event)
+
+        self.filter = KeyFilter()
+        QtWidgets.QApplication.instance().installEventFilter(self.filter)
+
+        class DocWatch:
+            def slotUndoDocument(self, doc):
+                guard._undone(doc)
+
+            def slotRedoDocument(self, doc):
+                guard._undone(doc)
+
+            def slotDeletedDocument(self, doc):
+                guard._document_gone(doc)
+
+        self.watch = DocWatch()
+        App.addDocumentObserver(self.watch)
+
+    def _filter(self, event):
+        from .compat import QtCore, QtGui, QtWidgets
+
+        try:
+            kind = event.type()
+            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
+                return False
+            if not isinstance(event, QtGui.QKeyEvent) or self.panel is None:
+                return False
+            mods = event.modifiers()
+            if not (mods & QtCore.Qt.ControlModifier) or (
+                mods & (QtCore.Qt.ShiftModifier | QtCore.Qt.AltModifier)
+            ):
+                return False
+            keys = {
+                QtCore.Qt.Key_Z: "Z",
+                QtCore.Qt.Key_Y: "Y",
+                QtCore.Qt.Key_S: "S",
+                QtCore.Qt.Key_N: "N",
+                QtCore.Qt.Key_O: "O",
+            }
+            key = keys.get(event.key())
+            if key is None:
+                return False
+            focus = QtWidgets.QApplication.focusWidget()
+            editors = (
+                QtWidgets.QLineEdit,
+                QtWidgets.QAbstractSpinBox,
+                QtWidgets.QTextEdit,
+                QtWidgets.QPlainTextEdit,
+            )
+            if key in ("Z", "Y") and isinstance(focus, editors):
+                return False  # undo/redo of the typing in the field
+            event.accept()  # ShortcutOverride accepted: SciForge's own shortcut does not fire
+            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
+                if key == "Z":
+                    QtCore.QTimer.singleShot(0, self._cancel)
+                elif key in self.FINISH_FIRST:
+                    command = self.FINISH_FIRST[key]
+                    QtCore.QTimer.singleShot(0, lambda: self._finish_then(command))
+            return True
+        except Exception:
+            return False
+
+    def _cancel(self):
+        try:
+            panel = self.panel
+            if panel is not None and not getattr(panel, "_closed", True):
+                panel.reject()
+        except Exception as exc:
+            from . import warn
+
+            warn("Ctrl+Z in a dialog: %s" % exc)
+
+    def _finish_then(self, command):
+        import FreeCADGui as Gui
+
+        try:
+            panel = self.panel
+            if panel is not None and not getattr(panel, "_closed", True):
+                panel.finish()
+            Gui.runCommand(command)
+        except Exception as exc:
+            from . import warn
+
+            warn("%s with a dialog open: %s" % (command, exc))
+
+    def _undone(self, doc):
+        """Undo/redo reached the document anyway (toolbar): the preview is gone, close."""
+        try:
+            panel = self.panel
+            if panel is None or getattr(panel, "_closed", True) or doc is not panel.doc:
+                return
+            panel._timer.stop()  # nothing may rebuild from the objects the undo removed
+            from .compat import QtCore
+
+            QtCore.QTimer.singleShot(0, self._close_undone)
+        except Exception as exc:
+            from . import warn
+
+            warn("undo in a dialog: %s" % exc)
+
+    def _close_undone(self):
+        try:
+            panel = self.panel
+            if panel is None or getattr(panel, "_closed", True):
+                return
+            panel.target = None  # deleted by the undo
+            panel.cleanup()
+            try:
+                App.closeActiveTransaction(True)  # the dialog's pending step name
+            except Exception:
+                pass
+            panel._close()
+            recompute(panel.doc)
+            from . import log
+
+            log("%s cancelled by undo" % panel.title)
+        except Exception as exc:
+            from . import warn
+
+            warn("undo in a dialog: %s" % exc)
+
+    def _document_gone(self, doc):
+        """The dialog's document is being closed: drop the dialog without touching it."""
+        try:
+            panel = self.panel
+            if panel is None or getattr(panel, "_closed", True):
+                return
+            if doc.Name != panel.doc.Name:
+                return
+            panel._timer.stop()
+            panel.target = None
+            try:
+                panel.cleanup()
+            except Exception:
+                pass
+            from . import taskui
+            from .compat import QtCore
+
+            if taskui._OPEN["dialog"] is panel:
+                taskui._OPEN["dialog"] = None
+            QtCore.QTimer.singleShot(0, _close_task_panel)
+        except Exception as exc:
+            from . import warn
+
+            warn("document closed under a dialog: %s" % exc)
+
+    def remove(self):
+        from .compat import QtWidgets
+
+        try:
+            QtWidgets.QApplication.instance().removeEventFilter(self.filter)
+        except Exception:
+            pass
+        try:
+            App.removeDocumentObserver(self.watch)
+        except Exception:
+            pass
+        self.panel = None
+
+
+def _close_task_panel():
+    import FreeCADGui as Gui
+
+    try:
+        if Gui.Control.activeDialog():
+            Gui.Control.closeDialog()
+    except Exception:
+        pass
 
 
 def failure(obj):

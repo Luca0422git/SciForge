@@ -67,7 +67,10 @@ Picking:
 9. No modal pop-ups for things Fusion does in its dialog (sides of a polygon, attachment mode,
    "select something first"). Wait in the task panel for the user to pick instead.
 10. One command = one undo step (the Panel's transaction does this).
-11. Python only, unless there is no Python route. A change to FreeCAD's own files needs a
+11. **A `QTimer.singleShot(ms, obj.method)` is silently cancelled when `obj` (a Qt object) is
+    deleted first**, e.g. a widget with `WA_DeleteOnClose` that you close right before. Keep
+    the widget alive (hide it) until the call ran, or call a plain function.
+12. Python only, unless there is no Python route. A change to FreeCAD's own files needs a
     `SCIFORGE:` comment, an entry in `docs/sciforge/core-patches.md`, **and** a Python-side
     fallback/workaround: core patches only reach the user with a full rebuild.
 
@@ -83,7 +86,8 @@ Picking:
   renderer rounds differently and a plain click on an outline edge hit the face next to it). Cover: the happy
   path, editing the feature again (double-click it in the timeline, or `Gui.ActiveDocument.setEdit`
   if that is how the timeline does it), Cancel leaving the model unchanged, undo/redo, and the
-  "nothing selected yet" start.
+  "nothing selected yet" start. Import `QtTest` from `PySide6` (FreeCAD's `PySide` shim has
+  none); a scenario that does not load fails with "the scenario file loads".
 - **Golden models** (`SciForgeTests/golden/models/*.json`, format in its README) for any new
   geometry, with hand-derived expected volume/area/faces/bbox. Extend `builder.py`/`schema.py`
   with a new op if needed (builder must call your Qt-free module, the same code the GUI uses).

@@ -1,0 +1,108 @@
+{
+  "id": "pattern_quantity_parameter",
+  "title": "A row of holes whose Quantity is a parameter n; n changed from 3 to 5",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "parameter",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "n",
+      "value": 3,
+      "unit": ""
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            20
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "circle": [
+            5,
+            10,
+            2
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "direction": "X",
+      "quantity": 3,
+      "distance": 10,
+      "distribution": "spacing",
+      "expressions": {
+        "quantity": "n"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 5811.504440784613,
+        "faces": 9,
+        "source": "analytic",
+        "note": "n = 3: holes r2 at x = 5, 15, 25. V = 60*20*5 - 3*pi*4*5; faces 6 + 3."
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "n",
+      "value": 5,
+      "unit": ""
+    }
+  ],
+  "expect": {
+    "volume": 5685.84073464102,
+    "area": 3388.4955592153874,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      20,
+      5
+    ],
+    "source": "analytic",
+    "note": "n = 5: holes at x = 5, 15, 25, 35, 45 (Fusion's Quantity field takes a parameter). V = 6000 - 5*pi*4*5; A = 2*1200 + 800 - 10*4pi + 5*2pi*2*5; faces 6 + 5 hole walls."
+  }
+}

@@ -111,6 +111,7 @@ def enable():
     _safely(lambda: __import__("sciforge.browser_ui").browser_ui.show())
     _install_close_guard()
     _hide_panels()
+    _safely(_hide_overlay_titles)
     shortcuts.apply()
     timeline_ui.show()
     navbar_ui.show()
@@ -298,6 +299,87 @@ def _restore_panels():
         except RuntimeError:
             pass
     _state["panels"] = []
+    _overlay_titles_off()
+
+
+def _hide_overlay_titles():
+    """FreeCAD 1.1 floats the Tasks panel over the 3D view (its "overlay") with a title bar
+    of its own: "Tasks" and three small buttons stayed over the view when no command was
+    open (FreeCAD only auto-hides an overlay holding two panels or more), and a white strip
+    sat above every command dialog. Fusion shows just the dialog, with its own header.
+    FreeCAD shows these title bars again on every state change and builds new ones when a
+    panel changes, so each one is kept at zero height, also the ones made later."""
+    watcher = _state.get("overlay_watcher")
+    if watcher is None:
+        watcher = _state["overlay_watcher"] = _OverlayTitleWatcher()
+    for widget in _main().findChildren(QtWidgets.QWidget):
+        name = widget.metaObject().className()
+        if name == "Gui::OverlayTitleBar":
+            watcher.flatten(widget)
+        elif name == "Gui::OverlayTabWidget" or isinstance(widget, QtWidgets.QDockWidget):
+            watcher.watch(widget)
+
+
+def _overlay_titles_off():
+    watcher = _state.pop("overlay_watcher", None)
+    if watcher is not None:
+        watcher.release()
+
+
+def _in_overlay(widget):
+    parent = widget.parentWidget()
+    while parent is not None:
+        if parent.metaObject().className() in ("Gui::OverlayTabWidget", "Gui::OverlaySplitter"):
+            return True
+        parent = parent.parentWidget()
+    return False
+
+
+class _OverlayTitleWatcher(QtCore.QObject):
+    """Flattens FreeCAD's overlay title bars: the ones there now and the ones FreeCAD makes
+    later inside a watched overlay or panel (they are made as children of those)."""
+
+    def __init__(self):
+        super().__init__()
+        self.flat = []  # (title bar, its old maximum height)
+        self.watched = []
+
+    def watch(self, widget):
+        if widget not in self.watched:
+            widget.installEventFilter(self)
+            self.watched.append(widget)
+
+    def flatten(self, widget):
+        """Only title bars over the 3D view: docked panels (the BROWSER) keep theirs."""
+        if _in_overlay(widget) and all(w is not widget for w, _ in self.flat):
+            self.flat.append((widget, widget.maximumHeight()))
+            widget.setMaximumHeight(0)
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() in (QtCore.QEvent.ChildAdded, QtCore.QEvent.ChildPolished):
+                child = event.child()
+                if (
+                    isinstance(child, QtWidgets.QWidget)
+                    and child.metaObject().className() == "Gui::OverlayTitleBar"
+                ):
+                    self.flatten(child)
+        except Exception as exc:
+            warn("interface: %s" % exc)
+        return False
+
+    def release(self):
+        for widget in self.watched:
+            try:
+                widget.removeEventFilter(self)
+            except RuntimeError:
+                pass
+        for widget, height in self.flat:
+            try:
+                widget.setMaximumHeight(height)
+            except RuntimeError:
+                pass
+        self.watched, self.flat = [], []
 
 
 def _safely(step):

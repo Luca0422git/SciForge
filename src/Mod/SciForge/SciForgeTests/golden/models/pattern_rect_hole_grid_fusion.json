@@ -1,0 +1,85 @@
+{
+  "id": "pattern_rect_hole_grid_fusion",
+  "title": "Plate 60x40x5, a 3x2 Rectangular Pattern of a hole (Fusion dialog, Extent)",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            3
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "through_all",
+      "flip": true
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "c1"
+      ],
+      "direction": "X",
+      "quantity": 3,
+      "distance": 40,
+      "direction2": "Y",
+      "quantity2": 2,
+      "distance2": 20
+    }
+  ],
+  "expect": {
+    "volume": 11151.769983530756,
+    "area": 6026.194671058465,
+    "faces": 12,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      5
+    ],
+    "source": "analytic",
+    "note": "Extent 40 / 20: holes at x 10, 30, 50 and y 10, 30. V = 60*40*5 - 6*pi*9*5; A = 2*2400 + 2*60*5 + 2*40*5 - 12*9pi + 6*2pi*3*5. Same part as plate_hole_grid, built with SciForge's dialog code, which writes both spacing lists (passes on stock FreeCAD)."
+  }
+}

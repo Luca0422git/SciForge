@@ -1,0 +1,49 @@
+{
+  "id": "sf_revolve_cylinder",
+  "title": "Revolve dialog: rectangle against Z, Full: a cylinder",
+  "tags": [
+    "revolve",
+    "fusion-revolve"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            20
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z",
+      "type": "full"
+    }
+  ],
+  "expect": {
+    "volume": 6283.185307179586,
+    "area": 1884.9555921538758,
+    "faces": 3,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "Cylinder r10 h20: V = pi*10^2*20 = 2000 pi; A = 2*100 pi + 2 pi*10*20 = 600 pi; faces: top, bottom, side. First solid: operation auto = new body (the empty body)."
+  }
+}

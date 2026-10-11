@@ -9,6 +9,7 @@ click is matched to them geometrically (nearest square along the mouse ray).
 If a plane or flat face is already selected, the sketch opens on it at once.
 Esc / Cancel leaves without creating anything.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -202,7 +203,20 @@ def sketch_target(selection=None):
 
 
 def create_sketch(body, target):
-    """New sketch in `body` attached flat to `target` = (plane or feature, "" or "FaceN")."""
+    """New sketch in `body` attached flat to `target` = (plane or feature, "" or "FaceN").
+
+    A face or plane of another body puts the sketch in that body and makes it active, as
+    in Fusion, where Extrude then joins the body that was clicked. (In `body` the sketch
+    would reach out of its body, and the extrude would join the wrong one.)"""
+    from . import timeline_ops
+
+    owner = timeline_ops.body_of(target[0])
+    if owner is not None and owner is not body:
+        body = owner
+        try:
+            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+        except Exception as exc:
+            warn("could not activate %s: %s" % (body.Label, exc))
     doc = body.Document
     doc.openTransaction("Create Sketch")
     try:
@@ -293,7 +307,7 @@ class SketchPicker:
         try:
             from . import sketch_mode
 
-            self.view_widget = sketch_mode.gl_widget()
+            self.view_widget = sketch_mode.view_widget()  # where the keyboard goes
             if self.view_widget is not None:
                 self.view_widget.installEventFilter(self.esc)
         except Exception as exc:
@@ -306,6 +320,11 @@ class SketchPicker:
         target = sketch_target()
         if target is not None:
             self._picked(target)
+        elif Gui.Selection.getSelectionEx():
+            # Fusion only offers flat faces and planes; a curved face or an edge is not
+            # taken (and does not stay selected), with the reason next to the mouse.
+            Gui.Selection.clearSelection()
+            commands.tell("A sketch goes on a flat face or a plane: click one of those.")
 
     def _picked(self, target):
         if self._closed:

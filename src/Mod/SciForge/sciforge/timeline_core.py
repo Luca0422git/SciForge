@@ -14,8 +14,11 @@ bodies' lists are merged by creation order (``key``), never changing the order
 inside a body, so the merged row is always a valid FreeCAD history.
 
 The history marker is FreeCAD's ``Body.Tip``: a step is active when it is at or
-before its body's Tip. Only solid steps can be a Tip, so the marker always sits
-just before the first rolled-back solid step (or at the end).
+before its body's Tip. Only solid steps can be a Tip, so by the Tips alone the marker
+sits just before the first rolled-back solid step (or at the end). Fusion's marker can
+also stand before a sketch or plane that comes after the last active solid step: the
+name of the step right after the marker (``marker_before``) says so; it is ignored when
+it does not fit the Tips (after an undo, say).
 """
 
 import re
@@ -42,6 +45,7 @@ KINDS = {
     "primitive": ("Primitive", "box"),
     "pattern_rect": ("Rectangular Pattern", "pattern_rect"),
     "pattern_circ": ("Circular Pattern", "pattern_circ"),
+    "pattern_path": ("Pattern on Path", "pattern_rect"),
     "pattern": ("Pattern", "pattern_rect"),
     "mirror": ("Mirror", "mirror"),
     "thicken": ("Thicken", "thicken"),
@@ -57,6 +61,7 @@ KINDS = {
     "presspull": ("Press Pull", "press_pull"),
     "offset_face": ("Offset Face", "offset_face"),
     "replace_face": ("Replace Face", "replace_face"),
+    "delete_face": ("Delete Face", "delete"),
     "plane": ("Plane", "offset_plane"),
     "axis": ("Axis", "axis"),
     "point": ("Point", "point"),
@@ -138,6 +143,8 @@ KIND_BY_SCIFORGE_TYPE = {
     "SplitFace": "split_face",
     "RectangularPattern": "pattern_rect",
     "CircularPattern": "pattern_circ",
+    "PatternOnPath": "pattern_path",
+    "DeleteFace": "delete_face",
     "Move": "move",
     "MoveCopy": "move",
 }
@@ -225,6 +232,7 @@ class Timeline:
     items: tuple
     marker: int  # slot of the history marker: number of steps before it
     tips: dict  # body name -> tip name (or None)
+    before: str = ""  # the step right after the marker, when it stands before a sketch
 
     @property
     def at_end(self):
@@ -281,6 +289,48 @@ def merge(features):
         heads[body] += 1
 
 
+def label_number(label, name):
+    """The number of FreeCAD's default label ("Extrude" 0, "Extrude003" 3), None for a
+    label the user typed. Only its order counts: FreeCAD counts every object it ever
+    made (cancelled previews too), but within one kind of label the numbers follow the
+    order the steps were made in, and SciForge keeps a step's label when it rebuilds it
+    as another kind (an extrude turned into a cut: a new object)."""
+    if not is_default_label(label, name):
+        return None
+    m = re.search(r"(\d+)$", label or "")
+    return int(m.group(1)) if m else 0
+
+
+def _numbers(rows, kinds):
+    """Fusion's step numbers ("Extrude 3"): steps of a kind are numbered in the order
+    they were made (``created``: FreeCAD's object ID), so moving a step or adding one at
+    the rolled-back marker renames nothing. A step rebuilt as another kind is a new
+    object; among default labels of one kind the label order decides (it is kept)."""
+    bases = [title_base(f["type_id"], k) for f, k in zip(rows, kinds)]
+    groups = {}
+    for i in range(len(rows)):
+        groups.setdefault(bases[i], []).append(i)
+    numbers = [0] * len(rows)
+    for members in groups.values():
+        order = sorted(
+            members, key=lambda i: (float(rows[i].get("created", rows[i].get("key", 0))), i)
+        )
+        stems = {}
+        for pos, i in enumerate(order):
+            label = rows[i].get("label", rows[i]["name"])
+            n = label_number(label, rows[i]["name"])
+            if n is not None:
+                stems.setdefault(_strip(label), []).append((pos, n, i))
+        for entries in stems.values():
+            positions = [pos for pos, _n, _i in entries]
+            by_label = sorted(entries, key=lambda e: (e[1], e[0]))
+            for pos, (_p, _n, i) in zip(positions, by_label):
+                order[pos] = i
+        for rank, i in enumerate(order, 1):
+            numbers[i] = rank
+    return numbers
+
+
 def _status(f):
     if f.get("error"):
         return "error", f["error"]
@@ -289,8 +339,9 @@ def _status(f):
     return "ok", ""
 
 
-def build(features, tips):
-    """The whole timeline. ``tips``: {body name: tip name or None}."""
+def build(features, tips, marker_before=None):
+    """The whole timeline. ``tips``: {body name: tip name or None}; ``marker_before``:
+    the step right after the marker when it stands before a sketch/plane (see above)."""
     rows = merge(features)
     kinds = [classify(f["type_id"]) for f in rows]
     # A step outside any body has no Tip: it never rolls back.
@@ -313,14 +364,20 @@ def build(features, tips):
             active[i] = seq.index(f["name"]) <= seq.index(tip)
     inactive = [i for i in active if not active[i]]
     marker = min(inactive) if inactive else len(rows)
+    before = ""
+    if marker_before:
+        names = [f["name"] for f in rows]
+        last_active = max([i for i in active if active[i]], default=-1)
+        k = names.index(marker_before) if marker_before in names else -1
+        if last_active < k < marker:  # only sketches/planes between: a valid spot
+            marker, before = k, marker_before
 
-    counts = {}
+    numbers = _numbers(rows, kinds)
     items = []
     for i, f in enumerate(rows):
         kind = kinds[i]
         base = title_base(f["type_id"], kind)
-        counts[base] = counts.get(base, 0) + 1
-        title = "%s %d" % (base, counts[base])
+        title = "%s %d" % (base, numbers[i])
         label = f.get("label", f["name"])
         display = title if is_default_label(label, f["name"]) else label
         if solid[i]:
@@ -351,7 +408,7 @@ def build(features, tips):
                 group_name=f.get("group_name") or "",
             )
         )
-    return Timeline(tuple(items), marker, dict(tips))
+    return Timeline(tuple(items), marker, dict(tips), before)
 
 
 def tooltip(item):
@@ -375,6 +432,7 @@ def signature(timeline, extra=None):
     return (
         extra,
         timeline.marker,
+        timeline.before,
         tuple(
             (i.name, i.display, i.kind, i.state, i.suppressed, i.status, i.message, i.group)
             for i in timeline.items
@@ -506,6 +564,24 @@ def tips_for_slot(timeline, slot):
 def tips_for_item(timeline, index):
     """'Roll History Marker Here': the marker goes right after step ``index``."""
     return tips_for_slot(timeline, index + 1)
+
+
+def marker_for_slot(timeline, slot):
+    """(tips or None, marker_before or None) for the marker dropped after ``slot``
+    steps: the Tips for the solid steps before it, and the step right after it when it
+    stands before a sketch/plane that follows the last of those. tips is None when the
+    Tips stay as they are (only marker_before may change)."""
+    solids = _solid_indexes(timeline)
+    if not solids:
+        return None, None
+    count = max(1, len([i for i in solids if i < slot]))
+    last = solids[count - 1]
+    nxt = solids[count] if count < len(solids) else len(timeline.items)
+    before = timeline.items[slot].name if last < slot < nxt else None
+    tips = tips_for_count(timeline, count)
+    if count == active_count(timeline) and _consistent(timeline):
+        tips = None
+    return tips, before
 
 
 def tips_for_step(timeline, where):

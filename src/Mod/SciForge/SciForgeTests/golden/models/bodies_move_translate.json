@@ -1,0 +1,58 @@
+{
+  "id": "bodies_move_translate",
+  "title": "Move/Copy Translate 10, 5, 20",
+  "tags": [
+    "bodies",
+    "move"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "translate",
+      "dx": 10,
+      "dy": 5,
+      "dz": 20
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      10,
+      5,
+      20,
+      50,
+      35,
+      30
+    ],
+    "source": "analytic",
+    "note": "the box moved"
+  }
+}

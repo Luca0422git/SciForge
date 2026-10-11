@@ -1,0 +1,54 @@
+{
+  "id": "sf_shell_hollow_body",
+  "title": "Box 40x30x10, Shell on the body (nothing taken away): closed hollow, 2 mm",
+  "tags": [
+    "shell",
+    "sciforge-shell",
+    "hollow"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "body": true,
+      "inside": 2
+    }
+  ],
+  "expect": {
+    "volume": 6384,
+    "faces": 12,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "V = 40*30*10 - 36*26*6 (a void inside); faces: 6 outside + 6 inside"
+  }
+}

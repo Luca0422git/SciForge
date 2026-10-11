@@ -1,0 +1,86 @@
+{
+  "id": "mirror_body_join_face",
+  "title": "Plate with a boss mirrored as a body across its right face, Operation Join",
+  "tags": [
+    "mirror",
+    "bodies",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            5,
+            3
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 6
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "body": true,
+      "plane": {
+        "face": {
+          "normal": [
+            1,
+            0,
+            0
+          ],
+          "count": 1
+        }
+      },
+      "operation": "join"
+    }
+  ],
+  "expect": {
+    "volume": 24339.292006587697,
+    "faces": 10,
+    "solids": 1,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      60,
+      15,
+      16
+    ],
+    "source": "analytic",
+    "note": "The copy touches the original along x = 20 and joins it: one box 80x30x10 (6 faces after refine) with two bosses (2 faces each). V = 2*(12000 + pi*9*6)."
+  }
+}

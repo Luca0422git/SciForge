@@ -5,7 +5,7 @@ Colours were measured from screenshots of Fusion's stock dark theme
 (docs/sciforge/parity/ui-shell.md). Everything changed here is remembered and
 put back by restore(), so leaving SciForge returns FreeCAD exactly as it was.
 """
-from . import log, warn
+from . import log, ui_icon_path, warn
 
 CHROME = "#3b4453"  # ribbon, panels, timeline
 MENU = "#454f61"  # drop-down menus
@@ -59,6 +59,13 @@ QPushButton {{ background: #4a5568; color: {text}; border: 1px solid {line}; bor
 QPushButton:hover {{ background: {hover}; }}
 QPushButton:default {{ border: 1px solid {accent}; }}
 QCheckBox, QRadioButton, QLabel, QGroupBox {{ color: {text}; background: transparent; }}
+/* An unticked box must be visible on the dark panels (it was only visible once ticked) */
+QCheckBox::indicator {{ width: 13px; height: 13px; border: 1px solid #8a94a3; border-radius: 2px;
+    background: #2b313b; }}
+QCheckBox::indicator:hover {{ border-color: {accent}; }}
+QCheckBox::indicator:checked {{ background: {accent}; border-color: {accent};
+    image: url(CHECK_ICON); }}
+QCheckBox::indicator:disabled {{ background: #3b4453; border-color: #5d6778; }}
 QGroupBox {{ border: 1px solid {line}; margin-top: 8px; padding-top: 6px; }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 6px; padding: 0 3px; }}
 
@@ -127,6 +134,7 @@ QSint--ActionGroup QFrame[class="separator"] {{ background: transparent; }}
     line=LINE,
     accent=ACCENT,
 )
+QSS = QSS.replace("CHECK_ICON", ui_icon_path("palette_check").replace("\\", "/"))
 
 _VIEW_PARAMS = "User parameter:BaseApp/Preferences/View"
 

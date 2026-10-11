@@ -1,0 +1,89 @@
+{
+  "id": "bodies_split_face_extended",
+  "title": "Split Body with a face of another body, Extend Splitting Tool on",
+  "tags": [
+    "bodies",
+    "split",
+    "extend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            25,
+            -5,
+            35,
+            5
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 20,
+      "operation": "new_body"
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "e1",
+      "tool": {
+        "face": {
+          "normal": [
+            0,
+            -1,
+            0
+          ],
+          "count": 1
+        },
+        "of": "e2"
+      },
+      "extend": true
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 4600,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "The face at y = -5 of the 10x10 tool body (x 25..35) does not touch the box; extended it is the plane y = -5: pieces 40x10x10 and 40x20x10 (the tool body is not measured)."
+  }
+}

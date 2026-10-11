@@ -1,0 +1,66 @@
+{
+  "id": "bodies_move_point_to_point",
+  "title": "Move/Copy Point to Point: corner (0, 0, 0) to (5, 5, 5)",
+  "tags": [
+    "bodies",
+    "move",
+    "point-to-point"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "point_to_point",
+      "from_point": [
+        0,
+        0,
+        0
+      ],
+      "to_point": [
+        5,
+        5,
+        5
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "bbox": [
+      5,
+      5,
+      5,
+      45,
+      35,
+      15
+    ],
+    "source": "analytic",
+    "note": "moved by (5, 5, 5)"
+  }
+}

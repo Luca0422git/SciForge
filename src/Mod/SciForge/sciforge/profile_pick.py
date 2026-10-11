@@ -95,7 +95,32 @@ def hidden_by(shape, point, direction):
         return False
 
 
+def handle_at(view, position, radius=3):
+    """True if the front-most thing under the mouse is a drag handle (a Coin dragger: the
+    blue arrows, the taper disc). A press there drags the handle; it is not a pick."""
+    from pivy import coin
+
+    try:
+        viewer = view.getViewer()
+        manager = viewer.getSoRenderManager()
+        action = coin.SoRayPickAction(manager.getViewportRegion())
+        action.setPoint(coin.SbVec2s(int(position[0]), int(position[1])))
+        action.setRadius(radius)
+        action.apply(manager.getSceneGraph())
+        point = action.getPickedPoint()
+        if point is None:
+            return False
+        path = point.getPath()  # read now: the path dies with the action
+        dragger = coin.SoDragger.getClassTypeId()
+        return any(path.getNode(i).isOfType(dragger) for i in range(path.getLength()))
+    except Exception:
+        return False
+
+
 class ProfilePicker:
+    """A press on a drag handle (an arrow in front of a region) drags the handle: it is no
+    pick of the region behind it."""
+
     def __init__(self, view, sketches, on_pick, occluder=None):
         from pivy import coin
 
@@ -221,7 +246,11 @@ class ProfilePicker:
         try:
             if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
                 return
-            hit = self.region_at(info["Position"], check_hidden=True)
+            # (On the press: FreeCAD's selection takes the release and stops it there.)
+            position = tuple(info["Position"])
+            if handle_at(self.view, position):
+                return  # a drag handle sits in front of the region: the press drags it
+            hit = self.region_at(position, check_hidden=True)
             if hit is not None:
                 self.last_click = time.time()
                 self.on_pick(hit[0], hit[1])

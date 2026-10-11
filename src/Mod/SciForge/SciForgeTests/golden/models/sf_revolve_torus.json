@@ -1,0 +1,48 @@
+{
+  "id": "sf_revolve_torus",
+  "title": "Revolve dialog: circle r5 at x = 20 about Z, Full: a torus",
+  "tags": [
+    "revolve",
+    "fusion-revolve"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            0,
+            5
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": "Z",
+      "type": "full"
+    }
+  ],
+  "expect": {
+    "volume": 9869.604401089358,
+    "area": 3947.8417604357437,
+    "faces": 1,
+    "solids": 1,
+    "bbox": [
+      -25,
+      -25,
+      -5,
+      25,
+      25,
+      5
+    ],
+    "source": "analytic",
+    "note": "Torus R20 r5 (Pappus): V = 2 pi^2 R r^2 = 1000 pi^2; A = 4 pi^2 R r = 400 pi^2."
+  }
+}

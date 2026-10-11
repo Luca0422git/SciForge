@@ -3,10 +3,10 @@
 
 Input: one dict per document object
     {"name", "label", "type_id", "visible", "body" (name of its body or None), "role",
-     "sciforge_type" (optional), "error"/"warning" (optional reason)}
+     "sciforge_type" (optional), "error"/"warning" (optional reason), "suppressed" (bool)}
 Output: a tree of nodes
     {"key", "label", "icon", "kind", "object" (name or None), "visible" (bool or None),
-     "active" (bool), "status" ("ok"|"warning"|"error"), "tip", "children": [...]}
+     "active" (bool), "status" ("ok"|"warning"|"error"|"suppressed"), "tip", "children": [...]}
 
 Fusion's browser shows the design's structure, not its history (that is the
 timeline): Document Settings, Named Views, Analysis (once there is one), Origin,
@@ -91,6 +91,8 @@ def _folder(key, label, items):
 
 
 def _status(obj):
+    if obj.get("suppressed"):
+        return "suppressed", "Suppressed in the timeline"
     if obj.get("error"):
         return "error", obj["error"]
     if obj.get("warning"):
@@ -116,6 +118,12 @@ def _item(prefix, obj, icon, kind, **extra):
 def build(doc_label, objects, units="mm", active_body=None, views=()):
     """The whole browser tree for a document. ``views``: names of saved named views."""
     bodies, sketches, construction, origin, analysis = [], [], [], [], []
+    # Fusion's design has one origin. FreeCAD gives every body its own: show the active
+    # body's, else the first body's (a reopened file has no active body yet).
+    origin_body = active_body
+    if origin_body is None:
+        owners = [o["body"] for o in objects if o.get("role") in ORIGIN_ROLES and o["body"]]
+        origin_body = owners[0] if owners else None
     for obj in objects:
         type_id = obj["type_id"]
         if type_id in BODY_TYPES:
@@ -133,7 +141,7 @@ def build(doc_label, objects, units="mm", active_body=None, views=()):
         elif is_analysis(obj):
             analysis.append(_item("analysis:", obj, "section", "analysis"))
         elif obj.get("role") in ORIGIN_ROLES and (
-            active_body is None or obj["body"] == active_body
+            origin_body is None or obj["body"] == origin_body
         ):
             role = obj["role"]
             icon = (

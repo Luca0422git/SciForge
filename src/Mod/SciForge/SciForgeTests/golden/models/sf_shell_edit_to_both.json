@@ -1,0 +1,76 @@
+{
+  "id": "sf_shell_edit_to_both",
+  "title": "Shell inside 2 mm edited to Both with 1 mm outside (FreeCAD's Thickness -> SciForge's)",
+  "tags": [
+    "shell",
+    "sciforge-shell",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "inside": 2
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 4512,
+        "faces": 11,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "sf_shell_edit",
+      "target": "sh1",
+      "set": {
+        "direction": "both",
+        "outside": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7296,
+    "faces": 11,
+    "bbox": [
+      -1,
+      -1,
+      -1,
+      41,
+      31,
+      10
+    ],
+    "source": "analytic",
+    "note": "4512 before; after the edit V = 42*32*11 - 36*26*8"
+  }
+}

@@ -137,9 +137,12 @@ run_scenarios() {
         name="$(basename "${file}" .py)"
         [ "${name}" = "__init__" ] && continue
         [ -n "${SCENARIO:-}" ] && [ "${name}" != "${SCENARIO}" ] && continue
-        SCIFORGE_SCENARIO="${name}" SCIFORGE_SMOKE_OUT="${OUT}" timeout 900 \
-            xvfb-run -a -s "-screen 0 1920x1200x24" \
-            "${FC_GUI[@]}" "${file}" > "${OUT}/scenario-${name}.log" 2>&1
+        # Through the launcher: a scenario that does not even load fails at once
+        # instead of leaving FreeCAD open until the timeout.
+        SCIFORGE_SCENARIO="${name}" SCIFORGE_SCENARIO_FILE="${file}" SCIFORGE_SMOKE_OUT="${OUT}" \
+            timeout 900 xvfb-run -a -s "-screen 0 1920x1200x24" \
+            "${FC_GUI[@]}" "${MODULE}/SciForgeTests/gui/scenario_launcher.py" \
+            > "${OUT}/scenario-${name}.log" 2>&1
         python3 - "${OUT}" "${name}" <<'EOF' || FAILED+=("scenario ${name}")
 import glob, json, os, sys
 out, name = sys.argv[1], sys.argv[2]

@@ -1,0 +1,56 @@
+{
+  "id": "sf_revolve_sketch_line_axis",
+  "title": "Revolve dialog: square about its own right line",
+  "tags": [
+    "revolve",
+    "fusion-revolve",
+    "sketch-line"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s1",
+      "axis": {
+        "sketch": "s1",
+        "at": [
+          20,
+          10
+        ]
+      },
+      "type": "full"
+    }
+  ],
+  "expect": {
+    "volume": 25132.741228718343,
+    "area": 5026.548245743669,
+    "faces": 3,
+    "solids": 1,
+    "bbox": [
+      0,
+      -20,
+      0,
+      40,
+      20,
+      20
+    ],
+    "source": "analytic",
+    "note": "Cylinder r20 h20 about the line x = 20: V = pi*400*20; A = 800 pi + 800 pi."
+  }
+}

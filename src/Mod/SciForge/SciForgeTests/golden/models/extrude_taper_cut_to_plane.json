@@ -1,0 +1,76 @@
+{
+  "id": "extrude_taper_cut_to_plane",
+  "title": "Tapered hole from the top of a 20 mm block Cut To Object (the XY plane), narrowing 5 degrees",
+  "tags": [
+    "extrude",
+    "cut",
+    "to-object",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            10,
+            10,
+            20,
+            20
+          ],
+          "name": "h"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "extent": "to_object",
+      "operation": "cut",
+      "taper": -5,
+      "to": {
+        "plane": "XY"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 22618.263801588168,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "Block 40x30x20 = 24000. The square hole goes from the top down to the XY plane (through), narrowing by 20*tan(5 deg) = 1.7498 per side: 10x10 at the top, b = 6.5005 at the bottom. Removed frustum = 20/3 (100 + b^2 + 10 b) = 1381.7362. Faces: top and bottom (each with a square hole), 4 block sides, 4 drafted walls = 10."
+  }
+}

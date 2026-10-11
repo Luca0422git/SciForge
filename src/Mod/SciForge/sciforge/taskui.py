@@ -7,6 +7,8 @@
 - Panel: a task-dialog base that wraps the edit in one undo step: OK keeps it,
   Cancel/Esc removes it again, like Fusion.
 """
+import re
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -37,6 +39,43 @@ def set_current(dialog):
 EDITORS = {}
 
 
+def dialog_button(role):
+    """The enabled OK ("accept") or Cancel/Close ("reject") button of the open task
+    dialog, or None. FreeCAD keeps them in the TaskEditControl's button box."""
+    want = (
+        QtWidgets.QDialogButtonBox.AcceptRole
+        if role == "accept"
+        else QtWidgets.QDialogButtonBox.RejectRole
+    )
+    if not Gui.Control.activeDialog():
+        return None
+    found = None
+    for box in Gui.getMainWindow().findChildren(QtWidgets.QDialogButtonBox):
+        parent = box.parentWidget()
+        if parent is None or parent.metaObject().className() != "Gui::TaskView::TaskEditControl":
+            continue
+        for button in box.buttons():
+            if box.buttonRole(button) == want and button.isEnabled():
+                if button.isVisible():
+                    return button
+                found = found or button  # the Tasks tab may be hidden behind the Model tab
+    return found
+
+
+def press_dialog_button(role):
+    """Click the open dialog's OK or Cancel, exactly as a mouse click on it does (the
+    marking menu offers them, as Fusion's does while a command is open)."""
+    try:
+        button = dialog_button(role)
+        if button is None:
+            return False
+        button.click()
+        return True
+    except Exception as exc:
+        warn("could not press %s: %s" % ("OK" if role == "accept" else "Cancel", exc))
+        return False
+
+
 def type_key(obj):
     kind = getattr(obj, "SciForgeType", "")
     return "SciForge::" + kind if kind else obj.TypeId
@@ -49,7 +88,10 @@ def edit_object(obj):
 
     if obj is None or not commands.finish_open_dialog():
         return
-    editor = EDITORS.get(type_key(obj))
+    try:
+        editor = EDITORS.get(type_key(obj))
+    except ReferenceError:
+        return  # it was the unfinished step of the dialog that was just cancelled
     try:
         if editor is not None:
             editor(obj)
@@ -59,15 +101,30 @@ def edit_object(obj):
         warn("could not edit %s: %s" % (obj.Label, exc))
 
 
+_BARE_NUMBER = re.compile(r"^\s*[+-]?(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?\s*$")
+
+
 class DistanceField:
+    """A plain number typed in the box is in the box's own unit (mm, or degrees), like
+    Fusion. FreeCAD's box reads it in the unit it *shows*: after a value below 0.1 mm it
+    showed "50.00 µm", and the next "4" typed became 4 µm (found by the fillet QA)."""
+
     def __init__(self, value=0.0, unit="mm", on_change=None):
         self.widget = Gui.UiLoader().createWidget("Gui::QuantitySpinBox")
         self.widget.setProperty("unit", unit)
         self.widget.setProperty("minimum", -1e9)
         self.widget.setProperty("maximum", 1e9)
         self.widget.setProperty("rawValue", float(value))
+        # FreeCAD's box swallowed the first Enter after a sum ("2*0.25") to rewrite it as
+        # "0.50 mm"; in Fusion that Enter already finishes the command.
+        self.widget.setProperty("autoNormalize", False)
         self._on_change = on_change
         self._quiet = False
+        self._typed = None  # text typed since the box was last settled
+        edit = self.widget.findChild(QtWidgets.QLineEdit)
+        if edit is not None:
+            edit.textEdited.connect(self._edited)
+        self.widget.editingFinished.connect(self._settle)
         self.widget.valueChanged.connect(self._changed)
 
     def bind(self, obj, prop):
@@ -78,14 +135,46 @@ class DistanceField:
             warn("expression binding unavailable: %s" % exc)
 
     def value(self):
-        return float(self.widget.property("rawValue"))
+        typed = self._bare()
+        return typed if typed is not None else float(self.widget.property("rawValue"))
 
     def set_value(self, value):
+        self._typed = None
         self._quiet = True
         try:
             self.widget.setProperty("rawValue", float(value))
         finally:
             self._quiet = False
+
+    def _bare(self):
+        if self._typed is None or not _BARE_NUMBER.match(self._typed):
+            return None
+        return float(self._typed.strip().replace(",", "."))
+
+    def _edited(self, text):
+        self._typed = text
+
+    def _settle(self):
+        """Editing finished: a plain number typed counts in the box's unit. Only a value
+        FreeCAD read in another unit is corrected; nothing is done while the dialog closes
+        (leaving the box then also "finishes" it, after the value was taken)."""
+        typed, self._typed = self._bare(), None
+        if typed is None:
+            return
+        try:
+            if not self.widget.isVisible():
+                return
+            if abs(float(self.widget.property("rawValue")) - typed) <= 1e-12:
+                return
+        except RuntimeError:
+            return  # the box went with its dialog
+        try:
+            self.set_value(typed)
+            owner = getattr(self._on_change, "__self__", None)
+            if self._on_change is not None and not getattr(owner, "_closed", False):
+                self._on_change(typed)
+        except Exception as exc:
+            warn("value box: %s" % exc)
 
     def _changed(self, *_):
         if not self._quiet and self._on_change:
@@ -170,6 +259,21 @@ class ArrowDragger:
             pass
 
 
+def _end_transaction(doc, abort=False):
+    """Close a dialog's undo step. doc.commitTransaction()/abortTransaction() only close a
+    step that holds changes: a dialog OK'd or cancelled without a change left its step name
+    pending, and the next change anywhere opened a step under that name and threw away the
+    Redo list. The pending name is closed too (same as preview.end_transaction)."""
+    if abort:
+        doc.abortTransaction()
+    else:
+        doc.commitTransaction()
+    try:
+        App.closeActiveTransaction(abort)
+    except Exception:
+        pass
+
+
 class Panel:
     """Base for SciForge task dialogs. Subclasses fill self.layout and implement apply()."""
 
@@ -204,11 +308,16 @@ class Panel:
         self._timer.start()
 
     def _recompute(self):
+        if self._closed:
+            return  # a change that arrived as the dialog closed
         try:
             self.doc.recompute()
             self.show_status()
         except Exception as exc:
-            self.message.setText(str(exc))
+            try:
+                self.message.setText(str(exc))
+            except RuntimeError:
+                pass
 
     def feature(self):
         """The feature whose state the dialog reports (override)."""
@@ -238,7 +347,7 @@ class Panel:
             self.show_status()
             return False  # stay open, like Fusion's dialog with an error
         self.cleanup()
-        self.doc.commitTransaction()
+        _end_transaction(self.doc)
         self._close()
         log("%s done" % self.title)
         return True
@@ -246,7 +355,7 @@ class Panel:
     def reject(self):
         self._timer.stop()
         self.cleanup()
-        self.doc.abortTransaction()
+        _end_transaction(self.doc, abort=True)
         self.doc.recompute()
         self._close()
         return True

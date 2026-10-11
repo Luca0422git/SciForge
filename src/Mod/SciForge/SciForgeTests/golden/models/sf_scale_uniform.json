@@ -1,0 +1,51 @@
+{
+  "id": "sf_scale_uniform",
+  "title": "Box 40x30x10 scaled 2 about the origin",
+  "tags": [
+    "scale",
+    "sciforge-scale"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_scale",
+      "id": "sc1",
+      "factor": 2
+    }
+  ],
+  "expect": {
+    "volume": 96000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      80,
+      60,
+      20
+    ],
+    "source": "analytic",
+    "note": "V = 12000 * 2^3"
+  }
+}
