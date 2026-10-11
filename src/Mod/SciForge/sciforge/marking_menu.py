@@ -5,12 +5,15 @@ A short right click (press and release without dragging) on the 3D view
 opens a ring of 8 commands around the cursor plus a list underneath, instead
 of FreeCAD's context menu. Slot 1 repeats the last command. The layout is
 data in ribbon_config.MARKING_MENU / MARKING_LIST.
+
+While a command's dialog is open, slot 1 is OK and the list starts with Cancel (Fusion
+offers both there, so a right click finishes the command without going to the panel).
 """
 import math
 
 import FreeCADGui as Gui
 
-from . import recent, registry, ribbon_config as cfg, ui_icon, warn
+from . import recent, registry, ribbon_config as cfg, taskui, ui_icon, warn
 from .compat import QtCore, QtGui, QtWidgets
 from .ribbon_ui import build_menu, resolve, run
 
@@ -34,11 +37,22 @@ class MarkingMenu(QtWidgets.QWidget):
         self.move(center.x() - size // 2, center.y() - size // 2)
         mid = QtCore.QPoint(size // 2, size // 2)
         self.slots = []
-        for i, entry in enumerate(cfg.MARKING_MENU):
+        ring = list(cfg.MARKING_MENU)
+        in_command = _dialog_open()
+        if in_command:
+            ring[0] = cfg.item("OK", "__ok__", "finish_sketch")
+        for i, entry in enumerate(ring):
             angle = math.radians(90 - 45 * i)  # N first, clockwise
             pos = mid + QtCore.QPoint(int(RADIUS * math.cos(angle)), int(-RADIUS * math.sin(angle)))
             self.slots.append(self._slot(entry, pos, available))
         listing = build_menu(self, cfg.MARKING_LIST, available)
+        if in_command:
+            first = listing.actions()[0] if listing.actions() else None
+            cancel = listing.addAction(ui_icon("cancel"), "Cancel\tEsc")
+            cancel.setEnabled(taskui.dialog_button("reject") is not None)
+            cancel.triggered.connect(lambda *_: taskui.press_dialog_button("reject"))
+            if first is not None:
+                listing.insertAction(first, cancel)  # moves it to the top
         self.list = QtWidgets.QListWidget(self)
         self.list.setObjectName("SciForgeMarkingList")
         self.list.setFixedWidth(200)
@@ -75,13 +89,19 @@ class MarkingMenu(QtWidgets.QWidget):
     def _slot(self, entry, pos, available):
         button = QtWidgets.QToolButton(self)
         button.setObjectName("SciForgeMarkingSlot")
-        if entry["command"] == "__repeat__":
-            last = recent.last()
-            label = "Repeat " + last[2] if last else "Repeat"
-            resolved = (last[0], last[1]) if last else None
+        label = entry["label"]
+        if entry["command"] == "__ok__":
+            enabled = taskui.dialog_button("accept") is not None
+            button.clicked.connect(lambda *_: self._press("accept"))
         else:
-            label = entry["label"]
-            resolved = resolve(entry["command"], available)
+            if entry["command"] == "__repeat__":
+                last = recent.last()
+                label = "Repeat " + last[2] if last else "Repeat"
+                resolved = (last[0], last[1]) if last else None
+            else:
+                resolved = resolve(entry["command"], available)
+            enabled = resolved is not None
+            button.clicked.connect(lambda _=False, r=resolved, l=label: self._run(r, l))
         button.setText(label)
         button.setIcon(ui_icon(entry["icon"]))
         button.setIconSize(QtCore.QSize(20, 20))
@@ -89,9 +109,12 @@ class MarkingMenu(QtWidgets.QWidget):
         button.ensurePolished()
         button.setFixedSize(button.sizeHint())
         button.move(pos.x() - button.width() // 2, pos.y() - button.height() // 2)
-        button.setEnabled(resolved is not None)
-        button.clicked.connect(lambda _=False, r=resolved, l=label: self._run(r, l))
+        button.setEnabled(enabled)
         return button
+
+    def _press(self, role):
+        self.close()
+        QtCore.QTimer.singleShot(0, lambda: taskui.press_dialog_button(role))
 
     def _run(self, resolved, label):
         self.close()
@@ -99,9 +122,24 @@ class MarkingMenu(QtWidgets.QWidget):
 
     def _list_clicked(self, row):
         action = row.data(QtCore.Qt.UserRole)
-        self.close()
-        if action is not None and action.isEnabled():
-            QtCore.QTimer.singleShot(0, action.trigger)
+        if action is None or not action.isEnabled():
+            self.close()
+            return
+        # Hidden, not closed: closing deletes the menu and the row's action with it, and
+        # Qt then silently drops the delayed action.trigger (no list row ever ran).
+        self.hide()
+
+        def go():
+            try:
+                action.trigger()
+            except Exception as exc:
+                warn("marking menu: %s" % exc)
+            try:
+                self.close()
+            except RuntimeError:
+                pass
+
+        QtCore.QTimer.singleShot(0, go)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -130,6 +168,13 @@ STYLE = """
 #SciForgeMarkingMenu QListWidget#SciForgeMarkingList::item { height: 24px; padding-left: 4px; }
 #SciForgeMarkingMenu QListWidget#SciForgeMarkingList::item:hover { background: #56647a; }
 """
+
+
+def _dialog_open():
+    try:
+        return bool(Gui.Control.activeDialog())
+    except Exception:
+        return False
 
 
 def open_at(global_pos):

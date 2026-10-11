@@ -37,6 +37,43 @@ def set_current(dialog):
 EDITORS = {}
 
 
+def dialog_button(role):
+    """The enabled OK ("accept") or Cancel/Close ("reject") button of the open task
+    dialog, or None. FreeCAD keeps them in the TaskEditControl's button box."""
+    want = (
+        QtWidgets.QDialogButtonBox.AcceptRole
+        if role == "accept"
+        else QtWidgets.QDialogButtonBox.RejectRole
+    )
+    if not Gui.Control.activeDialog():
+        return None
+    found = None
+    for box in Gui.getMainWindow().findChildren(QtWidgets.QDialogButtonBox):
+        parent = box.parentWidget()
+        if parent is None or parent.metaObject().className() != "Gui::TaskView::TaskEditControl":
+            continue
+        for button in box.buttons():
+            if box.buttonRole(button) == want and button.isEnabled():
+                if button.isVisible():
+                    return button
+                found = found or button  # the Tasks tab may be hidden behind the Model tab
+    return found
+
+
+def press_dialog_button(role):
+    """Click the open dialog's OK or Cancel, exactly as a mouse click on it does (the
+    marking menu offers them, as Fusion's does while a command is open)."""
+    try:
+        button = dialog_button(role)
+        if button is None:
+            return False
+        button.click()
+        return True
+    except Exception as exc:
+        warn("could not press %s: %s" % ("OK" if role == "accept" else "Cancel", exc))
+        return False
+
+
 def type_key(obj):
     kind = getattr(obj, "SciForgeType", "")
     return "SciForge::" + kind if kind else obj.TypeId

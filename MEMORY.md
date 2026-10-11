@@ -89,7 +89,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       models (2 documented gaps: sloped neighbours, shared corners -> need C++ per-face offset, 9.1)
 - [x] Fusion-style Extrude (E): join/cut/new body, one side/two sides/symmetric, distance/all,
       taper, drag arrow, auto-switch to Cut when dragged into material
-- [x] Right-click marking menu (8 slots + list, Repeat last command). **Slot order unconfirmed.**
+- [x] Right-click marking menu (8 slots + list, Repeat last command; OK/Cancel while a command
+      is open). **Slot order unconfirmed.**
 - [x] Browser panel with Fusion's structure (7.2), eye toggles, rename, activate
 - [x] Change Parameters (7.4): user params (App::VarSet "Parameters"), model params, bare names
 - [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed)
@@ -313,18 +314,34 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   - `doc.commitTransaction()`/`abortTransaction()` leave the step name opened by
     `doc.openTransaction(name)` pending when nothing changed: the next change anywhere (even
     right after an Undo) opens a step under that name and the Redo list is lost. Close it
-    with `App.closeActiveTransaction()` (`preview.end_transaction`). **`taskui.Panel` (shared)
-    still has this for every other dialog.**
+    with `App.closeActiveTransaction()` (`preview.end_transaction`; `taskui._end_transaction`
+    for every `taskui.Panel` dialog since c76d6ac7d2).
   - FreeCAD's Pad "up to shape" with a whole body fails ("please select faces") and an empty
     face list silently extrudes nothing: hand over the faces facing the extrusion
     (`extrude.facing_faces`).
   - FreeCAD's number field (QuantitySpinBox) silently drops a parameter name; formulas typed
     in Extrude/Press Pull fields go through `preview.FormulaInput` (expression on the feature).
     FreeCAD's own ExpressionBinding made a field read-only once it had a formula.
-  - Not fixed (other owners): rolling the timeline marker (`timeline_ops._set_tips`) does
-    not hide/show features, so the 3D view shows the wrong step after a roll; a sketch made
-    on a face of another body goes into the active body (`sketch_ui.create_sketch`); the
-    marking menu has no OK/Cancel while a command is open (Fusion has).
+  - Fixed since (main branch): rolling the timeline marker shows exactly the step at the
+    marker (`timeline_ops._show_only_tip`, scenario `timeline_roll_view`); a sketch on a face
+    or plane of another body goes into that body and makes it active
+    (`sketch_ui.create_sketch`, scenario `sketch_other_body`); the marking menu offers OK
+    (top slot) and Cancel (first list row) while a dialog is open (`taskui.dialog_button`
+    clicks FreeCAD's own panel button, scenario `marking_menu_command`); E pressed while a
+    sketch is open extrudes that sketch even when an extrude already uses it (it took "the
+    newest unused sketch" instead; `ExtrudePanel(sketch=...)`, scenario
+    `extrude_from_edited_sketch`).
+- **Marking-menu list rows never ran their command** (found 2026-10-11): `_list_clicked`
+  closed the menu first (WA_DeleteOnClose deletes it and the row's QAction) and PySide
+  silently drops a `QTimer.singleShot(0, action.trigger)` whose QObject is gone. The menu is
+  now hidden, the action triggered, then closed. Trap for everything: a singleShot to a
+  bound method of a Qt object is cancelled when that object is deleted.
+- **A scenario that fails to import kept FreeCAD open for the runner's 15-minute timeout.**
+  run_tests.sh now starts scenarios through `SciForgeTests/gui/scenario_launcher.py`, which
+  writes a failed result ("the scenario file loads") and quits. Scenarios import QtTest
+  from `PySide6` (FreeCAD's `PySide` shim has no QtTest).
+- `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
+  `palette_check.svg` (check-box tick) would have been deleted; it is now in its `RAW` table.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
     clickable (compute what is in front); the disc at the bottom of a hole is only visible
     from the top.

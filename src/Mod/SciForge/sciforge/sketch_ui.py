@@ -203,7 +203,20 @@ def sketch_target(selection=None):
 
 
 def create_sketch(body, target):
-    """New sketch in `body` attached flat to `target` = (plane or feature, "" or "FaceN")."""
+    """New sketch in `body` attached flat to `target` = (plane or feature, "" or "FaceN").
+
+    A face or plane of another body puts the sketch in that body and makes it active, as
+    in Fusion, where Extrude then joins the body that was clicked. (In `body` the sketch
+    would reach out of its body, and the extrude would join the wrong one.)"""
+    from . import timeline_ops
+
+    owner = timeline_ops.body_of(target[0])
+    if owner is not None and owner is not body:
+        body = owner
+        try:
+            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+        except Exception as exc:
+            warn("could not activate %s: %s" % (body.Label, exc))
     doc = body.Document
     doc.openTransaction("Create Sketch")
     try:

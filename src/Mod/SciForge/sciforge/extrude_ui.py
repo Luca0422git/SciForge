@@ -332,6 +332,15 @@ def selected_profile(body):
     return found[0] if found else None
 
 
+def single_region(sketch):
+    """[(sketch, area)] when the sketch has exactly one closed area, else []."""
+    try:
+        found = extrude.regions(sketch)
+    except Exception:
+        return []
+    return [(sketch, found[0][0])] if len(found) == 1 else []
+
+
 def newest_single_region(body):
     """The only area of the newest sketch no extrude uses yet (Fusion picks a sketch's
     single profile by itself), or None."""
@@ -355,9 +364,12 @@ class ExtrudePanel(Panel):
     last = None
     auto_pick = True  # take the single area of a sketch just finished, like Fusion
 
-    def __init__(self, doc, feature=None, profiles=None):
+    def __init__(self, doc, feature=None, profiles=None, sketch=None):
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
+        # The sketch that was open when E was pressed: its areas are the profiles, also
+        # when an extrude already uses it (Fusion extrudes the sketch you are in).
+        self.from_sketch = sketch
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
@@ -638,8 +650,15 @@ class ExtrudePanel(Panel):
         if self.body is None:
             self.message.setText("Create a sketch first (Create Sketch).")
             return
-        picked = list(given) if given else selected_profiles(self.body)
-        if not picked and self.auto_pick:
+        if given:
+            picked = list(given)
+        elif self.from_sketch is not None:
+            # Never "the newest unused sketch" instead: with several areas, the user
+            # clicks the ones wanted in this sketch.
+            picked = single_region(self.from_sketch)
+        else:
+            picked = selected_profiles(self.body)
+        if not picked and self.auto_pick and self.from_sketch is None:
             single = newest_single_region(self.body)
             picked = [single] if single else []
         try:
@@ -668,6 +687,8 @@ class ExtrudePanel(Panel):
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
         extra = [obj for obj, _ in self.profiles if extrude.is_sketch(obj)]
+        if self.from_sketch is not None:
+            extra.append(self.from_sketch)
         try:
             self.picker = profile_pick.ProfilePicker(
                 Gui.ActiveDocument.ActiveView,
@@ -1332,12 +1353,22 @@ class ExtrudeCommand:
 
     def Activated(self):
         try:
+            sketch = _sketch_in_edit()  # E pressed in a sketch: extrude that sketch
             if not commands.finish_open_dialog():
                 return
-            Gui.Control.showDialog(ExtrudePanel(App.ActiveDocument))
+            Gui.Control.showDialog(ExtrudePanel(App.ActiveDocument, sketch=sketch))
             log("extrude started")
         except Exception as exc:
             warn("Extrude failed to start: %s" % exc)
+
+
+def _sketch_in_edit():
+    try:
+        edit = Gui.ActiveDocument.getInEdit() if Gui.ActiveDocument is not None else None
+        obj = edit.Object if edit is not None else None
+    except Exception:
+        return None
+    return obj if obj is not None and extrude.is_sketch(obj) else None
 
 
 def edit(feature):
