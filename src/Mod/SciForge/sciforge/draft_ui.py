@@ -297,13 +297,40 @@ class DraftPanel(pickpanel.PickPanel):
         except Exception:
             return False
 
+    def _other_body(self, obj):
+        """(body, base) when `obj` is the solid of another body and the dialog may still
+        move there (nothing picked yet, not editing): Fusion drafts any body's faces."""
+        if self.editing or self.plane_ref is not None or self.picked:
+            return None
+        body = drafting.owner_body(obj)
+        if body is None or body is self.body:
+            return None
+        base = drafting.solid_base(body)
+        if base is None or obj is not base:
+            return None
+        return body, base
+
+    def _follow(self, body, base):
+        self._hide_planes()
+        self.switch_body(body, base)
+        self._chains = {}
+        pickpanel.activate(body)
+        if self.active == "plane":
+            self._show_planes()
+
     def allow(self, obj, short):
         if self.base is None or obj is None:
             return False
         if not short:
             return drafting.is_plane_object(obj) and self._in_body(obj)
-        if not short.startswith("Face") or obj.Name != self.base.Name:
+        if not short.startswith("Face"):
             return False
+        if self.plane_ref is not None and obj is self.plane_ref[0] and short == self.plane_ref[1]:
+            return True  # the plane face stays shown (and a click on it drops it)
+        if obj.Name != self.base.Name:
+            if self._other_body(obj) is None:
+                return False
+            return self.active != "plane" or self._flat(obj, short)
         if self.active == "plane":
             return self._flat(obj, short)
         pull = self._pull()
@@ -326,6 +353,10 @@ class DraftPanel(pickpanel.PickPanel):
             elif obj is self.base and short.startswith("Face"):
                 changed = self._drop(short) or changed
         for obj, short, _point in added:
+            if short.startswith("Face") and obj is not self.base:
+                follow = self._other_body(obj)
+                if follow is not None:
+                    self._follow(*follow)
             if not short:
                 if drafting.is_plane_object(obj) and self._in_body(obj):
                     changed = self._set_plane((obj, "")) or changed

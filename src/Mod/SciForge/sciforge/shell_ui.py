@@ -267,6 +267,7 @@ class ShellPanel(pickpanel.PickPanel):
             follow = self._other_body_solid(obj)
             if follow is not None:
                 self.switch_body(*follow)
+                pickpanel.activate(follow[0])
                 self._chains = {}
             name = pickpanel.match_face(self.base, obj, short)
         else:
@@ -292,6 +293,7 @@ class ShellPanel(pickpanel.PickPanel):
                 self.help.setText("This shell belongs to %s." % self.body.Label)
                 return False
             self.switch_body(*follow)
+            pickpanel.activate(follow[0])
             self._chains = {}
         if self.whole:
             return False

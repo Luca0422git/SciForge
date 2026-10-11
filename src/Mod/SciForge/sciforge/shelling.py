@@ -573,9 +573,9 @@ def apply(feature, base, names, options, formulas=None):
         _set_formula(feature, "Value", formulas.get(key, ""))
         _set(feature, "Value", float(opts[key]))
         _set(feature, "Reversed", direction == "inside")
-        _set(feature, "Mode", "Skin")
         _set(feature, "Join", "Intersection" if opts["shell_type"] == "sharp" else "Arc")
-        _set(feature, "Intersection", False)
+        # Mode and Intersection keep FreeCAD's defaults (Skin, off): Fusion has no such
+        # choices, and a shell made in FreeCAD with other values keeps them when edited.
     else:
         old = feature.Faces
         if not (old and old[0] is base and [s for s in old[1] if s] == names):

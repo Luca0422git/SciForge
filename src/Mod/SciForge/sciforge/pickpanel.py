@@ -257,8 +257,9 @@ class PickPanel(Panel):
         return []
 
     def _sync(self):
-        """Make FreeCAD's selection show exactly the picks."""
-        want = []
+        """Make FreeCAD's selection show exactly the picks. What is remembered as shown is
+        read back from the selection: an entry FreeCAD did not take (its selection filter
+        said no) must not look like a pick the user clicked away a moment later."""
         self._syncing = True
         try:
             Gui.Selection.clearSelection()
@@ -273,10 +274,11 @@ class PickPanel(Panel):
                         Gui.Selection.addSelection(obj)
                 except Exception:
                     continue
-                want += [(obj.Name, n) for n in names] or [(obj.Name, "")]
+            self._shown = [
+                (obj.Name, short) for obj, short, _p in selection_entries(self.doc)
+            ]
         finally:
             self._syncing = False
-        self._shown = want
 
     def _selection_event(self, cleared):
         if self._syncing or self._closed:
