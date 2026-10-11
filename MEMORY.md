@@ -1053,12 +1053,30 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - For every owner: `undo_links.py` is installed when the SciForge commands load and fixes
   formula links after undo/redo for all features, not only these (see findings).
 
+### 2026-10-11: Integration of the feature agents (main branch)
+- Merged into `claude/inspiring-cerf-ragp6j`, each after a full local suite: timeline/browser
+  QA, shell_draft, bodies, fillet QA, inspect, primitives (MEMORY/builder/schema conflicts:
+  schema blocks are appended whole from each branch's own diff, never a blind union, which
+  once cut the tail off a check function).
+- Fixed unowned leftovers, each with a scenario that fails without the fix (checked):
+  sketch on another body's face goes into that body (`sketch_other_body`); marking menu OK /
+  Cancel while a command is open and list rows that never ran (`marking_menu_command`); E
+  in an already used sketch (`extrude_from_edited_sketch`); empty "Tasks" header and white
+  strip over the 3D view (`overlay_title`); Extrude to Cut with a fillet after the marker
+  (`timeline_rolled_cut`); timeline Delete of the last step hid the part (`fillet_qa_more`);
+  bare numbers read in µm (`value_box_units`); Combine's used-up bodies in the browser
+  (`bodies_combine`); analysis edit from the browser (`inspect_section`). Timeline kinds for
+  Pattern on Path and Delete Face. `patterns_path` now expects a failed step to add nothing.
+- Test runner: scenarios start through `scenario_launcher.py` (a scenario that does not load
+  fails in seconds, not after the 15-minute timeout).
+- CI green on 4263146a1d (run #45): the quick update for Luca has everything up to fillet QA.
+
 ## Next steps (in order)
 
-1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
-   inspect (built on `sf/inspect`, merge after review), primitives, sweep_loft (hole: done on `sf/hole`, merge after its full-suite run);
-   then the QA stage for all 12 (including the 4 already merged). Merge each only after the full
-   suite passes locally.
+1. Finish the feature workflow (wf_f0015b22-593): sweep_loft (build), then the QA stage of hole,
+   revolve, patterns, shell_draft, bodies, inspect, primitives, sweep_loft. Merged so far: hole,
+   extrude/presspull QA, revolve, sketch QA, patterns, timeline/browser QA, shell_draft,
+   bodies, fillet QA, inspect, primitives. Merge each only after the full suite passes.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).
