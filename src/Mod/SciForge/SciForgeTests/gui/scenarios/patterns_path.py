@@ -137,7 +137,11 @@ def symmetric_runs_off():
     p = ps.panel()
     text = p.message.text() if p else ""
     h.check("the dialog says the copies run off the path", "off the end of the path" in text, text)
-    h.check("the last good preview stays", ps.close(h.solid_volume(), ps.BOX + 4 * BOSS))
+    # The values are valid but the copies do not fit on the path: a compute failure. Like
+    # Fusion, the failed step adds nothing (timeline_ops.settle), the dialog says why and OK
+    # waits. (A value the dialog refuses outright keeps the last good preview instead.)
+    v = h.solid_volume()
+    h.check("the failed pattern adds nothing: the one boss", ps.close(v, ps.BOX + BOSS), v)
     h.shot("2-off-path")
     h.task_button("OK")
 

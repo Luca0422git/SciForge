@@ -361,6 +361,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   flattens new ones). Docked panels use the same `Gui::OverlayTitleBar` class (the BROWSER
   header): only bars inside `Gui::OverlayTabWidget`/`OverlaySplitter` are flattened.
   Scenario `overlay_title` (fails without the fix, checked).
+- **Failed preview vs. refused value (rule since the timeline QA merge)**: a step whose
+  compute fails adds nothing, also inside its own dialog (`timeline_ops.settle` passes the
+  step before it through; the dialog says why and OK waits), like Fusion. A value the
+  dialog refuses before applying it (fillet radius, shell thickness, scale factor) keeps
+  the last good preview. `patterns_path` expected the old FreeCAD behaviour (a failed step
+  keeps its old shape) and was updated.
 - `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
   `palette_check.svg` (check-box tick) would have been deleted; it is now in its `RAW` table.
   - Scenario traps: in the iso view a point behind a wall or right behind an arrow is not
