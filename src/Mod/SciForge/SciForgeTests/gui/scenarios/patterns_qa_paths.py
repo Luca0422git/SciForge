@@ -177,7 +177,9 @@ def p3_planes_up():
 
 def p3_after_esc():
     h.check("Esc in the middle of a pick closes Mirror", ps.panel() is None)
-    h.check("the plane squares are gone", nodes() == s["nodes"], (nodes(), s["nodes"]))
+    # Not more nodes than before (other overlays, such as the timeline's hover highlight,
+    # may have gone away meanwhile).
+    h.check("the plane squares are gone", nodes() <= s["nodes"], (nodes(), s["nodes"]))
     h.check("model unchanged", ps.close(h.solid_volume(), s["v"]) and len(ps.patterns()) == 1)
     h.check("nothing selected", not Gui.Selection.getSelectionEx())
     h.check("no undo step left behind", doc().UndoCount == s["undo"])

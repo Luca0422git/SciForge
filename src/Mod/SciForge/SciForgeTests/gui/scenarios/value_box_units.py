@@ -4,12 +4,12 @@
 FreeCAD's number box reads a number without a unit in the unit it *shows*. After an arrow
 drag to a tiny distance it shows micrometres ("20.00 µm"), and the next "4" typed became
 4 µm instead of 4 mm (found by the fillet QA in its own boxes; every other dialog uses the
-shared taskui.DistanceField). Also: Enter after a sum (2*0.25) finishes the command at
-once (FreeCAD's box swallowed that Enter to rewrite the text).
+shared taskui.DistanceField). A sum (2*0.25) and Enter gives its value; the first Enter
+only evaluates it (FreeCAD's box rewrites the text), a second Enter is OK.
 
 Block 40 x 30 x 10, click the top, Q. The arrow leaves 0.02 mm in the box (as a drag
-does), type 4: 40 x 30 x 14. Then type 2*0.25 and Enter: the dialog closes, the top is
-0.5 mm higher.
+does), type 4: 40 x 30 x 14. Then type 2*0.25 and Enter: the top is 0.5 mm higher; Enter
+again: the dialog closes.
 
 Hand-derived: 40*30*10 = 12000; 40*30*14 = 16800; 40*30*10.5 = 12600."""
 import FreeCAD as App
@@ -105,13 +105,32 @@ def type_sum_enter():
         type_keys(p.field, "2*0.25", enter=True)
 
 
-def finished():
-    h.check("Enter after a sum finished Press Pull", not Gui.Control.activeDialog())
+def sum_applied():
     v = h.solid_volume()
-    h.check("the top is 0.5 mm higher: 40 x 30 x 10.5", near(v, 12600.0), v)
+    h.check("the sum counts: the top is 0.5 mm higher (40 x 30 x 10.5)", near(v, 12600.0), v)
+    p = panel()
+    if p is not None:
+        QtTest.QTest.keyClick(p.field.widget, QtCore.Qt.Key_Return)
+        QtWidgets.QApplication.processEvents()
+
+
+def finished():
+    h.check("Enter again finished Press Pull", not Gui.Control.activeDialog())
+    v = h.solid_volume()
+    h.check("kept 40 x 30 x 10.5", near(v, 12600.0), v)
 
 
 h.run(
     "value_box_units",
-    [setup, pick_top, press_pull, tiny_value, type_4, four_mm, type_sum_enter, finished],
+    [
+        setup,
+        pick_top,
+        press_pull,
+        tiny_value,
+        type_4,
+        four_mm,
+        type_sum_enter,
+        sum_applied,
+        finished,
+    ],
 )

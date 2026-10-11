@@ -115,9 +115,9 @@ class DistanceField:
         self.widget.setProperty("minimum", -1e9)
         self.widget.setProperty("maximum", 1e9)
         self.widget.setProperty("rawValue", float(value))
-        # FreeCAD's box swallowed the first Enter after a sum ("2*0.25") to rewrite it as
-        # "0.50 mm"; in Fusion that Enter already finishes the command.
-        self.widget.setProperty("autoNormalize", False)
+        # autoNormalize stays on: switched off, the box re-read its own rounded text when
+        # it lost the focus ("12.57 mm" for 4*pi), a silent loss of precision. The cost: the
+        # first Enter after a sum ("2*0.25") only evaluates it, a second Enter is OK.
         self._on_change = on_change
         self._quiet = False
         self._typed = None  # text typed since the box was last settled

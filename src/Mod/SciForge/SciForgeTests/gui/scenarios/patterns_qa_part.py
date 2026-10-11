@@ -166,7 +166,9 @@ def p8_plane_face():
 
 
 def p8_plane_distance():
-    b.type_into(b.active_panel().field.widget, "-20")
+    p = b.active_panel()  # the CONSTRUCT dialog (rewritten by the inspect agent: .distance)
+    field = getattr(p, "distance", None) or getattr(p, "field", None)
+    b.type_into(field.widget, "-20")
 
 
 def p8_plane_ok():

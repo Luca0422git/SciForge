@@ -447,9 +447,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   keeps its old shape) and was updated.
 - **Value boxes: a plain number is mm (or degrees), always** (2026-10-11, all dialogs via
   `taskui.DistanceField`): FreeCAD's QuantitySpinBox reads a bare number in the unit it
-  *shows*; after a value below 0.1 mm it showed µm and "4" became 4 µm. The box also had
-  `autoNormalize` on, which swallowed the first Enter after a sum ("2*0.25"). Trap found
-  while fixing it: leaving a box "finishes" it, also while its dialog closes, so anything
+  *shows*; after a value below 0.1 mm it showed µm and "4" became 4 µm. `autoNormalize`
+  stays ON: switched off, the box re-read its own rounded text on focus-out ("12.57" for
+  4*pi, caught by patterns_qa_paths), so the first Enter after a sum ("2*0.25") only
+  evaluates it and a second Enter is OK (known small gap). Trap found while fixing it: leaving a box "finishes" it, also while its dialog closes, so anything
   connected to `editingFinished` must not report to a closed dialog (`Panel._recompute`
   now returns once closed). Scenario `value_box_units`.
 - Timeline Delete of a body's last step hid the whole part: FreeCAD moves the Tip back by
