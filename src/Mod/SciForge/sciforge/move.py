@@ -179,6 +179,13 @@ class MoveFeature:
         _properties(obj, "Move")
 
     def execute(self, obj):
+        try:
+            self._build(obj)
+        except Exception:
+            bodies.pass_through(obj)  # shown as the body was before it, the step red
+            raise
+
+    def _build(self, obj):
         base = obj.BaseFeature
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             raise MoveError("There is no solid before this step to move.")

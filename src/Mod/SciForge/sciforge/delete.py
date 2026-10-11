@@ -355,6 +355,8 @@ def _reroute_users(doc, step, gone):
         try:
             if combine.is_combine(obj) and step in obj.Tools:
                 obj.Tools = [base if t is step else t for t in obj.Tools]
+            elif combine.is_combine(obj) and obj.NewBody and obj.Target is step:
+                obj.Target = base
             elif move.is_copy(obj) and obj.Source is step:
                 obj.Source = base
         except Exception:
@@ -471,6 +473,13 @@ class DeleteFaceFeature:
         self.ensure_properties(obj)
 
     def execute(self, obj):
+        try:
+            self._build(obj)
+        except Exception:
+            bodies.pass_through(obj)  # the faces stay (as before this step), the step red
+            raise
+
+    def _build(self, obj):
         base = obj.BaseFeature
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             raise DeleteError("There is no solid before this step.")

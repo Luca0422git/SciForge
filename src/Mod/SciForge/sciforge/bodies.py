@@ -17,7 +17,7 @@ body (bold in the browser) is where new sketches and features go.
 
 Tools that "use up" bodies (Combine without Keep Tools) hide them while that step is part of
 the design, and show them again when the step is deleted, undone, suppressed or rolled back
-(sync_consumed, run after every recompute/undo by bodies_watch.py).
+(sync_consumed, run after every recompute/undo by bodies_gui.Watch).
 """
 import json
 
@@ -320,6 +320,22 @@ def show_tip(body):
     set_shown(tip, True)
 
 
+def pass_through(obj):
+    """A step that cannot be built shows the body as it was before it, the way Fusion skips a
+    failed step (red in the timeline) instead of showing the result it had before the change
+    that broke it. Steps call this right before raising their error."""
+    try:
+        import Part
+
+        base = getattr(obj, "BaseFeature", None)
+        if base is not None and not base.Shape.isNull():
+            obj.Shape = base.Shape.copy()
+        else:
+            obj.Shape = Part.Shape()
+    except Exception:
+        pass
+
+
 def solid_steps(body):
     """The steps of a body that make its solid (sketches and planes left out)."""
     return [o for o in body.Group if "BaseFeature" in o.PropertiesList]
@@ -437,7 +453,12 @@ CONSUMERS = {}  # SciForgeType -> function(step) -> [bodies it uses up while act
 
 def consumed(doc):
     """{body name} of the bodies some active step uses up (they are not shown)."""
-    found = set()
+    return set(consumers(doc))
+
+
+def consumers(doc):
+    """{body name: the step that uses it up} for the bodies active steps use up."""
+    found = {}
     for obj in doc.Objects:
         user = CONSUMERS.get(kind(obj))
         if user is None:
@@ -447,7 +468,7 @@ def consumed(doc):
                 continue
             for body in user(obj) or []:
                 if alive(body):
-                    found.add(body.Name)
+                    found.setdefault(body.Name, obj)
         except Exception:
             continue
     return found
@@ -475,7 +496,8 @@ def sync_consumed(doc, initial=False):
     the state of a design just opened without touching it."""
     if doc is None or doc.Name in PAUSED:
         return
-    now = consumed(doc)
+    users = consumers(doc)
+    now = set(users)
     before = _CONSUMED_BEFORE.get(doc.Name)
     _CONSUMED_BEFORE[doc.Name] = now
     if before is None and initial:
@@ -490,3 +512,20 @@ def sync_consumed(doc, initial=False):
         if body is not None:
             set_shown(body, True)
             show_tip(body)
+    leave_used_up(doc, users)
+
+
+def leave_used_up(doc, users=None):
+    """A used-up body must not stay the active one: new sketches and extrudes would go into
+    a body nobody sees (Fusion has no such body any more). The body of the step that used it
+    up becomes the active one (the Combine's result)."""
+    active = active_body(doc)
+    if active is None:
+        return
+    users = consumers(doc) if users is None else users
+    seen = set()
+    while active is not None and active.Name in users and active.Name not in seen:
+        seen.add(active.Name)
+        active = body_of(users[active.Name])
+    if active is not None and active is not active_body(doc):
+        set_active_body(active)

@@ -152,15 +152,71 @@ def set_material_look(body, look):
 def set_faces(body, feature, names, look):
     """Give single faces a look. `feature`: the step the face names belong to (the Tip)."""
     data = get(body)
+    frame = frame_of(feature)
     for name in names:
         try:
             face = feature.Shape.getElement(name)
         except Exception:
             continue
         point, normal = _probe(face)
-        data["faces"] = [f for f in data["faces"] if not _matches(face, f)]
-        data["faces"].append({"point": list(point), "normal": list(normal), "look": look})
+        data["faces"] = [f for f in data["faces"] if not _matches(face, f, _shift(frame, f))]
+        data["faces"].append(
+            {"point": list(point), "normal": list(normal), "look": look, "frame": _save(frame)}
+        )
     _put(body, data)
+
+
+# -- faces moved by Move steps ---------------------------------------------------------------------
+def _move_of(step, body_place):
+    """The movement a Move step gives the body's solid, in body coordinates, or None."""
+    from . import move
+
+    if not move.is_move(step) or move.is_copy(step) or bodies.is_suppressed(step):
+        return None
+    movement = step.Movement
+    if body_place.isIdentity():
+        return movement
+    return body_place.inverse().multiply(movement).multiply(body_place)
+
+
+def frame_of(step):
+    """How the Move steps up to and including `step` have moved its body's solid (body
+    coordinates): a face given a look before a Move is found again after it, moved."""
+    place = App.Placement()
+    body = bodies.body_of(step)
+    if body is None:
+        return place
+    body_place = body.getGlobalPlacement()
+    for obj in body.Group:
+        movement = _move_of(obj, body_place)
+        if movement is not None:
+            place = movement.multiply(place)
+        if obj is step:
+            break
+    return place
+
+
+def _save(place):
+    return [float(c) for c in list(place.Base) + list(place.Rotation.Q)]
+
+
+def _load(value):
+    try:
+        values = [float(c) for c in value]
+        return App.Placement(App.Vector(*values[:3]), App.Rotation(*values[3:7]))
+    except Exception:
+        return App.Placement()
+
+
+def _shift(frame, entry):
+    """What takes an entry's point from where it was given its look to `frame`."""
+    given = _load(entry["frame"]) if entry.get("frame") else App.Placement()
+    shift = frame.multiply(given.inverse())
+    return None if move_identity(shift) else shift
+
+
+def move_identity(place, tol=1e-12):
+    return place.Base.Length < tol and abs(place.Rotation.Angle) < tol
 
 
 def copy_body_appearance(source, target):
@@ -213,26 +269,33 @@ def _probe(face):
     return point, face.normalAt(u, v)
 
 
-def _matches(face, entry):
+def _matches(face, entry, shift=None):
     import Part
 
     point = App.Vector(*entry["point"])
+    normal = App.Vector(*entry["normal"])
+    if shift is not None:
+        point = shift.multVec(point)
+        normal = shift.Rotation.multVec(normal)
     try:
         if face.distToShape(Part.Vertex(point))[0] > 1e-5:
             return False
         u, v = face.Surface.parameter(point)
-        return face.normalAt(u, v).dot(App.Vector(*entry["normal"])) > 0.999
+        return face.normalAt(u, v).dot(normal) > 0.999
     except Exception:
         return False
 
 
-def face_looks(shape, data):
-    """[look or None] per face of `shape` (body coordinates)."""
+def face_looks(shape, data, frame=None):
+    """[look or None] per face of `shape` (body coordinates). `frame`: how Move steps have
+    moved the body's solid at this step (frame_of)."""
+    frame = frame if frame is not None else App.Placement()
+    shifts = [_shift(frame, entry) for entry in data["faces"]]
     out = []
     for face in shape.Faces:
         look = None
-        for entry in data["faces"]:
-            if _matches(face, entry):
+        for entry, shift in zip(data["faces"], shifts):
+            if _matches(face, entry, shift):
                 look = entry["look"]
         out.append(look)
     return out
@@ -266,10 +329,33 @@ def _same_materials(a, b):
 
 
 def _default_material():
+    """The look FreeCAD gives a part that has none (its Part colour preferences), worked out
+    the way FreeCAD does (Materials' defaultAppearance). App.Material() alone is FreeCAD's
+    built-in lavender grey: faces left without a look turned that colour instead of the grey
+    every other part has."""
     try:
-        return App.Material()
+        base = App.Material()
     except Exception:
         return None
+    try:
+        params = App.ParamGet("User parameter:BaseApp/Preferences/View")
+
+        def color(name, fallback):
+            if params.GetUnsigned(name, 1) == 1 and params.GetUnsigned(name, 2) == 2:
+                return tuple(fallback[:3])  # not set: FreeCAD's built-in default
+            packed = params.GetUnsigned(name, 0)
+            return tuple(((packed >> shift) & 255) / 255.0 for shift in (24, 16, 8))
+
+        return App.Material(
+            DiffuseColor=color("DefaultShapeColor", base.DiffuseColor),
+            AmbientColor=color("DefaultAmbientColor", base.AmbientColor),
+            SpecularColor=color("DefaultSpecularColor", base.SpecularColor),
+            EmissiveColor=color("DefaultEmissiveColor", base.EmissiveColor),
+            Shininess=params.GetInt("DefaultShapeShininess", 90) / 100.0,
+            Transparency=params.GetInt("DefaultShapeTransparency", 0) / 100.0,
+        )
+    except Exception:
+        return base
 
 
 def apply(body):
@@ -283,7 +369,15 @@ def apply(body):
     _COLORED.setdefault(body.Document.Name, set()).add(body.Name)
     base = material_of(whole) if whole else _default_material()
     text = getattr(body, PROP, "")
+    frame = App.Placement()
+    body_place = body.getGlobalPlacement()
     for step in body.Group:
+        try:
+            movement = _move_of(step, body_place)
+        except Exception:
+            movement = None
+        if movement is not None:
+            frame = movement.multiply(frame)
         if not step.isDerivedFrom("PartDesign::Feature"):
             continue
         vobj = step.ViewObject
@@ -298,7 +392,7 @@ def apply(body):
             if _APPLIED.get(key) == stamp:
                 continue  # nothing changed since the look was put on (big designs stay quick)
             if data["faces"]:
-                per_face = face_looks(shape, data)
+                per_face = face_looks(shape, data, frame)
                 if any(per_face):
                     wanted = [material_of(look) if look else base for look in per_face]
                 else:
