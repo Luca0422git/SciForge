@@ -25,6 +25,7 @@ from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel
 
 DIRECTION_LABELS = [("Right hand", "right"), ("Left hand", "left")]
+MIN_LENGTH = 0.1  # mm: the length arrow stops here
 
 PLAIN = (
     ("multiple solids", "This thread would cut the part into pieces. Make it shorter."),
@@ -90,6 +91,11 @@ class ThreadPanel(Panel):
         super().__init__(doc, "Thread" if feature is None else "Edit Thread")
         ThreadPanel.last = self
         self.escape = preview.EscapeCancels(self)
+        # Ctrl+Z cancels the thread being made, Ctrl+S/N/O finish it first, closing the design
+        # drops the dialog; Enter over the 3D view is OK (the same rules as every dialog).
+        self.undo_guard = preview.UndoCancels(self)
+        self.enter = preview.EnterFinishes(self)
+        self.formula_error = ""
         self.target = feature
         self.editing = feature is not None
         self.body = thread.owner_body(feature) if feature is not None else commands.find_body()
@@ -98,6 +104,12 @@ class ThreadPanel(Panel):
         self.faces = []  # "FaceN" of self.source
         self.source = self.base
         if feature is not None:
+            # The step clicked in the timeline stays selected as a whole object, and FreeCAD
+            # then took the first click on it as a click on something already selected.
+            try:
+                Gui.Selection.clearSelection()
+            except Exception:
+                pass
             try:
                 self.options.update(thread.read(feature))
                 if feature.Faces:
@@ -108,6 +120,7 @@ class ThreadPanel(Panel):
         else:
             self.options.update(ThreadPanel.remembered)
             self.options.update({"size": "", "designation": "", "thread_class": ""})
+        self.options["expressions"] = dict(self.options.get("expressions") or {})
         self.error = ""
         self.dirty = False
         self._quiet = False
@@ -116,9 +129,9 @@ class ThreadPanel(Panel):
         self.dragger = None
         self.observer = None
         self.gate = None
-        self.watch = common.DocumentWatch(self)
         self._build_form()
         self._show_options()
+        self.show_formulas()
         self._watch()
         self.activate("faces")
         if feature is not None:
@@ -160,7 +173,22 @@ class ThreadPanel(Panel):
         form.addRow("Class", self.thread_class)
         self.direction = common.combo(DIRECTION_LABELS, self.options["direction"])
         form.addRow("Direction", self.direction)
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        # Fusion takes a parameter or a formula in every value field.
+        self.formula_inputs = [
+            preview.FormulaInput(self, "length", self.length),
+            preview.FormulaInput(self, "offset", self.offset),
+        ]
+        for key, field in (("length", self.length), ("offset", self.offset)):
+            edit = field.widget.findChild(QtWidgets.QLineEdit)
+            if edit is not None:
+                edit.textEdited.connect(lambda text, key=key: self._text_edited(key, text))
+        # After FormulaInput and the field's own settling (connected first, run first).
+        self.length.widget.editingFinished.connect(self._length_settled)
         self.modeled.toggled.connect(self._typed)
         self.full_length.toggled.connect(self._full_toggled)
         self.standard.currentIndexChanged.connect(self._standard_changed)
@@ -266,7 +294,7 @@ class ThreadPanel(Panel):
         return tip
 
     def _start(self, selection=None):
-        found = list(selection) if selection is not None else common.picks()
+        found = list(selection) if selection is not None else common.picks(self.doc)
         try:
             Gui.Selection.clearSelection()
         except Exception:
@@ -319,7 +347,7 @@ class ThreadPanel(Panel):
         if self._closed:
             return
         try:
-            found = common.picks()
+            found = common.picks(self.doc)
             if not found:
                 return
             Gui.Selection.clearSelection()
@@ -390,9 +418,12 @@ class ThreadPanel(Panel):
                 self._fill_sizes(d.standard, d.size, d.label)
             finally:
                 self._quiet = False
-        if not self.editing and abs(self.length.value()) < 1e-9:
+        room = c.length - max(self.offset.value(), 0.0)
+        if not self.editing and not (1e-9 < self.length.value() <= room + 1e-9):
+            # No length yet, or one longer than this face (typed before it was picked): the
+            # thread runs to the face's end, and the field says so.
             self._quiet = True
-            self.length.set_value(round(min(c.length, 10.0), 3))
+            self.length.set_value(round(max(room, MIN_LENGTH), 3))
             self._quiet = False
 
     def _faces_changed(self):
@@ -457,10 +488,31 @@ class ThreadPanel(Panel):
     def _length_typed(self, value):
         if self._quiet:
             return
+        room = self._room()
         arrow = self.draggers.get("length")
         if arrow is not None:
-            arrow.set_distance(value)
+            arrow.set_distance(min(value, room) if room is not None else value)
         self._changed()
+
+    def _length_settled(self):
+        """The length field was left: a length longer than the face becomes the face's length
+        (the thread runs to its end), so the field shows what is made."""
+        try:
+            if self._closed or "length" in self.options.get("expressions", {}):
+                return
+            room = self._room()
+            if room is None or self.length.value() <= room + 1e-9:
+                return
+            self._quiet = True
+            try:
+                self.length.set_value(round(room, 6))
+            finally:
+                self._quiet = False
+            self._changed()
+        except RuntimeError:
+            pass  # the dialog is gone
+        except Exception as exc:
+            warn("thread length: %s" % exc)
 
     def _standard_changed(self, *_):
         if self._quiet:
@@ -488,6 +540,53 @@ class ThreadPanel(Panel):
         self.dirty = True
         self.schedule()
 
+    # -- formulas (preview.FormulaInput calls the three below) ----------------------------------
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options.setdefault("expressions", {})[key] = text
+        if key == "length":
+            self._length_typed(value)
+        else:
+            self._typed()
+        self.show_formulas()
+
+    def formula_cleared(self, key):
+        self.drop_formula(key)
+
+    def formula_failed(self, key, text):
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
+
+    def drop_formula(self, key):
+        self.formula_error = ""
+        if self.options.setdefault("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            self._changed()
+
+    def _text_edited(self, key, text):
+        """A plain number typed over a formula (or a typo) wins at once."""
+        try:
+            from . import parameters
+
+            if self._closed or not text.strip() or not parameters.is_plain_number(text):
+                return
+            self.drop_formula(key)
+        except Exception as exc:
+            warn("thread value: %s" % exc)
+
+    def show_formulas(self):
+        names = {"length": "Thread Length", "offset": "Offset"}
+        rows = [
+            "%s = %s" % (names.get(key, key), text)
+            for key, text in sorted((self.options.get("expressions") or {}).items())
+            if text
+        ]
+        try:
+            self.formulas.setText("\n".join(rows))
+            self.formulas.setVisible(bool(rows))
+        except RuntimeError:
+            pass
+
     def _recompute(self):
         if self._closed:
             return
@@ -500,10 +599,25 @@ class ThreadPanel(Panel):
                 self.dirty = False
                 self._apply()
             preview.recompute(self.doc)
+            if self._closed:
+                return  # finished or cancelled while the (slow) recompute ran
             self.show_status()
             self._make_draggers()
         except Exception as exc:
-            self.message.setText("⚠ %s" % exc)
+            if not self._closed:
+                try:
+                    self.message.setText("⚠ %s" % exc)
+                except RuntimeError:
+                    pass  # the dialog's widgets are gone
+
+    def _busy(self):
+        """True while FreeCAD recomputes (a modeled thread takes a moment). OK, Cancel and
+        another command's key wait for it: finishing the dialog in the middle of a recompute
+        removed the preview under FreeCAD's feet."""
+        try:
+            return bool(self.doc.Recomputing)
+        except Exception:
+            return False
 
     def _apply(self):
         if not self.faces:
@@ -523,11 +637,15 @@ class ThreadPanel(Panel):
     def feature(self):
         return self.target
 
-    def show_status(self):
+    def problem(self):
+        if self.formula_error:
+            return self.formula_error
         if self.error:
-            self.message.setText("⚠ " + self.error)
-            return
-        text = plain(preview.failure(self.target))
+            return self.error
+        return plain(preview.failure(self.target))
+
+    def show_status(self):
+        text = self.problem()
         self.message.setText("⚠ " + text if text else "")
 
     # -- the length arrow -------------------------------------------------------------------
@@ -575,35 +693,61 @@ class ThreadPanel(Panel):
                 self.length.value(),
                 size,
                 on_drag=self._length_dragged,
-                on_release=self._length_dragged,
+                on_release=self._length_released,
             )
             common.on_top(arrow.root)
             self.dragger = self.draggers["length"] = arrow
         except Exception as exc:
             warn("thread handle unavailable: %s" % exc)
 
+    def _room(self):
+        """How long the thread can be: the face's length less the offset (None if unknown)."""
+        c = self._first_cylinder()
+        if c is None:
+            return None
+        return max(c.length - max(self.offset.value(), 0.0), MIN_LENGTH)
+
     def _length_dragged(self, value):
+        # The arrow stops at the end of the face (the thread cannot run past it) and at a
+        # tenth of a millimetre (dragged back past where the thread starts).
+        length = max(round(value, 2), MIN_LENGTH)
+        room = self._room()
+        if room is not None:
+            length = min(length, round(room, 6))
         self._quiet = True
         try:
-            self.length.set_value(max(round(value, 2), 0.1))
+            self.length.set_value(length)
         finally:
             self._quiet = False
+        if self.options.get("expressions", {}).pop("length", None) is not None:
+            self.show_formulas()  # dragged: the length no longer follows its formula
         self._changed()
 
-    # -- undo / closing while open ----------------------------------------------------------
-    def document_event(self, closing):
-        if closing:
-            self.target = self.base = self.body = self.source = None
-            common.abandon(self)
-        else:
-            QtCore.QTimer.singleShot(0, lambda: common.end_after_undo(self))
+    def _length_released(self, value):
+        self._length_dragged(value)
+        arrow = self.draggers.get("length")
+        if arrow is not None:
+            arrow.set_distance(self.length.value())  # the arrow sits where the thread ends
 
     # -- OK / Cancel ------------------------------------------------------------------------
+    def finish(self):
+        """Another command is starting: keep the thread if it is good, else drop it. Not in
+        the middle of a recompute (the other command then says to finish this one first)."""
+        if self._busy():
+            return
+        super().finish()
+
     def accept(self):
         if self._closed:
             return True
+        if self._busy():
+            self.message.setText("⚠ Still working out the preview; press OK again in a moment.")
+            return False
         if self.target is None:
             self.message.setText("⚠ Click a cylindrical face to thread first.")
+            return False
+        if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
+            self.message.setText("⚠ " + self.formula_error)
             return False
         self._timer.stop()
         if self.dirty:
@@ -613,7 +757,7 @@ class ThreadPanel(Panel):
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
-        text = plain(preview.failure(self.target))
+        text = self.problem()
         if text:
             self.message.setText("⚠ " + text)
             return False
@@ -622,7 +766,8 @@ class ThreadPanel(Panel):
             k: self.options[k] for k in ("standard", "modeled", "direction", "full_length")
         }
         self.cleanup()
-        self.doc.commitTransaction()
+        # Also closes the step's name when nothing changed (the Redo list survives).
+        preview.end_transaction(self.doc)
         self._close()
         log("%s done" % self.title)
         CosmeticThreads.schedule()
@@ -631,10 +776,15 @@ class ThreadPanel(Panel):
     def reject(self):
         if self._closed:
             return True
+        if self._busy():
+            QtCore.QTimer.singleShot(200, self.reject)  # once the recompute is over
+            return False
         self._timer.stop()
+        body = self.body
         self.cleanup()
-        self.doc.abortTransaction()
+        preview.end_transaction(self.doc, abort=True)
         preview.recompute(self.doc)
+        thread.show_tip(body)
         self._close()
         CosmeticThreads.schedule()
         return True
@@ -642,8 +792,9 @@ class ThreadPanel(Panel):
     def cleanup(self):
         self._unwatch()
         self.escape.remove()
+        self.undo_guard.remove()
+        self.enter.remove()
         self._remove_draggers()
-        self.watch.remove()
         super().cleanup()
 
 
@@ -662,7 +813,7 @@ class ThreadCommand:
     def Activated(self):
         try:
             CosmeticThreads.install()
-            found = common.picks()  # a face picked before the command
+            found = common.picks(App.ActiveDocument)  # a face picked before the command
             if not commands.finish_open_dialog():
                 return
             Gui.Control.showDialog(ThreadPanel(App.ActiveDocument, selection=found))
