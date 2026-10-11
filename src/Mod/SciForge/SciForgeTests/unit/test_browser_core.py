@@ -67,6 +67,30 @@ class BrowserTests(unittest.TestCase):
     def test_origin_in_fusion_order(self):
         self.assertEqual(self.labels(self.folder(self.tree(), "Origin")), ["O", "X", "XY"])
 
+    def test_one_origin_without_an_active_body(self):
+        """A reopened file with two bodies has no active body yet: still one origin."""
+        second = [
+            obj("Body001", "PartDesign::Body"),
+            obj("XY_Plane001", "App::Plane", False, "Body001", "XY_Plane"),
+            obj("X_Axis001", "App::Line", False, "Body001", "X_Axis"),
+            obj("Origin003", "App::Point", False, "Body001", "Origin"),
+        ]
+        tree = core.build("Design", OBJECTS + second)
+        origin = self.folder(tree, "Origin")["children"]
+        self.assertEqual([n["label"] for n in origin], ["O", "X", "XY"])
+        self.assertEqual({n["object"] for n in origin}, {"Origin001", "X_Axis", "XY_Plane"})
+        # The active body's origin when there is one.
+        tree = core.build("Design", OBJECTS + second, active_body="Body001")
+        origin = self.folder(tree, "Origin")["children"]
+        self.assertEqual({n["object"] for n in origin}, {"Origin003", "X_Axis001", "XY_Plane001"})
+
+    def test_suppressed_is_greyed_not_a_problem(self):
+        rows = [dict(o) for o in OBJECTS]
+        rows[5]["suppressed"] = True
+        sketch = self.folder(self.tree(rows), "Sketches")["children"][0]
+        self.assertEqual(sketch["status"], "suppressed")
+        self.assertIn("Suppressed", sketch["tip"])
+
     def test_folder_eye_follows_children(self):
         tree = self.tree()
         self.assertFalse(self.folder(tree, "Sketches")["visible"])  # the only sketch is hidden

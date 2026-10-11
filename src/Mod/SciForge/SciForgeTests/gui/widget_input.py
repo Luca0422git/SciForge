@@ -139,16 +139,11 @@ def drag(widget, start, end_global, steps=10):
         )
         QtWidgets.QApplication.sendEvent(widget, event)
         _process()
+    # The release goes through the window like the press did: a release sent straight to
+    # the widget left Qt thinking the button was still down, and the next click anywhere
+    # (a browser eye, a row) went to the dragged widget instead.
     local = widget.mapFromGlobal(end_global)
-    release = QtGui.QMouseEvent(
-        QtCore.QEvent.MouseButtonRelease,
-        QtCore.QPointF(local),
-        QtCore.QPointF(end_global),
-        LEFT,
-        QtCore.Qt.NoButton,
-        NONE,
-    )
-    QtWidgets.QApplication.sendEvent(widget, release)
+    QtTest.QTest.mouseRelease(widget, LEFT, NONE, local)
     _process()
 
 

@@ -71,6 +71,29 @@ def _tell(msg):
     commands.tell(msg)
 
 
+def _defer(fn, ms=0):
+    """Run document work after FreeCAD's signal/event has finished (never inside it)."""
+
+    def run():
+        try:
+            fn()
+        except Exception as exc:
+            warn("timeline: %s" % exc)
+
+    QtCore.QTimer.singleShot(ms, run)
+
+
+def _command_open():
+    """A command dialog is open or something is being edited (a sketch...)."""
+    try:
+        if Gui.Control.activeDialog():
+            return True
+        gdoc = Gui.ActiveDocument
+        return gdoc is not None and gdoc.getInEdit() is not None
+    except Exception:
+        return False
+
+
 def _ready():
     """Fusion ends the command in progress when you use the timeline."""
     from . import commands
@@ -87,6 +110,7 @@ class _Marker(QtWidgets.QFrame):
         self.setProperty("role", "marker")
         self.setCursor(QtCore.Qt.SizeHorCursor)
         self.setToolTip("History marker: drag it to roll the design back or forward")
+        self.setFocusPolicy(QtCore.Qt.ClickFocus)  # Esc drops a drag
         self._guide = None
 
     def paintEvent(self, event):
@@ -101,11 +125,30 @@ class _Marker(QtWidgets.QFrame):
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
+            self.setFocus()
             self._guide = QtWidgets.QFrame(self.timeline._inner)
             self._guide.setStyleSheet("background: #6fb7f0;")
             self._guide.resize(2, self.height())
             self._guide.show()
             event.accept()
+
+    def event(self, event):
+        if (
+            event.type() == QtCore.QEvent.ShortcutOverride
+            and event.key() == QtCore.Qt.Key_Escape
+            and self._guide is not None
+        ):
+            event.accept()
+            return True
+        return super().event(event)
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Escape and self._guide is not None:
+            self._guide.deleteLater()  # Esc: the marker stays where it was
+            self._guide = None
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self._guide is not None:
@@ -188,13 +231,27 @@ class _ItemButton(QtWidgets.QToolButton):
         self.doubleClicked.emit()
         event.accept()
 
+    def enterEvent(self, event):
+        try:
+            self.timeline.hover(self.item)
+        except Exception as exc:
+            warn("timeline hover: %s" % exc)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        try:
+            self.timeline.unhover(self.item)
+        except Exception:
+            pass
+        super().leaveEvent(event)
+
     # -- keys ----------------------------------------------------------------------
     def event(self, event):
-        # Delete and F2 belong to the timeline while a step has the focus.
-        if event.type() == QtCore.QEvent.ShortcutOverride and event.key() in (
-            QtCore.Qt.Key_Delete,
-            QtCore.Qt.Key_Backspace,
-            QtCore.Qt.Key_F2,
+        # Delete and F2 belong to the timeline while a step has the focus, Esc while
+        # it is being dragged.
+        if event.type() == QtCore.QEvent.ShortcutOverride and (
+            event.key() in (QtCore.Qt.Key_Delete, QtCore.Qt.Key_Backspace, QtCore.Qt.Key_F2)
+            or (event.key() == QtCore.Qt.Key_Escape and self._dragging)
         ):
             event.accept()
             return True
@@ -202,6 +259,13 @@ class _ItemButton(QtWidgets.QToolButton):
 
     def keyPressEvent(self, event):
         try:
+            if event.key() == QtCore.Qt.Key_Escape and self._press is not None:
+                dragging = self._dragging
+                self._press = None  # Fusion: Esc drops the drag, nothing moves
+                self._dragging = False
+                if dragging:
+                    self.timeline.cancel_drag()
+                return
             if event.key() in (QtCore.Qt.Key_Delete, QtCore.Qt.Key_Backspace):
                 self.timeline.delete_selected()
                 return
@@ -252,6 +316,26 @@ class _UndoWatcher:
         QtCore.QTimer.singleShot(0, self.timeline.after_undo)
 
     slotUndoDocument = slotRedoDocument = _later
+
+
+class _WheelScroll(QtCore.QObject):
+    """The mouse wheel scrolls the timeline sideways (it has no vertical scroll)."""
+
+    def __init__(self, scroll):
+        super().__init__(scroll)
+        self.scroll = scroll
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QtCore.QEvent.Wheel:
+                delta = event.angleDelta()
+                step = delta.y() if abs(delta.y()) >= abs(delta.x()) else delta.x()
+                bar = self.scroll.horizontalScrollBar()
+                bar.setValue(bar.value() - step)
+                return True
+        except Exception:
+            pass
+        return False
 
 
 class _GroupButton(QtWidgets.QToolButton):
@@ -326,6 +410,7 @@ class TimelineWidget(QtWidgets.QWidget):
         self._slots = []
         self._undo_watch = None
         self._move_timeline = self._timeline
+        self._hover = None  # timeline_hover.HoverLook, made on first use
 
         outer = QtWidgets.QHBoxLayout(self)
         outer.setContentsMargins(8, 3, 8, 3)
@@ -346,7 +431,16 @@ class TimelineWidget(QtWidgets.QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         self._scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        # A long design scrolls sideways: a thin bar under the icons (the default one
+        # covered their lower half) and the mouse wheel. The height stays as it was: the
+        # 3D view's size (and so where a click lands) must not change.
         self._scroll.setFixedHeight(ICON + 14)
+        self._scroll.horizontalScrollBar().setStyleSheet("QScrollBar:horizontal { height: 6px; }")
+        self._wheel = _WheelScroll(self._scroll)
+        self._scroll.viewport().installEventFilter(self._wheel)
+        self._shown_end = None  # (steps, marker) last scrolled into view
+        self._follow = 0  # rebuilds whose marker is still to be scrolled into view
+        self._scroll.horizontalScrollBar().rangeChanged.connect(self._range_changed)
         self._inner = QtWidgets.QWidget()
         self._row = QtWidgets.QHBoxLayout(self._inner)
         self._row.setContentsMargins(0, 0, 0, 0)
@@ -375,7 +469,7 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def start(self):
         try:
-            ops.install_guard()
+            ops.install_guard(_defer)
             if self._undo_watch is None:
                 self._undo_watch = _UndoWatcher(self)
                 App.addDocumentObserver(self._undo_watch)
@@ -387,6 +481,7 @@ class TimelineWidget(QtWidgets.QWidget):
     def stop(self):
         self._timer.stop()
         self._play_timer.stop()
+        self.unhover()
         ops.remove_guard()
         if self._undo_watch is not None:
             try:
@@ -413,6 +508,7 @@ class TimelineWidget(QtWidgets.QWidget):
                     break
             if stale:
                 ops.recompute(doc)
+            ops.show_marker_state(doc)  # sketches/planes drawn as the marker says
             self.refresh(force=True)
         except Exception as exc:
             warn("timeline after undo: %s" % exc)
@@ -466,6 +562,7 @@ class TimelineWidget(QtWidgets.QWidget):
         return None
 
     def _clear(self):
+        self.unhover()  # the step under the mouse may change or go
         self._cancel_editor()
         while self._row.count():
             entry = self._row.takeAt(0)
@@ -519,6 +616,30 @@ class TimelineWidget(QtWidgets.QWidget):
             self._row.addWidget(self._make_marker())
         self._row.addStretch(1)
         self._update_selection_look()
+        # Fusion keeps the history marker in view: a new step (or a marker move) on a
+        # long design showed the start of the row with the new step off-screen.
+        where = (len(self._items), marker)
+        if where != self._shown_end:
+            self._shown_end = where
+            # Once the new row is laid out (its width changes the scroll range).
+            self._follow += 1
+            QtCore.QTimer.singleShot(60, self._marker_into_view)
+            QtCore.QTimer.singleShot(1500, self._stop_following)
+
+    def _stop_following(self):
+        self._follow = max(0, self._follow - 1)
+
+    def _range_changed(self, *_args):
+        if self._follow:
+            self._marker_into_view()
+
+    def _marker_into_view(self):
+        try:
+            marker = self.marker()
+            if marker is not None:
+                self._scroll.ensureWidgetVisible(marker, 60, 0)
+        except RuntimeError:
+            pass  # rebuilt meanwhile
 
     def _add_step(self, item):
         button = self._item_button(item)
@@ -633,9 +754,8 @@ class TimelineWidget(QtWidgets.QWidget):
         doc = _doc()
         if doc is None or not _ready():
             return
-        tips = core.tips_for_slot(self._timeline, self._slot_at(global_pos))
-        if tips:
-            ops.roll(doc, tips, "Move History Marker")
+        tips, before = core.marker_for_slot(self._timeline, self._slot_at(global_pos))
+        if ops.roll(doc, tips, "Move History Marker", before):
             self.refresh(force=True)
 
     def step(self, where):
@@ -659,6 +779,11 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def _play_step(self):
         try:
+            if _command_open():
+                # Fusion: starting a command stops the playback; rolling the design
+                # under an open dialog would have committed its preview.
+                self._play_timer.stop()
+                return
             self.refresh()
             doc = _doc()
             tips = core.tips_for_step(self._timeline, "next") if doc else None
@@ -675,9 +800,8 @@ class TimelineWidget(QtWidgets.QWidget):
         item = self._timeline.find(name)
         if doc is None or item is None or not _ready():
             return
-        tips = core.tips_for_item(self._timeline, item.index)
-        if tips:
-            ops.roll(doc, tips, "Roll History Marker Here")
+        tips, before = core.marker_for_slot(self._timeline, item.index + 1)
+        ops.roll(doc, tips, "Roll History Marker Here", before)
         self.refresh(force=True)
 
     def roll_to_end(self):
@@ -688,7 +812,32 @@ class TimelineWidget(QtWidgets.QWidget):
         self.refresh(force=True)
 
     # -- reordering ----------------------------------------------------------------
+    # -- hover: light up what a step made ---------------------------------------------
+    def hover(self, item):
+        """Fusion: the mouse over a step lights up its faces (sketch: its curves) in the
+        3D view. Not for steps after the marker or switched off (they add nothing)."""
+        if self._drag is not None or self._busy or item.state != "done" or item.suppressed:
+            self.unhover()
+            return
+        obj = self._object(item.name)
+        if obj is None:
+            return
+        from .timeline_hover import HoverLook
+
+        if self._hover is None:
+            self._hover = HoverLook()
+        self._hover.show(obj)
+
+    def unhover(self, item=None):
+        if self._hover is not None and (item is None or self._hover.name == item.name):
+            self._hover.clear()
+
+    def hovered(self):
+        """Name of the step lit up in the 3D view, or None (tests)."""
+        return self._hover.name if self._hover is not None else None
+
     def begin_drag(self, button):
+        self.unhover()
         line = QtWidgets.QFrame(self._inner)
         line.setProperty("role", "drop")
         line.resize(3, ICON + 8)
@@ -723,6 +872,19 @@ class TimelineWidget(QtWidgets.QWidget):
             QtWidgets.QToolTip.showText(global_pos, plan.reason, self)
         else:
             QtWidgets.QToolTip.hideText()
+
+    def cancel_drag(self):
+        if self._drag is None:
+            return
+        button, line = self._drag
+        self._drag = None
+        try:
+            button.unsetCursor()
+            line.hide()
+            line.deleteLater()
+        except RuntimeError:
+            pass
+        QtWidgets.QToolTip.hideText()
 
     def end_drag(self, global_pos):
         if self._drag is None:
@@ -793,9 +955,13 @@ class TimelineWidget(QtWidgets.QWidget):
         return doc.getObject(name) if doc is not None else None
 
     def edit(self, name):
-        obj = self._object(name)
+        if self._object(name) is None or not _ready():
+            return
+        obj = self._object(name)  # finishing the open command may have removed it
         if obj is None:
             return
+        doc = obj.Document
+        back = self._roll_for_edit(doc, name)
         try:
             body = ops.body_of(obj)
             if body is not None:
@@ -805,12 +971,64 @@ class TimelineWidget(QtWidgets.QWidget):
         from . import taskui
 
         taskui.edit_object(obj)  # the feature's SciForge dialog (EDITORS), else FreeCAD's
+        if back is not None:
+            self._roll_back_after_edit(doc.Name, *back)
+
+    def _roll_for_edit(self, doc, name):
+        """Fusion: editing a step after the history marker rolls the design to that
+        step while its dialog is open (else the edit could not be seen). Returns what
+        to roll back to afterwards: (marker count before, marker count while editing)."""
+        self.refresh(force=True)
+        item = self._timeline.find(name)
+        if item is None or item.state != "rolled_back":
+            return None
+        tips, note = core.marker_for_slot(self._timeline, item.index + 1)
+        saved = (core.active_count(self._timeline), self._timeline.before)
+        ops.set_marker_untracked(doc, tips, note)
+        self.refresh(force=True)
+        return saved, (core.active_count(self._timeline), self._timeline.before)
+
+    def _roll_back_after_edit(self, doc_name, before, during):
+        """Once the edit is over, put the marker back where it was (unless the user
+        moved it meanwhile)."""
+        timer = QtCore.QTimer(self)
+        timer.setInterval(150)
+
+        def check():
+            try:
+                if _command_open():
+                    return
+                timer.stop()
+                timer.deleteLater()
+                doc = _doc()
+                if doc is None or doc.Name != doc_name:
+                    return
+                tl = ops.timeline(doc, deps=False)
+                if (core.active_count(tl), tl.before) != during:
+                    return  # the user rolled the marker himself
+                count, note = before
+                ops.set_marker_untracked(doc, core.tips_for_count(tl, count), note)
+                self.refresh(force=True)
+            except Exception as exc:
+                timer.stop()
+                warn("timeline: %s" % exc)
+
+        timer.timeout.connect(check)
+        timer.start()
 
     def edit_profile(self, name):
         obj = self._object(name)
         sketch = ops.profile_sketch(obj) if obj is not None else None
         if sketch is not None:
             self.edit(sketch.Name)
+
+    def suppress_selected(self, on):
+        """Suppress Features / Unsuppress Features on every selected step."""
+        doc = _doc()
+        if doc is None or not self._selected or not _ready():
+            return
+        ops.suppress_many(doc, list(self._selected), on)
+        self.refresh(force=True)
 
     def toggle_suppress(self, name):
         doc = _doc()
@@ -839,6 +1057,8 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def rename(self, name):
         """Fusion: the name becomes editable in place; Enter keeps it, Esc cancels."""
+        if not _ready():  # a rename is an undo step: never inside a command's own step
+            return
         button = self.button(name)
         if button is None:
             return
@@ -899,6 +1119,8 @@ class TimelineWidget(QtWidgets.QWidget):
             self.refresh(force=True)
 
     def rename_group(self, gid):
+        if not _ready():
+            return
         header = self.group_button(gid)
         if header is None:
             return
@@ -969,7 +1191,7 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def find_in_window(self, name):
         obj = self._object(name)
-        if obj is None:
+        if obj is None or not _ready():  # the selection it makes is not a pick
             return
         target = obj
         visible = getattr(obj.ViewObject, "Visibility", False) if obj.ViewObject else False
@@ -985,22 +1207,37 @@ class TimelineWidget(QtWidgets.QWidget):
         menu.setObjectName("SciForgeTimelineSettings")
         to_end = menu.addAction("Roll History Marker to End")
         to_end.setEnabled(not self._timeline.at_end)
-        hide = menu.addAction("Hide Timeline")
+        # No "Hide Timeline" (Fusion has none): with the menu bar hidden a beginner could
+        # not get it back.
+        groups = {i.group for i in self._items if i.group}
+        menu.addSeparator()
+        expand = menu.addAction("Expand All Groups")
+        expand.setEnabled(bool(groups - self._open_groups))
+        collapse = menu.addAction("Collapse All Groups")
+        collapse.setEnabled(bool(groups & self._open_groups))
         self._busy += 1
         try:
             chosen = menu.exec_(QtGui.QCursor.pos())
         finally:
             self._busy -= 1
-        if chosen is hide:
-            hide_timeline()
-        elif chosen is to_end:
+        if chosen is to_end:
             _later(self.roll_to_end)
+        elif chosen is expand:
+            self._open_groups |= groups
+            _later(self.refresh, True)
+        elif chosen is collapse:
+            self._open_groups -= groups
+            _later(self.refresh, True)
 
     def _menu(self, button, global_pos):
         item = button.item
         if item.name not in self._selected:
             self._selected = [item.name]
-            self._push_selection()
+            # A right-click is not a pick: with a command waiting for picks (Fillet
+            # takes whole features) it would have used this step. The command ends
+            # when a menu entry runs (_ready).
+            if not _command_open():
+                self._push_selection()
             self._update_selection_look()
         obj = self._object(item.name)
         if obj is None:
@@ -1026,11 +1263,18 @@ class TimelineWidget(QtWidgets.QWidget):
             add("Edit Profile Sketch", lambda: self.edit_profile(item.name))
         menu.addSeparator()
         many = len(self._selected) > 1
-        add(
-            "Unsuppress Features" if item.suppressed else "Suppress Features",
-            lambda: self.toggle_suppress(item.name),
-            ops.can_suppress(obj) and not many,
-        )
+        if many:  # Fusion: Suppress Features works on the whole selection
+            add(
+                "Unsuppress Features" if item.suppressed else "Suppress Features",
+                lambda: self.suppress_selected(not item.suppressed),
+                ops.can_suppress(obj),
+            )
+        else:
+            add(
+                "Unsuppress Features" if item.suppressed else "Suppress Features",
+                lambda: self.toggle_suppress(item.name),
+                ops.can_suppress(obj),
+            )
         add("Roll History Marker Here", lambda: self.roll_here(item.name), not many)
         menu.addSeparator()
         add("Rename", lambda: self.rename(item.name), not many)

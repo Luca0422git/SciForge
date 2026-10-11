@@ -44,11 +44,12 @@ def _objects(doc):
                 "sciforge_type": getattr(obj, "SciForgeType", ""),
             }
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
-                kind, reason = ops.problem(obj)
-                if kind:
-                    row[kind] = reason
                 if ops.is_suppressed(obj):
-                    row["warning"] = "Suppressed in the timeline"
+                    row["suppressed"] = True  # off, not broken: greyed, like Fusion
+                else:
+                    kind, reason = ops.problem(obj)
+                    if kind:
+                        row[kind] = reason
             rows.append(row)
         except Exception:
             continue
@@ -160,6 +161,11 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
             shifted.palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#ff8a80"))
         elif node["status"] == "warning":
             shifted.palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#f2c440"))
+        elif node["status"] == "suppressed":
+            shifted.palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#8a94a6"))
+            font = QtGui.QFont(shifted.font)
+            font.setStrikeOut(True)
+            shifted.font = font
         super().paint(painter, shifted, index)
 
     def sizeHint(self, option, index):
@@ -470,6 +476,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             warn("browser: %s" % exc)
 
     def _activate(self, body):
+        if not commands.finish_open_dialog():  # a command keeps the body it started in
+            return
         Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
         self._refresh_soon()
 
@@ -506,6 +514,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         node = item.data(1, ROLE_NODE)
         if node["kind"] not in self.RENAMABLE:
             return
+        if node["kind"] not in ("document", "saved_view") and not commands.finish_open_dialog():
+            return  # a rename is an undo step: never inside a command's own step
         self._cancel_rename()
         rect = self.visualRect(self.indexFromItem(item, 1)).adjusted(EYE + 22, 0, 0, 0)
         rect.setWidth(max(rect.width(), 120))
@@ -601,10 +611,19 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         if item is None:
             return
         node = item.data(1, ROLE_NODE)
-        if not item.isSelected():
-            self.clearSelection()
-            item.setSelected(True)
-        self.setCurrentItem(item)
+        # A right-click is not a pick for a command waiting for picks: the row is
+        # marked here only, the command ends when a menu entry runs.
+        quiet = bool(Gui.Control.activeDialog())
+        if quiet:
+            self.blockSignals(True)
+        try:
+            if not item.isSelected():
+                self.clearSelection()
+                item.setSelected(True)
+            self.setCurrentItem(item)
+        finally:
+            if quiet:
+                self.blockSignals(False)
         menu = self.build_menu(item)
         if menu is None:
             return
@@ -711,6 +730,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self.refresh(force=True)
 
     def _find_in_window(self, obj):
+        if not commands.finish_open_dialog():  # the selection it makes is not a pick
+            return
         Gui.Selection.clearSelection()
         Gui.Selection.addSelection(obj.Document.Name, obj.Name)
         Gui.SendMsgToActiveView("ViewSelection")
