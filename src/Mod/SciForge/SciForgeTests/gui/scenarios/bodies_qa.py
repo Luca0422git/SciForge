@@ -1234,6 +1234,7 @@ def g_extrude_back():
 
 # == H: Appearance and material, the selection first, Esc, Ctrl+Z ==================================
 def h_select_top():
+    state["h_grey"] = (look_colors(s.bodies()[0]) or [None])[0]
     h.fit()
     h.click(V(-10, -5, 10))
 
@@ -1263,6 +1264,12 @@ def h_escaped():
     from sciforge import appearance
 
     h.check("Esc: nothing stored", not appearance.get(s.bodies()[0])["faces"])
+    grey = state.get("h_grey")
+    h.check(
+        "Esc: the part's usual grey again",
+        grey is not None and cols and all(near_color(c, grey) for c in cols),
+        (cols, grey),
+    )
 
 
 def h_open_again():

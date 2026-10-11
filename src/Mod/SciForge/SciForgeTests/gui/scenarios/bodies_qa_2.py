@@ -26,6 +26,8 @@ the timeline, typing into the dialog fields.
      OpenCASCADE starts the circle: the origin point is the circle's centre, as in Fusion.
   O  Construct > Offset Plane 4 mm under the top face, then Split Body with that construction
      plane (picked in the browser): 7200 + 4800. Undo.
+  Q  Appearance on the top face only (blue), then Move/Copy (X 50, Z 5, Z Angle 90): the top
+     face is still the blue one after the move (a face keeps its look when it moves). Undo.
 """
 import math
 
@@ -727,6 +729,120 @@ def p_nothing_moved():
     h.check("nothing moved", (c - V(*state["p_box"])).Length < 1e-9, c)
 
 
+# == Q: a face's look follows the body when it is moved ==========================================
+BLUE = (0.10, 0.28, 0.80)
+
+
+def tip_colors():
+    try:
+        return [
+            tuple(round(c, 3) for c in m.DiffuseColor[:3])
+            for m in s.bodies()[0].Tip.ViewObject.ShapeAppearance
+        ]
+    except Exception:
+        return []
+
+
+def blue_faces():
+    """Indices of the blue faces of the body's end step."""
+    return [
+        i for i, c in enumerate(tip_colors()) if all(abs(a - b) <= 0.01 for a, b in zip(c, BLUE))
+    ]
+
+
+def is_top(index, z):
+    face = s.bodies()[0].Tip.Shape.Faces[index]
+    return abs(face.CenterOfMass.z - z) < 1e-6 and face.Area > 1000
+
+
+def click_item(view, item):
+    from SciForgeTests.gui import widget_input as w
+
+    view.scrollToItem(item)
+    w.click(view.viewport(), view.visualItemRect(item).center())
+
+
+def q_open_look():
+    state["q_default"] = (tip_colors() or [None])[0]
+    h.click_empty()
+    h.fit()
+    s.menu("MODIFY", "Appearance")
+
+
+def q_faces_blue():
+    p = s.panel()
+    if h.check("Appearance open", p is not None and p.title == "Appearance", p):
+        b.choose(p.apply_to, "Faces")
+        click_item(p.library, p.item_for("Glossy plastic, blue"))
+
+
+def q_click_top():
+    h.click(V(20, 15, 10))
+
+
+def q_look_ok():
+    h.task_button("OK")
+
+
+def q_blue_top():
+    found = blue_faces()
+    h.check("one face blue", len(found) == 1, tip_colors())
+    if found:
+        h.check("the top face", is_top(found[0], 10), found)
+    others = [c for i, c in enumerate(tip_colors()) if i not in found]
+    grey = state.get("q_default")
+    h.check(
+        "the other faces keep the part's usual grey",
+        grey is not None and all(all(abs(a - b) <= 0.01 for a, b in zip(c, grey)) for c in others),
+        (others, grey),
+    )
+
+
+def q_move():
+    h.click_empty()
+    h.fit()
+    h.press("m")
+
+
+def q_move_body():
+    h.click(V(20, 15, 10))
+
+
+def q_move_values():
+    p = s.panel()
+    if h.check("Move open", p is not None):
+        s.type_value(p.distance_fields[0].widget, "50")
+        s.type_value(p.distance_fields[2].widget, "5")
+        s.type_value(p.angle_fields[2].widget, "90")
+
+
+def q_move_ok():
+    h.task_button("OK")
+
+
+q_move_ok.wait_ms = 1200
+
+
+def q_moved_blue():
+    box = bbox(s.bodies()[0])
+    h.check("moved (z 5..15)", s.close(box.ZMin, 5) and s.close(box.ZMax, 15), box)
+    found = blue_faces()
+    h.check("still one face blue after the move", len(found) == 1, tip_colors())
+    if found:
+        h.check("still the top face", is_top(found[0], 15), found)
+    h.fit()
+    h.shot("Q-moved-face-look")
+
+
+def q_undo():
+    s.undo()
+
+
+def q_undone():
+    found = blue_faces()
+    h.check("undo: the top face is blue", len(found) == 1 and is_top(found[0], 10), found)
+
+
 h.run(
     "bodies_qa_2",
     [s.new_design("QA_Multi")]
@@ -853,5 +969,21 @@ h.run(
         o_done,
         o_undo,
         o_undone,
+    ]
+    + [s.new_design("QA_FaceLook")]
+    + s.box_steps("look_box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + [
+        q_open_look,
+        q_faces_blue,
+        q_click_top,
+        q_look_ok,
+        q_blue_top,
+        q_move,
+        q_move_body,
+        q_move_values,
+        q_move_ok,
+        q_moved_blue,
+        q_undo,
+        q_undone,
     ],
 )
