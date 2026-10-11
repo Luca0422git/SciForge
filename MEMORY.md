@@ -569,6 +569,30 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   a line end, greyed sketch tools, Fusion's constraint glyph look; sketch_polygon failed once
   ("second use") and never again; one see-through task panel screenshot (path F).
 
+### 2026-10-11: Shell, Draft, Scale (branch `sf/shell_draft`)
+- Built Fusion's Shell, Draft and Scale (see the Phase 1 checkbox and Known issues). New
+  modules: `shelling.py` / `shell_ui.py`, `drafting.py` / `draft_ui.py`, `scale.py` /
+  `scale_ui.py`, shared dialog base `pickpanel.py` (picking with toggling clicks, see-through
+  "before" part + solid preview, Esc/Enter/Ctrl+Z guards, Delete held). Shared edits: one
+  ribbon line (Scale -> `SciForge_Scale`), ribbon_sweep `KNOWN` emptied (Shell fixed),
+  append-only golden ops (`schema.py`, one import line in `builder.py`).
+- Tests (only real input): `shell_draft` (nothing selected, picks/drops, typed value, arrow
+  drag, Both / Outside / Rounded, too thick + hint, OK, undo/redo, timeline edit to Both,
+  Cancel, Esc), `shell_draft_hollow` (body picked in the browser, preselected face + Enter,
+  second shell on the result, Ctrl+Z inside, editing the first of two shells, a parameter
+  formula, save/reopen), `shell_draft_draft` (origin square, faces, handle, flip, refused
+  face, too steep, edit, Cancel, Esc, second draft with a preselected face),
+  `shell_draft_scale` (body click, arrow drag, corner point, Non Uniform, factor 0, edit,
+  Cancel, Esc, preselected body + Enter, save/reopen), `shell_draft_qa` (rounded block:
+  tangent runs, a second body followed by Draft and Shell). 20 golden models, unit tests.
+- Full suite on the branch (no --only): unit 149 OK, golden 134 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 45 scenarios
+  PASS (3847 checks).
+- Gaps: Draft Parting Line / Two Sides / Symmetric (greyed: FreeCAD's Draft cannot split
+  faces), Scale of sketches/components, several bodies in one step, Change Parameters does
+  not list SciForge's own Shell (hollow/Both) and Scale values (`parameters.py` knows only
+  Press Pull among SciForge's features). Not checked by Luca yet.
+
 ## Next steps (in order)
 
 1. Finish the feature workflow (see session log, part 5): revolve, patterns, shell_draft, bodies,
