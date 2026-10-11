@@ -1227,7 +1227,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Teammate scenario changed on purpose: `revolve_basic` expects Type Angle / To / Full.
 - Shared files touched: `SciForgeTests/golden/schema.py` (append-only block: sf_revolve
   takes "to"), `MEMORY.md`. New spec `docs/sciforge/parity/revolve.md`.
-- Full suite: see the line below (filled in at the end of the session).
+- Full suite on the branch (no --only, code of commit 52eb1d9d4b, 87 minutes): unit 236 OK,
+  golden 219 pass + 1 xfail (plate_hole_grid, core patch #4 not compiled; the golden
+  `sf_revolve_to_cut`, added after the run started, passed on its own), smoke 70/70,
+  journey 25/25, 93 of 93 scenarios PASS (10064 checks; revolve_qa 342, revolve_qa_more
+  353, revolve_qa_part 306, revolve_qa_to 255, revolve_qa_bodies 228).
 
 ## Next steps (in order)
 
