@@ -948,6 +948,7 @@ def delete(doc, names):
         order = [n for n in tl.names() if n in gone]
         order += [n for n in names if n not in order]
         helpers = _helpers_of(doc, order, gone)
+        touched = {b.Name for b in (body_of(doc.getObject(n)) for n in order) if b is not None}
         for n in reversed(order):
             obj = doc.getObject(n)
             if obj is None:
@@ -968,6 +969,13 @@ def delete(doc, names):
             after = timeline(doc)
             _set_marker_note(doc, None)
             _set_tips(doc, core.tips_for_count(after, len(after.items)))
+        # Deleting a body's last step makes FreeCAD move its Tip back by itself, so
+        # _set_tips() sees nothing to change and the new Tip, hidden until now, stayed
+        # hidden: the whole part disappeared. Show each touched body's Tip.
+        for name in touched:
+            body = doc.getObject(name)
+            if body is not None:
+                _show_only_tip(body, body.Tip)
         recompute(doc)
     except Exception:
         doc.abortTransaction()

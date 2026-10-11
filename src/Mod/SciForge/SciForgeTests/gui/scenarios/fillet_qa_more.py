@@ -428,11 +428,9 @@ def p19_undone():
 def p19_deleted():
     h.check("P19 Delete from the timeline removed the fillet", not b.blends(), b.blends())
     h.check("P19 the box is whole again", b.close(h.solid_volume(), b.BOX), h.solid_volume())
-    if not h.body().Tip.ViewObject.isVisible():
-        # KNOWN, timeline owner (sciforge/timeline_ops.py, delete): FreeCAD already moved the
-        # Tip back when the step was removed, so _set_tips() skips _show_only_tip() and the
-        # new Tip stays hidden: the whole part disappears from the view after the Delete.
-        print("[SciForge] fillet_qa_more: KNOWN timeline Delete leaves the new Tip hidden")
+    # FreeCAD moves the Tip back itself when the last step is removed; the new Tip used to
+    # stay hidden, so the whole part disappeared from the view after the Delete.
+    h.check("P19 the part is still drawn after the Delete", h.body().Tip.ViewObject.isVisible())
     h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
 
 
