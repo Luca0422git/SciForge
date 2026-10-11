@@ -148,7 +148,7 @@ CONSTRUCT = group(
         item("Plane at Angle", "SciForge_Construct_PlaneAtAngle", "plane_angle"),
         item("Tangent Plane", "SciForge_Construct_TangentPlane", "tangent_plane"),
         item("Midplane", "SciForge_Construct_Midplane", "midplane"),
-        item("Perpendicular Plane", "SciForge_Construct_PerpendicularPlane", "plane_perp"),
+        item("Plane Tangent to Face at Point", "SciForge_Construct_PlaneAtPoint", "tangent_plane"),
         item("Plane Through Two Edges", "SciForge_Construct_PlaneTwoEdges", "plane_two_edges"),
         item(
             "Plane Through Three Points",
@@ -158,7 +158,7 @@ CONSTRUCT = group(
         item("Plane Along Path", "SciForge_Construct_PlaneAlongPath", "plane_along_path"),
         SEP,
         item("Axis Through Cylinder/Cone/Torus", "SciForge_Construct_AxisCylinder", "axis"),
-        item("Axis Perpendicular to Face", "SciForge_Construct_AxisNormal", "axis"),
+        item("Axis Perpendicular to Face at Point", "SciForge_Construct_AxisNormal", "axis"),
         item("Axis Through Two Planes", "SciForge_Construct_AxisTwoPlanes", "axis"),
         item("Axis Through Two Points", "SciForge_Construct_AxisTwoPoints", "axis_two_points"),
         item("Axis Through Edge", "SciForge_Construct_AxisEdge", "axis_edge"),
