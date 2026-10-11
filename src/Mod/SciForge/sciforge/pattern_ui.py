@@ -1259,7 +1259,7 @@ class PatternPanel(Panel):
         body = pattern.owner_body(obj)
         if body is None or body is self.body:
             return True
-        if self.editing:
+        if self.editing and self.body is not None:
             self.message.setText(
                 "⚠ This pattern is in %s: pick features of %s." % (self.body.Label, self.body.Label)
             )
@@ -1586,8 +1586,11 @@ class PatternPanel(Panel):
         if self._closed:
             return
         self._handle_press = False  # the handle took the press: no selection follows
-        self.drop_formula(key)
         value = round(value, 2)
+        field = self._value_fields().get(key)
+        if field is not None and abs(value - round(field.value(), 2)) < 1e-9:
+            return  # a click on the arrow without moving it: the value (and its formula) stays
+        self.drop_formula(key)
         if key == "distance":
             self._distance_set = True
         elif key == "distance2":
@@ -1605,8 +1608,10 @@ class PatternPanel(Panel):
         if self._closed:
             return
         self._handle_press = False
-        self.drop_formula("angle")
         value = round(value, 1)
+        if abs(value - round(self.angle_field.value(), 1)) < 1e-9:
+            return  # a click on the handle without turning it: the angle (and its formula) stays
+        self.drop_formula("angle")
         if abs(value) < 1.0:
             value = 1.0 if value >= 0 else -1.0
         self._quiet = True

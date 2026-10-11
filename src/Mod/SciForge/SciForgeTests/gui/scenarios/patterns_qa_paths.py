@@ -14,11 +14,14 @@ Path 3, Esc in the middle of a pick: Mirror, the hole, the Mirror Plane box (the
 Path 4, values while the preview runs: a pattern along Y; "abc" in Quantity is explained in
         plain words and OK waits; Distance 0 is refused in the dialog; a negative distance puts
         the copy off the part (it cuts nothing, no error); the blue arrow dragged far out and far
-        back past the start; 14 typed again; Enter in the Quantity field finishes the command.
+        back past the start; a formula typed (4 * pi) stays when the arrow is only clicked (it
+        was thrown away); Enter in the Quantity field finishes the command.
         Ctrl+Z removes exactly that pattern, Ctrl+Y brings it back.
 
 Hand-derived: box 40 x 30 x 10 = 12000; a through hole r 2 removes pi 2^2 10.
 """
+import math
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
@@ -265,13 +268,31 @@ def p4_dragged_back():
     p = ps.panel()
     value = p.distance_field.value()
     h.check("dragged back past the start", value < -100.0, value)
-    ps.type_value(p.distance_field.widget, "14")
+    ps.type_value(p.distance_field.widget, "4 * pi")  # a formula, like "gap * 2"
 
 
 def p4_fourteen():
-    h.check("copy at (8, 22)", (8, 22) in centres(), centres())
+    p = ps.panel()
+    h.check("copy at (8, 8 + 4 pi)", (8, round(8 + 4 * math.pi, 4)) in centres(), centres())
     h.check("4 holes", ps.close(h.solid_volume(), ps.BOX - 4 * HOLE), h.solid_volume())
-    spin = ps.panel().quantity
+    h.check("the formula is kept", "4 * pi" in p.formulas.text(), p.formulas.text())
+    handle = p.handles.get("distance")
+    if h.check("the arrow is there", handle is not None):
+        h.fit()
+        h.click(handle.origin + handle.direction * handle.distance())  # a click, no drag
+
+
+def p4_clicked_arrow():
+    p = ps.panel()
+    h.check(
+        "a click on the arrow without moving it keeps the formula",
+        "4 * pi" in p.formulas.text(),
+        p.formulas.text(),
+    )
+    h.check(
+        "and the value", ps.close(p.distance_field.value(), 4 * math.pi), p.distance_field.value()
+    )
+    spin = p.quantity
     spin.setFocus()
     QtTest.QTest.mouseClick(spin, QtCore.Qt.LeftButton)
     QtTest.QTest.keyClick(spin, QtCore.Qt.Key_A, QtCore.Qt.ControlModifier)
@@ -280,7 +301,7 @@ def p4_fourteen():
     QtWidgets.QApplication.processEvents()
 
 
-p4_fourteen.wait_ms = 1200
+p4_clicked_arrow.wait_ms = 1200
 
 
 def p4_enter_finished():
@@ -341,6 +362,7 @@ h.run(
         p4_dragged_far,
         p4_dragged_back,
         p4_fourteen,
+        p4_clicked_arrow,
         p4_enter_finished,
         p4_undone,
         p4_redone,

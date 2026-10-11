@@ -127,7 +127,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       errors in the dialog; timeline edit.
       Spec + gaps: `docs/sciforge/parity/patterns.md`. 6 scenarios (`patterns*.py`), 16 golden
       models, unit tests `test_pattern_core.py`. Ribbon: Pattern on Path now runs
-      `SciForge_PatternOnPath` (was greyed).
+      `SciForge_PatternOnPath` (was greyed). QA pass done (branch `sf/patterns-qa`): 17 paths
+      in 5 more scenarios (`patterns_qa_*.py`), 8 bugs fixed (see Known issues).
 
 ## Known issues / findings
 
@@ -351,6 +352,35 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     `SciForge::PatternOnPath` (generic icon, title "Pattern On Path"): timeline owner, add a
     kind `"pattern_path": ("Pattern on Path", "pattern_rect")` to `KINDS` and map
     `"PatternOnPath"` to it in `KIND_BY_SCIFORGE_TYPE`.
+- **Patterns QA findings (branch `sf/patterns-qa`, break-and-fix pass)**:
+  - **Trap: rebuilding a step as a new object silently drops every link to it.** A pattern
+    edit that needs the other kind of feature (Suppression, a Quantity formula, Faces, a
+    fillet among the objects) replaced FreeCAD's LinearPattern with SciForge's feature; a
+    sketch on its top face, a fillet on its edges or a Press Pull of its face lost their
+    reference without a message. `pattern.relink_dependents(old, new)` moves every link first,
+    each face/edge/vertex found again by place (`pattern.twin_element`). Any feature that
+    swaps its object type needs the same.
+  - **Upstream behaviour:** FreeCAD's Transformed features return without touching their shape
+    when none of their originals is left (`FeatureTransformed.cpp`, `originals.empty()`): after
+    the patterned hole was deleted the copies stayed and everything after the pattern froze.
+    `pattern.OrphanWatch` (an App observer, `slotRecomputedObject`) passes the base shape
+    through and sets the timeline warning (`SciForgeWarning`). Worth reporting upstream.
+  - FreeCAD's pattern features repeat their originals in list (= click) order: a boss picked
+    after the hole in it filled the copied hole. Originals are now sorted in timeline order.
+  - Fusion has no active body: a pattern dialog started while a second body was active
+    ignored the first body's features (clicks did nothing). `PatternPanel._adopt_body`.
+  - **Trap: a flat drag handle is a sliver when its plane is seen nearly edge-on**, and a
+    press that misses a handle selects the part behind it on release (the box's whole
+    feature joined the pattern's objects). The pattern's curved handle got a second, standing
+    band; pattern dialogs ignore the selection that follows a press on a handle. **Not fixed
+    for other dialogs** (owners of `taskui.ArrowDragger` / `extrude_ui.AngleDragger`): the
+    taper handle has the same flat band, and every dialog that picks faces should ignore the
+    release after a press on a handle.
+  - OpenCASCADE's Python exceptions print as "<unknown exception data>"; SciForge's pattern
+    feature now raises sentences (`pattern.kernel_message`).
+  - Not patterns' (seen during QA, sf/patterns base): an Extrude to a New Body from a sketch
+    on another body's face shows a step "ExtrudeNNN profile" in the timeline (extrude /
+    timeline owners).
 
 ## Questions waiting for Luca
 
