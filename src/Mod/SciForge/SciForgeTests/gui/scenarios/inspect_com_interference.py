@@ -188,6 +188,11 @@ def com_edit_dialog():
     h.click(V(45, 35, 10))
 
 
+# The pick is applied from a timer; on a loaded machine the next check came too early and
+# read the centre of body 1 alone (full suite with other suites running; passes alone).
+com_edit_dialog.wait_ms = 1200
+
+
 def com_edit_both():
     p = b.active_panel()
     got = [p.coords[a].text() for a in "XYZ"]
