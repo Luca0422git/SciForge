@@ -1191,6 +1191,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Primitives (`docs/sciforge/parity/primitives.md`): which defaults does your Fusion show for
   Torus Position, Coil Rotation (Clockwise?) and Section Position, and is Section Size of a
   square/triangle section the circle round it or its side?
+- The 6 open Dependabot PRs (GitHub Actions version bumps): close them, or merge them?
+- The browser lists a Single Hole's own sketch ("Hole 1 Sketch") under the body. Fusion
+  shows nothing there; hiding it is easy, but double-clicking it is how the `hole` scenario
+  edits the hole today. Hide it?
+- Fusion checks for your copy: marking-menu slot order (screenshot), hole depth measured
+  to the drill point or the shoulder, Polygon size (inscribed or circumscribed), Plane at
+  Angle reference, how Symmetric counts pattern copies, pipe corners (mitred or rounded),
+  Scale's default for profiles.
 
 ## Session log
 
@@ -1817,14 +1825,33 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Pull failure that the new face memory fixes; its expectation was updated (13500) and the
   scenario then passed alone (225 checks). No product code changed after the full run.
 
+### 2026-10-12: Final integration of the QA rounds (main branch)
+- Merged `sf/inspect-qa-3` (with qa-2), `sf/primitives-qa3` (with qa2) and `sf/sweep_loft-qa`
+  after unit + golden runs; pushed (ebf14fd11f). The feature workflow is finished: every
+  build stage and every QA round is on `claude/inspiring-cerf-ragp6j`.
+- Fixed: deleting a pipe, sweep, loft or rib (timeline right-click, Delete key, browser)
+  left the sketches it used hidden. They are read through helper objects (pipe path,
+  sweep / loft binders), and only Profile / Sketch links were followed.
+  `timeline_ops.used_sketches()` follows the step's helpers; `delete.py` uses it too.
+  Scenario steps in `primitives_pipe` and `sweep_loft_sweep`, both failing without the fix
+  (checked: the sweep's profile sketch stayed hidden as well).
+- CI: every SciForge tests run since #52 was cancelled at the 90-minute limit (the suite
+  needs ~2 h on one machine), so no quick update was built after #45. CI now runs 5 parts
+  side by side: `--only base` (unit, golden, smoke, journey) and `--only scenarios --shard
+  K/4` (`run_tests.sh`); the quick update is packaged by its own job once all pass.
+- Full suite at the end: running (started 04:32 UTC on 580bb54f50); result added here when done.
+
 ## Next steps (in order)
 
-1. Feature workflow wf_f0015b22-593 is finished: every build stage and the QA of hole, revolve,
-   patterns, shell_draft, bodies (plus extrude/presspull, sketch, timeline/browser, fillet) are
-   merged. The QA of inspect, primitives and sweep_loft stopped on the org spend limit and was
-   restarted as wf_d887d414-12d (qa_only, from the merged HEAD). Merge each after the full suite.
-   Inspect QA: finished on `sf/inspect-qa-3` (includes `sf/inspect-qa-2`), merge that one.
-   Sweep / Loft QA is done on `sf/sweep_loft-qa` (merge it).
+1. Done: all feature builds and QA rounds are merged (see the 2026-10-12 log). Open items
+   left by the QA rounds, none blocking:
+   - a length formula typed into an angle box is accepted (Fusion refuses it);
+   - coils and pipes saved before the QA fixes keep their old shape until edited once;
+   - Extrude Join with a profile away from the part says "separate solids", while Sweep and
+     Loft switch to New Body (Fusion makes a new body);
+   - other features than sweep / loft / Press Pull may lose picked edges / faces after
+     save, reopen and edit (the "remember element" fix was made for those three);
+   - the gaps listed at the end of each `docs/sciforge/parity/*.md`.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).
