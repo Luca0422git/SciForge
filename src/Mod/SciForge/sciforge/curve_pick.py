@@ -19,7 +19,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import profile_pick, warn
+from . import drag_guard, profile_pick, warn
 from .compat import QtCore, QtGui, QtWidgets
 
 HANDLE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
@@ -425,6 +425,7 @@ class PathHandle:
             if Gui.ActiveDocument is None:
                 self._timer.stop()
                 return
+            drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
             pending = self._pending
             if pending is not None and abs(pending - self._value) > 1e-6:

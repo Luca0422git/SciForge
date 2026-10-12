@@ -19,7 +19,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import warn
+from . import drag_guard, warn
 from .compat import QtCore
 
 BLUE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
@@ -246,6 +246,7 @@ class _Handle:
             if Gui.ActiveDocument is None:
                 self._timer.stop()
                 return
+            drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
             pending = self._pending
             if pending is not None and abs(pending - self.value()) > 1e-9:

@@ -22,7 +22,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, log, preview, primitives, profile_pick, ui_icon_path, warn
+from . import commands, drag_guard, log, preview, primitives, profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_core import nearest_snap, nice_floor, round_to
@@ -523,6 +523,7 @@ class LinearHandle:
             if Gui.ActiveDocument is None:
                 self._timer.stop()
                 return
+            drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
             pending = self._pending
             if pending is not None and abs(pending - self._value) > 1e-9:

@@ -18,7 +18,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, hole, log, preview, ui_icon_path, warn
+from . import commands, drag_guard, hole, log, preview, ui_icon_path, warn
 from . import hole_common as common
 from . import thread_tables as tables
 from .compat import QtCore, QtWidgets
@@ -129,7 +129,7 @@ class PointDragger:
 
     def _poll(self):
         try:
-            active = self.dragging()
+            active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
             value = self.xy()
             if abs(value[0] - self._last[0]) + abs(value[1] - self._last[1]) > 1e-9:
                 self._last = value
@@ -146,6 +146,7 @@ class PointDragger:
             self._timer.stop()
         except Exception:
             pass
+        drag_guard.before_remove(self.dragger, self.root, self.view)
         try:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:

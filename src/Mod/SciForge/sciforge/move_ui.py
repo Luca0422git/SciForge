@@ -27,7 +27,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, move, profile_pick, ui_icon_path, warn
+from . import bodies, drag_guard, move, profile_pick, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField
@@ -322,6 +322,7 @@ class Triad:
             if Gui.ActiveDocument is None:
                 self._timer.stop()
                 return
+            drag_guard.end_lost_drag(self, idle=None)  # its release never came (drag_guard)
             self._paint()
             pending, self._pending = self._pending, None
             if pending is not None and self.on_drag:

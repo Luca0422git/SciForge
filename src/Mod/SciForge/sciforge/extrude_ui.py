@@ -19,7 +19,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, extrude, log, preview, profile_pick, ui_icon_path, warn
+from . import commands, drag_guard, extrude, log, preview, profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel
 
@@ -219,7 +219,7 @@ class AngleDragger:
 
     def _poll(self):
         try:
-            active = bool(self.dragger.isActive.getValue())
+            active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
             value = self.angle()
             if abs(value - self._last) > 1e-6:
                 self._last = value
@@ -237,6 +237,7 @@ class AngleDragger:
         except Exception:
             pass
         try:
+            drag_guard.before_remove(self.dragger, self.root, self.view)
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass

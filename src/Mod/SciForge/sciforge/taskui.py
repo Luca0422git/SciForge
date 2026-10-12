@@ -12,7 +12,7 @@ import re
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import log, warn
+from . import drag_guard, log, warn
 from .compat import QtCore, QtWidgets
 
 
@@ -236,7 +236,8 @@ class ArrowDragger:
 
     def _poll(self):
         try:
-            active = bool(self.dragger.isActive.getValue())
+            # a release FreeCAD never passed on ends the drag here (drag_guard)
+            active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
             value = self.distance()
             if abs(value - self._last) > 1e-9:
                 self._last = value
@@ -253,6 +254,7 @@ class ArrowDragger:
             self._timer.stop()
         except Exception:
             pass
+        drag_guard.before_remove(self.dragger, self.root, self.view)
         try:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
