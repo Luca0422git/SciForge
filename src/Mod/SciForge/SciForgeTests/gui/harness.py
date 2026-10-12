@@ -318,11 +318,18 @@ def double_click(point):
     QtWidgets.QApplication.processEvents()
 
 
-def drag(start, end, steps=12):
-    """Press, move and release the left button, start/end in widget pixels."""
+def drag(
+    start,
+    end,
+    steps=12,
+    button=QtCore.Qt.LeftButton,
+    modifiers=QtCore.Qt.NoModifier,
+):
+    """Press, move and release a mouse button (left by default; Shift + middle orbits),
+    start/end in widget pixels."""
     widget = gl_widget()
     move(start)
-    QtTest.QTest.mousePress(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, start)
+    QtTest.QTest.mousePress(widget, button, modifiers, start)
     for i in range(1, steps + 1):
         pos = QtCore.QPointF(
             start.x() + (end.x() - start.x()) * i / steps,
@@ -333,12 +340,12 @@ def drag(start, end, steps=12):
             pos,
             QtCore.QPointF(widget.mapToGlobal(pos.toPoint())),
             QtCore.Qt.NoButton,
-            QtCore.Qt.LeftButton,
-            QtCore.Qt.NoModifier,
+            button,
+            modifiers,
         )
         QtWidgets.QApplication.sendEvent(widget, event)
         QtWidgets.QApplication.processEvents()
-    QtTest.QTest.mouseRelease(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, end)
+    QtTest.QTest.mouseRelease(widget, button, modifiers, end)
     QtWidgets.QApplication.processEvents()
 
 

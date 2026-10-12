@@ -149,12 +149,16 @@ _NAVICUBE_PARAMS = "User parameter:BaseApp/Preferences/NaviCube"
 
 # (parameter group, kind, name, SciForge value). Fusion: flat dark background; middle
 # button pans, Shift+middle orbits, wheel zooms at the cursor (FreeCAD's "Revit" style);
-# a light ViewCube with dark labels and a blue hover.
+# the orbit is Fusion's Constrained Orbit: it turns about the up axis and tilts, never
+# rolls (FreeCAD's "Free Turntable", 2; FreeCAD 1.1's default "Rounded Arcball", 4, rolls
+# the model off axis). OrbitStyle comes after NavigationStyle: a new style re-reads it.
+# A light ViewCube with dark labels and a blue hover.
 VIEWER_SETTINGS = [
     (_VIEW_PARAMS, "Bool", "Gradient", False),
     (_VIEW_PARAMS, "Bool", "RadialGradient", False),
     (_VIEW_PARAMS, "Unsigned", "BackgroundColor", _rgba(VIEW)),
     (_VIEW_PARAMS, "String", "NavigationStyle", "Gui::RevitNavigationStyle"),
+    (_VIEW_PARAMS, "Int", "OrbitStyle", 2),
     (_VIEW_PARAMS, "Bool", "ZoomAtCursor", True),
     (_NAVICUBE_PARAMS, "Unsigned", "BaseColor", (0xF0F0F0 << 8) | 0xE6),
     (_NAVICUBE_PARAMS, "Unsigned", "EmphaseColor", _rgba("#4a4f57")),
