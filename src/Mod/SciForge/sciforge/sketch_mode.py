@@ -647,6 +647,7 @@ class SketchSession:
         self.viewer = view_widget(self.gl) if self.gl is not None else None
         self._fields = []
         self._typed = None  # the value field the user typed a value into
+        self.last_letter = ""  # what the last letter typed into a value field did (reports)
         if self.gl is not None:
             self.gl.installEventFilter(self.filter)
         if self.viewer is not None:
@@ -934,18 +935,28 @@ class SketchSession:
             return False
         mods = event.modifiers() & ~(QtCore.Qt.ShiftModifier | QtCore.Qt.KeypadModifier)
         letter = event.text()[:1].isalpha() and mods == QtCore.Qt.NoModifier
+        if letter:
+            self.last_letter = "%s: %s" % (
+                event.text()[:1],
+                "after a value typed here, kept in the field"
+                if _same(self._typed, field)
+                else ("held down" if event.isAutoRepeat() else "a tool key?"),
+            )
         if letter and not event.isAutoRepeat() and not _same(self._typed, field):
             # Fusion: a tool's key switches tools at any time. FreeCAD would type the
             # letter into the field for two seconds after any value or Enter (a unit);
             # here only after a value typed into this field.
             command = _sketch_key(event)
             if command is not None:
+                self.last_letter += " runs %s" % command
                 QtCore.QTimer.singleShot(0, lambda: _run(command))
                 return True
             name = _swallowed_shortcut(event)
             if name is not None:
+                self.last_letter += " runs shortcut %s" % name
                 QtCore.QTimer.singleShot(0, lambda: _run_shortcut(name))
                 return True
+            self.last_letter += " no tool has this key"
         return False
 
     def _finishes_on_enter(self):

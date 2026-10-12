@@ -43,6 +43,12 @@ def recent_command():
     return last[0] if last else None
 
 
+def sketch_session():
+    from sciforge import sketch_mode
+
+    return sketch_mode.current()
+
+
 def editor():
     from sciforge import sketch_mode
 
@@ -183,13 +189,26 @@ def r_l_in_field():
     focus = si.focus_class()
     h.check("R4: the next circle's value field has the keyboard", focus == FIELD, focus)
     si.move_towards(V(58, 12.3, 0), X)
+    session = sketch_session()
+    if session is not None:
+        session.last_letter = ""
+    s["focus_before_l"] = si.focus_class()
     si.key("l")
 
 
 def r_switched():
+    session = sketch_session()
     h.check(
         "R4: L in the circle's field starts the line tool",
         recent_command() == "SciForge_SketchLine",
+        # Failed once, only on a built SciForge (GitHub, 2026-10-12): say what L did.
+        "last command %s; keyboard before L: %s, now: %s; the field saw: %r"
+        % (
+            recent_command(),
+            s.get("focus_before_l"),
+            si.focus_class(),
+            session.last_letter if session is not None else "no sketch",
+        ),
     )
     h.check("R4: a drawing tool runs", si.drawing())
     h.check("R4: the half circle goes", len(s["sk"].Geometry) == 3, s["sk"].Geometry)

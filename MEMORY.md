@@ -1965,6 +1965,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   golden-model run before compiling; Linux-only builds are rare). Fixed after review:
   windows_golden.sh keeps FreeCAD's whole output (golden.log) and prints its end when no
   report came out; README no longer promises the quick update fixes a red built test.
+- Build run #3 scenarios on the built Linux AppImage (first time): 3 of 4 parts green, part 3
+  had one failed check, `sketch_qa_keys` R4 "L in the circle's field starts the line tool"
+  (only that check: the circle tool kept running, so L never switched tools). Not
+  reproduced: the same part (same commit 31239bf4a0, same order) passes on the official
+  FreeCAD here, sketch_qa_keys alone 4 of 4; same Qt/PySide 6.8.3 in both; the C++ patches
+  do not touch it; the old field is deleted and PySide knows it (not a stale pointer). The
+  check now reports what L did (`SketchSession.last_letter`, the keyboard widget before and
+  after), so the next build's scenarios say why if it fails again. Lesson: "Re-run failed
+  jobs" on a build re-runs the failed 3-hour compile too (the scenarios wait for it);
+  cancelled at once. Run a failing scenario part again with a new build instead.
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
