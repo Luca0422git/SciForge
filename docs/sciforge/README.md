@@ -23,7 +23,7 @@ Until the branding pass, it does share FreeCAD 1.1's settings folder.
 About cost: the repository is public (since 2026-10-10), and GitHub's standard build machines are
 free for public repositories, so builds cost nothing. A full build still takes a few hours, so it
 is started by hand (or by a `sciforge-v*` tag) rather than on every change. The automatic test
-run (**SciForge tests**) takes about 20 minutes and runs on every push.
+run (**SciForge tests**) takes about 40 minutes (5 machines side by side) and runs on every push.
 
 ## Getting updates without rebuilding (most of the time)
 
@@ -44,17 +44,22 @@ SciForge module and checks:
 
 - **Unit tests**: the parts of SciForge that are plain logic (search ranking, timeline rules,
   golden-model format).
-- **Golden models**: 48 reference parts (bracket, enclosure, flange, holes, fillets, shells,
+- **Golden models**: about 280 reference parts (bracket, enclosure, flange, holes, fillets, shells,
   patterns, Press Pull, Extrude on a face, and "edit an early step" cases). Each is rebuilt step
   by step and its volume, area, size and face count are compared with values worked out by hand.
   The report appears on the run's summary page.
 - **GUI smoke test**: starts the real FreeCAD window on a virtual screen, switches to SciForge,
   checks toolbars, shortcuts and the timeline, and saves a screenshot (download
-  `sciforge-test-output` from the run).
+  `sciforge-test-output-base` from the run).
 - **GUI journey test**: uses SciForge the way a person does, with real mouse clicks and drags:
   Create Sketch by clicking a plane, Extrude by clicking inside the profile and dragging the
   arrow, Press Pull by clicking a face, a second sketch on a face, a cut, a face extrude.
-  Screenshots `journey-*.png` are in `sciforge-test-output`.
+  Screenshots `journey-*.png` are in `sciforge-test-output-base`.
+- **GUI scenarios**: about 130 complete workflows (one per feature, plus the "try to break
+  it" rounds), each with real clicks, typing and keys, checking volumes worked out by hand
+  and that no error or pop-up appears. They are split over 4 machines; the reports and
+  screenshots are in `sciforge-test-output-scenarios-1` to `-4`.
+- The quick update is only built when all five parts pass.
 
 ## Folder map
 

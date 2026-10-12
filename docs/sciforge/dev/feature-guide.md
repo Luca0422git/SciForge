@@ -99,6 +99,8 @@ Run (FreeCAD is already unpacked at the path below in this sandbox):
 tools/sciforge/run_tests.sh --freecad <FC> --out <OUT> --scenario <name>   # one scenario
 tools/sciforge/run_tests.sh --freecad <FC> --out <OUT> --only golden
 tools/sciforge/run_tests.sh --freecad <FC> --out <OUT>                     # everything
+tools/sciforge/run_tests.sh --freecad <FC> --out <OUT> --only base         # all but scenarios
+tools/sciforge/run_tests.sh --freecad <FC> --out <OUT> --only scenarios --shard 2/4  # CI's split
 ```
 
 Format with black, line length 100. Look at the screenshots your scenario saves (`<OUT>/*.png`)

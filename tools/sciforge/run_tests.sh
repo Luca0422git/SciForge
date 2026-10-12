@@ -4,26 +4,41 @@
 #   2. golden models       (real FreeCAD, headless)
 #   3. GUI smoke test      (real FreeCAD GUI on a virtual screen via xvfb-run)
 #
-#   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR] [--only unit|golden|gui|scenarios]
+#   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR]
+#                               [--only unit|golden|gui|scenarios|base]
 #                               [--scenario NAME]   (one file of SciForgeTests/gui/scenarios)
+#                               [--shard K/N]       (every N-th scenario, from the K-th)
 #
 # --freecad  folder from tools/sciforge/get_freecad.sh (default .sciforge-cache/freecad),
 #            or a SciForge install prefix containing bin/FreeCADCmd
 # --out      where reports and the screenshot go (default .sciforge-cache/test-output)
+# --only     base = everything but the scenarios (unit, golden, smoke, journey)
+# --shard    splits the scenarios over N runs (CI runs them side by side): 1/4 runs the
+#            1st, 5th, 9th... scenario in name order, 2/4 the 2nd, 6th... (N runs cover all)
 #
 # FreeCAD runs with a throw-away user profile, so your own FreeCAD settings are untouched.
 set -uo pipefail
+LC_COLLATE=C  # the same scenario order everywhere (--shard relies on it)
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FREECAD_DIR="${REPO}/.sciforge-cache/freecad"
 OUT="${REPO}/.sciforge-cache/test-output"
 ONLY=""
+SHARD_INDEX=1
+SHARD_COUNT=1
 while [ $# -gt 0 ]; do
     case "$1" in
         --freecad) FREECAD_DIR="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --only) ONLY="$2"; shift 2 ;;
         --scenario) SCENARIO="$2"; ONLY="scenarios"; shift 2 ;;
+        --shard)
+            SHARD_INDEX="${2%/*}"; SHARD_COUNT="${2#*/}"
+            if ! [[ "${SHARD_INDEX}" =~ ^[0-9]+$ && "${SHARD_COUNT}" =~ ^[0-9]+$ ]] \
+                || [ "${SHARD_INDEX}" -lt 1 ] || [ "${SHARD_INDEX}" -gt "${SHARD_COUNT}" ]; then
+                echo "--shard must be K/N with 1 <= K <= N, e.g. 2/4" >&2; exit 2
+            fi
+            shift 2 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -114,17 +129,22 @@ EOF
 }
 
 run_gui() {
+    run_gui_base && run_scenarios
+}
+
+# The GUI smoke test and the journey (not the scenarios).
+run_gui_base() {
     echo "== [SciForge] GUI tests"
     need_freecad gui || return
     if ! command -v xvfb-run >/dev/null; then
         echo "xvfb-run not installed; skipping GUI tests" >&2
         FAILED+=("gui (no xvfb-run)")
-        return
+        return 1
     fi
     run_gui_script smoke smoke_gui.py gui.log result.json
     # The journey uses SciForge like a person: real clicks and drags on the 3D view.
     run_gui_script journey journey_gui.py journey.log journey-result.json
-    run_scenarios
+    return 0
 }
 
 # Scenario tests (SciForgeTests/gui/scenarios/*.py, see harness.py): each one a
@@ -132,10 +152,12 @@ run_gui() {
 run_scenarios() {
     echo "== [SciForge] GUI scenarios"
     need_freecad scenarios || return
-    local dir="${MODULE}/SciForgeTests/gui/scenarios" file name
+    local dir="${MODULE}/SciForgeTests/gui/scenarios" file name index=0
     for file in "${dir}"/*.py; do
         name="$(basename "${file}" .py)"
         [ "${name}" = "__init__" ] && continue
+        index=$((index + 1))
+        [ $(((index - 1) % SHARD_COUNT + 1)) -ne "${SHARD_INDEX}" ] && continue
         [ -n "${SCENARIO:-}" ] && [ "${name}" != "${SCENARIO}" ] && continue
         # Through the launcher: a scenario that does not even load fails at once
         # instead of leaving FreeCAD open until the timeout.
@@ -177,8 +199,9 @@ case "${ONLY}" in
     golden) run_golden ;;
     gui) run_gui ;;
     scenarios) run_scenarios ;;
+    base) run_unit; run_golden; run_gui_base ;;
     "") run_unit; run_golden; run_gui ;;
-    *) echo "--only must be unit, golden, gui or scenarios" >&2; exit 2 ;;
+    *) echo "--only must be unit, golden, gui, scenarios or base" >&2; exit 2 ;;
 esac
 
 echo "== [SciForge] reports in ${OUT}"

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# SciForge: fast tests on every push and pull request (a few minutes, Linux only).
+# SciForge: tests on every push and pull request (about 40 minutes, Linux only).
 # Runs SciForge's unit tests, the golden models and the GUI smoke test against
 # the official FreeCAD release the fork is based on, with SciForge added as an
 # add-on. No C++ build, so it stays cheap. Full builds: sciforge-build.yml.
@@ -22,9 +22,32 @@ env:
   FREECAD_VERSION: "1.1.4"
 
 jobs:
+  # The tests run side by side on 5 machines (one machine took about 2 hours): "base" runs
+  # the unit tests, golden models, smoke test and journey; "1/4".."4/4" each run a quarter
+  # of the GUI scenarios (tools/sciforge/run_tests.sh --shard).
   tests:
+    name: tests (${{ matrix.part }})
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: base
+            args: --only base
+            id: base
+          - part: scenarios 1/4
+            args: --only scenarios --shard 1/4
+            id: scenarios-1
+          - part: scenarios 2/4
+            args: --only scenarios --shard 2/4
+            id: scenarios-2
+          - part: scenarios 3/4
+            args: --only scenarios --shard 3/4
+            id: scenarios-3
+          - part: scenarios 4/4
+            args: --only scenarios --shard 4/4
+            id: scenarios-4
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -46,11 +69,35 @@ jobs:
       - name: Get FreeCAD ${{ env.FREECAD_VERSION }}
         run: tools/sciforge/get_freecad.sh .sciforge-cache/freecad
 
-      - name: Unit tests, golden models, GUI smoke test
-        run: tools/sciforge/run_tests.sh --freecad .sciforge-cache/freecad --out test-output
+      - name: Tests (${{ matrix.part }})
+        run: tools/sciforge/run_tests.sh --freecad .sciforge-cache/freecad --out test-output ${{ matrix.args }}
+
+      - name: Add golden report to the run summary
+        if: always() && matrix.id == 'base'
+        run: |
+          if [ -f test-output/golden-report.md ]; then cat test-output/golden-report.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: sciforge-test-output-${{ matrix.id }}
+          path: test-output/
+          retention-days: 14
+
+  # Only when every part passed.
+  quick-update:
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
 
       - name: Package the quick update (SciForge module only, no rebuild needed)
-        if: success()
         run: |
           mkdir -p quick-update
           cp -r src/Mod/SciForge quick-update/SciForge
@@ -61,22 +108,8 @@ jobs:
           cp docs/sciforge/quick-update.md quick-update/README.md
 
       - name: Upload the quick update
-        if: success()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: SciForge-quick-update-${{ github.sha }}
           path: quick-update/
           retention-days: 30
-
-      - name: Add golden report to the run summary
-        if: always()
-        run: |
-          if [ -f test-output/golden-report.md ]; then cat test-output/golden-report.md >> "$GITHUB_STEP_SUMMARY"; fi
-
-      - name: Upload reports and screenshot
-        if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        with:
-          name: sciforge-test-output
-          path: test-output/
-          retention-days: 14
