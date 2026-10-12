@@ -1951,9 +1951,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 ## Next steps (in order)
 
 0. **The current plan is `docs/sciforge/plan.md`** (2026-10-12, after the research report
-   `reports/Fusion sketching ViewCube and navigation.md`): first stable orbit, a Python
-   ViewCube, then a Python sketch inference layer (feasibility test first); then selection,
-   components, joints, versions. The items below are older and partly superseded by it.
+   `reports/Fusion sketching ViewCube and navigation.md`). Done on 2026-10-12: stable orbit
+   (A1), the Python ViewCube (B), sketch inference for Line (C1-C4, Ctrl in every tool), the
+   full-build fix (install rules). Next: A2-A3 (orbit choice, mouse details), inference in
+   the other sketch tools, glyphs beside the geometry, tangent-arc drag in L; then selection,
+   components, joints, versions. Luca's Fusion checks (plan, last section) tune the details.
+   The items below are older and partly superseded by it.
 1. Done: all feature builds and QA rounds are merged (see the 2026-10-12 log). Open items
    left by the QA rounds, none blocking:
    - a length formula typed into an angle box is accepted (Fusion refuses it);
