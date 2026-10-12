@@ -1,0 +1,86 @@
+{
+  "id": "sf_pipe_corner_mitre_join",
+  "title": "Box 40x30x10, a Pipe d2 round the corner of two top edges (front, then right), Join: the corner is mitred like Fusion's",
+  "tags": [
+    "primitive",
+    "pipe",
+    "join",
+    "model-edges",
+    "corner"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 30,
+      "height": 10
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "edges": {
+          "any_of": [
+            {
+              "type": "line",
+              "parallel": [
+                1,
+                0,
+                0
+              ],
+              "at": [
+                {
+                  "axis": "y",
+                  "value": 0
+                },
+                {
+                  "axis": "z",
+                  "value": 10
+                }
+              ],
+              "count": 1
+            },
+            {
+              "type": "line",
+              "parallel": [
+                0,
+                1,
+                0
+              ],
+              "at": [
+                {
+                  "axis": "x",
+                  "value": 40
+                },
+                {
+                  "axis": "z",
+                  "value": 10
+                }
+              ],
+              "count": 1
+            }
+          ]
+        }
+      },
+      "section_size": 2,
+      "operation": "join"
+    }
+  ],
+  "expect": {
+    "volume": 12165.60028098013,
+    "bbox": [
+      0,
+      -1,
+      0,
+      41,
+      30,
+      11
+    ],
+    "note": "A mitred pipe has exactly area x path length: pi x 70. Inside the block: a quarter of each leg, the mitre (the cut on the corner's bisecting plane) takes a wedge off each leg's quarter: the integral of the distance across the leg over the quarter section, (r_out^3 - r_in^3) / 3, twice (r 1: 2/3). Join adds the rest: V = 12000 + 70 pi - (17.5 pi - 2/3). FreeCAD's default corner failed here.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

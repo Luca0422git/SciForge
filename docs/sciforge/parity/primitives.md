@@ -51,7 +51,7 @@ ones). Intersect for any of them is SciForge's `PrimitiveFeature` (a
 |---|---|
 | Centre click, a point on the circle (diameter), then the height arrow | Same |
 | Type: Revolution and Height / Revolution and Pitch / Height and Pitch / Spiral | Same; switching type keeps the coil's shape (the value the new type works out is filled in) |
-| Diameter, Revolutions, Height, Pitch, Angle (taper) | Same; all take parameters (Revolutions too, e.g. a unitless `n`). The fields the type does not use are hidden, and a formula in a field that gets hidden is dropped |
+| Diameter, Revolutions, Height, Pitch, Angle (taper) | Same; all take parameters (Revolutions too, e.g. a unitless `n`). The fields the type does not use are hidden, and a formula in a field that gets hidden is dropped. A positive Angle widens the coil as it rises, a negative one narrows it (FreeCAD's helix only widens away from its section, so a narrowing coil is swept from its narrow end back to the plane) |
 | Rotation Clockwise / Counterclockwise | Same |
 | Section Circular / Square / Triangular (External) / Triangular (Internal); Section Position Inside / On Center / Outside; Section Size | Same |
 | Operation (Cut when it is inside the part) | Same |
@@ -73,8 +73,10 @@ uses FreeCAD's "height-turns-growth" mode with height 0.
 | The path sketch is hidden after OK | Same; shown again while the pipe is edited |
 
 Built on FreeCAD's `PartDesign::AdditivePipe` / `SubtractivePipe` with two SciForge helper
-objects (the path, cut to the distance, and the section). Intersect is SciForge's
-`PipeFeature`.
+objects (the path, cut to the distance, and the section), both used only by the pipe (a
+timeline Delete takes them along). Sharp corners of the path are mitred ("Right corner"),
+like Fusion's. Intersect, and a hollow pipe round a closed path (FreeCAD's pipe made that
+ring solid), are SciForge's `PipeFeature`; a pipe that is one stays one.
 
 ## FreeCAD bug found and worked around
 
@@ -89,9 +91,19 @@ history). This fixes it for every feature, not only these. Should be reported up
 Scenarios with real mouse and keyboard input (`SciForgeTests/gui/scenarios/`):
 `primitives_box.py`, `primitives_shapes.py`, `primitives_coil.py`, `primitives_pipe.py`,
 `primitives_qa.py` (nothing selected, valid selection, Cancel, Esc, Enter, Ctrl+Z, edit again,
-undo/redo, second use, parameters, re-pick plane, save + reopen + edit, timeline Delete).
-Golden models `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil_*`,
-`sf_pipe_*` (25, volumes worked out by hand: Pappus for coils and pipes), built with
+undo/redo, second use, parameters, re-pick plane, save + reopen + edit, timeline Delete), and
+the QA passes `primitives_qa_paths.py` (typed sizes while placing, values changed while the
+preview runs, handles dragged far and negative, edits twice), `primitives_qa_keys.py` (digits
+over the 3D view, Enter, another command's key), `primitives_qa_part.py` (a part of several
+features with Create Sketch / Extrude / Press Pull, problems said in the dialog, picks in the
+wrong order), `primitives_qa_coil.py` (a thread groove on a rod), `primitives_qa_pipe.py`
+(pipes along block edges, round a corner, hollow), `primitives_qa_more.py` (a conical spring,
+a torus groove, another command's key with Pipe open) and `primitives_qa_ring.py` (a hollow
+ring round a parameter-driven sketch circle, Esc mid-pick, save / reopen, timeline Delete).
+Golden models `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil_*`
+(tapered and narrowing coils: `sf_coil_taper_*`), `sf_pipe_*` (mitred corners:
+`sf_pipe_corner_*`, hollow rings: `sf_pipe_ring_*`) (36, volumes worked out by hand: Pappus
+for coils and pipes), built with
 `golden/primitive_ops.py`. Unit tests `test_primitives_core.py`.
 
 ## Known gaps
@@ -102,5 +114,5 @@ Golden models `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil
 | Values typed in boxes on the canvas next to the mouse | The live values are in the dialog fields (type there) |
 | Snapping onto any point of an edge, midpoints, and points that are not on the plane | Snaps to the origin and to corners, line ends, sketch points and circle centres lying on the plane |
 | Exact Fusion defaults (to confirm with Luca): Torus Position starts On Center; Clockwise = right-hand coil; for square and triangle sections Section Size is the circle round the section; how pipe squares/triangles are turned; the coil starts centred on the plane | Taken from the docs, not compared with a capture |
-| Sharp path corners in Pipe | FreeCAD's "Transformed" corners (Fusion's look may differ) |
+| Sharp path corners in Pipe | Mitred (cut on the corner's bisecting plane); to compare with a capture of Fusion's |
 | Coil section | FreeCAD sweeps an upright section along the helix (Fusion's section may lean with the pitch) |

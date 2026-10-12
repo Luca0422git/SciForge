@@ -39,6 +39,13 @@ PATH_ROLE = "PipePath"
 SECTION_ROLE = "PipeSection"
 FP_TYPE = "PartDesign::FeaturePython"
 TANGENT_TOL = 1e-3  # radians: edges this close to tangent continue a chain
+# Sharp corners of the path are mitred, like Fusion's pipe (the section is cut on the corner's
+# bisecting plane: volume = section area x path length). FreeCAD's default "Transformed"
+# failed on every sharp corner ("A fatal error occurred when making the pipe"), and
+# OpenCASCADE's matching sweep mode silently swept only the first leg (found by the
+# primitives QA: a pipe along two edges of a block).
+CORNERS = "Right corner"
+CORNER_MODE = 1  # makePipeShell's number for it (0 transformed, 1 right, 2 round)
 JOIN_TOL = 1e-6
 
 DEFAULTS = {
@@ -328,29 +335,7 @@ class PipePath:
         self.ensure_properties(obj)
 
     def execute(self, obj):
-        refs = []
-        for linked, subs in obj.Edges:
-            for sub in subs:
-                refs.append((linked, sub))
-        if not refs:
-            raise PrimitiveError("The pipe has no path. Edit it and select one.")
-        inverse = primitives.body_placement(obj).inverse()
-        edges = []
-        for linked, sub in refs:
-            try:
-                edge = _global_edge(linked, sub)
-            except Exception:
-                raise PrimitiveError(
-                    "An edge of the pipe's path is gone (%s of %s). Edit the pipe and pick "
-                    "the path again." % (sub, linked.Label)
-                )
-            edge.Placement = inverse.multiply(edge.Placement)
-            edges.append(edge)
-        wire, start, tangent, reverse = ordered_path(edges)
-        normal = sketch_normal([o for o, _ in refs])
-        if normal is not None:
-            normal = inverse.Rotation.multVec(normal)  # into this body's coordinates
-        up = up_vector(tangent, normal, wire)
+        wire, start, tangent, reverse, up = path_run(obj)
         path = trim(wire, start, reverse, float(obj.Distance))
         for prop, value in (("Start", start), ("Tangent", tangent), ("Up", up)):
             if (getattr(obj, prop) - value).Length > 1e-12:
@@ -366,6 +351,34 @@ class PipePath:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def path_run(obj):
+    """(wire, start, tangent, reversed, up) of the edges in `obj.Edges`, in the
+    coordinates of `obj`'s body: the whole run of the path and how the pipe starts."""
+    refs = []
+    for linked, subs in obj.Edges:
+        for sub in subs:
+            refs.append((linked, sub))
+    if not refs:
+        raise PrimitiveError("The pipe has no path. Edit it and select one.")
+    inverse = primitives.body_placement(obj).inverse()
+    edges = []
+    for linked, sub in refs:
+        try:
+            edge = _global_edge(linked, sub)
+        except Exception:
+            raise PrimitiveError(
+                "An edge of the pipe's path is gone (%s of %s). Edit the pipe and pick "
+                "the path again." % (sub, linked.Label)
+            )
+        edge.Placement = inverse.multiply(edge.Placement)
+        edges.append(edge)
+    wire, start, tangent, reverse = ordered_path(edges)
+    normal = sketch_normal([o for o, _ in refs])
+    if normal is not None:
+        normal = inverse.Rotation.multVec(normal)  # into this body's coordinates
+    return wire, start, tangent, reverse, up_vector(tangent, normal, wire)
 
 
 class PipeSection:
@@ -385,7 +398,10 @@ class PipeSection:
                 return True
             return False
 
-        add("App::PropertyLink", "Path", "The pipe's path object")
+        add("App::PropertyLink", "Path", "The pipe's path object (pipes made before Edges)")
+        # The path's edges themselves (where the pipe starts): linking the path object
+        # made it used by the section too, so a timeline Delete of the pipe left it behind.
+        add("App::PropertyLinkSubListGlobal", "Edges", "The edges the pipe follows")
         if add("App::PropertyEnumeration", "Section", "Shape of the section"):
             obj.Section = list(SECTIONS)
         if add("App::PropertyLength", "SectionSize", "Diameter of the circle round it"):
@@ -400,10 +416,13 @@ class PipeSection:
     def execute(self, obj):
         import Part
 
-        path = obj.Path
-        if path is None:
+        if obj.Edges:
+            _wire, start, tangent, _reverse, up = path_run(obj)
+        elif obj.Path is not None:
+            start, tangent, up = obj.Path.Start, obj.Path.Tangent, obj.Path.Up
+        else:
             raise PrimitiveError("The pipe's path is gone. Edit the pipe and pick it again.")
-        place = section_frame(path.Start, path.Tangent, path.Up)
+        place = section_frame(start, tangent, up)
         options = {
             "section": obj.Section,
             "section_size": obj.SectionSize.Value,
@@ -428,14 +447,14 @@ class PipeSection:
 
 def sweep(path_wire, section_shape):
     """The pipe's solid: the section's outer wire swept along the path, minus the inner
-    one (hollow). The same sweep PartDesign's pipe makes (corrected Frenet, transformed
-    corners)."""
+    one (hollow). The same sweep PartDesign's pipe makes (corrected Frenet, mitred
+    corners: see CORNERS)."""
     wires = list(section_shape.Wires)
     if not wires:
         raise PrimitiveError("The pipe has no section.")
 
     def one(w):
-        solid = path_wire.makePipeShell([w], True, False, 0)
+        solid = path_wire.makePipeShell([w], True, False, CORNER_MODE)
         if solid.Volume < 0:
             solid.reverse()
         return solid
@@ -447,8 +466,12 @@ def sweep(path_wire, section_shape):
 
 
 class PipeFeature:
-    """Pipe with operation Intersect: the body keeps what lies inside the pipe. Saved
-    documents store "sciforge.pipe.PipeFeature": keep the name stable."""
+    """SciForge's own pipe step: Intersect (the body keeps what lies inside the pipe), and
+    a hollow pipe round a closed path for every operation. FreeCAD's pipe builds each wire
+    of the section into its own closed shell there and makes each a solid: the inner tube
+    vanished into the outer one and the ring came out solid, without a message (found by
+    the primitives QA). Saved documents store "sciforge.pipe.PipeFeature": keep the name
+    stable."""
 
     def __init__(self, obj):
         obj.Proxy = self
@@ -463,23 +486,42 @@ class PipeFeature:
         if "Refine" not in obj.PropertiesList:
             obj.addProperty("App::PropertyBool", "Refine", "Pipe", "Merge coplanar faces")
             obj.Refine = True
+        if "Operation" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", "Operation", "Pipe", "join, cut, intersect")
+            obj.Operation = "intersect"  # what every pipe of this kind was before
         primitives.mark_type(obj, KIND)
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
 
     def execute(self, obj):
+        operation = obj.Operation or "intersect"
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise PrimitiveError("Intersect needs a solid before it in the timeline.")
+        solid = base is not None and not base.Shape.isNull() and bool(base.Shape.Solids)
+        if operation in ("cut", "intersect") and not solid:
+            raise PrimitiveError(
+                "%s needs a solid before it in the timeline."
+                % ("Cut" if operation == "cut" else "Intersect")
+            )
         if obj.Spine is None or obj.Profile is None:
             raise PrimitiveError("The pipe has no path or section.")
         tool = sweep(obj.Spine.Shape.Wires[0], obj.Profile.Shape)
-        result = base.Shape.common(tool)
+        if not solid:
+            result = tool
+        elif operation == "cut":
+            result = base.Shape.cut(tool)
+        elif operation == "intersect":
+            result = base.Shape.common(tool)
+        else:
+            result = base.Shape.fuse(tool)
         if obj.Refine:
             result = result.removeSplitter()
         if result.isNull() or not result.Solids or result.Volume < 1e-7:
-            raise PrimitiveError("The pipe does not overlap the body, so Intersect leaves nothing.")
+            if operation == "intersect":
+                raise PrimitiveError(
+                    "The pipe does not overlap the body, so Intersect leaves nothing."
+                )
+            raise PrimitiveError("Nothing is left: the pipe takes the whole body away.")
         obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
 
     def dumps(self):
@@ -504,12 +546,26 @@ def _attach_view_provider(obj):
 
 
 # -- building -------------------------------------------------------------------------------------------
-def type_id(operation):
+def type_id(operation, own=False):
+    """The step's type: SciForge's own pipe for Intersect and when `own` (see
+    needs_own_step), else FreeCAD's."""
+    if operation == "intersect" or own:
+        return FP_TYPE
     if operation == "cut":
         return "PartDesign::SubtractivePipe"
-    if operation == "intersect":
-        return FP_TYPE
     return "PartDesign::AdditivePipe"
+
+
+def needs_own_step(path, options):
+    """True for a hollow pipe that runs round a closed path (the whole of it): FreeCAD's
+    pipe loses the hole there (see PipeFeature)."""
+    if not options.get("hollow") or float(options.get("distance", 1.0)) < 1.0 - 1e-9:
+        return False
+    try:
+        wire = ordered_path([_global_edge(obj, sub) for obj, sub in path])[0]
+        return bool(wire.isClosed())
+    except Exception:
+        return False
 
 
 def is_pipe(obj):
@@ -553,7 +609,10 @@ def build(path, options, feature=None, name="Pipe", body=None):
     if feature is not None and any(obj is feature for obj, _ in path):
         raise PrimitiveError("The pipe cannot follow its own edges. Pick other edges.")
     operation = options["operation"]
-    tid = type_id(operation)
+    # SciForge's own step does every operation: a pipe that is one stays one (swapping
+    # the step for another kind is refused once later steps use it).
+    own = needs_own_step(path, options) or (feature is not None and feature.TypeId == FP_TYPE)
+    tid = type_id(operation, own)
 
     def setup(new):
         if tid == FP_TYPE:
@@ -600,8 +659,10 @@ def _update(feature, body, path, options):
         spine.Edges = links
     if abs(spine.Distance - float(options["distance"])) > 1e-12:
         spine.Distance = float(options["distance"])
-    if section.Path is not spine:
-        section.Path = spine
+    if section.Path is not None:
+        section.Path = None  # a pipe made before: it reads the edges now (path_run)
+    if [(o.Name, tuple(s)) for o, s in section.Edges] != [(o.Name, s) for o, s in links]:
+        section.Edges = links
     if section.Section != options["section"]:
         section.Section = options["section"]
     for prop, value in (
@@ -623,6 +684,8 @@ def _update(feature, body, path, options):
             feature.Spine = spine
         if feature.Profile is not section:
             feature.Profile = section
+        if feature.Operation != options["operation"]:
+            feature.Operation = options["operation"]
     else:
         if feature.Spine is None or feature.Spine[0] is not spine:
             feature.Spine = (spine, [])
@@ -630,8 +693,8 @@ def _update(feature, body, path, options):
             feature.Profile = (section, [""])
         if feature.Mode != "Standard":
             feature.Mode = "Standard"
-        if feature.Transition != "Transformed":
-            feature.Transition = "Transformed"
+        if feature.Transition != CORNERS:
+            feature.Transition = CORNERS
         if not feature.Refine:
             feature.Refine = True
     meta.update(
@@ -677,7 +740,7 @@ def read(feature):
         if obj is not None:
             path.append((obj, sub))
     if feature.TypeId == FP_TYPE:
-        options["operation"] = "intersect"
+        options["operation"] = getattr(feature, "Operation", "") or "intersect"
     elif feature.TypeId == "PartDesign::SubtractivePipe":
         options["operation"] = "cut"
     else:

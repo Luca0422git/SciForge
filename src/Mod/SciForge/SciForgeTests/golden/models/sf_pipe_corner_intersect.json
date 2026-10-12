@@ -1,0 +1,86 @@
+{
+  "id": "sf_pipe_corner_intersect",
+  "title": "Box 40x30x10, a Pipe d2 round the corner of two top edges, Intersect: SciForge's own sweep keeps both legs",
+  "tags": [
+    "primitive",
+    "pipe",
+    "intersect",
+    "model-edges",
+    "corner"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 30,
+      "height": 10
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "edges": {
+          "any_of": [
+            {
+              "type": "line",
+              "parallel": [
+                1,
+                0,
+                0
+              ],
+              "at": [
+                {
+                  "axis": "y",
+                  "value": 0
+                },
+                {
+                  "axis": "z",
+                  "value": 10
+                }
+              ],
+              "count": 1
+            },
+            {
+              "type": "line",
+              "parallel": [
+                0,
+                1,
+                0
+              ],
+              "at": [
+                {
+                  "axis": "x",
+                  "value": 40
+                },
+                {
+                  "axis": "z",
+                  "value": 10
+                }
+              ],
+              "count": 1
+            }
+          ]
+        }
+      },
+      "section_size": 2,
+      "operation": "intersect"
+    }
+  ],
+  "expect": {
+    "volume": 54.31120477115471,
+    "bbox": [
+      0,
+      0,
+      9,
+      40,
+      30,
+      10
+    ],
+    "note": "The quarter of each leg inside the block: 0.25 pi x 70 = 17.5 pi, minus the mitre (the cut on the corner's bisecting plane) takes a wedge off each leg's quarter: the integral of the distance across the leg over the quarter section, (r_out^3 - r_in^3) / 3, twice (r 1: 2/3). Before the fix the sweep silently followed the first leg only.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

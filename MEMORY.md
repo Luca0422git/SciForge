@@ -947,6 +947,53 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     turns) is its exact volume. Coil Intersect = `SubtractiveHelix` with `Outside` on.
   - Golden steps `sf_primitive`, `sf_coil`, `sf_path_sketch`, `sf_pipe`, `sf_primitive_edit`
     (`golden/primitive_ops.py`); the first three take `expressions` {field: formula}.
+- **Primitives QA findings (branches `sf/primitives-qa2`, `sf/primitives-qa3`)**:
+  - **FreeCAD's pipe fails on every sharp corner of its path** with its default
+    `Transition = "Transformed"` ("A fatal error occurred when making the pipe"), and
+    OpenCASCADE's `makePipeShell(..., 0)` (the same mode) **silently sweeps only the first
+    leg** (40 pi instead of 70 pi round two block edges). Use "Right corner" / mode 1: a
+    mitred corner, volume exactly area x path length (`pipe.CORNERS`).
+  - **FreeCAD's pipe loses the hole of a hollow section swept round a closed path** (no
+    message): it makes each wire of the section its own shell; on a closed path both shells
+    are already closed, each becomes a solid and the inner one vanishes into the outer
+    (`FeaturePipe.cpp`, "shells are already closed"). A hollow pipe round a closed path is
+    SciForge's own `PipeFeature` (it now does Join / Cut / New Body as well as Intersect;
+    property `Operation`), and a pipe that is one stays one (no step swaps).
+  - **FreeCAD's helix always widens away from its section**: a negative `Angle` (or a
+    negative `Growth`) gives exactly the mirror image, the same as `Reversed`. A coil that
+    narrows as it rises is swept from its narrow end: the section stands at the far end
+    (shifted along the axis, turned by the coil's own turns so it still starts where it was
+    clicked) and FreeCAD sweeps it back to the plane (`coil.narrow_end`).
+  - **FreeCAD's tapered helix (Angle not 0) is only right when its axis starts level with
+    the body's origin** (`Helix::generateHelixPath`, the `startOffset` term): on a face 30
+    above the origin a 20 mm coil ended 1.5 mm off, volume 0.8 % short. The coil section's
+    own origin is moved down the axis to that level and its outline drawn where it is.
+    Untapered coils were and are exact.
+  - A Placement set inside a `Part2DObjectPython.execute()` is overwritten by its
+    attachment right after (FreeCAD calls `positionBySupport` after the Python execute):
+    put the offset into `AttachmentOffset` and keep the user's own offset in another
+    property (`CoilSection.BaseOffset`).
+  - The timeline's Delete removes a step's helpers only when nothing else uses them: a
+    helper linked by another helper of the same step stayed behind (the pipe's path, read
+    by its section). Link helpers from the step only (`PipeSection.Edges`).
+  - The pipe's automatic section size (a twentieth of the path) was worked out again on
+    every pick and overwrote a typed wall (0.5 became 0.2): it is chosen once.
+  - A hollow pipe cut along an edge cuts its own core loose (a second solid): correct.
+  - Hand-derived volumes for coils: Pappus with the mean radius of the section's centre
+    (`primitives_core.coil_volume`) holds for tapered coils too (to ~1e-5, the helix is an
+    approximation: golden rel_tol 1e-4).
+  - From `sf/primitives-qa2` (that agent stopped before writing these down): sizes typed
+    while placing are kept (the next mouse move overwrote them); a Length arrow dragged
+    through the first corner flips the box over; arrows move in round steps; digits typed
+    with the mouse over the 3D view go into the dialog's field (`TypeOverView`, FreeCAD's
+    view keys 0-6 jumped the view); a diameter typed after the centre click wins; Enter
+    after a negative number is OK at once (`EnterTakesNumber`); another command's key
+    drops a shape not placed yet and keeps a placed one; the origin squares are sized to
+    the whole design; a click on an edge never picks the plane hidden behind it; a box on
+    a face hangs on the step that made the face; a Cut that misses, a Join leaving two
+    pieces and an empty Intersect are said in the dialog; an edit opened from the timeline
+    starts with nothing selected (`clear_selection_soon`), and a face or edge the step
+    itself changed is found on the part before it (`base_face_holding`, `pipe_ui._holds`).
 - **Hole / Thread QA findings (branch `sf/hole-qa`)**:
   - The Hole and Thread dialogs were built before main's shared dialog rules and missed
     them all: Enter over the 3D view (`preview.EnterFinishes`), Ctrl+Z / Ctrl+S / closing the
@@ -1665,6 +1712,29 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Full suite at the end (no --only, at d43207a93a): unit 245 OK, golden 264 pass + 1 xfail
   (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 120 of 120
   scenarios PASS (15447 checks; inspect_qa6 317, inspect_qa7 314, inspect_qa8 251).
+### 2026-10-11: QA of Box, Cylinder, Sphere, Torus, Coil, Pipe, round 3 (branch `sf/primitives-qa3`)
+- Merged the stopped agent's `sf/primitives-qa2` (three fix rounds + a WIP commit) and
+  finished it: its coil, pipe and part scenarios now run and pass.
+- Fixed (each found by a scenario or a headless probe, each with a golden model or a
+  scenario step that fails on the old code): pipe round a sharp corner failed (FreeCAD's
+  "Transformed" corner; now mitred) and SciForge's own sweep silently followed only the
+  first leg; a typed pipe wall was overwritten when a curve was picked or dropped; a
+  negative coil Angle built the mirror image below the plane instead of a coil narrowing
+  as it rises; a tapered coil on a raised face drifted (FreeCAD's helix); a hollow pipe
+  round a closed path came out solid (FreeCAD's pipe); a timeline Delete of a pipe left
+  its hidden path helper behind. See "Primitives QA findings".
+- New scenarios `primitives_qa_more` (conical spring with type change, a too-steep angle,
+  edit, undo/redo, save / reopen / edit; torus groove with drag and edit; E with Pipe
+  open) and `primitives_qa_ring` (hollow ring round a parameter-driven sketch circle, Esc
+  mid-pick, Change Parameters, edit + Esc, save / reopen / edit, timeline Delete). Golden
+  models `sf_pipe_corner_*` (3), `sf_pipe_ring_*` (2), `sf_coil_taper_*` (6).
+- `primitives_qa` C clicked XY at a spot now behind the YZ square (the squares are as big
+  as the design since qa2): it clicks where XY is in front.
+- Full suite at the end (no --only, commit 7de7a3d8ae): unit 245 OK; golden 273 pass + 1
+  xfail (`plate_hole_grid`, core patch #4); smoke 70/70; journey 25/25; 119 of 119
+  scenarios PASS (13215 checks; primitives_qa 107, _qa_paths 81, _qa_keys 47, _qa_part 83,
+  _qa_coil 61, _qa_pipe 54, _qa_more 80, _qa_ring 60). It took about 1 h 55: with 119
+  scenarios the suite is close to a 2-hour limit on a busy machine.
 
 ## Next steps (in order)
 

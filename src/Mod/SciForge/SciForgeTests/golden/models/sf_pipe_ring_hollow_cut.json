@@ -1,0 +1,76 @@
+{
+  "id": "sf_pipe_ring_hollow_cut",
+  "title": "Block 40x40x10 on XY, a hollow Pipe d2 wall 0.5 round a sketch circle r15 on its bottom face, Cut: a hollow groove",
+  "tags": [
+    "primitive",
+    "pipe",
+    "hollow",
+    "closed-path",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "x": -20,
+      "y": -20,
+      "length": 40,
+      "width": 40,
+      "height": 10
+    },
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "arc": [
+            0,
+            0,
+            15,
+            0,
+            180
+          ]
+        },
+        {
+          "arc": [
+            0,
+            0,
+            15,
+            180,
+            360
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "chain": true,
+      "section_size": 2,
+      "hollow": true,
+      "thickness": 0.5,
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 15888.966950487746,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      10
+    ],
+    "solids": 2,
+    "note": "The upper half of the 22.5 pi^2 ring lies in the block: V = 16000 - 11.25 pi^2. The ring cuts its own core (the half rod r 0.5 inside it) loose: 2 solids.",
+    "source": "analytic"
+  }
+}

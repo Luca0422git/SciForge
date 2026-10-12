@@ -1,0 +1,64 @@
+{
+  "id": "sf_pipe_ring_hollow",
+  "title": "A hollow Pipe d2 wall 0.5 round a closed sketch circle r15 (two half arcs, Chain Selection): a hollow ring",
+  "tags": [
+    "primitive",
+    "pipe",
+    "hollow",
+    "closed-path"
+  ],
+  "steps": [
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "arc": [
+            0,
+            0,
+            15,
+            0,
+            180
+          ]
+        },
+        {
+          "arc": [
+            0,
+            0,
+            15,
+            180,
+            360
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "chain": true,
+      "section_size": 2,
+      "hollow": true,
+      "thickness": 0.5,
+      "operation": "new_body"
+    }
+  ],
+  "expect": {
+    "volume": 222.06609902451055,
+    "bbox": [
+      -16,
+      -16,
+      -1,
+      16,
+      16,
+      1
+    ],
+    "solids": 1,
+    "note": "Pappus: the ring of pi (1 - 0.25) = 0.75 pi round r 15: 0.75 pi x 2 pi 15 = 22.5 pi^2. FreeCAD's pipe made it a solid ring (30 pi^2) without a message: each wire of the section became its own closed solid; SciForge's own pipe step builds it.",
+    "source": "analytic"
+  }
+}

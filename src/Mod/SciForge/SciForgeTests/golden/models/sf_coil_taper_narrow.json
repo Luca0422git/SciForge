@@ -1,0 +1,34 @@
+{
+  "id": "sf_coil_taper_narrow",
+  "title": "Coil d20 on XY (centre 3, -2), 4 turns, height 20, angle -10: it narrows as it rises",
+  "tags": [
+    "primitive",
+    "coil",
+    "taper",
+    "new-body"
+  ],
+  "steps": [
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "diameter": 20,
+      "type": "rev_height",
+      "revolutions": 4,
+      "height": 20,
+      "section": "circular",
+      "section_position": "inside",
+      "section_size": 2,
+      "plane": "XY",
+      "angle": -10,
+      "x": 3,
+      "y": -2
+    }
+  ],
+  "expect": {
+    "volume": 571.3893132919486,
+    "rel_tol": 0.0001,
+    "solids": 1,
+    "note": "Circle d2 inside d20: its centre at r 9 on the plane, 9 - 20 tan 10 at the top; Pappus with the mean radius 9 - 10 tan 10: V = pi x 2 pi x 4 x (9 - 10 tan 10). FreeCAD's helix only widens away from its section (a negative angle gave the mirror image below the plane): SciForge sweeps it from the narrow end. The helix is an approximation, hence rel_tol 1e-4.",
+    "source": "analytic"
+  }
+}
