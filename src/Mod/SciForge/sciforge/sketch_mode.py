@@ -649,6 +649,7 @@ class SketchSession:
         self._typed = None  # the value field the user typed a value into
         self.last_letter = ""  # what the last letter typed into a value field did (reports)
         if self.gl is not None:
+            remove_stray_editors(self.gl)
             self.gl.installEventFilter(self.filter)
         if self.viewer is not None:
             self.viewer.installEventFilter(self.keys)
@@ -852,10 +853,29 @@ class SketchSession:
             return None
 
     def close_editor(self, commit=True):
+        """Close the dimension box, keeping a typed value when it can be set. It always
+        closes (only Enter typed in the box keeps it open with the reason, like Fusion): a
+        value that cannot be set is dropped with a note next to the mouse. A box that stayed
+        open here was forgotten by the sketch and stayed on the screen for good, also after
+        Finish Sketch (Luca: "Invalid constraint index: 19" boxes over the part)."""
         editor = self.editor
-        self.editor = None
-        if editor is not None:
+        if editor is None:
+            return
+        try:
             editor.finish(commit)
+            if not editor.closed():
+                reason = editor.reason()
+                editor.finish(False)
+                if reason:
+                    from . import commands
+
+                    commands.tell("The dimension was not changed: %s" % reason)
+        except Exception as exc:
+            warn("dimension box: %s" % exc)
+            editor.discard()
+        finally:
+            if self.editor is editor:
+                self.editor = None
 
     # -- Esc -------------------------------------------------------------------------
     def escape(self):
@@ -1069,6 +1089,7 @@ class SketchSession:
         except Exception:
             pass
         self.close_editor(commit=True)
+        remove_stray_editors(self.gl)
         for part in (self.polygon, self.shading, self.display):
             try:
                 part.remove()
@@ -1338,6 +1359,35 @@ def _is_value_key(event):
 
 
 # -- the value box for dimensions -------------------------------------------------------
+EDITOR_NAME = "SciForgeDimensionEditor"
+
+
+def _constraint_key(c):
+    """What tells one dimension from another (its index changes when others go)."""
+    return tuple(
+        getattr(c, name, None)
+        for name in ("Type", "First", "FirstPos", "Second", "SecondPos", "Third", "ThirdPos", "Name")
+    )
+
+
+def remove_stray_editors(gl, keep=None):
+    """Delete dimension boxes left on the 3D view by an earlier sketch (or an earlier
+    SciForge), except `keep`. They are children of the view, so they outlive the sketch."""
+    if gl is None or not _is_valid(gl):
+        return 0
+    removed = 0
+    try:
+        for box in gl.findChildren(QtWidgets.QFrame, EDITOR_NAME):
+            if keep is not None and _same(box, keep):
+                continue
+            box.hide()
+            box.deleteLater()
+            removed += 1
+    except Exception as exc:
+        warn("dimension box: %s" % exc)
+    return removed
+
+
 class DimensionEditor(QtWidgets.QFrame):
     """Fusion's in-place dimension box: shows the measured value selected; type a
     value or an expression (=width*2), Enter keeps it, Esc keeps the measured one."""
@@ -1347,10 +1397,15 @@ class DimensionEditor(QtWidgets.QFrame):
         self.session = session
         self.sketch = session.sketch
         self.index = index
-        self.setObjectName("SciForgeDimensionEditor")
+        self._done = False
+        try:  # which dimension this is, to find it again if the sketch changes meanwhile
+            self.identity = _constraint_key(self.sketch.Constraints[index])
+        except Exception:
+            self.identity = None
+        self.setObjectName(EDITOR_NAME)
         self.setStyleSheet(
-            "#SciForgeDimensionEditor { background: #f5f5f5; border: 1px solid #3fa9f5;"
-            " border-radius: 2px; }"
+            "#%s { background: #f5f5f5; border: 1px solid #3fa9f5;" % EDITOR_NAME
+            + " border-radius: 2px; }"
             " QLineEdit { background: #ffffff; color: #111111; border: none; padding: 1px 3px;"
             " selection-background-color: #3fa9f5; selection-color: #ffffff; }"
             " QLabel { color: #b00020; background: #f5f5f5; padding: 1px 3px; }"
@@ -1380,13 +1435,53 @@ class DimensionEditor(QtWidgets.QFrame):
         self.show()
         self.raise_()
         self.edit.setFocus()
-        self._done = False
         self._fresh = True
         self.edit.textEdited.connect(self._edited)
         log("dimension: type a value and press Enter")
 
     def _edited(self, _text):
         self._fresh = False
+
+    def closed(self):
+        return self._done
+
+    def reason(self):
+        """The message the box shows (why the value cannot be set), or ''."""
+        try:
+            return self.message.text() if self.message.isVisible() else ""
+        except Exception:
+            return ""
+
+    def discard(self):
+        """Close without setting anything, whatever happens."""
+        self._done = True
+        if self.session.editor is self:
+            self.session.editor = None
+        try:
+            self.hide()
+            self.deleteLater()
+        except Exception:
+            pass
+
+    def _follow(self):
+        """The index of this box's dimension now, or None when it is gone. The sketch can
+        change while the box is open (a curve deleted, Undo): its index may then point at
+        another dimension or past the end ("Invalid constraint index")."""
+        try:
+            constraints = self.sketch.Constraints
+        except Exception:
+            return None
+        if self.identity is None:
+            return self.index if 0 <= self.index < len(constraints) else None
+        if (
+            0 <= self.index < len(constraints)
+            and _constraint_key(constraints[self.index]) == self.identity
+        ):
+            return self.index
+        for i, c in enumerate(constraints):
+            if _constraint_key(c) == self.identity:
+                return i
+        return None
 
     def _constraint(self):
         return self.sketch.Constraints[self.index]
@@ -1469,6 +1564,9 @@ class DimensionEditor(QtWidgets.QFrame):
     def finish(self, commit):
         if self._done:
             return
+        if not _is_valid(self):
+            self._done = True
+            return
         if commit and not self.apply():
             return  # stay open with the message, like Fusion
         self._done = True
@@ -1488,6 +1586,11 @@ class DimensionEditor(QtWidgets.QFrame):
 
     def apply(self):
         """Set the dimension; False (and a message) when the value is not possible."""
+        index = self._follow()
+        if index is None:
+            log("dimension box closed: its dimension no longer exists")
+            return True  # nothing left to set
+        self.index = index
         text = self.edit.text()
         if text.strip() == self._current_text().strip() or not text.strip():
             return True
