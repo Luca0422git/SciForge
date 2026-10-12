@@ -160,6 +160,7 @@ SHORTCUTS = {
     "Std_TransformManip": "M",
     "Std_Measure": "I",
     "Std_ViewFitAll": "F6",
+    "SciForge_ToggleViewCube": "Ctrl+Alt+V",  # Fusion: show/hide the ViewCube
     # FreeCAD only honours its own Ctrl+Z etc. while its menu bar is visible, and
     # SciForge hides the menu bar: without these, undo/redo/save/delete keys did nothing.
     "Std_Undo": "Ctrl+Z",

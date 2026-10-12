@@ -152,6 +152,8 @@ _NAVICUBE_PARAMS = "User parameter:BaseApp/Preferences/NaviCube"
 # the orbit is Fusion's Constrained Orbit: it turns about the up axis and tilts, never
 # rolls (FreeCAD's "Free Turntable", 2; FreeCAD 1.1's default "Rounded Arcball", 4, rolls
 # the model off axis). OrbitStyle comes after NavigationStyle: a new style re-reads it.
+# FreeCAD's own cube (the NaviCube) is hidden: SciForge draws Fusion's ViewCube itself
+# (viewcube_ui.py). Its colours below only matter if someone turns it back on.
 # A light ViewCube with dark labels and a blue hover.
 VIEWER_SETTINGS = [
     (_VIEW_PARAMS, "Bool", "Gradient", False),
@@ -160,6 +162,7 @@ VIEWER_SETTINGS = [
     (_VIEW_PARAMS, "String", "NavigationStyle", "Gui::RevitNavigationStyle"),
     (_VIEW_PARAMS, "Int", "OrbitStyle", 2),
     (_VIEW_PARAMS, "Bool", "ZoomAtCursor", True),
+    (_VIEW_PARAMS, "Bool", "ShowNaviCube", False),
     (_NAVICUBE_PARAMS, "Unsigned", "BaseColor", (0xF0F0F0 << 8) | 0xE6),
     (_NAVICUBE_PARAMS, "Unsigned", "EmphaseColor", _rgba("#4a4f57")),
     (_NAVICUBE_PARAMS, "Unsigned", "HiliteColor", _rgba("#6fb7f0")),
