@@ -4,8 +4,9 @@
 Profiles: click inside closed sketch areas (they are shaded blue and light up under
 the mouse; a circle inside a rectangle gives the ring and the disc separately) or on
 flat faces of the part. Click more areas to add them, click a picked one again to
-drop it. A sketch or face selected before pressing E, or the one area of a sketch
-just finished, is taken at once.
+drop it. What is selected before pressing E is taken at once: sketch areas clicked
+after Finish Sketch or inside the open sketch, flat faces, a whole sketch (its areas);
+with nothing selected, the one area of a sketch just finished.
 
 The fields follow Fusion's Extrude: Start (Profile Plane / Offset / Object), Direction
 (One Side / Two Sides / Symmetric), Extent (Distance / To Object / All), Taper Angle,
@@ -308,14 +309,22 @@ def selected_profiles(body):
                 hidden = False
             if obj.Name in used and hidden:
                 continue
-            # A selected sketch with one closed area is that profile (Fusion picks a
-            # single profile by itself); with several, the user clicks the ones wanted.
+            # A selected sketch (the whole sketch, e.g. in the browser) is its profiles: one
+            # area is that profile; with several, the sketch's areas as FreeCAD extrudes
+            # the whole sketch (a plate keeps its holes). Each one can then be dropped, or
+            # a hole's disc added, by clicking it.
             try:
                 areas = extrude.regions(obj)
             except Exception:
                 areas = []
             if len(areas) == 1:
                 found.append((obj, areas[0][0]))
+            elif areas:
+                try:
+                    whole = [p for p in extrude.expand_whole([(obj, "")]) if p[1]]
+                except Exception:
+                    whole = []
+                found.extend(whole or [(obj, name) for name, _face in areas])
         elif short.startswith("Face"):
             try:
                 face = obj.Shape.getElement(short)
@@ -1356,12 +1365,43 @@ class ExtrudeCommand:
     def Activated(self):
         try:
             sketch = _sketch_in_edit()  # E pressed in a sketch: extrude that sketch
+            picked = sketch_areas_picked(sketch)  # areas clicked in it (read before it closes)
             if not commands.finish_open_dialog():
                 return
-            Gui.Control.showDialog(ExtrudePanel(App.ActiveDocument, sketch=sketch))
-            log("extrude started")
+            profiles = sketch_areas_profiles(sketch, picked)
+            Gui.Control.showDialog(
+                ExtrudePanel(App.ActiveDocument, sketch=sketch, profiles=profiles or None)
+            )
+            log("extrude started" + (" on %d picked area(s)" % len(profiles) if profiles else ""))
         except Exception as exc:
             warn("Extrude failed to start: %s" % exc)
+
+
+def sketch_areas_picked(sketch):
+    """Areas picked inside the open sketch (Fusion: click a profile, then E or Q)."""
+    if sketch is None:
+        return []
+    try:
+        from . import sketch_mode
+
+        return sketch_mode.picked_areas(sketch)
+    except Exception as exc:
+        warn("picked sketch areas: %s" % exc)
+        return []
+
+
+def sketch_areas_profiles(sketch, picked):
+    """The closed sketch's areas ("InternalFaceN") for the points picked while it was
+    open; [] if none."""
+    if sketch is None or not picked:
+        return []
+    try:
+        from . import sketch_areas
+
+        return sketch_areas.profiles(sketch, picked)
+    except Exception as exc:
+        warn("picked sketch areas: %s" % exc)
+        return []
 
 
 def _sketch_in_edit():
