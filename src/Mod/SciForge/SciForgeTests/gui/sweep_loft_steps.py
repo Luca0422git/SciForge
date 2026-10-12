@@ -202,3 +202,77 @@ def simpson(f, a, b, n=2000):
     for k in range(1, n):
         total += f(a + k * hstep) * (4 if k % 2 else 2)
     return total * hstep / 3.0
+
+
+# -- QA helpers (scenarios/sweep_loft_qa*.py) ---------------------------------------------------
+def esc():
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def ctrl(letter):
+    """Ctrl+<letter> on the 3D view (Ctrl+Z, Ctrl+Y, Ctrl+S), like a person's keyboard."""
+    h.press(getattr(QtCore.Qt, "Key_" + letter.upper()), QtCore.Qt.ControlModifier)
+
+
+def message(kind):
+    p = panel(kind)
+    return p.message.text() if p is not None else ""
+
+
+def dialog_open():
+    return bool(Gui.Control.activeDialog())
+
+
+def undo_counts():
+    doc = App.ActiveDocument
+    return (doc.UndoCount, doc.RedoCount)
+
+
+def drag_ball_to(handle, point, steps=20):
+    """Press on a PathHandle's ball and drag it to the screen spot of the 3D `point` (which
+    may lie far off the path: the ball follows the nearest point of the path)."""
+    h.drag(h.screen_point(handle.point_at(handle.value())), h.screen_point(point), steps)
+
+
+def circle_of(sketch, index=0):
+    """(centre (global), radius) of the sketch's index-th circle as it was drawn."""
+    found = si.circles(sketch, construction=False)
+    if len(found) <= index:
+        return None, 0.0
+    g = found[index][1]
+    return sketch.getGlobalPlacement().multVec(g.Center), g.Radius
+
+
+def frustum(r, length, taper_deg):
+    """Volume of a round profile r swept straight `length` with Fusion's taper angle (its
+    side tilts by the angle: the end radius is r + length tan(angle))."""
+    import math
+
+    big = r + length * math.tan(math.radians(taper_deg))
+    return math.pi * length * (r * r + r * big + big * big) / 3.0
+
+
+def region_click(sketch, which=None, occluder=None):
+    """Click inside an area of `sketch` (which(faces) picks one; default the only one) at a
+    spot the camera sees past `occluder` (a global shape, or None)."""
+    from SciForgeTests.gui import revolve_input as ri
+
+    faces = [f for _sub, f in ri.regions(sketch)]
+    face = which(faces) if which is not None else (faces[0] if faces else None)
+    point = ri.visible_point(face, occluder) if face is not None else None
+    h.check("a visible spot inside the area of %s" % sketch.Label, point is not None)
+    if point is not None:
+        h.click(point)
+    return point
+
+
+def named(name, fn, wait_ms=None):
+    """A scenario step called `name` (the harness logs step names)."""
+
+    def step():
+        fn()
+
+    step.__name__ = name
+    if wait_ms:
+        step.wait_ms = wait_ms
+    return step

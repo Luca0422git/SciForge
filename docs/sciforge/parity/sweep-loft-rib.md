@@ -31,10 +31,17 @@ timeline to edit it again.
 | Edit from the timeline | Same |
 
 What is built: FreeCAD's own `PartDesign::AdditivePipe` / `SubtractivePipe` when it gives
-exactly Fusion's result. That means a single path, the whole path, no taper, no twist, Join,
-Cut or New Body, and everything in one body. Otherwise SciForge builds its own `SweepFeature`
-(a `PartDesign::FeaturePython`, timeline type `SciForge::Sweep`). An edit switches between the
-two as needed; the step keeps its place and name.
+exactly Fusion's result. That means a sketch profile and a sketch path, a single path, the
+whole path, no taper, no twist, Join, Cut or New Body, and everything in one body. Otherwise
+SciForge builds its own `SweepFeature` (a `PartDesign::FeaturePython`, timeline type
+`SciForge::Sweep`). A face or edges of the part always use SciForge's sweep: FreeCAD loses
+such names after some edits (a reopened design whose Extrude is edited), and SciForge's sweep
+finds a lost face or edge again where it was (`curves.remember` / `curves.refind`). An edit
+switches between the two as needed; the step keeps its place and name, and the steps built
+on it (a sketch on its end face, a Press Pull, a fillet) are moved onto the new step.
+
+A sweep or loft that does not touch the part becomes a New Body by itself (Fusion makes a new
+body for it). A path lying in the profile's own plane is refused with the reason.
 
 ## Loft (CREATE > Loft)
 
@@ -49,9 +56,10 @@ two as needed; the step keeps its place and name.
 | Operation Join / Cut / Intersect / New Body | Same, with the automatic choice and the miss check used by Sweep |
 | Edit from the timeline | Same |
 
-What is built: FreeCAD's `PartDesign::AdditiveLoft` / `SubtractiveLoft` when there are no rails
-and no centerline, the operation is Join, Cut or New Body, and everything is in one body.
-Otherwise SciForge builds its `LoftFeature` (timeline type `SciForge::Loft`).
+What is built: FreeCAD's `PartDesign::AdditiveLoft` / `SubtractiveLoft` when every profile is a
+whole sketch (or a sketch point), there are no rails and no centerline, the operation is Join,
+Cut or New Body, and everything is in one body. Otherwise SciForge builds its `LoftFeature`
+(timeline type `SciForge::Loft`), which also finds a lost face of the part again.
 
 ## Rib (CREATE > Rib)
 
@@ -86,14 +94,24 @@ SciForge refuses three cases, each with its reason in the dialog:
 
 ## Tests
 
-Seven scenarios, real input only: `sweep_loft_sweep`, `sweep_loft_sweep_cut`,
+QA pass (break and fix, only real input, sketches drawn with the mouse and typed sizes):
+`sweep_loft_qa_sweep` (5 paths), `sweep_loft_qa_loft` (5), `sweep_loft_qa_rib` (4),
+`sweep_loft_qa_web` (3) and `sweep_loft_qa_part` (4): OK / Enter with nothing picked, picks
+in the wrong order, Esc in the middle of picking (the Redo list survives), another command's
+key with the dialog open, values typed while the preview runs (0, negative, too big, a decimal
+comma), the distance ball and the thickness arrow dragged far out and back past their start,
+edits from the timeline twice with Ctrl+Z / Ctrl+Y, Ctrl+Z in an edit, save / close / reopen /
+edit, and Create Sketch, Extrude, Shell and Press Pull before and after the step. Golden model
+`sf_web_depth_thin_wall` (a web carried on to walls thinner than the web).
+
+Seven scenarios from the first pass, real input only: `sweep_loft_sweep`, `sweep_loft_sweep_cut`,
 `sweep_loft_sweep_rail`, `sweep_loft_loft`, `sweep_loft_loft_guides`, `sweep_loft_rib` and
 `sweep_loft_web`. Between them they cover nothing selected at the start, a selection made before
 the command, Cancel and Esc, editing from the timeline, undo and redo, and a second use. Each
 volume is checked against a hand-derived formula.
 
-There are also 35 golden models: `sf_sweep_*` (14), `sf_loft_*` (9), `sf_rib_*` (6) and
-`sf_web_*` (6). Their ops are `sf_curves`, `sf_sweep(_edit)`, `sf_loft(_edit)` and
+There are also 36 golden models: `sf_sweep_*` (14), `sf_loft_*` (9), `sf_rib_*` (6) and
+`sf_web_*` (7). Their ops are `sf_curves`, `sf_sweep(_edit)`, `sf_loft(_edit)` and
 `sf_rib(_edit)` in `golden/sweep_loft_ops.py`. Every expected value is analytic and its
 formula is in the model's note.
 

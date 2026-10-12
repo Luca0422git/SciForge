@@ -1,0 +1,96 @@
+{
+  "id": "sf_web_depth_thin_wall",
+  "title": "Web: Depth 4, One Side 3 thick, carried on to 2 mm walls (it must stop at the walls)",
+  "tags": [
+    "web",
+    "fusion-web",
+    "regression"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            -18,
+            -18,
+            18,
+            18
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s1",
+      "distance": 8,
+      "flip": true,
+      "operation": "cut"
+    },
+    {
+      "op": "sf_curves",
+      "id": "w",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "line": [
+            -10,
+            0,
+            10,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_rib",
+      "id": "web",
+      "kind": "web",
+      "curves": "w",
+      "thickness": 3,
+      "thickness_side": "one_side",
+      "depth_type": "depth",
+      "depth": 4
+    }
+  ],
+  "expect": {
+    "volume": 6064.0,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      10
+    ],
+    "note": "A tray: 40 x 40 x 10 less a 36 x 36 pocket 8 deep: 16000 - 10368 = 5632. The line y = 0 is carried on to the inner walls x = -18 and 18: a plate 36 long, 3 thick (One Side) and 4 deep hanging from the rim: 36 * 3 * 4 = 432. The walls are 2 thick, thinner than the web: before the QA fix the ends were carried 3 mm past the walls and poked out of the tray (x = +-21).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

@@ -106,6 +106,14 @@ class SweepPanel(Panel):
     auto_pick = True
 
     def __init__(self, doc, feature=None):
+        extra = []
+        if feature is not None:
+            try:
+                extra = [o for o, _ in sweep.read(feature)[0] if extrude.is_sketch(o)]
+            except Exception:
+                extra = []
+        body = commands.find_body() if feature is None else sweep.owner_body(feature)
+        curve_pick.prepare_regions(body, extra)  # before the undo step opens
         super().__init__(doc, "Sweep" if feature is None else "Edit Sweep")
         SweepPanel.last = self
         self.escape = preview.EscapeCancels(self)
@@ -327,6 +335,7 @@ class SweepPanel(Panel):
         self._refresh_picks()
         self._next_field()
         self._collect()
+        self._auto_operation()
         if self.profiles and self.path:
             self._picks_changed()
             self._timer.stop()
@@ -476,7 +485,9 @@ class SweepPanel(Panel):
             self.path = refs
         else:
             self.rail = refs
-        self.activate(box)
+        # A path clicked before the profile leaves the Profile box waiting (lit up), as the
+        # profile is still to be picked.
+        self.activate("profiles" if not self.profiles else box)
         self._picks_changed()
 
     def _refresh_picks(self):
@@ -609,16 +620,23 @@ class SweepPanel(Panel):
         self.options["chain"] = bool(self.chain.isChecked())
 
     def _auto_operation(self):
-        if self.user_picked_operation or not self.profiles or not self.path:
+        if self.user_picked_operation:
             return
         base = self._base_feature()
         shape = None
         if base is not None and not base.Shape.isNull():
             shape = curves.to_global(base.Shape, base)
-        try:
-            wanted = sweep.auto_operation(shape, self.profiles, self.path, self.rail, self.options)
-        except Exception:
+        if shape is None or not shape.Solids:
+            wanted = "new_body"  # Fusion shows it from the start when there is no solid yet
+        elif not self.profiles or not self.path:
             return
+        else:
+            try:
+                wanted = sweep.auto_operation(
+                    shape, self.profiles, self.path, self.rail, self.options
+                )
+            except Exception:
+                return
         if wanted != self.options["operation"]:
             self.options["operation"] = wanted
             self._quiet = True

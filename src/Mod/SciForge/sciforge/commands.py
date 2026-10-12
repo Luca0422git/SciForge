@@ -40,14 +40,32 @@ def find_body():
     return candidates[0]
 
 
+_TOLD = {"msg": None}  # the newest tell() message (an older one is not shown again)
+
+
 def tell(msg):
     """A short message next to the mouse pointer (and in the log), for when a command
     cannot start: silence made it look like the keys and buttons were broken."""
     log(msg)
     try:
-        from .compat import QtGui, QtWidgets
+        from .compat import QtCore, QtGui, QtWidgets
 
-        QtWidgets.QToolTip.showText(QtGui.QCursor.pos(), msg, Gui.getMainWindow())
+        def show():
+            QtWidgets.QToolTip.showText(QtGui.QCursor.pos(), msg, Gui.getMainWindow())
+
+        def again():
+            try:
+                if _TOLD["msg"] is msg and not QtWidgets.QToolTip.isVisible():
+                    show()
+            except Exception:
+                pass
+
+        _TOLD["msg"] = msg
+        show()
+        # A command picked from a ribbon menu (CREATE > Sweep) runs while the menu closes; the
+        # main window becoming active again then hid the tip at once, so the reason was never
+        # seen. It is shown again a moment later.
+        QtCore.QTimer.singleShot(250, again)
     except Exception:
         pass
 

@@ -118,6 +118,305 @@ def label(refs):
     return "%d curve%s (%s)" % (count, "" if count == 1 else "s", ", ".join(names))
 
 
+# -- later steps that use a sweep / loft rebuilt as another kind of feature -----------------
+# An edit can need the other kind of feature (FreeCAD's Pipe has no Distance, taper or twist,
+# SciForge's sweep has), so the step is rebuilt as a new object in the same place. Fusion
+# keeps what was built on it (a sketch on its end face, a fillet on its edges), while
+# FreeCAD clears every link to a deleted object. Before the old step goes, every link of a
+# later step to it is moved to the new one, each face / edge / corner found again on the new
+# shape: the same place, else the same kind facing the same way nearest to where it was (an
+# end face that moved because the sweep got shorter).
+_CHAIN = {"BaseFeature", "_Body", "Group", "Tip", "Origin"}
+
+
+def _element(sub):
+    short = (sub or "").split(".")[-1].lstrip("?")
+    return short if short.startswith(("Face", "Edge", "Vertex")) else ""
+
+
+def relink_users(old, new):
+    """Point every link of the objects using `old` (but not the body's own history chain) at
+    `new`, which must be computed. Returns the objects changed."""
+    from . import follow
+
+    if old is None or new is None or old is new:
+        return []
+    users = [
+        o
+        for o in old.InList
+        if o is not new and o.TypeId not in ("PartDesign::Body", "App::Part", "App::Origin")
+    ]
+    if not users:
+        return []
+    try:
+        old_shape = None if old.Shape.isNull() else old.Shape
+        new_shape = None if new.Shape.isNull() else new.Shape
+    except Exception:
+        old_shape = new_shape = None
+    cache = {}
+
+    def mapped(sub):
+        short = _element(sub)
+        if not short or old_shape is None or new_shape is None:
+            return sub
+        if short not in cache:
+            try:
+                found = follow.find(new_shape, old_shape.getElement(short))
+            except Exception:
+                found = None
+            cache[short] = found or short
+        return cache[short]
+
+    def swapped(value):
+        if value is None:
+            return value, False
+        if hasattr(value, "TypeId"):
+            return (new, True) if value is old else (value, False)
+        if isinstance(value, tuple) and len(value) == 2 and hasattr(value[0], "TypeId"):
+            obj, subs = value
+            if obj is not old:
+                return value, False
+            if isinstance(subs, str):
+                return (new, mapped(subs)), True
+            return (new, [mapped(s) for s in subs]), True
+        if isinstance(value, (list, tuple)):
+            out, changed = [], False
+            for item in value:
+                one, did = swapped(item)
+                out.append(one)
+                changed = changed or did
+            return out, changed
+        return value, False
+
+    changed = []
+    for user in users:
+        for prop in user.PropertiesList:
+            if prop in _CHAIN:
+                continue
+            try:
+                kind = user.getTypeIdOfProperty(prop)
+            except Exception:
+                continue
+            if not kind.startswith(("App::PropertyLink", "App::PropertyXLink")):
+                continue
+            try:
+                value, did = swapped(getattr(user, prop))
+                if not did:
+                    continue
+                setattr(user, prop, value)
+            except Exception:
+                continue  # that step then reports the lost link itself, like any other
+            if user not in changed:
+                changed.append(user)
+    return changed
+
+
+# -- picked elements of the part, found again when FreeCAD loses their names ------------------
+# A sweep along an edge of the part, or a loft from a face of it, names that edge / face
+# ("Edge3"). FreeCAD 1.1 loses such names after some edits of the step that made them (seen:
+# the cylinder's Extrude edited after the design was reopened: the path became "?Edge3" and
+# the sweep failed, "A curve picked from Extrude is gone"). Like Fusion, the sweep keeps
+# following its edge: where each picked element was is remembered after every good compute,
+# and a lost one is found again there (the same kind of curve or surface, facing the same
+# way, nearest to where it was).
+MEMORY = "SciForgeLinkMemory"
+
+
+def _record(element):
+    kind = element.ShapeType
+    rec = {"k": kind}
+    try:
+        if kind == "Vertex":
+            rec["c"] = list(element.Point)
+            return rec
+        if kind == "Edge":
+            curve = element.Curve
+            rec["t"] = curve.TypeId
+            rec["c"] = list(element.valueAt((element.FirstParameter + element.LastParameter) / 2))
+            rec["s"] = element.Length
+            if curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment"):
+                d = element.Vertexes[-1].Point - element.Vertexes[0].Point
+                if d.Length > TOL:
+                    d.normalize()
+                    rec["d"] = list(d)
+            elif hasattr(curve, "Axis") and hasattr(curve, "Radius"):
+                rec["d"] = list(curve.Axis)
+                rec["r"] = curve.Radius
+            return rec
+        rec["t"] = element.Surface.TypeId
+        rec["c"] = list(element.CenterOfMass)
+        rec["s"] = element.Area
+        if element.Surface.TypeId == "Part::GeomPlane":
+            u0, u1, v0, v1 = element.ParameterRange
+            n = element.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+            if n.Length > TOL:
+                n.normalize()
+                rec["d"] = list(n)
+    except Exception:
+        pass
+    return rec
+
+
+def _same_way(a, b, kind, surface):
+    dot = App.Vector(*a).dot(App.Vector(*b))
+    if kind == "Face" and surface == "Part::GeomPlane":
+        return dot > 1.0 - 1e-6  # a flat face keeps facing the same way
+    return abs(dot) > 1.0 - 1e-6
+
+
+def _find_again(shape, rec):
+    """Name ("Edge3") of the element of `shape` that is most likely `rec`'s, or None."""
+    kind = rec.get("k")
+    pool = {"Edge": shape.Edges, "Face": shape.Faces, "Vertex": shape.Vertexes}.get(kind)
+    if not pool or "c" not in rec:
+        return None
+    centre = App.Vector(*rec["c"])
+    best = None
+    for i, other in enumerate(pool, start=1):
+        try:
+            if kind == "Vertex":
+                distance = (other.Point - centre).Length
+            else:
+                there = _record(other)
+                if there.get("t") != rec.get("t"):
+                    continue
+                if (
+                    "d" in rec
+                    and "d" in there
+                    and not _same_way(rec["d"], there["d"], kind, rec["t"])
+                ):
+                    continue
+                if (
+                    "r" in rec
+                    and "r" in there
+                    and not 0.5 <= there["r"] / max(rec["r"], TOL) <= 2.0
+                ):
+                    continue
+                size = rec.get("s", 0.0)
+                if size > TOL and not 0.2 <= there.get("s", 0.0) / size <= 5.0:
+                    continue
+                distance = (App.Vector(*there["c"]) - centre).Length
+        except Exception:
+            continue
+        if best is None or distance < best[0] - 1e-9:
+            best = (distance, i)
+    return "%s%d" % (kind, best[1]) if best is not None else None
+
+
+def _single(value):
+    """True for the value of a one-object link (App::PropertyLinkSub): (object, [subs])."""
+    return isinstance(value, tuple) and len(value) == 2 and hasattr(value[0], "Name")
+
+
+def _items(value):
+    """[(object, [sub names])] of a link (list) value."""
+    if _single(value):
+        value = [value]
+    out = []
+    for item in value or []:
+        if isinstance(item, tuple) and len(item) == 2 and hasattr(item[0], "Name"):
+            subs = item[1]
+            subs = [subs] if isinstance(subs, str) else list(subs or [])
+            out.append((item[0], subs))
+    return out
+
+
+def remember(feature, props):
+    """Store where the part elements linked by `props` are now (after a good compute)."""
+    import json
+
+    data = {}
+    for prop in props:
+        rows = []
+        for linked, subs in _items(getattr(feature, prop, None)):
+            if linked is None or is_sketch(linked):
+                continue
+            for sub in subs:
+                short = _element(sub)
+                if not short or sub.startswith("?"):
+                    continue
+                try:
+                    rows.append([linked.Name, short, _record(linked.Shape.getElement(short))])
+                except Exception:
+                    continue
+        if rows:
+            data[prop] = rows
+    text = json.dumps(data, sort_keys=True)
+    if MEMORY not in feature.PropertiesList:
+        # hidden, output, no recompute: writing it from execute() changes nothing else
+        feature.addProperty("App::PropertyString", MEMORY, "SciForge", "Picked elements", 28)
+    if getattr(feature, MEMORY) != text:
+        setattr(feature, MEMORY, text)
+
+
+def refind(feature, props):
+    """Point the links of `props` whose part element FreeCAD lost at the element found again
+    where it was. Returns {(object name, old name): new name} for the links changed."""
+    import json
+
+    try:
+        memory = json.loads(getattr(feature, MEMORY, "") or "{}")
+    except Exception:
+        return {}
+    changed = {}
+    for prop in props:
+        rows = memory.get(prop) or []
+        if not rows:
+            continue
+        entries = _items(getattr(feature, prop, None))
+        touched = False
+        renames = {}
+        fixed = []
+        for linked, subs in entries:
+            new_subs = []
+            for sub in subs:
+                short = _element(sub)
+                lost = bool(short) and (sub.startswith("?") or not _exists(linked, short))
+                if lost and linked is not None and not is_sketch(linked):
+                    rec = next((r for n, s, r in rows if n == linked.Name and s == short), None)
+                    found = _find_again(linked.Shape, rec) if rec else None
+                    if found is not None:
+                        renames[(linked.Name, short)] = found
+                        sub = found
+                        touched = True
+                new_subs.append(sub)
+            fixed.append((linked, new_subs))
+        if touched:
+            try:
+                if _single(getattr(feature, prop, None)):
+                    setattr(feature, prop, fixed[0])
+                else:
+                    setattr(feature, prop, [(o, s) for o, s in fixed])
+                changed.update(renames)
+            except Exception:
+                pass
+    return changed
+
+
+def _exists(obj, short):
+    try:
+        element = obj.Shape.getElement(short)
+        return element is not None and not element.isNull()
+    except Exception:
+        return False
+
+
+def computed(obj):
+    """Recompute `obj` on its own (its base is up to date) without messages; True if it has a
+    shape then."""
+    from .preview import quiet
+
+    try:
+        with quiet():
+            obj.recompute()
+    except Exception:
+        pass
+    try:
+        return not obj.Shape.isNull()
+    except Exception:
+        return False
+
+
 # -- chains --------------------------------------------------------------------------------
 def _ends(edge):
     """((start point, direction leaving the start), (end point, direction leaving the end))."""

@@ -261,6 +261,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       conditions.
       `SciForge_PatternOnPath` (was greyed). QA pass done (branch `sf/patterns-qa`): 17 paths
       in 5 more scenarios (`patterns_qa_*.py`), 8 bugs fixed (see Known issues).
+- [x] Sweep / Loft / Rib / Web QA pass (branch `sf/sweep_loft-qa`, 12 bugs fixed): editing a
+      sweep / loft into the other kind of feature keeps the steps built on it (was refused),
+      the Redo list survives a dialog opened and cancelled, a sweep / loft away from the part
+      is a New Body, New Body shown from the start, a path clicked first leaves the Profile
+      box waiting, a path in the profile's plane explained, web extensions stop at thin walls,
+      Create Sketch on a construction plane in front of an origin square, loft sections no
+      longer offered as unused profiles, the reason of a menu command shown, picked part
+      edges / faces found again after FreeCAD loses their names (sweep, loft, Press Pull).
+      5 QA scenarios (`sweep_loft_qa_sweep/_loft/_rib/_web/_part.py`, 21 paths), golden
+      `sf_web_depth_thin_wall`.
 - [x] Body tools QA pass (branch `sf/bodies-qa`): 12 problems fixed (used-up body left active,
       Combine edit hiding its tools, tool clicks swallowed by the Join preview, Move type
       chosen first eating the body click, browser/timeline Delete breaking Combines, New Body
@@ -1067,6 +1077,49 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     the sketch plane (the band minus the plane's section of the part), then thickened.
   - A rib / web turned out of a side face (One Side) touches the part only along edges:
     `fuse` then gives two solids. Refused with the reason.
+- **Sweep / Loft / Rib / Web QA findings (branch `sf/sweep_loft-qa`, break-and-fix pass)**:
+  - **Trap: FreeCAD 1.1 re-hashes element names after a reopen.** A design saved and
+    reopened, then the Extrude before a sweep edited: the Extrude's mapped names got new
+    string-hasher ids (`#c:1;...` became `#4a:1;...`), a sweep along its top edge lost the
+    edge ("?Edge3", "A curve picked from Extrude is gone") and a Press Pull on a face of the
+    sweep lost its face (nested hashed names no longer match). Not reproducible headless
+    without the GUI's own steps. Fix: `curves.remember(feature, props)` stores where each
+    picked part element is after every good compute (hidden `SciForgeLinkMemory`, an
+    output property) and `curves.refind` points a lost link at the element found again
+    there (same curve / surface kind, facing the same way, nearest). Used by SciForge's
+    sweep and loft and by Press Pull (two lines in `presspull.py`). Part edges / faces are
+    therefore always built with SciForge's sweep / loft (FreeCAD's Pipe / Loft just fail).
+    Other features that link part elements (Extrude To Object, fillets after an edit...)
+    may need the same: worth checking in their QA.
+  - Rebuilding a step as the other kind of feature (FreeCAD Pipe <-> SciForge sweep) used
+    to be refused when a later step used it ("Sweep is used by Sketch002"). Now
+    `curves.relink_users(old, new)` moves every link (each face / edge found again by
+    `follow.find`) after the new step computed, before the old one is removed.
+  - **Trap: a dialog's undo step is opened lazily by its first change.** `extrude.
+    ensure_regions` recomputed a sketch with no closed area (a path, a rib line: its
+    InternalShape stays null) every time areas were looked for, inside the dialog's step,
+    so opening Sweep/Loft and pressing Esc threw away the Redo list. It now remembers such
+    sketches (by shape hash); the Sweep / Loft dialogs also turn areas on before their step
+    opens (`curve_pick.prepare_regions`).
+  - Create Sketch (`sketch_ui.PlanePicker`) gave every click to the origin square behind a
+    construction plane (a datum plane is picked as a whole object, not a "Face"): the
+    loft's second profile was drawn on XZ instead of the Offset Plane. A datum plane in
+    front of the squares now wins. (A face of the part under the mouse still always wins,
+    even behind a square: by design for Create Sketch.)
+  - `profile_pick.used_sketches` did not count FreeCAD Loft's `Sections`: Extrude / Sweep
+    took a loft's second circle by itself as a new profile.
+  - A command started from a ribbon menu (CREATE > Sweep / Loft / Rib / Web) that cannot
+    start told why with a tooltip that the closing menu hid at once: `commands.tell` shows
+    it again 250 ms later if it vanished.
+  - Web Extend Curves added half the thickness (or all of it, One Side) past the wall: the
+    web poked out of walls thinner than that (Depth mode; To Next was clipped). The band's
+    two sides are now carried exactly to the wall.
+  - Fusion makes a new body for a sweep / loft that does not touch the part: the automatic
+    operation is now New Body there (SciForge's Extrude still says "separate solids").
+  - Scenario traps: a Create Sketch click on an origin square with a face of the part
+    behind it goes to the face (`sweep_loft_qa_part` clicks XZ left of the cylinder); in
+    the XZ sketch of a cylinder a circle can be drawn inside the part (clicks land on the
+    sketch plane); a sketch line lying on a preview's edge is picked as the sketch line.
 - **Patterns QA findings (branch `sf/patterns-qa`, break-and-fix pass)**:
   - **Trap: rebuilding a step as a new object silently drops every link to it.** A pattern
     edit that needs the other kind of feature (Suppression, a Quantity formula, Faces, a
@@ -1735,6 +1788,34 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   scenarios PASS (13215 checks; primitives_qa 107, _qa_paths 81, _qa_keys 47, _qa_part 83,
   _qa_coil 61, _qa_pipe 54, _qa_more 80, _qa_ring 60). It took about 1 h 55: with 119
   scenarios the suite is close to a 2-hour limit on a busy machine.
+### 2026-10-12: QA of Sweep, Loft, Rib and Web (branch `sf/sweep_loft-qa`)
+- Break-and-fix pass with only real input (sketches drawn with the mouse, typed sizes,
+  volumes hand-derived from what was drawn): 5 new scenarios, 21 paths:
+  `sweep_loft_qa_sweep` (beginner / OK and Enter with nothing / boss on the sweep and edits
+  with taper and distance / values and the ball dragged far and back / Esc mid-pick + Redo /
+  wrong order + another command's key), `sweep_loft_qa_loft` (wrong order, Esc and Q
+  mid-pick, centerline added under a boss, save-reopen-edit, used profiles not taken again),
+  `sweep_loft_qa_rib` (rib before the part, gusset values, arrow dragged out and back, One
+  Side / Flip Side / Depth, earlier Extrude edited, edit twice + Cancel, save-reopen-edit +
+  Enter), `sweep_loft_qa_web` (Shell tray, pick / drop on the preview, Extend / Flip / One
+  Side / Depth, Esc mid-pick, Ctrl+Z in an edit), `sweep_loft_qa_part` (sweep along the
+  cylinder's top edge: Cut by itself, Intersect, Press Pull after it, save-reopen-edit, the
+  Extrude edited). Golden `sf_web_depth_thin_wall`.
+- 12 bugs fixed (see Known issues): edits refused when a later step used the sweep / loft;
+  Redo list lost by just opening Sweep / Loft; New Body shown late and not chosen for a
+  sweep away from the part; Profile box not lit after a path clicked first; empty sweep
+  errors; web poking through thin walls; Create Sketch on a construction plane; loft
+  sections offered again; menu-command tooltips hidden; picked part edges / faces lost
+  after reopen + edit (sweep, loft, Press Pull).
+- Shared files touched (minimal): `commands.py` (tell), `extrude.py` (ensure_regions),
+  `profile_pick.py` (Sections), `sketch_ui.py` (datum plane in front), `presspull.py`
+  (refind / remember), scenarios `sweep_loft_loft.py` (face profile now SciForge's loft)
+  and `bodies_qa_2.py` (path R: the Press Pull now keeps its face, 13500).
+- Full suite once at the end (no --only, 2026-10-12): unit 245 OK; golden 263 pass + 1
+  xfail (`plate_hole_grid`, core patch #4); smoke 70/70; journey 25/25; scenarios 116 of
+  117 PASS (13773 checks). The one failure, `bodies_qa_2` path R, expected the old Press
+  Pull failure that the new face memory fixes; its expectation was updated (13500) and the
+  scenario then passed alone (225 checks). No product code changed after the full run.
 
 ## Next steps (in order)
 
@@ -1743,6 +1824,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
    merged. The QA of inspect, primitives and sweep_loft stopped on the org spend limit and was
    restarted as wf_d887d414-12d (qa_only, from the merged HEAD). Merge each after the full suite.
    Inspect QA: finished on `sf/inspect-qa-3` (includes `sf/inspect-qa-2`), merge that one.
+   Sweep / Loft QA is done on `sf/sweep_loft-qa` (merge it).
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).

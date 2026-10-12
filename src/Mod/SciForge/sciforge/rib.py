@@ -403,16 +403,29 @@ def _web_tool(refs, options, base):
         left, right = (0.0, t) if options["flip_side"] else (t, 0.0)
     pieces = list(edges)
     if options["extend"] and base is not None:
-        # carry free ends on until they meet the part, at the depth the web reaches
-        for _i, at_start, point, out in _free_ends(edges):
-            hits = []
-            for frac in (0.02, 0.25, 0.5, 0.75, 0.98):
-                step = min(length, reach) * frac
-                hit = _hit_distance(base, point + direction * step, out, reach)
-                if hit is not None:
-                    hits.append(hit)
-            if hits:
-                stretch = min(hits) + max(left, right)
+        # Carry free ends on until they meet the part, at the depth the web reaches. Both
+        # sides of the band must reach the wall (a slanted wall is met later on one side), but
+        # no further: a fixed extra length poked the web out through a wall thinner than the
+        # web (sweep_loft_qa_web: 3 thick One Side in a 2 mm tray wall).
+        for i, at_start, point, out in _free_ends(edges):
+            edge = edges[i]
+            param = edge.FirstParameter if at_start else edge.LastParameter
+            tangent = App.Vector(edge.tangentAt(param))
+            if tangent.Length > 1e-12:
+                tangent.normalize()
+            side = normal.cross(tangent)
+            stretch = None
+            for offset in (side * left, App.Vector(), side * -right):
+                hits = []
+                for frac in (0.02, 0.25, 0.5, 0.75, 0.98):
+                    step = min(length, reach) * frac
+                    start = point + offset + direction * step
+                    hit = _hit_distance(base, start, out, reach)
+                    if hit is not None:
+                        hits.append(hit)
+                if hits and (stretch is None or min(hits) > stretch):
+                    stretch = min(hits)
+            if stretch is not None and stretch > 1e-9:
                 stub = _stub(point, out, stretch)
                 if at_start:
                     # run the stub the curve's way, so One Side stays on the curve's side

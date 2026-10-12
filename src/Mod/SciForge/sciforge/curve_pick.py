@@ -120,6 +120,24 @@ class RegionPicker(profile_pick.ProfilePicker):
         super()._button(info)
 
 
+def prepare_regions(body, extra=()):
+    """Turn on the closed areas of every sketch a dialog offers *before* the dialog opens its
+    undo step. Turning them on changes the sketch (FreeCAD's MakeInternals, a recompute
+    after an undo); inside the step that change was the first one, and FreeCAD then threw
+    away the Redo list, even when the dialog was cancelled with Esc."""
+    from . import extrude
+
+    try:
+        sketches = profile_pick.candidate_sketches(body, extra)
+    except Exception:
+        return
+    for sketch in sketches:
+        try:
+            extrude.ensure_regions(sketch)
+        except Exception:
+            pass
+
+
 def base_element(base, obj, short):
     """(base, name) of the edge / face `short` of `obj` (the preview, or a later step) that
     is also in `base` (the step before), matched by geometry; None if only obj has it."""

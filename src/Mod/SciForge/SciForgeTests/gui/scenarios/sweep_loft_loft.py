@@ -196,9 +196,11 @@ def lofted():
         [p.list.item(i).text() for i in range(p.list.count())],
     )
     h.check("Join", p.operation.currentText() == "Join", p.operation.currentText())
+    # A face of the part as a profile: SciForge's loft, which finds the face again if FreeCAD
+    # loses its name after the box is edited (sweep_loft_qa_part).
     h.check(
-        "FreeCAD's own loft",
-        p.target is not None and p.target.TypeId == "PartDesign::AdditiveLoft",
+        "SciForge's loft for a face of the part",
+        p.target is not None and getattr(p.target, "SciForgeType", "") == "Loft",
         p.target and p.target.TypeId,
     )
     h.check(
