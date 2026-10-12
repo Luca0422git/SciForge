@@ -10,9 +10,13 @@ You never need to compile anything yourself. GitHub builds it:
 
 1. On GitHub, open the repository, click **Actions**, then **SciForge build** in the left list.
 2. Click **Run workflow**, pick `windows` (or `both`), and press the green button.
-3. Wait. A full build takes a few hours (the C++ part of FreeCAD is large).
-4. When the run has a green tick, open it and scroll to **Artifacts**. Download
+3. Wait. A full build takes a few hours (the C++ part of FreeCAD is large). Quick checks run
+   first (about 10 minutes, including the test models on FreeCAD for Windows); when one fails,
+   the run stops there instead of compiling for hours.
+4. When the run is finished, open it and scroll to **Artifacts**. Download
    `SciForge-Windows-portable-...`. GitHub wraps it in a .zip; inside is a `.7z` file.
+   The build is uploaded before its tests run, so it is there even when a test failed (the
+   run then has a red cross): install the newest quick update on top, which has the fix.
 5. Unpack the `.7z` (7-Zip) anywhere, for example `C:\SciForge`. Run `bin\FreeCAD.exe`.
    (The program is still called FreeCAD inside until the branding pass is done.)
 6. Pick **SciForge** in the workbench drop-down at the top.
@@ -23,7 +27,8 @@ Until the branding pass, it does share FreeCAD 1.1's settings folder.
 About cost: the repository is public (since 2026-10-10), and GitHub's standard build machines are
 free for public repositories, so builds cost nothing. A full build still takes a few hours, so it
 is started by hand (or by a `sciforge-v*` tag) rather than on every change. The automatic test
-run (**SciForge tests**) takes about 40 minutes (5 machines side by side) and runs on every push.
+run (**SciForge tests**) takes about 40 minutes (6 machines side by side, one of them Windows) and
+runs on every push.
 
 ## Getting updates without rebuilding (most of the time)
 

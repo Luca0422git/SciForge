@@ -1951,6 +1951,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   passes). Fix: `TAG_BASE = 1 << 30`, tags above 2**31 - 1 skipped; unit test
   `test_wall_tags_fit_windows`. Lesson: any number handed to FreeCAD's C++ must fit 32 bits
   (Windows `long`).
+- Build pipeline after run #3 (Luca: "one single item wasted hours"): (1) the golden models
+  now also run on the official FreeCAD for Windows (`tools/sciforge/windows_golden.sh
+  --stock`), in "SciForge tests" on every push (job "tests (Windows golden models)"; the
+  quick update waits for it) and in the build as `check-windows` before compiling; (2) the
+  build uploads the .7z / AppImage before testing it (a failed test no longer throws away
+  the compile; the quick update fixes Python problems on top); (3) the build's concurrency
+  group includes the platform choice, so a Windows-only build does not cancel a running
+  build of both. Not done: a compile cache between builds (ccache is in the recipe but not
+  kept between runs); a rebuild still takes the full 3 hours.
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch

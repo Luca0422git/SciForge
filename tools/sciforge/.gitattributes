@@ -1,0 +1,2 @@
+# SciForge: the shell scripts here also run on Windows (Git Bash), which fails on CRLF line ends.
+*.sh text eol=lf
