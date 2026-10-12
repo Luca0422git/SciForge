@@ -232,6 +232,57 @@ def click(point, approach=App.Vector(1.0, 0.6, 0)):
     return h.click(point)
 
 
+def move_held(pos, modifiers):
+    """Move the mouse to widget pixel `pos` with keys held (Ctrl: modifiers in the move
+    events, as a real mouse reports them; QTest's mouse moves drop them)."""
+    widget = h.gl_widget()
+    at = QtCore.QPointF(pos)
+    event = QtGui.QMouseEvent(
+        QtCore.QEvent.MouseMove,
+        at,
+        QtCore.QPointF(widget.mapToGlobal(pos)),
+        QtCore.Qt.NoButton,
+        QtCore.Qt.NoButton,
+        modifiers,
+    )
+    QtWidgets.QApplication.sendEvent(widget, event)
+    QtWidgets.QApplication.processEvents()
+
+
+def click_held(point, modifiers, approach=App.Vector(1.0, 0.6, 0)):
+    """si.click with keys held all the way (moves and click). Returns the clicked pixel."""
+    h.uncover(point)
+    for f in (3.0, 1.5, 0.5):
+        move_held(h.screen_point(point + approach * f), modifiers)
+    pos = h.screen_point(point)
+    move_held(pos, modifiers)
+    QtTest.QTest.qWait(80)
+    QtTest.QTest.mouseClick(h.gl_widget(), QtCore.Qt.LeftButton, modifiers, pos)
+    QtWidgets.QApplication.processEvents()
+    return pos
+
+
+def sketch_at(sketch, pos):
+    """The sketch point FreeCAD's tools compute for widget pixel `pos` (its mouse
+    handling counts y from the bottom, minus one, times the pixel ratio)."""
+    from sciforge import profile_pick
+
+    widget = h.gl_widget()
+    ratio = widget.devicePixelRatioF()
+    coin = (int(pos.x() * ratio), int((widget.height() - pos.y() - 1) * ratio))
+    placement = sketch.getGlobalPlacement()
+    normal = placement.Rotation.multVec(App.Vector(0, 0, 1))
+    hit = profile_pick.ray_plane(h.view(), coin, placement.Base, normal)
+    return placement.inverse().multVec(hit[0])
+
+
+def mm_per_pixel(sketch):
+    """How many sketch millimetres one screen pixel is now (near the sketch origin)."""
+    a = h.screen_point(sketch.getGlobalPlacement().multVec(App.Vector(0, 0, 0)))
+    b = QtCore.QPoint(a.x() + 100, a.y())
+    return (sketch_at(sketch, b) - sketch_at(sketch, a)).Length / 100.0
+
+
 def type_text(text, enter=True):
     """Type on the keyboard: the keys go to the widget that has the keyboard focus
     (FreeCAD's on-screen value fields, SciForge's dimension box), like a real keyboard.
