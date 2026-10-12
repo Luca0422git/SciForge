@@ -278,7 +278,11 @@ p3_reopen.wait_ms = 2000
 
 
 def p3_reopened():
-    h.check("P3 reopened: the half ring and the Press Pull", near(vol(), cylinder(13.0) - ring(0.5), 1e-5), vol())
+    h.check(
+        "P3 reopened: the half ring and the Press Pull",
+        near(vol(), cylinder(13.0) - ring(0.5), 1e-5),
+        vol(),
+    )
     sweeps = st.features("sweep")
     h.check(
         "P3 SciForge's sweep is restored",
@@ -328,11 +332,19 @@ def p4_ok():
 def p4_done():
     h.check("P4 Extrude closed", not st.dialog_open())
     v = cylinder(15.0) - ring(0.75)
-    h.check("P4 the channel followed its edge, the Press Pull still on top", near(vol(), v, 1e-5), (vol(), v))
+    h.check(
+        "P4 the channel followed its edge, the Press Pull still on top",
+        near(vol(), v, 1e-5),
+        (vol(), v),
+    )
     zmax = st.bbox(h.body().Shape)[5]
     h.check("P4 the top is at 15", near(zmax, 15.0), zmax)
     sweeps = st.features("sweep")
-    h.check("P4 the sweep is fine", sweeps and "Invalid" not in sweeps[0].State, sweeps and sweeps[0].State)
+    h.check(
+        "P4 the sweep is fine",
+        sweeps and "Invalid" not in sweeps[0].State,
+        sweeps and sweeps[0].State,
+    )
     h.check("P4 no pop-up", not h.popups(), h.popups())
     h.shot("p4-done")
 

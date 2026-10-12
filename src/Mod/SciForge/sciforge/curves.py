@@ -280,9 +280,17 @@ def _find_again(shape, rec):
                 there = _record(other)
                 if there.get("t") != rec.get("t"):
                     continue
-                if "d" in rec and "d" in there and not _same_way(rec["d"], there["d"], kind, rec["t"]):
+                if (
+                    "d" in rec
+                    and "d" in there
+                    and not _same_way(rec["d"], there["d"], kind, rec["t"])
+                ):
                     continue
-                if "r" in rec and "r" in there and not 0.5 <= there["r"] / max(rec["r"], TOL) <= 2.0:
+                if (
+                    "r" in rec
+                    and "r" in there
+                    and not 0.5 <= there["r"] / max(rec["r"], TOL) <= 2.0
+                ):
                     continue
                 size = rec.get("s", 0.0)
                 if size > TOL and not 0.2 <= there.get("s", 0.0) / size <= 5.0:
