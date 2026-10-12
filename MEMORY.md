@@ -1399,7 +1399,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   models `sf_pipe_corner_*` (3), `sf_pipe_ring_*` (2), `sf_coil_taper_*` (6).
 - `primitives_qa` C clicked XY at a spot now behind the YZ square (the squares are as big
   as the design since qa2): it clicks where XY is in front.
-- Full suite at the end: FULL_SUITE_RESULT
+- Full suite at the end (no --only, commit 7de7a3d8ae): unit 245 OK; golden 273 pass + 1
+  xfail (`plate_hole_grid`, core patch #4); smoke 70/70; journey 25/25; 119 of 119
+  scenarios PASS (13215 checks; primitives_qa 107, _qa_paths 81, _qa_keys 47, _qa_part 83,
+  _qa_coil 61, _qa_pipe 54, _qa_more 80, _qa_ring 60). It took about 1 h 55: with 119
+  scenarios the suite is close to a 2-hour limit on a busy machine.
 
 ## Next steps (in order)
 
