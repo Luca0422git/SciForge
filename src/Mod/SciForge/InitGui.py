@@ -44,3 +44,21 @@ class SciForgeWorkbench(FreeCADGui.Workbench):
 
 
 FreeCADGui.addWorkbench(SciForgeWorkbench())
+
+
+def _sciforge_startup():
+    try:
+        from sciforge import shell
+
+        shell.startup()
+    except Exception as exc:  # never take FreeCAD down with us
+        FreeCAD.Console.PrintError("[SciForge] startup check failed: %s\n" % exc)
+
+
+# Once FreeCAD's window runs: follow workbench changes (see shell.startup).
+try:
+    from PySide import QtCore
+
+    QtCore.QTimer.singleShot(0, _sciforge_startup)
+except Exception as _exc:
+    FreeCAD.Console.PrintError("[SciForge] startup check not scheduled: %s\n" % _exc)

@@ -169,7 +169,32 @@ VIEWER_SETTINGS = [
 ]
 
 _saved_qss = None
-_saved_params = []
+
+# The user's own values of VIEWER_SETTINGS, kept until SciForge is switched off. In
+# FreeCAD's preferences, not in memory: FreeCAD saves its preferences when it quits, so
+# quitting while SciForge was on left SciForge's values as "the user's", and memory alone
+# then restored SciForge's values the next time (FreeCAD's own cube never came back).
+BACKUP = "User parameter:BaseApp/Preferences/Mod/SciForge/ViewerBackup"
+_ABSENT = "absent"  # the user had never set it: removed again, FreeCAD's default applies
+
+
+def _backup_key(path, name):
+    return "%s.%s" % (path.split("Preferences/")[-1].replace("/", "."), name)
+
+
+def _encode(kind, value):
+    if kind == "Bool":
+        return "=1" if value else "=0"
+    return "=%s" % value
+
+
+def _decode(kind, text):
+    text = text[1:]
+    if kind == "Bool":
+        return text == "1"
+    if kind in ("Int", "Unsigned"):
+        return int(text)
+    return text
 
 
 def apply():
@@ -186,14 +211,19 @@ def apply():
     try:
         import FreeCAD as App
 
-        if not _saved_params:
-            for path, kind, name, _ in VIEWER_SETTINGS:
-                group = App.ParamGet(path)
-                # Remember whether the user had set it at all: if not, restore() removes it
-                # again so FreeCAD falls back to its own default (not to 0/False).
-                existed = name in getattr(group, "Get" + kind + "s")()
-                value = getattr(group, "Get" + kind)(name) if existed else None
-                _saved_params.append((path, kind, name, value))
+        backup = App.ParamGet(BACKUP)
+        saved = backup.GetStrings()
+        for path, kind, name, _ in VIEWER_SETTINGS:
+            key = _backup_key(path, name)
+            if key in saved:
+                continue  # kept from a session that ended with SciForge on: the user's value
+            group = App.ParamGet(path)
+            # Whether the user had set it at all: if not, restore() removes it again so
+            # FreeCAD falls back to its own default (not to 0/False).
+            if name in getattr(group, "Get" + kind + "s")():
+                backup.SetString(key, _encode(kind, getattr(group, "Get" + kind)(name)))
+            else:
+                backup.SetString(key, _ABSENT)
         for path, kind, name, value in VIEWER_SETTINGS:
             getattr(App.ParamGet(path), "Set" + kind)(name, value)
     except Exception as exc:
@@ -214,12 +244,18 @@ def restore():
     try:
         import FreeCAD as App
 
-        for path, kind, name, value in _saved_params:
+        backup = App.ParamGet(BACKUP)
+        saved = backup.GetStrings()
+        for path, kind, name, _ in VIEWER_SETTINGS:
+            key = _backup_key(path, name)
+            if key not in saved:
+                continue
+            text = backup.GetString(key)
             group = App.ParamGet(path)
-            if value is None:
+            if text == _ABSENT:
                 getattr(group, "Rem" + kind)(name)
             else:
-                getattr(group, "Set" + kind)(name, value)
-        _saved_params.clear()
+                getattr(group, "Set" + kind)(name, _decode(kind, text))
+            backup.RemString(key)
     except Exception as exc:
         warn("theme: could not restore viewer settings: %s" % exc)

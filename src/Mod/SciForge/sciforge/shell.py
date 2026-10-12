@@ -65,8 +65,32 @@ def on_workbench(name):
             _set_sketch_mode(True)
         elif _state["on"]:
             disable()
+        else:
+            # SciForge is off: put back viewer settings a session that ended with SciForge
+            # on left behind (FreeCAD's own cube, orbit, background). Nothing to do if none.
+            from . import theme
+
+            theme.restore()
     except Exception as exc:
         warn("workbench change to %s: %s" % (name, exc))
+
+
+def startup():
+    """Called once FreeCAD runs (InitGui): follow workbench changes from the start, and when
+    FreeCAD starts in another workbench, undo SciForge's viewer settings left over from a
+    session that ended with SciForge on."""
+    try:
+        import FreeCADGui as Gui
+
+        _connect()
+        workbench = Gui.activeWorkbench()
+        name = workbench.name() if workbench is not None else ""
+        if name and name != SCIFORGE_WB and not _state["on"]:
+            from . import theme
+
+            theme.restore()
+    except Exception as exc:
+        warn("startup check: %s" % exc)
 
 
 def _set_sketch_mode(on):

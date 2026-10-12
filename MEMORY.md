@@ -1921,6 +1921,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   feature). Open: Fusion checks (arrow set, default Home corner, snap after a drag),
   Perspective with Ortho Faces, Go Home in one move. Also fixed `marking_menu._install`
   watching a view being deleted (traceback on close + open).
+- CI run #70 (ViewCube merge): `viewcube_menu` failed only on GitHub ("FreeCAD's NaviCube is
+  back"). Real bug, older than the cube: `theme` kept the user's viewer settings in memory,
+  but FreeCAD saves its preferences on quit, so after quitting with SciForge on, the next
+  session took SciForge's values for the user's and leaving SciForge kept them (no NaviCube,
+  Revit navigation, dark background in Part Design). Each CI part shares one profile, so an
+  earlier scenario had "quit with SciForge on". Fix: the user's values go to
+  `Mod/SciForge/ViewerBackup` (kept until restored); `shell.startup()` (from InitGui) and
+  `on_workbench` restore leftovers when SciForge is off. Scenario `viewer_settings_restart`
+  (restart imitated by reloading `theme`) fails without the fix.
 - Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
   agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
   (they appear in the job log).
