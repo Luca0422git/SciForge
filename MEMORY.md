@@ -69,7 +69,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - [x] First `sciforge-tests.yml` run on GitHub is green (2026-10-09)
 - [x] CI `sciforge-build.yml` written (manual): Windows portable 7z + Linux AppImage, then
       golden models run on the built SciForge
-- [ ] First `sciforge-build.yml` run succeeds (never run yet: expect fixes; it is hours long)
+- [x] `sciforge-build.yml` runs: #1 (2026-10-09) green; #2 (2026-10-12) compiled and packaged on
+      Windows and Linux (core patches #4, #6, #7 compile; golden `plate_hole_grid` PASS on the
+      build) but its tests failed: the install rules listed 35 of 116 SciForge modules. Fixed
+      (glob + `tools/sciforge/check_install.sh` on every push); a new run is needed.
 - [ ] First CI build downloaded and launched by Luca on Windows
 - [ ] Branding pass: app name, icons, user-data folder, installer (side by side with FreeCAD)
 - [ ] Parity capture: Luca records Fusion workflows; behavior specs written + signed off
@@ -319,7 +322,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Prototype bug (fixed): `Sketcher_External` no longer exists in 1.1. It is now
   `Sketcher_Projection` + `Sketcher_Intersection` (matches Fusion's Project / Intersect split).
 - **Upstream bug (core patch #4):** `LinearPattern.Spacings2` defaults to `[0.0]`, so 2-direction
-  linear patterns in Spacing mode stack row 2 on row 1. Fixed in C++ but **not yet compiled**:
+  linear patterns in Spacing mode stack row 2 on row 1. Fixed in C++, compiled in build run #2
+  (2026-10-12: `plate_hole_grid` PASS on the Windows build); earlier note:
   the first `sciforge-build.yml` run verifies it (golden `plate_hole_grid` must PASS there).
   Worth reporting upstream.
 - FreeCAD API: `body.newObject()` does not move `Body.Tip` for pattern/mirror features (the GUI
@@ -1856,6 +1860,18 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     dialog covers the point (`h.uncover`); `harness_covered_click` checks that.
 - CI green on d005d2d92a (run #61, all 5 parts, about 33 minutes): its quick update has
   everything up to this session.
+- Full build run #2 (Luca, 2026-10-12, 4 hours): both platforms compiled and packaged, then
+  its tests failed (Windows golden: 234 errors, 43 pass; Linux: golden and every scenario).
+  Cause: `src/Mod/SciForge/CMakeLists.txt` listed SciForge's modules by hand and still had 35
+  of 116 (`cannot import name 'blend' from 'sciforge'`); the quick update copies the whole
+  folder, so only the full build lacked them. The 5 extrude "failed to compute" errors had
+  the same cause (reproduced here: the installed copy of the old rules gives the same 234).
+  Fix: the rules glob every module, icon and test file; `tools/sciforge/check_install.sh`
+  (runs the real install rules with CMake into a scratch folder and compares) runs on every
+  push and first in the build (fails in a minute, not after hours). On the installed copy
+  of the new rules: unit OK, golden 276 + 1 xfail, smoke and journey PASS, 6 scenarios PASS.
+  The build's Linux test now runs unit/golden/smoke/journey; the scenarios run on the built
+  AppImage in a separate 4-part job that does not hold up the uploads.
 - Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
   agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
   (they appear in the job log).

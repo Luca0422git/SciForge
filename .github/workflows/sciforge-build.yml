@@ -2,7 +2,9 @@
 # SciForge: full build of the fork (C++ and all), producing files Luca downloads and tests:
 #   Windows: portable .7z (unzip anywhere, run bin\FreeCAD.exe)
 #   Linux:   .AppImage
-# Then the golden models run on the freshly built SciForge (not stock FreeCAD).
+# Then the golden models run on the freshly built SciForge (not stock FreeCAD), and the
+# build is uploaded; the GUI scenarios then run on the built Linux AppImage in parallel
+# (4 parts) without holding up the uploads.
 #
 # Started by hand: GitHub > Actions > "SciForge build" > Run workflow. It is not run on
 # every push because a build takes hours (free on this public repository, but slow).
@@ -33,7 +35,26 @@ permissions:
   contents: read
 
 jobs:
+  # A minute before hours of compiling: every SciForge file must be in the install rules
+  # (run #2 compiled for 4 hours and then lacked 81 of 116 SciForge modules).
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Every SciForge file is installed by the build
+        run: tools/sciforge/check_install.sh
+
+      - name: Unit tests
+        run: tools/sciforge/run_tests.sh --only unit --out test-output
+
   matrix:
+    needs: check
     runs-on: ubuntu-24.04
     outputs:
       include: ${{ steps.pick.outputs.include }}
@@ -112,14 +133,15 @@ jobs:
           pixi run -e package create_bundle
 
       # ---- Linux: test the built AppImage, then upload it ----------------
-      - name: Test the Linux build (unit, golden models, GUI smoke)
+      # The scenarios (about 2 hours on one machine) run afterwards in the "scenarios" job.
+      - name: Test the Linux build (unit, golden models, GUI smoke and journey)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
           image=$(ls package/rattler-build/linux/*.AppImage | head -1)
           mkdir -p .sciforge-cache/sciforge
           (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)
-          tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output
+          tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --only base
 
       - name: Upload Linux AppImage
         if: runner.os == 'Linux'
@@ -170,3 +192,51 @@ jobs:
           name: test-output-${{ matrix.target }}
           path: test-output/
           retention-days: 30
+
+  # The GUI scenarios on the built Linux AppImage, in 4 parts side by side. They test the
+  # C++ fixes through the interface; the uploads above do not wait for them.
+  scenarios:
+    needs: [matrix, build]
+    if: ${{ !cancelled() && contains(needs.matrix.outputs.include, 'linux-64') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/4", "2/4", "3/4", "4/4"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Get the AppImage built above
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-Linux-*' --dir built
+          image=$(find built -name '*.AppImage' | head -1)
+          chmod +x "$image"
+          mkdir -p .sciforge-cache/sciforge
+          (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)
+
+      - name: Scenarios ${{ matrix.shard }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
+          tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --only scenarios --shard ${{ matrix.shard }}
+
+      - name: Name of the reports
+        if: always()
+        run: echo "PART=$(echo '${{ matrix.shard }}' | cut -d/ -f1)" >> "$GITHUB_ENV"
+
+      - name: Upload scenario reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: scenarios-linux-${{ env.PART }}
+          path: test-output/
+          retention-days: 14

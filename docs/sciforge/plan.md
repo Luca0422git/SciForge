@@ -12,7 +12,7 @@ most urgent first.
   "SciForge tests" run, about a minute to install). They are tested here, click by click,
   before they are pushed.
 - **C++ changes** (FreeCAD's compiled core) need the Windows full build
-  (`sciforge-build.yml`), which has never run. They cannot be tested here (the tests run
+  (`sciforge-build.yml`, about 3 hours). They cannot be tested here (the tests run
   the official FreeCAD plus the SciForge module). Three earlier C++ fixes (patches #4,
   #6, #7) are still waiting for that build.
 
@@ -125,9 +125,9 @@ Route: a **SciForge "inference layer" in Python** on top of FreeCAD's tools:
 
 ## Housekeeping
 
-- **The Windows full build** (`sciforge-build.yml`): has never run; it compiles the three
-  waiting C++ fixes. It is free on GitHub (public repository) and takes hours. Claude can
-  start it on request; expect a few build fixes the first time.
+- **The full build** (`sciforge-build.yml`): run #2 compiled the C++ fixes on Windows and
+  Linux, but its packaged SciForge lacked 81 modules (install rules kept by hand). Fixed on
+  2026-10-12; the next run should give Luca a working download.
 - `MEMORY.md` status checkboxes partly out of date (for example "Unified Revolve / Hole /
   Fillet dialogs" is done): tidy at the next update.
 

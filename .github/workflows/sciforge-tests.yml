@@ -69,6 +69,12 @@ jobs:
       - name: Get FreeCAD ${{ env.FREECAD_VERSION }}
         run: tools/sciforge/get_freecad.sh .sciforge-cache/freecad
 
+      # The full build installs SciForge with src/Mod/SciForge/CMakeLists.txt; a file left out
+      # there only shows in a full build, hours later.
+      - name: Every SciForge file is installed by the full build
+        if: matrix.id == 'base'
+        run: tools/sciforge/check_install.sh
+
       - name: Tests (${{ matrix.part }})
         run: tools/sciforge/run_tests.sh --freecad .sciforge-cache/freecad --out test-output ${{ matrix.args }}
 
