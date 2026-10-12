@@ -148,32 +148,24 @@ def _keep_attached(doc, gone):
         _warn_step(obj, "Lost the face or plane it was on (deleted); it stays where it was.")
 
 
-def _profile_sketch(obj):
-    for prop in ("Profile", "Sketch"):
-        if prop not in obj.PropertiesList:
-            continue
-        for o in _objects_in(getattr(obj, prop)):
-            if o.TypeId == "Sketcher::SketchObject":
-                return o
-    return None
-
-
 def _show_profiles(doc, gone):
-    """A sketch whose extrude is deleted shows again (Fusion)."""
+    """A sketch whose extrude (pipe, sweep...) is deleted shows again (Fusion)."""
+    from .timeline_ops import used_sketches
+
     for name in gone:
         obj = doc.getObject(name)
         if obj is None:
             continue
-        sketch = _profile_sketch(obj)
-        if sketch is None or sketch.Name in gone:
-            continue
-        users = [
-            o
-            for o in sketch.InList
-            if o.Name not in gone and _profile_sketch(o) is sketch and o is not obj
-        ]
-        if not users:
-            bodies.set_shown(sketch, True)
+        for sketch in used_sketches(obj):
+            if sketch.Name in gone:
+                continue
+            users = [
+                o
+                for o in sketch.InList + [u for h in sketch.InList for u in h.InList]
+                if o.Name not in gone and o is not obj and sketch in used_sketches(o)
+            ]
+            if not users:
+                bodies.set_shown(sketch, True)
 
 
 def extra_steps(steps):

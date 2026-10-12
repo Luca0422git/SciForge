@@ -1048,19 +1048,36 @@ def _helpers_of(doc, names, gone):
     return found
 
 
+def used_sketches(obj):
+    """The sketches a step was made from: its profile sketch and the ones its own helpers
+    read (a pipe's path, a sweep's path and rails, a loft's sections). Fusion hides them
+    while a step uses them and shows them again when the step is deleted."""
+    if obj.TypeId == "Sketcher::SketchObject":
+        return []
+    found = []
+    sketch = profile_sketch(obj)
+    if sketch is not None:
+        found.append(sketch)
+    for o in obj.OutList:
+        for s in o.OutList if is_helper(o) else [o]:
+            if s.TypeId == "Sketcher::SketchObject" and not is_helper(s) and s not in found:
+                found.append(s)
+    return found
+
+
 def _show_profile_again(doc, obj, gone):
     if not App.GuiUp:
         return
-    sketch = profile_sketch(obj)
-    if sketch is None or sketch.Name in gone or sketch.ViewObject is None or is_helper(sketch):
-        return
-    others = [
-        o
-        for o, _b in steps(doc)
-        if o.Name not in gone and o is not obj and profile_sketch(o) is sketch
-    ]
-    if not others:
-        sketch.ViewObject.Visibility = True
+    for sketch in used_sketches(obj):
+        if sketch.Name in gone or sketch.ViewObject is None:
+            continue
+        others = [
+            o
+            for o, _b in steps(doc)
+            if o.Name not in gone and o is not obj and sketch in used_sketches(o)
+        ]
+        if not others:
+            sketch.ViewObject.Visibility = True
 
 
 # -- reorder -----------------------------------------------------------------------------

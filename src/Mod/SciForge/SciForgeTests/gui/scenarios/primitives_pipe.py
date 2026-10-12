@@ -11,7 +11,8 @@ The sketch is hidden (it is used). Undo / redo. Double-click Pipe 1: Triangular,
 hollow, OK.
 Second use from a selection: a Box 40 x 20 x 10 next to it; click its top front edge,
 then Pipe: the edge is taken at once, the pipe runs along it; Cut takes the quarter
-inside the box away; OK. Cancel and Esc change nothing.
+inside the box away; OK. Cancel and Esc change nothing. Right-click Pipe 1 in the
+timeline, Delete: its path sketch shows again (it was hidden through the pipe's helper).
 
 Hand-derived volumes (the section square to the path, which bends gently, so Pappus:
 area x length):
@@ -32,6 +33,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -437,6 +439,27 @@ def formula_follows():
     )
 
 
+# -- Delete shows the path sketch again (Fusion) ----------------------------------------------------
+def delete_pipe1():
+    h.check("the path sketch is hidden (used)", not s["sketch"].ViewObject.Visibility)
+    hs.timeline_menu("Pipe 1", "Delete")
+
+
+def pipe1_deleted():
+    left = [o.TypeId for o in pipes()]
+    h.check(
+        "only the cut along the box edge is left", left == ["PartDesign::SubtractivePipe"], left
+    )
+    titles = ui.timeline_titles()
+    h.check(
+        "one pipe in the timeline",
+        [t for t in titles if t.startswith("Pipe")] == ["Pipe 1"],
+        titles,
+    )
+    h.check("its path sketch shows again", s["sketch"].ViewObject.Visibility)
+    h.check("no pop-up", not h.popups(), h.popups())
+
+
 h.run(
     "primitives_pipe",
     [
@@ -487,5 +510,7 @@ h.run(
         esc_now,
         after_esc,
         formula_follows,
+        delete_pipe1,
+        pipe1_deleted,
     ],
 )

@@ -9,7 +9,7 @@ Chain Selection takes the whole smooth path (3 curves); the tube appears as a Ne
 (the first solid). Type Distance 0.5: half the tube; drag the blue ball back to the end
 of the path: the whole tube; OK. Undo / redo. Double-click it in the timeline, Distance
 0.25, OK. Sweep again: nothing is taken (the circle is used), Cancel changes nothing; Esc
-too.
+too. Click Sweep 1 in the timeline, Delete key: both sketches show again.
 
 Hand-derived volumes: path length L = 20 + 10 pi / 2 + 20, tube = pi 2^2 L; a share d of
 the path sweeps d of that (the profile sits at the path's start).
@@ -23,6 +23,7 @@ from PySide import QtCore
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import sweep_loft_steps as st
+from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
 PI = math.pi
@@ -296,6 +297,34 @@ def after_esc():
     h.check("the body is shown", st.shown(h.body()))
 
 
+# -- Delete shows both sketches again (Fusion) ----------------------------------------------------
+def select_sweep():
+    from sciforge import timeline_ui
+
+    widget = timeline_ui.widget()
+    widget.refresh()
+    for button in widget._buttons:
+        if button.item.display == "Sweep 1":
+            s["button"] = button
+            w.click(button)
+            return
+    h.check("timeline has Sweep 1", False, st.timeline_titles())
+
+
+def delete_key():
+    h.check("the path sketch is hidden (used)", not s["path"].ViewObject.Visibility)
+    if "button" in s:
+        w.key(s["button"], QtCore.Qt.Key_Delete)
+
+
+def sweep_deleted():
+    titles = st.timeline_titles()
+    h.check("Sweep 1 is gone", "Sweep 1" not in titles, titles)
+    h.check("the profile sketch shows again", s["profile"].ViewObject.Visibility)
+    h.check("the path sketch shows again", s["path"].ViewObject.Visibility)
+    h.check("no solid left", h.solid_volume() == 0.0, h.solid_volume())
+
+
 h.run(
     "sweep_loft_sweep",
     [
@@ -334,5 +363,8 @@ h.run(
         sweep_esc,
         esc_now,
         after_esc,
+        select_sweep,
+        delete_key,
+        sweep_deleted,
     ],
 )
