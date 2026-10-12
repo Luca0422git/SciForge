@@ -148,7 +148,48 @@ jobs:
           cache: false
           run-install: false
 
+      # ---- Windows: compile cache kept between builds -----------------------
+      # FreeCAD already compiles through ccache (ccache is in the recipe and FreeCAD's
+      # CMakeLists uses it when found), but its cache was thrown away with the machine, so
+      # every build compiled everything (about 3 hours). It is now kept with GitHub's cache:
+      # a later build only compiles the C++ files that changed. The first build fills it.
+      # Every cache step may fail without failing the build: ccache then compiles as before.
+      # The cache folder is set in ccache's system-wide config file, which the build reads
+      # whatever environment pixi and rattler-build pass on to it.
+      - name: Compile cache settings (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          conf="$(cygpath -u "${ALLUSERSPROFILE:-C:\ProgramData}")/ccache"
+          mkdir -p "$conf"
+          printf 'cache_dir = D:/ccache\nmax_size = 4G\n' > "$conf/ccache.conf"
+          cat "$conf/ccache.conf"
+
+      - name: Restore the compile cache (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        timeout-minutes: 20
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: D:\ccache
+          key: ccache-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-${{ matrix.target }}-
+
+      - name: Compile cache before compiling (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          pixi exec --spec ccache -- ccache --zero-stats
+          pixi exec --spec ccache -- ccache --show-config | grep -E "cache_dir|max_size" || true
+          du -sh /d/ccache 2>/dev/null || echo "[SciForge] no compile cache yet (this build fills it)"
+
       - name: Compile SciForge (takes a long time)
+        id: compile
         shell: bash
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
@@ -157,6 +198,26 @@ jobs:
           python3 package/scripts/write_version_info.py ../freecad_version.txt
           cd package/rattler-build
           pixi install
+
+      # Right after compiling, also when compiling failed or was stopped: a later failing
+      # test must not lose 3 hours of cache.
+      - name: Save the compile cache (Windows)
+        if: always() && runner.os == 'Windows' && steps.compile.outcome != 'skipped' && github.ref_type == 'branch'
+        continue-on-error: true
+        timeout-minutes: 20
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: D:\ccache
+          key: ccache-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Compile cache statistics (Windows)
+        if: always() && runner.os == 'Windows' && steps.compile.outcome != 'skipped'
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          pixi exec --spec ccache -- ccache --show-stats --verbose
+          du -sh /d/ccache 2>/dev/null || true
 
       - name: Package
         shell: bash

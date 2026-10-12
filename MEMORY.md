@@ -1975,6 +1975,21 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   after), so the next build's scenarios say why if it fails again. Lesson: "Re-run failed
   jobs" on a build re-runs the failed 3-hour compile too (the scenarios wait for it);
   cancelled at once. Run a failing scenario part again with a new build instead.
+- Compile cache for the Windows full build (Luca: "do the compile cache"; trimming unused
+  FreeCAD modules is on hold, he does not want to risk breaking anything). Research (3 agents,
+  source-level): FreeCAD already compiles through ccache (recipe build requirement +
+  FREECAD_USE_CCACHE), but the cache died with the machine; the conda Windows preset has PCH
+  and PDB off, ccache 4.14.1 caches MSVC; pixi v0.59.0's backend (0.3.5) does not clear the
+  environment and its work dir path is stable; only `%ALLUSERSPROFILE%\ccache\ccache.conf`
+  can move ccache's cache_dir on Windows. sciforge-build.yml (Windows only): that config file
+  (cache_dir D:/ccache, max_size 4G), actions/cache/restore before compiling (key per run,
+  restore-keys per target), save right after compiling with `always()` (a failed test no
+  longer loses it), stats before/after via `pixi exec --spec ccache`. Every step
+  continue-on-error with a time limit. The first build fills the cache (full ~3 h); check its
+  `ccache --show-stats` ("cacheable calls" > 0 proves ccache is used), the second build shows
+  the gain. The branch is the repository's default branch, so its caches are visible to all
+  later runs. Also confirmed: no interference between the C++ patches and their Python
+  fallbacks (run #3's Linux build passed the trim, pattern and leave-sketch scenarios).
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
