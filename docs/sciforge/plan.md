@@ -78,6 +78,12 @@ dashed guides and snapping to them, perpendicular (and maybe parallel) inference
 beside the line, Fusion's Ctrl (in FreeCAD, Ctrl does the opposite: 5-degree angle
 steps), the tangent-arc drag.
 
+Status 2026-10-12: the feasibility test passed, the Python route works (no C++ needed).
+Items 2, 3, 4 are built for Line (L) in `sketch_infer.py` (Ctrl in every tool), with
+the guide and a right-angle mark drawn by SciForge (part of 5); see
+`parity/sketch.md`. Still to do: guides for the other tools' points, 5 (glyphs for
+level/upright), 6, 7, and Luca's Fusion checks 3-6 for the tolerances.
+
 Route: a **SciForge "inference layer" in Python** on top of FreeCAD's tools:
 
 1. **Feasibility test first** (small): catch the mouse before FreeCAD, move the pointer's

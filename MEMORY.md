@@ -104,6 +104,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - [x] Timeline: reorder by drag, suppress, groups (7.3); QA pass done (branch
       `sf/timeline_browser-qa`, 4 QA scenarios, spec `docs/sciforge/parity/timeline-browser.md`)
 - [ ] Sketcher parity (7.5): inference, glyphs, Fusion dimension tool feel (needs captures)
+- [x] Sketch inference in Python (plan C1-C4, branch `worktree-agent-a27127a70299bdc90`,
+      `sketch_infer.py` + `sketch_infer_core.py`): Ctrl = no snaps / no automatic
+      constraints (all drawing tools); in Line (L) dashed alignment guides from the last 3
+      hovered points + the tool's own points (Vertical/Horizontal point-to-point
+      constraint on click, option), perpendicular from/onto a line with a right-angle
+      mark, level/upright within 4 degrees, parallel (off by default). Feasibility answer:
+      **works in Python** by rewriting the mouse position FreeCAD gets (no C++ needed).
+      Scenario `sketch_infer` (222 checks), 33 unit tests. Tolerances, guide look and the
+      constraint on click are **unconfirmed** against real Fusion (plan checks 3-6)
 - [x] Sketch workspace, first parity pass (branch `sf/sketch`): Fusion keys in sketches (L R C D T
       X O P E, Esc / Esc), on-screen dimension box (type the value, Enter; double-click a
       dimension to change it), Finish Sketch always works (also with a tool running), Look At on
@@ -404,6 +413,36 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   release, DblClick, release by hand: `sketch_input.double_click_widget`); clicks in fast
   succession on the 3D view merge (one click per scenario step); a Coin search path dies with
   its action (keep node + parent, never the path: SIGSEGV otherwise).
+- **Sketch inference in Python (2026-10-12, `sketch_infer.py`)**: FreeCAD snaps in C++ from
+  the mouse pixel, but SciForge's filter on the 3D view's drawing area runs first: it can
+  swallow a mouse event and `sendEvent` a copy with another position, and FreeCAD's own
+  tool then lands exactly on that pixel (probe: created point = pixel's sketch point to
+  1e-7 mm). Pixel -> sketch point the way FreeCAD does it: coin = (x * ratio,
+  (height - y - 1) * ratio), then ray to the sketch plane (`_ViewMap`). Per-event
+  switches are read live: `Mod/Sketcher/Snap/Snap` (master snap, also kills Ctrl's
+  5-degree steps), `Snap/SnapToGrid`, the sketch's `ViewObject.Autoconstraints` (no undo
+  entry), `view.getViewer().setPickRadius()`. Traps found:
+  - **FreeCAD's click jumps to a point marker under the mouse before any snapping**
+    (`ViewProviderSketch::mouseButtonPressed` uses the picked point): with Snap off a Ctrl
+    click still landed on the end point; shrinking the pick radius for that click fixes it.
+  - Autoconstraints off during a click that *finishes* a line also drops the constraints
+    of its start (they are generated at the end): SciForge turns it back on in the
+    synchronous commit signal of "Add sketch line" (before "Add Auto-Constraints").
+  - FreeCAD 1.1 Python: `sketch.moveGeometry(geo, pos, Vector, False)` (no `movePoint`);
+    `sketch.GeometryCount` is cheap (`len(sketch.Geometry)` copies every curve).
+  - The line tool's preview is the Coin node `EditCurvesCoordinate` (2 points while the
+    second point is sought, sketch-local); look it up fresh each time (find_node).
+  - FreeCAD snaps to a line's middle within 5% of its length: inference must not fight it.
+  - **Keep FreeCAD's grid snap on for the moved event whenever it cannot pull the point off
+    the inference** (`sketch_infer_core.grid_off`): switching it off for every level line
+    broke `sketch_modify`, `sketch_qa` K and `sketch_qa_keys` R2 (ends at 19.934 instead of
+    20; with a typed length FreeCAD drops its own H/V, so the pixel's direction was used).
+    When it must be off, the grid spacing is recomputed in Python (`_grid_size`) and the
+    exact value is put in after the click (`exact_point`).
+  - QTest's mouse *moves* drop keyboard modifiers in Qt 6.8 (send a QMouseEvent with
+    `sendEvent` for Ctrl-held moves, `sketch_input.move_held`); under xvfb the real X
+    pointer stays elsewhere and stray hover events land there: scenarios that read hover
+    state move it too (`QCursor.setPos`, scenario `sketch_infer.move`).
 - **Trap: a Gui document observer (`Gui.addDocumentObserver`) crashes FreeCAD** when its
   `slotChangedObject(vp, prop)` reads `vp.Object` while FreeCAD is still building that view
   provider (SIGSEGV in `ViewProviderDocumentObjectPy::getObject`). Use an App observer
@@ -1885,6 +1924,29 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
   agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
   (they appear in the job log).
+
+### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
+- Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
+  tools? **Yes.** Probes in real FreeCAD 1.1.4: a filter that replaces a mouse event by a
+  copy at another pixel moves FreeCAD's point exactly there; the Snap master switch and
+  the sketch's Autoconstraints are read live; stock Ctrl drew a line at exactly 10.000
+  degrees (5-degree steps), confirming the opposite-of-Fusion behaviour.
+- Built `sketch_infer.py` (mouse filter, overlay, constraints after the click) and
+  `sketch_infer_core.py` (pure maths, 26 unit tests), hooked into `SketchSession`
+  (`_ViewFilter` gives it every mouse event first; commit/undo signals; Esc; close).
+  Undo: "Inferred Constraints" is glued to the step before it (`sketch_mode.GLUED_STEPS`,
+  the same mechanism as "Sketch recompute", now looping over several glued steps).
+- Scenario `sketch_infer` (222 checks, real moves/clicks): Ctrl free point (also start
+  coincident kept), guide snap + Vertical constraint (XY and XZ sketch), perpendicular
+  from and onto a slanted line (exactly 90), level at 3.5 degrees / free at 6.8, parallel
+  off/on, a typed length beating a guide, Ctrl+Z / Ctrl+Y. Parity:
+  `docs/sciforge/parity/sketch.md` (new section). About 2 ms per mouse move on a
+  400-curve sketch (box tests before distances; 7.6 ms without them).
+- The first regression run caught 3 failures (grid snap, see Known issues); fixed.
+- Not done / open: guides for rectangle corners, circle centres, arcs (Line only); the
+  tolerances, the guide colour and whether Fusion adds a constraint on a guide click
+  are unconfirmed (Luca's Fusion checks 3-6 in `plan.md`); Ctrl pressed without moving
+  the mouse takes effect at the next move; FreeCAD's own line steps stay two undo steps.
 
 ## Next steps (in order)
 

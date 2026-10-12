@@ -208,6 +208,12 @@ def enable():
     if _state["on"]:
         return
     _state["on"] = True
+    try:
+        from .sketch_infer import repair_snap
+
+        repair_snap()
+    except Exception as exc:
+        warn("sketch snapping: %s" % exc)
     _save_and_apply(PARAMS + [(SNAP, "Bool", "SnapToGrid", option("snap"))])
     _patch_profilelib()
     try:
@@ -360,7 +366,17 @@ class _AppObserver:
 # change with its effect on the part, so that step is undone/redone together with the
 # sketch change before it.
 RECOMPUTE_STEP = "Sketch recompute"
+# Steps undone and redone together with the step before them: FreeCAD's recompute on
+# closing a sketch, and the constraints SciForge adds right after a click
+# (sketch_infer.py: Fusion adds them with the line itself).
+INFER_STEP = "Inferred Constraints"
+GLUED_STEPS = (RECOMPUTE_STEP, INFER_STEP)
 _merging = {"busy": False}
+
+
+def _glued_next(doc):
+    """The first step of the redo list goes with the step before it."""
+    return bool(doc.RedoNames) and doc.RedoNames[0] in GLUED_STEPS
 
 
 def _merge_recompute_step(doc, undo):
@@ -369,11 +385,11 @@ def _merge_recompute_step(doc, undo):
     try:
         if undo:
             # the step just undone is first in the redo list
-            go_on = bool(doc.RedoNames) and doc.RedoNames[0] == RECOMPUTE_STEP and doc.UndoNames
+            go_on = _glued_next(doc) and bool(doc.UndoNames)
         else:
-            # the step just redone is first in the undo list; the recompute that came
-            # with it is next in the redo list
-            go_on = bool(doc.RedoNames) and doc.RedoNames[0] == RECOMPUTE_STEP
+            # the step just redone is first in the undo list; a step glued to it is
+            # next in the redo list
+            go_on = _glued_next(doc)
     except Exception:
         return
     if go_on:
@@ -385,10 +401,14 @@ def _one_more_step(doc_name, undo):
     _merging["busy"] = True
     try:
         doc = App.getDocument(doc_name)
-        if undo and doc.UndoNames:
-            doc.undo()
-        elif not undo and doc.RedoNames:
-            doc.redo()
+        # several glued steps in a row (inferred constraints, then a recompute)
+        for _ in range(4):
+            if undo and doc.UndoNames:
+                doc.undo()
+            elif not undo and doc.RedoNames:
+                doc.redo()
+            if not _glued_next(doc) or (undo and not doc.UndoNames):
+                break
         if doc.isTouched() or any("Touched" in o.State for o in doc.Objects):
             doc.recompute()
     except Exception as exc:
@@ -609,6 +629,14 @@ class SketchSession:
         from .sketch_line import LineChain
 
         self.line = LineChain(self)
+        self.infer = None
+        try:
+            from .sketch_infer import Inference
+
+            # Fusion's guides, perpendicular and Ctrl while drawing (sketch_infer.py)
+            self.infer = Inference(self)
+        except Exception as exc:
+            warn("sketch inference: %s" % exc)
         self.fillet_watch = FilletRadius(self)
         self._refresh = QtCore.QTimer()
         self._refresh.setSingleShot(True)
@@ -637,6 +665,8 @@ class SketchSession:
 
     # -- changes ---------------------------------------------------------------------
     def changed(self, prop):
+        if self.infer is not None:
+            self.infer.invalidate()
         self._refresh.start()
 
     def _refreshed(self):
@@ -655,6 +685,11 @@ class SketchSession:
         already while it follows the mouse, so only a committed one counts."""
         grew = count > self.constraint_count
         self.constraint_count = count
+        if self.infer is not None:
+            try:
+                self.infer.commit_signal(kind)
+            except Exception as exc:
+                warn("sketch inference: %s" % exc)
         if kind == "commit":
             QtCore.QTimer.singleShot(0, self._repair)
             self.line.committed()
@@ -828,6 +863,8 @@ class SketchSession:
         if self.closed or editing_sketch() is not self.sketch:
             return
         self.line.stop()
+        if self.infer is not None:
+            self.infer.reset()
         try:
             from . import sketch_pick_ui, sketch_tools_ui
 
@@ -1005,6 +1042,11 @@ class SketchSession:
             return
         self.closed = True
         self.line.stop()
+        if self.infer is not None:
+            try:
+                self.infer.close()
+            except Exception as exc:
+                warn("sketch mode: %s" % exc)
         try:
             from . import sketch_pick_ui
 
@@ -1119,6 +1161,10 @@ class _ViewFilter(QtCore.QObject):
             session = self.session
             if session.closed:
                 return False
+            # Fusion's inference (sketch_infer.py) may hand FreeCAD a copy of the event
+            # with the point moved onto a guide; the copy comes back through here.
+            if session.infer is not None and session.infer.mouse(obj, event):
+                return True
             kind = event.type()
             if kind == QtCore.QEvent.MouseButtonPress:
                 session.last_press = event.position().toPoint()
