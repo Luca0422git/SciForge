@@ -99,10 +99,11 @@ def click_vertex(point):
 
     QtTest.QTest.mouseClick(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pos)
     QtWidgets.QApplication.processEvents()
-    h.state["last_click"] = "vertex click %s (found: %s); selected: %s" % (
+    h.state["last_click"] = "vertex click %s (found: %s); selected: %s; %s" % (
         (pos.x(), pos.y()),
         best is not None,
         selected(),
+        h.click_context(pos),
     )
     return best is not None
 

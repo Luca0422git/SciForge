@@ -430,6 +430,13 @@ def point_of(obj, sub, near=None):
         return None
     if element is None:
         return None
+    if sub.startswith("Vertex"):
+        try:
+            circle = seam_circle(obj.Shape, element)
+        except Exception:
+            circle = None
+        if circle is not None:
+            element, sub = circle, "Edge"  # the round edge it starts: its centre
     element = element.copy()
     try:
         parent = obj.getParentGeoFeatureGroup()
@@ -450,6 +457,24 @@ def point_of(obj, sub, near=None):
             return App.Vector(surface.Center)
         return element.CenterOfMass
     return None
+
+
+def seam_circle(shape, vertex):
+    """The full circle or ellipse that OpenCASCADE starts at `vertex`, when nothing but
+    seam lines also meet there: Fusion has no such point (a round edge has no corner), so a
+    click on it means the round edge. None for a real corner."""
+    found = None
+    for edge in shape.Edges:
+        if not any(v.isSame(vertex) for v in edge.Vertexes):
+            continue
+        if edge.isClosed():
+            if found is None and hasattr(edge.Curve, "Center"):
+                found = edge
+            continue
+        faces = [f for f in shape.Faces if any(e.isSame(edge) for e in f.Edges)]
+        if not any(edge.isSeam(f) for f in faces):
+            return None  # a real edge ends here: a real corner
+    return found
 
 
 def axis_of(obj, sub):

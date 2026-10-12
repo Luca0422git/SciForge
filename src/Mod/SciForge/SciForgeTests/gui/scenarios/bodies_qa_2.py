@@ -25,6 +25,8 @@ the timeline, typing into the dialog fields.
      (the browser's own Delete, as Luca tidies up): the Combine keeps its result. Undo.
   P  (on J's part) Point to Point, a click on the boss's round top edge right next to where
      OpenCASCADE starts the circle: the origin point is the circle's centre, as in Fusion.
+     Again, the click right on the point where the circle starts (a point Fusion does not
+     have; GitHub's renderer picked it): still the centre, not that point.
   O  Construct > Offset Plane 4 mm under the top face, then Split Body with that construction
      plane (picked in the browser): 7200 + 4800. Undo.
   Q  Appearance on the top face only (blue), then Move/Copy (X 50, Z 5, Z Angle 90): the top
@@ -769,6 +771,51 @@ def p_nothing_moved():
     h.check("Esc: dialog closed", s.panel() is None)
     c = bbox(s.bodies()[0]).Center
     h.check("nothing moved", (c - V(*state["p_box"])).Length < 1e-9, c)
+    h.click_empty()
+    h.press("m")
+
+
+def p_seam_body():
+    h.check("Move open again", s.panel() is not None)
+    h.click(V(32, 25, 35))
+
+
+def p_seam_type():
+    p = s.panel()
+    if p is not None:
+        h.check("body picked again", len(p.options["bodies"]) == 1, p.options)
+        b.choose(p.move_type, "Point to Point")
+
+
+def p_seam_point():
+    from SciForgeTests.gui import shell_draft_steps as sd
+
+    p = s.panel()
+    if p is not None:
+        h.check("origin point box waits again", p.active == "from_point", p.active)
+    sd.click_vertex(V(11, 8, 40))  # where OpenCASCADE starts the top circle
+    # (Move takes the point and clears the selection: what was under the mouse is in the
+    # click's note)
+    met = h.state.get("last_click", "").split("picked there:")[-1]
+    h.check("the circle's start point was clicked", "'Vertex" in met, h.state.get("last_click"))
+
+
+def p_seam_centre():
+    p = s.panel()
+    if p is not None:
+        got = p.options["from_point"]
+        h.check(
+            "that point gives the circle's centre (8, 8, 40)",
+            got is not None and (V(*got) - V(8, 8, 40)).Length < 1e-6,
+            (got, h.state.get("last_click")),
+        )
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def p_seam_nothing_moved():
+    h.check("Esc: dialog closed again", s.panel() is None)
+    c = bbox(s.bodies()[0]).Center
+    h.check("still nothing moved", (c - V(*state["p_box"])).Length < 1e-9, c)
 
 
 # == Q: a face's look follows the body when it is moved ==========================================
@@ -1044,6 +1091,11 @@ h.run(
         p_round_edge,
         p_centre,
         p_nothing_moved,
+        p_seam_body,
+        p_seam_type,
+        p_seam_point,
+        p_seam_centre,
+        p_seam_nothing_moved,
     ]
     + [s.new_design("QA_Three")]
     + s.box_steps("three_body1", (0, 0, 40, 30), 10, V(12, -8, 0))

@@ -146,6 +146,29 @@ def move(pos):
     QtWidgets.QApplication.processEvents()
 
 
+def click_context(pos):
+    """What a click at widget pixel `pos` met, for failure messages: the widget on top
+    there (a dialog floating over the view takes the click before the 3D view does), the
+    view's size and what FreeCAD picks at that very pixel. A pick that differs from the
+    pixel searched (another renderer, a moved camera) shows up here."""
+    widget = gl_widget()
+    try:
+        top = QtWidgets.QApplication.widgetAt(widget.mapToGlobal(pos))
+        on_top = "3D view" if top is widget else (top.metaObject().className() if top else None)
+        ratio = widget.devicePixelRatioF()
+        info = view().getObjectInfo((pos.x() * ratio, (widget.height() - pos.y()) * ratio))
+        picked = info and (info.get("Object"), info.get("Component"))
+        return "on top: %s; view %dx%d (Coin %s); picked there: %s" % (
+            on_top,
+            widget.width(),
+            widget.height(),
+            tuple(view().getSize()),
+            picked,
+        )
+    except Exception as exc:
+        return "click context: %s" % exc
+
+
 def under_mouse(point):
     info = view().getObjectInfo(view().getPointOnViewport(point))
     return info and (info.get("Object"), info.get("Component"))
@@ -159,7 +182,7 @@ def click(point, modifiers=QtCore.Qt.NoModifier, button=QtCore.Qt.LeftButton):
     QtTest.QTest.mouseClick(gl_widget(), button, modifiers, pos)
     QtWidgets.QApplication.processEvents()
     selected = [(s.ObjectName, s.SubElementNames) for s in Gui.Selection.getSelectionEx()]
-    state["last_click"] = "under mouse: %s; selected: %s" % (hit, selected)
+    state["last_click"] = "under mouse: %s; selected: %s; %s" % (hit, selected, click_context(pos))
     return hit
 
 
@@ -191,10 +214,11 @@ def click_edge(point, modifiers=QtCore.Qt.NoModifier):
     QtTest.QTest.mouseClick(widget, QtCore.Qt.LeftButton, modifiers, pos)
     QtWidgets.QApplication.processEvents()
     selected = [(s.ObjectName, s.SubElementNames) for s in Gui.Selection.getSelectionEx()]
-    state["last_click"] = "edge click %s (found: %s); selected: %s" % (
+    state["last_click"] = "edge click %s (found: %s); selected: %s; %s" % (
         (pos.x(), pos.y()),
         best is not None,
         selected,
+        click_context(pos),
     )
     return best is not None
 
