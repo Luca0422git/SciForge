@@ -3,17 +3,20 @@
 
 A block 40 x 30 x 10, isometric view. Right-click the cube: SciForge's menu (Go Home,
 Orthographic, Perspective, Set Current View as Home, Reset Home), Orthographic ticked, and
-not the marking menu of the 3D view. Perspective: the camera is a perspective one (ticked
+not the marking menu of the 3D view; a right click on a see-through corner of the cube's
+square is the view's (marking menu). Perspective: the camera is a perspective one (ticked
 in the menu next time); Orthographic: back. From FRONT, Go Home: the isometric view.
 Ctrl+Alt+V hides the cube, again shows it. Switching to the Part Design workbench (SciForge
 off): no SciForge cube, FreeCAD's own NaviCube is back; back to SciForge: the other way."""
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore
+from PySide import QtCore, QtWidgets
+from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import viewcube_input as vc
 
+st = {}
 ISO = App.Rotation(0.4247081321999479, 0.1759200437218226, 0.339851090706265, 0.8204732639190053)
 ENTRIES = ["Go Home", "Orthographic", "Perspective", "Set Current View as Home", "Reset Home"]
 
@@ -34,6 +37,41 @@ def menu():
         "the 3D view's marking menu did not open",
         marking_menu._last_menu["widget"] is None,
     )
+
+
+def corner_right_click():
+    """A right click on a see-through corner of the cube's square is for the 3D view."""
+    from sciforge import marking_menu
+
+    marking_menu._last_menu["widget"] = None
+    cube = vc.cube()
+    seen = []
+
+    def close_cube_menu():  # only if the cube's menu wrongly opened (it would wait forever)
+        for w in QtWidgets.QApplication.topLevelWidgets():
+            if w.objectName() == "SciForgeViewCubeMenu" and w.isVisible():
+                seen.append(w)
+                w.close()
+
+    QtCore.QTimer.singleShot(400, close_cube_menu)
+    corner = QtCore.QPoint(cube.width() - 3, cube.height() - 3)
+    h.check("nothing of the cube is drawn in that corner", cube.hit(corner.x(), corner.y()) is None)
+    vc._open_menu(cube, corner)
+    QtWidgets.QApplication.processEvents()
+    st["marking"] = marking_menu._last_menu["widget"]
+    st["marking_shown"] = st["marking"] is not None and st["marking"].isVisible()
+    st["cube_menu"] = seen
+
+
+def corner_done():
+    menu = st["marking"]
+    h.check(
+        "a right click on a see-through corner opens the view's marking menu",
+        st["marking_shown"],
+    )
+    h.check("and not the ViewCube menu", not st["cube_menu"])
+    if menu is not None and menu.isVisible():
+        QtTest.QTest.keyClick(menu, QtCore.Qt.Key_Escape)
 
 
 def perspective():
@@ -110,6 +148,8 @@ h.run(
     [
         setup,
         menu,
+        corner_right_click,
+        corner_done,
         perspective,
         perspective_done,
         orthographic_done,

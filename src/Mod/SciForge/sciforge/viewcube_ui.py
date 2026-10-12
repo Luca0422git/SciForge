@@ -239,6 +239,7 @@ class ViewCube(QtWidgets.QWidget):
         self.last = None
         self.dragging = False
         self.target = None  # (orientation, time) of the last arrow click
+        self.right_on_cube = False  # the right button went down on the cube
         self.place()
 
     # -- following the view ----------------------------------------------------------------
@@ -434,13 +435,16 @@ class ViewCube(QtWidgets.QWidget):
         try:
             button = event.button()
             pos = event.position()
+            target = self.hit(pos.x(), pos.y())
             if button == QtCore.Qt.RightButton:
-                event.accept()  # the menu opens from contextMenuEvent
+                # On the cube: its menu opens from contextMenuEvent. On a see-through corner:
+                # the 3D view's own right-click (the marking menu).
+                self.right_on_cube = target is not None
+                event.setAccepted(self.right_on_cube)
                 return
             if button != QtCore.Qt.LeftButton:
                 event.ignore()  # middle button: pan/orbit in the view underneath
                 return
-            target = self.hit(pos.x(), pos.y())
             if target is None:
                 event.ignore()  # see-through corner: the click is for the model behind
                 return
@@ -482,7 +486,7 @@ class ViewCube(QtWidgets.QWidget):
     def mouseReleaseEvent(self, event):
         try:
             if event.button() == QtCore.Qt.RightButton:
-                event.accept()
+                event.setAccepted(self.right_on_cube)
                 return
             if event.button() != QtCore.Qt.LeftButton or self.press is None:
                 event.ignore()
@@ -505,8 +509,12 @@ class ViewCube(QtWidgets.QWidget):
         event.ignore()
 
     def contextMenuEvent(self, event):
-        event.accept()
         try:
+            pos = event.pos()
+            if self.hit(pos.x(), pos.y()) is None:
+                event.ignore()  # a see-through corner: for the 3D view
+                return
+            event.accept()
             self.open_menu(event.globalPos())
         except Exception as exc:
             warn("ViewCube menu: %s" % exc)

@@ -54,10 +54,38 @@ def point(name):
 
 
 def hover(name):
+    """The mouse moves onto the part or button `name` (through the window system, which
+    also tells the cube the mouse came in). Under xvfb Qt now and then drops that test move
+    (the cube is on top, no mouse grab, no button down, no popup: it just never arrives);
+    then the move is given to the cube directly, and the run log says so."""
     pos = point(name)
-    if pos is not None:
-        QtTest.QTest.mouseMove(cube(), pos)
-        _process()
+    if pos is None:
+        return None
+    widget = cube()
+    QtTest.QTest.mouseMove(widget, pos)
+    _process()
+    if widget.hover != name:
+        top = QtWidgets.QApplication.widgetAt(widget.mapToGlobal(pos))
+        print(
+            "[SciForge] %s: the mouse move onto %s did not reach the cube (on top there: %s,"
+            " cube hover %s, mouse grabber %s, buttons %s, popup %s); moved again directly"
+            % (
+                h.state.get("name"),
+                name,
+                top.objectName() or top.metaObject().className() if top else None,
+                widget.hover,
+                QtWidgets.QWidget.mouseGrabber(),
+                QtWidgets.QApplication.mouseButtons(),
+                QtWidgets.QApplication.activePopupWidget(),
+            ),
+            flush=True,
+        )
+        if not widget.inside:
+            enter = QtGui.QEnterEvent(
+                QtCore.QPointF(pos), QtCore.QPointF(pos), QtCore.QPointF(widget.mapToGlobal(pos))
+            )
+            QtWidgets.QApplication.sendEvent(widget, enter)
+        _send_move(widget, pos, QtCore.Qt.NoButton)
     return pos
 
 
