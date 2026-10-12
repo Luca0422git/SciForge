@@ -68,6 +68,14 @@ class LoftPanel(Panel):
     last = None
 
     def __init__(self, doc, feature=None):
+        extra = []
+        if feature is not None:
+            try:
+                extra = [o for o, _ in loft.read(feature)[0] if extrude.is_sketch(o)]
+            except Exception:
+                extra = []
+        body = commands.find_body() if feature is None else loft.owner_body(feature)
+        curve_pick.prepare_regions(body, extra)  # before the undo step opens
         super().__init__(doc, "Loft" if feature is None else "Edit Loft")
         LoftPanel.last = self
         self.escape = preview.EscapeCancels(self)
@@ -258,6 +266,7 @@ class LoftPanel(Panel):
         self.activate("profiles")
         self._refresh_picks()
         self._collect()
+        self._auto_operation()
         if len(self.profiles) >= 2:
             self._picks_changed()
             self._timer.stop()
@@ -515,18 +524,23 @@ class LoftPanel(Panel):
         self._changed()
 
     def _auto_operation(self):
-        if self.user_picked_operation or len(self.profiles) < 2:
+        if self.user_picked_operation:
             return
         base = self._base_feature()
         shape = None
         if base is not None and not base.Shape.isNull():
             shape = curves.to_global(base.Shape, base)
-        try:
-            wanted = loft.auto_operation(
-                shape, self.profiles, self.rails, self.centerline, self.options
-            )
-        except Exception:
+        if shape is None or not shape.Solids:
+            wanted = "new_body"  # Fusion shows it from the start when there is no solid yet
+        elif len(self.profiles) < 2:
             return
+        else:
+            try:
+                wanted = loft.auto_operation(
+                    shape, self.profiles, self.rails, self.centerline, self.options
+                )
+            except Exception:
+                return
         if wanted != self.options["operation"]:
             self.options["operation"] = wanted
             self._quiet = True

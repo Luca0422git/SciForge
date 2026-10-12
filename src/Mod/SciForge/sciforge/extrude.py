@@ -97,9 +97,35 @@ def ensure_regions(sketch):
         sketch.MakeInternals = True
         with preview.quiet():  # a sketch FreeCAD cannot make areas from just has none
             sketch.recompute()
+        _remember_empty(sketch)
     elif sketch.InternalShape.isNull() and not sketch.Shape.isNull():
+        # A sketch with no closed area (a path, a rib line) never gets an InternalShape: it
+        # was recomputed every time a dialog looked for areas, and inside a dialog's undo
+        # step that recompute threw away the Redo list (sweep_loft_qa_sweep P4).
+        stamp = _stamp(sketch)
+        if stamp is not None and _EMPTY.get((sketch.Document.Name, sketch.Name)) == stamp:
+            return
         with preview.quiet():
             sketch.recompute()
+        _remember_empty(sketch)
+
+
+_EMPTY = {}  # (document, sketch) -> stamp of a sketch shape that has no closed area
+
+
+def _stamp(sketch):
+    try:
+        return sketch.Shape.hashCode()
+    except Exception:
+        return None
+
+
+def _remember_empty(sketch):
+    try:
+        if sketch.InternalShape.isNull():
+            _EMPTY[(sketch.Document.Name, sketch.Name)] = _stamp(sketch)
+    except Exception:
+        pass
 
 
 def regions(sketch):

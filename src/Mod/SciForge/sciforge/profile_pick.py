@@ -279,7 +279,8 @@ def used_sketches(doc):
     """Names of sketches some extrude-like feature already uses as its profile."""
     used = set()
     for obj in doc.Objects:
-        for prop in ("Profile", "Profiles", "Support"):
+        # Sections: the other profiles of FreeCAD's Loft (they were offered again as unused)
+        for prop in ("Profile", "Profiles", "Sections", "Support"):
             if prop not in obj.PropertiesList:
                 continue
             value = getattr(obj, prop)

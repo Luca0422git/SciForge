@@ -105,6 +105,11 @@ class PlanePicker:
 
     def plane_at(self, position):
         """Role of the nearest origin square under the mouse, or None."""
+        found = self._square_at(position)
+        return found[0] if found else None
+
+    def _square_at(self, position):
+        """(role, distance along the mouse ray) of the nearest origin square, or None."""
         from .profile_pick import ray_plane
 
         best = None
@@ -119,12 +124,32 @@ class PlanePicker:
             if abs(local.dot(u)) <= h and abs(local.dot(v)) <= h:
                 if best is None or t < best[1]:
                     best = (role, t)
-        return best[0] if best else None
+        return best
 
     def _geometry_at(self, position):
-        """True if the part (not the empty background) is under the mouse."""
+        """True if the part (not the empty background) is under the mouse, or a construction
+        plane in front of the origin squares."""
         info = self.view.getObjectInfo(tuple(position))
-        return bool(info and info.get("Object") and info.get("Component", "").startswith("Face"))
+        if not (info and info.get("Object")):
+            return False
+        if info.get("Component", "").startswith("Face"):
+            return True
+        # A construction plane (an Offset Plane for a loft's next profile) is picked as a
+        # whole object, not a face: the origin square behind it took the click and the
+        # sketch landed on XZ (found by the sweep / loft QA, sweep_loft_qa_loft).
+        try:
+            doc = Gui.ActiveDocument.Document
+            obj = doc.getObject(str(info.get("Object")))
+            if obj is None or obj.TypeId not in ("PartDesign::Plane", "App::Plane"):
+                return False
+            from .profile_pick import mouse_ray
+
+            start, direction = mouse_ray(self.view, position)
+            spot = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
+            square = self._square_at(position)
+            return square is None or (spot - start).dot(direction) <= square[1] + 1e-6
+        except Exception:
+            return False
 
     def _moved(self, info):
         try:

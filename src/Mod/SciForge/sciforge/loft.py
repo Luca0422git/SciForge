@@ -407,6 +407,8 @@ def auto_operation(base_shape, profiles, rail_refs, centerline_refs, options):
         tool = tool_shape(profiles, rail_refs, centerline_refs, options)
         inside = base_shape.common(tool).Volume
         outside = tool.Volume - inside
+        if inside < 1e-9 and base_shape.distToShape(tool)[0] > 1e-6:
+            return "new_body"  # Fusion: a loft that does not touch the part is a new body
     except Exception:
         return "join"
     return "cut" if inside > outside + 1e-6 * max(1.0, tool.Volume) else "join"
@@ -519,7 +521,11 @@ class LoftFeature:
         if result.isNull() or not result.Solids or result.Volume < TOL:
             if operation == "Cut":
                 raise LoftError("This cut would remove the whole body.")
-            raise LoftError("The loft does not overlap the body, so Intersect would leave nothing.")
+            if operation == "Intersect":
+                raise LoftError(
+                    "The loft does not overlap the body, so Intersect would leave nothing."
+                )
+            raise LoftError("The loft has no volume. Check the profiles.")
         if operation == "Cut" and abs(result.Volume - base.Shape.Volume) < 1e-9:
             raise LoftError("The cut does not touch the body. Move the profiles.")
         obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
@@ -680,11 +686,13 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
         if owner_body(feature) is target and same:
             _update(feature, profiles, rail_refs, centerline_refs, options, hide)
             return feature
-        blocking = extrude.dependents(feature)
+        # Rebuilt in its own body, later steps are moved onto the new step (relink_users
+        # below); only a move to another body cannot take them along.
+        blocking = [] if owner_body(feature) is target else extrude.dependents(feature)
         if blocking:
             raise LoftError(
-                "%s is used by %s, so it cannot change this way here. Make a new loft instead."
-                % (feature.Label, ", ".join(o.Label for o in blocking))
+                "%s is used by %s, so it cannot move to a new body. Use Join, or make a new "
+                "loft." % (feature.Label, ", ".join(o.Label for o in blocking))
             )
     old_meta = load_meta(feature) if feature is not None else {}
     created = None
@@ -705,6 +713,8 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
     except Exception:
         _remove(new, keep_body=created is None or before is not None)
         raise
+    if before is not None and curves.computed(new):
+        curves.relink_users(feature, new)
     if feature is not None:
         label = feature.Label
         old_body = owner_body(feature)

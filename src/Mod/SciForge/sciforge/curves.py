@@ -118,6 +118,115 @@ def label(refs):
     return "%d curve%s (%s)" % (count, "" if count == 1 else "s", ", ".join(names))
 
 
+# -- later steps that use a sweep / loft rebuilt as another kind of feature -----------------
+# An edit can need the other kind of feature (FreeCAD's Pipe has no Distance, taper or twist,
+# SciForge's sweep has), so the step is rebuilt as a new object in the same place. Fusion
+# keeps what was built on it (a sketch on its end face, a fillet on its edges), while
+# FreeCAD clears every link to a deleted object. Before the old step goes, every link of a
+# later step to it is moved to the new one, each face / edge / corner found again on the new
+# shape: the same place, else the same kind facing the same way nearest to where it was (an
+# end face that moved because the sweep got shorter).
+_CHAIN = {"BaseFeature", "_Body", "Group", "Tip", "Origin"}
+
+
+def _element(sub):
+    short = (sub or "").split(".")[-1].lstrip("?")
+    return short if short.startswith(("Face", "Edge", "Vertex")) else ""
+
+
+def relink_users(old, new):
+    """Point every link of the objects using `old` (but not the body's own history chain) at
+    `new`, which must be computed. Returns the objects changed."""
+    from . import follow
+
+    if old is None or new is None or old is new:
+        return []
+    users = [
+        o
+        for o in old.InList
+        if o is not new and o.TypeId not in ("PartDesign::Body", "App::Part", "App::Origin")
+    ]
+    if not users:
+        return []
+    try:
+        old_shape = None if old.Shape.isNull() else old.Shape
+        new_shape = None if new.Shape.isNull() else new.Shape
+    except Exception:
+        old_shape = new_shape = None
+    cache = {}
+
+    def mapped(sub):
+        short = _element(sub)
+        if not short or old_shape is None or new_shape is None:
+            return sub
+        if short not in cache:
+            try:
+                found = follow.find(new_shape, old_shape.getElement(short))
+            except Exception:
+                found = None
+            cache[short] = found or short
+        return cache[short]
+
+    def swapped(value):
+        if value is None:
+            return value, False
+        if hasattr(value, "TypeId"):
+            return (new, True) if value is old else (value, False)
+        if isinstance(value, tuple) and len(value) == 2 and hasattr(value[0], "TypeId"):
+            obj, subs = value
+            if obj is not old:
+                return value, False
+            if isinstance(subs, str):
+                return (new, mapped(subs)), True
+            return (new, [mapped(s) for s in subs]), True
+        if isinstance(value, (list, tuple)):
+            out, changed = [], False
+            for item in value:
+                one, did = swapped(item)
+                out.append(one)
+                changed = changed or did
+            return out, changed
+        return value, False
+
+    changed = []
+    for user in users:
+        for prop in user.PropertiesList:
+            if prop in _CHAIN:
+                continue
+            try:
+                kind = user.getTypeIdOfProperty(prop)
+            except Exception:
+                continue
+            if not kind.startswith(("App::PropertyLink", "App::PropertyXLink")):
+                continue
+            try:
+                value, did = swapped(getattr(user, prop))
+                if not did:
+                    continue
+                setattr(user, prop, value)
+            except Exception:
+                continue  # that step then reports the lost link itself, like any other
+            if user not in changed:
+                changed.append(user)
+    return changed
+
+
+def computed(obj):
+    """Recompute `obj` on its own (its base is up to date) without messages; True if it has a
+    shape then."""
+    from .preview import quiet
+
+    try:
+        with quiet():
+            obj.recompute()
+    except Exception:
+        pass
+    try:
+        return not obj.Shape.isNull()
+    except Exception:
+        return False
+
+
 # -- chains --------------------------------------------------------------------------------
 def _ends(edge):
     """((start point, direction leaving the start), (end point, direction leaving the end))."""

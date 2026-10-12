@@ -241,11 +241,27 @@ class Plan:
         return found
 
 
+def _check_crossing(path, s_p, faces):
+    """A path that runs along the profile's own plane sweeps nothing (a flat sliver)."""
+    try:
+        tangent = path.tangent_at(s_p)
+        normal = _profile_normal(faces[0])
+        along = abs(tangent.dot(normal)) / max(tangent.Length * normal.Length, 1e-12)
+    except Exception:
+        return
+    if along < 1e-3:
+        raise SweepError(
+            "The path lies in the profile's plane, so nothing would be swept. Draw the path "
+            "in a sketch on another plane, so that it runs through the profile."
+        )
+
+
 def plan(profiles, path_refs, options):
     options = options_with_defaults(options)
     faces = profile_faces(check_profiles(profiles))
     path = make_path(path_refs)
     s_p, _point = station(path, faces)
+    _check_crossing(path, s_p, faces)
     return Plan(path, s_p, options)
 
 
@@ -481,6 +497,7 @@ def tool_shape(profiles, path_refs, rail_refs, options):
     faces = profile_faces(profiles)
     path = make_path(path_refs)
     s_p, _point = station(path, faces)
+    _check_crossing(path, s_p, faces)
     layout = Plan(path, s_p, options)
     rail = None
     if not single(options):
@@ -534,6 +551,8 @@ def auto_operation(base_shape, profiles, path_refs, rail_refs, options):
         tool = tool_shape(profiles, path_refs, rail_refs, options)
         inside = base_shape.common(tool).Volume
         outside = tool.Volume - inside
+        if inside < 1e-9 and base_shape.distToShape(tool)[0] > 1e-6:
+            return "new_body"  # Fusion: a sweep that does not touch the part is a new body
     except Exception:
         return "join"
     return "cut" if inside > outside + 1e-6 * max(1.0, tool.Volume) else "join"
@@ -662,9 +681,11 @@ class SweepFeature:
         if result.isNull() or not result.Solids or result.Volume < TOL:
             if operation == "Cut":
                 raise SweepError("This cut would remove the whole body.")
-            raise SweepError(
-                "The sweep does not overlap the body, so Intersect would leave nothing."
-            )
+            if operation == "Intersect":
+                raise SweepError(
+                    "The sweep does not overlap the body, so Intersect would leave nothing."
+                )
+            raise SweepError("The sweep has no volume. Check that the path crosses the profile.")
         if operation == "Cut" and abs(result.Volume - base.Shape.Volume) < 1e-9:
             raise SweepError("The cut does not touch the body. Move the profile or the path.")
         obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
@@ -839,11 +860,13 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
         if owner_body(feature) is target and same:
             _update(feature, profiles, path_refs, rail_refs, options, hide)
             return feature
-        blocking = [o for o in extrude.dependents(feature)]
+        # Rebuilt in its own body, later steps are moved onto the new step (relink_users
+        # below); only a move to another body cannot take them along.
+        blocking = [] if owner_body(feature) is target else extrude.dependents(feature)
         if blocking:
             raise SweepError(
-                "%s is used by %s, so it cannot change this way here. Make a new sweep instead."
-                % (feature.Label, ", ".join(o.Label for o in blocking))
+                "%s is used by %s, so it cannot move to a new body. Use Join, or make a new "
+                "sweep." % (feature.Label, ", ".join(o.Label for o in blocking))
             )
     old_meta = load_meta(feature) if feature is not None else {}
     created = None
@@ -864,6 +887,8 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
     except Exception:
         _remove(new, keep_body=created is None or before is not None)
         raise
+    if before is not None and curves.computed(new):
+        curves.relink_users(feature, new)
     if feature is not None:
         label = feature.Label
         old_body = owner_body(feature)
