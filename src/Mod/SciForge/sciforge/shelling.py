@@ -37,7 +37,11 @@ FP_TYPE = "PartDesign::FeaturePython"
 KIND = "Shell"
 META = "SciForgeShell"  # hidden JSON on the feature: what FreeCAD's Thickness cannot hold
 TOL = 1e-7
-TAG_BASE = 1 << 40  # wall tags (see _tagged): far from FreeCAD's object ids
+# Wall tags (see _tagged): far from FreeCAD's object ids, and small enough for a C "long"
+# on Windows (32 bits there: 1 << 40 failed every Shell Both with "Python int too large
+# to convert to C long" in the Windows build, 2026-10-12).
+TAG_BASE = 1 << 30
+TAG_MAX = (1 << 31) - 1
 RIM_SPOTS = (0.5, 0.375, 0.625, 0.25, 0.75, 0.125, 0.875, 0.0)  # where an arrow may sit
 SMOOTH = math.radians(1.0)
 DIRECTIONS = ("inside", "outside", "both")
@@ -221,6 +225,8 @@ def _tagged(shapes, tags):
     if not tags:
         return
     for shape, tag in zip(shapes, tags):
+        if not 0 < int(tag) <= TAG_MAX:
+            continue  # FreeCAD would fail the whole step on a tag it cannot hold
         try:
             shape.Tag = int(tag)
         except Exception:
@@ -233,7 +239,8 @@ def wall_tags(feature):
         ident = int(feature.ID)
     except Exception:
         return None
-    return (TAG_BASE + 2 * ident, TAG_BASE + 2 * ident + 1)
+    tags = (TAG_BASE + 2 * ident, TAG_BASE + 2 * ident + 1)
+    return tags if tags[1] <= TAG_MAX else None
 
 
 def build(shape, names, options, tags=None):

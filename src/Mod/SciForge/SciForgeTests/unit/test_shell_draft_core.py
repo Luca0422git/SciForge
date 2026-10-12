@@ -58,6 +58,23 @@ class ShellOptionTests(unittest.TestCase):
         self.assertIn("thinner", shelling.too_thick("inside", 20))
         self.assertIn("thinner", shelling.friendly("Failed to make thick solid"))
 
+    def test_wall_tags_fit_windows(self):
+        # FreeCAD keeps a shape's tag in a C "long": 32 bits on Windows. A bigger tag
+        # failed every Shell Both there (Windows build, 2026-10-12).
+        class Feature:
+            ID = 123456
+
+        tags = shelling.wall_tags(Feature())
+        self.assertEqual(len(set(tags)), 2)
+        for tag in tags:
+            self.assertTrue(0 < tag <= (1 << 31) - 1, tag)
+            self.assertGreater(tag, 1 << 24)  # far from FreeCAD's object ids
+
+        class Huge:
+            ID = 1 << 31
+
+        self.assertIsNone(shelling.wall_tags(Huge()))
+
 
 class ShellDraftScaleSchemaTests(unittest.TestCase):
     def test_good_models(self):

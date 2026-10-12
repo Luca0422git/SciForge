@@ -1941,6 +1941,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
   agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
   (they appear in the job log).
+- Full build run #3 (31239bf4a0, started by Claude): both platforms compiled and packaged;
+  Linux tests passed and the AppImage was uploaded. Windows golden: 275 pass, 2 errors
+  (`sf_shell_both`, `sf_shell_both_edit_presspull`: "sh1 failed to compute"), so no .7z.
+  Cause: Shell Both tags its two walls `1 << 40 + 2 * ID` (`shelling.TAG_BASE`), and FreeCAD
+  keeps a shape's tag in a C `long`, which is 32 bits on Windows: "Python int too large to
+  convert to C long", so every Shell Both failed on Windows (for Luca too, since the
+  2026-10-11 Shell QA). Reproduced on Linux with a tag past 64 bits (same 2 errors, same 9
+  passes). Fix: `TAG_BASE = 1 << 30`, tags above 2**31 - 1 skipped; unit test
+  `test_wall_tags_fit_windows`. Lesson: any number handed to FreeCAD's C++ must fit 32 bits
+  (Windows `long`).
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
@@ -1986,8 +1996,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 2. Luca installs the newest green quick update and redoes his session; ask for the copyable
    SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
    screenshot (slot order).
-3. Full Windows build to get core patches #4, #6, #7 compiled (CI `sciforge-build.yml`); check
-   golden `plate_hole_grid` PASS there.
+3. Full Windows build: patches #4, #6, #7 compile (run #2/#3, `plate_hole_grid` PASS). Run #3's
+   .7z was held back by the Shell Both tag bug (fixed 2026-10-12): a Windows-only build of
+   the fix gives Luca the download.
 4. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
 5. Spike 9.2 (Fillets): 100+ case benchmark from real part workflows, success-rate metric.
 6. Branding pass (app name, icons, user-data folder, installer) so CI can ship an installer.
