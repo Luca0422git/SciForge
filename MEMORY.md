@@ -1872,6 +1872,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   of the new rules: unit OK, golden 276 + 1 xfail, smoke and journey PASS, 6 scenarios PASS.
   The build's Linux test now runs unit/golden/smoke/journey; the scenarios run on the built
   AppImage in a separate 4-part job that does not hold up the uploads.
+- ViewCube (plan B, Python, merged 62cf7836c6): `viewcube.py` (geometry, views, turntable
+  drag, arrows, hit-test, Home storage; no Qt) + `viewcube_ui.py` (QPainter widget over the
+  view); FreeCAD's NaviCube hidden via `VIEWER_SETTINGS` (`ShowNaviCube`). Click a face /
+  edge / corner (animated), drag = constrained orbit, face-on triangles (90 degrees) and
+  roll arrows, Home in `doc.Meta["SciForgeHome"]` (saved), right-click menu (Go Home,
+  Orthographic/Perspective, Set Home: Fit / Fixed Distance, Reset Home), Ctrl+Alt+V,
+  X/Y/Z triad. Scenarios `viewcube_click/_drag/_arrows/_home/_menu` (each fails without the
+  feature). Open: Fusion checks (arrow set, default Home corner, snap after a drag),
+  Perspective with Ortho Faces, Go Home in one move. Also fixed `marking_menu._install`
+  watching a view being deleted (traceback on close + open).
 - Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
   agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
   (they appear in the job log).
