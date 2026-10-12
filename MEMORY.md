@@ -1854,6 +1854,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     not reproduce it, so a click's note now says what was on top ("on top: TaskPanel"
     proved it). `h.click`, `h.click_edge` and the corner click pan the view first when the
     dialog covers the point (`h.uncover`); `harness_covered_click` checks that.
+- CI green on d005d2d92a (run #61, all 5 parts, about 33 minutes): its quick update has
+  everything up to this session.
 - Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
   agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
   (they appear in the job log).
