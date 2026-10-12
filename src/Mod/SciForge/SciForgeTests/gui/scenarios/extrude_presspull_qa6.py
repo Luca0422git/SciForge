@@ -20,6 +20,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -98,7 +99,7 @@ def extrude_prism():
 
 def prism_depth():
     p = xpanel()
-    h.check("trapezoid picked by itself", p.target is not None, p.message.text())
+    h.check("trapezoid picked by itself", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "20")
 
 
@@ -180,7 +181,7 @@ def p26_e():
 
 def p26_type():
     p = xpanel()
-    h.check("the circle picked by itself", p.target is not None, p.message.text())
+    h.check("the circle picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("Join out of the slope", p.operation.currentText() == "Join", p.operation.currentText())
     h.check("distance arrow and taper handle", {"distance", "taper"} <= set(p.draggers))
     ui.type_into(p.distance.widget, "5")
@@ -280,9 +281,10 @@ def p28_extruding():
     h.check("E in a sketch leaves it", h.in_sketch() is None)
     h.check(
         "and starts Extrude on its profile",
-        p is not None and not p._closed and p.target is not None,
+        p is not None and not p._closed and len(p.profiles) == 1,
         p and p.message.text(),
     )
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 

@@ -15,6 +15,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -67,6 +68,7 @@ def extrude_box():
 
 
 def box_ok():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 
@@ -365,7 +367,7 @@ def trapezoid_depth():
     from sciforge import extrude_ui
 
     p = extrude_ui.ExtrudePanel.last
-    h.check("trapezoid picked by itself", p.target is not None, p.message.text())
+    h.check("trapezoid picked by itself", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "20")
 
 
@@ -453,10 +455,11 @@ def became_extrude():
     e = extrude_ui.ExtrudePanel.last
     h.check(
         "Press Pull on a sketch area starts Extrude on it",
-        e is not None and not e._closed and e.target is not None,
+        e is not None and not e._closed and len(e.profiles) == 1,
         e and e.message.text(),
     )
     h.check("the Press Pull dialog is gone", panel()._closed)
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 

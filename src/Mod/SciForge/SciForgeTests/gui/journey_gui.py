@@ -222,8 +222,10 @@ def step_extrude_click():
 
 def step_extrude_drag():
     panel = state["panel"]
-    check("Clicking inside the profile starts the extrude", panel.target is not None)
-    if panel.target is None or panel.dragger is None:
+    # The dialog starts at 0 (Fusion): the profile is picked and the arrow is there to drag.
+    check("Clicking inside the profile starts the extrude", len(panel.profiles) == 1)
+    if panel.dragger is None:
+        check("the distance arrow is there", False)
         return
     fit()
     head = App.Vector(20, 15, panel.dragger.distance() + panel.dragger.size * 0.9)
@@ -235,7 +237,7 @@ def step_extrude_drag():
 def step_extrude_ok():
     panel = state["panel"]
     distance = panel.distance.value()
-    check("Dragging the arrow changes the distance", distance > 10.5, distance)
+    check("Dragging the arrow changes the distance", distance > 0.5, distance)
     check("Extrude preview has no error", panel.message.text() == "", panel.message.text())
     shot("journey-3-extrude.png")
     panel.distance.widget.setProperty("rawValue", 10.0)

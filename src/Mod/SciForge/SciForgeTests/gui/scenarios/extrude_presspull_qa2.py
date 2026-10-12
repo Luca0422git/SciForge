@@ -19,6 +19,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -135,7 +136,7 @@ def extrude_steps(tag, distance, check=None):
     def typed():
         p = xpanel()
         h.check(
-            "extrude %s: profile picked by itself" % tag, p.target is not None, p.message.text()
+            "extrude %s: profile picked by itself" % tag, len(p.profiles) == 1, p.message.text()
         )
         ui.type_into(p.distance.widget, "%g" % distance)
 
@@ -227,7 +228,7 @@ def p7_pp_end_done():
 
 def p7_hole_cut():
     p = xpanel()
-    h.check("hole profile picked by itself", p.target is not None, p.message.text())
+    h.check("hole profile picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("choose Operation: Cut", ui.choose(p.operation, "Cut"))
     h.check("choose Extent: All", ui.choose(p.extent, "All"))
 
@@ -320,8 +321,9 @@ def p8_new():
 
 def p8_new_body():
     p = xpanel()
-    h.check("square on the block picked by itself", p.target is not None, p.message.text())
+    h.check("square on the block picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("choose Operation: New Body", ui.choose(p.operation, "New Body"))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p8_new_body_ok():
@@ -435,6 +437,7 @@ def p9_e():
 
 def p9_ring():
     h.click(V(3, 3, 0))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p9_ring_ok():
@@ -481,7 +484,7 @@ def p9_ring_followed():
 
 def p9_intersect():
     p = xpanel()
-    h.check("square on the ring picked", p.target is not None, p.message.text())
+    h.check("square on the ring picked", len(p.profiles) == 1, p.message.text())
     h.check("choose Operation: Intersect", ui.choose(p.operation, "Intersect"))
     ui.type_into(p.distance.widget, "-6")
 

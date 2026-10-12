@@ -23,6 +23,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import widget_input as w
@@ -173,6 +174,7 @@ def p10_e():
 
 def p10_ring():
     h.click(V(3, 3, 0))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p11_both():
@@ -213,6 +215,7 @@ def p10_regions_offered():
     h.view().fitAll()
     QtWidgets.QApplication.processEvents()
     h.click(V(20, 15, 0))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p10_disc():
@@ -237,7 +240,7 @@ def p11_boss_e():
 
 def p11_boss_type():
     p = xpanel()
-    h.check("boss circle picked by itself", p.target is not None, p.message.text())
+    h.check("boss circle picked by itself", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "5")
 
 
@@ -319,7 +322,7 @@ def p12_rolled():
 
 def p12_extrude():
     p = xpanel()
-    h.check("square on the rolled-back part picked", p.target is not None, p.message.text())
+    h.check("square on the rolled-back part picked", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "4")
 
 
@@ -558,7 +561,7 @@ h.run(
         p14_new,
         *sketch_on("base", V(12, -8, 0), rect(0, 0, 40, 30, 0)),
         step(lambda: (h.fit(), h.press("e")), "p14_base_e"),
-        step(lambda: h.task_button("OK"), "p14_base_ok"),
+        step(lambda: (arrows.type_distance("10"), h.task_button("OK")), "p14_base_ok"),
         *sketch_on("a", V(20, 15, 10), rect(2, 2, 8, 8, 10)),
         *sketch_on("b", V(20, 15, 10), rect(30, 20, 36, 26, 10)),
         p14_e,

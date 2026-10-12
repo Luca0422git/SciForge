@@ -16,6 +16,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -91,6 +92,7 @@ def waiting_for_profiles():
 
 def click_ring():
     h.click(V(5, 5, 0))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def ring_extruded():
@@ -255,7 +257,7 @@ def cancel_pick_face():
 
 def cancel_type():
     p = panel()
-    h.check("a click on the top face starts a face extrude", p.target is not None, p.message.text())
+    h.check("a click on the top face starts a face extrude", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "5")
 
 
@@ -284,7 +286,7 @@ def second_pick():
 
 def second_type():
     p = panel()
-    h.check("second extrude picked the top face", p.target is not None, p.message.text())
+    h.check("second extrude picked the top face", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "5")
 
 

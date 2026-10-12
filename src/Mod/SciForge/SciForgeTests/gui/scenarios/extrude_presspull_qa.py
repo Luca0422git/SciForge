@@ -23,6 +23,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -263,6 +264,7 @@ def p2_then_ring():
     p = xpanel()
     h.check("disc picked", len(p.profiles) == 1, p.profiles)
     h.click(V(5, 5, 0))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p2_both():
@@ -286,11 +288,12 @@ def p2b_e():
 def p2b_face():
     h.fit()
     h.click(V(30, 25, 10))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p2b_face_picked():
     p = xpanel()
-    h.check("the top face starts a face extrude", p.target is not None, p.message.text())
+    h.check("the top face starts a face extrude", len(p.profiles) == 1, p.message.text())
     h.check("preview grows the block", h.solid_volume() > 12000.5, h.solid_volume())
     # The preview now covers the picked face: a person clicks the same face where it is
     # shown, at the end of the preview.
@@ -343,7 +346,7 @@ def p3_e():
 
 def p3_type_fast():
     p = xpanel()
-    h.check("the column profile is picked by itself", p.target is not None, p.message.text())
+    h.check("the column profile is picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("Join out of the part", p.operation.currentText() == "Join", p.operation.currentText())
     # Two values typed back to back: the preview of the first is still pending.
     ui.type_into(p.distance.widget, "25")
@@ -410,7 +413,12 @@ def p3_far_down():
 
 def p3_zero():
     p = xpanel()
-    h.check("zero: the dialog says so", "zero" in p.message.text().lower(), p.message.text())
+    from sciforge import extrude_ui
+
+    # Like a new Extrude at 0: no preview stays, the dialog says what to do (no warning).
+    h.check("zero: no preview left", p.target is None and near(h.solid_volume(), 12000.0),
+            (p.target, h.solid_volume()))
+    h.check("zero: the dialog says so", p.info.text() == extrude_ui.ZERO_HINT, p.info.text())
     h.task_button("OK")
 
 
@@ -521,11 +529,12 @@ def p4_e_in_pp():
     s["volume"] = h.solid_volume()
     h.fit()
     h.click(V(30, 25, 12))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p4_extrude_face():
     p = xpanel()
-    h.check("face extrude preview", p.target is not None, p.message.text())
+    h.check("face extrude preview", len(p.profiles) == 1, p.message.text())
     h.check("preview grows the part", h.solid_volume() > s["volume"] + 1.0, h.solid_volume())
     s["objects"] = len(doc().Objects)
     h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)

@@ -129,6 +129,21 @@ def box_near(box, dragger, pixels=150):
     )
 
 
+def type_distance(text="10"):
+    """Type a distance into the open Extrude dialog's Distance field, as a person does
+    (the dialog starts at 0, like Fusion's: nothing is built until a distance is given).
+    False when no Extrude dialog is open."""
+    from sciforge import extrude_ui
+
+    from SciForgeTests.gui import dialog_input as ui
+
+    panel = extrude_ui.ExtrudePanel.last
+    if panel is None or panel._closed:
+        return False
+    ui.type_into(panel.distance.widget, text)
+    return True
+
+
 def focus_name():
     widget = QtWidgets.QApplication.focusWidget()
     if widget is None:

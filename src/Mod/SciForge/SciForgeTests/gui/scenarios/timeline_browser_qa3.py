@@ -26,6 +26,7 @@ import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 from PySide6 import QtTest
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
@@ -88,12 +89,13 @@ def p12_extrude():
 
 def p12_new_body():
     p = xpanel()
-    h.check("Extrude picked the square", p is not None and p.target is not None)
+    h.check("Extrude picked the square", p is not None and bool(p.profiles))
     if p is not None:
         h.check("choose New Body", ui.choose(p.operation, "New Body"))
 
 
 def p12_ok():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 
