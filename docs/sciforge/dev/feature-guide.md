@@ -83,7 +83,10 @@ Picking:
   traceback, after every step. Click one step **after** the key/button that opened a task panel
   (the panel narrows the 3D view). Call `h.fit()` before computing click points. Click edges
   with `h.click_edge(point)` (it aims within a few pixels like a person does; the CI's software
-  renderer rounds differently and a plain click on an outline edge hit the face next to it). Cover: the happy
+  renderer rounds differently and a plain click on an outline edge hit the face next to it).
+  The command dialog floats over the right of the view and is wider on some machines (fonts):
+  `h.click`, `h.click_edge` and the corner click pan the view first when it covers the point
+  (`h.uncover`); a failed check's note says what was on top. Cover: the happy
   path, editing the feature again (double-click it in the timeline, or `Gui.ActiveDocument.setEdit`
   if that is how the timeline does it), Cancel leaving the model unchanged, undo/redo, and the
   "nothing selected yet" start. Import `QtTest` from `PySide6` (FreeCAD's `PySide` shim has

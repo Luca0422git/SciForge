@@ -146,6 +146,59 @@ def move(pos):
     QtWidgets.QApplication.processEvents()
 
 
+def covered(pos):
+    """The widget over the 3D view at widget pixel `pos` (a command dialog floats over the
+    view and takes a click there), or None when the click reaches the view."""
+    widget = gl_widget()
+    top = QtWidgets.QApplication.widgetAt(widget.mapToGlobal(pos))
+    return None if top is None or top is widget else top
+
+
+def pan(dx, dy):
+    """Slide what the view shows by (dx, dy) widget pixels, as a person pans."""
+    widget = gl_widget()
+    ratio = widget.devicePixelRatioF()
+    cx, cy = widget.width() / 2.0, widget.height() / 2.0
+    a = view().getPoint(int(cx * ratio), int((widget.height() - cy) * ratio))
+    b = view().getPoint(int((cx + dx) * ratio), int((widget.height() - cy - dy) * ratio))
+    camera = view().getCameraNode()
+    p = camera.position.getValue()
+    shift = App.Vector(*a) - App.Vector(*b)
+    camera.position.setValue(p[0] + shift.x, p[1] + shift.y, p[2] + shift.z)
+    QtWidgets.QApplication.processEvents()
+
+
+def uncover(point):
+    """Like a person whose target is under the command dialog: pan the view until the 3D
+    point is clear of it (the dialog's width depends on the machine's fonts; on GitHub's
+    runner it covered a box corner the local run could click). True when it panned."""
+    widget = gl_widget()
+    pos = screen_point(point)
+    if not covered(pos):
+        return False
+    margin = 30
+    for step in range(1, 40):
+        for dx, dy in ((-1, 0), (0, 1), (0, -1), (1, 0)):
+            target = QtCore.QPoint(pos.x() + dx * 25 * step, pos.y() + dy * 25 * step)
+            inside = margin < target.x() < widget.width() - margin
+            inside = inside and margin < target.y() < widget.height() - margin
+            if inside and not covered(target):
+                pan(target.x() - pos.x(), target.y() - pos.y())
+                print(
+                    "[SciForge] %s: %s was under %s; panned the view %+d, %+d px"
+                    % (
+                        state.get("name"),
+                        tuple(round(c, 3) for c in point),
+                        covered(pos).metaObject().className() if covered(pos) else "a widget",
+                        target.x() - pos.x(),
+                        target.y() - pos.y(),
+                    ),
+                    flush=True,
+                )
+                return True
+    return False
+
+
 def click_context(pos):
     """What a click at widget pixel `pos` met, for failure messages: the widget on top
     there (a dialog floating over the view takes the click before the 3D view does), the
@@ -176,6 +229,7 @@ def under_mouse(point):
 
 def click(point, modifiers=QtCore.Qt.NoModifier, button=QtCore.Qt.LeftButton):
     """Click on the 3D point; remembers what was under the mouse and what got selected."""
+    uncover(point)
     pos = screen_point(point)
     move(pos)
     hit = under_mouse(point)
@@ -191,6 +245,7 @@ def click_edge(point, modifiers=QtCore.Qt.NoModifier):
     differently (the CI's software OpenGL picked the face next to an outline edge), so,
     like a person aiming until the edge lights up, try the pixels around the point and
     click the nearest one where an edge is under the mouse."""
+    uncover(point)
     widget = gl_widget()
     ratio = widget.devicePixelRatioF()
     centre = screen_point(point)

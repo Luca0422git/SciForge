@@ -75,6 +75,7 @@ def click_vertex(point):
     """Click a corner of the part at a 3D point. Corners are drawn as small dots, so, like
     a person aiming until the corner lights up, try the pixels around the point and click
     the nearest one where a vertex is under the mouse."""
+    h.uncover(point)
     widget = h.gl_widget()
     ratio = widget.devicePixelRatioF()
     centre = h.screen_point(point)
