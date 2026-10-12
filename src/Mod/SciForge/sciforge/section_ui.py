@@ -35,6 +35,9 @@ SWATCHES = [
     (0.60, 0.45, 0.85),
     (0.80, 0.80, 0.80),
 ]
+# value box -> the analysis property its formula goes on, and the box's name
+FORMULA_PROPS = {"distance": "Distance", "x_angle": "XAngle", "y_angle": "YAngle"}
+FORMULA_NAMES = {"distance": "Distance", "x_angle": "X Angle", "y_angle": "Y Angle"}
 
 
 # -- keeping the cut display in order ----------------------------------------------------------
@@ -163,21 +166,64 @@ def visible_sections(doc):
     return found
 
 
+def solid_displays(obj):
+    """The objects whose display shows the solid of `obj`: a body's solid features (one of
+    them is shown, the Tip or the step the timeline is rolled back to), or a loose solid
+    itself. Only these are cut: a body's sketches, construction planes, axes and points stay
+    whole, as in Fusion (a construction plane lying in the cut was drawn half-clipped)."""
+    if obj.TypeId != "PartDesign::Body":
+        return [obj]
+    found = []
+    for feature in obj.Group:
+        try:
+            if feature.isDerivedFrom("PartDesign::Feature"):
+                found.append(feature)
+        except Exception:
+            continue
+    return found
+
+
+def clips_on(obj):
+    """Clip nodes cutting the displayed solid of a body (its Tip) or of a loose solid."""
+    shown = obj.Tip if obj.TypeId == "PartDesign::Body" else obj
+    return _clip_nodes(_root(shown)) if shown is not None else []
+
+
+def _parent_frame(obj):
+    """Global -> the coordinates obj's display is drawn in (its body's, or a container's)."""
+    try:
+        parent = obj.getParentGeoFeatureGroup()
+        if parent is not None:
+            return parent.getGlobalPlacement().inverse()
+    except Exception:
+        pass
+    return App.Placement()
+
+
 def refresh(doc):
-    """Clip planes on every body for the visible sections, cut faces drawn again."""
+    """Clip planes on every body's solid for the visible sections, cut faces drawn again."""
     if App.GuiUp is False or Gui.getDocument(doc.Name) is None:
         return
     shown = visible_sections(doc)
     for obj in section.clipped_objects(doc):
-        root = _root(obj)
-        if root is None:
-            continue
-        for node in _clip_nodes(root):
-            root.removeChild(node)
-        if not obj.ViewObject.Visibility:
-            continue
-        for analysis in shown:
-            root.insertChild(_clip_node(analysis.CutPlacement), 0)
+        own = _root(obj)
+        for node in _clip_nodes(own):  # an earlier SciForge clipped the whole body
+            own.removeChild(node)
+        cut = bool(obj.ViewObject is not None and obj.ViewObject.Visibility)
+        for target in solid_displays(obj):
+            root = _root(target)
+            if root is None:
+                continue
+            for node in _clip_nodes(root):
+                root.removeChild(node)
+            if not cut:
+                continue
+            # The clip goes first in the step's own display, which is drawn inside its
+            # body's placement: give it the cut in the body's coordinates (a body that was
+            # moved by its Placement was cut in the wrong place).
+            frame = _parent_frame(target)
+            for analysis in shown:
+                root.insertChild(_clip_node(frame.multiply(analysis.CutPlacement)), 0)
     for analysis in section.sections(doc):
         proxy = getattr(analysis.ViewObject, "Proxy", None) if analysis.ViewObject else None
         if isinstance(proxy, ViewProviderSection):
@@ -313,8 +359,15 @@ class ViewProviderSection:
         for a, b, c in triangles:
             index += [a, b, c, -1]
         faces.coordIndex.setValues(0, len(index), index)
+        # The hatch lines lie a hair above the cut face; that alone lost to the depth
+        # buffer's rounding on a cut seen at a slant (bands of the hatch went missing).
+        # Push the filled face back a little, as decals are drawn.
+        offset = coin.SoPolygonOffset()
+        offset.factor.setValue(1.0)
+        offset.units.setValue(2.0)
         sep.addChild(material)
         sep.addChild(hints)
+        sep.addChild(offset)
         sep.addChild(coords)
         sep.addChild(faces)
         parent.addChild(sep)
@@ -415,10 +468,18 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             "hatch": True,
             "pivot": (0.0, 0.0),
         }
+        # Values typed as a parameter or formula ("-gap", "depth / 2") follow it, as in every
+        # Fusion value box: kept as expressions on the analysis' Distance / XAngle / YAngle.
+        self.formulas = {}
+        self.formula_errors = {}  # value box -> why what was typed there is no value
         if analysis is not None:
             ref, options = section.read(analysis)
             self.ref = ref
             self.options.update(options)
+            for key, prop in FORMULA_PROPS.items():
+                text = preview.formula_of(analysis, prop)
+                if text:
+                    self.formulas[key] = text
         self.handles = {}
         self.planes = None
         self.repick = False
@@ -458,6 +519,19 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         self.y_angle = DistanceField(self.options["y_angle"], unit="deg", on_change=self._typed_y)
         self.y_angle.widget.setObjectName("SciForgeSection_yangle")
         self.layout.addRow("Y Angle", self.y_angle.widget)
+        self._formula_inputs = [
+            preview.FormulaInput(self, key, field)
+            for key, field in (
+                ("distance", self.distance),
+                ("x_angle", self.x_angle),
+                ("y_angle", self.y_angle),
+            )
+        ]
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setObjectName("SciForgeSection_formulas")
+        self.formula_label.setWordWrap(True)
+        self.layout.addRow(self.formula_label)
+        self._show_formulas()
         self.flip = QtWidgets.QPushButton("Flip")
         self.flip.setObjectName("SciForgeSection_flip")
         self.flip.setCheckable(True)
@@ -497,6 +571,9 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         self.hatch.toggled.connect(self._hatch_toggled)
         self.layout.addRow(self.hatch)
         self._show_swatches()
+        from .construct_ui import EnterAfterSum
+
+        self._enter_sum = EnterAfterSum(self, [self.distance, self.x_angle, self.y_angle])
         self.finish_layout()
 
     def _show_box(self):
@@ -544,7 +621,11 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         return [(self.ref[0], [self.ref[1]] if self.ref[1] else [])]
 
     def picks_changed(self, added, dropped):
-        if any(h.busy() for h in self.handles.values()):
+        # A handle's press or release is not a pick: FreeCAD also selected the face under
+        # the mouse then. Letting go of the arrow far down selected the bottom face (seen
+        # from inside the cut) and the section jumped onto it; the handles are made anew
+        # when a drag ends, so ask handles3d (it remembers it for every handle).
+        if handles3d.just_used() or any(h.busy() for h in self.handles.values()):
             return False
         if self.planes is not None and self.planes.clicked_recently():
             added = []
@@ -583,30 +664,99 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
                 body = commands.find_body()
                 if body is not None:
                     self.planes = cls(Gui.ActiveDocument.ActiveView, body, self._plane_clicked)
+                    self.planes.takes = self._takes_under
             except Exception as exc:
                 warn("Section Analysis: origin planes unavailable: %s" % exc)
         elif not want and self.planes is not None:
             self.planes.remove()
             self.planes = None
 
+    def _takes_under(self, position):
+        """True when what FreeCAD picks under the mouse can be cut along (it then gets the
+        click); anything else lets the origin square behind it take it, like Fusion."""
+        try:
+            from .construct_ui import _resolve_gate
+
+            info = Gui.ActiveDocument.ActiveView.getObjectInfo(tuple(position))
+            if not info or not info.get("Object"):
+                return False
+            top = self.doc.getObject(info["Object"])
+            if top is None:
+                return False
+            obj, short = _resolve_gate(top, str(info.get("Component", "")))
+            return bool(self.allow(obj, short))
+        except Exception:
+            return False
+
     # -- values ------------------------------------------------------------------------------
+    def _plain_value(self, key, value):
+        """A number typed or dragged: the box no longer follows a formula."""
+        self.options[key] = float(value)
+        self.formulas.pop(key, None)
+        self.formula_errors.pop(key, None)
+        self._show_formulas()
+
     @_safe
     def _typed_distance(self, value):
-        self.options["distance"] = float(value)
+        self._plain_value("distance", value)
         self._move_handles()
         self.schedule()
 
     @_safe
     def _typed_x(self, value):
-        self.options["x_angle"] = float(value)
+        self._plain_value("x_angle", value)
         self._rebuild_handles()
         self.schedule()
 
     @_safe
     def _typed_y(self, value):
-        self.options["y_angle"] = float(value)
+        self._plain_value("y_angle", value)
         self._move_handles()
         self.schedule()
+
+    # preview.FormulaInput calls these
+    def formula_typed(self, key, text, value):
+        self.formula_errors.pop(key, None)
+        self.formulas[key] = text
+        self.options[key] = float(value)
+        self._show_formulas()
+        if key == "x_angle":
+            self._rebuild_handles()
+        else:
+            self._move_handles()
+        self.schedule()
+
+    def formula_cleared(self, key):
+        self.formula_errors.pop(key, None)
+        if self.formulas.pop(key, None) is not None:
+            self._show_formulas()
+        self.schedule()
+
+    def formula_failed(self, key, message):
+        """Something that is no value ("gap +"): the dialog stays open (also on Enter and
+        OK) and says so; the cut keeps the last good value."""
+        self.formula_errors[key] = message
+        self._show_status("")
+
+    def _show_formulas(self):
+        label = getattr(self, "formula_label", None)
+        if label is None:
+            return
+        rows = [
+            "%s = %s" % (FORMULA_NAMES[k], self.formulas[k])
+            for k in FORMULA_PROPS
+            if self.formulas.get(k)
+        ]
+        label.setText("\n".join(rows))
+        label.setVisible(bool(rows))
+
+    def _show_status(self, problem):
+        if self.formula_errors:
+            self.say("⚠ %s" % next(iter(self.formula_errors.values())))
+        elif problem:
+            self.say(problem)
+        else:
+            self.hint("")
 
     @_safe
     def _flipped(self, *_):
@@ -655,17 +805,14 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         return base, moved, after_x
 
     def _size(self):
-        size = 50.0
-        for _o, shape in cut_shapes(self.doc):
-            size = max(10.0, shape.BoundBox.DiagonalLength)
-        return size
+        """How big the handles are drawn: from the biggest body the section cuts."""
+        sizes = [shape.BoundBox.DiagonalLength for _o, shape in cut_shapes(self.doc)]
+        return max([10.0] + sizes) if sizes else 50.0
 
     def _rebuild_handles(self):
         self._remove_handles()
         if self.ref is None or self.error:
             return
-        from .revolve_ui import AngleHandle
-
         size = self._size()
         base, moved, after_x = self._frames()
         n = base.Rotation.multVec(App.Vector(0, 0, 1))
@@ -679,7 +826,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         )
         x_axis = moved.Rotation.multVec(App.Vector(1, 0, 0))
         y_axis = moved.Rotation.multVec(App.Vector(0, 1, 0))
-        self.handles["x"] = AngleHandle(
+        self.handles["x"] = handles3d.angle_handle(
             moved.Base,
             x_axis,
             y_axis,
@@ -691,7 +838,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         )
         y_axis_x = after_x.Rotation.multVec(App.Vector(0, 1, 0))
         x_axis_x = after_x.Rotation.multVec(App.Vector(1, 0, 0))
-        self.handles["y"] = AngleHandle(
+        self.handles["y"] = handles3d.angle_handle(
             moved.Base,
             y_axis_x,
             x_axis_x,
@@ -710,7 +857,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
     @_safe
     def _dragged_distance(self, value):
         value = round(float(value), 3)
-        self.options["distance"] = value
+        self._plain_value("distance", value)
         self.distance.set_value(value)
         handle = self.handles.get("distance")
         if handle is not None and not handle.dragging():
@@ -720,7 +867,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
     @_safe
     def _dragged_x(self, value):
         value = round(float(value), 2)
-        self.options["x_angle"] = value
+        self._plain_value("x_angle", value)
         self.x_angle.set_value(value)
         handle = self.handles.get("x")
         if handle is not None and not handle.dragging():
@@ -730,7 +877,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
     @_safe
     def _dragged_y(self, value):
         value = round(float(value), 2)
-        self.options["y_angle"] = value
+        self._plain_value("y_angle", value)
         self.y_angle.set_value(value)
         self.schedule()
 
@@ -758,7 +905,11 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
                     pass
                 self.analysis = None
                 schedule(self.doc)
-            self.hint("Click a plane or a flat face to cut along.")
+            gone = section.problem(self.analysis) if self.analysis is not None else ""
+            if gone:
+                self.say(gone)
+            else:
+                self.hint("Click a plane or a flat face to cut along.")
             return
         try:
             section.cut_frame(self.ref, **self._frame_options())
@@ -773,6 +924,8 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             make_view(self.analysis)
         else:
             section.update(self.analysis, self.ref, self.options)
+        for key, prop in FORMULA_PROPS.items():
+            preview.set_formula(self.analysis, prop, self.formulas.get(key, ""))
         preview.recompute(self.doc)
         try:
             if self.analysis.ViewObject is not None and not self.analysis.ViewObject.Visibility:
@@ -782,11 +935,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
         schedule(self.doc)
         if not any(h.dragging() for h in self.handles.values()):
             self._rebuild_handles()
-        problem = preview.failure(self.analysis)
-        if problem:
-            self.say(problem)
-        else:
-            self.hint("")
+        self._show_status(section.problem(self.analysis) or preview.failure(self.analysis))
 
     def _frame_options(self):
         return {
@@ -822,6 +971,9 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             if self.error:
                 self.say(self.error)
                 return False
+            if self.formula_errors:  # Fusion does not take a value it cannot read
+                self._show_status("")
+                return False
             label = self.analysis.Label
             done = self.finish_ok()
             schedule(self.doc)
@@ -839,6 +991,13 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
 
     def cleanup(self):
         self._remove_handles()
+        enter = getattr(self, "_enter_sum", None)
+        if enter is not None:
+            enter.remove()
+            self._enter_sum = None
+        for formula in getattr(self, "_formula_inputs", []):
+            formula.panel = None
+        self._formula_inputs = []
         if self.planes is not None:
             try:
                 self.planes.remove()

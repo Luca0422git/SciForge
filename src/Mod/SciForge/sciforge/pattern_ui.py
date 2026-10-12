@@ -319,12 +319,15 @@ class AxisPicker:
 
 
 def _part_depth(view, position):
-    """Distance along the mouse ray to the part under the mouse, or None."""
+    """Distance along the mouse ray to the part (or a construction plane) under the mouse,
+    or None. A construction plane in front of an origin square takes the click too: it is
+    a Mirror Plane like any other (found by the inspect QA, `inspect_qa3` path M)."""
     try:
         info = view.getObjectInfo(tuple(position))
     except Exception:
         return None
-    if not info or not str(info.get("Component", "")).startswith(("Face", "Edge", "Vertex")):
+    component = str((info or {}).get("Component", "")).split(".")[-1]
+    if not info or not (component.startswith(("Face", "Edge", "Vertex")) or component == "Plane"):
         return None
     origin, direction = profile_pick.mouse_ray(view, position)
     return (App.Vector(info["x"], info["y"], info["z"]) - origin).dot(direction)

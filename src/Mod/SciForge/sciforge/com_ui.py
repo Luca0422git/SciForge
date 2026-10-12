@@ -180,7 +180,8 @@ class ViewProviderCenterOfMass:
         try:
             p = obj.Position
             self.place.translation.setValue(p.x, p.y, p.z)
-            s = self._size(obj)
+            # nothing measured any more (its bodies were deleted): no marker
+            s = 0.0 if analysis.problem(obj) else self._size(obj)
             self.scale.scaleFactor.setValue(s, s, s)
         except Exception as exc:
             warn("Center of Mass marker: %s" % exc)
@@ -195,7 +196,7 @@ class ViewProviderCenterOfMass:
         return mode
 
     def updateData(self, obj, prop):
-        if prop in ("Position", "Volume"):
+        if prop in ("Position", "Volume", "Problem"):
             self._update(obj)
 
     def onChanged(self, vobj, prop):
@@ -288,7 +289,7 @@ class CenterOfMassPanel(bodypick.BodyPickPanel):
             else:
                 analysis.set_bodies(self.target, self.picked)
             preview.recompute(self.doc)
-            problem = preview.failure(self.target)
+            problem = analysis.problem(self.target) or preview.failure(self.target)
             if problem:
                 for label in self.coords.values():
                     label.setText("")
@@ -312,7 +313,9 @@ class CenterOfMassPanel(bodypick.BodyPickPanel):
             self._timer.stop()
             self._apply_now()
             problem = (
-                preview.failure(self.target) if self.target is not None else "Nothing to measure."
+                (analysis.problem(self.target) or preview.failure(self.target))
+                if self.target is not None
+                else "Nothing to measure."
             )
             if problem:
                 self.say(problem)

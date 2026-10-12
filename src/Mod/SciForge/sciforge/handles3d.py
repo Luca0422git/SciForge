@@ -25,6 +25,21 @@ from .compat import QtCore
 BLUE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
 BLUE_ACTIVE = (0.55, 0.80, 1.0)
 GRAB = {"time": 0.0}  # one press moves one handle
+USED = {"time": 0.0}  # when any handle was last pressed, dragged or let go
+JUST_USED_S = 0.6
+
+
+def touch():
+    USED["time"] = time.time()
+
+
+def just_used(seconds=JUST_USED_S):
+    """True while a handle is in use and just after. FreeCAD's selection also takes the
+    press and the release of a handle's drag as a click on what is under the mouse (the
+    face behind the handle, or the face under the mouse where the drag ends): that is not
+    a pick. A dialog often makes new handles when a drag ends (the old one's own memory of
+    the drag is gone then), so this is remembered here, for every handle."""
+    return time.time() - USED["time"] < seconds
 
 
 def _mouse_ray(view, position):
@@ -43,6 +58,76 @@ def _segment_distance(px, py, ax, ay, bx, by):
     length2 = dx * dx + dy * dy
     t = 0.0 if length2 < 1e-12 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
     return math.hypot(px - (ax + dx * t), py - (ay + dy * t))
+
+
+class ReleaseWatch:
+    """Ends a handle's drag on any left-button release in the application. FreeCAD's
+    selection keeps the release of a drag that ends over a face (it selects the face and
+    marks the event handled), so a view callback never saw it: the handle stayed "grabbed",
+    followed the mouse with no button down and swallowed every later pick. Qt sees every
+    release first: this filter is installed while the button is down on the handle."""
+
+    def __init__(self, handle):
+        from .compat import QtWidgets
+
+        self.handle = handle
+        self.filter = None
+        watch = self
+
+        class _Filter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                try:
+                    if event.type() == QtCore.QEvent.MouseButtonRelease and (
+                        event.button() == QtCore.Qt.LeftButton
+                    ):
+                        watch.released()
+                except Exception:
+                    pass
+                return False
+
+        self.filter = _Filter()
+        QtWidgets.QApplication.instance().installEventFilter(self.filter)
+
+    def released(self):
+        handle = self.handle
+        if handle is not None and getattr(handle, "_drag", False):
+            handle._drag = False
+            handle._released = True
+            handle._last_event = time.time()
+            touch()
+        self.remove()
+
+    def remove(self):
+        from .compat import QtWidgets
+
+        self.handle = None
+        if self.filter is not None:
+            try:
+                QtWidgets.QApplication.instance().removeEventFilter(self.filter)
+            except Exception:
+                pass
+            # deleted later, never inside its own eventFilter call
+            QtCore.QTimer.singleShot(0, self.filter.deleteLater)
+            self.filter = None
+
+
+def watch_release(handle):
+    """Start watching for the release of a drag on `handle` (see ReleaseWatch)."""
+    old = getattr(handle, "_release_watch", None)
+    if old is not None:
+        old.remove()
+    try:
+        handle._release_watch = ReleaseWatch(handle)
+    except Exception as exc:
+        handle._release_watch = None
+        warn("handle: %s" % exc)
+
+
+def stop_watching(handle):
+    old = getattr(handle, "_release_watch", None)
+    if old is not None:
+        old.remove()
+    handle._release_watch = None
 
 
 def _rotation_y_to(direction):
@@ -117,11 +202,15 @@ class _Handle:
                     GRAB["time"] = time.time()
                     self._drag = True
                     self._last_event = time.time()
+                    touch()
                     self._press(position)
+                    watch_release(self)
             elif self._drag:
                 self._drag = False
                 self._released = True
                 self._last_event = time.time()
+                touch()
+                stop_watching(self)
         except Exception as exc:
             warn("handle: %s" % exc)
 
@@ -132,6 +221,7 @@ class _Handle:
                 self._hover = self.hit(position)
                 return
             self._last_event = time.time()
+            touch()
             value = self._drag_to(position)
             if value is not None:
                 self._pending = value
@@ -165,12 +255,14 @@ class _Handle:
             if self._released and not self._drag:
                 self._released = False
                 self._pending = None
+                touch()  # also a release found from Qt's mouse state (pickpanel.Arrow)
                 if self.on_release:
                     self.on_release(self.value())
         except Exception as exc:
             warn("handle drag: %s" % exc)
 
     def remove(self):
+        stop_watching(self)
         try:
             self._timer.stop()
         except Exception:
@@ -185,6 +277,44 @@ class _Handle:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+
+
+def angle_handle(*args, **kwargs):
+    """revolve_ui.AngleHandle (the blue ball turning about a line) whose drag also ends on a
+    release FreeCAD's selection kept (see ReleaseWatch)."""
+    from .revolve_ui import AngleHandle
+
+    class WatchedAngleHandle(AngleHandle):
+        def _button(self, info):
+            try:
+                pressed = info.get("Button") == "BUTTON1" and info.get("State") == "DOWN"
+                if pressed and not self._drag and time.time() - GRAB["time"] <= 0.05:
+                    return  # an arrow of this dialog took this press (one press, one handle)
+            except Exception:
+                pass
+            was = self._drag
+            super()._button(info)
+            try:
+                if self._drag and not was:
+                    GRAB["time"] = time.time()
+                    touch()
+                    watch_release(self)
+                elif was and not self._drag:
+                    touch()
+                    stop_watching(self)
+            except Exception as exc:
+                warn("handle: %s" % exc)
+
+        def _moved(self, info):
+            super()._moved(info)
+            if self._drag:
+                touch()
+
+        def remove(self):
+            stop_watching(self)
+            super().remove()
+
+    return WatchedAngleHandle(*args, **kwargs)
 
 
 class LinearHandle(_Handle):
