@@ -184,6 +184,24 @@ def open_at(global_pos):
     return menu
 
 
+def _open_for_state(global_pos):
+    """Fusion: inside a sketch the right click offers the sketch's own tools. Decided here,
+    at the click, so it does not depend on which of the two right-click filters on the 3D
+    view runs first: Qt runs the filter installed last first, and this part filter was
+    installed again after switching to another program and back while a sketch was open
+    (Luca saw the part menu in a sketch)."""
+    try:
+        from . import sketch_mode
+
+        if sketch_mode.current() is not None:
+            from . import sketch_marking
+
+            return sketch_marking.open_at(global_pos)
+    except Exception as exc:
+        warn("marking menu: %s" % exc)
+    return open_at(global_pos)
+
+
 class _RightClickFilter(QtCore.QObject):
     """Turns a short right click on the 3D view into the marking menu."""
 
@@ -201,7 +219,7 @@ class _RightClickFilter(QtCore.QObject):
                 start, self.pressed_at = self.pressed_at, None
                 pos = event.globalPosition().toPoint()
                 if start is not None and (pos - start).manhattanLength() <= CLICK_SLOP:
-                    open_at(pos)
+                    _open_for_state(pos)
                 return True
             if kind == QtCore.QEvent.ContextMenu:
                 return True  # FreeCAD's own context menu is replaced
@@ -255,6 +273,16 @@ def _install():
             # becomes active): a traceback was printed when a design was closed and another
             # opened.
             pass
+    # An open sketch keeps its own filter in front (it closes the dimension box on a press):
+    # installing this one again above moved it behind.
+    try:
+        from . import sketch_mode
+
+        session = sketch_mode.current()
+        if session is not None and session.gl is not None and session.filter is not None:
+            session.gl.installEventFilter(session.filter)
+    except Exception as exc:
+        warn("marking menu: %s" % exc)
 
 
 def disable():
