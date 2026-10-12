@@ -59,8 +59,15 @@ export FREECAD_USER_HOME="$(cygpath -w "${profile}")"
 export SCIFORGE_GOLDEN_OUT="$(cygpath -w "$(cd "${OUT}" && pwd)")"
 rm -f "${OUT}/golden-report.json"
 
+# FreeCAD's whole output goes to golden.log; the job log gets the SciForge lines, and the
+# end of golden.log when no report came out (a start-up error has no [SciForge] in it).
 "${exe}" -c "from SciForgeTests.golden import runner; runner.main()" 2>&1 | tr -d '\r' \
-    | grep -aE "\[SciForge\]" || true
+    > "${OUT}/golden.log" || true
+grep -aE "\[SciForge\]" "${OUT}/golden.log" || true
+if [ ! -f "${OUT}/golden-report.json" ]; then
+    echo "[SciForge] no golden report; the end of FreeCAD's output:"
+    tail -n 60 "${OUT}/golden.log"
+fi
 
 python - "${OUT}/golden-report.json" "${MODE}" <<'EOF'
 import json

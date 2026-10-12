@@ -16,7 +16,9 @@ You never need to compile anything yourself. GitHub builds it:
 4. When the run is finished, open it and scroll to **Artifacts**. Download
    `SciForge-Windows-portable-...`. GitHub wraps it in a .zip; inside is a `.7z` file.
    The build is uploaded before its tests run, so it is there even when a test failed (the
-   run then has a red cross): install the newest quick update on top, which has the fix.
+   run then has a red cross). Then ask Claude what failed before relying on it: the same
+   test models already passed on FreeCAD for Windows before compiling, so a failure here is
+   usually in the compiled part, which a quick update cannot fix.
 5. Unpack the `.7z` (7-Zip) anywhere, for example `C:\SciForge`. Run `bin\FreeCAD.exe`.
    (The program is still called FreeCAD inside until the branding pass is done.)
 6. Pick **SciForge** in the workbench drop-down at the top.

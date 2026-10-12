@@ -1960,6 +1960,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   group includes the platform choice, so a Windows-only build does not cancel a running
   build of both. Not done: a compile cache between builds (ccache is in the recipe but not
   kept between runs); a rebuild still takes the full 3 hours.
+  Reviewed by 3 independent reviewers plus a refuting check (7 agents): nothing that touches
+  run #4. Kept on purpose: `check-windows` also gates a Linux-only build (it is the only
+  golden-model run before compiling; Linux-only builds are rare). Fixed after review:
+  windows_golden.sh keeps FreeCAD's whole output (golden.log) and prints its end when no
+  report came out; README no longer promises the quick update fixes a red built test.
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
