@@ -314,6 +314,11 @@ def p2_depth():
     ui.type_into(panel().depth.widget, "4")
 
 
+# The web's preview is rebuilt on the shelled tray after the value is typed: in the full
+# local run on a busy machine 0.7 s was not enough (the check read the volume before it).
+p2_depth.wait_ms = 1500
+
+
 def p2_depth4():
     v = TRAY + cross(36.0, 2.0, 4.0)
     h.check("P2 Depth 4", near(vol(), v, 1e-6), (vol(), v))

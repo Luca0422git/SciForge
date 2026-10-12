@@ -1839,7 +1839,24 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   needs ~2 h on one machine), so no quick update was built after #45. CI now runs 5 parts
   side by side: `--only base` (unit, golden, smoke, journey) and `--only scenarios --shard
   K/4` (`run_tests.sh`); the quick update is packaged by its own job once all pass.
-- Full suite at the end: running (started 04:32 UTC on 580bb54f50); result added here when done.
+- Full local suite (started 04:32 on 580bb54f50, ended 06:37): unit 245 OK; golden 276
+  pass + 1 xfail (`plate_hole_grid`, core patch #4); smoke and journey PASS; 130 of 132
+  scenarios PASS (16974 checks). The two failures re-ran PASS alone on fc1c19cc57:
+  `inspect_qa4` broke because I edited the test helpers while the suite ran (the module is
+  a symlink: one file loaded old, one new); `sweep_loft_qa_web` P2 checked the web's
+  preview 0.7 s after typing on a busy machine (its wait is now 1.5 s).
+- The first split CI runs (#58, #59) failed only on GitHub, in two scenarios:
+  - `bodies_qa_2` P: GitHub's renderer picked the vertex where OpenCASCADE starts the boss's
+    top circle, and Move took that point. Fusion has no such point: `move.seam_circle()`
+    makes a click on it mean the round edge (centre). Path P now clicks it on purpose.
+  - `inspect_qa8`: the command dialog is wider on GitHub's runner and covered the box
+    corner (40, 30, 10); the clicks went to the dialog. Imitating GitHub's font locally did
+    not reproduce it, so a click's note now says what was on top ("on top: TaskPanel"
+    proved it). `h.click`, `h.click_edge` and the corner click pan the view first when the
+    dialog covers the point (`h.uncover`); `harness_covered_click` checks that.
+- Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
+  agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
+  (they appear in the job log).
 
 ## Next steps (in order)
 
