@@ -193,6 +193,27 @@ def dragged_red():
             (p.operation.currentText(), p.distance.value()))
     h.check("R7: red after the release", len(a.cut_nodes()) == 1, len(a.cut_nodes()))
     h.shot("2-dragged-red")
+    ui.type_into(p.distance.widget, "-5")
+
+
+def regrab_in_pocket():
+    """The arrow of a 5 mm cut has its head just under the profile's sketch, which stays in
+    view until OK (R6): it must still be grabbed, not the sketch area behind it."""
+    p = xpanel()
+    s["regrab_before"] = p.distance.value()
+    d = p.dragger
+    head = d.origin + d.direction * (d.distance() + 0.9 * d.size)
+    h.check("the arrow head is under the sketch plane", head.z < 10.0, head)
+    start = h.screen_point(head)
+    h.drag(start, QtCore.QPoint(start.x(), start.y() - 50))
+
+
+def regrabbed():
+    p = xpanel()
+    h.check("R6: grabbing the arrow under the kept sketch keeps the profile picked",
+            len(p.profiles) == 1, p.profiles)
+    h.check("R6: and drags the arrow", p.distance.value() > s["regrab_before"] + 0.5,
+            (p.distance.value(), s["regrab_before"]))
 
 
 def cancel():
@@ -394,6 +415,8 @@ h.run(
         join_not_red,
         drag_into_part,
         dragged_red,
+        regrab_in_pocket,
+        regrabbed,
         cancel,
         cancelled,
         e_again,

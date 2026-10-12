@@ -120,7 +120,10 @@ def handle_at(view, position, radius=3):
 
 class ProfilePicker:
     """A press on a drag handle (an arrow in front of a region) drags the handle: it is no
-    pick of the region behind it."""
+    pick of the region behind it. While the regions are offered, the sketches' own lines
+    and faces let clicks through: the shaded regions here take the clicks, and an arrow
+    behind a sketch (a cut going down into the part, with the sketch kept in view until OK)
+    stays grabbable, as Fusion's arrows always are."""
 
     def __init__(self, view, sketches, on_pick, occluder=None):
         from pivy import coin
@@ -133,6 +136,7 @@ class ProfilePicker:
         self.selected = set()  # {(sketch name, sub)}
         self.dimmed = False  # picked profiles faded (a red cut preview is shown over them)
         self.face_materials = []  # materials of the highlighted body faces
+        self.unpickable = []  # (sketch's root node, pick style) put in while offered
         self.last_click = 0.0  # time of the last click that picked a region
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
@@ -152,12 +156,31 @@ class ProfilePicker:
                 continue
             for sub, face in found:
                 self.regions.append((sketch, sub, face, self._add_face(face, self.root)))
+            if found:
+                self._let_clicks_through(sketch)
         self.hovered = None
         view.getSceneGraph().addChild(self.root)
         self.callbacks = [
             ("SoMouseButtonEvent", view.addEventCallback("SoMouseButtonEvent", self._button)),
             ("SoLocation2Event", view.addEventCallback("SoLocation2Event", self._moved)),
         ]
+
+    def _let_clicks_through(self, sketch):
+        """The sketch's own drawing cannot be picked while the picker is on (a Coin pick
+        style in the sketch's own scene nodes, taken out again by remove(); nothing about
+        the sketch itself changes). Its lines are under RootNode; its shaded areas
+        (FreeCAD 1.1's SoSketchFaces) under the separate Annotation node."""
+        for attr in ("RootNode", "Annotation"):
+            try:
+                root = getattr(sketch.ViewObject, attr)
+                if root is None:
+                    continue
+                style = self.coin.SoPickStyle()
+                style.style = self.coin.SoPickStyle.UNPICKABLE
+                root.insertChild(style, 0)
+                self.unpickable.append((root, style))
+            except Exception:
+                pass  # no view of the sketch: nothing to click there anyway
 
     def _add_face(self, face, parent, color=FILL, transparency=IDLE_TRANSPARENCY):
         coin = self.coin
@@ -295,6 +318,14 @@ class ProfilePicker:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        for root, style in self.unpickable:
+            try:
+                index = root.findChild(style)
+                if index >= 0:
+                    root.removeChild(index)
+            except Exception:
+                pass  # the sketch was deleted with its scene
+        self.unpickable = []
         self.regions = []
 
 
