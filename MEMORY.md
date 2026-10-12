@@ -1662,7 +1662,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - New golden model `inspect_three_points_oblique_hole` (a construction point in Plane Through
   Three Points, a slanted hole cut from that plane: 12000 - 520 pi / 12).
 - No shared file changed; no core patch.
-- Full suite at the end: FULLSUITE3
+- Full suite at the end (no --only, at d43207a93a): unit 245 OK, golden 264 pass + 1 xfail
+  (plate_hole_grid, core patch #4 not compiled), smoke 70/70, journey 25/25, 120 of 120
+  scenarios PASS (15447 checks; inspect_qa6 317, inspect_qa7 314, inspect_qa8 251).
 
 ## Next steps (in order)
 
