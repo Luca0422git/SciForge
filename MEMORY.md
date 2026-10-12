@@ -1930,6 +1930,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `Mod/SciForge/ViewerBackup` (kept until restored); `shell.startup()` (from InitGui) and
   `on_workbench` restore leftovers when SciForge is off. Scenario `viewer_settings_restart`
   (restart imitated by reloading `theme`) fails without the fix.
+- CI run #72: `sketch_infer` path A failed only on GitHub (the Ctrl line came out level).
+  Not the Ctrl code (the end landed exactly on the clicked pixel): the start was clicked
+  without Ctrl, so FreeCAD's grid snap (a fifth of the 10 mm grid) put it on y = 20, and
+  the test's pixel for y = 20.35 maps to 20.02 (GitHub) or 20.16 (here), so the angle
+  passed here by luck (0.25 > 0.2). Path A now holds Ctrl for both clicks and checks both
+  ends against the clicked pixels. Reproduced and checked with GitHub's font locally:
+  `XDG_CONFIG_HOME=<dir with fontconfig/fonts.conf preferring DejaVu Sans>` (the AppImage
+  forces FONTCONFIG_FILE, but its fonts.conf reads the user's XDG file).
 - Lessons: do not edit files a running local suite uses (work in a `git worktree`); the
   agent proxy blocks downloading CI artifacts, so put diagnostics into the check details
   (they appear in the job log).

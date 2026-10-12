@@ -166,7 +166,10 @@ def a_line():
 
 
 def a_start():
-    si.click(g(V(5.5, 21.3, 0)))
+    # Ctrl from the first click: the start stays where it is clicked too (without Ctrl
+    # FreeCAD's grid snap, 1/5 of the 10 mm grid, put it on y = 20 and the line came out
+    # level or nearly so, depending on the screen's pixel scale).
+    s["a_start_pos"] = si.click_held(g(V(5.5, 21.3, 0)), CTRL)
 
 
 def a_ctrl_end():
@@ -188,7 +191,17 @@ def a_ctrl_check():
     angle = math.degrees(
         math.atan2(line.EndPoint.y - line.StartPoint.y, line.EndPoint.x - line.StartPoint.x)
     )
-    h.check("A: the Ctrl line keeps its small angle (not 0)", 0.2 < abs(angle) < 2.0, angle)
+    start = si.sketch_at(sk, s["a_start_pos"])
+    h.check(
+        "A: with Ctrl the start is exactly where the mouse was",
+        line is not None and si.vnear(line.StartPoint, start, 1e-6),
+        (line and line.StartPoint, start),
+    )
+    h.check(
+        "A: the Ctrl line keeps its small angle (not leveled, not a 5-degree step)",
+        0.5 < abs(angle) < 4.0,
+        (angle, line.StartPoint, line.EndPoint, s["px"]),
+    )
     added = cons()[s["a_count"] :]
     h.check(
         "A: with Ctrl no coincident and no horizontal constraint",
