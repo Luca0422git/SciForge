@@ -655,6 +655,7 @@ class SweepFeature:
                 % ("Cut" if operation == "Cut" else "Intersect")
             )
         options = fp_options(obj)
+        curves.refind(obj, LINKS)  # a picked edge / face of the part FreeCAD lost
         profiles = _links(obj.Profiles)
         path = _links(obj.Path)
         rail = _links(obj.GuideRail)
@@ -689,6 +690,7 @@ class SweepFeature:
         if operation == "Cut" and abs(result.Volume - base.Shape.Volume) < 1e-9:
             raise SweepError("The cut does not touch the body. Move the profile or the path.")
         obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
+        curves.remember(obj, LINKS)
 
     def dumps(self):
         return None
@@ -698,6 +700,9 @@ class SweepFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+LINKS = ("Profiles", "Path", "GuideRail")
 
 
 def _links(value):
@@ -751,8 +756,8 @@ def _native_profile(profiles, body):
         except Exception:
             return None
         return obj if whole == picked and whole else None
-    if len(profiles) == 1 and profiles[0][1].startswith("Face"):
-        return (obj, [profiles[0][1]])
+    # A face of the part: SciForge's sweep, which finds the face again when FreeCAD loses its
+    # name after an earlier step is edited (FreeCAD's Pipe then just fails).
     return None
 
 
@@ -763,6 +768,8 @@ def _native_curves(refs, body):
     obj = refs[0][0]
     if owner_body(obj) is not body or obj is body:
         return None
+    if not is_sketch(obj):
+        return None  # edges of the part: SciForge's sweep (it finds a lost edge again)
     return (obj, [sub for _, sub in refs])
 
 

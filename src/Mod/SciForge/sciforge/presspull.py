@@ -10,6 +10,7 @@ keep the name and properties stable.
 """
 import FreeCAD as App
 
+from . import curves
 from . import presspull_core as core
 
 TYPE = "PartDesign::FeaturePython"
@@ -53,6 +54,9 @@ class PressPullFeature:
         base_obj = obj.BaseFeature
         if base_obj is None or base_obj.Shape.isNull():
             raise core.PressPullError("Press Pull needs a solid before it in the timeline.")
+        # A face FreeCAD lost (reopened design, an earlier Extrude edited, a sweep or loft in
+        # between: "?Face3") is found again where it was (sweep / loft QA).
+        curves.refind(obj, ("Faces",))
         link = obj.Faces
         if not link or not link[1]:
             raise core.PressPullError("Select one or more faces to push or pull.")
@@ -70,6 +74,7 @@ class PressPullFeature:
         obj.Shape = core.press_pull(
             base_obj.Shape, faces, obj.Distance.Value, refine=obj.Refine, report=notes
         )
+        curves.remember(obj, ("Faces",))
         # Shown by the dialog: e.g. neighbours that could not be extended.
         self.note = " ".join(notes)
 

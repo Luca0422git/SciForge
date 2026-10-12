@@ -498,6 +498,13 @@ class LoftFeature:
                 % ("Cut" if operation == "Cut" else "Intersect")
             )
         options = fp_options(obj)
+        renamed = curves.refind(obj, LINKS)  # a picked face / edge of the part FreeCAD lost
+        if renamed:
+            meta = load_meta(obj)
+            meta["profiles"] = [
+                [name, renamed.get((name, sub), sub)] for name, sub in meta.get("profiles") or []
+            ]
+            _save_meta(obj, meta)
         tool = tool_shape(ordered_profiles(obj), _links(obj.Rails), _links(obj.Centerline), options)
         body = owner_body(obj)
         if body is not None:
@@ -529,6 +536,7 @@ class LoftFeature:
         if operation == "Cut" and abs(result.Volume - base.Shape.Volume) < 1e-9:
             raise LoftError("The cut does not touch the body. Move the profiles.")
         obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
+        curves.remember(obj, LINKS)
 
     def dumps(self):
         return None
@@ -538,6 +546,9 @@ class LoftFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+LINKS = ("Profiles", "Rails", "Centerline")
 
 
 def _links(value):
@@ -598,8 +609,8 @@ def _native_section(profile, body):
         except Exception:
             return None
         return (obj, [""]) if whole == picked and len(whole) == 1 else None
-    if sub.startswith("Face"):
-        return (obj, [sub])
+    # A face of the part: SciForge's loft, which finds the face again when FreeCAD loses its
+    # name after an earlier step is edited (FreeCAD's Loft then just fails).
     return None
 
 
