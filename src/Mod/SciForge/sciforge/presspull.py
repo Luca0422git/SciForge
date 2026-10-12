@@ -51,6 +51,7 @@ class PressPullFeature:
         self.ensure_properties(obj)
 
     def execute(self, obj):
+        self.tool = None  # the material taken away, for the dialog's red preview
         base_obj = obj.BaseFeature
         if base_obj is None or base_obj.Shape.isNull():
             raise core.PressPullError("Press Pull needs a solid before it in the timeline.")
@@ -71,9 +72,13 @@ class PressPullFeature:
                     "Edit this Press Pull and select the face again." % name
                 )
         notes = []
+        pieces = []
         obj.Shape = core.press_pull(
-            base_obj.Shape, faces, obj.Distance.Value, refine=obj.Refine, report=notes
+            base_obj.Shape, faces, obj.Distance.Value, refine=obj.Refine, report=notes,
+            pieces=pieces,
         )
+        if pieces and obj.Distance.Value < 0:
+            self.tool = pieces[0]  # body coordinates; not saved (dumps() keeps nothing)
         curves.remember(obj, ("Faces",))
         # Shown by the dialog: e.g. neighbours that could not be extended.
         self.note = " ".join(notes)

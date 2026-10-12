@@ -25,6 +25,7 @@ PICKED = (0.12, 0.53, 0.90)
 IDLE_TRANSPARENCY = 0.65
 HOVER_TRANSPARENCY = 0.35
 PICKED_TRANSPARENCY = 0.25
+DIMMED_TRANSPARENCY = 0.85  # picked, while a red cut preview must show through
 
 
 def sketch_faces(sketch):
@@ -130,6 +131,8 @@ class ProfilePicker:
         self.occluder = occluder  # () -> the part (global) that can hide regions
         self.regions = []  # (sketch, sub, face, material)
         self.selected = set()  # {(sketch name, sub)}
+        self.dimmed = False  # picked profiles faded (a red cut preview is shown over them)
+        self.face_materials = []  # materials of the highlighted body faces
         self.last_click = 0.0  # time of the last click that picked a region
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
@@ -203,10 +206,13 @@ class ProfilePicker:
         return best[0]
 
     # -- looks --------------------------------------------------------------------------
+    def _picked_transparency(self):
+        return DIMMED_TRANSPARENCY if self.dimmed else PICKED_TRANSPARENCY
+
     def _paint(self, region, hovered=False):
         material = region[3]
         if (region[0].Name, region[1]) in self.selected:
-            color, transparency = PICKED, PICKED_TRANSPARENCY
+            color, transparency = PICKED, self._picked_transparency()
         else:
             color = FILL
             transparency = HOVER_TRANSPARENCY if hovered else IDLE_TRANSPARENCY
@@ -223,11 +229,29 @@ class ProfilePicker:
     def show_faces(self, faces):
         """Highlight picked body faces (global coordinates)."""
         self.face_root.removeAllChildren()
+        self.face_materials = []
         for face in faces:
             try:
-                self._add_face(face, self.face_root, PICKED, PICKED_TRANSPARENCY)
+                self.face_materials.append(
+                    self._add_face(face, self.face_root, PICKED, self._picked_transparency())
+                )
             except Exception as exc:
                 warn("could not highlight a face: %s" % exc)
+
+    def dim_picked(self, dim):
+        """Fade the picked profiles' blue (while the dialog shows a cut in red: the strong
+        blue on the profile plane hid the red), or bring it back."""
+        dim = bool(dim)
+        if dim == self.dimmed:
+            return
+        self.dimmed = dim
+        for region in self.regions:
+            self._paint(region, region is self.hovered)
+        for material in self.face_materials:
+            try:
+                material.transparency.setValue(self._picked_transparency())
+            except Exception:
+                pass
 
     # -- events -------------------------------------------------------------------------
     def _moved(self, info):

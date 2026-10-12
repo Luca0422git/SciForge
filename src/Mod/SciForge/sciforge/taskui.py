@@ -4,10 +4,13 @@
 - DistanceField: unit-aware number field (types "5", "5 mm", "0.2 in", "=width*2"),
   optionally bound to a property so expressions/parameters work like in FreeCAD.
 - ArrowDragger: the arrow you drag in the 3D view to set a distance (Coin3D).
+- ArrowValueBox: the small value box next to an arrow (Fusion shows the distance there
+  while you drag, and you can type a new one in it).
 - Panel: a task-dialog base that wraps the edit in one undo step: OK keeps it,
   Cancel/Esc removes it again, like Fusion.
 """
 import re
+import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -110,6 +113,7 @@ class DistanceField:
     showed "50.00 µm", and the next "4" typed became 4 µm (found by the fillet QA)."""
 
     def __init__(self, value=0.0, unit="mm", on_change=None):
+        self.unit = unit
         self.widget = Gui.UiLoader().createWidget("Gui::QuantitySpinBox")
         self.widget.setProperty("unit", unit)
         self.widget.setProperty("minimum", -1e9)
@@ -180,6 +184,180 @@ class DistanceField:
         if not self._quiet and self._on_change:
             self._on_change(self.value())
 
+    def parse(self, text):
+        """The value of a plain number typed for this field somewhere else (the box next to
+        an arrow): "25", "2,5", "1 in", "30 deg". A bare number is in the field's own unit,
+        like a number typed in the field. ValueError says what to type instead."""
+        text = (text or "").strip()
+        if _BARE_NUMBER.match(text):
+            return float(text.replace(",", "."))
+        try:
+            quantity = App.Units.Quantity(text)
+        except Exception:
+            raise ValueError("'%s' is not a value." % text)
+        angle = self.unit == "deg"
+        if quantity.Unit == App.Units.Quantity(1.0).Unit:
+            return float(quantity.Value)
+        if quantity.Unit != App.Units.Quantity("1 " + self.unit).Unit:
+            raise ValueError(
+                "Type %s, for example %s." % (("an angle", "30") if angle else ("a length", "25"))
+            )
+        return float(quantity.getValueAs(self.unit).Value)
+
+    def take(self, value):
+        """Show `value` and tell the dialog, as if it had been typed in the field."""
+        self.set_value(value)
+        if self._on_change:
+            self._on_change(float(value))
+
+
+def view_widget():
+    """The OpenGL widget of the active 3D view (it gets the mouse and the keys), or None."""
+    try:
+        area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+        sub = area.activeSubWindow() or (area.subWindowList() or [None])[-1]
+        if sub is None:
+            return None
+        for widget in sub.findChildren(QtWidgets.QWidget):
+            if widget.metaObject().className() == "QOpenGLWidget":
+                return widget
+    except Exception:
+        pass
+    return None
+
+
+def _alive(widget):
+    """False once Qt deleted the widget (its 3D view closed with the document)."""
+    try:
+        widget.objectName()
+        return True
+    except (RuntimeError, AttributeError):
+        return False
+
+
+class ArrowValueBox(QtWidgets.QLineEdit):
+    """The value box next to a drag arrow in the 3D view, like Fusion's: it shows exactly
+    what the dialog's field shows (with units) and moves with the arrow while it is
+    dragged. Click it and type a value or a formula; Enter (or clicking elsewhere) takes
+    it like the dialog's field does. It never takes the keyboard by itself.
+
+    text():        what to show (the dialog field's text)
+    commit(text):  the user typed `text` here and pressed Enter
+    The dialog owns the box (the arrows are rebuilt often; typing must survive that);
+    discard() it when the dialog closes."""
+
+    STYLE = (
+        "QLineEdit#SciForgeArrowValue { background: #fafafa; color: #111111;"
+        " border: 1px solid #3fa9f5; border-radius: 2px; padding: 1px 4px;"
+        " selection-background-color: #3fa9f5; selection-color: #ffffff; }"
+    )
+    GAP = 14  # pixels between the arrow and the box
+
+    def __init__(self, text, commit, parent=None):
+        super().__init__(parent if parent is not None else view_widget())
+        self.setObjectName("SciForgeArrowValue")
+        self.setStyleSheet(self.STYLE)
+        self.setFocusPolicy(QtCore.Qt.ClickFocus)  # never by Tab, never by itself
+        self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
+        self._text = text
+        self._commit = commit
+        self.edited = False  # the user typed in the box since it last showed the field
+        self.anchor = None  # widget pixel of the arrow point it sits next to
+        self.textEdited.connect(self._typed)
+        self.returnPressed.connect(self._enter)
+        self.hide()
+
+    # -- what it shows -----------------------------------------------------------------
+    def refresh(self):
+        """Show the dialog's value, unless the user is typing in the box."""
+        try:
+            if self.edited or self.hasFocus():
+                return
+            text = self._text() or ""
+            if text != self.text():
+                self.setText(text)
+                self.setCursorPosition(0)
+            width = self.fontMetrics().horizontalAdvance(self.text() + "00") + 12
+            if self.width() != max(72, width):
+                self.setFixedWidth(max(72, width))
+        except RuntimeError:
+            pass  # the dialog's field went with its dialog
+        except Exception as exc:
+            warn("value box: %s" % exc)
+
+    def place(self, view, point):
+        """Sit just right of the 3D `point` (on the arrow); hidden when it is off screen."""
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        x, y = view.getPointOnViewport(point)
+        ratio = parent.devicePixelRatioF() or 1.0
+        px, py = int(x / ratio), int(parent.height() - y / ratio)
+        if not (0 <= px < parent.width() and 0 <= py < parent.height()):
+            self.hide()
+            return
+        self.anchor = QtCore.QPoint(px, py)
+        left = min(px + self.GAP, parent.width() - self.width() - 2)
+        top = max(0, min(py - self.height() // 2, parent.height() - self.height() - 2))
+        if self.pos() != QtCore.QPoint(left, top):
+            self.move(left, top)
+        if not self.isVisible():
+            self.show()
+            self.raise_()
+
+    # -- typing --------------------------------------------------------------------------
+    def _typed(self, _text):
+        self.edited = True
+
+    def _enter(self):
+        self._take()
+
+    def _take(self):
+        if not self.edited:
+            return
+        self.edited = False
+        text = self.text()
+        try:
+            self._commit(text)
+        except Exception as exc:
+            warn("value box: %s" % exc)
+        self.refresh()
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        # A click puts the cursor somewhere in the text; Fusion selects the value so the
+        # first key replaces it.
+        QtCore.QTimer.singleShot(0, self._select_all)
+
+    def _select_all(self):
+        try:
+            if self.hasFocus() and not self.edited:
+                self.selectAll()
+        except RuntimeError:
+            pass
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        # Clicking elsewhere (OK, the 3D view) keeps what was typed, like the dialog field.
+        try:
+            self._take()
+            self.refresh()
+        except Exception as exc:
+            warn("value box: %s" % exc)
+
+    def discard(self):
+        """Remove the box for good (the dialog closes)."""
+        self._commit = lambda _text: None
+        self._text = lambda: ""
+        if not _alive(self):
+            return
+        try:
+            self.hide()
+            self.setParent(None)
+            self.deleteLater()
+        except RuntimeError:
+            pass
+
 
 class ArrowDragger:
     """A 1D drag handle at `origin` pointing along `direction` (both App.Vector).
@@ -193,11 +371,25 @@ class ArrowDragger:
 
     POLL_MS = 30
 
-    def __init__(self, origin, direction, distance=0.0, size=8.0, on_drag=None, on_release=None):
+    def __init__(
+        self,
+        origin,
+        direction,
+        distance=0.0,
+        size=8.0,
+        on_drag=None,
+        on_release=None,
+        value_box=None,
+    ):
         from pivy import coin
 
         self.coin = coin
         self.view = Gui.ActiveDocument.ActiveView
+        self.origin = App.Vector(origin)
+        self.direction = App.Vector(direction)
+        if self.direction.Length > 1e-12:
+            self.direction.normalize()
+        self.value_box = value_box  # an ArrowValueBox that follows the arrow, or None
         self.root = coin.SoSeparator()
         place = coin.SoTransform()
         place.translation.setValue(origin.x, origin.y, origin.z)
@@ -226,6 +418,7 @@ class ArrowDragger:
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        self._show_value()
 
     def distance(self):
         return self.dragger.translation.getValue()[0] * self.size
@@ -233,6 +426,24 @@ class ArrowDragger:
     def set_distance(self, distance):
         self.dragger.translation.setValue(distance / self.size, 0, 0)
         self._last = self.distance()
+
+    def anchor(self):
+        """The 3D point the value box sits next to: the arrow's middle, which is where the
+        extrusion ends. (Its heads stick out on both sides; for a cut the far one is inside
+        the part, so the box goes by the middle, next to the arrow either way.)"""
+        return self.origin + self.direction * self.distance()
+
+    def _show_value(self):
+        """Keep the value box next to the arrow and showing the dialog's value. Also run on
+        every poll: it follows the drag, and a turned or zoomed view."""
+        box = self.value_box
+        if box is None:
+            return
+        if not _alive(box):
+            self.value_box = None
+            return
+        box.refresh()
+        box.place(self.view, self.anchor())
 
     def _poll(self):
         try:
@@ -245,6 +456,7 @@ class ArrowDragger:
             if self._was_active and not active and self.on_release:
                 self.on_release(value)
             self._was_active = active
+            self._show_value()
         except Exception as exc:
             warn("drag: %s" % exc)
 
@@ -257,6 +469,15 @@ class ArrowDragger:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        box, self.value_box = self.value_box, None
+        if box is not None and _alive(box):
+            try:
+                # The dialog owns it; the next arrow shows it again. Never hidden while the
+                # user types in it (hiding would take the keyboard away mid-value).
+                if not box.hasFocus():
+                    box.hide()
+            except RuntimeError:
+                pass
 
 
 def _end_transaction(doc, abort=False):
@@ -279,6 +500,10 @@ class Panel:
 
     title = "SciForge"
     icon = None
+    # The preview follows a drag at most every PREVIEW_MS; a part that takes long to
+    # rebuild gets more time in between (up to PREVIEW_MAX_MS), so the arrow stays smooth.
+    PREVIEW_MS = 60
+    PREVIEW_MAX_MS = 400
 
     def __init__(self, doc, transaction):
         from . import ui_icon
@@ -294,8 +519,8 @@ class Panel:
         self.message.setStyleSheet("color: #ff8a80;")
         self._timer = QtCore.QTimer()
         self._timer.setSingleShot(True)
-        self._timer.setInterval(60)  # coalesce rapid changes (dragging) into one recompute
-        self._timer.timeout.connect(self._recompute)
+        self._timer.setInterval(self.PREVIEW_MS)
+        self._timer.timeout.connect(self._tick)
         doc.openTransaction(transaction)
         self._closed = False
         set_current(self)
@@ -305,7 +530,41 @@ class Panel:
 
     # -- live preview ---------------------------------------------------------
     def schedule(self):
-        self._timer.start()
+        """Rebuild the preview soon. While changes keep coming (an arrow being dragged, keys
+        typed) the preview follows them at a steady pace, like Fusion's, which moves with the
+        mouse. A timer already running is left alone: restarting it on every change put the
+        preview off until the mouse stopped moving."""
+        if getattr(self, "_closed", False):
+            return
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def _tick(self):
+        """The preview timer fired: rebuild, then pace the next rebuild by how long it took."""
+        if getattr(self, "_closed", False):
+            return
+        try:
+            if getattr(self.doc, "Recomputing", False):
+                # A long recompute lets Qt run timers meanwhile: never start a second one.
+                self._timer.start()
+                return
+        except Exception:
+            pass
+        started = time.perf_counter()
+        try:
+            self._recompute()
+        except Exception as exc:
+            warn("preview: %s" % exc)
+        self._pace(time.perf_counter() - started)
+
+    def _pace(self, seconds):
+        """Give the computer 1.5 times the last rebuild's time to draw and follow the mouse
+        before the next preview rebuild (a heavy part would otherwise freeze the drag)."""
+        try:
+            wanted = int(1.5 * seconds * 1000.0)
+            self._timer.setInterval(max(self.PREVIEW_MS, min(self.PREVIEW_MAX_MS, wanted)))
+        except Exception:
+            pass
 
     def _recompute(self):
         if self._closed:

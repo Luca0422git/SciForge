@@ -135,7 +135,7 @@ def _middle(face):
     return (u0 + u1) / 2.0, (v0 + v1) / 2.0
 
 
-def press_pull(base, faces, distance, refine=True, report=None):
+def press_pull(base, faces, distance, refine=True, report=None, pieces=None):
     """New shape: `base` with `faces` (Part.Face objects of base) moved by `distance` mm.
 
     Like Fusion, the faces next to the moved ones are extended (or trimmed) to meet them:
@@ -143,13 +143,16 @@ def press_pull(base, faces, distance, refine=True, report=None):
     corner. The slabs give the moved faces; where a slab's side does not merge with an
     unmoved face it is a "step", and OpenCASCADE's defeaturing removes it by extending
     the neighbours until they meet (BRepAlgoAPI_Defeaturing). `report`, a list, gets a
-    note when the neighbours could not be extended (the step then stays)."""
+    note when the neighbours could not be extended (the step then stays). `pieces`, a list,
+    gets the material added or taken away (the slabs fused into one solid)."""
     if not faces:
         raise PressPullError("Select one or more faces to push or pull.")
     if abs(distance) < TOL:
         return base.copy()
     slabs = [slab(face, distance) for face in faces]
     tool = slabs[0] if len(slabs) == 1 else slabs[0].multiFuse(slabs[1:])
+    if pieces is not None:
+        pieces.append(tool)
     try:
         result = base.fuse(tool) if distance > 0 else base.cut(tool)
         if refine:

@@ -131,6 +131,42 @@ class FormulaInput:
     def _edited(self, text):
         self.raw = text
 
+    def take(self, text):
+        """`text` typed for this field somewhere else (the value box next to the arrow in the
+        3D view): taken exactly as if typed in the field and Enter pressed. A plain number
+        ("25", "1 in") is a value, anything else a formula. True if it gave a value."""
+        panel = self.panel
+        if getattr(panel, "_closed", True):
+            return False
+        text = (text or "").strip().lstrip("=").strip()
+        if not text:
+            return False
+        try:
+            from . import extrude, parameters
+
+            if parameters.is_plain_number(text):
+                try:
+                    value = self.field.parse(text)
+                except ValueError as exc:
+                    panel.formula_failed(self.key, str(exc))
+                    return False
+                self.field.take(value)
+                panel.formula_cleared(self.key)
+                return True
+            try:
+                value = extrude.evaluate(panel.doc, text)
+            except extrude.ExtrudeError as exc:
+                panel.formula_failed(self.key, str(exc))
+                return False
+            self.field.set_value(value)
+            panel.formula_typed(self.key, text, value)
+            return True
+        except Exception as exc:
+            from . import warn
+
+            warn("value %r: %s" % (text, exc))
+            return False
+
     def _finished(self):
         raw, self.raw = self.raw, None
         panel = self.panel
