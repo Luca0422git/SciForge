@@ -115,6 +115,7 @@ def enable():
     shortcuts.apply()
     timeline_ui.show()
     navbar_ui.show()
+    _safely(lambda: __import__("sciforge.viewcube_ui").viewcube_ui.enable())
     _safely(lambda: __import__("sciforge.marking_menu").marking_menu.enable())
     _safely(_sketch_mode_on)
     log("interface on")
@@ -136,6 +137,7 @@ def disable():
         shortcuts.restore,
         timeline_ui.hide,
         navbar_ui.hide,
+        lambda: __import__("sciforge.viewcube_ui").viewcube_ui.disable(),
         _restore_panels,
         _restore_menubar,
         _restore_toolbars,

@@ -241,10 +241,20 @@ def enable():
 def _install():
     if _watch["filter"] is None:
         return
-    for widget in _view_widgets():
-        if widget not in _filters:
-            widget.installEventFilter(_watch["filter"])
-            _filters.append(widget)
+    try:
+        widgets = _view_widgets()
+    except RuntimeError:
+        return
+    for widget in widgets:
+        try:
+            if widget not in _filters:
+                widget.installEventFilter(_watch["filter"])
+                _filters.append(widget)
+        except RuntimeError:
+            # The view of a design that is being closed (Qt deletes it while the next view
+            # becomes active): a traceback was printed when a design was closed and another
+            # opened.
+            pass
 
 
 def disable():
