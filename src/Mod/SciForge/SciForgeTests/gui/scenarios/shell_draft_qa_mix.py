@@ -19,6 +19,7 @@ Path 7, a cup for the printer: a circle r 10, E 20, Shell taking the top away (1
 Volumes by hand: open box (bottom away) 12000 - (40-2t)(30-2t)(10-t); boss 500; a scale
 by (1, 1, 2) doubles the volume; a cup pi (10^2 20 - 9^2 19).
 """
+
 import math
 import os
 import tempfile
@@ -32,6 +33,7 @@ from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import shell_draft_steps as sd
 from SciForgeTests.gui import timeline_input as tl
+from SciForgeTests.gui import versions_input as vi
 
 V = App.Vector
 s = {}
@@ -283,6 +285,12 @@ def p6_ctrl_s():
     h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
 
 
+def p6_describe():
+    """Fusion's Save asks for a version description on a saved design; Enter skips it."""
+    h.check("P6 the Save dialog asks for a version description", vi.version_dialog() is not None)
+    vi.accept_save()
+
+
 def p6_saved():
     h.check("P6 Ctrl+S finished the dialog first", not dialog_open())
     h.check("P6 the scale was kept", sd.close(h.solid_volume(), s["v3"] / 8, 1e-5))
@@ -365,6 +373,7 @@ h.run(
             p6_body,
             p6_type,
             p6_ctrl_s,
+            p6_describe,
             p6_saved,
         ]
         + b.box_steps("CupQA", height=20, profile=circle)

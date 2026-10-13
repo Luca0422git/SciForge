@@ -19,6 +19,7 @@ Path T7, Ctrl+S with the dialog open; close, reopen: cosmetic threads drawn agai
 
 Hand-derived volumes: thread_core.removed_volume (the ISO 68-1 groove per mm of thread).
 """
+
 import math
 import os
 import tempfile
@@ -33,6 +34,7 @@ from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
+from SciForgeTests.gui import versions_input as vi
 
 V = App.Vector
 s = {}
@@ -574,6 +576,12 @@ def t7_press():
     h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
 
 
+def t7_describe():
+    """Fusion's Save asks for a version description on a saved design; Enter skips it."""
+    h.check("T7 the Save dialog asks for a version description", vi.version_dialog() is not None)
+    vi.accept_save()
+
+
 def t7_saved():
     h.check("T7 Ctrl+S finished the dialog first", not dialog_open())
     h.check("T7 the edit was kept", hs.threads() and not hs.threads()[0].Modeled)
@@ -684,6 +692,7 @@ h.run(
             t7_save,
             t7_cosmetic,
             t7_press,
+            t7_describe,
             t7_saved,
             t7_open,
             t7_reopened,

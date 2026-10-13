@@ -26,6 +26,7 @@ Path 10, Revolve started from the SOLID tab while a sketch is still open: the sk
 Volumes by hand: box 40 x 30 x 15 = 18000; a round bar about an edge from a w x r
 rectangle: pi r^2 w (a quarter of it per 90 degrees).
 """
+
 import math
 import os
 import tempfile
@@ -42,6 +43,7 @@ from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import revolve_input as ri
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
+from SciForgeTests.gui import versions_input as vi
 
 V = App.Vector
 PI = math.pi
@@ -462,6 +464,12 @@ def p7_ctrl_s():
     ti.ctrl("s")
 
 
+def p7_describe():
+    """Fusion's Save asks for a version description on a saved design; Enter skips it."""
+    h.check("P7 the Save dialog asks for a version description", vi.version_dialog() is not None)
+    vi.accept_save()
+
+
 def p7_saved():
     h.check("P7 Ctrl+S finished the dialog first", not dialog_open())
     h.check("P7 the revolve was kept", near(vol(), s["v7s"]), (vol(), s["v7s"]))
@@ -704,6 +712,7 @@ STEPS = [
     p7_face4,
     p7_edge4,
     p7_ctrl_s,
+    p7_describe,
     p7_saved,
     p8_open,
     p8_reopened,

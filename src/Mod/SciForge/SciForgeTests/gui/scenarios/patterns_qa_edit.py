@@ -18,6 +18,7 @@ Path 7, the design saved (Ctrl+S with the edit dialog open: the edit is finished
 Hand-derived: box 40 x 30 x 10 = 12000; a through hole r 2 removes pi 2^2 10; a boss r 3 x 4
 adds pi 3^2 4.
 """
+
 import math
 import os
 
@@ -29,6 +30,7 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import widget_input as w
+from SciForgeTests.gui import versions_input as vi
 
 V = App.Vector
 s = {}
@@ -307,6 +309,12 @@ def p7_ctrl_s():
 p7_ctrl_s.wait_ms = 2500
 
 
+def p7_describe():
+    """Fusion's Save asks for a version description on a saved design; Enter skips it."""
+    h.check("P7 the Save dialog asks for a version description", vi.version_dialog() is not None)
+    vi.accept_save()
+
+
 def p7_saved():
     h.check("Ctrl+S finished the edit first", ps.panel() is None and not Gui.Control.activeDialog())
     h.check("the file was saved", os.path.getmtime(s["path"]) > s["mtime"])
@@ -417,6 +425,7 @@ h.run(
         p7_save_as,
         p7_edit,
         p7_ctrl_s,
+        p7_describe,
         p7_saved,
         p7_reopened,
         p7_edit_again,

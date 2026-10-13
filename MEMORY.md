@@ -1400,6 +1400,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   body moves with the body (FreeCAD needs sketches inside bodies), Parent is a drop-down.
 
 ### 2026-10-13: Files, versions and recovery (branch `sf/versions`, outline 7.15, plan item 4)
+- Merge follow-up (main): Ctrl+S on a saved design now opens Fusion's version-description
+  prompt, so every scenario that presses Ctrl+S must accept it (`versions_input.accept_save()`
+  in a step of its own after the Ctrl+S step): hole_qa_thread T7, patterns_qa_edit P7,
+  revolve_qa_part P7 and shell_draft_qa_mix P6 were missed by the branch and fixed at the
+  merge. Product bug found by revolve_qa_part: the Save dialog's lambdas read `doc.Name` after
+  the design was closed (ReferenceError); the name is taken when the dialog opens. Rule for
+  tests: a scenario that saves a design presses Ctrl+S, then accepts the version prompt.
 - Research first (Autodesk help: "Create and save designs", "Save a version of a design as
   the latest version", "Open older versions of designs", "View design history", "Recover
   designs", the Data Panel pages; the Fusion blog on version control and the Data Panel;

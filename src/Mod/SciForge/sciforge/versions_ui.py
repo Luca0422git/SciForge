@@ -434,18 +434,22 @@ def save_design(doc, after=None):
         dialog.accepted.connect(chosen)
         _show(dialog, "save:" + doc.Name)
         return
+    # The document's name is taken now: the design may be closed while the dialog is open
+    # (the lambda then read `doc.Name` from a deleted object: ReferenceError), and
+    # _first_save / _save_version look the document up by name and do nothing when gone.
+    name = doc.Name
     if not doc.FileName:
         dialog = SaveDialog(doc)
-        dialog.accepted.connect(lambda: _first_save(doc.Name, dialog.result_path, after))
-        _show(dialog, "save:" + doc.Name)
+        dialog.accepted.connect(lambda: _first_save(name, dialog.result_path, after))
+        _show(dialog, "save:" + name)
     elif ask_description():
         # A recovered design: the description says so unless the user writes another.
-        default = RECOVERED_DESCRIPTION if doc.Name in _recovered else ""
+        default = RECOVERED_DESCRIPTION if name in _recovered else ""
         dialog = VersionDialog("Save", default=default)
-        dialog.accepted.connect(lambda: _save_version(doc.Name, dialog.text(), after))
-        _show(dialog, "save:" + doc.Name)
+        dialog.accepted.connect(lambda: _save_version(name, dialog.text(), after))
+        _show(dialog, "save:" + name)
     else:
-        _save_version(doc.Name, "", after)
+        _save_version(name, "", after)
 
 
 def save_design_as(doc):
@@ -453,9 +457,10 @@ def save_design_as(doc):
     if doc is None:
         commands.tell("Nothing to save: no design is open.")
         return
+    name = doc.Name  # taken now: the design may be closed while the dialog is open
     dialog = SaveDialog(doc, save_as=True)
-    dialog.accepted.connect(lambda: _first_save(doc.Name, dialog.result_path, None, save_as=True))
-    _show(dialog, "saveas:" + doc.Name)
+    dialog.accepted.connect(lambda: _first_save(name, dialog.result_path, None, save_as=True))
+    _show(dialog, "saveas:" + name)
 
 
 def _document(name):
