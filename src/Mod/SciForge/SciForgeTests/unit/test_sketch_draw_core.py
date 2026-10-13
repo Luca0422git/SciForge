@@ -167,6 +167,33 @@ class TangentArcRadiusTests(unittest.TestCase):
         self.assertIsNone(core.tangent_arc_radius((0, 0), (1, 0), (9, 0), 5.0))
 
 
+class ThreePointRectangleTests(unittest.TestCase):
+    def test_square_corners_on_the_pointer_side(self):
+        # side (0,0)-(10,0); the pointer 4 above it at x = 3 (not over a corner): width 4
+        corners = core.rectangle_3point((0, 0), (10, 0), (3, 4))
+        for got, want in zip(corners, [(0, 0), (10, 0), (10, 4), (0, 4)]):
+            near(self, got, want)
+
+    def test_tilted_side_and_other_side(self):
+        # side (0,0)-(3,4) (length 5, direction (0.6, 0.8)); the pointer right of it at
+        # distance 2: the square direction is (0.8, -0.6) * 2 = (1.6, -1.2)
+        p = (1.5 + 1.6, 2 - 1.2)
+        corners = core.rectangle_3point((0, 0), (3, 4), p)
+        near(self, corners[2], (4.6, 2.8))
+        near(self, corners[3], (1.6, -1.2))
+        for i in range(4):
+            a, b, c = corners[i], corners[(i + 1) % 4], corners[(i + 2) % 4]
+            self.assertAlmostEqual(core.dot(core.sub(b, a), core.sub(c, b)), 0.0)
+
+    def test_typed_width(self):
+        corners = core.rectangle_3point((0, 0), (10, 0), (3, -1), width=7)
+        near(self, corners[2], (10, -7))
+
+    def test_no_shape(self):
+        self.assertIsNone(core.rectangle_3point((1, 1), (1, 1), (5, 5)))
+        self.assertIsNone(core.rectangle_3point((0, 0), (10, 0), (5, 0)))
+
+
 class EdgePolygonTests(unittest.TestCase):
     def test_square_on_the_pointer_side(self):
         corners, centre, r = core.edge_polygon((0, 0), (10, 0), 4, (5, 3))

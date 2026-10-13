@@ -260,6 +260,33 @@ def make(sketch, faces, curves, kind=TYPES[0], direction=None):
     return obj
 
 
+def sketch_edge_name(sketch, geo):
+    """The name ("EdgeN") in the sketch's shape of its curve `geo`. The sketch numbers
+    its curves with the construction curves counted (Edge3 in the sketch editor is curve
+    2), its shape leaves construction curves out. None for a construction curve or a
+    point."""
+    import Part
+
+    g = sketch.Geometry[geo]
+    if sketch.getConstruction(geo) or isinstance(g, Part.Point):
+        return None
+    try:
+        edge = g.toShape()
+    except Exception:
+        return None
+    edge.Placement = sketch.Placement
+    probes = [
+        edge.valueAt(edge.FirstParameter + (edge.LastParameter - edge.FirstParameter) * f)
+        for f in (0.0, 0.37, 1.0)
+    ]
+    for k, candidate in enumerate(sketch.Shape.Edges):
+        if abs(candidate.Length - edge.Length) > 1e-6:
+            continue
+        if all(candidate.distToShape(Part.Vertex(p))[0] < 1e-6 for p in probes):
+            return "Edge%d" % (k + 1)
+    return None
+
+
 def sketch_normal_towards(sketch, faces):
     """The sketch's normal, turned to point at the faces (Along Vector's default)."""
     placement = sketch.getGlobalPlacement()

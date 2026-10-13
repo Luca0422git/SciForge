@@ -2,22 +2,17 @@
 """Commands of the SKETCH tab's remaining Fusion tools (outline 7.5): the drawing tools
 SciForge draws itself (sketch_draw_tools.py), Trim / Extend / Break
 (sketch_modify_tools.py), the Collinear / Concentric / Midpoint / Curvature constraints
-(sketch_constrain_tools.py), Project to Surface (sketch_project_tool.py) and the
-3-Point Rectangle (FreeCAD's rectangle tool started in its "3 corners" mode).
+(sketch_constrain_tools.py) and Project to Surface (sketch_project_tool.py).
 
 Every command says next to the mouse when it cannot start (no sketch open)."""
 
 import FreeCAD as App
-import FreeCADGui as Gui
 
-from . import commands
 from . import sketch_constrain_tools as constrain
 from . import sketch_draw_tools as tools
-from . import sketch_mode
 from . import sketch_modify_tools as modify
 from . import sketch_project_tool as project
 from . import ui_icon_path, warn
-from .compat import QtCore, QtWidgets
 
 
 class _ToolCommand:
@@ -52,74 +47,6 @@ def _command(tool, icon, tip):
     )
 
 
-# -- 3-Point Rectangle: FreeCAD's rectangle in its "3 corners" mode ------------------------
-THREE_CORNERS = "3 corners"
-
-
-class Rectangle3Point:
-    title = "3-Point Rectangle"
-
-    def GetResources(self):
-        return {
-            "MenuText": self.title,
-            "ToolTip": "A rectangle at any angle: click two corners (one side), then the "
-            "width; type the length and width if you like",
-            "Pixmap": ui_icon_path("sk_rectangle"),
-        }
-
-    def IsActive(self):
-        return App.ActiveDocument is not None
-
-    def Activated(self):
-        try:
-            if sketch_mode.editing_sketch() is None:
-                commands.tell(
-                    "3-Point Rectangle works inside a sketch: click Create Sketch (or edit a "
-                    "sketch) first."
-                )
-                return
-            session = sketch_mode.current()
-            if session is not None:
-                session.stop_tool()
-                session.line.stop()
-            Gui.runCommand("Sketcher_CreateRectangle")
-            QtCore.QTimer.singleShot(0, lambda: three_corners(0))
-        except Exception as exc:
-            warn("3-Point Rectangle failed: %s" % exc)
-
-
-def tool_combo(entry):
-    """The construction-method box of FreeCAD's running tool (in its tool panel) that
-    offers `entry`, or None."""
-    for widget in Gui.getMainWindow().findChildren(QtWidgets.QWidget):
-        if widget.metaObject().className() != "SketcherGui::TaskSketcherTool":
-            continue
-        for box in widget.findChildren(QtWidgets.QComboBox):
-            texts = [box.itemText(i) for i in range(box.count())]
-            if entry in texts:
-                return box
-    return None
-
-
-def three_corners(tries):
-    """Switch FreeCAD's rectangle tool to "3 corners" (its tool panel can appear a
-    moment after the tool starts)."""
-    try:
-        box = tool_combo(THREE_CORNERS)
-        if box is None:
-            if tries < 10:
-                QtCore.QTimer.singleShot(50, lambda: three_corners(tries + 1))
-            else:
-                warn("3-Point Rectangle: FreeCAD's rectangle tool did not offer 3 corners")
-            return
-        index = [box.itemText(i) for i in range(box.count())].index(THREE_CORNERS)
-        if box.currentIndex() != index:
-            box.setCurrentIndex(index)
-        commands.tell("3-Point Rectangle: click two corners (one side), then the width.")
-    except Exception as exc:
-        warn("3-Point Rectangle: %s" % exc)
-
-
 COMMANDS = {
     "SciForge_SketchMidpointLine": _command(
         tools.MidpointLine,
@@ -127,7 +54,12 @@ COMMANDS = {
         "A line drawn out both ways from its middle: click the middle, then an end "
         "(or type the length and angle)",
     ),
-    "SciForge_SketchRectangle3Point": Rectangle3Point,
+    "SciForge_SketchRectangle3Point": _command(
+        tools.ThreePointRectangle,
+        "sk_rectangle",
+        "A rectangle at any angle: click two corners (one side), then the width (or type "
+        "the length, angle and width)",
+    ),
     "SciForge_SketchCircle2Point": _command(
         tools.TwoPointCircle,
         "sk_circle",

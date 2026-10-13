@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Fusion's sketch drawing tools that FreeCAD's Sketcher does not have, on SciForge's own
-drawing handler (sketch_draw.DrawTool): Midpoint Line, 2-Point Circle, 2-Tangent and
-3-Tangent Circle, Tangent Arc, Edge Polygon, the linear slots (centre to centre, overall,
-centre point), the three-point arc slot and the conic curve.
+drawing handler (sketch_draw.DrawTool): Midpoint Line, 3-Point Rectangle, 2-Point Circle,
+2-Tangent and 3-Tangent Circle, Tangent Arc, Edge Polygon, the linear slots (centre to
+centre, overall, centre point), the three-point arc slot and the conic curve.
 
 The maths is in sketch_draw_core.py (unit tested), the shapes and their constraints in
 sketch_build.py; here: the clicks, the preview and the value boxes of each tool. The
@@ -143,6 +143,96 @@ class MidpointLine(_Directed):
             out += self.snap_constraints(shape["anchors"]["middle"], middle_snap)
         out += self.snap_constraints((line, 2), end_snap, line=line)
         out += self._typed_dimensions(line)
+        return out
+
+
+# -- 3-Point Rectangle ---------------------------------------------------------------------
+class ThreePointRectangle(_Directed):
+    """Fusion's 3-Point Rectangle: two clicks give one side (at any angle), the third
+    how wide the rectangle is, square to that side. (FreeCAD's rectangle has a "3 corners"
+    mode, but it makes a parallelogram through the third click.)"""
+
+    title = "3-Point Rectangle"
+    command = "SciForge_SketchRectangle3Point"
+    direction_steps = (1,)
+
+    def steps(self):
+        return 3
+
+    def prompt(self):
+        return [
+            "click the first corner.",
+            "click the second corner (or type the length, Tab, the angle, Enter).",
+            "click to set the width (or type it, Enter).",
+        ][self.step]
+
+    def fields(self):
+        if self.step == 1:
+            return [Field("length", LENGTH, "L"), Field("angle", ANGLE, "A")]
+        if self.step == 2:
+            return [Field("width", LENGTH, "W")]
+        return []
+
+    def corners(self, snap):
+        p1, p2 = self.snaps[0].point, self.snaps[1].point
+        return core.rectangle_3point(p1, p2, snap.raw, self.boxes.typed("width"))
+
+    def adjust(self, snap):
+        if self.step == 1:
+            end = self.end_from(self.snaps[0].point, snap)
+            return _plain(snap, end) if end is not None else snap
+        if self.step == 2:
+            corners = self.corners(snap)
+            return _plain(snap, corners[2]) if corners is not None else snap
+        return snap
+
+    def accept(self, snap):
+        if self.step == 1:
+            return core.dist(snap.point, self.snaps[0].point) > 1e-7
+        if self.step == 2:
+            return self.corners(snap) is not None
+        return True
+
+    def moved(self, snap):
+        guides, marks, points = self.hint_marks(snap)
+        if self.step == 0:
+            self.preview.show(guides=guides, marks=marks, points=points)
+            return
+        p1 = self.snaps[0].point
+        if self.step == 1:
+            end = self.end_from(p1, snap)
+            if end is None:
+                self.preview.show(points=[p1])
+                return
+            self._update_direction_fields(p1, end)
+            self.preview.show(curves=[[p1, end]], guides=guides, marks=marks, points=points + [p1])
+            return
+        corners = self.corners(snap)
+        p2 = self.snaps[1].point
+        if corners is None:
+            self.preview.show(curves=[[p1, p2]], points=[p1, p2])
+            return
+        f = self.boxes.field("width")
+        if f is not None:
+            f.value = core.dist(corners[1], corners[2])
+            f.anchor = core.mid(corners[1], corners[2])
+        self.preview.show(curves=[corners + [corners[0]]], points=[p1, p2])
+
+    def build(self, construction):
+        p1_snap, p2_snap, p3_snap = self.snaps
+        corners = core.rectangle_3point(
+            p1_snap.point, p2_snap.point, p3_snap.raw, self.boxes.typed("width")
+        )
+        shape = build.add_rectangle_3point(self.sketch, corners, construction)
+        anchors = shape["anchors"]
+        out = self.snap_constraints(anchors["p1"], p1_snap)
+        out += self.snap_constraints(anchors["p2"], p2_snap, line=shape["edge"])
+        if core.dist(p3_snap.point, corners[2]) <= 1e-9:
+            out += self.snap_constraints(anchors["p3"], p3_snap)
+        out += self._typed_dimensions(shape["edge"])
+        width = self.boxes.typed("width")
+        if width is not None:
+            out.append(_con("Distance", shape["width"], abs(width)))
         return out
 
 
@@ -954,6 +1044,7 @@ TOOLS = {
     cls.command: cls
     for cls in (
         MidpointLine,
+        ThreePointRectangle,
         TwoPointCircle,
         TwoTangentCircle,
         ThreeTangentCircle,

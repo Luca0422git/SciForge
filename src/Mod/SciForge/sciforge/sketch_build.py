@@ -73,6 +73,28 @@ def add_midpoint_line(sketch, a, b, construction=False, middle_point=True):
     return {"ids": ids, "anchors": anchors, "line": line}
 
 
+def add_rectangle_3point(sketch, corners, construction=False):
+    """Fusion's 3-Point Rectangle from its corners [p1, p2, p3, p4] (core.rectangle_3point):
+    four lines joined end to end, the second square to the first and each side parallel
+    to the one opposite (Fusion's perpendicular and parallel constraints), so it stays a
+    rectangle at any angle. Anchors: "p1", "p2" (the first side's ends), "p3" (the
+    clicked corner: the end of the second side); "edge" is the first side, "width" the
+    second."""
+    pts = list(corners)
+    lines = _add(sketch, [_line(pts[i], pts[(i + 1) % 4]) for i in range(4)], construction)
+    cons = [_con("Coincident", lines[i], END, lines[(i + 1) % 4], START) for i in range(4)]
+    cons.append(_con("Perpendicular", lines[0], lines[1]))
+    cons.append(_con("Parallel", lines[0], lines[2]))
+    cons.append(_con("Parallel", lines[1], lines[3]))
+    sketch.addConstraint(cons)
+    return {
+        "ids": lines,
+        "anchors": {"p1": (lines[0], START), "p2": (lines[0], END), "p3": (lines[1], END)},
+        "edge": lines[0],
+        "width": lines[1],
+    }
+
+
 # -- circles ---------------------------------------------------------------------------
 def add_circle(sketch, centre, radius, construction=False):
     import Part

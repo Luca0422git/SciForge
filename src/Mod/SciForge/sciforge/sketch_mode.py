@@ -145,7 +145,6 @@ ENTER_FINISHES = {
     "Sketcher_CreateLine",
     "Sketcher_CreateRectangle",
     "Sketcher_CreateRectangle_Center",
-    "SciForge_SketchRectangle3Point",
     "SciForge_PolygonCircumscribed",
     "SciForge_PolygonInscribed",
 }
@@ -1069,46 +1068,44 @@ class SketchSession:
         except Exception:
             return False
 
+    def open_spline_step(self):
+        """FreeCAD's spline tool adds a point (or control circle) to the sketch at each
+        click, meant to be kept in its undo step "Add Sketch B-Spline"; but FreeCAD's
+        command runner closes that step as soon as the tool has started, so the points
+        land outside any undo step (Esc could not take them back, and Ctrl+Z after the
+        spline undid the step before it). SciForge opens the step again at the click."""
+        try:
+            if self._spline_tool() and App.getActiveTransaction() is None:
+                App.setActiveTransaction(SPLINE_STEP)
+        except Exception as exc:
+            warn("spline: %s" % exc)
+
     def _commit_spline(self):
         """Fusion's Enter / OK on a spline being drawn: the spline is made from the points
-        clicked so far. FreeCAD makes it on a right click (its spline tool's own finish),
-        which SciForge's view filter otherwise turns into the marking menu: the click is
-        handed to FreeCAD directly."""
+        clicked so far. FreeCAD's spline tool makes it on Esc (or its right click), which
+        SciForge otherwise takes for "cancel": that Esc is handed to FreeCAD directly."""
         gl = self.gl
         if gl is None or not _is_valid(gl):
             return
         before = len(self.sketch.Geometry)
-        pos = gl.mapFromGlobal(QtGui.QCursor.pos())
-        if not gl.rect().contains(pos):
-            pos = gl.rect().center()
-        at = QtCore.QPointF(pos)
-        right, none = QtCore.Qt.RightButton, QtCore.Qt.NoButton
-        self.filter.pass_right = True
+        self.keys.pass_escape = True
         try:
-            for kind, buttons in (
-                (QtCore.QEvent.MouseButtonPress, right),
-                (QtCore.QEvent.MouseButtonRelease, none),
-            ):
-                event = QtGui.QMouseEvent(
-                    kind,
-                    at,
-                    QtCore.QPointF(gl.mapToGlobal(pos)),
-                    right,
-                    buttons,
-                    QtCore.Qt.NoModifier,
-                )
+            gl.setFocus()
+            for kind in (QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease):
+                event = QtGui.QKeyEvent(kind, QtCore.Qt.Key_Escape, QtCore.Qt.NoModifier)
                 QtWidgets.QApplication.sendEvent(gl, event)
         finally:
-            self.filter.pass_right = False
+            self.keys.pass_escape = False
         log(
             "spline: made from the points clicked (%d curve(s) added)"
             % (len(self.sketch.Geometry) - before)
         )
 
     def _drop_spline(self):
-        """Fusion's Esc on a spline being drawn cancels that spline. FreeCAD keeps its
-        points (pole / knot circles) in its open "Add Sketch B-Spline" step, which the
-        next change would commit: that step is dropped."""
+        """Fusion's Esc on a spline being drawn cancels that spline: the undo step that
+        holds its points so far (open_spline_step) is dropped. Also run after Enter / OK:
+        FreeCAD opens a fresh step for the next spline, which would hold whatever the
+        user changes next."""
         try:
             active = App.getActiveTransaction()
             name = active[0] if isinstance(active, (tuple, list)) else active
@@ -1153,7 +1150,8 @@ class SketchSession:
         except Exception:
             pass
         _state["polygon"] = None if not self.polygon.active else _state["polygon"]
-        if self._spline_tool():
+        spline = self._spline_tool()
+        if spline:
             try:
                 self._commit_spline()
             except Exception as exc:
@@ -1162,6 +1160,8 @@ class SketchSession:
             Gui.runCommand("Sketcher_StopOperation")  # quits FreeCAD's tool
         except Exception as exc:
             warn("sketch OK: %s" % exc)
+        if spline:
+            self._drop_spline()  # the empty step FreeCAD opened for a next spline
         log("sketch: tool finished")
 
     def escape(self):
@@ -1429,11 +1429,12 @@ class _KeyFilter(QtCore.QObject):
     def __init__(self, session):
         super().__init__()
         self.session = session
+        self.pass_escape = False  # an Esc meant for FreeCAD (finishing a spline)
 
     def eventFilter(self, obj, event):
         try:
             session = self.session
-            if session.closed:
+            if session.closed or self.pass_escape:
                 return False
             kind = event.type()
             if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
@@ -1496,12 +1497,11 @@ class _ViewFilter(QtCore.QObject):
         super().__init__()
         self.session = session
         self.right_pressed = None
-        self.pass_right = False  # a right click meant for FreeCAD (finishing a spline)
 
     def eventFilter(self, obj, event):
         try:
             session = self.session
-            if session.closed or self.pass_right:
+            if session.closed:
                 return False
             kind = event.type()
             tool = session.tool
@@ -1538,6 +1538,8 @@ class _ViewFilter(QtCore.QObject):
                     # FreeCAD must not get this second press as another click there.
                     QtCore.QTimer.singleShot(0, session.line.break_chain)
                     return True
+            if kind == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton:
+                session.open_spline_step()  # (FreeCAD's spline tool: the points' undo step)
             # Fusion's inference (sketch_infer.py) may hand FreeCAD a copy of the event
             # with the point moved onto a guide; the copy comes back through here.
             if session.infer is not None and session.infer.mouse(obj, event):

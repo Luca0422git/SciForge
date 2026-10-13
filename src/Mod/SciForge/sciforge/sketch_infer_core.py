@@ -41,7 +41,6 @@ TOOLS = {
     "Sketcher_CreateLine": "line",
     "Sketcher_CreateRectangle": "rect",
     "Sketcher_CreateRectangle_Center": "rect_center",
-    "SciForge_SketchRectangle3Point": "rect3",  # FreeCAD's rectangle in "3 corners" mode
     "Sketcher_CreateCircle": "circle",
     "Sketcher_Create3PointCircle": "circle3",
     "Sketcher_CreateArc": "arc",
@@ -65,7 +64,6 @@ POINTS = {
     "line": 2,
     "rect": 2,
     "rect_center": 2,
-    "rect3": 2,  # two corners of one side; the third click gives the width (no guide)
     "circle": 2,
     "circle3": 3,
     "arc": 2,
@@ -639,7 +637,6 @@ PREVIEWS = {
     "line": ("line",),
     "rect": ("rect",),
     "rect_center": ("rect",),
-    "rect3": ("line", "rect"),  # one side first, then the whole rectangle
     "circle": ("circle",),
     "circle3": ("circle",),
     "arc": ("circle", "arc"),

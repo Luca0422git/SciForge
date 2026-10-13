@@ -110,6 +110,12 @@ class ProjectToSurface(draw.DrawTool):
         else:
             geo = self._sketch_curve(press_snap)
             if geo is not None:
+                if sketch_project.sketch_edge_name(self.sketch, geo) is None:
+                    self.say(
+                        "Project to Surface: a construction curve cannot be projected "
+                        "(make it a normal curve first)."
+                    )
+                    return
                 self._toggle(self.curves, self.sketch, "Edge%d" % (geo + 1))
             else:
                 found = self._object_at(pos) if pos is not None else None
@@ -172,7 +178,7 @@ class ProjectToSurface(draw.DrawTool):
             self.say("Project to Surface: click the curves to project.")
             return
         faces = _grouped(self.faces)
-        curves = _grouped(self.curves)
+        curves = _grouped(self._shape_names(self.curves))
         direction = None
         if self.kind == sketch_project.TYPES[1]:
             direction = sketch_project.sketch_normal_towards(self.sketch, faces)
@@ -189,6 +195,19 @@ class ProjectToSurface(draw.DrawTool):
         log("Project to Surface: %s made" % obj.Label)
         if stop:
             self.stop()
+
+    def _shape_names(self, items):
+        """The picks with the sketch's curves named as in its shape (sketch_edge_name):
+        the sketch editor's EdgeN counts construction curves, the shape does not."""
+        out = []
+        for obj, sub in items:
+            if obj is self.sketch and sub.startswith("Edge"):
+                name = sketch_project.sketch_edge_name(self.sketch, int(sub[4:]) - 1)
+                if name is None:
+                    continue
+                sub = name
+            out.append((obj, sub))
+        return out
 
 
 def _grouped(items):

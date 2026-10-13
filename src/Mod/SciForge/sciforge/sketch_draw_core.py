@@ -6,6 +6,7 @@ No FreeCAD, no Qt here: plain (x, y) tuples in sketch millimetres, so it is unit
 (SciForgeTests/unit/test_sketch_draw_core.py). Angles are radians unless a name says deg.
 
 - Midpoint Line: the line symmetric about the first click.
+- 3-Point Rectangle: one side from the first two clicks, the width square to it.
 - 2-Point Circle: the two clicks are the ends of a diameter.
 - 2-Tangent Circle: the circle touching two lines in the quadrant the pointer is in.
 - 3-Tangent Circle: the circles touching three lines (incircle and excircles), the one
@@ -351,6 +352,24 @@ def edge_polygon(p1, p2, sides, side_point):
     step = side * 2.0 * math.pi / sides
     corners = [rotate(p1, centre, step * i) for i in range(sides)]
     return corners, centre, radius
+
+
+def rectangle_3point(p1, p2, pointer, width=None):
+    """The four corners [p1, p2, p3, p4] of Fusion's 3-Point Rectangle: the side p1 -> p2,
+    the other two sides square to it on the side of `pointer`, as long as the pointer's
+    distance from the line p1 p2 (or `width`). None for a side of no length or no width."""
+    edge = sub(p2, p1)
+    n_edge = length(edge)
+    if n_edge <= EPS:
+        return None
+    u = mul(edge, 1.0 / n_edge)
+    across = cross(u, sub(pointer, p1))
+    side = 1.0 if across >= 0 else -1.0
+    w = abs(across) if width is None else abs(width)
+    if w <= EPS:
+        return None
+    offset = mul(left(u), side * w)
+    return [p1, p2, add(p2, offset), add(p1, offset)]
 
 
 # -- slots ------------------------------------------------------------------------------
