@@ -182,6 +182,9 @@ class BrowserComponentTests(unittest.TestCase):
         self.assertIn("Activate", browser.MENUS["component"])
         self.assertIn("Create Components from Bodies", browser.MENUS["body"])
         self.assertIn("Move to Component", browser.MENUS["body"])
+        # Joints: a body and a component can both be grounded from the browser (Fusion).
+        self.assertIn("Ground", browser.MENUS["body"])
+        self.assertIn("Ground", browser.MENUS["component"])
         self.assertIn("New Component", browser.MENUS["document"])
 
 

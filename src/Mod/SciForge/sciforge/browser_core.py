@@ -395,6 +395,8 @@ MENUS = {
         "Activate Body",
         "Create Components from Bodies",
         "-",
+        "Ground",
+        "-",
         "Show/Hide",
         "Isolate",
         "Find in Window",
