@@ -72,6 +72,7 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `blend_edit` | `target`, `add_edges` / `add_faces` (selectors on the shape it is applied to), `set` {options} | double-click a Fillet / Chamfer in the timeline, pick more edges, change sizes; later blends keep their edges |
 | `shell` | `id`, `faces` (faces to remove), `thickness`, `direction` (inside/outside) | Shell |
 | `hole` | `id`, `sketch` (hole centres = its circles' centres), `diameter`, `depth` or `through_all`, `counterbore {diameter, depth}` or `countersink {diameter, angle}` | Hole |
+| `emboss` | `id`, `sketch` (every closed area of it is a profile), `faces` (selector), `depth`, `effect` (emboss/deboss), `h`, `v`, `angle`, `tangent_chain` | Emboss dialog (`sciforge/emboss.py`, details in `golden/emboss_ops.py`) |
 | `pattern_rect` | `id`, `features`, `direction`, `count`, `spacing`, optional second direction `direction2`, `count2`, `spacing2` | Rectangular Pattern |
 | `pattern_circ` | `id`, `features`, `axis`, `count`, `angle` | Circular Pattern |
 | `mirror` | `id`, `features`, `plane` | Mirror |

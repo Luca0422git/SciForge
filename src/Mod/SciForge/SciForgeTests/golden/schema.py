@@ -375,6 +375,11 @@ _HOLE_OPTION_KEYS = {
     "flip",
     "comment",
 }
+# Fusion Emboss (the Emboss dialog's code, sciforge/emboss.py; golden/emboss_ops.py)
+STEP_KEYS["emboss"] = (
+    {"id", "sketch", "faces"},
+    {"depth", "effect", "h", "v", "angle", "tangent_chain", "comment"},
+)
 STEP_KEYS["hole_at"] = ({"id", "face", "at"}, {"references"} | _HOLE_OPTION_KEYS)
 STEP_KEYS["hole_points"] = ({"id", "sketch"}, set(_HOLE_OPTION_KEYS))
 STEP_KEYS["thread"] = (

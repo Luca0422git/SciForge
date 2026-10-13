@@ -1,0 +1,76 @@
+{
+  "id": "emboss_cylinder_deboss",
+  "title": "Deboss a 10x4 rectangle 1 mm into a cylinder r20",
+  "tags": [
+    "emboss",
+    "cylinder"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            20
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 40
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            20,
+            10,
+            4
+          ],
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "op": "emboss",
+      "id": "em1",
+      "sketch": "s2",
+      "faces": {
+        "type": "cylinder",
+        "radius": 20,
+        "count": 1
+      },
+      "depth": 1,
+      "effect": "deboss"
+    }
+  ],
+  "expect": {
+    "volume": 50226.482457436694,
+    "area": 7565.322368615503,
+    "faces": 8,
+    "edges": 15,
+    "solids": 1,
+    "bbox": [
+      -20,
+      -20,
+      0,
+      20,
+      20,
+      40
+    ],
+    "source": "analytic",
+    "note": "Pocket = 0.5/2 * (20^2 - 19^2) * 4 = 39 (= 40 * 1 * (1 - 1/40)). Area: floor 19*0.5*4 = 38 replaces 40 (-2), end walls 0.5/2*(400-361) = 9.75 each, side walls 4 each: +25.5"
+  }
+}
