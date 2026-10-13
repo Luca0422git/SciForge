@@ -477,7 +477,9 @@ class PressPullPanel(Panel):
             return box
         try:
             self.value_box = ArrowValueBox(
-                lambda: self.field.widget.text(), lambda text: self.formula_input.take(text)
+                lambda: self.field.widget.text(),
+                lambda text: self.formula_input.take(text),
+                cancel=self.escape.press,
             )
         except Exception as exc:
             warn("value box unavailable: %s" % exc)

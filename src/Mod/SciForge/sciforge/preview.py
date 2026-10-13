@@ -85,6 +85,11 @@ class EscapeCancels:
 
         QtCore.QTimer.singleShot(0, self._cancel)
 
+    def press(self):
+        """Esc pressed somewhere that keeps the key to itself (the value box next to an
+        arrow): cancel just the same, once the key has been handled."""
+        self._pressed()
+
     def _cancel(self):
         try:
             panel = self.panel

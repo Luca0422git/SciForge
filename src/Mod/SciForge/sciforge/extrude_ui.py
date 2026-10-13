@@ -1301,7 +1301,9 @@ class ExtrudePanel(Panel):
         }[key]
         try:
             box = ArrowValueBox(
-                lambda: field.widget.text(), lambda text: self._box_typed(key, text)
+                lambda: field.widget.text(),
+                lambda text: self._box_typed(key, text),
+                cancel=self.escape.press,
             )
         except Exception as exc:
             warn("value box unavailable: %s" % exc)

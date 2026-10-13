@@ -239,11 +239,12 @@ class ArrowValueBox(QtWidgets.QLineEdit):
     """The value box next to a drag arrow in the 3D view, like Fusion's: it shows exactly
     what the dialog's field shows (with units) and moves with the arrow while it is
     dragged. Click it and type a value or a formula; Enter (or clicking elsewhere) takes
-    it like the dialog's field does. It never takes the keyboard by itself, and it never
-    covers the arrow's heads.
+    it like the dialog's field does. Esc cancels the command, as it does anywhere else.
+    It never takes the keyboard by itself, and it never covers the arrow's heads.
 
     text():        what to show (the dialog field's text)
     commit(text):  the user typed `text` here and pressed Enter
+    cancel():      Esc was pressed in the box (the dialog cancels, like Esc elsewhere)
     The dialog owns the box (the arrows are rebuilt often; typing must survive that);
     discard() it when the dialog closes."""
 
@@ -253,7 +254,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         " selection-background-color: #3fa9f5; selection-color: #ffffff; }"
     )
 
-    def __init__(self, text, commit, parent=None):
+    def __init__(self, text, commit, parent=None, cancel=None):
         super().__init__(parent if parent is not None else view_widget())
         self.setObjectName("SciForgeArrowValue")
         self.setStyleSheet(self.STYLE)
@@ -261,6 +262,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
         self._text = text
         self._commit = commit
+        self._cancel = cancel
         self.edited = False  # the user typed in the box since it last showed the field
         self.anchor = None  # widget pixel of the arrow point it sits next to
         self.textEdited.connect(self._typed)
@@ -352,6 +354,33 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             warn("value box: %s" % exc)
         self.refresh()
 
+    def event(self, event):
+        # Esc while typing here cancels the command, as everywhere in Fusion. Claimed before
+        # Qt looks for shortcuts, so it reaches keyPressEvent below.
+        try:
+            if (
+                event.type() == QtCore.QEvent.ShortcutOverride
+                and event.key() == QtCore.Qt.Key_Escape
+            ):
+                event.accept()
+                return True
+        except Exception:
+            pass
+        return super().event(event)
+
+    def keyPressEvent(self, event):
+        try:
+            if event.key() == QtCore.Qt.Key_Escape:
+                event.accept()
+                self.edited = False  # what was typed is dropped with the command
+                if self._cancel is not None:
+                    self._cancel()
+                return
+        except Exception as exc:
+            warn("value box: %s" % exc)
+            return
+        super().keyPressEvent(event)
+
     def focusInEvent(self, event):
         super().focusInEvent(event)
         # A click puts the cursor somewhere in the text; Fusion selects the value so the
@@ -378,6 +407,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         """Remove the box for good (the dialog closes)."""
         self._commit = lambda _text: None
         self._text = lambda: ""
+        self._cancel = None
         if not _alive(self):
             return
         try:
