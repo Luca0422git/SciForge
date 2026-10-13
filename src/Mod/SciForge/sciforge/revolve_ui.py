@@ -25,8 +25,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, extrude, log, preview, profile_pick, revolve, ui_icon_path, warn
-from . import drag_guard
+from . import commands, drag_guard, extrude, handles3d, log, preview, profile_pick, revolve
+from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField, Panel
 
@@ -442,10 +442,14 @@ class AngleHandle:
                     self._last_pos = (float(position[0]), float(position[1]))
                     start = self._absolute(position, self._value)
                     self._offset = 0.0 if start is None else start - self._value
+                    # The release of a drag ending over the part is kept by FreeCAD's
+                    # selection; Qt's is watched too (handles3d.ReleaseWatch).
+                    handles3d.watch_release(self)
             elif self._drag:
                 self._drag = False
                 self._released = True
                 self._last_event = time.time()
+                handles3d.stop_watching(self)
         except Exception as exc:
             warn("revolve handle: %s" % exc)
 
@@ -498,6 +502,10 @@ class AngleHandle:
     def remove(self):
         try:
             self._timer.stop()
+        except Exception:
+            pass
+        try:
+            handles3d.stop_watching(self)
         except Exception:
             pass
         for kind, callback in getattr(self, "callbacks", []):

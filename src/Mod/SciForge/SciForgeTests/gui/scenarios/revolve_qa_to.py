@@ -27,6 +27,7 @@ import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 from PySide6 import QtTest
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
@@ -170,6 +171,7 @@ def block_extrude():
 
 
 def block_ok():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 

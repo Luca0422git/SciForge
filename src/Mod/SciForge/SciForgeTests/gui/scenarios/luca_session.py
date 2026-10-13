@@ -6,6 +6,7 @@ Finish Sketch on a face sketch errors, errors everywhere."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
 
 V = App.Vector
@@ -50,10 +51,11 @@ def extrude_1():
 
 
 def extrude_1_drag():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     from sciforge import extrude_ui
 
     p = extrude_ui.ExtrudePanel.last
-    h.check("extrude 1 has a target", p is not None and p.target is not None)
+    h.check("extrude 1 picked the sketch", p is not None and bool(p.profiles))
     if p and p.dragger:
         h.fit()
         head = V(20, 15, p.dragger.distance() + p.dragger.size * 0.9)
@@ -84,10 +86,11 @@ def extrude_2_click_top():
 
 
 def extrude_2_drag():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     from sciforge import extrude_ui
 
     p = extrude_ui.ExtrudePanel.last
-    h.check("extrude 2 picked the face", p is not None and p.target is not None)
+    h.check("extrude 2 picked the face", p is not None and bool(p.profiles))
     if p and p.dragger:
         h.fit()
         top = h.body().Shape.BoundBox.ZMax
@@ -157,10 +160,11 @@ def extrude_3():
 
 
 def extrude_3_ok():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     from sciforge import extrude_ui
 
     p = extrude_ui.ExtrudePanel.last
-    h.check("extrude 3 picked the circle", p is not None and p.target is not None)
+    h.check("extrude 3 picked the circle", p is not None and bool(p.profiles))
     h.task_button("OK")
 
 

@@ -27,6 +27,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import sketch_input as si
 
@@ -310,6 +311,7 @@ def r_extrude():
 
 
 def r_extrude_open():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     from sciforge import extrude_ui
 
     h.check("R6: E finished the sketch", h.in_sketch() is None)

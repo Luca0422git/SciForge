@@ -131,7 +131,7 @@ def to_object():
     h.check("Extrude open", p is not None)
     if p is None:
         return
-    h.check("the circle is taken by itself", p.target is not None, p.message.text())
+    h.check("the circle is taken by itself", len(p.profiles) == 1, p.message.text())
     h.check("choose Extent: To Object", ui.choose(p.extent, "To Object"))
     h.check("the Object box takes the next click", p.active == "extent_object", p.active)
 

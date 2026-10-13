@@ -21,6 +21,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import widget_input as w
@@ -100,6 +101,7 @@ def block_steps(tag, name):
         h.press("e")
 
     def ok():
+        arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
         h.task_button("OK")
 
     def done():
@@ -130,7 +132,7 @@ def pick_top():
 # -- Path 20: typing values ------------------------------------------------------------------
 def p20_inch():
     p = xpanel()
-    h.check("face extrude preview", p.target is not None, p.message.text())
+    h.check("face extrude picked", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "1 in")
 
 
@@ -174,7 +176,7 @@ def p22_save_as():
 
 def p22_type():
     p = xpanel()
-    h.check("face extrude preview", p.target is not None, p.message.text())
+    h.check("face extrude picked", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "5")
 
 
@@ -242,6 +244,7 @@ def p23_extrude_in_b():
 def p23_pick_in_b():
     h.fit()
     h.click(V(30, 25, 10))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p23_switch_to_a():
@@ -283,6 +286,7 @@ def p24_start():
 def p24_preview():
     h.fit()
     h.click(V(30, 25, 20))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p24_close():
@@ -346,7 +350,7 @@ def p27_e():
 
 def p27_type_width():
     p = xpanel()
-    h.check("rectangle picked by itself", p.target is not None, p.message.text())
+    h.check("rectangle picked by itself", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "width")
 
 
@@ -434,7 +438,7 @@ def p27_cut_pick():
 
 def p27_cut_type():
     p = xpanel()
-    h.check("face extrude on the top", p.target is not None, p.message.text())
+    h.check("face extrude on the top", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "-depth")
 
 

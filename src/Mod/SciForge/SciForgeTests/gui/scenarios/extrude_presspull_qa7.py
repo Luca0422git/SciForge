@@ -16,6 +16,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import widget_input as w
@@ -116,7 +117,8 @@ def e():
 
 def block_ok():
     p = xpanel()
-    h.check("block profile picked by itself", p.target is not None, p.message.text())
+    h.check("block profile picked by itself", len(p.profiles) == 1, p.message.text())
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 
@@ -127,7 +129,7 @@ def block_done():
 
 def slab_options():
     p = xpanel()
-    h.check("slab profile picked by itself", p.target is not None, p.message.text())
+    h.check("slab profile picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("choose New Body", ui.choose(p.operation, "New Body"))
     h.check("choose Start: Offset", ui.choose(p.start, "Offset"))
 
@@ -177,7 +179,7 @@ def block_active():
 
 def column_to_object():
     p = xpanel()
-    h.check("column profile picked by itself", p.target is not None, p.message.text())
+    h.check("column profile picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("choose Extent: To Object", ui.choose(p.extent, "To Object"))
 
 

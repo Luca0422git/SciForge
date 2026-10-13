@@ -12,6 +12,7 @@ import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 from PySide6 import QtTest
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import widget_input as w
 
@@ -148,6 +149,7 @@ def extrude():
 
 
 def extrude_ok():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 
@@ -440,6 +442,7 @@ def draw_b2():
 def extrude_b2():
     h.fit()
     h.press("e")
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def check_two_bodies():

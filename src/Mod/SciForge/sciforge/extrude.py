@@ -633,8 +633,10 @@ class ExtrudeFeature:
             "taper2": obj.TaperAngle2.Value,
             "target2": target(obj.UpToFace2),
         }
+        self.tool = None
         try:
             tool = prism.build(faces, normal, spec, reach=[base.Shape] if has_base else [])
+            self.tool = tool  # the extruded volume (body coordinates), for the cut preview
             if operation == "Intersect":
                 result = base.Shape.common(tool)
             elif operation == "Cut":
@@ -1073,15 +1075,23 @@ def evaluate(doc, text):
         raise ExtrudeError("'%s' is not a number." % text)
 
 
-def _hide_sketches(profiles):
+def hide_sketches(profiles):
+    """Fusion hides a profile's sketch once the extrude is made (OK), not before: while the
+    dialog is open the sketch stays in view (Luca, R6)."""
     if not App.GuiUp:
         return
     for obj, _ in profiles:
         if is_sketch(obj):
             try:
-                obj.ViewObject.Visibility = False
+                # Only a visible one: setting it again is a change FreeCAD records, and an
+                # edit OK'd without a change then left an undo step that did nothing.
+                if obj.ViewObject.Visibility:
+                    obj.ViewObject.Visibility = False
             except Exception:
                 pass
+
+
+_hide_sketches = hide_sketches  # first-version name
 
 
 def _new_body(src_body):
@@ -1117,9 +1127,10 @@ def _structure(feature, profiles, options):
     return target, feature_type(op, options), src
 
 
-def build(profiles, options, name="Extrude", feature=None):
+def build(profiles, options, name="Extrude", feature=None, hide=True):
     """Create the extrude, or rebuild `feature` with new profiles/options.
-    Returns the feature (a different object when its kind had to change)."""
+    Returns the feature (a different object when its kind had to change). hide=False keeps
+    the profile sketches in view (the dialog's preview; it hides them on OK)."""
     profiles = check_profiles(profiles)
     options = options_with_defaults(options)
     check_options(options)
@@ -1129,7 +1140,7 @@ def build(profiles, options, name="Extrude", feature=None):
             type_id != INTERSECT_TYPE or is_intersect(feature)
         )
         if owner_body(feature) is target and same_type:
-            _update(feature, target, profiles, options)
+            _update(feature, target, profiles, options, hide)
             return feature
         blocking = dependents(feature)
         if blocking:
@@ -1153,7 +1164,7 @@ def build(profiles, options, name="Extrude", feature=None):
         _attach_view_provider(new)
     _save_meta(new, {"created_body": created.Name if created is not None else None})
     try:
-        _update(new, target, profiles, options)
+        _update(new, target, profiles, options, hide)
     except Exception:
         # Nothing half-made stays behind; the old feature is still there, untouched.
         _remove(new, keep_body=created is None or (feature is not None and before is not None))
@@ -1168,7 +1179,7 @@ def build(profiles, options, name="Extrude", feature=None):
     return new
 
 
-def _update(feature, body, profiles, options):
+def _update(feature, body, profiles, options, hide=True):
     meta = load_meta(feature)
     doc = feature.Document
     old_helpers = [doc.getObject(n) for n in meta.get("helpers", [])]
@@ -1223,7 +1234,8 @@ def _update(feature, body, profiles, options):
         }
     )
     _save_meta(feature, meta)
-    _hide_sketches(profiles)
+    if hide:
+        hide_sketches(profiles)
 
 
 def _delete(obj):
@@ -1429,6 +1441,59 @@ def _link_ref(feature, suffix):
             if links:
                 return (links[0][0], "")
     return None
+
+
+# -- the cut preview -----------------------------------------------------------------------
+def tool_shape(feature):
+    """The volume a cut extrude removes material with, in global coordinates, or None:
+    what the dialog shows in red while it is open (Fusion's cut preview). A Pocket keeps
+    it as AddSubShape; SciForge's own feature (a tapered cut FreeCAD cannot make) keeps it
+    on its proxy. A side going through All stops at the far side of the part, like Fusion's
+    preview, instead of reaching as far as FreeCAD extends it."""
+    if feature is None:
+        return None
+    try:
+        if is_intersect(feature):
+            tool = getattr(getattr(feature, "Proxy", None), "tool", None)
+            if tool is None or tool.isNull():
+                return None
+            shape = tool.copy()
+            body = owner_body(feature)
+            if body is not None:
+                shape.Placement = body.getGlobalPlacement().multiply(shape.Placement)
+        else:
+            sub = getattr(feature, "AddSubShape", None)
+            if sub is None or sub.isNull():
+                return None
+            shape = sub.copy()
+            shape.Placement = feature.getGlobalPlacement().multiply(sub.Placement)
+        if shape.isNull() or not shape.Solids:
+            return None
+        through = _through_all(feature)
+        base = getattr(feature, "BaseFeature", None)
+        if through and base is not None and not base.Shape.isNull():
+            import Part
+
+            box = _to_global(base.Shape, base).BoundBox
+            box.enlarge(max(box.DiagonalLength * 1e-3, 1e-3))
+            limit = Part.makeBox(
+                box.XLength, box.YLength, box.ZLength, App.Vector(box.XMin, box.YMin, box.ZMin)
+            )
+            clipped = shape.common(limit)
+            if not clipped.isNull() and clipped.Solids:
+                shape = clipped
+        return shape
+    except Exception:
+        return None
+
+
+def _through_all(feature):
+    """True if a side of the extrude goes through All."""
+    for prop in ("Type", "Type2"):
+        value = str(getattr(feature, prop, ""))
+        if value in ("ThroughAll", "UpToLast"):
+            return True
+    return False
 
 
 # -- auto operation ----------------------------------------------------------------------

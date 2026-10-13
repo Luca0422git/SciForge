@@ -381,8 +381,11 @@ def step_extrude():
     Gui.Selection.addSelection(App.ActiveDocument.Name, sketch.Name)
     press("E")
     panel = extrude_ui.ExtrudePanel.last
+    # The dialog starts at 0 (Fusion): the sketch is picked, nothing is built until a distance.
     check(
-        "Pressing E opens Extrude with the sketch", panel is not None and panel.target is not None
+        "Pressing E opens Extrude with the sketch",
+        panel is not None and len(panel.profiles) == 1 and panel.distance.value() == 0.0,
+        panel and (panel.profiles, panel.distance.value()),
     )
     panel.distance.widget.setProperty("rawValue", -5.0)
     state["panel"] = panel

@@ -25,6 +25,7 @@ PICKED = (0.12, 0.53, 0.90)
 IDLE_TRANSPARENCY = 0.65
 HOVER_TRANSPARENCY = 0.35
 PICKED_TRANSPARENCY = 0.25
+DIMMED_TRANSPARENCY = 0.85  # picked, while a red cut preview must show through
 
 
 def sketch_faces(sketch):
@@ -119,9 +120,15 @@ def handle_at(view, position, radius=3):
 
 class ProfilePicker:
     """A press on a drag handle (an arrow in front of a region) drags the handle: it is no
-    pick of the region behind it."""
+    pick of the region behind it.
 
-    def __init__(self, view, sketches, on_pick, occluder=None):
+    clicks_through=True (Extrude): while the regions are offered, the sketches' own lines
+    and faces let clicks through. The shaded regions here take the clicks, and an arrow
+    behind a sketch (a cut going down into the part, with the sketch kept in view until OK)
+    stays grabbable, as Fusion's arrows always are. Off for the other dialogs: Sweep and
+    Loft pick sketch lines as paths and rails, so FreeCAD must still find them."""
+
+    def __init__(self, view, sketches, on_pick, occluder=None, clicks_through=False):
         from pivy import coin
 
         self.coin = coin
@@ -130,6 +137,9 @@ class ProfilePicker:
         self.occluder = occluder  # () -> the part (global) that can hide regions
         self.regions = []  # (sketch, sub, face, material)
         self.selected = set()  # {(sketch name, sub)}
+        self.dimmed = False  # picked profiles faded (a red cut preview is shown over them)
+        self.face_materials = []  # materials of the highlighted body faces
+        self.unpickable = []  # (sketch's root node, pick style) put in while offered
         self.last_click = 0.0  # time of the last click that picked a region
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
@@ -149,12 +159,31 @@ class ProfilePicker:
                 continue
             for sub, face in found:
                 self.regions.append((sketch, sub, face, self._add_face(face, self.root)))
+            if found and clicks_through:
+                self._let_clicks_through(sketch)
         self.hovered = None
         view.getSceneGraph().addChild(self.root)
         self.callbacks = [
             ("SoMouseButtonEvent", view.addEventCallback("SoMouseButtonEvent", self._button)),
             ("SoLocation2Event", view.addEventCallback("SoLocation2Event", self._moved)),
         ]
+
+    def _let_clicks_through(self, sketch):
+        """The sketch's own drawing cannot be picked while the picker is on (a Coin pick
+        style in the sketch's own scene nodes, taken out again by remove(); nothing about
+        the sketch itself changes). Its lines are under RootNode; its shaded areas
+        (FreeCAD 1.1's SoSketchFaces) under the separate Annotation node."""
+        for attr in ("RootNode", "Annotation"):
+            try:
+                root = getattr(sketch.ViewObject, attr)
+                if root is None:
+                    continue
+                style = self.coin.SoPickStyle()
+                style.style = self.coin.SoPickStyle.UNPICKABLE
+                root.insertChild(style, 0)
+                self.unpickable.append((root, style))
+            except Exception:
+                pass  # no view of the sketch: nothing to click there anyway
 
     def _add_face(self, face, parent, color=FILL, transparency=IDLE_TRANSPARENCY):
         coin = self.coin
@@ -203,10 +232,13 @@ class ProfilePicker:
         return best[0]
 
     # -- looks --------------------------------------------------------------------------
+    def _picked_transparency(self):
+        return DIMMED_TRANSPARENCY if self.dimmed else PICKED_TRANSPARENCY
+
     def _paint(self, region, hovered=False):
         material = region[3]
         if (region[0].Name, region[1]) in self.selected:
-            color, transparency = PICKED, PICKED_TRANSPARENCY
+            color, transparency = PICKED, self._picked_transparency()
         else:
             color = FILL
             transparency = HOVER_TRANSPARENCY if hovered else IDLE_TRANSPARENCY
@@ -223,11 +255,29 @@ class ProfilePicker:
     def show_faces(self, faces):
         """Highlight picked body faces (global coordinates)."""
         self.face_root.removeAllChildren()
+        self.face_materials = []
         for face in faces:
             try:
-                self._add_face(face, self.face_root, PICKED, PICKED_TRANSPARENCY)
+                self.face_materials.append(
+                    self._add_face(face, self.face_root, PICKED, self._picked_transparency())
+                )
             except Exception as exc:
                 warn("could not highlight a face: %s" % exc)
+
+    def dim_picked(self, dim):
+        """Fade the picked profiles' blue (while the dialog shows a cut in red: the strong
+        blue on the profile plane hid the red), or bring it back."""
+        dim = bool(dim)
+        if dim == self.dimmed:
+            return
+        self.dimmed = dim
+        for region in self.regions:
+            self._paint(region, region is self.hovered)
+        for material in self.face_materials:
+            try:
+                material.transparency.setValue(self._picked_transparency())
+            except Exception:
+                pass
 
     # -- events -------------------------------------------------------------------------
     def _moved(self, info):
@@ -271,6 +321,14 @@ class ProfilePicker:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        for root, style in self.unpickable:
+            try:
+                index = root.findChild(style)
+                if index >= 0:
+                    root.removeChild(index)
+            except Exception:
+                pass  # the sketch was deleted with its scene
+        self.unpickable = []
         self.regions = []
 
 

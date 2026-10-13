@@ -10,18 +10,23 @@ just finished, is taken at once.
 The fields follow Fusion's Extrude: Start (Profile Plane / Offset / Object), Direction
 (One Side / Two Sides / Symmetric), Extent (Distance / To Object / All), Taper Angle,
 Operation (Join / Cut / Intersect / New Body). The blue arrows in the 3D view set the
-distances, the blue disc the taper angle. Dragging into the part switches to Cut, as
-Fusion does, unless you picked the operation yourself. Problems are shown in the
-dialog, which then stays open.
+distances (each with a value box next to it, to read or type the value), the blue disc
+the taper angle. Dragging into the part switches to Cut, as Fusion does, unless you
+picked the operation yourself; a cut shows in red while the dialog is open. A new
+extrude starts at 0 and shows nothing until you drag or type; the profile's sketch stays
+in view until OK. Problems are shown in the dialog, which then stays open.
 """
 import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, drag_guard, extrude, log, preview, profile_pick, ui_icon_path, warn
+from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_pick, taskui
+from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, DistanceField, Panel
+from .taskui import ArrowDragger, ArrowValueBox, DistanceField, Panel
+
+ZERO_HINT = "Drag the arrow or type a distance."
 
 START_LABELS = [("Profile Plane", "profile"), ("Offset", "offset"), ("Object", "object")]
 DIRECTION_LABELS = [
@@ -380,6 +385,11 @@ class ExtrudePanel(Panel):
         self.profiles = []
         self.options = dict(extrude.DEFAULTS)
         self.options["measurement"] = "half"  # Fusion's default for Symmetric
+        if feature is None:
+            # Fusion's Extrude starts at 0: nothing pops out before you drag the arrow or
+            # type a distance (Luca, R5). extrude.DEFAULTS keeps 10 for scripts.
+            self.options["distance"] = 0.0
+            self.options["distance2"] = 0.0
         self.user_picked_operation = feature is not None
         self.error = ""
         self.waiting = ""  # the selection box that waits for a click, said as a hint
@@ -393,6 +403,8 @@ class ExtrudePanel(Panel):
         self.picker = None
         self.observer = None
         self._quiet = False
+        self.value_boxes = {}  # the value box next to each arrow ({"distance": box, ...})
+        self.cut_view = None  # the red cut preview (cut_preview.CutPreview)
         if feature is not None:
             try:
                 self.profiles, read = extrude.read(feature)
@@ -430,7 +442,9 @@ class ExtrudePanel(Panel):
         form.addRow(self.profile)
         self.start = _combo(START_LABELS, self.options["start"])
         form.addRow("Start", self.start)
-        self.start_offset = DistanceField(self.options["start_offset"], on_change=self._typed)
+        self.start_offset = DistanceField(
+            self.options["start_offset"], on_change=self._offset_typed
+        )
         self.start_offset_label = QtWidgets.QLabel("Offset")
         form.addRow(self.start_offset_label, self.start_offset.widget)
         self.start_object_label = QtWidgets.QLabel("Object")
@@ -698,6 +712,7 @@ class ExtrudePanel(Panel):
                     0, lambda: self._region_clicked(sketch, sub)
                 ),
                 occluder=self._occluder,
+                clicks_through=True,  # the sketch stays in view: its arrows stay grabbable
             )
         except Exception as exc:
             warn("profile shading unavailable: %s" % exc)
@@ -917,6 +932,10 @@ class ExtrudePanel(Panel):
         if not self._quiet:
             self._changed()
 
+    def _offset_typed(self, *_):
+        if not self._quiet:
+            self._changed(new_geometry=True)  # the arrows start at the new offset
+
     def _distance_typed(self, value):
         if self._quiet:
             return
@@ -1009,7 +1028,7 @@ class ExtrudePanel(Panel):
             return
         base = self._base_feature()
         base_shape = base.Shape if base is not None and not base.Shape.isNull() else None
-        options = extrude.options_with_defaults(self.options)
+        options = extrude.options_with_defaults(self._build_options() or self.options)
         try:
             distance = extrude._sign1(self.profiles, options)  # the side it goes to
         except Exception:
@@ -1066,14 +1085,74 @@ class ExtrudePanel(Panel):
                 self._make_draggers()
         except Exception as exc:
             self.message.setText("⚠ %s" % exc)
+        self._update_cut_preview()
+
+    # -- a distance of 0 -------------------------------------------------------------------
+    def _zero_sides(self):
+        """The sides whose distance is still 0: {1}, {2}, {1, 2} or an empty set."""
+        options = self.options
+        zero = set()
+        if options["extent"] == "distance" and abs(float(options["distance"])) < 1e-6:
+            zero.add(1)
+        if (
+            options["direction"] == "two_sides"
+            and options["extent2"] == "distance"
+            and abs(float(options["distance2"])) < 1e-6
+        ):
+            zero.add(2)
+        return zero
+
+    def _build_options(self):
+        """The options the preview is built with, or None when there is nothing to build
+        yet. A new extrude starts at 0 (Fusion): a side still at 0 is left out of the
+        preview, so dragging one side of Two Sides already shows it. Editing an existing
+        extrude builds what the dialog says (a 0 there is an error, the step stays)."""
+        options = self.options
+        zero = self._zero_sides()
+        if not zero or self.editing:
+            return options
+        if options["direction"] != "two_sides" or zero == {1, 2}:
+            return None
+        if zero == {2}:
+            return dict(options, direction="one_side")
+        # Side one is at 0: side two alone, as a one-sided extrude the other way.
+        alone = dict(
+            options,
+            direction="one_side",
+            extent=options["extent2"],
+            taper=options["taper2"],
+            extent_object=options.get("extent_object2"),
+            flip=False,
+        )
+        if options["extent2"] == "distance":
+            alone["distance"] = -float(options["distance2"])
+        elif options["extent2"] == "all":
+            alone["distance"] = -1.0  # All keeps the side its distance is on
+        return alone
+
+    def _zero_message(self):
+        if self._zero_sides() == {2}:
+            return "The distance of side two must not be zero: drag its arrow or type a distance."
+        return "The distance must not be zero: drag the arrow or type a distance."
 
     def _apply(self):
         if not self.profiles:
             return
         self.waiting = ""
+        options = self._build_options()
+        if options is None:
+            # Nothing to show at 0: no preview (an old one would stay as if it were still
+            # there), the arrows stay to be dragged, and the dialog says what to do.
+            if self.target is not None and not self.editing:
+                extrude.remove(self.target)
+                self.target = None
+            self.error = ""
+            self.waiting = ZERO_HINT
+            return
         try:
             before = self.target
-            self.target = extrude.build(self.profiles, self.options, feature=self.target)
+            # hide=False: the profile's sketch stays in view until OK (Fusion; Luca R6).
+            self.target = extrude.build(self.profiles, options, feature=self.target, hide=False)
             self.error = ""
             if before is None or self.target is not before:
                 self._geometry_changed = True
@@ -1133,7 +1212,7 @@ class ExtrudePanel(Panel):
         if any(_is_dragging(h) for h in self.draggers.values()):
             return False
         wanted = set()
-        if self.target is not None and self.profiles:
+        if self.profiles:  # also with no preview yet: the arrows start at 0 (R5)
             if self.options["start"] == "offset":
                 wanted.add("offset")
             if self.options["extent"] == "distance":
@@ -1158,7 +1237,7 @@ class ExtrudePanel(Panel):
         if active:
             return  # never pull a handle from under the mouse
         self._remove_draggers()
-        if not self.profiles or self.target is None:
+        if not self.profiles:
             return
         try:
             point, normal = extrude.profile_frame(self.profiles)
@@ -1183,6 +1262,7 @@ class ExtrudePanel(Panel):
                     size * 0.7,
                     on_drag=self._offset_dragged,
                     on_release=self._offset_released,
+                    value_box=self._value_box("offset"),
                 )
             if options["extent"] == "distance":
                 self.dragger = self.draggers["distance"] = ArrowDragger(
@@ -1192,6 +1272,7 @@ class ExtrudePanel(Panel):
                     size,
                     on_drag=self._dragged,
                     on_release=self._dragged,
+                    value_box=self._value_box("distance"),
                 )
             if options["direction"] == "two_sides" and options["extent2"] == "distance":
                 self.draggers["distance2"] = ArrowDragger(
@@ -1201,10 +1282,99 @@ class ExtrudePanel(Panel):
                     size,
                     on_drag=self._dragged2,
                     on_release=self._dragged2,
+                    value_box=self._value_box("distance2"),
                 )
             self._make_taper_handle(faces, start, normal, size)
         except Exception as exc:
             warn("extrude handles unavailable: %s" % exc)
+
+    # -- the value boxes next to the arrows ---------------------------------------------------
+    def _value_box(self, key):
+        """The box that shows (and takes) the value of the arrow `key`. Made once and kept by
+        the dialog: the arrows are rebuilt often, and what is being typed must survive that."""
+        box = self.value_boxes.get(key)
+        if box is not None and taskui._alive(box):
+            return box
+        field = {
+            "distance": self.distance,
+            "distance2": self.distance2,
+            "offset": self.start_offset,
+        }[key]
+        try:
+            box = ArrowValueBox(
+                lambda: field.widget.text(), lambda text: self._box_typed(key, text)
+            )
+        except Exception as exc:
+            warn("value box unavailable: %s" % exc)
+            return None
+        self.value_boxes[key] = box
+        return box
+
+    def _box_typed(self, key, text):
+        """A value typed in the box next to an arrow: taken like the same text typed in the
+        dialog's field (numbers with units, parameters, formulas)."""
+        if self._closed:
+            return
+        formulas = {f.key: f for f in self.formula_inputs}
+        if key in formulas:
+            formulas[key].take(text)
+            return
+        # The start offset: a value (its field takes no formula either).
+        try:
+            value = self.start_offset.parse(text.strip().lstrip("="))
+        except ValueError as exc:
+            self.message.setText("⚠ " + str(exc))
+            return
+        self.start_offset.take(value)
+
+    def _discard_value_boxes(self):
+        for box in self.value_boxes.values():
+            try:
+                box.discard()
+            except Exception:
+                pass
+        self.value_boxes = {}
+
+    # -- the red cut preview -------------------------------------------------------------------
+    def _update_cut_preview(self):
+        """Fusion shows a cut in red while the dialog is open: the volume the extrude takes
+        away, drawn over the part (a picture only; the features keep their colours)."""
+        if self._closed:
+            return
+        shape = None
+        try:
+            if (
+                self.options.get("operation") == "cut"
+                and self.target is not None
+                and not self.error
+                and not preview.failure(self.target)
+            ):
+                shape = extrude.tool_shape(self.target)
+        except Exception:
+            shape = None
+        try:
+            if shape is None:
+                if self.cut_view is not None:
+                    self.cut_view.clear()
+            else:
+                if self.cut_view is None:
+                    self.cut_view = cut_preview.CutPreview(self._view())
+                self.cut_view.show(shape)
+            if self.picker is not None:
+                self.picker.dim_picked(shape is not None)
+        except Exception as exc:
+            warn("cut preview: %s" % exc)
+
+    def _view(self):
+        try:
+            return Gui.getDocument(self.doc.Name).ActiveView
+        except Exception:
+            return Gui.ActiveDocument.ActiveView
+
+    def _remove_cut_preview(self):
+        view, self.cut_view = self.cut_view, None
+        if view is not None:
+            view.clear()
 
     def _make_taper_handle(self, faces, start, normal, size):
         """The taper disc sits on the profile's edge, turning outward from the normal."""
@@ -1244,7 +1414,7 @@ class ExtrudePanel(Panel):
 
     # -- OK / Cancel ----------------------------------------------------------------------------
     def accept(self):
-        if self.target is None:
+        if not self.profiles:
             self.message.setText(
                 "⚠ Pick a profile first: click inside a sketch area or on a flat face."
             )
@@ -1253,12 +1423,22 @@ class ExtrudePanel(Panel):
             self.message.setText("⚠ " + self.formula_error)
             return False
         self._timer.stop()
-        if self.dirty:
+        if self.dirty:  # a value typed and Enter at once: build it before deciding
             self.dirty = False
             self._apply()
+        if not self.editing and self._zero_sides():
+            # Fusion makes nothing of a 0 distance: the dialog stays open and says why.
+            self.info.setText(ZERO_HINT)
+            self.message.setText("⚠ " + self._zero_message())
+            return False
         if self.error:
             self.info.setText("")
             self.message.setText("⚠ " + self.error)
+            return False
+        if self.target is None:
+            self.message.setText(
+                "⚠ Pick a profile first: click inside a sketch area or on a flat face."
+            )
             return False
         preview.recompute(self.doc)
         text = _plain(preview.failure(self.target))
@@ -1266,6 +1446,9 @@ class ExtrudePanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
+        # Fusion hides the profile's sketch once the extrude is made (inside this step:
+        # Undo shows it again).
+        extrude.hide_sketches(self.profiles)
         self.cleanup()
         preview.end_transaction(self.doc)
         self._close()
@@ -1292,6 +1475,11 @@ class ExtrudePanel(Panel):
         self.undo_guard.remove()
         self.enter.remove()
         self._remove_draggers()
+        self._discard_value_boxes()
+        try:
+            self._remove_cut_preview()
+        except Exception as exc:
+            warn("cut preview: %s" % exc)
         super().cleanup()
 
 
@@ -1359,10 +1547,29 @@ class ExtrudeCommand:
             sketch = _sketch_in_edit()  # E pressed in a sketch: extrude that sketch
             if not commands.finish_open_dialog():
                 return
-            Gui.Control.showDialog(ExtrudePanel(App.ActiveDocument, sketch=sketch))
-            log("extrude started")
+            if sketch is not None:
+                # FreeCAD keeps the undo step of leaving the sketch (which also shows the
+                # sketch again) open until this command returns; a dialog opened now
+                # worked inside it, and its Cancel undid that too and hid the sketch. It
+                # opens right after instead, in a step of its own (as after Finish Sketch).
+                doc = App.ActiveDocument
+                QtCore.QTimer.singleShot(0, lambda: _open_dialog(doc, sketch))
+                return
+            _open_dialog(App.ActiveDocument, None)
         except Exception as exc:
             warn("Extrude failed to start: %s" % exc)
+
+
+def _open_dialog(doc, sketch):
+    try:
+        if doc is None or doc.Name not in App.listDocuments():
+            return
+        if Gui.Control.activeDialog() and not commands.finish_open_dialog():
+            return
+        Gui.Control.showDialog(ExtrudePanel(doc, sketch=sketch))
+        log("extrude started")
+    except Exception as exc:
+        warn("Extrude failed to start: %s" % exc)
 
 
 def _sketch_in_edit():

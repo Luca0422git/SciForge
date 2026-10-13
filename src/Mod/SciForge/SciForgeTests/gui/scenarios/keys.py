@@ -6,6 +6,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import harness as h
 
 V = App.Vector
@@ -37,6 +38,10 @@ def finish():
 def extrude():
     h.fit()
     h.press("e")
+
+
+def extrude_distance():
+    h.check("Extrude dialog open", a.type_distance("10"))  # it starts at 0, like Fusion
 
 
 def extrude_ok():
@@ -99,6 +104,7 @@ h.run(
         draw,
         finish,
         extrude,
+        extrude_distance,
         extrude_ok,
         after_extrude,
         undo,

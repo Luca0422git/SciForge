@@ -100,7 +100,7 @@ def boss_5():
     from sciforge import extrude_ui
 
     p = extrude_ui.ExtrudePanel.last
-    h.check("Extrude took the circle", p is not None and p.target is not None)
+    h.check("Extrude took the circle", p is not None and len(p.profiles) == 1)
     if p is not None:
         ui.type_into(p.distance.widget, "5")
 

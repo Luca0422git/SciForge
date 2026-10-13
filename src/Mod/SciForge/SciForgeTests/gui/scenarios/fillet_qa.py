@@ -249,10 +249,16 @@ def p4_too_big():
     h.check("P4 dragging far out makes the radius big", r > 15, r)
     text = p.message.text() if p else ""
     h.check("P4 too big: said in the dialog", "too big" in text, text)
+    # The preview follows the arrow while it is dragged (like Fusion's), so the last good
+    # result is the last radius that still fitted during the drag (at least the one before).
+    shown = getattr(getattr(p, "target", None), "Radius", None)
+    shown = float(getattr(shown, "Value", shown or 0.0))
     h.check(
         "P4 the preview keeps the last good result",
-        b.close(h.solid_volume(), s["good"]),
-        h.solid_volume(),
+        0 < shown < r
+        and b.close(h.solid_volume(), one_edge(shown))
+        and h.solid_volume() <= s["good"] + 1e-6,
+        (h.solid_volume(), shown, s["good"]),
     )
     h.shot("p4-too-big")
     h.task_button("OK")

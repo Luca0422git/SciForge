@@ -14,6 +14,7 @@ Undo removes it again.
 import FreeCAD as App
 import FreeCADGui as Gui
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -93,7 +94,8 @@ def extrude_base():
 
 
 def base_ok():
-    h.check("base picked by itself", panel().target is not None)
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
+    h.check("base picked by itself", len(panel().profiles) == 1)
     h.task_button("OK")
 
 
@@ -108,7 +110,7 @@ def extrude_wall():
 
 def wall_height():
     p = panel()
-    h.check("wall sketch picked by itself", p.target is not None, p.message.text())
+    h.check("wall sketch picked by itself", len(p.profiles) == 1, p.message.text())
     ui.type_into(p.distance.widget, "20")
 
 
@@ -127,7 +129,7 @@ def extrude_column():
 
 def column_to_object():
     p = panel()
-    h.check("column profile picked by itself", p.target is not None, p.message.text())
+    h.check("column profile picked by itself", len(p.profiles) == 1, p.message.text())
     h.check(
         "Join while going up out of the part",
         p.operation.currentText() == "Join",
@@ -157,6 +159,7 @@ def column_to_wall():
     h.check("the target is linked, not copied", p.target.Type == "UpToFace", p.target.Type)
     h.shot("1-to-object")
     h.check("choose Extent: Distance", ui.choose(p.extent, "Distance"))
+    ui.type_into(p.distance.widget, "10")  # the distance starts at 0 (Fusion)
 
 
 def start_from_object():
@@ -255,8 +258,9 @@ def extrude_new_body():
 
 def choose_new_body():
     p = panel()
-    h.check("block profile picked by itself", p.target is not None, p.message.text())
+    h.check("block profile picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("choose Operation: New Body", ui.choose(p.operation, "New Body"))
+    ui.type_into(p.distance.widget, "10")  # the distance starts at 0 (Fusion)
 
 
 def new_body_ok():

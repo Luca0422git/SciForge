@@ -12,6 +12,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -71,11 +72,12 @@ def finish_sketch():
 def extrude_it():
     h.fit()
     h.press("e")
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def started():
     p = panel()
-    h.check("the single profile is picked by itself", p is not None and p.target is not None)
+    h.check("the single profile is picked by itself", p is not None and len(p.profiles) == 1)
     h.check(
         "first solid: operation New Body",
         p.operation.currentText() == "New Body",
@@ -232,11 +234,12 @@ def esc_pick():
     h.fit()
     top = h.body().Shape.BoundBox.ZMax
     h.click(V(30, 25, top))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def esc_now():
     p = panel()
-    h.check("a face extrude started", p.target is not None, p.message.text())
+    h.check("a face extrude started", len(p.profiles) == 1, p.message.text())
     h.check("preview changes the part", not near(h.solid_volume(), s["volume"]))
     h.press(QtCore.Qt.Key_Escape)
 

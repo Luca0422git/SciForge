@@ -27,7 +27,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, drag_guard, move, profile_pick, ui_icon_path, warn
+from . import bodies, drag_guard, handles3d, move, profile_pick, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField
@@ -67,7 +67,7 @@ class Triad:
         self.on_release = on_release
         self._hover = None
         self._painted = None
-        self._drag = None  # (kind, index)
+        self._drag = None  # (kind, index); None or False when no drag
         self._drag_center = None
         self._start = None  # value at the press (mm along the axis / angle vector)
         self._pending = None
@@ -277,10 +277,15 @@ class Triad:
                 self._start = start
                 self._last_angle = 0.0
                 self._last_event = time.time()
-            elif self._drag is not None:
+                # FreeCAD's selection keeps the release of a drag that ends over the part
+                # (the moved body follows the handle there); Qt's release is watched too
+                # (handles3d.ReleaseWatch, which ends the drag with _drag = False).
+                handles3d.watch_release(self)
+            elif self._drag:
                 self._drag = None
                 self._released = True
                 self._last_event = time.time()
+                handles3d.stop_watching(self)
         except Exception as exc:
             warn("move handle: %s" % exc)
 
@@ -290,7 +295,7 @@ class Triad:
     def _moved(self, info):
         try:
             position = info["Position"]
-            if self._drag is None:
+            if not self._drag:
                 self._hover = self.handle_at(position)
                 return
             self._last_event = time.time()
@@ -311,11 +316,11 @@ class Triad:
             warn("move handle: %s" % exc)
 
     def dragging(self):
-        return self._drag is not None
+        return bool(self._drag)
 
     def busy(self, seconds=0.6):
         """True while dragging and just after: the click is the handle's, not a pick."""
-        return self._drag is not None or time.time() - self._last_event < seconds
+        return bool(self._drag) or time.time() - self._last_event < seconds
 
     def _poll(self):
         try:
@@ -327,7 +332,7 @@ class Triad:
             pending, self._pending = self._pending, None
             if pending is not None and self.on_drag:
                 self.on_drag(*pending)
-            if self._released and self._drag is None:
+            if self._released and not self._drag:
                 self._released = False
                 self._drag_done()
                 if self.on_release:
@@ -338,6 +343,10 @@ class Triad:
     def remove(self):
         try:
             self._timer.stop()
+        except Exception:
+            pass
+        try:
+            handles3d.stop_watching(self)
         except Exception:
             pass
         for kind, callback in getattr(self, "callbacks", []):

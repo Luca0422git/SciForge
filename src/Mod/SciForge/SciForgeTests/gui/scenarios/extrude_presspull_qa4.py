@@ -21,6 +21,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 
@@ -126,7 +127,7 @@ def extrude_steps(tag, distance, want):
 
     def typed():
         p = xpanel()
-        h.check("%s picked by itself" % tag, p.target is not None, p.message.text())
+        h.check("%s picked by itself" % tag, len(p.profiles) == 1, p.message.text())
         ui.type_into(p.distance.widget, "%g" % distance)
 
     def ok():
@@ -209,7 +210,7 @@ def p16_e():
 
 def p16_to_object():
     p = xpanel()
-    h.check("column picked by itself", p.target is not None, p.message.text())
+    h.check("column picked by itself", len(p.profiles) == 1, p.message.text())
     h.check("choose Extent: To Object", ui.choose(p.extent, "To Object"))
 
 
@@ -282,11 +283,13 @@ def p17_e():
 def p17_face():
     h.fit()
     h.click(V(20, 5, 15))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p17_preview():
     p = xpanel()
-    h.check("face extrude preview", p.target is not None, p.message.text())
+    h.check("face extrude preview", p.target is not None and len(p.profiles) == 1,
+            p.message.text())
     s["count"] = len(extrudes())
     s["before_dblclick"] = vol1()
     h.check("double-click Extrude 1", ui.double_click_timeline("Extrude 1"), ui.timeline_titles())
@@ -309,8 +312,9 @@ def p17_done():
 # -- Path 18: New Body edited into a Cut --------------------------------------------------------
 def p18_new_body():
     p = xpanel()
-    h.check("square on the wall picked", p.target is not None, p.message.text())
+    h.check("square on the wall picked", len(p.profiles) == 1, p.message.text())
     h.check("choose New Body", ui.choose(p.operation, "New Body"))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p18_ok():
@@ -375,6 +379,7 @@ def p19_e():
 def p19_face():
     h.fit()
     h.click(V(20, 5, 25))
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p19_to_object():

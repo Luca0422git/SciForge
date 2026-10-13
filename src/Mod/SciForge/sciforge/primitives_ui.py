@@ -22,7 +22,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, drag_guard, log, preview, primitives, profile_pick, ui_icon_path, warn
+from . import commands, drag_guard, handles3d, log, preview, primitives, profile_pick, ui_icon_path
+from . import warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_core import nearest_snap, nice_floor, round_to
@@ -473,10 +474,15 @@ class LinearHandle:
                     self._last_pos = (float(position[0]), float(position[1]))
                     start = self._along(position)
                     self._grab = 0.0 if start is None else start - self._value
+                    # FreeCAD's selection keeps the release when the drag ends over the
+                    # part (the preview now follows the arrow, so it often does): Qt's
+                    # release is watched too, or the arrow stayed stuck to the mouse.
+                    handles3d.watch_release(self)
             elif self._drag:
                 self._drag = False
                 self._released = True
                 self._last_event = time.time()
+                handles3d.stop_watching(self)
         except Exception as exc:
             warn("handle: %s" % exc)
 
@@ -542,6 +548,10 @@ class LinearHandle:
     def remove(self):
         try:
             self._timer.stop()
+        except Exception:
+            pass
+        try:
+            handles3d.stop_watching(self)
         except Exception:
             pass
         for kind, callback in getattr(self, "callbacks", []):

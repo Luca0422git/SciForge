@@ -22,6 +22,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import sketch_input as si
 
@@ -82,6 +83,7 @@ def extrude_1():
 
 
 def extrude_1_ok():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.task_button("OK")
 
 
@@ -141,11 +143,12 @@ def e_in_sketch():
 
 
 def e_started():
+    arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     from sciforge import extrude_ui
 
     h.check("E left the sketch", h.in_sketch() is None)
     panel = extrude_ui.ExtrudePanel.last
-    h.check("Extrude started with the sketch", panel is not None and panel.target is not None)
+    h.check("Extrude started with the sketch", panel is not None and bool(panel.profiles))
     h.task_button("OK")
 
 

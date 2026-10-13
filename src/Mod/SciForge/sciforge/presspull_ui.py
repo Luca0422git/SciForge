@@ -3,7 +3,10 @@
 
 The command looks at what is clicked, like Fusion:
   faces of the body        -> push/pull them (Fusion's Offset Face): drag the arrow or type
-                              a distance; the faces next to them are extended to follow
+                              a distance (in the dialog or in the box next to the arrow);
+                              the faces next to them are extended to follow. Material
+                              pushed away shows in red while the dialog is open. It starts
+                              at 0, and OK at 0 waits for a distance (no empty step)
   a face made by a fillet  -> edit that fillet's radius (or a chamfer's size)
   edges                    -> new fillet, the distance is the radius
 Nothing selected: the dialog opens and waits. Click more faces (or edges) to add them,
@@ -13,9 +16,10 @@ a picked face smoothly (a filleted run). Problems are shown in the dialog.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, log, preview, presspull, presspull_core as core, ui_icon_path, warn
+from . import commands, cut_preview, log, preview, presspull, presspull_core as core, taskui
+from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, DistanceField, Panel
+from .taskui import ArrowDragger, ArrowValueBox, DistanceField, Panel
 
 
 class ViewProviderPressPull:
@@ -139,6 +143,8 @@ class PressPullPanel(Panel):
         self.observer = None
         self.error = ""
         self.editing = feature is not None
+        self.value_box = None  # the box next to the arrow (taskui.ArrowValueBox)
+        self.cut_view = None  # the red preview of the material taken away
 
         from .extrude_ui import SelectionField
 
@@ -458,9 +464,33 @@ class PressPullPanel(Panel):
                 size,
                 on_drag=self._dragged,
                 on_release=self._dragged,
+                value_box=self._value_box(),
             )
         except Exception as exc:
             warn("press pull arrow unavailable: %s" % exc)
+
+    def _value_box(self):
+        """The box next to the arrow: shows the distance and takes one typed in it. Kept by
+        the dialog (the arrow is rebuilt when faces are added)."""
+        box = self.value_box
+        if box is not None and taskui._alive(box):
+            return box
+        try:
+            self.value_box = ArrowValueBox(
+                lambda: self.field.widget.text(), lambda text: self.formula_input.take(text)
+            )
+        except Exception as exc:
+            warn("value box unavailable: %s" % exc)
+            self.value_box = None
+        return self.value_box
+
+    def _discard_value_box(self):
+        box, self.value_box = self.value_box, None
+        if box is not None:
+            try:
+                box.discard()
+            except Exception:
+                pass
 
     def _watch_selection(self):
         panel = self
@@ -569,6 +599,47 @@ class PressPullPanel(Panel):
             self.show_status()
         except Exception as exc:
             self.message.setText("⚠ %s" % exc)
+        self._update_cut_preview()
+
+    # -- the red preview of material taken away ----------------------------------------------
+    def _removed(self):
+        """The material a face push takes away (global coordinates), or None."""
+        target = self.target
+        if self.mode != "faces" or target is None or preview.failure(target):
+            return None
+        tool = getattr(getattr(target, "Proxy", None), "tool", None)
+        if tool is None or tool.isNull() or not tool.Solids:
+            return None
+        shape = tool.copy()
+        body = target.getParentGeoFeatureGroup()
+        if body is not None:
+            shape.Placement = body.getGlobalPlacement().multiply(shape.Placement)
+        return shape
+
+    def _update_cut_preview(self):
+        """Pushing a face into the part shows the material it takes away in red (like a cut
+        in Fusion's Extrude); a picture only, the features keep their colours."""
+        if self._closed:
+            return
+        try:
+            shape = self._removed()
+        except Exception:
+            shape = None
+        try:
+            if shape is None:
+                if self.cut_view is not None:
+                    self.cut_view.clear()
+                return
+            if self.cut_view is None:
+                self.cut_view = cut_preview.CutPreview(Gui.getDocument(self.doc.Name).ActiveView)
+            self.cut_view.show(shape)
+        except Exception as exc:
+            warn("cut preview: %s" % exc)
+
+    def _remove_cut_preview(self):
+        view, self.cut_view = self.cut_view, None
+        if view is not None:
+            view.clear()
 
     def show_status(self):
         if self.formula_error:  # stays until the field gets a value again
@@ -590,6 +661,12 @@ class PressPullPanel(Panel):
             return False
         if self.mode in ("faces", "fillet") and not self.names:
             self.message.setText("⚠ Pick at least one face or edge.")
+            return False
+        if self.mode == "faces" and abs(self.field.value()) < 1e-6:
+            # A push of 0 changes nothing: Fusion makes no step of it. Stay open and say why.
+            self.message.setText(
+                "⚠ The distance must not be zero: drag the arrow or type a distance."
+            )
             return False
         self._timer.stop()
         preview.recompute(self.doc)
@@ -618,6 +695,11 @@ class PressPullPanel(Panel):
         self.undo_guard.remove()
         self.enter.remove()
         self._remove_dragger()
+        self._discard_value_box()
+        try:
+            self._remove_cut_preview()
+        except Exception as exc:
+            warn("cut preview: %s" % exc)
         super().cleanup()
 
 
