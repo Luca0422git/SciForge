@@ -106,7 +106,7 @@ def extrude_start():
 
 def into_the_part():
     p = xpanel()
-    h.check("Extrude picked the circle", p is not None and p.target is not None)
+    h.check("Extrude picked the circle", p is not None and len(p.profiles) == 1)
     if p is not None:
         ui.type_into(p.distance.widget, "-4")
 

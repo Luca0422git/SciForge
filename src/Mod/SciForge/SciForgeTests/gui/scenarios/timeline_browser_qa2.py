@@ -85,7 +85,7 @@ def hole_e():
 
 def hole_depth():
     p = xpanel()
-    h.check("Extrude picked the circle", p is not None and p.target is not None)
+    h.check("Extrude picked the circle", p is not None and len(p.profiles) == 1)
     if p is not None:
         ui.type_into(p.distance.widget, "-10")
 

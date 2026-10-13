@@ -8,7 +8,9 @@ R7  E, type -6: Cut, and the removed volume shows as one red see-through node ov
     part (exactly the pocket: 10..20 x 5..15 x 4..10), clicks go through it, the blue of
     the picked profile is faded meanwhile, the features keep their own colours. Type 5
     (Join): the red goes. Drag the arrow down into the part with the button held: red
-    again while dragging. Cancel: no red left, the scene is as before E, the part too.
+    again while dragging. Type -5: the arrow's head is now under the sketch, which stays
+    in view (R6); it can still be grabbed and dragged (the profile stays picked).
+    Cancel: no red left, the scene is as before E, the part too.
     E, -6, OK: the pocket is made, no red left. Undo; E, -6, Ctrl+Z: no red left.
 Press Pull on the top face:
 R5  it starts at 0; OK at 0 keeps the dialog open and makes no step.

@@ -77,7 +77,7 @@ def boss_steps(tag, point, center, radius, height):
 
     def distance():
         p = xpanel()
-        h.check("Extrude picked circle %s" % tag, p is not None and p.target is not None)
+        h.check("Extrude picked circle %s" % tag, p is not None and len(p.profiles) == 1)
         if p is not None:
             ui.type_into(p.distance.widget, "%g" % height)
 
