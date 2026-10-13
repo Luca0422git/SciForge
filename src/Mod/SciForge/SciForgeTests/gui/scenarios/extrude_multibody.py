@@ -173,7 +173,7 @@ def a_extrude():
 def a_distance():
     p = xpanel()
     if h.check("extrude dialog open", p is not None):
-        h.check("the sketch's area picked by itself", p.target is not None, p.profiles)
+        h.check("the sketch's area picked by itself", bool(p.profiles), p.profiles)
         ui.type_into(p.distance.widget, "-5")
 
 
@@ -417,7 +417,7 @@ def h_click_area():
 
 def h_became_extrude():
     p = xpanel()
-    if h.check("Press Pull on the area starts Extrude", p is not None and p.target is not None):
+    if h.check("Press Pull on the area starts Extrude", p is not None and bool(p.profiles)):
         ui.type_into(p.distance.widget, "-5")
 
 

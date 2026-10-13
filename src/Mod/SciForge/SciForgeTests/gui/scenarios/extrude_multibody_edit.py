@@ -125,7 +125,7 @@ def a_extrude():
 
 def a_distance():
     p = xpanel()
-    if h.check("A: extrude dialog open", p is not None and p.target is not None):
+    if h.check("A: extrude dialog open", p is not None and bool(p.profiles)):
         ui.type_into(p.distance.widget, "-3")
 
 
@@ -176,7 +176,7 @@ def a_boss_extrude():
 
 def a_boss_distance():
     p = xpanel()
-    if h.check("A: boss dialog open", p is not None and p.target is not None):
+    if h.check("A: boss dialog open", p is not None and bool(p.profiles)):
         ui.type_into(p.distance.widget, "1")
 
 
@@ -387,7 +387,7 @@ def d_extrude():
 
 def d_distance():
     p = xpanel()
-    if h.check("D: extrude dialog open", p is not None and p.target is not None):
+    if h.check("D: extrude dialog open", p is not None and bool(p.profiles)):
         ui.type_into(p.distance.widget, "-5")
 
 
@@ -530,7 +530,7 @@ def e_pick():
     if p.target is None:
         h.click(V(60, 60, 10))  # the sketch area on the plate's top
     _settled(p)
-    h.check("E: the sketch area picked", p.target is not None, p.profiles)
+    h.check("E: the sketch area picked", bool(p.profiles), p.profiles)
 
 
 def _type_and_time(text):
