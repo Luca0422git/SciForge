@@ -130,3 +130,111 @@ def middle_of_first_letter(obj):
 def open_text_tool():
     """SKETCH > CREATE > Text, with the mouse."""
     return si.menu_item("CREATE", "Text")
+
+
+def screen(sketch, x, y):
+    """Widget pixel of sketch point (x, y)."""
+    return h.screen_point(at(sketch, x, y))
+
+
+def text_steps(state, first, second, content, height=None, label="text"):
+    """The steps that make a text with the mouse and keys: SKETCH > CREATE > Text, two
+    frame corners, the text typed, (the height typed), OK. state["sketch"] is the open
+    sketch; the new text lands in state[label]. A corner may be a function giving the
+    sketch point when the step runs."""
+
+    def point(p):
+        return p() if callable(p) else p
+
+    def open_tool():
+        state["_before"] = list(texts(state["sketch"]))
+        open_text_tool()
+
+    def corner_1():
+        h.check("%s: the Text dialog opened" % label, dialog() is not None)
+        click_sketch(state["sketch"], *point(first))
+
+    def corner_2():
+        click_sketch(state["sketch"], *point(second))
+
+    def type_it():
+        d = dialog()
+        h.check("%s: the frame is placed" % label, d is not None and d.frame_placed)
+        type_text(content)
+        if height is not None and d is not None:
+            type_field(d.height, str(height))
+
+    def press_ok():
+        QtCore.QThread.msleep(100)
+        QtWidgets.QApplication.processEvents()
+        ok()
+
+    def made():
+        new = [o for o in texts(state["sketch"]) if o not in state["_before"]]
+        h.check("%s: OK made it" % label, len(new) == 1 and dialog() is None, new)
+        state[label] = new[0] if new else None
+
+    return [open_tool, corner_1, corner_2, type_it, press_ok, made]
+
+
+def marking_list_click(label):
+    """Click the entry `label` in the list under the open marking menu, with the mouse."""
+    menu = si.marking_menu()
+    if menu is None:
+        h.check("marking menu open for %s" % label, False)
+        return False
+    listing = menu.findChild(QtWidgets.QListWidget, "SciForgeMarkingList")
+    rows = [listing.item(i).text() for i in range(listing.count())] if listing else []
+    for i, row in enumerate(rows):
+        if row.split("    ")[0].strip() == label:
+            item = listing.item(i)
+            rect = listing.visualItemRect(item)
+            QtTest.QTest.mouseMove(listing.viewport(), rect.center())
+            QtTest.QTest.mouseClick(
+                listing.viewport(), QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, rect.center()
+            )
+            QtWidgets.QApplication.processEvents()
+            return True
+    h.check("marking list has %s" % label, False, rows)
+    menu.close()
+    return False
+
+
+def frame_of(obj):
+    """(corner, angle, width, height) of a text's frame lines in its sketch."""
+    from sciforge import text
+
+    return text.read_frame(obj.Sketch, list(obj.FrameIds))
+
+
+def points_in_frame(points, frame, tol=0.05):
+    """True if every (x, y) is inside frame (corner, angle, width, height)."""
+    import math
+
+    (cx, cy), angle, width, height = frame
+    a = math.radians(angle)
+    co, sn = math.cos(a), math.sin(a)
+    for x, y in points:
+        dx, dy = x - cx, y - cy
+        u, w = co * dx + sn * dy, -sn * dx + co * dy
+        if u < -tol or w < -tol or u > width + tol or w > height + tol:
+            return False
+    return True
+
+
+def preview_in_frame(d):
+    """True if the open dialog's previewed letters sit in the frame it shows."""
+    if d is None or d.plan is None or d.frame() is None:
+        return False
+    points = [p for line in d.plan.outlines() for p in line]
+    return bool(points) and points_in_frame(points, d.frame())
+
+
+def letters_in_frame(obj, tol=0.05):
+    """True if every vertex of the text's letters is inside its (turned) frame."""
+    found = frame_of(obj)
+    if found is None:
+        return False
+    shape = obj.Shape.copy()
+    shape.Placement = App.Placement()
+    return points_in_frame([(v.X, v.Y) for v in shape.Vertexes], found, tol)

@@ -124,6 +124,14 @@ PARAMS = [
     # of SciForge's profiles (ProfileShading.FILL), strong enough to see on the dark
     # background. FreeCAD's own is a dim 0x54ABFF40.
     (SKETCHER_GENERAL, "Unsigned", "SketchFaceColor", 0x73C4FF80),
+    # A spline is drawn as a plain curve, as in Fusion: FreeCAD's B-spline information
+    # (curvature comb, degree, knot multiplicity and pole weight labels) buried an
+    # exploded text under green hair and numbers. The control polygon stays (Fusion
+    # shows it for control-point splines).
+    (SKETCHER_GENERAL, "Bool", "BSplineCombVisible", False),
+    (SKETCHER_GENERAL, "Bool", "BSplineDegreeVisible", False),
+    (SKETCHER_GENERAL, "Bool", "BSplineKnotMultiplicityVisible", False),
+    (SKETCHER_GENERAL, "Bool", "BSplinePoleWeightVisible", False),
 ]
 
 # Sketch palette options (Fusion's defaults); remembered between sessions.

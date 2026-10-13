@@ -52,6 +52,9 @@ class TextError(core.TextError):
 
 # -- fonts ------------------------------------------------------------------------------------
 _FONTS = {"catalog": None, "told": set(), "missing": []}
+# called with the document's name when a text of an opening design lacks its font
+# (text_ui shows the message once the design is open)
+ON_FONT_MISSING = []
 
 
 def freecad_font_files():
@@ -948,6 +951,11 @@ class TextFeature:
                     )
                     log(msg)
                     _FONTS["missing"].append((obj.Document.Name, msg))
+                    for call in list(ON_FONT_MISSING):
+                        try:
+                            call(obj.Document.Name)
+                        except Exception:
+                            pass
         except Exception:
             pass
 
@@ -1202,7 +1210,40 @@ def remove(obj):
             remove_frame(sketch, list(obj.FrameIds))
         except Exception as exc:
             warn("text: frame lines: %s" % exc)
+    _forget_hidden(obj)
     doc.removeObject(obj.Name)
+
+
+def _forget_hidden(obj):
+    """FreeCAD's sketch edit hides what depends on the sketch (its texts) and shows it
+    again when the sketch closes (Show.TempoVis); a text deleted in between made that
+    printed as errors ("failed to restore detail"). Its saved visibility is dropped
+    (texts follow their sketch's visibility anyway, text_ui.sync_all)."""
+    if not App.GuiUp:
+        return
+    try:
+        from Show import TVStack
+
+        doc = obj.Document
+        stack = TVStack.mainStack(doc, create_if_missing=False)
+        if stack is None:
+            return
+        prefix = obj.Name + "."
+        for tv in stack:
+            if tv is None:
+                continue
+            for store in (getattr(tv, "data", {}), getattr(tv, "data_requested", {})):
+                for key in list(store):
+                    if (
+                        isinstance(key, tuple)
+                        and len(key) == 3
+                        and key[1] == doc.Name
+                        and isinstance(key[2], str)
+                        and key[2].startswith(prefix)
+                    ):
+                        store.pop(key, None)
+    except Exception as exc:
+        log("text: sketch visibility: %s" % exc)
 
 
 def users(obj):
@@ -1323,6 +1364,7 @@ def explode(obj):
     if obj.TextType == "Text":
         remove_frame(sketch, list(obj.FrameIds))
     _repoint(obj, sketch, ink, users_before)
+    _forget_hidden(obj)
     obj.Document.removeObject(obj.Name)
     return added
 

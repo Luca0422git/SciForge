@@ -1162,9 +1162,9 @@ class TextDialog(QtWidgets.QFrame):
         notes = []
         if not errors and self._ready():
             try:
-                self.plan = text.plan(
-                    self.spec, self.sketch, lookup=text.parameter_lookup(self.doc)
-                )
+                # the dialog's own frame (turned or typed), not the frame lines as they are
+                spec = dict(self.spec, frame_ids=[])
+                self.plan = text.plan(spec, self.sketch, lookup=text.parameter_lookup(self.doc))
                 notes = list(self.plan.notes)
             except core.TextError as exc:
                 self.error = str(exc)
@@ -1726,13 +1726,6 @@ class _AppObserver:
             pass
         self._texts_changed()
 
-    def slotFinishRestoreDocument(self, doc):
-        try:
-            name = doc.Name
-            QtCore.QTimer.singleShot(300, lambda: _tell_missing_fonts(name))
-        except Exception:
-            pass
-
     def slotUndoDocument(self, doc):
         self._texts_changed()
 
@@ -1743,6 +1736,15 @@ class _AppObserver:
         layer = current_layer()
         if layer is not None:
             layer.refresh()
+
+
+def _font_missing(doc_name):
+    """text.TextFeature found a text whose font this computer lacks while a design opens:
+    say so once the design is open (FreeCAD tells observers of no finished restore)."""
+    try:
+        QtCore.QTimer.singleShot(300, lambda: _tell_missing_fonts(doc_name))
+    except Exception:
+        pass
 
 
 def _tell_missing_fonts(doc_name):
@@ -2023,6 +2025,8 @@ def enable():
     if _state["on"]:
         return
     _state["on"] = True
+    if _font_missing not in text.ON_FONT_MISSING:
+        text.ON_FONT_MISSING.append(_font_missing)
     try:
         _state["gui_observer"] = _GuiObserver()
         Gui.addDocumentObserver(_state["gui_observer"])
@@ -2039,6 +2043,10 @@ def disable():
     if not _state["on"]:
         return
     _state["on"] = False
+    try:
+        text.ON_FONT_MISSING.remove(_font_missing)
+    except ValueError:
+        pass
     layer = _state["layer"]
     _state["layer"] = None
     if layer is not None:
