@@ -67,7 +67,10 @@ KINDS = {
     "point": ("Point", "point"),
     "ucs": ("Coordinate System", "ucs"),
     "derive": ("Derive", "derive"),
-    "base": ("Base Feature", "document"),
+    "base": ("Base Feature", "base_feature"),
+    "remove": ("Remove", "remove"),
+    "align": ("Align", "align"),
+    "silhouette_split": ("Silhouette Split", "silhouette_split"),
     "component": ("Component", "new_component"),
     "group": ("Group", "folder"),
     "other": ("Feature", "workspace_design"),
@@ -149,6 +152,10 @@ KIND_BY_SCIFORGE_TYPE = {
     "DeleteFace": "delete_face",
     "Move": "move",
     "MoveCopy": "move",
+    "BaseFeature": "base",
+    "Remove": "remove",
+    "Align": "align",
+    "SilhouetteSplit": "silhouette_split",
 }
 
 # Steps that are not a solid: they never carry the history marker (FreeCAD's Tip).

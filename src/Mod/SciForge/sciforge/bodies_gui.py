@@ -22,7 +22,16 @@ ICONS = {
     "SplitBody": "split_body",
     "MoveCopy": "move",
     "DeleteFace": "delete",
+    "Remove": "remove",
+    "Align": "align",
+    "ReplaceFace": "replace_face",
+    "SplitFace": "split_face",
+    "SilhouetteSplit": "silhouette_split",
 }
+
+
+# Steps that made or used other bodies: when one is deleted, its extra bodies go too.
+MAKERS = ("Combine", "SplitBody", "SilhouetteSplit", "MoveCopy")
 
 
 class StepViewProvider:
@@ -130,7 +139,7 @@ class Watch:
         except Exception as exc:
             warn("body tools: %s" % exc)
         try:
-            if bodies.kind(obj) in ("Combine", "SplitBody", "MoveCopy") or bodies.is_body(obj):
+            if bodies.kind(obj) in MAKERS or bodies.is_body(obj):
                 self._later(obj.Document, orphans=True)
             elif _leads_followers(obj):
                 # A multi-body extrude deleted by FreeCAD's own Delete: its hidden steps in

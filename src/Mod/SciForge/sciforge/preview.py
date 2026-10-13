@@ -48,7 +48,12 @@ def end_transaction(doc, abort=False):
     """Close the dialog's undo step. FreeCAD's doc.commitTransaction()/abortTransaction()
     only close a step that holds changes; a dialog OK'd or cancelled without any change
     left its name pending, and the next change anywhere (even right after an Undo) opened a
-    step under that name and threw away the Redo list. The pending name is closed too."""
+    step under that name and threw away the Redo list. The pending name is closed too.
+
+    In a design without history (or for an open base feature's bodies) the steps the
+    command made are first baked into the bodies, in this same undo step (direct.py)."""
+    if not abort and _bakes(doc):
+        return
     if abort:
         doc.abortTransaction()
     else:
@@ -57,6 +62,19 @@ def end_transaction(doc, abort=False):
         App.closeActiveTransaction(abort)
     except Exception:
         pass
+
+
+def _bakes(doc):
+    """True when direct.py took over the end of the undo step (it commits a moment later)."""
+    try:
+        from . import direct
+
+        return direct.takes_commit(doc)
+    except Exception as exc:
+        from . import warn
+
+        warn("could not apply the change without history: %s" % exc)
+        return False
 
 
 def recompute(doc):

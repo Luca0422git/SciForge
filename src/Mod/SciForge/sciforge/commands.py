@@ -131,6 +131,12 @@ def finish_open_dialog():
             leave_edit()
     except Exception as exc:
         warn("could not close the open dialog: %s" % exc)
+    try:  # a design without history: the finished command's bake, before the next one starts
+        from . import direct_ui
+
+        direct_ui.flush_deferred()
+    except Exception as exc:
+        warn("could not finish the change: %s" % exc)
     if Gui.Control.activeDialog():
         tell("Finish the open command first (OK or Cancel in the panel on the right).")
         return False

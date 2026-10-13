@@ -312,6 +312,10 @@ MENUS = {
         "Hide All Sketches",
         "-",
         "Rename",
+        "-",
+        # Fusion's switch between a parametric and a direct design; the browser shows the
+        # entry that switches ("Do Not Capture Design History" while history is captured).
+        "Capture Design History",
     ],
     "units": ["Change Active Units"],
     "settings": ["Change Active Units"],
@@ -331,6 +335,7 @@ MENUS = {
         "-",
         "Move to Component",
         "Rename",
+        "Remove",
         "Delete",
     ],
     "body": [
@@ -344,6 +349,7 @@ MENUS = {
         "-",
         "Move to Component",
         "Rename",
+        "Remove",
         "Delete",
     ],
     "sketch": [

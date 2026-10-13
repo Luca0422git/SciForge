@@ -87,6 +87,42 @@ def _objects(doc):
     return rows
 
 
+def _history_command(doc):
+    try:
+        from . import direct
+
+        if doc is not None and direct.is_direct(doc):
+            return "SciForge_CaptureDesignHistory"
+    except Exception:
+        pass
+    return "SciForge_DoNotCaptureDesignHistory"
+
+
+def _history_label(doc):
+    try:
+        from . import direct, direct_core
+
+        return direct_core.history_menu_label(not direct.is_direct(doc))
+    except Exception:
+        return "Do Not Capture Design History"
+
+
+def _can_remove(doc):
+    try:
+        from . import direct
+
+        return doc is not None and not direct.is_direct(doc)
+    except Exception:
+        return True
+
+
+def _run_command(name):
+    try:
+        Gui.runCommand(name)
+    except Exception as exc:
+        warn("%s failed: %s" % (name, exc))
+
+
 def _origin_of(feature):
     for parent in feature.InList:
         if parent.TypeId == "App::Origin":
@@ -890,6 +926,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 if node["kind"] == "view"
                 else self._go_to_view(node["object"])
             ),
+            "Capture Design History": lambda: _run_command(_history_command(doc)),
+            "Remove": lambda: self._remove(node, obj),
             "Show All Bodies": lambda: self._show_all("body", True),
             "Show All Sketches": lambda: self._show_all("sketch", True),
             "Hide All Sketches": lambda: self._show_all("sketch", False),
@@ -915,6 +953,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             text = entry
             if entry == "Show/Hide":
                 text = "Hide" if node["visible"] else "Show"
+            if entry == "Capture Design History":
+                text = _history_label(doc)
+            if entry == "Remove" and not _can_remove(doc):
+                continue  # a design without history deletes instead (Fusion)
             if entry == "Isolate" and isolated:
                 text = "Exit Isolate"
             if entry in ("Activate Body", "Activate") and node["active"]:
@@ -935,6 +977,20 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 action.setFont(font)
             added = True
         return menu if added else None
+
+    def _remove(self, node, obj):
+        """Remove (Fusion): the body or component is gone from this point of the timeline
+        on; the selected bodies and components are removed together."""
+        targets = [self._object(n) for n in self._selected_draggable()] or [obj]
+        targets = [t for t in targets if t is not None]
+        if not targets:
+            return
+        try:
+            from . import remove_ui
+
+            remove_ui.remove_now(targets)
+        except Exception as exc:
+            warn("Remove failed: %s" % exc)
 
     def _move_menu(self, menu, node, obj):
         """ "Move to Component" with one entry per component a row can go into (and the

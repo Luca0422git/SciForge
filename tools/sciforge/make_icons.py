@@ -1385,6 +1385,16 @@ def _():
     return block(0, 0, 0, 16, 16, 14, GREY, 24, 30)
 
 
+@icon("base_feature")
+def _():
+    # A body kept as it is (no steps): a solid with a blue "held" badge (a clamp).
+    return (
+        block(0, 0, 0, 16, 16, 14, GREY, 21, 30)
+        + circle(36, 35, 9, DBLUE[1])
+        + path("M31 31 L31 39 M41 31 L41 39 M31 35 L41 35", WHITE, 2.6)
+    )
+
+
 @icon("units")
 def _():
     return (

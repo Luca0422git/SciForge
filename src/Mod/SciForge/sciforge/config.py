@@ -159,6 +159,7 @@ SHORTCUTS = {
     "Sketcher_Projection": "P",
     "Std_TransformManip": "M",
     "Std_Measure": "I",
+    "SciForge_Appearance": "A",  # Fusion: A opens Appearance
     "Std_ViewFitAll": "F6",
     "SciForge_ToggleViewCube": "Ctrl+Alt+V",  # Fusion: show/hide the ViewCube
     "SciForge_DataPanel": "Ctrl+Alt+P",  # Fusion: show/hide the Data Panel

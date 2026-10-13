@@ -22,6 +22,7 @@ by where they were when the split was made, so editing an earlier step keeps eac
 in its own body. Deleting the Split Body step removes the new bodies again (bodies_gui.Watch
 and delete.py), as in Fusion.
 """
+
 import FreeCAD as App
 import Part
 
@@ -50,8 +51,13 @@ def with_defaults(options):
     return merged
 
 
+# Steps whose extra pieces live in bodies of their own (SplitPiece): Split Body, and
+# Silhouette Split's Split Solid Body / Split Shelled Body (silhouette.py).
+SPLIT_KINDS = (SCIFORGE_TYPE, "SilhouetteSplit")
+
+
 def is_split(obj):
-    return bodies.kind(obj) == SCIFORGE_TYPE
+    return bodies.kind(obj) in SPLIT_KINDS
 
 
 def is_piece(obj):

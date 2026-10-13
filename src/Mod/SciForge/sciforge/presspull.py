@@ -8,6 +8,7 @@ This module has no GUI code, so golden models can create it headless.
 Saved documents store the class path "sciforge.presspull.PressPullFeature";
 keep the name and properties stable.
 """
+
 import FreeCAD as App
 
 from . import curves
@@ -74,7 +75,11 @@ class PressPullFeature:
         notes = []
         pieces = []
         obj.Shape = core.press_pull(
-            base_obj.Shape, faces, obj.Distance.Value, refine=obj.Refine, report=notes,
+            base_obj.Shape,
+            faces,
+            obj.Distance.Value,
+            refine=obj.Refine,
+            report=notes,
             pieces=pieces,
         )
         if pieces and obj.Distance.Value < 0:
@@ -94,8 +99,15 @@ class PressPullFeature:
     __setstate__ = loads
 
 
+KINDS = ("PressPull", "OffsetFace")  # Offset Face (Modify menu) is the same step
+
+
+def kind_of(obj):
+    return getattr(obj, "SciForgeType", "") if obj is not None else ""
+
+
 def is_press_pull(obj):
-    return getattr(obj, "SciForgeType", "") == "PressPull"
+    return kind_of(obj) in KINDS
 
 
 def removed_material(obj):
@@ -120,10 +132,13 @@ def removed_material(obj):
     return tool
 
 
-def make(body, base, face_names, distance, name="PressPull"):
-    """Add a Press Pull to `body` after `base` (normally body.Tip). Returns the feature."""
-    obj = body.newObject(TYPE, name)
+def make(body, base, face_names, distance, name="PressPull", kind="PressPull"):
+    """Add a Press Pull (or, ``kind`` "OffsetFace", an Offset Face) to `body` after `base`
+    (normally body.Tip). Returns the feature."""
+    obj = body.newObject(TYPE, name if kind == "PressPull" else kind)
     PressPullFeature(obj)
+    if kind != "PressPull":
+        obj.SciForgeType = kind
     obj.BaseFeature = base
     obj.Faces = (base, list(face_names))
     obj.Distance = distance
