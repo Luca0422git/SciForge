@@ -21,7 +21,7 @@ bundled into one full build.
 
 ## Now: the three things Luca asked for first
 
-### A. Stable orbit (Fusion's Constrained Orbit) [small]
+### A. Stable orbit (Fusion's Constrained Orbit) [small] — done 2026-10-13 (`parity/ui-shell.md`, Orbit)
 
 What Fusion does: Shift + middle-drag spins the model about its up axis and tilts it
 toward or away from you; it never rolls, so vertical edges stay vertical.
@@ -39,7 +39,7 @@ trackball that rolls) in 2025, and SciForge never overrode it.
    to zoom; Shift + single middle click to set the orbit centre (green dot); Reset Orbit
    Center in the right-click menu. Each with a scenario.
 
-### B. Fusion's ViewCube [medium]
+### B. Fusion's ViewCube [medium] — done 2026-10-12 (`parity/ui-shell.md`, ViewCube)
 
 What Fusion does: a cube in the top-right corner. Click a face, edge or corner (26
 targets) and the view turns there smoothly; **drag the cube to orbit**; a small house

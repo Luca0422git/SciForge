@@ -127,3 +127,42 @@ Not done yet: Perspective with Ortho Faces, Set current view as Front / Reset Fr
 cube is always drawn without perspective. The mouse wheel over the cube zooms the view;
 clicks and right-clicks on the see-through corners of the cube's square go to the 3D view
 underneath (selection, marking menu).
+
+## Orbit (2026-10-13)
+
+`orbit.py` (the two modes and the camera maths, no Qt, unit tested) and `orbit_ui.py` (the
+drop-down, the mouse filter, the orbit-centre dot, the commands). Scenario `orbit_feel`
+(67 checks with real middle-button input); `viewcube_drag`, `navigation_orbit` and
+`viewer_settings_restart` cover the rest.
+
+Matches Fusion (Autodesk sources, see the research report):
+- **Orbit drop-down** in the bottom navigation bar: Constrained Orbit (default: turns about
+  the up axis and tilts, never rolls, FreeCAD's "Free Turntable") or Free Orbit (tumbles,
+  rolling included). One exclusive choice with a tick, remembered in SciForge's own
+  preference `Mod/SciForge/OrbitMode`. Applied as FreeCAD's `OrbitStyle` while SciForge is
+  on; the user's own FreeCAD value comes back when SciForge is off (also after a quit with
+  SciForge on, through `theme.keep_and_set` / `give_back`).
+- **Double-click of the middle button**: Fit. A single middle click does nothing (FreeCAD's
+  Revit style, which gives Fusion's mouse layout, would re-centre the view on the point).
+- **Ctrl + Shift + middle-drag**: zoom (drag up = in).
+- **Shift + a single middle click on the model**: the orbit centre goes there with a small
+  green dot (9 px, a picture-only node: clicks go through it). Shift + middle-drag and the
+  ViewCube drag then turn about that point, which stays on the same pixel. The dot and the
+  centre belong to the design and go when it is closed. **Set Orbit Center** (the next click
+  on the model sets it, Esc gives up) and **Reset Orbit Center** are in the right-click
+  menu; both are greyed when no design is open.
+- A middle press is held back until the mouse moves 4 px, so a shaky click never pans.
+- The ViewCube drag follows the chosen mode and the orbit centre.
+
+Unconfirmed (check in real Fusion), SciForge's guess:
+- Free Orbit is FreeCAD's "Rounded Arcball" (an arcball with a clean roll near the edges);
+  with an orbit centre set, SciForge's own trackball maths is used instead.
+- The dot's colour, size and that it stays visible after the drag.
+- Fusion turns about the model's centre after a Fit; SciForge turns about the middle of the
+  window (FreeCAD's `RotationMode` 0) until an orbit centre is set.
+- The orbit about a centre turns about 1.4 % less than FreeCAD's own orbit for the same drag
+  (FreeCAD drops the first move of a drag; SciForge starts where the 4 px were crossed).
+
+Known limits: Shift + middle click on sketch geometry inside an open sketch sets nothing
+(FreeCAD reports no object for edit-mode geometry; a body face works). With two views of
+one design the dot is drawn only in the view where it was set, the centre applies to both.
