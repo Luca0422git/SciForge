@@ -327,6 +327,12 @@ def step_cut_ok():
         return
     panel.distance.widget.setProperty("rawValue", -5.0)
     QtWidgets.QApplication.processEvents()
+    # The automatic Cut / Join is decided with the preview (rebuilt 60 ms after a change), so
+    # typing stays quick on a big part: wait for it, as a person sees it.
+    for _ in range(60):
+        if not panel._timer.isActive() and not getattr(App.ActiveDocument, "Recomputing", False):
+            break
+        QtTest.QTest.qWait(50)
     check("Extruding into the part picks Cut", panel.operation.currentData() == "cut")
     panel.accept()
     expected = state["before_cut"] - math.pi * 16 * 5
