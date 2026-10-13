@@ -497,7 +497,7 @@ def export_everything(doc, folder=None, open_after=True):
             folder = os.path.join(folder, export.safe_name(doc.Label) + export.EXPORT_FOLDER_SUFFIX)
     chosen = export.exportable_bodies(doc)
     if not chosen:
-        raise export.ExportError("There is no solid body to export yet.")
+        raise export.ExportError("There is no body to export yet (a solid or a mesh body).")
 
     def screenshot(path):
         view = Gui.ActiveDocument.ActiveView if Gui.ActiveDocument else None
@@ -568,7 +568,7 @@ class ExportEverythingCommand(_Command):
         written = export_everything(doc)
         if written:
             commands.tell(
-                "%d files written to %s" % (len(written), os.path.dirname(written["step"]))
+                "%d files written to %s" % (len(written), os.path.dirname(written["readme"]))
             )
 
 

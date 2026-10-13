@@ -161,8 +161,13 @@ def readme_text(design, files, body_labels):
         "",
         "Every file here is an open format you can use in any other program:",
         "",
-        "  %s  the exact solids with names and colours (STEP); for other CAD programs"
-        % os.path.basename(files["step"]),
+    ]
+    if "step" in files:  # a design of mesh bodies only has no STEP file
+        lines.append(
+            "  %s  the exact solids with names and colours (STEP); for other CAD programs"
+            % os.path.basename(files["step"])
+        )
+    lines += [
         "  %s  all bodies as one triangle mesh (3MF, with the bodies' names); for slicers"
         % os.path.basename(files["3mf"]),
         "  %s  all bodies as one triangle mesh (STL); for slicers and mesh tools"
@@ -450,7 +455,7 @@ def export_everything(doc, folder, body_list=None, screenshot=None, base=None):
     if body_list is None:
         body_list = exportable_bodies(doc)
     if not body_list:
-        raise ExportError("There is no solid body to export yet.")
+        raise ExportError("There is no body to export yet (a solid or a mesh body).")
     base = safe_name(base or os.path.splitext(os.path.basename(doc.FileName or ""))[0] or doc.Label)
     os.makedirs(folder, exist_ok=True)
     files = export_everything_plan(folder, base)
@@ -469,7 +474,8 @@ def export_everything(doc, folder, body_list=None, screenshot=None, base=None):
         except Exception as exc:
             warn("Export Everything: no picture (%s)" % exc)
     with open(files["readme"], "w", encoding="utf-8") as handle:
-        handle.write(readme_text(doc.Label, files, [b.Label for b in body_list]))
+        listed = {k: v for k, v in files.items() if k != "step" or "step" in written}
+        handle.write(readme_text(doc.Label, listed, [b.Label for b in body_list]))
     written["readme"] = files["readme"]
     log("Export Everything: %d files in %s" % (len(written), folder))
     return written
