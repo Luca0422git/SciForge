@@ -20,10 +20,26 @@ V = App.Vector
 s = {}
 
 
-def colours():
-    from sciforge import sketch_mode
+class _Colours:
+    """sketch_mode's colours, with the expected values as a fallback so the checks still
+    run (and fail on the behaviour) on a SciForge without them."""
 
-    return sketch_mode
+    BLUE = "#5cb3ff"
+    WHITE = "#f0f0f0"
+    GREEN = "#4ad66d"
+    ORANGE = "#f5a142"
+    SELECT = "#3b5bdb"
+    HOVER = "#246eab"
+
+    def __init__(self):
+        from sciforge import sketch_mode
+
+        for name in ("BLUE", "WHITE", "GREEN", "ORANGE", "SELECT", "HOVER"):
+            setattr(self, name, getattr(sketch_mode, name, getattr(self, name)))
+
+
+def colours():
+    return _Colours()
 
 
 def g(point):
