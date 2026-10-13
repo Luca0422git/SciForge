@@ -27,7 +27,7 @@ with Refine on; value boxes in `sciforge/blend_field.py`. Status: **first pass +
 | Ctrl+Z while the dialog is open | Ends the dialog and takes the unfinished fillet away; Ctrl+Y brings it back as a normal step |
 | Double-click the fillet in the timeline: edit with the edges shown and editable | Same. The model rolls back to the fillet while editing (later steps hidden) and comes back after OK |
 | Starting another command finishes this one | Same (kept if valid, else cancelled); F pressed inside Fillet starts a new one with nothing picked; Ctrl+S / Ctrl+N / Ctrl+O finish the dialog first, so a saved file never holds a half-made fillet |
-| Right-click marking menu while the command is open | OK (top slot) and Cancel (first row) work like the dialog's buttons |
+| Right-click marking menu while the command is open | OK (3 o'clock) and Cancel (9 o'clock) work like the dialog's buttons |
 | Edits earlier in the timeline keep later fillets on "their" edges | A fillet inserted with the marker rolled back, or an earlier fillet edited to round one more edge, used to break the later fillets/chamfers ("Invalid edge link"): their edges are now found again by geometry (`blend.References`), also when an edge got shorter |
 | A body made of several separate solids | Fillets work on it (it used to say "would cut the part into pieces") |
 | Distance and Angle chamfer with an angle the bevel cannot reach | The dialog names the largest angle that works here (below 90° on a box edge) |

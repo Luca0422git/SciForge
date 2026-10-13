@@ -6,6 +6,12 @@ Hole, Create Sketch, part Move/Copy). In a sketch Fusion's menu is about the ske
 drawing tools, Sketch Dimension, Trim, the sketch's own Move/Copy and Finish Sketch.
 The ring and the list underneath are the same widget as the part menu, filled with
 these entries (data below, like ribbon_config.MARKING_MENU).
+
+While a tool runs (a line being drawn, a rectangle half placed) or a dialog is open, the
+ring offers OK at 3 o'clock and Cancel at 9 o'clock, as Fusion's does (Luca, 2026-10-13:
+"there's no way to end a line"; Autodesk's marking menu help puts OK on the drag-right
+gesture, a forum answer Cancel at 9 o'clock). OK ends the tool and keeps what was drawn
+(Fusion's green check); Cancel is Esc. For a dialog they press its OK / Cancel.
 """
 
 import math
@@ -42,6 +48,27 @@ LIST = [
 ]
 
 
+OK = item("OK", "__ok__", "finish_sketch")
+CANCEL = item("Cancel", "__cancel__", "cancel", "Esc")
+
+
+def _session():
+    try:
+        from . import sketch_mode
+
+        return sketch_mode.current()
+    except Exception:
+        return None
+
+
+def _tool_running():
+    session = _session()
+    try:
+        return session is not None and session.tool_running()
+    except Exception:
+        return False
+
+
 def _menu_class():
     from .marking_menu import MarkingMenu
 
@@ -53,7 +80,7 @@ def _menu_class():
             QtWidgets.QWidget.__init__(
                 self, parent, QtCore.Qt.Popup | QtCore.Qt.FramelessWindowHint
             )
-            from .marking_menu import RADIUS, STYLE, _last_menu
+            from .marking_menu import CANCEL_SLOT, OK_SLOT, RADIUS, STYLE, _last_menu
             from .ribbon_ui import build_menu
 
             self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
@@ -67,7 +94,11 @@ def _menu_class():
             self.move(center.x() - size // 2, center.y() - size // 2)
             mid = QtCore.QPoint(size // 2, size // 2)
             self.slots = []
-            for i, entry in enumerate(RING):
+            ring = list(RING)
+            if self.in_command():
+                ring[OK_SLOT] = OK
+                ring[CANCEL_SLOT] = CANCEL
+            for i, entry in enumerate(ring):
                 angle = math.radians(90 - 45 * i)
                 pos = mid + QtCore.QPoint(
                     int(RADIUS * math.cos(angle)), int(-RADIUS * math.sin(angle))
@@ -93,6 +124,39 @@ def _menu_class():
             self._listing = listing
             self._shape(mid)
             _last_menu["widget"] = self
+
+        def in_command(self):
+            """A dialog is open or a drawing tool runs: OK and Cancel on the ring."""
+            return MarkingMenu.in_command(self) or _tool_running()
+
+        def can_press(self, role):
+            return MarkingMenu.can_press(self, role) or _tool_running()
+
+        def _press(self, role):
+            """OK / Cancel: the dialog's button when a dialog is open; else the tool ends
+            (OK keeps what was drawn, Cancel is Esc)."""
+            self.close()
+
+            def go():
+                try:
+                    from . import taskui
+
+                    # Only one of SciForge's own dialogs (never the Sketcher's task panel,
+                    # whose Close button would leave the sketch).
+                    if taskui.current() is not None and taskui.dialog_button(role) is not None:
+                        taskui.press_dialog_button(role)
+                        return
+                    session = _session()
+                    if session is None:
+                        return
+                    if role == "accept":
+                        session.finish_tool()
+                    else:
+                        session.escape()
+                except Exception as exc:
+                    warn("sketch marking menu: %s" % exc)
+
+            QtCore.QTimer.singleShot(0, go)
 
     return SketchMarkingMenu
 

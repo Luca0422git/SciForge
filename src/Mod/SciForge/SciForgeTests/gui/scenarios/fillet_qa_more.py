@@ -99,9 +99,9 @@ def p15_menu_ok():
     menu = open_menu()
     if menu is None:
         return
-    h.check("P15 the top slot is OK", menu.slots[0].text() == "OK", menu.slots[0].text())
+    h.check("P15 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text())
     h.shot("p15-menu")
-    w.click(menu.slots[0])
+    w.click(menu.slots[2])
 
 
 def p15_ok_done():

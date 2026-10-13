@@ -7,8 +7,14 @@ and the new line tool (on-screen Length and Angle fields: type 50, Tab, 30, Ente
 which also adds the dimension, like Fusion) that draws one line per two clicks. SciForge
 runs the new tool and joins the lines itself: when a line has been added, the next one
 starts at its end (the end point is clicked for you, so FreeCAD makes the two ends
-coincident as if you had clicked it). Clicking the first point of the chain closes the
-shape and the next click starts a new chain, like Fusion. Esc stops the tool.
+coincident as if you had clicked it).
+
+Ending a chain, as in Fusion (Autodesk's sketch basics course and help, forum answers):
+clicking the first point of the chain closes the shape; a line that ends on existing
+geometry (a point or a curve, the origin or an axis) ends the chain too; a double-click
+on the point the chain goes on from ends it (break_chain). In each case the Line tool
+stays on, waiting for a new first point. Esc, Enter with nothing typed, and OK / Cancel
+in the right-click menu stop the tool (sketch_mode.SketchSession.finish_tool / escape).
 
 The click is sent from a Qt timer after FreeCAD has finished adding the line (never from
 inside FreeCAD's own click handling).
@@ -31,18 +37,53 @@ class LineChain:
         self.session = session
         self.active = False
         self.chain_start = None  # sketch point where the current chain began
+        self.current = None  # sketch point the chain goes on from (the last line's end)
         self.seen = 0  # geometry count already looked at
 
     def start(self):
         sketch = self.session.sketch
         self.active = True
         self.chain_start = None
+        self.current = None
         self.seen = len(sketch.Geometry)
         Gui.runCommand(COMMAND)
 
     def stop(self):
         self.active = False
         self.chain_start = None
+        self.current = None
+
+    def break_chain(self):
+        """Fusion: a double-click on the end of the line being drawn ends the chain; the
+        Line tool stays on, waiting for a new first point. FreeCAD's tool is stopped (it
+        was waiting for the second point of a line from that end) and started afresh."""
+        if not self.active or self.session.closed:
+            return False
+        self.chain_start = None
+        self.current = None
+        try:
+            Gui.runCommand("Sketcher_StopOperation")
+        except Exception as exc:
+            warn("line: %s" % exc)
+        try:
+            self.seen = len(self.session.sketch.Geometry)
+            Gui.runCommand(COMMAND)
+        except Exception as exc:
+            warn("line: %s" % exc)
+            self.active = False
+            return False
+        log("line: chain ended; the next click starts a new one")
+        return True
+
+    def at_current(self, pos, pixels=8):
+        """True when the widget pixel `pos` is on the point the chain goes on from."""
+        if not self.active or self.current is None:
+            return False
+        try:
+            at = self._pixel(self.current)
+            return at is not None and (at - QtCore.QPointF(pos)).manhattanLength() <= pixels
+        except Exception:
+            return False
 
     def _tool_running(self):
         """The line tool is still the active tool: it was the last command started and
@@ -91,27 +132,47 @@ class LineChain:
             if (end - self.chain_start).Length <= TOLERANCE:
                 # back on the first point: the shape is closed; the next click starts anew
                 self.chain_start = None
+                self.current = None
                 return
-            if not self._click_at(end):
+            if _ends_on_geometry(sketch, lines[0]):
+                # Fusion: a line that ends on existing geometry (a point, a curve, the
+                # origin or an axis) ends the chain; the next click starts a new one
                 self.chain_start = None
+                self.current = None
+                log("line: ended on existing geometry; the next click starts a new chain")
+                return
+            if self._click_at(end):
+                self.current = end
+            else:
+                self.chain_start = None
+                self.current = None
                 from . import commands
 
                 commands.tell("Line: click the end of the last line to go on from it.")
         except Exception as exc:
             warn("line: %s" % exc)
 
-    def _click_at(self, sketch_point):
-        """Click the sketch point on the 3D view (and put the pointer back where the hand
-        is). False when that point is not on the screen."""
+    def _pixel(self, sketch_point):
+        """The widget pixel (QPointF) of a sketch point, or None when it is off the view."""
         session = self.session
         gl = session.gl
         if gl is None:
-            return False
+            return None
         world = session.sketch.getGlobalPlacement().multVec(sketch_point)
         x, y = session.view.getPointOnViewport(world)
         ratio = gl.devicePixelRatioF()
         pos = QtCore.QPointF(x / ratio, gl.height() - y / ratio)
         if not (0 <= pos.x() < gl.width() and 0 <= pos.y() < gl.height()):
+            return None
+        return pos
+
+    def _click_at(self, sketch_point):
+        """Click the sketch point on the 3D view (and put the pointer back where the hand
+        is). False when that point is not on the screen."""
+        session = self.session
+        gl = session.gl
+        pos = self._pixel(sketch_point)
+        if gl is None or pos is None:
             return False
         hand = gl.mapFromGlobal(QtGui.QCursor.pos())
         left, none = QtCore.Qt.LeftButton, QtCore.Qt.NoButton
@@ -138,3 +199,22 @@ class LineChain:
             QtWidgets.QApplication.sendEvent(gl, event)
         log("line: next line from the end of the last one")
         return True
+
+
+def _ends_on_geometry(sketch, index):
+    """True when the end of line `index` landed on existing sketch geometry: FreeCAD then
+    made it coincident with another curve's point or put it on a curve. The origin and the
+    axes (FreeCAD's geometry -1 and -2) do not count: a line drawn along the X axis gets a
+    point-on-object there and must still go on. A line of the chain joined to the previous
+    one is coincident at its start, not its end, so a chain going on does not count."""
+    try:
+        for c in sketch.Constraints:
+            if c.Type not in ("Coincident", "PointOnObject"):
+                continue
+            if c.First == index and c.FirstPos == 2 and c.Second not in (index, -1, -2):
+                return True
+            if c.Second == index and c.SecondPos == 2 and c.First not in (index, -1, -2):
+                return True
+    except Exception:
+        return False
+    return False

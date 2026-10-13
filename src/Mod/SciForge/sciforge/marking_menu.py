@@ -6,9 +6,12 @@ opens a ring of 8 commands around the cursor plus a list underneath, instead
 of FreeCAD's context menu. Slot 1 repeats the last command. The layout is
 data in ribbon_config.MARKING_MENU / MARKING_LIST.
 
-While a command's dialog is open, slot 1 is OK and the list starts with Cancel (Fusion
-offers both there, so a right click finishes the command without going to the panel).
+While a command is open, the ring offers OK at 3 o'clock and Cancel at 9 o'clock, where
+Fusion has them (Autodesk's marking menu help: the gesture for OK is a quick drag to the
+right; a forum answer: "in an active command 3 o'clock is OK, 9 o'clock is Cancel"), so a
+right click finishes the command without going to the panel.
 """
+
 import math
 
 import FreeCADGui as Gui
@@ -19,6 +22,8 @@ from .ribbon_ui import build_menu, resolve, run
 
 RADIUS = 110
 CLICK_SLOP = 6  # pixels the mouse may move and still count as a click
+OK_SLOT = 2  # 3 o'clock: OK while a command is open (Fusion)
+CANCEL_SLOT = 6  # 9 o'clock: Cancel while a command is open (Fusion)
 
 _filters = []
 _last_menu = {"widget": None}
@@ -38,21 +43,14 @@ class MarkingMenu(QtWidgets.QWidget):
         mid = QtCore.QPoint(size // 2, size // 2)
         self.slots = []
         ring = list(cfg.MARKING_MENU)
-        in_command = _dialog_open()
-        if in_command:
-            ring[0] = cfg.item("OK", "__ok__", "finish_sketch")
+        if self.in_command():
+            ring[OK_SLOT] = cfg.item("OK", "__ok__", "finish_sketch")
+            ring[CANCEL_SLOT] = cfg.item("Cancel", "__cancel__", "cancel")
         for i, entry in enumerate(ring):
             angle = math.radians(90 - 45 * i)  # N first, clockwise
             pos = mid + QtCore.QPoint(int(RADIUS * math.cos(angle)), int(-RADIUS * math.sin(angle)))
             self.slots.append(self._slot(entry, pos, available))
         listing = build_menu(self, cfg.MARKING_LIST, available)
-        if in_command:
-            first = listing.actions()[0] if listing.actions() else None
-            cancel = listing.addAction(ui_icon("cancel"), "Cancel\tEsc")
-            cancel.setEnabled(taskui.dialog_button("reject") is not None)
-            cancel.triggered.connect(lambda *_: taskui.press_dialog_button("reject"))
-            if first is not None:
-                listing.insertAction(first, cancel)  # moves it to the top
         self.list = QtWidgets.QListWidget(self)
         self.list.setObjectName("SciForgeMarkingList")
         self.list.setFixedWidth(200)
@@ -90,9 +88,10 @@ class MarkingMenu(QtWidgets.QWidget):
         button = QtWidgets.QToolButton(self)
         button.setObjectName("SciForgeMarkingSlot")
         label = entry["label"]
-        if entry["command"] == "__ok__":
-            enabled = taskui.dialog_button("accept") is not None
-            button.clicked.connect(lambda *_: self._press("accept"))
+        if entry["command"] in ("__ok__", "__cancel__"):
+            role = "accept" if entry["command"] == "__ok__" else "reject"
+            enabled = self.can_press(role)
+            button.clicked.connect(lambda *_, r=role: self._press(r))
         else:
             if entry["command"] == "__repeat__":
                 last = recent.last()
@@ -111,6 +110,15 @@ class MarkingMenu(QtWidgets.QWidget):
         button.move(pos.x() - button.width() // 2, pos.y() - button.height() // 2)
         button.setEnabled(enabled)
         return button
+
+    def in_command(self):
+        """A command is open: the ring shows OK and Cancel (a dialog here; the sketch menu
+        also counts a running drawing tool)."""
+        return _dialog_open()
+
+    def can_press(self, role):
+        """OK ("accept") / Cancel ("reject") can be pressed: the dialog has the button."""
+        return taskui.dialog_button(role) is not None
 
     def _press(self, role):
         self.close()
@@ -171,8 +179,17 @@ STYLE = """
 
 
 def _dialog_open():
+    """A command's dialog is open. Not the Sketcher's own task panel: FreeCAD keeps one
+    open for the whole sketch session (its Close button would leave the sketch), so inside
+    a sketch only one of SciForge's dialogs counts."""
     try:
-        return bool(Gui.Control.activeDialog())
+        if not Gui.Control.activeDialog():
+            return False
+        if taskui.current() is not None:
+            return True
+        from . import sketch_mode
+
+        return not sketch_mode.sketch_edited_anywhere()
     except Exception:
         return False
 

@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""The right-click marking menu while a command is open has OK and Cancel (Fusion).
+"""The right-click marking menu while a command is open has OK at 3 o'clock and Cancel at
+9 o'clock (Fusion: Autodesk's help puts OK on the drag-right gesture).
 
 Block 40 x 30 x 10. A right click with nothing open: the top slot repeats the last
-command and there is no Cancel. Click the top face, Q, type 2, right click: the top
-slot is OK and the list starts with Cancel; click OK: 40 x 30 x 12, the dialog is
-closed. Q again, type 3, right click, click Cancel in the list: still 40 x 30 x 12,
-no new feature. A list row starts its command (Fillet) and Cancel ends it again.
+command and there is no Cancel. Click the top face, Q, type 2, right click: the right
+slot is OK and the left slot is Cancel; click OK: 40 x 30 x 12, the dialog is closed. Q
+again, type 3, right click, click Cancel: still 40 x 30 x 12, no new feature. A list row
+starts its command (Fillet) and Cancel ends it again.
 
 Hand-derived: 40*30*10 = 12000; 40*30*12 = 14400."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -107,15 +109,26 @@ def menu_ok():
     menu = open_menu()
     if menu is None:
         return
-    h.check("top slot is OK", menu.slots[0].text() == "OK", menu.slots[0].text())
-    h.check("OK is enabled", menu.slots[0].isEnabled())
-    first = rows(menu)[0] if rows(menu) else None
-    h.check("list starts with Cancel", first is not None and first.text().startswith("Cancel"))
+    h.check("the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text())
+    h.check("OK is enabled", menu.slots[2].isEnabled())
     h.check(
-        "Cancel is enabled", first is not None and bool(first.flags() & QtCore.Qt.ItemIsEnabled)
+        "the left slot (9 o'clock) is Cancel",
+        menu.slots[6].text() == "Cancel",
+        menu.slots[6].text(),
+    )
+    h.check("Cancel is enabled", menu.slots[6].isEnabled())
+    h.check(
+        "the top slot still repeats",
+        menu.slots[0].text().startswith("Repeat"),
+        menu.slots[0].text(),
+    )
+    h.check(
+        "no Cancel in the list",
+        not any(r.text().startswith("Cancel") for r in rows(menu)),
+        [r.text() for r in rows(menu)],
     )
     h.shot("1-ok-cancel")
-    w.click(menu.slots[0])
+    w.click(menu.slots[2])
 
 
 def after_ok():
@@ -145,7 +158,8 @@ def menu_cancel():
     h.check("preview moved the face", not near(h.solid_volume(), s["volume"]), h.solid_volume())
     menu = open_menu()
     if menu is not None:
-        click_row(menu, "Cancel")
+        h.check("Cancel at 9 o'clock", menu.slots[6].text() == "Cancel", menu.slots[6].text())
+        w.click(menu.slots[6])
 
 
 def after_cancel():
@@ -164,8 +178,8 @@ def fillet_open():
     h.check("the Fillet row opened Fillet", bool(Gui.Control.activeDialog()))
     menu = open_menu()
     if menu is not None:
-        h.check("top slot is OK", menu.slots[0].text() == "OK", menu.slots[0].text())
-        click_row(menu, "Cancel")
+        h.check("the right slot is OK", menu.slots[2].text() == "OK", menu.slots[2].text())
+        w.click(menu.slots[6])
 
 
 def fillet_cancelled():

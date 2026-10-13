@@ -480,8 +480,8 @@ def p20_ok():
     menu = open_menu()
     if menu is None:
         return
-    h.check("P20 the top slot is OK", menu.slots[0].text() == "OK", menu.slots[0].text())
-    w.click(menu.slots[0])
+    h.check("P20 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text())
+    w.click(menu.slots[2])
 
 
 def p20_kept():

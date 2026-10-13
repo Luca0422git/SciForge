@@ -72,7 +72,10 @@ Unavailable items are greyed out. Separators group related commands.
 
 ## Known gaps (next passes)
 
-- Marking menu slot order is a guess: needs a screenshot of Fusion's right-click menu.
+- Marking menu slot order is a guess (needs a screenshot of Fusion's right-click menu),
+  except OK and Cancel while a command is open: Autodesk's marking-menu help puts OK on the
+  drag-right gesture (3 o'clock) and a forum answer Cancel at 9 o'clock, so SciForge shows
+  them there (2026-10-13; they were at the top and in the list before).
 - ViewCube: see the ViewCube section below for what is still unconfirmed.
 - Document tabs sit at the bottom of the view (FreeCAD); Fusion has them in the application bar.
 - Sketch Palette: FreeCAD's sketch task panel, restyled; Fusion's palette options differ.

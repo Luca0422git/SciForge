@@ -315,6 +315,21 @@ def give_back_left_over():
 
 
 # -- which sketch is open --------------------------------------------------------------
+def sketch_edited_anywhere():
+    """A sketch is being edited in any open design (not only the active one): FreeCAD's
+    one task panel is then the Sketcher's, whatever design is in front."""
+    try:
+        for name in App.listDocuments():
+            gdoc = Gui.getDocument(name)
+            edit = gdoc.getInEdit() if gdoc is not None else None
+            obj = getattr(edit, "Object", None)
+            if obj is not None and obj.TypeId == "Sketcher::SketchObject":
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def editing_sketch():
     """The sketch being edited in the active document, or None."""
     try:
@@ -724,6 +739,7 @@ class SketchSession:
         self.viewer = view_widget(self.gl) if self.gl is not None else None
         self._fields = []
         self._typed = None  # the value field the user typed a value into
+        self._typed_since_commit = False  # a value typed for the shape being drawn
         self.last_letter = ""  # what the last letter typed into a value field did (reports)
         if self.gl is not None:
             remove_stray_editors(self.gl)
@@ -771,6 +787,7 @@ class SketchSession:
             except Exception as exc:
                 warn("sketch inference: %s" % exc)
         if kind == "commit":
+            self._typed_since_commit = False  # the next shape: nothing typed yet
             QtCore.QTimer.singleShot(0, self._repair)
             self.line.committed()
             self.fillet_watch.committed()
@@ -797,8 +814,10 @@ class SketchSession:
         if typed:
             from . import commands
 
-            commands.tell("Undo changed the sketch while the dimension box was open: the value "
-                          "was not set.")
+            commands.tell(
+                "Undo changed the sketch while the dimension box was open: the value "
+                "was not set."
+            )
 
     def _repair(self):
         """FreeCAD's trim can leave an invalid constraint behind (sketch_fix.py)."""
@@ -981,11 +1000,59 @@ class SketchSession:
                 self.editor = None
 
     # -- Esc -------------------------------------------------------------------------
+    def tool_running(self):
+        """A drawing tool is running: SciForge's Line chain, or FreeCAD's drawing cursor
+        on the 3D view (FreeCAD gives Python no other sign of its active tool)."""
+        if self.closed:
+            return False
+        if self.line.active:
+            return True
+        try:
+            gl = self.gl
+            return gl is not None and _is_valid(gl) and gl.cursor().shape() != QtCore.Qt.ArrowCursor
+        except Exception:
+            return False
+
+    def enter_finishes_tool(self):
+        """Fusion: Enter while a tool runs and nothing was typed for the shape completes
+        the tool. With a value typed, Enter draws the shape (field_key / enter_pressed)."""
+        return (
+            not self.closed
+            and self.editor is None
+            and not self._typed_since_commit
+            and self.tool_running()
+        )
+
+    def finish_tool(self):
+        """OK in the right-click menu, or Enter with nothing typed: the tool ends and what
+        was drawn stays (a half-drawn shape has nothing to keep: FreeCAD drops it). Unlike
+        Esc, the selection and the picked areas are left alone."""
+        if self.closed or editing_sketch() is not self.sketch:
+            return
+        self._typed_since_commit = False
+        self.line.stop()
+        if self.infer is not None:
+            self.infer.reset()
+        try:
+            from . import sketch_pick_ui, sketch_tools_ui
+
+            sketch_tools_ui.stop_waiting()
+            sketch_pick_ui.stop_waiting()
+        except Exception:
+            pass
+        _state["polygon"] = None if not self.polygon.active else _state["polygon"]
+        try:
+            Gui.runCommand("Sketcher_StopOperation")  # quits FreeCAD's tool
+        except Exception as exc:
+            warn("sketch OK: %s" % exc)
+        log("sketch: tool finished")
+
     def escape(self):
         """Fusion: Esc stops the tool; with no tool running it clears the selection.
         FreeCAD has already handled the key (and reset a half-drawn shape)."""
         if self.closed or editing_sketch() is not self.sketch:
             return
+        self._typed_since_commit = False
         self.line.stop()
         if self.infer is not None:
             self.infer.reset()
@@ -1050,21 +1117,30 @@ class SketchSession:
         if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
             if self._enter_follow or event.modifiers() & QtCore.Qt.ControlModifier:
                 return False
+            if self.enter_finishes_tool():
+                # Fusion: Enter with nothing typed completes the tool (Autodesk's help on
+                # lines: "Press Enter to complete the tool"); the drawn lines stay.
+                if not event.isAutoRepeat():
+                    QtCore.QTimer.singleShot(0, self.finish_tool)
+                return True
             if not self._finishes_on_enter():
                 return False
             self._accept_fields(field)
             return True
         if _is_value_key(event) or key in (QtCore.Qt.Key_Backspace, QtCore.Qt.Key_Delete):
             self._typed = field  # the user is typing a value here
+            self._typed_since_commit = True
             return False
         mods = event.modifiers() & ~(QtCore.Qt.ShiftModifier | QtCore.Qt.KeypadModifier)
         letter = event.text()[:1].isalpha() and mods == QtCore.Qt.NoModifier
         if letter:
             self.last_letter = "%s: %s" % (
                 event.text()[:1],
-                "after a value typed here, kept in the field"
-                if _same(self._typed, field)
-                else ("held down" if event.isAutoRepeat() else "a tool key?"),
+                (
+                    "after a value typed here, kept in the field"
+                    if _same(self._typed, field)
+                    else ("held down" if event.isAutoRepeat() else "a tool key?")
+                ),
             )
         if letter and not event.isAutoRepeat() and not _same(self._typed, field):
             # Fusion: a tool's key switches tools at any time. FreeCAD would type the
@@ -1266,6 +1342,10 @@ class _KeyFilter(QtCore.QObject):
 
                 if sketch_pick_ui.on_enter():
                     return True
+                if session.enter_finishes_tool():
+                    if not event.isAutoRepeat():
+                        QtCore.QTimer.singleShot(0, session.finish_tool)
+                    return True
                 session.enter_pressed()
                 return False
             if key == QtCore.Qt.Key_Escape:
@@ -1333,7 +1413,14 @@ class _ViewFilter(QtCore.QObject):
                     return True
             elif kind == QtCore.QEvent.MouseButtonDblClick:
                 if event.button() == QtCore.Qt.LeftButton:
-                    return session.double_clicked(event.position().toPoint())
+                    at = event.position().toPoint()
+                    if session.line.at_current(at):
+                        # Fusion: a double-click on the end of the line being drawn ends
+                        # the chain; the Line tool stays on (FreeCAD must not see this
+                        # second press as another click on that point)
+                        QtCore.QTimer.singleShot(0, session.line.break_chain)
+                        return True
+                    return session.double_clicked(at)
         except Exception as exc:
             warn("sketch view: %s" % exc)
         return False
@@ -1482,7 +1569,16 @@ def _constraint_key(c):
     """What tells one dimension from another (its index changes when others go)."""
     return tuple(
         getattr(c, name, None)
-        for name in ("Type", "First", "FirstPos", "Second", "SecondPos", "Third", "ThirdPos", "Name")
+        for name in (
+            "Type",
+            "First",
+            "FirstPos",
+            "Second",
+            "SecondPos",
+            "Third",
+            "ThirdPos",
+            "Name",
+        )
     )
 
 
@@ -1676,6 +1772,18 @@ class DimensionEditor(QtWidgets.QFrame):
             # FreeCAD keeps the direction in the sign; the user types the size.
             q = App.Units.Quantity("%r %s" % (-value, "deg" if angle else "mm"))
         return q, None
+
+    def keyPressEvent(self, event):
+        """Enter typed in the box finished it (returnPressed, inside the box's own key
+        handling); QLineEdit then lets the key go on up to the 3D view, where Enter would
+        complete the running tool (Fusion's Enter, _KeyFilter). It was the box's: stop it."""
+        try:
+            if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter) and self._done:
+                event.accept()
+                return
+        except Exception:
+            pass
+        super().keyPressEvent(event)
 
     def finish(self, commit):
         if self._done:
