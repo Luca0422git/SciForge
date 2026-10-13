@@ -23,6 +23,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import sketch_input as si
@@ -177,6 +178,7 @@ def e_takes_b():
     p = open_panel()
     h.check("E opens Extrude", p is not None)
     h.check("E extrudes exactly B", profile_names() == [s["B"]], profile_names())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("B 10 mm: 4000", near(h.solid_volume(), 4000.0), h.solid_volume())
     cancel()
 
@@ -195,6 +197,7 @@ def two_selected():
 
 def e_takes_both():
     h.check("E extrudes A and B", profile_names() == sorted([s["A"], s["B"]]), profile_names())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("A + B 10 mm: 8000", near(h.solid_volume(), 8000.0), h.solid_volume())
     h.click(B)
 
@@ -222,6 +225,7 @@ def q_takes_both():
     p = open_panel()
     h.check("Q on sketch areas opens Extrude", p is not None and p is not s["extrude_before_q"])
     h.check("Q extrudes both areas", profile_names() == sorted([s["A"], s["B"]]), profile_names())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("A + B: 8000", near(h.solid_volume(), 8000.0), h.solid_volume())
     cancel()
 
@@ -243,6 +247,7 @@ def whole_sketch_taken():
         profile_names() == sorted([s["A"], s["B"]]),
         profile_names(),
     )
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("both areas: 8000", near(h.solid_volume(), 8000.0), h.solid_volume())
     cancel()
 
@@ -373,11 +378,16 @@ def e_in_sketch_takes_both():
         profile_names() == sorted([s["A"], s["B"]]),
         profile_names(),
     )
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("A + B: 8000", near(h.solid_volume(), 8000.0), h.solid_volume())
     cancel()
 
 
 def reopen_for_b():
+    h.check(
+        "Cancel after E in the sketch leaves the sketch shown (Fusion: hidden only on OK)",
+        s["sketch"].ViewObject.Visibility,
+    )
     w.double_click(step_button(s["sketch"].Name))
 
 
@@ -393,6 +403,7 @@ def e_only_b():
 
 def b_only_extruded():
     h.check("E in the sketch extrudes only B", profile_names() == [s["B"]], profile_names())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("B only: 4000", near(h.solid_volume(), 4000.0), h.solid_volume())
     h.task_button("OK")
 
@@ -420,6 +431,7 @@ def q_in_sketch_takes_a():
         p is not None and p is not s["extrude_before_q"],
     )
     h.check("on exactly A", profile_names() == [s["A"]], profile_names())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("A joins B: 8000", near(h.solid_volume(), 8000.0), h.solid_volume())
     h.task_button("OK")
 

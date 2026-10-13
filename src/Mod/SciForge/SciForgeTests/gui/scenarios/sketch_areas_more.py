@@ -24,6 +24,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as bs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
@@ -162,6 +163,7 @@ def lens_and_crescent():
     sk = s["face_sketch"]
     want = sorted([area_name(sk, s["lens"]), area_name(sk, s["left"])])
     h.check("E extrudes the lens and the left crescent", profile_names() == want, profile_names())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     v = h.solid_volume()
     h.check("block + one circle's worth (64 pi) 10 high", near(v, 12000.0 + CIRCLE * 10), v)
     h.fit()

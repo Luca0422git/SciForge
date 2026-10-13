@@ -25,6 +25,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as bs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
@@ -178,6 +179,7 @@ def clicked_b():
 def e_takes_b():
     h.check("E opens Extrude", extrude_panel() is not None)
     h.check("E extrudes only B", profiles() == [(s["sk"].Name, s["B"])], profiles())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("box + B 10 mm: 14400 (not the whole face: 24000)",
             near(h.solid_volume(), 14400.0), h.solid_volume())
     h.shot("2-e-b")
@@ -211,6 +213,7 @@ def ctrl_a():
 def e_takes_both():
     h.check("E extrudes A and B",
             profiles() == sorted([(s["sk"].Name, s["A"]), (s["sk"].Name, s["B"])]), profiles())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("box + A + B: 16800", near(h.solid_volume(), 16800.0), h.solid_volume())
     cancel()
 
@@ -247,6 +250,7 @@ def press_q():
 
 def q_on_b():
     h.check("Q on area B opens Extrude of B", profiles() == [(s["sk"].Name, s["B"])], profiles())
+    arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
     h.check("box + B: 14400", near(h.solid_volume(), 14400.0), h.solid_volume())
     cancel()
 

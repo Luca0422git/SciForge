@@ -10,6 +10,8 @@ value box and the part show while the button is still down). Like a real mouse, 
 press goes to whatever is on top at that pixel (a value box over the arrow's head takes
 it, and then the arrow is not dragged). Not a scenario itself.
 """
+import time
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtGui, QtWidgets
@@ -178,6 +180,28 @@ def type_distance(text="10"):
     if panel is None or panel._closed:
         return False
     ui.type_into(panel.distance.widget, text)
+    return True
+
+
+def give_distance(text="10", timeout_ms=4000):
+    """type_distance, then let the preview catch up (its timer done, no recompute running),
+    for a check of the part in the same step. False when no Extrude dialog is open."""
+    from sciforge import extrude_ui
+
+    if not type_distance(text):
+        return False
+    panel = extrude_ui.ExtrudePanel.last
+    end = time.time() + timeout_ms / 1000.0
+    while time.time() < end:
+        QtTest.QTest.qWait(50)
+        timer = getattr(panel, "_timer", None)
+        busy = (
+            (timer is not None and timer.isActive())
+            or getattr(panel, "_pending", False)
+            or getattr(App.ActiveDocument, "Recomputing", False)
+        )
+        if not busy:
+            break
     return True
 
 
