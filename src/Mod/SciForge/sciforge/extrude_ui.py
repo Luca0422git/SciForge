@@ -1072,14 +1072,20 @@ class ExtrudePanel(Panel):
             return
         try:
             options = extrude.options_with_defaults(self.options)
+            key = self._way_signature()
         except Exception:
             return
-        into = extrude_bodies.starts_in_material(self.profiles, options, lead=self.target)
-        way = self._in_the_way()
-        touches = bool(way[1]) if way is not None else self._base_has_solid()
-        wanted = bodies_core.auto_operation(
-            into, touches, symmetric=options["direction"] == "symmetric"
-        )
+        cached = getattr(self, "_auto_cache", None)
+        if cached is not None and cached[0] == key:
+            wanted = cached[1]
+        else:
+            into = extrude_bodies.starts_in_material(self.profiles, options, lead=self.target)
+            way = self._in_the_way()
+            touches = bool(way[1]) if way is not None else self._base_has_solid()
+            wanted = bodies_core.auto_operation(
+                into, touches, symmetric=options["direction"] == "symmetric"
+            )
+            self._auto_cache = (key, wanted)
         if wanted != self.options["operation"]:
             self.options["operation"] = wanted
             self._quiet = True
@@ -1102,8 +1108,10 @@ class ExtrudePanel(Panel):
             if wanted and self.options.get(name) is None and self.active != name:
                 self.activate(name)
                 new_geometry = True
-        # The automatic operation is decided when the preview is rebuilt (_apply): it tests
-        # every body in the way, too slow for each mouse move of a drag.
+        # The automatic operation tests every body in the way: too slow for each mouse move
+        # of an arrow drag, so a drag decides it when the preview is rebuilt (_apply).
+        if not any(_is_dragging(handle) for handle in self.draggers.values()):
+            self._auto_operation()
         self.dirty = True
         if new_geometry:
             self._geometry_changed = True
@@ -1189,6 +1197,7 @@ class ExtrudePanel(Panel):
         self._stored_bodies = None  # editing: the names the extrude was saved with
         self._way = None  # (bodies it cuts through, bodies it touches): names, or None
         self._way_key = None
+        self._auto_cache = None  # (signature, automatic operation) of the last decision
         self._sync_paused = False
         self._bodies_problem = ""  # e.g. a cut that goes through no body (OK refused)
 
@@ -1441,7 +1450,10 @@ class ExtrudePanel(Panel):
             return
         active = [h for h in self.draggers.values() if _is_dragging(h)]
         if active:
-            return  # never pull a handle from under the mouse
+            # never pull a handle from under the mouse: the arrows are made again once the
+            # drag is over (its on_release asks for one more preview)
+            self._geometry_changed = True
+            return
         self._remove_draggers()
         if not self.profiles or self.target is None:
             return
@@ -1610,10 +1622,15 @@ def _plain(text):
 
 
 def _is_dragging(handle):
+    """True while the handle is dragged, and just after the release until the handle's own
+    timer has noticed it and run its end-of-drag work (on_release): an arrow removed in
+    between never took the final value."""
     try:
-        return bool(handle.dragger.isActive.getValue())
+        if handle.dragger.isActive.getValue():
+            return True
     except Exception:
         return False
+    return bool(getattr(handle, "_was_active", False))
 
 
 def _ref_text(ref):
