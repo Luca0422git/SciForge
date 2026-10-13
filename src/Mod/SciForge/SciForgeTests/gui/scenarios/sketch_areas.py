@@ -432,12 +432,25 @@ def q_in_sketch_takes_a():
     )
     h.check("on exactly A", profile_names() == [s["A"]], profile_names())
     arrows.give_distance("10")  # Extrude starts at 0 (Fusion): type the distance
-    h.check("A joins B: 8000", near(h.solid_volume(), 8000.0), h.solid_volume())
+    p = panel()
+    op = p.operation.currentText() if p is not None else None
+    h.check("A touches no body: a new body of its own (Fusion)", op == "New Body", op)
+    h.check("A + B: 8000 in all", near(all_volume(), 8000.0), all_volume())
     h.task_button("OK")
 
 
+def all_volume():
+    """The volume of every shown body (A away from B is a body of its own)."""
+    total = 0.0
+    for obj in App.ActiveDocument.Objects:
+        if obj.TypeId == "PartDesign::Body" and obj.ViewObject.Visibility:
+            if not obj.Shape.isNull():
+                total += obj.Shape.Volume
+    return total
+
+
 def done():
-    h.check("two extrudes: A and B, 8000", near(h.solid_volume(), 8000.0), h.solid_volume())
+    h.check("two extrudes: A and B, 8000", near(all_volume(), 8000.0), all_volume())
     h.fit()
     h.shot("4-end")
 
