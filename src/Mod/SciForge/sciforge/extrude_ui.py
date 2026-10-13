@@ -493,6 +493,7 @@ class ExtrudePanel(Panel):
         # typed over the view goes to the handle used last, else to the distance.
         self.value_boxes = ValueBoxes(self, default="distance")
         self.cut_view = None  # the red cut preview (cut_preview.CutPreview)
+        self.bodies_view = None  # the listed bodies in blue while the row is active
         self._init_bodies()
         if feature is not None:
             try:
@@ -1548,6 +1549,7 @@ class ExtrudePanel(Panel):
         for widget in (self.bodies_label, self.fields["bodies"].widget, self.bodies_names):
             widget.setVisible(show)
         if not show:
+            self._highlight_bodies([])
             if self.active == "bodies":
                 self.activate("profiles")
             return
@@ -1556,6 +1558,7 @@ class ExtrudePanel(Panel):
         if names is None:
             body = self._source_body()
             names = [body.Name] if body is not None else []
+        self._highlight_bodies(names if self.active == "bodies" else [])
         labels = []
         for name in names:
             obj = self.doc.getObject(name)
@@ -1574,6 +1577,41 @@ class ExtrudePanel(Panel):
         if self.active == "bodies":
             text += "\nClick a body to leave it out or take it back."
         self.bodies_names.setText(text)
+
+    def _highlight_bodies(self, names):
+        """While the row takes the clicks, the bodies it lists show as see-through blue
+        copies (as they were before this extrude), so the person sees which bodies the
+        extrude changes; a body clicked away loses its blue. A picture only
+        (cut_preview.BodyHighlight): clicks go through it, and it goes with the dialog."""
+        if self._closed:
+            return
+        try:
+            if not names:
+                if self.bodies_view is not None:
+                    self.bodies_view.clear()
+                return
+            shapes = []
+            for name in names:
+                body = self.doc.getObject(name)
+                if body is None:
+                    continue
+                try:
+                    shape = extrude_bodies.before_shape(body, self.target)
+                except Exception:
+                    shape = None
+                if shape is None or shape.isNull() or not shape.Solids:
+                    shape = bodies.global_shape(body)
+                shapes.append(shape)
+            if self.bodies_view is None:
+                self.bodies_view = cut_preview.BodyHighlight(self._view())
+            self.bodies_view.show(shapes)
+        except Exception as exc:
+            warn("bodies highlight: %s" % exc)
+
+    def _remove_bodies_highlight(self):
+        view, self.bodies_view = self.bodies_view, None
+        if view is not None:
+            view.clear()
 
     def _used_up_labels(self):
         """Labels of the bodies the cut takes completely (they go when OK is pressed)."""
@@ -1938,6 +1976,7 @@ class ExtrudePanel(Panel):
         self._discard_value_boxes()
         try:
             self._remove_cut_preview()
+            self._remove_bodies_highlight()
         except Exception as exc:
             warn("cut preview: %s" % exc)
         super().cleanup()
