@@ -30,6 +30,16 @@ class RowTextTests(unittest.TestCase):
         many = ["B%d" % i for i in range(9)]
         self.assertEqual(core.names_text(many), "B0, B1, B2, B3, B4, B5 and 3 more")
 
+    def test_used_up_note_names_each_body_it_takes(self):
+        self.assertEqual(core.used_up_text([]), "")
+        self.assertEqual(
+            core.used_up_text(["Body2"]), "All of Body2 is inside the cut, so Body2 goes."
+        )
+        self.assertEqual(
+            core.used_up_text(["Body2", "Body3"]),
+            "Body2, Body3 are wholly inside the cut, so they go.",
+        )
+
 
 class ClickTests(unittest.TestCase):
     def test_click_drops_then_adds_back(self):

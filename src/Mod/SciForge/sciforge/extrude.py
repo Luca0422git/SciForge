@@ -1181,7 +1181,23 @@ def build(profiles, options, name="Extrude", feature=None):
         created = target  # still the body this extrude made
     before = feature if (feature is not None and owner_body(feature) is target) else None
     was_tip = before is not None and target.Tip is before
-    new = _insert(target, type_id, name, before)
+    after = None
+    if feature is not None and before is None and created is None:
+        # The extrude moves to another body (its sketch's body was left out, or taken
+        # back): it goes in at its own place in time there, not after that body's later
+        # steps (the timeline would show it jump to the end, its cut would come too late).
+        from .extrude_bodies import place_in
+
+        after = place_in(target, feature)
+        if after is target.Tip:
+            after = None
+    if after is not None:
+        new = feature.Document.addObject(type_id, name)
+        target.insertObject(new, after, True)
+    else:
+        new = _insert(target, type_id, name, before)
+    if feature is not None:
+        _keep_timeline_place(new, feature)
     if type_id == INTERSECT_TYPE:
         ExtrudeFeature(new)
         _attach_view_provider(new)
@@ -1198,11 +1214,35 @@ def build(profiles, options, name="Extrude", feature=None):
         label = feature.Label
         _remove(feature, keep_body=owner_body(feature) is target)
         new.Label = label
-    if before is None or was_tip:
+    if (before is None and after is None) or was_tip:
         target.Tip = new
         show_tip(target)
+    elif after is not None:
+        from .extrude_bodies import _show_only_tip
+
+        _show_only_tip(target)  # the new step is in the middle: the body's end stays shown
     merge_tip(new)
     return new
+
+
+def _keep_timeline_place(new, old):
+    """A step rebuilt as a new object (another operation, another body) keeps the place of
+    the one it replaces in the timeline, and its timeline group: the timeline orders steps
+    by when they were made, and the new object is younger than every later step."""
+    try:
+        from . import timeline_ops
+
+        key = timeline_ops._key(old)
+        rank = timeline_ops.RANK
+        timeline_ops._add_prop(new, "App::PropertyFloat", rank, "Place in the design timeline")
+        setattr(new, rank, float(key))
+        gid = getattr(old, timeline_ops.GROUP, "") or ""
+        if gid:
+            timeline_ops._set_group(new, gid, getattr(old, timeline_ops.GROUP_NAME, "") or "")
+    except Exception as exc:
+        from . import warn
+
+        warn("extrude: the timeline place was not kept: %s" % exc)
 
 
 def _update(feature, body, profiles, options):

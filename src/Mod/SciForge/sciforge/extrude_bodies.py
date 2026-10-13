@@ -48,6 +48,7 @@ from .extrude import (
 )
 
 WARNING = "SciForgeWarning"  # timeline_ops.WARNING: the timeline shows it in yellow
+USED_UP = bodies.USED_UP  # a cut that takes all of a body: the body is used up (hidden)
 VOLUME_TOL = 1e-6  # mm^3: less overlap than this is "only touching"
 # Automatic Cut: at least this share of the extrusion's first 0.01 mm must lie in a body. A
 # tapered column next to a face profile flares over its edge by a sliver (0.002 %), which
@@ -158,25 +159,64 @@ def nothing_touched(options):
     return "The cut does not go through any body. Flip it, change the distance or the " "direction."
 
 
-def before_shape(body, lead=None):
-    """`body`'s solid (design coordinates) as it was before the extrude `lead` changed it:
-    the step before the lead or before its follower in that body; else the body as it is."""
-    step = None
-    if lead is not None and _alive(lead):
-        if owner_body(lead) is body:
-            step = lead.BaseFeature
-            if step is None:
-                import Part
+def step_times(doc):
+    """{name: place in the design timeline} of every timeline step, and of every follower
+    (at the place of its extrude): the order the timeline shows across all bodies."""
+    from . import timeline_ops
 
-                return Part.Shape()
-        else:
-            for follower in followers_of(lead):
-                if owner_body(follower) is body and not is_merge(follower):
-                    step = follower.BaseFeature
-                    break
-    if step is None:
+    try:
+        names = timeline_ops.timeline(doc, deps=False).names()
+    except Exception:
+        return {}
+    times = {name: i for i, name in enumerate(names)}
+    for obj in doc.Objects:
+        if is_follower(obj):
+            lead = getattr(obj, "Source", None)
+            if lead is not None and lead.Name in times:
+                times[obj.Name] = times[lead.Name]
+    return times
+
+
+def place_in(body, lead, times=None):
+    """The step of `body` the extrude `lead` acts after: the last one that comes before the
+    extrude in the timeline (an older extrude being edited changes each body as it was at
+    that point, like Fusion rolls back to the step it edits), never past the body's Tip
+    (where the marker stands). None: the body has no solid step before the extrude (it was
+    made later)."""
+    if times is None:
+        times = step_times(lead.Document)
+    at = times.get(lead.Name)
+    tip = body.Tip
+    found = None
+    for obj in bodies.solid_steps(body):
+        if obj is lead:
+            break
+        t = times.get(obj.Name)
+        if t is not None and at is not None and t >= at:
+            break
+        found = obj  # a step before the extrude (or a helper that goes with the one before)
+        if obj is tip:
+            break
+    return found
+
+
+def before_shape(body, lead=None, times=None):
+    """`body`'s solid (design coordinates) as it was before the extrude `lead` changed it:
+    the step before the lead or before its follower in that body, else the body at the
+    extrude's place in the timeline (an empty shape: the body did not exist yet)."""
+    import Part
+
+    if lead is None or not _alive(lead):
         return bodies.global_shape(body)
-    return bodies.global_shape(step)
+    if owner_body(lead) is body:
+        step = lead.BaseFeature
+        return bodies.global_shape(step) if step is not None else Part.Shape()
+    for follower in followers_of(lead):
+        if owner_body(follower) is body and not is_merge(follower):
+            step = follower.BaseFeature
+            return bodies.global_shape(step) if step is not None else Part.Shape()
+    step = place_in(body, lead, times)
+    return bodies.global_shape(step) if step is not None else Part.Shape()
 
 
 def _merged_by(lead, body):
@@ -188,20 +228,34 @@ def _merged_by(lead, body):
     return False
 
 
+def _kept_when_hidden(lead):
+    """Names of the bodies an existing extrude already acts on: they stay in its list when
+    hidden (only a new extrude leaves hidden bodies alone)."""
+    if lead is None or not _alive(lead):
+        return set()
+    names = {b.Name for b in acted_on(lead)}
+    names |= {b.Name for b in stored_bodies(lead) or []}
+    return names
+
+
 def candidate_bodies(doc, lead=None):
     """[(body, its solid before the extrude)] for the bodies an extrude can act on: those
     shown and holding a solid, not used up by another step (Combine). A hidden body is left
-    out, as one Fusion does not show is not in the way (guess)."""
+    out of a new extrude, as one Fusion does not show is not in the way (guess); a body the
+    extrude already acts on stays, hidden or not (hiding a body to see the others must not
+    drop it from the extrude on the next edit)."""
     own = {f.Name for f in followers_of(lead)} if lead is not None else set()
     used = {name for name, step in bodies.consumers(doc).items() if step.Name not in own}
+    kept = _kept_when_hidden(lead)
+    times = step_times(doc) if lead is not None and _alive(lead) else None
     found = []
     for body in bodies.list_bodies(doc):
         if body.Name in used:
             continue
-        if not bodies.is_shown(body) and not _merged_by(lead, body):
+        if not bodies.is_shown(body) and body.Name not in kept:
             continue
         try:
-            shape = before_shape(body, lead)
+            shape = before_shape(body, lead, times)
         except Exception:
             continue
         if shape.isNull() or not shape.Solids:
@@ -210,39 +264,187 @@ def candidate_bodies(doc, lead=None):
     return found
 
 
+THIN = 1e-5  # mm: boxes overlapping less than this only touch (no shared volume)
+
+
+def _box_overlap(a, b):
+    """How far two bounding boxes overlap (the thinnest axis); negative when apart."""
+    return min(
+        min(a.XMax, b.XMax) - max(a.XMin, b.XMin),
+        min(a.YMax, b.YMax) - max(a.YMin, b.YMin),
+        min(a.ZMax, b.ZMax) - max(a.ZMin, b.ZMin),
+    )
+
+
+def _shared_volume(shape, tool):
+    """The volume `tool` shares with `shape`; None when they are apart. Boxes that only meet
+    at a face (a profile on a body's top extruded upwards) share no volume: the costly
+    boolean is skipped (it took 0.25 s on a plate with 144 holes)."""
+    gap = _box_overlap(shape.BoundBox, tool.BoundBox)
+    if gap < -1e-4:
+        return None
+    if gap < THIN:
+        return 0.0
+    return shape.common(tool).Volume
+
+
 def _overlaps(shape, tool, contact=False, volume=VOLUME_TOL):
     """True when `tool` shares volume with `shape` (with contact: or shares a piece of a
     face with it, as a profile on a body's face extruded outwards does; touching along an
     edge or at a corner does not count)."""
     try:
-        box = tool.BoundBox
-        box.enlarge(1e-4)
-        if not box.intersect(shape.BoundBox):
+        shared = _shared_volume(shape, tool)
+        if shared is None:
             return False
-        if shape.common(tool).Volume > volume:
+        if shared > volume:
             return True
         return bool(contact) and _face_contact(shape, tool)
     except Exception:
         return False
 
 
+# Quick tests before a costly boolean: a point strictly inside both solids (or on both faces)
+# answers at once; only when none is found does the exact boolean decide.
+FRACTIONS = ((0.5, 0.5), (0.31, 0.37), (0.69, 0.63), (0.37, 0.69), (0.63, 0.31))
+
+
+def _face_samples(face):
+    """A few points inside a face, at odd fractions of its parameter range (clear of its
+    edges)."""
+    found = []
+    try:
+        u0, u1, v0, v1 = face.ParameterRange
+        for fu, fv in FRACTIONS:
+            u, v = u0 + (u1 - u0) * fu, v0 + (v1 - v0) * fv
+            if face.isPartOfDomain(u, v):
+                found.append(face.valueAt(u, v))
+    except Exception:
+        pass
+    return found
+
+
+def _on_face(face, point):
+    """True when `point` (on the face's surface) lies on the face."""
+    import math
+
+    try:
+        u, v = face.Surface.parameter(point)
+        shifts = [0.0]
+        if type(face.Surface).__name__ == "Cylinder":
+            shifts += [2 * math.pi, -2 * math.pi]  # the face may use another turn of u
+        return any(face.isPartOfDomain(u + du, v) for du in shifts)
+    except Exception:
+        return False
+
+
+def _inner_points(prism, faces, normal, limit=12):
+    """Points strictly inside the extrusion: points inside the profile, carried along its
+    direction to the middle, a fifth and four fifths of the extrusion's length."""
+    try:
+        heights = [v.Point.dot(normal) for v in prism.Vertexes]
+    except Exception:
+        return []
+    if not heights:
+        return []
+    low, high = min(heights), max(heights)
+    found = []
+    for face in faces:
+        for point in _face_samples(face):
+            here = point.dot(normal)
+            for t in (0.5, 0.21, 0.79):
+                p = point + normal * (low + (high - low) * t - here)
+                try:
+                    if prism.isInside(p, 1e-7, False):
+                        found.append(p)
+                except Exception:
+                    continue
+                if len(found) >= limit:
+                    return found
+    return found
+
+
+def _holds_any(shape, points):
+    """True when one of `points` lies strictly inside the solid `shape`."""
+    box = shape.BoundBox
+    for p in points:
+        if not box.isInside(p):
+            continue
+        try:
+            if shape.isInside(p, 1e-7, False):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+KNOWN_SURFACES = ("Plane", "Cylinder")
+
+
+def _same_surface(a, b, tol):
+    """False when faces `a` and `b` surely do not lie on one surface (two planes that are
+    not the same plane, two cylinders not on one axis and radius, a plane and a cylinder);
+    True when they may (then their common area decides)."""
+    try:
+        sa, sb = a.Surface, b.Surface
+    except Exception:
+        return True
+    ta, tb = type(sa).__name__, type(sb).__name__
+    if ta in KNOWN_SURFACES and tb in KNOWN_SURFACES and ta != tb:
+        return False
+    if ta == tb == "Plane":
+        if abs(abs(sa.Axis.dot(sb.Axis)) - 1.0) > 1e-9:
+            return False
+        return abs((sb.Position - sa.Position).dot(sa.Axis)) <= tol
+    if ta == tb == "Cylinder":
+        if abs(sa.Radius - sb.Radius) > tol or abs(abs(sa.Axis.dot(sb.Axis)) - 1.0) > 1e-9:
+            return False
+        offset = sb.Center - sa.Center
+        across = offset - sa.Axis * offset.dot(sa.Axis)
+        return across.Length <= tol
+    try:
+        return b.distToShape(a)[0] <= tol
+    except Exception:
+        return True
+
+
 def _face_contact(shape, tool, tol=1e-6):
     """True when a face of `tool` lies on a face of `shape` over some area: a profile on a
-    body's top extruded upwards, a disc filling a round hole (its side on the hole's wall)."""
-    if shape.distToShape(tool)[0] > tol:
-        return False
+    body's top extruded upwards, a disc filling a round hole (its side on the hole's wall).
+    Only faces whose boxes meet and that lie on one surface are compared (a distance from
+    the whole body took 2 s on a plate with 144 holes)."""
+    sbox = shape.BoundBox
+    sbox.enlarge(1e-4)
+    faces = None
     for a in tool.Faces:
         box = a.BoundBox
         box.enlarge(1e-4)
-        for b in shape.Faces:
-            if not box.intersect(b.BoundBox) or b.distToShape(a)[0] > tol:
+        if not box.intersect(sbox):
+            continue
+        if faces is None:
+            faces = [(b, b.BoundBox) for b in shape.Faces]
+        samples = None
+        for b, bbox in faces:
+            if not box.intersect(bbox) or not _same_surface(a, b, tol):
                 continue
+            if _surface_kind(a) in KNOWN_SURFACES and _surface_kind(b) == _surface_kind(a):
+                # One surface: a point inside `a` that is on `b` means they share area.
+                if samples is None:
+                    samples = _face_samples(a)
+                if any(_on_face(b, p) for p in samples):
+                    return True
             try:
                 if a.common(b).Area > tol:
                     return True
             except Exception:
                 continue
     return False
+
+
+def _surface_kind(face):
+    try:
+        return type(face.Surface).__name__
+    except Exception:
+        return ""
 
 
 def tool_prism(profiles, options, reach=()):
@@ -332,12 +534,29 @@ def in_the_way(profiles, options, lead=None):
     # A sliver (a tapered neighbour flaring over the profile's edge) does not count.
     enough = max(VOLUME_TOL, prism.Volume * 1e-6)
     through, touching = [], []
+    inner = None
     for body, shape in candidates:
-        if _overlaps(shape, prism, volume=enough):
-            through.append(body)
-            touching.append(body)
-        elif _overlaps(shape, prism, contact=True):
-            touching.append(body)
+        try:
+            gap = _box_overlap(shape.BoundBox, prism.BoundBox)
+            if gap < -1e-4:
+                continue  # apart
+            if gap >= THIN:
+                if inner is None:
+                    inner = _inner_points(prism, global_faces(profiles), profile_normal(profiles))
+                if _holds_any(shape, inner):
+                    through.append(body)  # a point inside both: no boolean needed
+                    touching.append(body)
+                    continue
+            shared = _shared_volume(shape, prism)  # one boolean per body for both lists
+            if shared is None:
+                continue
+            if shared > enough:
+                through.append(body)
+                touching.append(body)
+            elif shared > VOLUME_TOL or _face_contact(shape, prism):
+                touching.append(body)
+        except Exception:
+            continue
     return through, touching
 
 
@@ -357,13 +576,17 @@ def starts_in_material(profiles, options, lead=None):
         sign = _sign1(profiles, options)
         normal = profile_normal(profiles)
         offset = start_offset_of(profiles, options)
-        pieces = []
+        pieces, points = [], []
         for face in global_faces(profiles):
             face = face.copy()
             if abs(offset) > TOL:
                 face.translate(normal * offset)
             pieces.append(face.extrude(normal * (0.01 * sign)))
+            # points inside the profile, just past it (a quick yes before the boolean)
+            points += [p + normal * (0.005 * sign) for p in _face_samples(face)]
         for _body, shape in candidates:
+            if _holds_any(shape, points):
+                return True
             for piece in pieces:
                 if _overlaps(shape, piece, volume=max(1e-9, piece.Volume * START_SHARE)):
                     return True
@@ -437,6 +660,10 @@ class ExtrudeFollower:
             obj.addProperty(
                 "App::PropertyString", WARNING, "SciForge", "Why the timeline warns", 4 | 16
             )
+        if USED_UP not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyBool", USED_UP, "SciForge", "The cut takes all of the body", 4 | 16
+            )
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
@@ -449,12 +676,17 @@ class ExtrudeFollower:
             raise
         except Exception as exc:
             bodies.pass_through(obj)
-            raise ExtrudeError("The extrude cannot be applied to this body: %s" % exc)
+            body = owner_body(obj)
+            raise ExtrudeError(
+                "The extrude cannot be applied to %s: %s"
+                % (body.Label if body is not None else "this body", exc)
+            )
 
     def _build(self, obj):
         base = obj.BaseFeature
         body = owner_body(obj)
         label = body.Label if body is not None else "this body"
+        _set_used_up(obj, False)
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             raise ExtrudeError("%s has no solid here for the extrude to act on." % label)
         lead = lead_of(obj)
@@ -476,7 +708,14 @@ class ExtrudeFollower:
                     "%s does not overlap the extrusion, so Intersect would leave nothing of it."
                     % label
                 )
-            raise ExtrudeError("This cut would remove all of %s." % label)
+            # The cut takes all of the body: it is used up, like a Combine's tool body
+            # (hidden, out of the browser, back when the extrude is undone, suppressed or
+            # rolled back). Its solid stays as it was, so nothing later fails on an empty
+            # body. Fusion removes a body a cut swallows instead of refusing (guess).
+            obj.Shape = base.Shape.copy()
+            _set_note(obj, "")
+            _set_used_up(obj, True)
+            return
         shape = bodies.as_result(solids, refine=bool(obj.Refine))
         note = ""
         if abs(shape.Volume - before.Volume) < 1e-9 and obj.Operation == "Cut":
@@ -492,6 +731,24 @@ class ExtrudeFollower:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _set_used_up(obj, value):
+    try:
+        if USED_UP in obj.PropertiesList and bool(getattr(obj, USED_UP)) != bool(value):
+            setattr(obj, USED_UP, bool(value))
+    except Exception:
+        pass
+
+
+def used_up_by(lead):
+    """The bodies the cut `lead` takes completely (they are used up), oldest first."""
+    found = []
+    for obj in followers_of(lead):
+        body = owner_body(obj)
+        if body is not None and getattr(obj, USED_UP, False) and body not in found:
+            found.append(body)
+    return found
 
 
 def _set_note(obj, text):
@@ -527,8 +784,16 @@ def _add_source(obj, lead):
         obj.Source = lead
 
 
-def _new_follower(body, lead, operation):
-    obj = bodies.insert_after_tip(body, INTERSECT_TYPE, "ExtrudeFollower")
+def _new_follower(body, lead, operation, times=None):
+    """A follower in `body` at the extrude's place in time: after the body's last step that
+    comes before the extrude in the timeline (editing an older extrude must not put its cut
+    after that body's later steps), or at the marker for a new extrude."""
+    place = place_in(body, lead, times)
+    if place is None or place is body.Tip:
+        obj = bodies.insert_after_tip(body, INTERSECT_TYPE, "ExtrudeFollower")
+    else:
+        obj = lead.Document.addObject(INTERSECT_TYPE, "ExtrudeFollower")
+        body.insertObject(obj, place, True)
     ExtrudeFollower(obj)
     _mark(obj, FOLLOWER_ROLE)
     obj.Source = lead
@@ -627,10 +892,13 @@ def sync_followers(lead, participants, options, old=None):
         remove_follower(doc.getObject(name))
     kind = "Intersect" if op == "intersect" else "Cut"
     touched = set()
+    times = None
     for body in others if op in ("cut", "intersect") else []:
         name = plan["keep"].get(body.Name)
         if name is None:
-            obj = _new_follower(body, lead, kind)
+            if times is None:
+                times = step_times(doc)
+            obj = _new_follower(body, lead, kind, times)
             touched.add(body.Name)
         else:
             obj = doc.getObject(name)
@@ -703,7 +971,8 @@ def follower_problem(lead):
                 text = obj.getStatusString()
             except Exception:
                 text = ""
-            return "error", "%s: %s" % (where, text or "this body could not be changed.")
+            # The follower's own messages name the body already.
+            return "error", text or ("%s could not be changed." % where)
         note = getattr(obj, WARNING, "")
         if note:
             return "warning", note

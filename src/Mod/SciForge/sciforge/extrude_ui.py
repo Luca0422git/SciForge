@@ -15,6 +15,7 @@ Fusion does, unless you picked the operation yourself. Problems are shown in the
 dialog, which then stays open.
 """
 import math
+import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -40,6 +41,9 @@ OPERATION_LABELS = [
     ("New Body", "new_body"),
 ]
 ACTIVE_STYLE = "QPushButton { background: #1f6fbf; color: white; border: 1px solid #5aa0e6; }"
+# An arrow drag rebuilds the preview many times a second: when testing the bodies in the
+# way took longer than this (seconds; a detailed part), a drag reuses the last answer.
+DRAG_TEST_BUDGET = 0.05
 
 
 def _combo(pairs, current):
@@ -546,6 +550,8 @@ class ExtrudePanel(Panel):
         for box in (self.start, self.direction, self.extent, self.extent2, self.measurement):
             box.currentIndexChanged.connect(self._typed)
         self.operation.activated.connect(self._operation_picked)
+        # The row's label follows the operation, also when it changes by itself.
+        self.operation.currentIndexChanged.connect(lambda _i: self._update_bodies_row())
         if self.editing:
             self.active = "profiles"
         self._show_active()
@@ -1079,7 +1085,7 @@ class ExtrudePanel(Panel):
         if cached is not None and cached[0] == key:
             wanted = cached[1]
         else:
-            into = extrude_bodies.starts_in_material(self.profiles, options, lead=self.target)
+            into = self._starts_inside(options)
             way = self._in_the_way()
             touches = bool(way[1]) if way is not None else self._base_has_solid()
             wanted = bodies_core.auto_operation(
@@ -1108,10 +1114,9 @@ class ExtrudePanel(Panel):
             if wanted and self.options.get(name) is None and self.active != name:
                 self.activate(name)
                 new_geometry = True
-        # The automatic operation tests every body in the way: too slow for each mouse move
-        # of an arrow drag, so a drag decides it when the preview is rebuilt (_apply).
-        if not any(_is_dragging(handle) for handle in self.draggers.values()):
-            self._auto_operation()
+        # The automatic operation tests every body in the way: it is decided when the
+        # preview is rebuilt (_apply, 60 ms after the last change), so the digits of a typed
+        # value and the mouse moves of a drag are not each waiting for it.
         self.dirty = True
         if new_geometry:
             self._geometry_changed = True
@@ -1121,17 +1126,32 @@ class ExtrudePanel(Panel):
         """Apply the dialog's values to the document and rebuild the preview."""
         if self._closed:
             return  # a change that arrived as the dialog closed
+        if getattr(self, "_rebuilding", False):
+            # FreeCAD lets the window work while it rebuilds a detailed part, so a change
+            # (an arrow let go) can come in the middle: it is applied right after.
+            self.schedule()
+            return
+        self._rebuilding = True
         try:
             if self.dirty:
                 self.dirty = False
                 self._apply()
             preview.recompute(self.doc)
+            if self._closed:
+                return  # closed (Esc) while the part was rebuilt
+            self._bodies_built()  # a cut that takes a whole body is known only now
             self.show_status()
             if self._geometry_changed or self._handles_moved():
                 self._geometry_changed = False
                 self._make_draggers()
         except Exception as exc:
-            self.message.setText("⚠ %s" % exc)
+            try:
+                if not self._closed:
+                    self.message.setText("⚠ %s" % exc)
+            except RuntimeError:
+                pass  # the dialog's widgets went with it
+        finally:
+            self._rebuilding = False
 
     def _apply(self):
         if not self.profiles:
@@ -1197,7 +1217,10 @@ class ExtrudePanel(Panel):
         self._stored_bodies = None  # editing: the names the extrude was saved with
         self._way = None  # (bodies it cuts through, bodies it touches): names, or None
         self._way_key = None
+        self._way_cost = 0.0  # seconds the last test of the bodies in the way took
+        self._way_side = None  # _way_signature(side_only=True) of that test
         self._auto_cache = None  # (signature, automatic operation) of the last decision
+        self._inside_cache = None  # (signature by side, starts inside a body) of the last test
         self._sync_paused = False
         self._bodies_problem = ""  # e.g. a cut that goes through no body (OK refused)
 
@@ -1222,7 +1245,10 @@ class ExtrudePanel(Panel):
         self.bodies_names.setWordWrap(True)
         form.addRow(self.bodies_names)
 
-    def _way_signature(self):
+    def _way_signature(self, side_only=False):
+        """What the extrusion's solid depends on (the cache key of the bodies in its way).
+        side_only: the distances by their sign only (where the extrusion starts and which
+        way it goes, all the automatic Cut test needs)."""
         keys = (
             "start",
             "start_offset",
@@ -1238,12 +1264,35 @@ class ExtrudePanel(Panel):
         )
         picked = [self.options.get(k) for k in ("start_object", "extent_object", "extent_object2")]
         refs = tuple((ref[0].Name, ref[1]) if ref else None for ref in picked)
+        values = []
+        for k in keys:
+            value = self.options.get(k)
+            if side_only and k in ("distance", "distance2"):
+                try:
+                    value = float(value) >= 0
+                except Exception:
+                    pass
+            values.append(repr(value))
         return (
             tuple(extrude.key(p) for p in self.profiles),
-            tuple(repr(self.options.get(k)) for k in keys),
+            tuple(values),
             refs,
             self.target.Name if self.target is not None else None,
         )
+
+    def _starts_inside(self, options):
+        """Fusion's automatic Cut test (the extrusion starts inside a body). It depends only
+        on where the extrusion starts and which way it goes: typing 5 then 6 tests once."""
+        try:
+            key = self._way_signature(side_only=True)
+        except Exception:
+            key = None
+        cached = getattr(self, "_inside_cache", None)
+        if key is not None and cached is not None and cached[0] == key:
+            return cached[1]
+        into = extrude_bodies.starts_in_material(self.profiles, options, lead=self.target)
+        self._inside_cache = (key, into)
+        return into
 
     def _in_the_way(self):
         """(names it cuts through, names it touches) for the extrusion as it is set now
@@ -1254,8 +1303,22 @@ class ExtrudePanel(Panel):
             key = self._way_signature()
             if key == self._way_key:
                 return self._way
+            side = self._way_signature(side_only=True)
+            if (
+                self._way_key is not None
+                and self._way_cost > DRAG_TEST_BUDGET
+                and side == self._way_side
+                and any(_is_dragging(handle) for handle in self.draggers.values())
+            ):
+                # An arrow drag on a detailed part: the bodies in the way are tested again
+                # when the arrow is let go (its release rebuilds the preview once more), or
+                # when it crosses to the other side of the profile.
+                return self._way
             options = extrude.options_with_defaults(self.options)
+            started = time.monotonic()
             found = extrude_bodies.in_the_way(self.profiles, options, lead=self.target)
+            self._way_cost = time.monotonic() - started
+            self._way_side = side
         except Exception as exc:
             warn("extrude bodies: %s" % exc)
             key, found = None, None
@@ -1268,14 +1331,16 @@ class ExtrudePanel(Panel):
             self._stored_bodies = None
         return self._way
 
-    def _touched_names(self):
-        way = self._in_the_way()
+    def _touched_names(self, compute=True):
+        """The bodies in the way for the operation (names). compute=False: as last tested
+        (the row is redrawn on every keystroke; the test runs with the preview)."""
+        way = self._in_the_way() if compute else self._way
         if way is None:
             return None
         return way[1] if self.options.get("operation") == "join" else way[0]
 
-    def _participant_names(self):
-        touched = self._touched_names()
+    def _participant_names(self, compute=True):
+        touched = self._touched_names(compute)
         if touched is None:
             return None
         return bodies_core.participants(touched, self.excluded)
@@ -1310,10 +1375,16 @@ class ExtrudePanel(Panel):
         return [b for b in found if b is not None]
 
     def _bodies_built(self):
-        """After a build: a Join that merges bodies keeps them shown while the dialog is open
-        (the used-up body would vanish from under the next click)."""
-        merging = any(extrude_bodies.is_merge(f) for f in extrude_bodies.followers_of(self.target))
-        self._pause_body_sync(merging)
+        """After a build: a Join that merges bodies, or a cut that takes all of one, keeps
+        them shown while the dialog is open (the used-up body would vanish from under the
+        next click)."""
+        if self.target is None:
+            return
+        followers = extrude_bodies.followers_of(self.target)
+        merging = any(extrude_bodies.is_merge(f) for f in followers)
+        # A body the cut takes completely is used up too: it stays shown (and clickable, to
+        # leave it out) until OK.
+        self._pause_body_sync(merging or bool(extrude_bodies.used_up_by(self.target)))
 
     def _pause_body_sync(self, on):
         try:
@@ -1348,7 +1419,7 @@ class ExtrudePanel(Panel):
                 self.activate("profiles")
             return
         self.bodies_label.setText(label)
-        names = self._participant_names() if self._way is not None else None
+        names = self._participant_names(compute=False) if self._way is not None else None
         if names is None:
             body = self._source_body()
             names = [body.Name] if body is not None else []
@@ -1364,9 +1435,21 @@ class ExtrudePanel(Panel):
                 if operation == "join"
                 else "The extrusion goes through no body."
             )
+        gone = self._used_up_labels()
+        if gone:
+            text += "\n" + bodies_core.used_up_text(gone)
         if self.active == "bodies":
             text += "\nClick a body to leave it out or take it back."
         self.bodies_names.setText(text)
+
+    def _used_up_labels(self):
+        """Labels of the bodies the cut takes completely (they go when OK is pressed)."""
+        try:
+            if self.target is None or self.operation.currentData() != "cut":
+                return []
+            return [b.Label for b in extrude_bodies.used_up_by(self.target)]
+        except Exception:
+            return []
 
     def _body_picked(self, obj):
         """A click on a body with the row active: leave it out, or take it back."""

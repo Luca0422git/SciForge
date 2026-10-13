@@ -449,6 +449,9 @@ def mass(body):
 
 # -- bodies used up by a step (Combine without Keep Tools) ---------------------------------------
 CONSUMERS = {}  # SciForgeType -> function(step) -> [bodies it uses up while active]
+# A step that uses up its own body (a multi-body extrude's cut that takes all of a body,
+# extrude_bodies.py) says so in this hidden property.
+USED_UP = "SciForgeUsedUp"
 
 
 def consumed(doc):
@@ -460,6 +463,14 @@ def consumers(doc):
     """{body name: the step that uses it up} for the bodies active steps use up."""
     found = {}
     for obj in doc.Objects:
+        if getattr(obj, USED_UP, False):
+            try:
+                body = body_of(obj)
+                if body is not None and is_active_step(obj):
+                    found.setdefault(body.Name, obj)
+            except Exception:
+                pass
+            continue
         user = CONSUMERS.get(kind(obj))
         if user is None:
             continue

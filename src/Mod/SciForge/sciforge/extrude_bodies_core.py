@@ -35,6 +35,16 @@ def names_text(labels, limit=6):
     return "%s and %d more" % (", ".join(labels[:limit]), len(labels) - limit)
 
 
+def used_up_text(labels):
+    """The note under the row when the cut takes all of some bodies (they go on OK)."""
+    labels = list(labels)
+    if not labels:
+        return ""
+    if len(labels) == 1:
+        return "All of %s is inside the cut, so %s goes." % (labels[0], labels[0])
+    return "%s are wholly inside the cut, so they go." % names_text(labels)
+
+
 def participants(touched, excluded):
     """The bodies the extrude acts on: those in its way, minus the ones clicked away
     (order kept)."""
