@@ -10,7 +10,9 @@ A block 40 x 30 x 10, isometric view, SciForge on. Checked:
   * A single middle click on the block leaves the camera where it is (FreeCAD's Revit
     style re-centres the view on the clicked point).
   * Ctrl + Shift + middle-drag upwards zooms in; the orientation does not change. A plain
-    middle-drag still pans.
+    middle-drag still pans. A double-click with the wheel kept down and moved a little
+    (plain, Shift on empty space, Ctrl+Shift) leaves FreeCAD idle afterwards: moving the
+    mouse with no button down pans, orbits and zooms nothing.
   * Shift + a single middle click on the top face sets the orbit centre there: the green
     dot (SciForge's own Coin node) is in the scene at the clicked point, the camera did not
     move. A Shift + middle-drag then turns about it: the dot stays on the same pixel while
@@ -23,6 +25,8 @@ A block 40 x 30 x 10, isometric view, SciForge on. Checked:
   * Orbit drop-down: Free Orbit sets OrbitStyle 4, is remembered in SciForge's preferences
     and applied again by theme.apply() (a new session); a diagonal Shift + middle-drag now
     rolls. The ViewCube's drag follows the choice. Constrained Orbit: back to 2, no roll.
+  * A design closed with a centre set, then a new design with the same name: no centre,
+    no dot, the orbit turns about the window's middle.
   * SciForge off (Part Design): FreeCAD's OrbitStyle, RotationMode and ShowRotationCenter
     are exactly as before SciForge, the dot is gone and Shift + middle click sets nothing.
     Back in SciForge: the constrained orbit again."""
@@ -140,25 +144,51 @@ def middle_click(pos, modifiers=NONE):
     process()
 
 
-def middle_double_click(pos):
+def middle_double_click(pos, modifiers=NONE, wobble=0):
     """The events of a real double-click: press, release, double-click, release.
     (QTest.mouseDClick alone sends just the double-click event and keeps the button
-    "down" for the test's later moves.)"""
+    "down" for the test's later moves.) `wobble`: the mouse moves that many pixels with
+    the button still down after the second press, before letting go."""
     widget = gl()
     h.move(pos)
-    QtTest.QTest.mousePress(widget, MIDDLE, NONE, pos)
-    QtTest.QTest.mouseRelease(widget, MIDDLE, NONE, pos)
+    QtTest.QTest.mousePress(widget, MIDDLE, modifiers, pos)
+    QtTest.QTest.mouseRelease(widget, MIDDLE, modifiers, pos)
     second = QtGui.QMouseEvent(
         QtCore.QEvent.MouseButtonDblClick,
         QtCore.QPointF(pos),
         QtCore.QPointF(widget.mapToGlobal(pos)),
         MIDDLE,
         MIDDLE,
-        NONE,
+        modifiers,
     )
     QtWidgets.QApplication.sendEvent(widget, second)
-    QtTest.QTest.mouseRelease(widget, MIDDLE, NONE, pos)
+    end = pos
+    if wobble:
+        end = QtCore.QPoint(pos.x() + wobble, pos.y() + wobble)
+        move = QtGui.QMouseEvent(
+            QtCore.QEvent.MouseMove,
+            QtCore.QPointF(end),
+            QtCore.QPointF(widget.mapToGlobal(end)),
+            QtCore.Qt.NoButton,
+            MIDDLE,
+            modifiers,
+        )
+        QtWidgets.QApplication.sendEvent(widget, move)
+    QtTest.QTest.mouseRelease(widget, MIDDLE, modifiers, end)
     process()
+
+
+def empty_spot():
+    """A pixel of the view with nothing of the model under it (bottom-left corner)."""
+    widget = gl()
+    ratio = widget.devicePixelRatioF()
+    for pos in (QtCore.QPoint(30, widget.height() - 30), QtCore.QPoint(30, 30)):
+        info = h.view().getObjectInfo(
+            (int(pos.x() * ratio), int((widget.height() - pos.y()) * ratio))
+        )
+        if not info:
+            return pos
+    return QtCore.QPoint(30, widget.height() - 30)
 
 
 def orbit_drag(modifiers=SHIFT):
@@ -354,6 +384,28 @@ def pan_done():
     h.check("a plain middle-drag still pans", not near(cam_pos(), st["pos"], 1e-3), cam_pos())
     h.check("and does not turn the view", turned(st["before"]) < 1e-6)
     h.fit()
+    # A double-click with the wheel kept down and moved a little before letting go, plain
+    # (Fit), with Shift on empty space and with Ctrl+Shift: FreeCAD must not be left
+    # panning, orbiting or zooming by itself afterwards (review finding).
+    middle_double_click(centre(), NONE, wobble=10)
+    middle_double_click(empty_spot(), SHIFT, wobble=10)
+    middle_double_click(off(80, 60), CTRL | SHIFT, wobble=10)
+    st["pos"] = cam_pos()
+    st["before"] = orientation()
+    st["height"] = cam_height()
+    for dx, dy in ((40, 30), (-120, 60), (90, -80)):  # the mouse moves, no button down
+        h.move(off(dx, dy))
+
+
+def not_stuck():
+    h.check(
+        "after a double-click with a wobble, FreeCAD is not left panning by itself",
+        near(cam_pos(), st["pos"], 1e-6),
+        (st["pos"], cam_pos()),
+    )
+    h.check("nor orbiting by itself", turned(st["before"]) < 1e-6, turned(st["before"]))
+    h.check("nor zooming by itself", abs(cam_height() - st["height"]) < 1e-9, cam_height())
+    h.fit()
     # Shift + a single middle click on the top face: the orbit centre goes there.
     st["pos"] = cam_pos()
     st["pivot_px"] = h.screen_point(PIVOT_POINT)
@@ -509,6 +561,25 @@ def constrained_rolls_not():
     middle_click(h.screen_point(PIVOT_POINT), SHIFT)
 
 
+def closed_design():
+    # A design closed with an orbit centre set, then a new design with the same name: the
+    # centre must not come back (invisible, the orbit turned about it; review finding).
+    h.check("a centre is set in the design about to be closed", pivot() is not None)
+    App.closeDocument(App.ActiveDocument.Name)
+    vc.setup("OrbitFeel")
+
+
+def closed_design_done():
+    h.check("a new design with the same name has no orbit centre", pivot() is None, pivot())
+    h.check("and no dot", markers() == [], markers())
+    st["centre_3d"] = centre_point_3d()
+    orbit_drag()
+    moved = (h.screen_point(st["centre_3d"]) - centre()).manhattanLength()
+    h.check("its orbit turns about the window's middle again", moved <= 2, moved)
+    h.fit()
+    middle_click(h.screen_point(PIVOT_POINT), SHIFT)
+
+
 def off_sciforge():
     h.check("a centre is set before leaving SciForge", pivot() is not None and len(markers()) == 1)
     Gui.activateWorkbench("PartDesignWorkbench")
@@ -545,6 +616,7 @@ h.run(
         single_click_done,
         zoom_drag_done,
         pan_done,
+        not_stuck,
         shift_click_done,
         pivot_orbit_done,
         reset_done,
@@ -558,6 +630,8 @@ h.run(
         cube_free_done,
         constrained_done,
         constrained_rolls_not,
+        closed_design,
+        closed_design_done,
         off_sciforge,
         off_done,
         off_click_done,

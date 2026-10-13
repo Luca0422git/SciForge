@@ -43,8 +43,18 @@ SHIFT = QtCore.Qt.ShiftModifier
 CTRL = QtCore.Qt.ControlModifier
 MODIFIERS = SHIFT | CTRL | QtCore.Qt.AltModifier | QtCore.Qt.MetaModifier
 
-_state = {"filter": None, "widgets": [], "area": None, "arming": False, "on": False}
-_pivots = {}  # document name -> {"point": (x, y, z), "marker": PivotMarker}
+_state = {
+    "filter": None,
+    "widgets": [],
+    "area": None,
+    "arming": False,
+    "on": False,
+    "observer": None,
+}
+# document name -> {"doc": the App document, "point": (x, y, z), "marker": PivotMarker}.
+# The entry goes when the design closes (_DocObserver), and is ignored for another design
+# that happens to have the same name (the "doc" check).
+_pivots = {}
 
 
 # -- the orbit choice ----------------------------------------------------------------------
@@ -156,9 +166,34 @@ def _active_view():
         return None
 
 
+def _active_document():
+    try:
+        gdoc = Gui.ActiveDocument
+        return gdoc.Document if gdoc is not None else None
+    except Exception:
+        return None
+
+
+def _entry():
+    """The active design's pivot entry, or None. An entry left by a closed design of the
+    same name (the observer missed it) is dropped here."""
+    name = _doc_name()
+    entry = _pivots.get(name)
+    if entry is None:
+        return None
+    try:
+        if App.getDocument(name) is not entry["doc"]:
+            _pivots.pop(name, None)
+            return None
+    except Exception:
+        _pivots.pop(name, None)
+        return None
+    return entry
+
+
 def pivot():
     """The orbit centre of the active design (App.Vector), or None when none is set."""
-    entry = _pivots.get(_doc_name())
+    entry = _entry()
     return App.Vector(*entry["point"]) if entry else None
 
 
@@ -166,13 +201,13 @@ def set_pivot(point, view=None):
     """Make `point` (App.Vector, global) the orbit centre of the active design: the dot
     shows there and Shift + middle-drag turns about it."""
     view = view if view is not None else _active_view()
-    if view is None:
+    doc = _active_document()
+    if view is None or doc is None:
         warn("orbit centre: no 3D view")
         return
-    name = _doc_name()
-    entry = _pivots.get(name)
+    entry = _entry()
     if entry is None:
-        entry = _pivots[name] = {"marker": PivotMarker()}
+        entry = _pivots[doc.Name] = {"doc": doc, "marker": PivotMarker()}
     entry["point"] = (float(point.x), float(point.y), float(point.z))
     entry["marker"].show(view, point)
     log("orbit centre set to (%.2f, %.2f, %.2f)" % (point.x, point.y, point.z))
@@ -180,7 +215,9 @@ def set_pivot(point, view=None):
 
 def clear_pivot():
     """Reset Orbit Center: the orbit turns about the middle of the window again."""
-    entry = _pivots.pop(_doc_name(), None)
+    entry = _entry()
+    if entry is not None:
+        entry = _pivots.pop(_doc_name(), None)
     if entry is not None:
         entry["marker"].clear()
         log("orbit centre reset")
@@ -195,6 +232,18 @@ def _clear_all_pivots():
         except Exception:
             pass
     _pivots.clear()
+
+
+class _DocObserver:
+    """Forgets a design's orbit centre when the design is closed: its view and the dot go
+    with it, and the next design with the same name must not inherit the centre (the
+    orbit would turn about an invisible point)."""
+
+    def slotDeletedDocument(self, doc):
+        try:
+            _pivots.pop(doc.Name, None)
+        except Exception as exc:
+            warn("orbit centre: %s" % exc)
 
 
 def marker_points(view=None):
@@ -313,9 +362,24 @@ def fit_view():
 # -- the mouse filter -----------------------------------------------------------------------
 
 
+def _is_valid(widget):
+    """The widget still exists (a closed view leaves Python wrappers of deleted widgets,
+    whose old address can be reused by a new view)."""
+    try:
+        import shiboken6
+
+        return widget is not None and shiboken6.isValid(widget)
+    except Exception:
+        try:
+            widget.objectName()
+            return True
+        except Exception:
+            return False
+
+
 def _same(a, b):
-    """The same Qt object (Python wrappers of one widget are not always the same)."""
-    if a is None or b is None:
+    """The same live Qt object (Python wrappers of one widget are not always the same)."""
+    if not _is_valid(a) or not _is_valid(b):
         return False
     try:
         import shiboken6
@@ -459,13 +523,20 @@ class _ViewFilter(QtCore.QObject):
         if not (event.buttons() & MIDDLE):
             self.press = None  # the button went up somewhere else
             return False
+        if press.done:
+            # The second press of a double-click was acted on (Fit, the pivot): a move
+            # with the button still down must not start a drag that FreeCAD never sees
+            # the end of (it would go on panning / orbiting / zooming by itself).
+            return True
         pos = QtCore.QPointF(event.position())
         if not press.forwarded and not press.turning:
             if _distance(pos, press.pos) <= CLICK_SLOP:
                 return True  # still a click
             if press.plan == "orbit" and press.centre is not None:
                 press.turning = True
-                press.last = QtCore.QPointF(press.pos)
+                # From here, not from the press: FreeCAD's own orbit drops the first move
+                # of a drag too, so the two turn the same amount for the same drag.
+                press.last = pos
             else:
                 modifiers = CTRL if press.plan == "zoom" else press.modifiers
                 self._forward(
@@ -597,6 +668,7 @@ def _install():
         widgets = _view_widgets()
     except RuntimeError:
         return
+    _state["widgets"] = [w for w in _state["widgets"] if _is_valid(w)]  # closed views go
     for widget in widgets:
         try:
             if not any(_same(widget, w) for w in _state["widgets"]):
@@ -619,6 +691,13 @@ def enable():
             _state["area"] = area
     except Exception as exc:
         warn("orbit: %s" % exc)
+    try:
+        if _state["observer"] is None:
+            _state["observer"] = _DocObserver()
+            App.addDocumentObserver(_state["observer"])
+    except Exception as exc:
+        _state["observer"] = None
+        warn("orbit centre: cannot follow closing designs: %s" % exc)
 
 
 def disable():
@@ -628,11 +707,17 @@ def disable():
     filt, _state["filter"] = _state["filter"], None
     for widget in _state["widgets"]:
         try:
-            if filt is not None:
+            if filt is not None and _is_valid(widget):
                 widget.removeEventFilter(filt)
         except RuntimeError:
             pass
     _state["widgets"] = []
+    observer, _state["observer"] = _state["observer"], None
+    if observer is not None:
+        try:
+            App.removeDocumentObserver(observer)
+        except Exception:
+            pass
     _clear_all_pivots()
 
 
@@ -672,9 +757,21 @@ class OrbitFreeCommand(_Command):
         set_mode(orbit.FREE)
 
 
+def _has_view():
+    """The two centre commands need a design with a 3D view (Set would otherwise wait for
+    a click that can never come)."""
+    try:
+        return _active_view() is not None
+    except Exception:
+        return False
+
+
 class SetOrbitCenterCommand(_Command):
     title = "Set Orbit Center"
     tip = "The next click on the model sets the point the orbit turns about"
+
+    def IsActive(self):
+        return _has_view()
 
     def run(self):
         arm()
@@ -683,6 +780,9 @@ class SetOrbitCenterCommand(_Command):
 class ResetOrbitCenterCommand(_Command):
     title = "Reset Orbit Center"
     tip = "The orbit turns about the middle of the view again; the green dot goes"
+
+    def IsActive(self):
+        return _has_view()
 
     def run(self):
         disarm()

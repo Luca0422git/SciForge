@@ -5,7 +5,7 @@ ribbon_config.py; this module only turns that data into Qt widgets."""
 import FreeCADGui as Gui
 
 from . import log, registry, ribbon_config as cfg, ui_icon, warn
-from .compat import QtCore, QtWidgets
+from .compat import QtCore, QtGui, QtWidgets
 
 BIG = 36  # ribbon icon size (Fusion: about 36-40 px at 100% scaling)
 SMALL = 18  # menu / quick-access icon size
@@ -73,6 +73,7 @@ def build_menu(parent, entries, available):
     menu = QtWidgets.QMenu(parent)
     menu.setToolTipsVisible(True)
     checks = []  # (action, resolved, checked spec) re-checked each time the menu opens
+    choices = None  # the ticked entries of one menu are one choice: exactly one tick
     for entry in entries:
         if entry is cfg.SEP:
             menu.addSeparator()
@@ -92,6 +93,12 @@ def build_menu(parent, entries, available):
                 action.setToolTip(entry["note"])
             if entry.get("checked"):
                 action.setCheckable(True)
+                if choices is None:
+                    # Exclusive: clicking the ticked entry again keeps its tick (without
+                    # the group Qt unticked it until the menu was opened again).
+                    choices = QtGui.QActionGroup(menu)
+                    choices.setExclusive(True)
+                choices.addAction(action)
                 action.setChecked(is_checked(entry["checked"]))
             checks.append((action, resolved, entry.get("checked")))
         else:
