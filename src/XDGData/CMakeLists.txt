@@ -11,22 +11,26 @@ if(NOT DEFINED APPDATA_RELEASE_DATE)
     endif()
 endif()
 
+# SCIFORGE: SciForge's own desktop entry, AppStream data and MIME package under SciForge's
+# id (SCIFORGE_DESKTOP_ID), so a FreeCAD installed on the same machine keeps its own menu
+# entry (docs/sciforge/core-patches.md #11). FreeCAD's org.freecad.FreeCAD.* files stay in
+# this folder unused, which keeps upstream merges simple.
 configure_file(
-    org.freecad.FreeCAD.metainfo.xml.in
-    ${CMAKE_BINARY_DIR}/org.freecad.FreeCAD.metainfo.xml
+    ${SCIFORGE_DESKTOP_ID}.metainfo.xml.in
+    ${CMAKE_BINARY_DIR}/${SCIFORGE_DESKTOP_ID}.metainfo.xml
 )
 install(
-    FILES ${CMAKE_BINARY_DIR}/org.freecad.FreeCAD.metainfo.xml
+    FILES ${CMAKE_BINARY_DIR}/${SCIFORGE_DESKTOP_ID}.metainfo.xml
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo
 )
 
 install(
-    FILES org.freecad.FreeCAD.desktop
+    FILES ${SCIFORGE_DESKTOP_ID}.desktop
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications
 )
 
 install(
-    FILES org.freecad.FreeCAD.xml
+    FILES ${SCIFORGE_DESKTOP_ID}.xml
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mime/packages
 )
 

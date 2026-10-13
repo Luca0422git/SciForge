@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SCIFORGE: SciForge opens FreeCAD's document format; this registers the same MIME type
+     under SciForge's own file name so it can be installed next to FreeCAD's. -->
+<mime-info xmlns='http://www.freedesktop.org/standards/shared-mime-info'>
+  <mime-type type="application/x-extension-fcstd">
+    <comment>SciForge / FreeCAD document</comment>
+    <glob pattern="*.fcstd"/>
+    <generic-icon name="application-x-extension-fcstd"/>
+  </mime-type>
+</mime-info>
