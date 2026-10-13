@@ -504,6 +504,7 @@ class Panel:
     # rebuild gets more time in between (up to PREVIEW_MAX_MS), so the arrow stays smooth.
     PREVIEW_MS = 60
     PREVIEW_MAX_MS = 400
+    STREAM_GAP = 0.15  # changes closer than this (seconds) are one stream (a drag)
 
     def __init__(self, doc, transaction):
         from . import ui_icon
@@ -533,36 +534,63 @@ class Panel:
         """Rebuild the preview soon. While changes keep coming (an arrow being dragged, keys
         typed) the preview follows them at a steady pace, like Fusion's, which moves with the
         mouse. A timer already running is left alone: restarting it on every change put the
-        preview off until the mouse stopped moving."""
+        preview off until the mouse stopped moving. A change on its own (a click, a value
+        typed) is shown after PREVIEW_MS; only while changes stream in (a drag sends one
+        every few milliseconds) does the next rebuild wait for the calm gap after a slow one
+        (see _tick)."""
         if getattr(self, "_closed", False):
             return
-        if not self._timer.isActive():
-            self._timer.start()
+        now = time.perf_counter()
+        streaming = now - getattr(self, "_last_change", -1.0) < self.STREAM_GAP
+        self._last_change = now
+        if self._timer.isActive():
+            return
+        wait = self.PREVIEW_MS
+        if streaming:
+            try:
+                calm = int((getattr(self, "_calm_until", 0.0) - now) * 1000.0)
+                wait = max(wait, min(self.PREVIEW_MAX_MS, calm))
+            except Exception:
+                pass
+        self._timer.setInterval(wait)
+        self._timer.start()
 
     def _tick(self):
-        """The preview timer fired: rebuild, then pace the next rebuild by how long it took."""
+        """The preview timer fired: rebuild. While a drag streams changes in, the next
+        rebuild waits for a calm gap of 1.5 times this one's time (at most PREVIEW_MAX_MS),
+        so the view and the arrow stay smooth on a heavy part."""
         if getattr(self, "_closed", False):
             return
         try:
             if getattr(self.doc, "Recomputing", False):
                 # A long recompute lets Qt run timers meanwhile: never start a second one.
+                # The rebuild running now starts the next one when it ends (below).
+                self._pending = True
+                self._timer.setInterval(self.PREVIEW_MS)
                 self._timer.start()
                 return
         except Exception:
             pass
+        self._pending = False
         started = time.perf_counter()
         try:
             self._recompute()
         except Exception as exc:
             warn("preview: %s" % exc)
-        self._pace(time.perf_counter() - started)
-
-    def _pace(self, seconds):
-        """Give the computer 1.5 times the last rebuild's time to draw and follow the mouse
-        before the next preview rebuild (a heavy part would otherwise freeze the drag)."""
+        ended = time.perf_counter()
+        gap = min(self.PREVIEW_MAX_MS / 1000.0, 1.5 * (ended - started))
+        self._calm_until = ended + gap
         try:
-            wanted = int(1.5 * seconds * 1000.0)
-            self._timer.setInterval(max(self.PREVIEW_MS, min(self.PREVIEW_MAX_MS, wanted)))
+            if getattr(self, "_closed", False):
+                return
+            if self._pending or self._timer.isActive():
+                # Changes came in while it rebuilt: one more rebuild, after the calm gap when
+                # they stream in (a drag), else at once.
+                self._pending = False
+                streaming = ended - getattr(self, "_last_change", -1.0) < self.STREAM_GAP
+                self._timer.stop()
+                self._timer.setInterval(max(self.PREVIEW_MS, int(gap * 1000.0) if streaming else 0))
+                self._timer.start()
         except Exception:
             pass
 
