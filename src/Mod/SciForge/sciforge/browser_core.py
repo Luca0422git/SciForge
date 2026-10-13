@@ -115,9 +115,22 @@ def _item(prefix, obj, icon, kind, **extra):
     )
 
 
+JOINT_TYPES = {"Joint": "joint", "AsBuiltJoint": "joint", "RigidGroup": "rigid_group"}
+JOINT_ICONS = {
+    "rigid": "joint",
+    "revolute": "joint_revolute",
+    "slider": "joint_slider",
+    "cylindrical": "joint_cylindrical",
+    "pinslot": "joint_pinslot",
+    "planar": "joint_planar",
+    "ball": "joint_ball",
+}
+
+
 def build(doc_label, objects, units="mm", active_body=None, views=()):
     """The whole browser tree for a document. ``views``: names of saved named views."""
     bodies, sketches, construction, origin, analysis = [], [], [], [], []
+    joints, joint_origins = [], []
     # Fusion's design has one origin. FreeCAD gives every body its own: show the active
     # body's, else the first body's (a reopened file has no active body yet).
     origin_body = active_body
@@ -126,11 +139,39 @@ def build(doc_label, objects, units="mm", active_body=None, views=()):
         origin_body = owners[0] if owners else None
     for obj in objects:
         type_id = obj["type_id"]
+        sciforge_type = obj.get("sciforge_type") or ""
         if type_id in BODY_TYPES:
-            node = _item("body:", obj, "box", "body", active=obj["name"] == active_body)
+            grounded = bool(obj.get("grounded"))
+            node = _item(
+                "body:",
+                obj,
+                "ground" if grounded else "box",
+                "body",
+                active=obj["name"] == active_body,
+                grounded=grounded,
+            )
             if node["active"]:
                 node["tip"] = node["tip"] or "Active body: new features go here"
+            if grounded:
+                node["tip"] = (
+                    node["tip"] + "; " if node["tip"] else ""
+                ) + "Grounded: it cannot move"
             bodies.append(node)
+        elif sciforge_type in JOINT_TYPES:
+            kind = JOINT_TYPES[sciforge_type]
+            icon = (
+                "rigid_group"
+                if kind == "rigid_group"
+                else JOINT_ICONS.get(obj.get("joint_type"), "joint")
+            )
+            if sciforge_type == "AsBuiltJoint":
+                icon = "joint_asbuilt"
+            node = _item("joint:", obj, icon, kind, joint_type=obj.get("joint_type"))
+            if obj.get("describe"):
+                node["tip"] = node["tip"] or obj["describe"]
+            joints.append(node)
+        elif sciforge_type == "JointOrigin":
+            joint_origins.append(_item("joint_origin:", obj, "joint_origin", "joint_origin"))
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
         elif type_id in CONSTRUCTION_TYPES:
@@ -188,6 +229,10 @@ def build(doc_label, objects, units="mm", active_body=None, views=()):
         children.append(_folder("origin", "Origin", origin))
     if bodies:
         children.append(_folder("bodies", "Bodies", bodies))
+    if joints:
+        children.append(_folder("joints", "Joints", joints))
+    if joint_origins:
+        children.append(_folder("joint_origins", "Joint Origins", joint_origins))
     if sketches:
         children.append(_folder("sketches", "Sketches", sketches))
     if construction:
@@ -260,9 +305,42 @@ MENUS = {
     "body": [
         "Activate Body",
         "-",
+        "Ground",
+        "-",
         "Show/Hide",
         "Isolate",
         "Find in Window",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "joint": [
+        "Edit Joint",
+        "Edit Joint Limits",
+        "Drive Joints",
+        "Animate Joint",
+        "-",
+        "Show/Hide",
+        "Suppress",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "rigid_group": [
+        "Edit Rigid Group",
+        "-",
+        "Suppress",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "joint_origin": [
+        "Edit Joint Origin",
+        "-",
+        "Show/Hide",
         "Find in Timeline",
         "-",
         "Rename",

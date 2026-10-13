@@ -8,6 +8,7 @@ the 3D view, F2 renames, Delete deletes, right click opens Fusion's menu for
 that kind of row. Structure: browser_core.py; deleting goes through
 timeline_ops.py (one undo step, later steps kept working where possible).
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -35,9 +36,43 @@ def _used_up_bodies(doc):
         return set()
 
 
+def _joints():
+    from . import joints
+
+    return joints
+
+
+def _grounded_names(doc):
+    try:
+        return {g.ObjectToGround.Name for g in _joints().grounds(doc) if g.ObjectToGround}
+    except Exception:
+        return set()
+
+
+def _joint_row(row, obj):
+    """What the browser's Joints / Joint Origins folders need to know about a joint."""
+    kind = row.get("sciforge_type") or ""
+    if kind not in core.JOINT_TYPES and kind != "JointOrigin":
+        return
+    try:
+        joints = _joints()
+        if kind in ("Joint", "AsBuiltJoint"):
+            row["joint_type"] = joints.fusion_type(obj)
+            row["describe"] = joints.describe(obj)
+        if ops.is_suppressed(obj):
+            row["suppressed"] = True
+        else:
+            problem, reason = ops.problem(obj)
+            if problem:
+                row[problem] = reason
+    except Exception:
+        pass
+
+
 def _objects(doc):
     rows = []
     used_up = _used_up_bodies(doc)
+    grounded = _grounded_names(doc)
     for obj in doc.Objects:
         if obj.Name in used_up:
             continue
@@ -58,7 +93,9 @@ def _objects(doc):
                 ),
                 "role": getattr(obj, "Role", None),
                 "sciforge_type": getattr(obj, "SciForgeType", ""),
+                "grounded": obj.Name in grounded,
             }
+            _joint_row(row, obj)
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
                     row["suppressed"] = True  # off, not broken: greyed, like Fusion
@@ -135,6 +172,13 @@ def _edit_object(obj):
     except Exception:
         pass
     taskui.edit_object(obj)
+
+
+def _joint_action(name, obj):
+    """A joint entry of the right-click menu (joints_ui does the work)."""
+    from . import joints_ui
+
+    getattr(joints_ui, name)(obj)
 
 
 def _later(fn, *args):
@@ -574,7 +618,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         doc = self._doc
         if doc is None or not commands.finish_open_dialog():
             return
-        steps = [n["object"] for n in nodes if n["kind"] in ("sketch", "construction", "analysis")]
+        step_kinds = ("sketch", "construction", "analysis", "joint", "rigid_group", "joint_origin")
+        steps = [n["object"] for n in nodes if n["kind"] in step_kinds]
         body_names = [n["object"] for n in nodes if n["kind"] == "body"]
         views = [n["object"] for n in nodes if n["kind"] == "saved_view"]
         Gui.Selection.clearSelection()
@@ -682,13 +727,33 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Show All Bodies": lambda: self._show_all("body", True),
             "Show All Sketches": lambda: self._show_all("sketch", True),
             "Hide All Sketches": lambda: self._show_all("sketch", False),
+            "Ground": lambda: _joint_action("toggle_ground", obj),
+            "Edit Joint": lambda: _edit_object(obj),
+            "Edit Rigid Group": lambda: _edit_object(obj),
+            "Edit Joint Origin": lambda: _edit_object(obj),
+            "Edit Joint Limits": lambda: _joint_action("edit_joint_limits", obj),
+            "Drive Joints": lambda: _joint_action("drive", obj),
+            "Animate Joint": lambda: _joint_action("animate", obj),
+            "Suppress": lambda: self._toggle_suppress(obj),
         }
         if node["kind"] == "body" and _isolated.get(doc.Name if doc else None):
             handlers["Isolate"] = lambda: self._unisolate()
         entries = core.menu_for(node)
         if node["visible"] is None and "Show/Hide" in entries:
             entries.remove("Show/Hide")
-        if node["kind"] in ("body", "sketch", "construction", "analysis") and obj is None:
+        if (
+            node["kind"]
+            in (
+                "body",
+                "sketch",
+                "construction",
+                "analysis",
+                "joint",
+                "rigid_group",
+                "joint_origin",
+            )
+            and obj is None
+        ):
             return None
         added = False
         for entry in entries:
@@ -701,6 +766,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 text = "Hide" if node["visible"] else "Show"
             if entry == "Isolate" and _isolated.get(doc.Name if doc else None):
                 text = "Exit Isolate"
+            if entry == "Ground":
+                text = "Unground" if node.get("grounded") else "Ground"
+            if entry == "Suppress":
+                text = "Unsuppress" if node.get("status") == "suppressed" else "Suppress"
             if entry == "Activate Body" and node["active"]:
                 continue
             action = (
@@ -709,12 +778,21 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 else menu.addAction(text)
             )
             self._handlers[action] = handlers.get(entry)
-            if entry in ("Edit Sketch", "Edit Feature"):
+            if entry.startswith("Edit ") and entry != "Edit Joint Limits":
                 font = action.font()
                 font.setBold(True)
                 action.setFont(font)
             added = True
         return menu if added else None
+
+    def _toggle_suppress(self, obj):
+        if obj is None or self._doc is None or not commands.finish_open_dialog():
+            return
+        try:
+            ops.toggle_suppress(self._doc, obj.Name)
+        except Exception as exc:
+            commands.tell(str(exc))
+        self.refresh(force=True)
 
     def _isolate(self, body):
         doc = self._doc

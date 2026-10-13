@@ -69,6 +69,11 @@ KINDS = {
     "derive": ("Derive", "derive"),
     "base": ("Base Feature", "document"),
     "group": ("Group", "folder"),
+    "joint": ("Joint", "joint"),
+    "as_built_joint": ("As-Built Joint", "joint_asbuilt"),
+    "joint_origin": ("Joint Origin", "joint_origin"),
+    "rigid_group": ("Rigid Group", "rigid_group"),
+    "position": ("Position", "position"),
     "other": ("Feature", "workspace_design"),
 }
 
@@ -147,10 +152,28 @@ KIND_BY_SCIFORGE_TYPE = {
     "DeleteFace": "delete_face",
     "Move": "move",
     "MoveCopy": "move",
+    "Joint": "joint",
+    "AsBuiltJoint": "as_built_joint",
+    "JointOrigin": "joint_origin",
+    "RigidGroup": "rigid_group",
+    "Position": "position",
 }
 
 # Steps that are not a solid: they never carry the history marker (FreeCAD's Tip).
-NON_SOLID_KINDS = {"sketch", "plane", "axis", "point", "ucs", "derive", "group"}
+NON_SOLID_KINDS = {
+    "sketch",
+    "plane",
+    "axis",
+    "point",
+    "ucs",
+    "derive",
+    "group",
+    "joint",
+    "as_built_joint",
+    "joint_origin",
+    "rigid_group",
+    "position",
+}
 
 
 def _words(camel):

@@ -14,6 +14,7 @@ traced from or derived from another product's artwork.
 
 Every icon is drawn on a 48x48 canvas. Edit a recipe below and re-run.
 """
+
 import math
 import os
 import sys
@@ -894,6 +895,133 @@ def _():
         + block(0, 0, 0, 12, 12, 10, BLUE, 32, 20)
         + circle(26, 30, 4, ORANGE)
         + path("M20 32 Q26 30 30 24", STROKE, 1.6)
+    )
+
+
+def _two_blocks():
+    return block(0, 0, 0, 12, 12, 10, GREY, 16, 38) + block(0, 0, 0, 12, 12, 10, BLUE, 32, 20)
+
+
+@icon("joint_revolute")
+def _():
+    # a hinge: the two blocks and a curved turn arrow about an axis
+    return (
+        _two_blocks()
+        + circle(26, 30, 3.5, ORANGE)
+        + path("M17 24 A10 10 0 0 1 35 24", STROKE, 1.8)
+        + poly([(35, 24), (31, 20), (31, 27)], STROKE)
+    )
+
+
+@icon("joint_slider")
+def _():
+    return (
+        _two_blocks()
+        + arrow(14, 10, 38, 10, STROKE, 2.0, 4.5)
+        + arrow(38, 10, 14, 10, STROKE, 2.0, 4.5)
+    )
+
+
+@icon("joint_cylindrical")
+def _():
+    return (
+        _two_blocks()
+        + path("M17 24 A10 10 0 0 1 35 24", STROKE, 1.8)
+        + poly([(35, 24), (31, 20), (31, 27)], STROKE)
+        + arrow(26, 20, 26, 6, STROKE, 2.0, 4.5)
+    )
+
+
+@icon("joint_pinslot")
+def _():
+    return (
+        _two_blocks()
+        + rect(14, 7, 24, 7, "none", 3.5, 'stroke="%s" stroke-width="1.8"' % STROKE)
+        + circle(26, 10.5, 2.6, ORANGE)
+        + path("M20 32 A6 6 0 0 1 32 32", STROKE, 1.6)
+    )
+
+
+@icon("joint_planar")
+def _():
+    return (
+        _two_blocks()
+        + poly(
+            [(10, 14), (30, 8), (44, 12), (24, 18)],
+            "none",
+            'stroke="%s" stroke-width="1.8"' % STROKE,
+        )
+        + arrow(22, 13, 36, 10, STROKE, 1.8, 4)
+    )
+
+
+@icon("joint_ball")
+def _():
+    return (
+        _two_blocks()
+        + circle(26, 30, 5, ORANGE)
+        + path("M15 20 A12 12 0 0 1 37 20", STROKE, 1.6)
+        + path("M17 36 A11 11 0 0 0 35 36", STROKE, 1.6)
+    )
+
+
+@icon("joint_asbuilt")
+def _():
+    # the two blocks stay where they are: a tick where the joint goes
+    return _two_blocks() + circle(26, 30, 4, ORANGE) + path("M20 10 L25 15 L34 5", GREEN, 2.4)
+
+
+@icon("joint_origin")
+def _():
+    return (
+        block(0, 0, 0, 16, 16, 12, GREY, 24, 36)
+        + arrow(24, 24, 40, 24, "#ef6f6c", 2.2)
+        + arrow(24, 24, 24, 8, "#3cc46a", 2.2)
+        + arrow(24, 24, 12, 32, "#4fb0f5", 2.2)
+    )
+
+
+@icon("rigid_group")
+def _():
+    return (
+        block(0, 0, 0, 10, 10, 9, GREY, 16, 38)
+        + block(0, 0, 0, 10, 10, 9, GREY, 32, 38)
+        + block(0, 0, 0, 10, 10, 9, BLUE, 24, 24)
+        + rect(
+            8, 6, 32, 36, "none", 3, 'stroke="%s" stroke-width="2" stroke-dasharray="4 3"' % ORANGE
+        )
+    )
+
+
+@icon("ground")
+def _():
+    # a body held down: an anchor badge
+    return (
+        block(0, 0, 0, 16, 16, 12, GREY, 22, 32)
+        + line(38, 24, 38, 42, ORANGE, 2.4)
+        + path("M30 36 Q38 46 46 36", ORANGE, 2.4)
+        + circle(38, 21, 3, "none", ORANGE, 2.2)
+        + line(32, 28, 44, 28, ORANGE, 2.4)
+    )
+
+
+@icon("drive_joints")
+def _():
+    return (
+        _two_blocks()
+        + path("M14 10 A12 12 0 0 1 38 10", STROKE, 1.8)
+        + poly([(38, 10), (34, 5), (33, 12)], STROKE)
+        + poly([(24, 6), (24, 14), (31, 10)], GREEN)
+    )
+
+
+@icon("position")
+def _():
+    # a captured position: a block with a pin above it
+    return (
+        block(0, 0, 0, 16, 16, 12, GREY, 22, 34)
+        + circle(36, 12, 5, ORANGE)
+        + poly([(31, 14), (41, 14), (36, 24)], ORANGE)
     )
 
 

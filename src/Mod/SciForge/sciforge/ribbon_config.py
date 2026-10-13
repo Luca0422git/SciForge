@@ -95,7 +95,7 @@ SOLID_CREATE = group(
         item("Boundary Fill", None, "boundary_fill"),
         SEP,
         item("Create Base Feature", None, "box"),
-        item("Joint Origin", None, "joint"),
+        item("Joint Origin", "SciForge_JointOrigin", "joint_origin"),
     ],
 )
 
@@ -219,13 +219,24 @@ ASSEMBLE = group(
     ["New Component"],
     [
         item("New Component", ("SciForge_NewComponent", "Std_Part"), "new_component"),
-        item("Joint", None, "joint", "J"),
-        item("As-built Joint", None, "joint"),
-        item("Joint Origin", None, "joint"),
-        item("Rigid Group", None, "new_component"),
+        item(
+            "Joint",
+            "SciForge_Joint",
+            "joint",
+            "J",
+            note="Click a snap point on each component; component 1 moves onto component 2.",
+        ),
+        item("As-built Joint", "SciForge_AsBuiltJoint", "joint_asbuilt"),
+        item("Joint Origin", "SciForge_JointOrigin", "joint_origin"),
+        item("Rigid Group", "SciForge_RigidGroup", "rigid_group"),
         SEP,
-        item("Drive Joints", None, "joint"),
+        item("Drive Joints", "SciForge_DriveJoints", "drive_joints"),
         item("Motion Link", None, "joint"),
+        SEP,
+        # Fusion shows these in a POSITION panel that appears once a component was moved;
+        # here they stay in the menu and are greyed while nothing moved (parity/joints.md).
+        item("Capture Position", "SciForge_CapturePosition", "position"),
+        item("Revert Position", "SciForge_RevertPosition", "position"),
     ],
 )
 

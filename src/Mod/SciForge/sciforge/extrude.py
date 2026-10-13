@@ -53,6 +53,7 @@ drives (SciForgeRole "ExtrudeFollower", never a timeline step of its own):
 A Join that touches no body at all makes a new body (Fusion). Followers link the lead
 ("Source"), so edits, formulas and reopened files flow through it.
 """
+
 import json
 import math
 
@@ -849,6 +850,55 @@ def _insert(body, type_id, name, before=None):
     return obj
 
 
+FRAME = "SciForgeFrame"  # where another body's profile sits in this body (fixed at creation)
+FRAME_OF = "SciForgeFrameOf"  # the container that frame was taken against
+
+
+def _container(obj):
+    """(the body or part holding `obj`, or None at the document root, its global placement)."""
+    body = owner_body(obj)
+    if body is not None:
+        return body, body.getGlobalPlacement()
+    parent = obj.getParentGeoFeatureGroup()
+    if parent is not None:
+        return parent, parent.getGlobalPlacement()
+    return None, App.Placement()
+
+
+def _freeze_frame(binder, body, container, container_placement):
+    """Remember, once, where the profile's container sits in `body`.
+
+    A New Body made from a sketch in another body must stay the same solid when a joint
+    later moves either body: with FreeCAD's default (Relative) binding the copied profile
+    follows the sketch's *global* position, so the body's own geometry would shift every
+    time the solver moved it. The frame is taken when the binder is made and kept through
+    later edits, so the body keeps its shape; it is taken again only when the profile moves
+    to a different body."""
+    name = container.Name if container is not None else ""
+    if FRAME not in binder.PropertiesList:
+        binder.addProperty("App::PropertyPlacement", FRAME, "SciForge", "Profile frame", 0)
+        binder.setEditorMode(FRAME, 2)
+        binder.addProperty("App::PropertyString", FRAME_OF, "SciForge", "Profile container", 0)
+        binder.setEditorMode(FRAME_OF, 2)
+    elif getattr(binder, FRAME_OF, None) == name:
+        return
+    frame = body.getGlobalPlacement().inverse().multiply(container_placement)
+    setattr(binder, FRAME, frame)
+    setattr(binder, FRAME_OF, name)
+
+
+def _frozen_placement(binder, support, container_placement, shift):
+    """The binder placement for a non-relative copy: frame * start shift (* the source's
+    own placement when FreeCAD copies a single shape, as it then drops that placement)."""
+    frame = getattr(binder, FRAME)
+    local_shift = container_placement.Rotation.inverted().multVec(shift)
+    place = App.Placement(local_shift, App.Rotation())
+    shapes = sum(max(1, len(subs)) for _, subs in support)
+    if shapes == 1:
+        place = place.multiply(support[0][0].Placement)
+    return frame.multiply(place)
+
+
 def _binder(body, feature, sources, offset, existing=None, role="ExtrudeProfile"):
     """A hidden SubShapeBinder in `body`, just before `feature`, copying `sources`."""
     doc = body.Document
@@ -866,10 +916,20 @@ def _binder(body, feature, sources, offset, existing=None, role="ExtrudeProfile"
             order.append(obj.Name)
         if sub:
             grouped[obj.Name][1].append(sub)
-    binder.Support = [(grouped[n][0], tuple(grouped[n][1])) for n in order]
+    support = [(grouped[n][0], tuple(grouped[n][1])) for n in order]
+    container, container_placement = _container(support[0][0])
+    cross = role == "ExtrudeProfile" and container is not body
+    if cross:
+        _freeze_frame(binder, body, container, container_placement)
+    if "Relative" in binder.PropertiesList and binder.Relative == cross:
+        binder.Relative = not cross  # before Support: setting Support copies at once
+    binder.Support = support
     shift = App.Vector(offset)
-    rot = body.getGlobalPlacement().Rotation
-    binder.Placement = App.Placement(rot.inverted().multVec(shift), App.Rotation())
+    if cross:
+        binder.Placement = _frozen_placement(binder, support, container_placement, shift)
+    else:
+        rot = body.getGlobalPlacement().Rotation
+        binder.Placement = App.Placement(rot.inverted().multVec(shift), App.Rotation())
     try:
         binder.Visibility = False
     except Exception:
