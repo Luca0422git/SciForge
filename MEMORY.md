@@ -50,6 +50,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 | 2026-10-09 | No SHEET METAL, PLASTIC or MANAGE tabs (Luca: "not for now") | Not used; out of scope |
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
 | 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
+- **2026-10-13: full (compiled) builds only for releases or a real C++ change.** Luca asked why
+  compile at all when SciForge is an add-on: all 7 core patches are housekeeping or FreeCAD bug
+  fixes (#4, #6, #7) that already have Python workarounds, so the quick update on the official
+  FreeCAD 1.1.4 is the normal delivery. Never start a 3-hour Windows build without one of those
+  two reasons (Luca waited hours on builds that were not needed).
 
 ## Status by phase (outline section 10)
 
