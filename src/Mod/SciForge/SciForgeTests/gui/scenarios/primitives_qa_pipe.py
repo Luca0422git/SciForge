@@ -7,8 +7,9 @@ Q2. A 40 x 30 x 10 block. Pipe with nothing selected: OK says to pick the path, 
     stays. The top front edge clicked: a pipe d2 along it (a quarter inside: Join).
     Cut. Hollow with a wall of 1 (as thick as the radius): said, OK waits; 0.5: a hollow
     groove. The top right edge clicked too: the pipe turns the corner. Clicked again:
-    dropped. 5 typed with the mouse over the 3D view: Section Size 5 (Fusion's box next
-    to the handle; FreeCAD's key 5 would have turned the view). OK. Picking or dropping
+    dropped. 5 typed with the mouse over the 3D view goes into the Section Size handle's
+    value box (Fusion's box next to the handle; FreeCAD's key 5 would have turned the
+    view); Enter takes it and is OK: a d5 groove. Picking or dropping
     curves keeps the section size and the typed wall (they were worked out again from
     the path's length: the wall 0.5 became 0.2), and the corner is mitred like Fusion's
     (FreeCAD's default corner failed: "A fatal error occurred when making the pipe").
@@ -26,6 +27,7 @@ the distance across the leg over the quarter ring = (1^3 - 0.5^3) / 3, twice:
 0.75 pi / 4 x 70 - 7 / 12 = 13.125 pi - 7 / 12. Triangular (circumscribed d5, a corner up) hollow:
 area 3 sqrt(3) / 16 (5^2 - 3^2) = 3 sqrt(3); the part inside the block is bounded.
 """
+
 import math
 
 import FreeCAD as App
@@ -36,6 +38,7 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import primitive_input as pi
+from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
 
 V = App.Vector
@@ -208,27 +211,35 @@ def q2_size_typed():
     p = panel()
     camera = tuple(round(q, 6) for q in h.view().getCameraOrientation().Q)
     h.check("Q2 the view did not turn (FreeCAD's key 5)", camera == s["camera"])
+    # Once a handle shows, the digits go into its value box (Fusion's box next to the
+    # handle); the dialog's field takes the value on Enter.
+    box = p.value_boxes.current() if p is not None else None
+    typed = box.text().strip() if box is not None and box.hasFocus() else None
     h.check(
-        "Q2 5 went into Section Size",
-        p is not None and near(p.size.value(), 5.0),
+        "Q2 5 went into the Section Size handle's box",
+        box is not None and box is p.value_boxes.boxes.get("section_size") and typed == "5",
+        (typed, p and sorted(p.value_boxes.shown())),
+    )
+    h.check(
+        "Q2 the field waits for Enter",
+        p is not None and near(p.size.value(), 2.0),
         p and p.size.value(),
     )
+    si.key(QtCore.Qt.Key_Return)  # where the keyboard is: the box
 
 
 q2_size_typed.wait_ms = 2500
 
 
 def q2_ok():
-    h.check("Q2 a d5 hollow groove: - 22.5 pi", near(vol(), 12000.0 - 22.5 * PI, 1e-5), vol())
-    h.task_button("OK")
+    h.check("Q2 Enter in the box took the 5 and was OK", pi.no_dialog())
 
 
 q2_ok.wait_ms = 1500
 
 
 def q2_kept():
-    h.check("Q2 OK closed it", pi.no_dialog())
-    h.check("Q2 kept", near(vol(), 12000.0 - 22.5 * PI, 1e-5), vol())
+    h.check("Q2 a d5 hollow groove kept: - 22.5 pi", near(vol(), 12000.0 - 22.5 * PI, 1e-5), vol())
     h.check("Q2 timeline", ti.titles()[-1:] == ["Pipe 1"], ti.titles())
     h.shot("q2")
 

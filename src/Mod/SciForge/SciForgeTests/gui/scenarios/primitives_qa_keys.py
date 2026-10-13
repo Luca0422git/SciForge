@@ -4,10 +4,12 @@
 K1. Box on XY, first corner on the origin; with the mouse over the 3D view type 3 0:
     the number goes into Length (Fusion's box next to the mouse), the view does not jump
     to FreeCAD's "right" view (key 3); Tab, 2 0 into Width, Enter: placed 30 x 20 (the
-    mouse only says on which side). Over the view again: - 5 goes into Height; Enter is
-    OK: 30 x 20 x 5 below the plane.
+    mouse only says on which side). Over the view again: - 5 goes into the Height
+    handle's value box (Fusion's box next to the arrow); Enter takes it and is OK:
+    30 x 20 x 5 below the plane.
 K2. Cylinder: the centre at (50, 10), then 1 2 over the view, Enter: diameter 12 (the
-    mouse is 5 mm away: the typed value wins). 8 over the view goes into Height; Enter.
+    mouse is 5 mm away: the typed value wins). 8 over the view goes into the Height
+    handle's box; Enter.
 K3. Sphere: 6 typed over the view before the centre click: the click places a sphere of
     diameter 6 (not the size worked out from the zoom). Enter.
 K4. Another command's key while a dialog is open: Torus, plane, centre, then E: the
@@ -19,6 +21,7 @@ K5. Esc in the middle of the pick: Cylinder, plane, centre, Esc: nothing is left
 Hand-derived volumes: box 30 x 20 x 5 = 3000; cylinder d12 h8 = 288 pi; sphere d6 = 36 pi;
 box 10 x 10 x 10 = 1000.
 """
+
 import math
 
 import FreeCAD as App
@@ -73,6 +76,19 @@ def key_to_focus(key):
 
 def body_count():
     return len(pi.bodies())
+
+
+def box_text(p, key):
+    """What the value box of the handle `key` holds while it has the keyboard (digits typed
+    over the 3D view go there once the shape is placed, like Fusion's box next to the
+    arrow; the dialog's field takes the value on Enter), else None."""
+    try:
+        box = p.value_boxes.current() if p is not None else None
+        if box is None or box is not p.value_boxes.boxes.get(key) or not box.hasFocus():
+            return None
+        return box.text().strip()
+    except Exception:
+        return None
 
 
 # == K1: Box, sizes typed over the view =====================================================
@@ -151,11 +167,11 @@ def k1_height():
 def k1_height_typed():
     p = pi.panel("BoxPanel")
     h.check(
-        "K1 -5 went into Height",
-        p is not None and near(p.height.value(), -5.0),
-        p and p.height.value(),
+        "K1 -5 went into the Height handle's box",
+        box_text(p, "height") == "-5",
+        box_text(p, "height"),
     )
-    keys_to_focus("", enter=True)
+    keys_to_focus("", enter=True)  # Enter takes the box's value and is OK (Fusion)
 
 
 k1_height_typed.wait_ms = 1500
@@ -224,11 +240,11 @@ k2_placed.wait_ms = 1500
 def k2_height():
     p = pi.panel("CylinderPanel")
     h.check(
-        "K2 8 went into Height",
-        p is not None and near(p.height.value(), 8.0),
-        p and p.height.value(),
+        "K2 8 went into the Height handle's box",
+        box_text(p, "height") == "8",
+        box_text(p, "height"),
     )
-    keys_to_focus("", enter=True)
+    keys_to_focus("", enter=True)  # Enter takes the box's value and is OK (Fusion)
 
 
 k2_height.wait_ms = 1500

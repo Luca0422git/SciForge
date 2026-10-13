@@ -128,7 +128,6 @@ class AngleDragger(BoxCarrier):
         self.zero = App.Vector(zero).normalize()
         self.radius = radius
         self.width = width
-        self.root = taskui.on_top_root(coin)  # over the part and grabbable through it
         place = coin.SoTransform()
         place.translation.setValue(pivot.x, pivot.y, pivot.z)
         x = self.zero
@@ -136,12 +135,12 @@ class AngleDragger(BoxCarrier):
         y = z.cross(x)
         matrix = App.Matrix(x.x, y.x, z.x, 0, x.y, y.y, z.y, 0, x.z, y.z, z.z, 0, 0, 0, 0, 1)
         place.rotation.setValue(*App.Placement(matrix).Rotation.Q)
+        self.root = taskui.on_top_root(coin, place)  # over the part and grabbable through it
         self.dragger = coin.SoRotateDiscDragger()
         self.dragger.setPart("rotator", self._arc(coin, radius, width, (0.30, 0.62, 0.95)))
         self.dragger.setPart("rotatorActive", self._arc(coin, radius, width, (0.55, 0.80, 1.0)))
         self.dragger.setPart("feedback", coin.SoSeparator())
         self.dragger.setPart("feedbackActive", coin.SoSeparator())
-        self.root.addChild(place)
         self.root.addChild(self.dragger)
         self.set_angle(angle)
         self.on_drag = on_drag

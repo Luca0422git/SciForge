@@ -54,11 +54,11 @@ class PointDragger:
         from pivy import coin
 
         self.view = Gui.ActiveDocument.ActiveView
-        self.root = on_top_root(coin)  # over the part and grabbable through it
         place = coin.SoTransform()
         base = placement.Base
         place.translation.setValue(base.x, base.y, base.z)
         place.rotation.setValue(*placement.Rotation.Q)
+        self.root = on_top_root(coin, place)  # over the part and grabbable through it
         self.dragger = coin.SoTranslate2Dragger()
         self.dragger.setPart("translator", self._disc(coin, radius, BLUE))
         self.dragger.setPart("translatorActive", self._disc(coin, radius, (0.55, 0.80, 1.0)))
@@ -67,9 +67,7 @@ class PointDragger:
                 self.dragger.setPart(part, coin.SoSeparator())
             except Exception:
                 pass
-        self.root.addChild(place)
         self.root.addChild(self.dragger)
-        common.on_top(self.root)
         self.radius = radius
         self.placement = placement
         self.set_xy(xy)

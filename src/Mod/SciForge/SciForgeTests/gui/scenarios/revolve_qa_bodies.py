@@ -19,6 +19,7 @@ Path 22, a number typed with the mouse over the 3D view (Fusion types it into th
          box next to the handle): 4, 5, Enter gives 45 and OK; the view does not jump
          (FreeCAD's 4 and 5 are view keys).
 """
+
 import math
 import os
 import tempfile
@@ -471,10 +472,14 @@ def p22_type():
     h.press("4")  # the first key, with the keyboard on the 3D view
     si.key("5")  # the next ones go where the keyboard now is
     p = panel()
+    # The digits go into the angle handle's value box (Fusion's box next to the handle);
+    # the dialog's field takes the value on Enter, which is OK as well.
+    box = p.value_boxes.current() if p is not None else None
+    typed = box.text().strip() if box is not None and box.hasFocus() else None
     h.check(
-        "P22 the typed number is in the angle field",
-        p is not None and p.angle.widget.findChild(QtWidgets.QLineEdit).text().strip() == "45",
-        p and p.angle.widget.findChild(QtWidgets.QLineEdit).text(),
+        "P22 the typed number is in the angle handle's box",
+        box is not None and box is p.value_boxes.boxes.get("angle") and typed == "45",
+        (typed, p and sorted(p.value_boxes.shown())),
     )
     si.key(QtCore.Qt.Key_Return)
 

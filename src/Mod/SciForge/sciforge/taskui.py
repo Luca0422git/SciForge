@@ -276,14 +276,17 @@ def handle_size_at(view, point, pixels=None, lo=None, hi=None):
     return arrow_box_core.handle_size(mm_per_pixel(view, point), pixels, lo, hi)
 
 
-def on_top_root(coin):
+def on_top_root(coin, place):
     """The root node of a drag handle: drawn over the part and grabbable through it, as
     Fusion's manipulators are (Luca, 2026-10-13: "arrows for dragging get occluded by
     bodies"). Coin's SoAnnotation renders its children after everything else without
     depth testing, so the arrow shows in front of a body that is nearer to the camera;
     its pick style SHAPE_ON_TOP sorts the handle's pick in front of that body's, so a
-    press on the visible arrow starts the drag instead of selecting the face over it."""
+    press on the visible arrow starts the drag instead of selecting the face over it.
+    `place` (the handle's SoTransform) stays child 0: the scenarios read the handle's
+    position from `root.getChild(0).translation`."""
     root = coin.SoAnnotation()
+    root.addChild(place)
     pick = coin.SoPickStyle()
     pick.style = coin.SoPickStyle.SHAPE_ON_TOP
     root.addChild(pick)
@@ -941,12 +944,12 @@ class ArrowDragger(BoxCarrier):
         self.direction = App.Vector(direction)
         if self.direction.Length > 1e-12:
             self.direction.normalize()
-        self.root = on_top_root(coin)
         place = coin.SoTransform()
         place.translation.setValue(origin.x, origin.y, origin.z)
         # SoTranslate1Dragger moves along its local X axis; turn X onto `direction`.
         rot = App.Rotation(App.Vector(1, 0, 0), direction)
         place.rotation.setValue(*rot.Q)
+        self.root = on_top_root(coin, place)  # over the part and grabbable through it
         scale = coin.SoScale()
         scale.scaleFactor.setValue(size, size, size)
         self.dragger = coin.SoTranslate1Dragger()
@@ -956,7 +959,6 @@ class ArrowDragger(BoxCarrier):
         color.diffuseColor.setValue(0.30, 0.62, 0.95)
         color.emissiveColor.setValue(0.10, 0.25, 0.45)
         color.setOverride(True)
-        self.root.addChild(place)
         self.root.addChild(scale)
         self.root.addChild(color)
         self.root.addChild(self.dragger)

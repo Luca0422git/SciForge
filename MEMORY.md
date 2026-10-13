@@ -2206,6 +2206,18 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Process: the three agents again built in isolated worktrees with reviewers; two review
   rounds (orbit, sketch) and the extrude agent's own final batch each found real bugs. From
   here on (Luca's decision above) CI is the overall test; merges go out at once.
+- **CI #102 (a5c0b167cf) red, 12 scenarios; the lessons.** (1) `on_top_root` had put the
+  SoPickStyle at child 0 of every handle root; six extrude scenarios read the handle's place
+  from `root.getChild(0).translation` and broke. Fixed by giving `on_top_root(coin, place)`
+  the SoTransform so it stays child 0 (taskui.ArrowDragger, extrude_ui.TaperHandle,
+  hole_ui.PointDragger; the latter's extra SoDepthBuffer went, the SoAnnotation does that).
+  Rule: a handle's root is `[SoTransform, SoPickStyle, ...]`; tests may index child 0.
+  (2) The extrude branch moved a digit typed over the 3D view into the handle's value box
+  (Fusion; Enter there takes it and is OK); three older QA checks still expected the dialog's
+  field to change at once (primitives_qa_keys K1/K2, primitives_qa_pipe Q2, revolve_qa_bodies
+  P22): they now read `panel.value_boxes.current()`. (3) Cancel left the marking-menu list
+  for the 9 o'clock slot; hole_qa_more P20 and fillet_qa_more P15 clicked the list row. Any
+  later test of Cancel while a command runs: `menu.slots[6]`.
 - Housekeeping: the agents' worktrees (`.claude/worktrees/agent-*`, all clean, branches
   merged) and the two stale ones from the first inspect / primitives QA rounds
   (`wf_f0015b22-593-18/19`, superseded by inspect_qa* / primitives_qa* on the main branch)

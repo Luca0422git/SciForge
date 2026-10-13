@@ -19,6 +19,7 @@ Path 21, Suppress the hole in the timeline and back.
 
 Volumes by hand (hole_steps has the formulas); the boss adds pi 36 h.
 """
+
 import math
 import os
 import tempfile
@@ -480,7 +481,9 @@ def p20_ok():
     menu = open_menu()
     if menu is None:
         return
-    h.check("P20 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text())
+    h.check(
+        "P20 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text()
+    )
     w.click(menu.slots[2])
 
 
@@ -505,12 +508,13 @@ def p20_cancel():
     menu = open_menu()
     if menu is None:
         return
-    for i in range(menu.list.count()):
-        row = menu.list.item(i)
-        if row.text().split("    ")[0] == "Cancel":
-            w.click(menu.list.viewport(), menu.list.visualItemRect(row).center())
-            return
-    h.check("P20 the list has Cancel", False)
+    # Cancel sits at 9 o'clock while a command runs (Fusion's marking menu), not in the list.
+    h.check(
+        "P20 the left slot (9 o'clock) is Cancel",
+        menu.slots[6].text() == "Cancel",
+        menu.slots[6].text(),
+    )
+    w.click(menu.slots[6])
 
 
 def p20_cancelled():

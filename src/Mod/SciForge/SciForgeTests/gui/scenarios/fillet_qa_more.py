@@ -21,6 +21,7 @@ Path 22, the design closed while the Fillet dialog is open: nothing is left behi
 
 Numbers by hand: 40 x 30 x 10 box (see blend_steps), a second 20 x 20 x 10 box.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
@@ -99,7 +100,9 @@ def p15_menu_ok():
     menu = open_menu()
     if menu is None:
         return
-    h.check("P15 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text())
+    h.check(
+        "P15 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text()
+    )
     h.shot("p15-menu")
     w.click(menu.slots[2])
 
@@ -134,7 +137,13 @@ def p15_still_open():
     h.check("P15 and says why", p is not None and "too big" in p.message.text())
     menu = open_menu()
     if menu is not None:
-        click_row(menu, "Cancel")
+        # Cancel sits at 9 o'clock while a command runs (Fusion's marking menu), not in the list.
+        h.check(
+            "P15 the left slot (9 o'clock) is Cancel",
+            menu.slots[6].text() == "Cancel",
+            menu.slots[6].text(),
+        )
+        w.click(menu.slots[6])
 
 
 def p15_cancelled():
