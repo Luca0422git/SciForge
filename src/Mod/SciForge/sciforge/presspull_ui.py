@@ -655,6 +655,11 @@ class PressPullPanel(Panel):
         self.message.setText(note)
 
     def accept(self):
+        if self._timer.isActive():
+            # A value typed and Enter (or OK) at once: build it before deciding. Left to the
+            # timer, that rebuild came ~60 ms later and wiped the message said below.
+            self._timer.stop()
+            self._recompute()
         if self.target is None:
             self.message.setText("⚠ Nothing selected yet: click faces or edges of the part.")
             return False
