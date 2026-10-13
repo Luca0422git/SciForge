@@ -11,9 +11,9 @@ R2  Click the square again, type -5: a cut, in red. Click the box, type 0, Enter
 R4  Start: Offset with the distance still at 0: the two arrows sit on one spot; their two
     value boxes do not cover each other. The same for Two Sides with both sides at 0. Then
     side two 5 (side one still 0): down into the box, so Cut, in red.
-R5  One Side, -5. Click the box, type 30 (no Enter), click the top face beside the square:
-    30 is taken, and that click is not a pick (the face is not added as a profile). Again
-    with 20 and a click on the square itself: 20 is taken, the square stays picked.
+R5  One Side, -5. Click the box, type 8 (no Enter), click the top face beside the square:
+    8 is taken, and that click is not a pick (the face is not added as a profile). Again
+    with 6 and a click on the square itself: 6 is taken, the square stays picked.
 R1  Create Sketch on the top face, Q with nothing picked in it: Press Pull opens. Esc: the
     sketch is still shown and the undo list is as before. Again: Q, the top face, 2, OK:
     Press Pull is an undo step of its own; one Undo takes it back and nothing else.
@@ -221,22 +221,22 @@ def side_two_into_box():
 
 
 # -- R5: the click that leaves the box is not a pick ---------------------------------------------
-def type_30():
+def type_8():
     p = xpanel()
     h.check("one profile before", p is not None and len(p.profiles) == 1, p and p.profiles)
     boxes = a.value_boxes()
     if h.check("the value box is there", len(boxes) == 1, len(boxes)):
-        a.type_in_box(boxes[0], "30", enter=False)
+        a.type_in_box(boxes[0], "8", enter=False)
         h.check("the box has the keyboard", boxes[0].hasFocus(), a.focus_name())
     h.click(BESIDE)
 
 
-type_30.wait_ms = 1200
+type_8.wait_ms = 1200
 
 
 def click_was_not_a_pick():
     p = xpanel()
-    h.check("leaving the box took 30", p is not None and near(abs(p.distance.value()), 30.0), p and p.distance.value())
+    h.check("leaving the box took 8", p is not None and near(abs(p.distance.value()), 8.0), p and p.distance.value())
     h.check(
         "the click that left the box added no profile",
         p is not None and len(p.profiles) == 1,
@@ -246,7 +246,7 @@ def click_was_not_a_pick():
     h.shot("R5-left-box")
     boxes = a.value_boxes()
     if h.check("the value box is there", len(boxes) == 1, len(boxes)):
-        a.type_in_box(boxes[0], "20", enter=False)
+        a.type_in_box(boxes[0], "6", enter=False)
     h.click(SQUARE)  # this time on the picked area itself
 
 
@@ -255,7 +255,7 @@ click_was_not_a_pick.wait_ms = 1200
 
 def area_click_was_not_a_pick():
     p = xpanel()
-    h.check("leaving the box took 20", p is not None and near(abs(p.distance.value()), 20.0), p and p.distance.value())
+    h.check("leaving the box took 6", p is not None and near(abs(p.distance.value()), 6.0), p and p.distance.value())
     h.check(
         "the click on the square that left the box did not drop it",
         p is not None and len(p.profiles) == 1,
@@ -364,7 +364,7 @@ h.run(
         offset_boxes,
         two_sides_boxes,
         side_two_into_box,
-        type_30,
+        type_8,
         click_was_not_a_pick,
         area_click_was_not_a_pick,
         q_sketch,

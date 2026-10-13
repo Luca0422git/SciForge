@@ -2062,6 +2062,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     `viewcube_arrows` (both fail on the old code with animation on).
   - Full build: the scenario jobs say "the Linux build did not finish" instead of a download
     error when the Linux build failed.
+- Second review (of the merge and the fixes above), fixed, each failing on the code before:
+  Two Sides with side one at 0 and side two into the part stayed Join (the "starts inside"
+  cache ignored which side the preview leaves out); the click that leaves a value box still
+  dropped a sketch area (area clicks have their own mouse handler); a ViewCube turn stopped
+  part way by a zoom kept the arrows on the tilted view. Also: the red preview of a cut through
+  All now reaches every body it cuts (golden `extrude_multi_cut_all_far`: red up to 310 mm, was
+  92.6, checked with a FreeCAD probe), and the offset's value box starts past its arrow's tip
+  (three boxes at 0 never cover each other; unit test).
 - Old scenarios that relied on the automatic 10 mm or on a preview right after E were updated
   (extrude_multibody*, sketch_areas*). Unit 330, golden 294 + 1 xfail.
 
