@@ -575,9 +575,17 @@ class ViewCube(QtWidgets.QWidget):
         self.view.setCameraOrientation(tuple(new))
 
     def drag_by(self, dx, dy):
-        """Orbit the model like Shift + middle-drag (turntable: about Z and sideways)."""
-        new = viewcube.orbit(orientation_of(self.view), dx, dy)
-        set_orientation_now(self.view, new)
+        """Orbit the model like Shift + middle-drag: in the chosen orbit mode (Constrained:
+        about Z and sideways, never rolling; Free: tumbling) and about the orbit centre when
+        one is set (orbit_ui)."""
+        try:
+            from . import orbit_ui
+
+            orbit_ui.drag_camera(self.view, dx, dy)
+        except Exception as exc:
+            _warn_once("ViewCube drag: %s" % exc)
+            new = viewcube.orbit(orientation_of(self.view), dx, dy)
+            set_orientation_now(self.view, new)
         self.set_orientation(orientation_of(self.view))
 
     # -- the right-click menu --------------------------------------------------------------

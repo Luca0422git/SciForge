@@ -54,11 +54,25 @@ def _menu_text(entry):
     return entry["label"] + ("\t" + entry["key"] if entry.get("key") else "")
 
 
+def is_checked(spec):
+    """Whether a "module:function" entry (ribbon_config.item(checked=...)) is the current
+    choice. Never raises: a broken spec shows unticked."""
+    try:
+        import importlib
+
+        module_name, function_name = spec.split(":", 1)
+        module = importlib.import_module("." + module_name, __package__)
+        return bool(getattr(module, function_name)())
+    except Exception as exc:
+        warn("menu tick %s: %s" % (spec, exc))
+        return False
+
+
 def build_menu(parent, entries, available):
     """QMenu for a list of config entries. Unavailable commands are greyed out."""
     menu = QtWidgets.QMenu(parent)
     menu.setToolTipsVisible(True)
-    checks = []  # (action, resolved) re-checked each time the menu opens
+    checks = []  # (action, resolved, checked spec) re-checked each time the menu opens
     for entry in entries:
         if entry is cfg.SEP:
             menu.addSeparator()
@@ -76,14 +90,19 @@ def build_menu(parent, entries, available):
             action.triggered.connect(lambda _=False, r=resolved, e=entry: run(r, e["label"]))
             if entry.get("note"):
                 action.setToolTip(entry["note"])
-            checks.append((action, resolved))
+            if entry.get("checked"):
+                action.setCheckable(True)
+                action.setChecked(is_checked(entry["checked"]))
+            checks.append((action, resolved, entry.get("checked")))
         else:
             action.setEnabled(False)
             action.setToolTip(entry.get("note") or "Not available in SciForge yet")
 
     def refresh():
-        for action, resolved in checks:
+        for action, resolved, checked in checks:
             action.setEnabled(is_active(resolved))
+            if checked:
+                action.setChecked(is_checked(checked))
 
     menu.aboutToShow.connect(refresh)
     return menu

@@ -24,7 +24,10 @@ class NavBar(QtWidgets.QWidget):
             button.setIconSize(QtCore.QSize(20, 20))
             button.setAutoRaise(True)
             if "submenu" in entry:
-                button.setToolTip(entry["label"])
+                tip = entry["label"]
+                if entry.get("note"):
+                    tip += "\n" + entry["note"]
+                button.setToolTip(tip)
                 button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
                 button.setMenu(build_menu(button, entry["submenu"], available))
             else:

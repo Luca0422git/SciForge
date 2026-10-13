@@ -146,6 +146,7 @@ def enable():
     navbar_ui.show()
     _safely(lambda: __import__("sciforge.viewcube_ui").viewcube_ui.enable())
     _safely(lambda: __import__("sciforge.marking_menu").marking_menu.enable())
+    _safely(lambda: __import__("sciforge.orbit_ui").orbit_ui.enable())
     _safely(_sketch_mode_on)
     log("interface on")
 
@@ -162,6 +163,7 @@ def disable():
         timeline_ui.hide()
         return
     for step in (
+        lambda: __import__("sciforge.orbit_ui").orbit_ui.disable(),
         lambda: __import__("sciforge.marking_menu").marking_menu.disable(),
         shortcuts.restore,
         timeline_ui.hide,

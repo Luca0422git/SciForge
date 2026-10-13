@@ -1278,6 +1278,17 @@ def _():
     )
 
 
+@icon("orbit_center")
+def _():
+    """Set / Reset Orbit Center: the green dot the orbit turns about, inside the orbit ring."""
+    return (
+        ellipse(24, 24, 17, 7, "none", STROKE, 2.2)
+        + circle(24, 24, 5.5, GREEN, DARK, 1.5)
+        + line(24, 6, 24, 14, STROKE, 2.2)
+        + line(24, 34, 24, 42, STROKE, 2.2)
+    )
+
+
 @icon("nav_lookat")
 def _():
     return (
