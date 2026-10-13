@@ -15,6 +15,9 @@ E  a window around the top face (its screen rectangle + 6 px): the top face, its
 F  modifiers: Shift + crossing box over the front-top edge adds the front face to E's
    picks; Ctrl + the same box removes the edge and the two faces it crosses; a plain box
    replaces the selection.
+F2 Shift + click on the front face adds it to a selected top face; Shift + click on the
+   top face again keeps both (Shift never removes); Ctrl + click on the top face removes
+   it; Shift + click on empty space keeps the selection.
 G  Esc clears the selection; Esc while a box is being dragged cancels it (the box
    widget hides, the release selects nothing).
 H  Select Through on: the window around the whole box takes the hidden faces and edges
@@ -28,6 +31,7 @@ K  an empty design: a box drag selects nothing and prints no error.
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
+from PySide6 import QtTest
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
@@ -205,6 +209,55 @@ def f_plain_check():
     )
 
 
+# -- F2 ------------------------------------------------------------------------------------------
+def f2_click_top():
+    h.click_empty()
+    h.click(V(20, 15, 10))
+
+
+def f2_shift_front():
+    h.check(
+        "F2 the top face is selected", si.selected_elements() == {names()["top"]}, si.selected()
+    )
+    h.click(V(20, 0, 5), modifiers=si.SHIFT)
+
+
+def f2_shift_top_again():
+    want = {names()["top"], names()["front"]}
+    h.check("F2 Shift + click adds the front face", si.selected_elements() == want, si.selected())
+    h.click(V(20, 15, 10), modifiers=si.SHIFT)
+
+
+def f2_ctrl_top():
+    want = {names()["top"], names()["front"]}
+    h.check(
+        "F2 Shift + click on a selected face keeps it",
+        si.selected_elements() == want,
+        si.selected(),
+    )
+    h.click(V(20, 15, 10), modifiers=si.CTRL)
+
+
+def f2_shift_empty():
+    h.check(
+        "F2 Ctrl + click removes the top face",
+        si.selected_elements() == {names()["front"]},
+        si.selected(),
+    )
+    pos = QtCore.QPoint(15, 15)
+    h.move(pos)
+    QtTest.QTest.mouseClick(h.gl_widget(), QtCore.Qt.LeftButton, si.SHIFT, pos)
+    QtWidgets.QApplication.processEvents()
+
+
+def f2_check():
+    h.check(
+        "F2 Shift + click on empty space keeps the selection",
+        si.selected_elements() == {names()["front"]},
+        si.selected(),
+    )
+
+
 # -- G -------------------------------------------------------------------------------------------
 def g_escape_clears():
     h.press(QtCore.Qt.Key_Escape)
@@ -360,6 +413,12 @@ steps = b.box_steps("SelBox") + [
     f_ctrl_check,
     f_plain_replaces,
     f_plain_check,
+    f2_click_top,
+    f2_shift_front,
+    f2_shift_top_again,
+    f2_ctrl_top,
+    f2_shift_empty,
+    f2_check,
     g_escape_clears,
     g_escape_check,
     g_escape_mid_drag,

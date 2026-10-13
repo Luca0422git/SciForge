@@ -739,10 +739,7 @@ def _candidates(doc):
                     continue
                 found.append((obj, tip, shape, tip.Name + "."))
             elif obj.TypeId == core.SKETCH_TYPE:
-                if not obj.ViewObject.Visibility or obj.getParentGeoFeatureGroup() is None:
-                    if not obj.ViewObject.Visibility:
-                        continue
-                if _is_edited(obj):
+                if not obj.ViewObject.Visibility or _is_edited(obj):
                     continue
                 shape = obj.Shape
                 if shape.isNull():
@@ -1168,6 +1165,21 @@ def _distance(a, b):
     return math.hypot(a.x() - b.x(), a.y() - b.y())
 
 
+_MOUSE = (
+    QtCore.QEvent.MouseButtonPress,
+    QtCore.QEvent.MouseButtonDblClick,
+    QtCore.QEvent.MouseMove,
+    QtCore.QEvent.MouseButtonRelease,
+)
+
+
+def _is_gl(obj):
+    try:
+        return obj.metaObject().className() == "QOpenGLWidget"
+    except Exception:
+        return False
+
+
 class _ViewFilter(QtCore.QObject):
     def __init__(self):
         super().__init__()
@@ -1194,6 +1206,8 @@ class _ViewFilter(QtCore.QObject):
                 return False
             if kind == QtCore.QEvent.KeyPress:
                 return self._key(obj, event)
+            if kind in _MOUSE and not _is_gl(obj):
+                return False  # an event Quarter ignored, handed on to the viewer widget
             if kind == QtCore.QEvent.MouseButtonPress:
                 return self._pressed(obj, event)
             if kind == QtCore.QEvent.MouseButtonDblClick:
@@ -1223,8 +1237,6 @@ class _ViewFilter(QtCore.QObject):
         if event.button() != LEFT:
             if self.press is not None:
                 self._drop()  # another button joined in: not a box any more
-            return False
-        if obj.metaObject().className() != "QOpenGLWidget":
             return False
         try:
             from . import orbit_ui
@@ -1261,7 +1273,15 @@ class _ViewFilter(QtCore.QObject):
                 self._hover(obj, event)
             return False
         if not (event.buttons() & LEFT):
-            self._drop()  # the button went up somewhere else
+            # A move without the button: the button went up somewhere else, or a move Qt
+            # made up (a widget shown under the pointer, a tooltip): the real state decides.
+            try:
+                held = bool(QtWidgets.QApplication.mouseButtons() & LEFT)
+            except Exception:
+                held = False
+            if held:
+                return press.boxing or press.listed  # a made-up move: nothing changes
+            self._drop()
             return False
         if press.listed:
             return True  # the list is open: the move is not a drag
@@ -1531,12 +1551,15 @@ def _safely(step, *args):
 
 
 def _preselect_body(body):
-    if body is None:
-        pre = Gui.Selection.getPreselection()
-        if pre.ObjectName and not pre.SubElementNames:
-            Gui.Selection.clearPreselection()
-    else:
-        Gui.Selection.setPreselection(body, "")
+    try:
+        if body is None:
+            pre = Gui.Selection.getPreselection()
+            if pre.ObjectName and not pre.SubElementNames:
+                Gui.Selection.clearPreselection()
+        else:
+            Gui.Selection.setPreselection(body, "")
+    except Exception:
+        pass  # the body went (deleted, undone) between the move and this moment
 
 
 def active_press():
