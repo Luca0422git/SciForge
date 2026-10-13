@@ -128,7 +128,8 @@ def p15_too_big():
 def p15_menu_ok_refused():
     menu = open_menu()
     if menu is not None:
-        w.click(menu.slots[0])
+        h.check("P15 OK at 3 o'clock again", menu.slots[2].text() == "OK", menu.slots[2].text())
+        w.click(menu.slots[2])
 
 
 def p15_still_open():

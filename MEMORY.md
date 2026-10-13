@@ -2217,7 +2217,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   field to change at once (primitives_qa_keys K1/K2, primitives_qa_pipe Q2, revolve_qa_bodies
   P22): they now read `panel.value_boxes.current()`. (3) Cancel left the marking-menu list
   for the 9 o'clock slot; hole_qa_more P20 and fillet_qa_more P15 clicked the list row. Any
-  later test of Cancel while a command runs: `menu.slots[6]`.
+  later test of Cancel while a command runs: `menu.slots[6]`. (4) extrude_presspull_qa3 P14
+  clicked a face "in front of its arrow": in the isometric view that pixel lies on the
+  arrow's lower half, inside the block, which the pick-on-top style now hands to the arrow
+  (nothing under the mouse, no face toggled). Kept as product behaviour (the arrow is drawn
+  there now, so it is grabbable there); the test clicks beside the arrow. Rule for tests:
+  never click a face on a handle's screen line, even where the handle is inside the part.
 - Housekeeping: the agents' worktrees (`.claude/worktrees/agent-*`, all clean, branches
   merged) and the two stale ones from the first inspect / primitives QA rounds
   (`wf_f0015b22-593-18/19`, superseded by inspect_qa* / primitives_qa* on the main branch)

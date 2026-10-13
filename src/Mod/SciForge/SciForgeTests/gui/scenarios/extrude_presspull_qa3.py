@@ -15,6 +15,7 @@ Path 14, profiles from two sketches in one extrude, edited, saved, reopened, edi
 
 Numbers by hand: 40 x 30 rectangle with an r5 circle at (20, 15).
 """
+
 import math
 import os
 import tempfile
@@ -483,7 +484,12 @@ def p14_editing():
         return
     h.check("both profiles back", len(p.profiles) == 2, p.profiles)
     h.fit()
-    h.click(V(35, 21, 15))  # the second block's top, in front of its arrow: drop that square
+    # The second block's top, beside its arrow: drop that square. The arrow is drawn over the
+    # part and grabbable along its whole drawn length, the half inside the block included
+    # (Fusion's manipulators are never hidden): a click on its line, (35, 21, 15) in this
+    # view, grabs the arrow instead of the face. Beside it (to the left: the value box
+    # sits on the right) the face is picked.
+    h.click(V(31, 22, 15))
 
 
 def p14_dropped():
