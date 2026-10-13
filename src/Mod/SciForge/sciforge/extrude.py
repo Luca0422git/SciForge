@@ -107,6 +107,11 @@ def is_sketch(obj):
     return obj is not None and obj.isDerivedFrom("Sketcher::SketchObject")
 
 
+def is_text(obj):
+    """A sketch text (text.py): one profile made of all its letters."""
+    return obj is not None and getattr(obj, "SciForgeType", "") == "SketchText"
+
+
 def ensure_regions(sketch):
     """Turn on the sketch's regions (FreeCAD's MakeInternals): every closed area becomes
     an "InternalFaceN" that a Pad can use as its profile."""
@@ -297,7 +302,7 @@ def profile_normal(profiles, local=False):
     if not profiles:
         raise ExtrudeError("Select a profile first.")
     obj, sub = profiles[0]
-    if is_sketch(obj):
+    if is_sketch(obj) or is_text(obj):
         placement = obj.Placement if local else obj.getGlobalPlacement()
         return placement.Rotation.multVec(Z)
     faces = local_faces(obj, sub)
@@ -369,6 +374,8 @@ def profile_label(profiles):
         obj, sub = profiles[0]
         if is_sketch(obj):
             return "%s (whole sketch)" % obj.Label if not sub else "1 profile of %s" % obj.Label
+        if is_text(obj):
+            return "%s (text)" % obj.Label
         return "1 face of %s" % obj.Label
     names = sorted({obj.Label for obj, _ in profiles})
     return "%d profiles (%s)" % (len(profiles), ", ".join(names))
@@ -1128,6 +1135,8 @@ def hide_sketches(profiles):
     if not App.GuiUp:
         return
     for obj, _ in profiles:
+        if is_text(obj):
+            obj = obj.Sketch  # the text goes with its sketch (text_ui keeps them together)
         if is_sketch(obj):
             try:
                 # Only a visible one: setting it again is a change FreeCAD records, and an

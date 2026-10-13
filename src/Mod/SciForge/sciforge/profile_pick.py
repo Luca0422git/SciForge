@@ -13,6 +13,7 @@ shows the picked ones in a stronger blue, show_faces() highlights picked body fa
 Mouse events come through FreeCAD's view.addEventCallback, which runs Python safely
 (unlike raw pivy callbacks, see taskui.ArrowDragger).
 """
+
 import time
 
 import FreeCAD as App
@@ -118,6 +119,49 @@ def handle_at(view, position, radius=3):
         return False
 
 
+class TextArea:
+    """A whole sketch text as one pickable area (Fusion picks a text as one profile): its
+    letters' faces (global), answering what ProfilePicker asks of a face."""
+
+    def __init__(self, faces):
+        self.faces = list(faces)
+        self.Surface = self.faces[0].Surface
+        self.CenterOfMass = self.faces[0].CenterOfMass
+        self.Area = sum(f.Area for f in self.faces)
+
+    def isInside(self, point, tol, check_face):
+        return any(f.isInside(point, tol, check_face) for f in self.faces)
+
+    def tessellate(self, tol):
+        import FreeCAD as _App
+
+        points, triangles = [], []
+        for face in self.faces:
+            verts, tris = face.tessellate(tol)
+            base = len(points)
+            points += [_App.Vector(v) for v in verts]
+            triangles += [(base + a, base + b, base + c) for a, b, c in tris]
+        return points, triangles
+
+
+def text_areas(sketch):
+    """[(text, TextArea)] of a sketch's texts (global coordinates)."""
+    from . import extrude, text
+
+    found = []
+    for obj in text.texts_of(sketch):
+        try:
+            if "Touched" in obj.State or obj.Shape.isNull():
+                obj.recompute()
+            faces = [extrude._to_global(f, obj) for f in obj.Shape.Faces]
+        except Exception as exc:
+            warn("no profile for %s: %s" % (obj.Label, exc))
+            continue
+        if faces:
+            found.append((obj, TextArea(faces)))
+    return found
+
+
 class ProfilePicker:
     """A press on a drag handle (an arrow in front of a region) drags the handle: it is no
     pick of the region behind it.
@@ -141,6 +185,7 @@ class ProfilePicker:
         self.face_materials = []  # materials of the highlighted body faces
         self.unpickable = []  # (sketch's root node, pick style) put in while offered
         self.last_click = 0.0  # time of the last click that picked a region
+        self.paused = False  # a dialog's other selection box takes the clicks now
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -161,6 +206,11 @@ class ProfilePicker:
                 self.regions.append((sketch, sub, face, self._add_face(face, self.root)))
             if found and clicks_through:
                 self._let_clicks_through(sketch)
+            texts = text_areas(sketch)  # a text is one more profile (its sub is "")
+            for obj, area in texts:
+                self.regions.append((obj, "", area, self._add_face(area, self.root)))
+                if clicks_through:
+                    self._let_clicks_through(obj)
         self.hovered = None
         view.getSceneGraph().addChild(self.root)
         self.callbacks = [
@@ -282,7 +332,7 @@ class ProfilePicker:
     # -- events -------------------------------------------------------------------------
     def _moved(self, info):
         try:
-            hit = self.region_at(info["Position"])
+            hit = None if self.paused else self.region_at(info["Position"])
             if hit is not self.hovered:
                 previous, self.hovered = self.hovered, hit
                 if previous is not None:
@@ -294,7 +344,7 @@ class ProfilePicker:
 
     def _button(self, info):
         try:
-            if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
+            if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN" or self.paused:
                 return
             # (On the press: FreeCAD's selection takes the release and stops it there.)
             position = tuple(info["Position"])

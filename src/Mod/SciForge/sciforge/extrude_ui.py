@@ -25,7 +25,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_pick, taskui
-from . import bodies, extrude_bodies, ui_icon_path, warn
+from . import bodies, extrude_bodies, text, ui_icon_path, warn
 from . import extrude_bodies_core as bodies_core
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, BoxCarrier, DistanceField, Panel, ValueBoxes
@@ -376,6 +376,10 @@ def selected_profiles(body):
     used = _used_profiles(body)
     found = []
     for obj, short in profile_pick.picks():
+        if text.is_text(obj):  # a text is one profile, whichever letter was clicked
+            if (obj, "") not in found:
+                found.append((obj, ""))
+            continue
         if extrude.is_sketch(obj):
             if short.startswith("InternalFace"):
                 found.append((obj, short))
@@ -422,12 +426,14 @@ def selected_profile(body):
 
 
 def single_region(sketch):
-    """[(sketch, area)] when the sketch has exactly one closed area, else []."""
+    """[(sketch, area)] when the sketch has exactly one closed area, else []. A text counts
+    as one profile (a sketch holding only a text gives the text)."""
     try:
-        found = extrude.regions(sketch)
+        found = [(sketch, name) for name, _face in extrude.regions(sketch)]
     except Exception:
         return []
-    return [(sketch, found[0][0])] if len(found) == 1 else []
+    found += [(obj, "") for obj in text.texts_of(sketch)]
+    return found if len(found) == 1 else []
 
 
 def newest_single_region(body):
@@ -438,11 +444,10 @@ def newest_single_region(body):
     used = _used_profiles(body)
     for obj in reversed(body.Group):
         if extrude.is_sketch(obj) and obj.Name not in used:
-            try:
-                found = extrude.regions(obj)
-            except Exception:
-                return None
-            return (obj, found[0][0]) if len(found) == 1 else None
+            if any(text.users(t) for t in text.texts_of(obj)):
+                return None  # its text is extruded already: not a new sketch
+            found = single_region(obj)
+            return found[0] if found else None
     return None
 
 
@@ -868,6 +873,10 @@ class ExtrudePanel(Panel):
             self._body_picked(obj)
             return
         if self.active == "profiles":
+            if text.is_text(obj):  # a letter clicked: the whole text is the profile
+                if not region_clicked:
+                    self._toggle((obj, ""))
+                return
             if extrude.is_sketch(obj):
                 if short.startswith("InternalFace") and not region_clicked:
                     self._toggle((obj, short))
@@ -1006,11 +1015,15 @@ class ExtrudePanel(Panel):
         self.profile.setText(extrude.profile_label(self.profiles) if count else "")
         if self.picker is not None:
             self.picker.set_selected(
-                [extrude.key(p) for p in self.profiles if extrude.is_sketch(p[0])]
+                [
+                    extrude.key(p)
+                    for p in self.profiles
+                    if extrude.is_sketch(p[0]) or text.is_text(p[0])
+                ]
             )
             faces = []
             for obj, sub in self.profiles:
-                if not extrude.is_sketch(obj):
+                if not extrude.is_sketch(obj) and not text.is_text(obj):
                     face = profile_pick.global_face(obj, sub)
                     if face is not None:
                         faces.append(face)
@@ -1996,6 +2009,7 @@ def _show_profile_sketches(feature):
         warn("could not read the profiles of %s: %s" % (feature.Label, exc))
         return shown
     for obj, _sub in profiles:
+        obj = text.sketch_of(obj) or obj  # a text shows with its sketch
         try:
             if extrude.is_sketch(obj) and obj.ViewObject is not None:
                 if not obj.ViewObject.Visibility and not any(o is obj for o in shown):

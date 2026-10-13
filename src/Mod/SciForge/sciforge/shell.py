@@ -151,6 +151,7 @@ def enable():
     _safely(lambda: __import__("sciforge.marking_menu").marking_menu.enable())
     _safely(lambda: __import__("sciforge.orbit_ui").orbit_ui.enable())
     _safely(_sketch_mode_on)
+    _safely(lambda: __import__("sciforge.text_ui").text_ui.enable())  # sketch text
     # Versions on save, recovery copies, the start-up "Recover unsaved work?" check.
     _safely(lambda: __import__("sciforge.versions_ui").versions_ui.enable())
     log("interface on")
@@ -162,6 +163,7 @@ def disable():
     from . import navbar_ui, shortcuts, theme, timeline_ui
 
     _state["on"] = False
+    _safely(lambda: __import__("sciforge.text_ui").text_ui.disable())
     _safely(_sketch_mode_off)
     if not config.USE_RIBBON:
         shortcuts.restore()
