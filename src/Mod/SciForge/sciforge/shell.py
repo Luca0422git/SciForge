@@ -12,6 +12,7 @@ same window and just adds a SKETCH tab. So:
 Everything changed while on (theme, toolbars, menu bar, shortcuts, docks) is
 put back when it turns off.
 """
+
 from . import config, log, warn
 from .compat import QtCore, QtWidgets
 
@@ -69,11 +70,12 @@ def on_workbench(name):
             # SciForge is off: put back viewer and sketch settings and FreeCAD's keys a session
             # that ended with SciForge on left behind (FreeCAD's own cube, orbit, background,
             # sketch areas, L / C / D...). Nothing to do if none.
-            from . import shortcuts, sketch_mode, theme
+            from . import shortcuts, sketch_mode, theme, versions_ui
 
             theme.restore()
             sketch_mode.give_back_left_over()
             shortcuts.give_back_left_over()
+            versions_ui.give_back_left_over()
     except Exception as exc:
         warn("workbench change to %s: %s" % (name, exc))
 
@@ -89,11 +91,12 @@ def startup():
         workbench = Gui.activeWorkbench()
         name = workbench.name() if workbench is not None else ""
         if name and name != SCIFORGE_WB and not _state["on"]:
-            from . import shortcuts, sketch_mode, theme
+            from . import shortcuts, sketch_mode, theme, versions_ui
 
             theme.restore()
             sketch_mode.give_back_left_over()
             shortcuts.give_back_left_over()
+            versions_ui.give_back_left_over()
     except Exception as exc:
         warn("startup check: %s" % exc)
 
@@ -148,6 +151,8 @@ def enable():
     _safely(lambda: __import__("sciforge.marking_menu").marking_menu.enable())
     _safely(lambda: __import__("sciforge.orbit_ui").orbit_ui.enable())
     _safely(_sketch_mode_on)
+    # Versions on save, recovery copies, the start-up "Recover unsaved work?" check.
+    _safely(lambda: __import__("sciforge.versions_ui").versions_ui.enable())
     log("interface on")
 
 
@@ -163,6 +168,7 @@ def disable():
         timeline_ui.hide()
         return
     for step in (
+        lambda: __import__("sciforge.versions_ui").versions_ui.disable(),
         lambda: __import__("sciforge.orbit_ui").orbit_ui.disable(),
         lambda: __import__("sciforge.marking_menu").marking_menu.disable(),
         shortcuts.restore,

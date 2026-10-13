@@ -11,6 +11,7 @@ dialog then reads the failure from the feature (obj.getStatusString()) and shows
 Only the dialog's own recomputes are wrapped. Everything else (opening files,
 editing earlier steps from the timeline) reports as usual.
 """
+
 import contextlib
 
 import FreeCAD as App
@@ -378,7 +379,9 @@ class UndoCancels:
             panel = self.panel
             if panel is not None and not getattr(panel, "_closed", True):
                 panel.finish()
-            Gui.runCommand(command)
+            from . import commands
+
+            Gui.runCommand(commands.preferred(command))
         except Exception as exc:
             from . import warn
 

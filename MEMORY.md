@@ -334,6 +334,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       draggable, a failed step showing its old result). Scenarios `bodies_qa.py` (8 paths) and
       `bodies_qa_2.py` (10 paths), golden
       `bodies_combine_new_body_target_deleted`.
+- [x] Files, versions and recovery, Fusion-style on local folders (7.15; branch
+      `sf/versions`; spec + gaps in `docs/sciforge/parity/versions.md`): Save with Name /
+      Location / New Folder on the first save and a Version Description after, every save a
+      version (git in the project folder, copies elsewhere), Version History (Open read-only,
+      Promote = Save As Latest, Compare), recovery copies every 5 minutes + "Recover unsaved
+      work?" at the next start + Recover Documents, the Data Panel (Ctrl+Alt+P) with
+      thumbnails and version badges, Insert Design by relative path, Project and Recovery
+      Settings. 4 scenarios (`versions_*.py`, 176 checks), unit `test_versions_core.py`.
 
 ## Known issues / findings
 
@@ -1391,6 +1399,54 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   ghosting of inactive components, no sheet-metal / external components, the sketch of a
   body moves with the body (FreeCAD needs sketches inside bodies), Parent is a drop-down.
 
+### 2026-10-13: Files, versions and recovery (branch `sf/versions`, outline 7.15, plan item 4)
+- Research first (Autodesk help: "Create and save designs", "Save a version of a design as
+  the latest version", "Open older versions of designs", "View design history", "Recover
+  designs", the Data Panel pages; the Fusion blog on version control and the Data Panel;
+  forum threads on the recovery interval, the description prompt, Ctrl+Shift+S, the
+  start-up recovery question). Sources and the behaviour tables: `docs/sciforge/parity/
+  versions.md`.
+- Built `versions.py` (no Qt: PlainStore = copies in `<Design>.versions/` with index.json,
+  GitStore = commits of the file in the project folder's repository (made on the first
+  save), recovery entries + sidecars, a Document.xml summary and a compare, the project
+  folder listing / breadcrumbs / New Folder / rename / trash, relative paths) and
+  `versions_ui.py` (Save dialog Name + Location + New Folder, Version Description dialog,
+  Version History with Open read-only / Promote = Save As Latest / Compare, the recovery
+  timer, "Recover unsaved work?" at start, Recover Documents, the Data Panel dock with
+  thumbnails and version badges, Insert Design as links, Project and Recovery Settings).
+  Ctrl+S runs `SciForge_Save` (config.PREFERRED), Ctrl+Alt+P the Data Panel, Ctrl+Shift+S a
+  recovery copy; the application menu and UTILITIES hold the file commands; INSERT >
+  Insert Component inserts a design. Every finished save (FreeCAD's own too) records a
+  version (App document observer).
+- FreeCAD facts and traps found: `doc.save()`, `saveAs()` and `saveCopy()` return None in
+  1.1.4 (judge success by the file, they raise on failure); `App.openDocument(path, True)`
+  of a file that is open already returns the open document (closing "the hidden copy"
+  closed the user's design); a hidden document becomes `App.ActiveDocument` and leaves none
+  when closed (`_restore_active`, `_active_doc`); a Python document observer's slots are
+  bound once at `addDocumentObserver` (replacing a method on the instance later does
+  nothing); `doc.FileName` is writable (a recovered copy is pointed back at its file);
+  external links are stored relative to the owner's folder (`<XLink file="Wheel.FCStd">`)
+  and resolved from there, but the owner must be saved before linking ("Owner document not
+  saved"); `checkFileName` appends .FCStd to any other extension (temp copies are
+  `<key>.tmp.FCStd`); `Gui.Document.Modified` is settable; FreeCAD 1.1 dispatches command
+  shortcuts through `Gui::ShortcutManager` (an application event filter) and a QShortcut
+  bound by SciForge fires only while the main window is the *active window*: after one of
+  SciForge's own QDialogs closed under xvfb (no window manager) every key was dead until a
+  click, so every dialog's `finished` re-activates the main window (`_refocus_main`);
+  FreeCAD's own AutoSaver (`Document/AutoSaveEnabled`, 15 min, its own start-up recovery
+  dialog) is switched off while SciForge is on through `theme.keep_and_set` and given back.
+  Shell trap: `pkill -f` with a pattern that appears in the shell's own command line kills
+  that shell (the output of the whole command is lost).
+- Tests: scenarios `versions_save` (69 checks), `versions_recovery` (55),
+  `versions_data_panel` (30), `versions_link` (22); unit `test_versions_core` (30). The QA
+  scenarios that press Ctrl+S with a dialog open (`hole_qa` P7, `fillet_qa` P7,
+  `extrude_presspull_qa5` P22) now press Enter in the version dialog, as Fusion users do
+  (`versions_input.accept_save`).
+- Gaps (parity doc): Milestone, Automatic version on close, Move / Copy in the Data Panel,
+  the Out-of-Date icon (the tab is named "<Name> v2" instead), a whole design as one
+  component (bodies are linked one by one), two FreeCAD instances share one recovery
+  folder (the other instance's copies look like a crash's at start-up).
+
 ### 2026-10-09: Session 1
 - Forked FreeCAD 1.1.4 (latest stable) into the repo with full history, pushed in stages.
 - Added outline and prototype verbatim; removed FreeCAD-org automation workflows.
@@ -2387,8 +2443,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
    `reports/Fusion sketching ViewCube and navigation.md`). Done: A (orbit, 2026-10-13), B (the
    Python ViewCube), C (2026-10-13: guides in every tool, marks, the tangent arc, green fixed
    geometry; left: Shift midpoint, the arc's end-angle and slot width guides, Fusion's floating
-   check). Next: selection like Fusion, components, joints, versions. Luca's Fusion checks
-   (plan, last section) tune the details. The items below are older and partly superseded.
+   check), versions and recovery (2026-10-13, branch `sf/versions`). Next: selection like
+   Fusion, components, joints. Luca's Fusion checks (plan, last section) tune the details.
+   The items below are older and partly superseded.
 0a. Open from 2026-10-13: Fusion's floating green check near the pointer while drawing a line
    (not built; OK is in the right-click menu); Move's triad, Scale's arrows and Draft's disc
    have no value box; the quick update is only produced on green runs (Luca may want it on

@@ -208,7 +208,12 @@ INSERT = group(
         item("Insert DXF", "Std_Import", "insert_dxf"),
         item("Insert Mesh", "Mesh_Import", "insert_mesh"),
         SEP,
-        item("Insert Component", None, "insert_component"),
+        item(
+            "Insert Component",
+            "SciForge_InsertDesign",
+            "insert_component",
+            note="Another design's bodies, linked to its file by a relative path",
+        ),
         item("Insert Derive", None, "derive"),
     ],
 )
@@ -343,6 +348,17 @@ UTIL_UTILITY = group(
     ["Preferences"],
     [
         item("Preferences", "Std_DlgPreferences", "tl_settings"),
+        item(
+            "Project and Recovery Settings",
+            "SciForge_FilesSettings",
+            "folder",
+            note="Project folder, recovery copies, version descriptions, git",
+        ),
+        SEP,
+        item("Version History", "SciForge_VersionHistory", "document"),
+        item("Recover Documents", "SciForge_RecoverDocuments", "document"),
+        item("Save As", "SciForge_SaveAs", "qa_save"),
+        SEP,
         item("SciForge Diagnostics", "SciForge_Diagnostics", "compute"),
         item("Command Search", "SciForge_CommandSearch", "nav_zoom", "S"),
     ],
@@ -521,10 +537,23 @@ TABS = [
 
 # Quick-access buttons at the top left, like Fusion's application bar.
 QUICK_ACCESS = [
+    item(
+        "Data Panel",
+        "SciForge_DataPanel",
+        "folder",
+        "Ctrl+Alt+P",
+        note="The project folder's designs with thumbnails (Fusion's Data Panel)",
+    ),
     item("Menu", "__menu__", "qa_menu", note="All FreeCAD menus"),
     item("New", "Std_New", "qa_new", "Ctrl+N"),
     item("Open", "Std_Open", "qa_open", "Ctrl+O"),
-    item("Save", "Std_Save", "qa_save", "Ctrl+S"),
+    item(
+        "Save",
+        ("SciForge_Save", "Std_Save"),
+        "qa_save",
+        "Ctrl+S",
+        note="Every save is a version: v1, v2, ... with a description",
+    ),
     item("Undo", "Std_Undo", "qa_undo", "Ctrl+Z"),
     item("Redo", "Std_Redo", "qa_redo", "Ctrl+Y"),
 ]
