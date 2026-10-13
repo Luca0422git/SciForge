@@ -18,7 +18,7 @@ normal through the clicked centre (x, y). Fusion's fields (options, see DEFAULTS
   section           circular | square | tri_ext (triangle pointing out) | tri_int (in)
   section_position  inside | center | outside the coil diameter
   section_size      the section's size: the diameter of the circle round it (Fusion)
-  operation         join | cut | intersect | new_body
+  operation         join | cut | intersect | new_body | new_component
 
 What is built: PartDesign::AdditiveHelix (join, new body) or SubtractiveHelix (cut; with
 Outside on, it keeps what is inside the coil: intersect), sweeping SciForge's own section
@@ -148,6 +148,21 @@ def auto_operation(base, ref, options):
     except Exception:
         return "join"
     return "join" if gap <= max(out, inward, along / 2.0) + 1e-6 else "new_body"
+
+
+def _joins_nothing(src, feature, ref, options):
+    """True when a Join would not even touch the part it is made in: Fusion then makes a
+    new body (it never leaves a separate piece in a body)."""
+    if src is None:
+        return False
+    before = feature if feature is not None and primitives.owner_body(feature) is src else None
+    base = primitives.base_shape(src, before=before)
+    if base is None:
+        return False  # the first solid of a body is a new body already
+    try:
+        return auto_operation(base, ref, options) == "new_body"
+    except Exception:
+        return False
 
 
 # -- the section object ---------------------------------------------------------------------------
@@ -304,6 +319,8 @@ def build(ref, options, feature=None, name="Coil"):
     src = primitives.owner_body(ref[0])
     if feature is not None and ref[0] is feature:
         raise PrimitiveError("That face belongs to this coil itself. Pick another plane.")
+    if options["operation"] == "join" and _joins_nothing(src, feature, ref, options):
+        options = dict(options, operation="new_body")  # Fusion: a new body, not a lump
     operation = options["operation"]
 
     def setup(new):
@@ -510,7 +527,7 @@ def read(feature):
         options["operation"] = "intersect" if feature.Outside else "cut"
     else:
         saved = meta.get("options", {}).get("operation")
-        options["operation"] = "new_body" if saved == "new_body" else "join"
+        options["operation"] = saved if saved in ("new_body", "new_component") else "join"
     options["clockwise"] = not feature.LeftHanded
     # The values as they are now (a parameter may drive them), not as last typed.
     section = None

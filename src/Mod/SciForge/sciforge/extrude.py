@@ -1412,6 +1412,11 @@ def _structure(feature, profiles, options, participants=None):
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
     op = options["operation"]
+    if created is not None:
+        from .components_core import same_new
+
+        if not same_new(meta.get("operation"), op):
+            created = None  # New Body <-> New Component: the result moves (made again)
     if op in ("new_body", "new_component"):
         if created is not None:
             target = created
@@ -1449,6 +1454,12 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
             participants = None
         else:
             raise ExtrudeError(nothing_touched(options))
+    elif (
+        participants is None
+        and options["operation"] == "join"
+        and _joins_nothing(profiles, options, feature)
+    ):
+        options = dict(options, operation="new_body")  # (no bodies list: scripts, old steps)
     target, type_id, src = _structure(feature, profiles, options, participants)
     if feature is not None:
         same_type = feature.TypeId == type_id and (
@@ -1516,6 +1527,24 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
         _show_only_tip(target)  # the new step is in the middle: the body's end stays shown
     merge_tip(new)
     return new
+
+
+def _joins_nothing(profiles, options, feature):
+    """True when a Join (acting on the profile's body only) would not even touch that
+    body's solid: Fusion makes a new body then, it never leaves a separate piece."""
+    from .extrude_bodies import in_the_way
+
+    src = _source_body(profiles)
+    before = feature if feature is not None and owner_body(feature) is src else None
+    if not _has_solid(src, before):
+        return False  # the first solid of a body is a new body already
+    try:
+        found = in_the_way(profiles, options, lead=feature)
+    except Exception:
+        return False
+    if found is None:
+        return False  # cannot be told here: as before
+    return src not in found[1]
 
 
 def _keep_timeline_place(new, old):

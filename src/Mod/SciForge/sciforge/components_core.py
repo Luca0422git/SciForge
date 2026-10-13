@@ -105,3 +105,14 @@ def visible_steps(step_components, parents, active):
 def body_label(labels, base="Body"):
     """Fusion numbers bodies per component: the first body of a new component is Body1."""
     return next_label(labels, base)
+
+
+def same_new(made, wanted):
+    """True when the body a step made with operation `made` (as saved) still serves it for
+    operation `wanted`. Switching between New Body and New Component moves the result (a
+    body beside the source body, or a body in a new component), so the step's old body is
+    not reused then; any other change keeps it (it decides elsewhere)."""
+    news = ("new_body", "new_component")
+    if made not in news or wanted not in news:
+        return True
+    return made == wanted

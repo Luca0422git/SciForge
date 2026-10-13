@@ -1,0 +1,74 @@
+{
+  "id": "sf_cylinder_new_component",
+  "title": "Cylinder d10 h5 on a box's top face with operation New Component: a new component holding a new body",
+  "tags": [
+    "primitive",
+    "cylinder",
+    "new-component",
+    "components"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "length": 40,
+      "width": 20,
+      "height": 10
+    },
+    {
+      "op": "sf_primitive",
+      "id": "c1",
+      "kind": "cylinder",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        }
+      },
+      "x": 20,
+      "y": 10,
+      "diameter": 10,
+      "height": 5,
+      "operation": "new_component"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "b1": {
+          "volume": 8000,
+          "solids": 1
+        },
+        "c1": {
+          "volume": 392.69908169872417,
+          "solids": 1
+        }
+      },
+      "comment": "the box is unchanged; the cylinder is a body of its own"
+    },
+    {
+      "op": "expect_component",
+      "step": "c1",
+      "comment": "that body lies in a new component"
+    }
+  ],
+  "expect": {
+    "volume": 392.69908169872417,
+    "solids": 1,
+    "bbox": [
+      15,
+      5,
+      10,
+      25,
+      15,
+      15
+    ],
+    "source": "analytic",
+    "note": "The cylinder's body (in its new component): pi 5^2 5, standing on the box's top (z 10..15)."
+  }
+}

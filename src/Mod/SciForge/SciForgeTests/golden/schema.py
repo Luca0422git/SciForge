@@ -930,8 +930,9 @@ STEP_KEYS["sf_coil"] = ({"id"}, {"plane", "expressions", "comment"} | _COIL_OPTI
 STEP_KEYS["sf_path_sketch"] = ({"id", "segments"}, {"plane", "comment"})
 STEP_KEYS["sf_pipe"] = ({"id", "path"}, {"chain", "expressions", "comment"} | _PIPE_OPTIONS)
 STEP_KEYS["sf_primitive_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["expect_component"] = ({"step"}, {"comment"})
 PRIMITIVE_KINDS = ("box", "cylinder", "sphere", "torus")
-PRIMITIVE_OPERATIONS = ("auto",) + OPERATIONS
+PRIMITIVE_OPERATIONS = ("auto",) + OPERATIONS + ("new_component",)
 
 
 def _check_primitive_plane(here, step):
@@ -1039,6 +1040,8 @@ def _check_primitive_steps(model):
             if not isinstance(step["set"], dict) or not step["set"]:
                 _fail(here, "'set' is a non-empty object of options")
             _check_primitive_values(here, step["set"], allowed)
+        if op == "expect_component" and step["step"] not in seen:
+            _fail(here, "'step' names unknown step %r" % step["step"])
         if "id" in step:
             seen[step["id"]] = op
 

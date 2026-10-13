@@ -27,7 +27,7 @@ timeline to edit it again.
 | Taper Angle | Same. A side of the profile at distance R from the path tilts by the angle, so the end section is scaled by 1 + L·tan(angle)/R |
 | Twist Angle | Same. A straight path uses an exact helix guide. A curved path uses a guide built from rotation-minimizing frames. Twist is greyed under Parallel |
 | Guide Rail with Profile Scaling Scale / Stretch / None | Same: the profile grows evenly with the rail, only towards the rail, or not at all (the rail only turns it) |
-| Operation Join / Cut / Intersect / New Body | Same. A new sweep that runs mostly into material starts as Cut, and the first solid is a New Body. A Cut or Intersect that misses the part is explained |
+| Operation Join / Cut / Intersect / New Body / New Component | Same. A new sweep that runs mostly into material starts as Cut, and the first solid is a New Body. A Cut or Intersect that misses the part is explained. New Component: `parity/components.md` |
 | Edit from the timeline | Same |
 
 What is built: FreeCAD's own `PartDesign::AdditivePipe` / `SubtractivePipe` when it gives
@@ -41,7 +41,9 @@ switches between the two as needed; the step keeps its place and name, and the s
 on it (a sketch on its end face, a Press Pull, a fillet) are moved onto the new step.
 
 A sweep or loft that does not touch the part becomes a New Body by itself (Fusion makes a new
-body for it). A path lying in the profile's own plane is refused with the reason.
+body for it), and so does one with Join picked by hand (2026-10-13: Fusion never leaves a
+second piece in the body; sources in `parity/revolve.md`, "A Join that touches nothing").
+A path lying in the profile's own plane is refused with the reason.
 
 ## Loft (CREATE > Loft)
 
@@ -53,7 +55,7 @@ body for it). A path lying in the profile's own plane is refused with the reason
 | Chain Selection for rails and centerline | Same |
 | Closed (the last profile lofts back to the first) | Same. With only two profiles the dialog says why it cannot close |
 | Tangent Edges Merge | Shown but greyed; see the gaps below |
-| Operation Join / Cut / Intersect / New Body | Same, with the automatic choice and the miss check used by Sweep |
+| Operation Join / Cut / Intersect / New Body / New Component | Same, with the automatic choice and the miss check used by Sweep |
 | Edit from the timeline | Same |
 
 What is built: FreeCAD's `PartDesign::AdditiveLoft` / `SubtractiveLoft` when every profile is a
@@ -130,7 +132,6 @@ formula is in the model's note.
 - **Distance boxes** (Sweep) take plain numbers, not parameters or formulas.
 - **Centerline loft** may show a seam line on its sides.
 - **Web One Side** works for lines and arcs. Other curves (splines) are Symmetric only.
-- **Operation New Component** is out of scope (SciForge has no components yet).
 - **Profile Scaling default.** The default is "Scale"; Luca should confirm that this matches
   his Fusion.
 

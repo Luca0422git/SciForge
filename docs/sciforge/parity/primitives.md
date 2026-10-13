@@ -17,7 +17,7 @@ not yet signed off**.
 | Place with the mouse: the cursor moves on the plane (a blue outline follows it) | Same: the mouse ray meets the plane. Within 10 px the mouse snaps onto the plane's origin and onto the corners, line ends, sketch points and circle centres that lie on the plane; elsewhere it rounds to steps that suit the zoom (1, 2.5 or 5 x 10^n, about 6 pixels) |
 | Blue arrows to drag sizes after placing | Same, drawn on top of the part; they show the value while dragging |
 | Typed values in the dialog (and parameters / formulas: `w`, `d / 4`) | Same; a formula keeps driving the shape (an expression), listed under the fields, and follows the parameter in Change Parameters, after undo/redo and after reopening the file |
-| Operation Join / Cut / Intersect / New Body; dragging into the part switches to Cut | Same. Until you pick one yourself: mostly inside the part -> Cut, touching or overlapping -> Join, away from it or no part yet -> New Body |
+| Operation Join / Cut / Intersect / New Body / New Component; dragging into the part switches to Cut | Same. Until you pick one yourself: mostly inside the part -> Cut, touching or overlapping -> Join, away from it or no part yet -> New Body. A Join picked by hand that touches nothing also makes a new body (never a second piece inside the part's body). New Component: a new component (Component N, under the active component) with a body holding the shape; OK activates it; Cancel, Esc or a failed preview remove it again; switching to New Body moves the shape out of it (the component goes) |
 | Live preview; problems said in the dialog (OK waits) | Same; nothing goes to the Report view |
 | OK = one undo step; Cancel / Esc leave nothing behind; Enter = OK; Ctrl+Z while the dialog is open = Cancel | Same |
 | Double-click the step in the timeline to edit it; the step can change operation | Same: the step keeps its place and name (e.g. a Box turned to Cut swaps `AdditiveBox` for `SubtractiveBox` in place; later steps move over) |
@@ -54,7 +54,7 @@ ones). Intersect for any of them is SciForge's `PrimitiveFeature` (a
 | Diameter, Revolutions, Height, Pitch, Angle (taper) | Same; all take parameters (Revolutions too, e.g. a unitless `n`). The fields the type does not use are hidden, and a formula in a field that gets hidden is dropped. A positive Angle widens the coil as it rises, a negative one narrows it (FreeCAD's helix only widens away from its section, so a narrowing coil is swept from its narrow end back to the plane) |
 | Rotation Clockwise / Counterclockwise | Same |
 | Section Circular / Square / Triangular (External) / Triangular (Internal); Section Position Inside / On Center / Outside; Section Size | Same |
-| Operation (Cut when it is inside the part) | Same |
+| Operation (Cut when it is inside the part) | Same; Join / Cut / Intersect / New Body / New Component as for Box |
 | Impossible coils (turns touching each other, section reaching the axis, an angle that closes the coil) explained | Same, in the dialog, saying what to change (e.g. the pitch must be larger than the section, 2 mm) |
 
 Built on FreeCAD's `PartDesign::AdditiveHelix` / `SubtractiveHelix` with a small section
@@ -69,7 +69,7 @@ uses FreeCAD's "height-turns-growth" mode with height 0.
 | Distance (0..1 of the path), with a blue handle at the pipe's end | Same |
 | Section Circular / Square / Triangular, Section Size | Same, with a size arrow |
 | Hollow + Section Thickness | Same; a wall too thick is explained |
-| Operation (Join / Cut / Intersect / New Body), auto from where the pipe goes | Same |
+| Operation (Join / Cut / Intersect / New Body / New Component), auto from where the pipe goes | Same (a Join that touches nothing is a new body; New Component as for Box) |
 | The path sketch is hidden after OK | Same; shown again while the pipe is edited |
 
 Built on FreeCAD's `PartDesign::AdditivePipe` / `SubtractivePipe` with two SciForge helper
@@ -77,6 +77,26 @@ objects (the path, cut to the distance, and the section), both used only by the 
 timeline Delete takes them along). Sharp corners of the path are mitred ("Right corner"),
 like Fusion's. Intersect, and a hollow pipe round a closed path (FreeCAD's pipe made that
 ring solid), are SciForge's `PipeFeature`; a pipe that is one stays one.
+
+## Join away from the part, New Component (2026-10-13, branch `sf/gaps`)
+
+Sources: **Autodesk** Box / solid primitives reference (SLD-BOX-SOLID, SLD-CREATE-SOLID-PRIMITIVE,
+search excerpts): Operation Join, Cut, Intersect, New Body, New Component ("creates the body in a
+new component"); **Autodesk** API `FeatureOperations` (Join, Cut, Intersect, NewBody,
+NewComponent: "results in the creation of a new component that contains the new body").
+**Forum** "Join produces New Body" and "Recurring problem with Join vs New Body" (Autodesk
+Community, 2021): a Join whose tool body touches no body comes out as a new body; "In order to
+join two bodies via Extrude, the bodies need to touch each other" ("Cannot Join Bodies with
+Extrude"). **Forum** "Break apart body to make separate bodies": a body *can* hold separate
+lumps (left by a cut, or a profile that only partly touches); SciForge keeps those as they are.
+
+- A Join that does not even touch the part's body is made as a New Body (Box, Cylinder, Sphere,
+  Torus, Coil, Pipe; the same rule is in Extrude, Revolve, Sweep and Loft). It used to say "This
+  would leave 2 separate pieces in one body" and wait. The step is saved as New Body, so its
+  timeline edit reads New Body (what was made). (Guess: what Fusion's edit dialog shows then.)
+- New Component in every primitive dialog, made the way Extrude / Revolve do it
+  (`components.body_for_new`). Golden models `sf_join_away_new_body`, `sf_cylinder_new_component`;
+  scenario `gaps_join_new_body.py` (J3, J4).
 
 ## FreeCAD bug found and worked around
 
@@ -110,7 +130,6 @@ for coils and pipes), built with
 
 | Fusion | Why not yet |
 |---|---|
-| Operation New Component | Components are not built yet (outline 7.2) |
 | Values typed in boxes on the canvas next to the mouse | The live values are in the dialog fields (type there) |
 | Snapping onto any point of an edge, midpoints, and points that are not on the plane | Snaps to the origin and to corners, line ends, sketch points and circle centres lying on the plane |
 | Exact Fusion defaults (to confirm with Luca): Torus Position starts On Center; Clockwise = right-hand coil; for square and triangle sections Section Size is the circle round the section; how pipe squares/triangles are turned; the coil starts centred on the plane | Taken from the docs, not compared with a capture |

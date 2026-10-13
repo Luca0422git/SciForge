@@ -13,7 +13,6 @@ shows the picked ones in a stronger blue, show_faces() highlights picked body fa
 Mouse events come through FreeCAD's view.addEventCallback, which runs Python safely
 (unlike raw pivy callbacks, see taskui.ArrowDragger).
 """
-
 import time
 
 import FreeCAD as App

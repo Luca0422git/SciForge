@@ -181,5 +181,22 @@ class BrowserComponentTests(unittest.TestCase):
         self.assertIn("New Component", browser.MENUS["document"])
 
 
+class SameNewTests(unittest.TestCase):
+    """A step's own new body serves it again unless New Body <-> New Component changed."""
+
+    def test_same_operation_keeps_the_body(self):
+        self.assertTrue(core.same_new("new_body", "new_body"))
+        self.assertTrue(core.same_new("new_component", "new_component"))
+
+    def test_switching_between_them_makes_it_again(self):
+        self.assertFalse(core.same_new("new_body", "new_component"))
+        self.assertFalse(core.same_new("new_component", "new_body"))
+
+    def test_other_operations_decide_elsewhere(self):
+        self.assertTrue(core.same_new("join", "new_component"))
+        self.assertTrue(core.same_new(None, "new_body"))
+        self.assertTrue(core.same_new("new_body", "join"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -110,8 +110,11 @@ sketches, a profile in another body) a hidden SubShapeBinder carries it into the
   face extended (or where the extrusion first meets a body).
 - **Start: Object** works with flat faces/planes parallel to the profile; the offset is measured
   when you press OK (moving the start face later does not move the extrusion; edit it and OK).
-- **Several disjoint profiles in a New Body** give one body with several solids in Fusion; a
-  PartDesign body holds one solid, so the dialog says so.
+- Several disjoint profiles in one extrude give one body with several solids, as in Fusion
+  (FreeCAD 1.1's bodies allow it). A Join that touches no body at all is made as a New Body
+  (also from scripts and old steps that have no bodies list; 2026-10-13, sources in
+  `parity/revolve.md`); one whose profiles only partly touch keeps the far piece in the body,
+  like Fusion's multi-lump bodies (guess).
 - The hidden profile binder shows in the timeline as a Construct item for start-offset, multi-sketch
   and new-body extrudes (the timeline could skip objects with `SciForgeRole`).
 - Value boxes: Move's triad, Scale's arrows (they set factor - 1 times a length, not a field)

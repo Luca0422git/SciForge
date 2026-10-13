@@ -163,7 +163,7 @@ def dialog_open():
         "Fusion's fields",
         [p.guide.itemText(i) for i in range(p.guide.count())] == ["Rails", "Centerline"]
         and [p.operation.itemText(i) for i in range(p.operation.count())]
-        == ["Join", "Cut", "Intersect", "New Body"]
+        == ["Join", "Cut", "Intersect", "New Body", "New Component"]
         and p.closed.isVisible()
         and p.merge.isVisible(),
     )

@@ -22,7 +22,6 @@ seen from the sketch's normal), "side2" (the other side) or "center" (half on ea
 A taper tilts the wall and keeps its thickness (positive: towards side two, i.e. outward
 for a closed profile).
 """
-
 import math
 
 import FreeCAD as App

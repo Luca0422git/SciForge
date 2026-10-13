@@ -116,7 +116,7 @@ def dialog_open():
         and [p.orientation.itemText(i) for i in range(p.orientation.count())]
         == ["Perpendicular", "Parallel"]
         and [p.operation.itemText(i) for i in range(p.operation.count())]
-        == ["Join", "Cut", "Intersect", "New Body"],
+        == ["Join", "Cut", "Intersect", "New Body", "New Component"],
     )
     h.check("Chain Selection on by default", p.chain.isChecked())
     h.check(

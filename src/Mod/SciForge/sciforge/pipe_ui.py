@@ -7,8 +7,9 @@ it. Edges selected before the command are taken at once. The pipe follows the pa
 a round, square or triangular section (Section Size: the diameter of the circle round
 it), solid or Hollow with a wall Section Thickness. Distance (0..1) is how far along the
 path it goes: drag the blue ball along the path or type it. The blue arrow at the start
-sets the section size. Operation Join / Cut / Intersect / New Body; a pipe that runs
-mostly inside the part becomes a Cut unless you picked the operation.
+sets the section size. Operation Join / Cut / Intersect / New Body / New Component; a pipe
+that runs mostly inside the part becomes a Cut unless you picked the operation, one that
+touches nothing a New Body (also when Join was picked: Fusion never leaves a separate piece).
 """
 import math
 
@@ -831,7 +832,9 @@ class PipePanel(Panel):
         body = pipe.owner_body(feature)
         if body is not None and body is not commands.active_body():
             try:
-                Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+                from . import components
+
+                components.activate_body(body)  # and its (new) component
             except Exception as exc:
                 warn("could not activate %s: %s" % (body.Label, exc))
         log("Pipe done")

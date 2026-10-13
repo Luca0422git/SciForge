@@ -64,22 +64,51 @@
     {
       "op": "check",
       "expect": {
-        "volume": 14091.378603578174,
+        "volume": 2091.378603578174,
+        "solids": 1,
         "source": "analytic",
-        "note": "the ring section r 60..70 h5 turns atan(30/40) = 36.87 degrees, to the half-plane of the corner (40, 30): 12000 + pi (70^2 - 60^2) 5 * 36.87 / 360"
+        "note": "the ring section r 60..70 h5 turns atan(30/40) = 36.87 degrees, to the half-plane of the corner (40, 30): pi (70^2 - 60^2) 5 * 36.87 / 360. It does not touch the block, so the Join makes it a body of its own (Fusion: a Join that touches nothing is a New Body)."
       }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 12000,
+          "solids": 1
+        },
+        "r1": {
+          "volume": 2091.378603578174,
+          "solids": 1
+        }
+      },
+      "comment": "two bodies: the block, and the ring by itself"
     },
     {
       "op": "edit",
       "target": "s1",
       "constraint": "b.height",
       "value": 40
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 16000,
+          "solids": 1
+        },
+        "r1": {
+          "volume": 2552.5440310417066,
+          "solids": 1
+        }
+      },
+      "comment": "the block grew, the ring followed its corner"
     }
   ],
   "expect": {
-    "volume": 18552.544031041707,
-    "solids": 2,
+    "volume": 2552.5440310417066,
+    "solids": 1,
     "source": "analytic",
-    "note": "The block grows to 40 x 40: its corner is now at (40, 40), 45 degrees round, and the revolve follows it: 40*40*10 + pi (70^2 - 60^2) 5 / 8 (two separate lumps)."
+    "note": "The block grows to 40 x 40: its corner is now at (40, 40), 45 degrees round, and the revolve follows it: pi (70^2 - 60^2) 5 / 8 (the ring's own body; the block is 40*40*10)."
   }
 }

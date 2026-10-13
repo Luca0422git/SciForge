@@ -753,19 +753,37 @@ def _to_link(body, feature, fp_profiles, axis, target, angle, existing=None):
 
 
 def auto_operation(base_shape, profiles, axis, options):
-    """Fusion: revolving into material becomes a cut, out of it a join (a new body when
-    there is no solid yet). The revolve goes "into material" when more of its volume lies
-    inside the part than outside (a groove drawn inside a shaft, a face turned into the
-    part). base_shape is global."""
+    """Fusion: revolving into material becomes a cut, out of it a join, and a revolve that
+    does not touch the part (or the first solid) a new body. The revolve goes "into
+    material" when more of its volume lies inside the part than outside (a groove drawn
+    inside a shaft, a face turned into the part). base_shape is global."""
     if base_shape is None or base_shape.isNull() or not base_shape.Solids:
         return "new_body"
     try:
         tool = tool_shape(profiles, axis, options)
         inside = base_shape.common(tool).Volume
         outside = tool.Volume - inside
+        if inside < 1e-9 and base_shape.distToShape(tool)[0] > 1e-6:
+            return "new_body"  # Fusion: a revolve that does not touch the part is a new body
     except Exception:
         return "join"
     return "cut" if inside > outside + 1e-6 * max(1.0, tool.Volume) else "join"
+
+
+def joins_nothing(profiles, axis, options, feature=None):
+    """True when a Join would not even touch the part it is made in: Fusion then makes a
+    new body (it never leaves a separate piece in a body)."""
+    src = _source_body(profiles)
+    before = feature if feature is not None and owner_body(feature) is src else None
+    tip = before.BaseFeature if before is not None else src.Tip
+    if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
+        return False  # the first solid of a body is a new body already
+    base = tip.Shape.copy()
+    base.Placement = src.getGlobalPlacement().multiply(base.Placement)
+    try:
+        return auto_operation(base, profiles, axis, options) == "new_body"
+    except Exception:
+        return False
 
 
 def feature_type(operation):
@@ -1292,6 +1310,11 @@ def _structure(feature, profiles, options):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
+    if created is not None:
+        from .components_core import same_new
+
+        if not same_new(meta.get("operation"), options["operation"]):
+            created = None  # New Body <-> New Component: the result moves (made again)
     if options["operation"] in ("new_body", "new_component"):
         if created is not None:
             target = created
@@ -1316,6 +1339,8 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
     options = options_with_defaults(options)
     check_options(options)
     check_axis(profiles, axis)
+    if options["operation"] == "join" and joins_nothing(profiles, axis, options, feature):
+        options = dict(options, operation="new_body")  # Fusion: a new body, never a lump
     target, type_id, src = _structure(feature, profiles, options)
     if feature is not None:
         same = feature.TypeId == type_id and (type_id != FP_TYPE or is_intersect(feature))

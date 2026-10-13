@@ -8,7 +8,7 @@ FreeCAD (where it would fail with a message about OpenCASCADE instead of what to
 """
 import math
 
-OPERATIONS = ("join", "cut", "intersect", "new_body")
+OPERATIONS = ("join", "cut", "intersect", "new_body", "new_component")
 POSITIONS = ("inside", "center", "outside")
 KINDS = ("box", "cylinder", "sphere", "torus")
 COIL_TYPES = ("rev_height", "rev_pitch", "height_pitch", "spiral")

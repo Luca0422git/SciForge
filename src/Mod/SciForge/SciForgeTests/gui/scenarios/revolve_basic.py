@@ -107,7 +107,7 @@ def dialog_open():
         and [p.direction.itemText(i) for i in range(p.direction.count())]
         == ["One Side", "Two Sides", "Symmetric"]
         and [p.operation.itemText(i) for i in range(p.operation.count())]
-        == ["Join", "Cut", "Intersect", "New Body"],
+        == ["Join", "Cut", "Intersect", "New Body", "New Component"],
     )
     h.fit()
     h.shot("1-waiting-for-axis")

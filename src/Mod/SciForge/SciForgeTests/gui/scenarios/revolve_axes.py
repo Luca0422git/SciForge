@@ -14,8 +14,8 @@ A 40 x 30 x 10 box (Create Sketch on XY, Extrude, OK).
    removed). OK. Double-click it in the timeline, 45, OK. Undo / redo.
 3. A sketch on XZ with a 10 x 5 rectangle (x 50..60, z 0..5) and a construction line at
    x = 70. Revolve: the construction line is drawn as a dashed line to click; click it:
-   a ring that does not touch the box: Join makes it a second lump of the box's body (a
-   Fusion body can hold several). Two Sides with 270 + 120 degrees: the dialog says the
+   a ring that does not touch the box: a New Body by itself (Fusion makes a new body for
+   a Join that touches nothing). Two Sides with 270 + 120 degrees: the dialog says the
    angles add up to more than a turn and OK keeps it open. One Side 360, New Body, OK:
    a second body.
 
@@ -376,11 +376,16 @@ def ring_axis():
         p.axis is not None and p.axis[0] is s["ring"] and p.axis[1] == "Axis0",
         p.axis,
     )
-    h.check("Join (a solid is there)", p.operation.currentText() == "Join")
     h.check(
-        "Join: the ring becomes a second lump of the body (Fusion's bodies can have several)",
-        near(volume(), s["volume"] + 1500 * PI),
-        volume(),
+        "the ring touches nothing: New Body by itself (Fusion)",
+        p.operation.currentText() == "New Body",
+        p.operation.currentText(),
+    )
+    other = [b for b in bodies() if b is not box_body()]
+    h.check(
+        "a body of its own, the box unchanged",
+        len(other) == 1 and near(other[0].Shape.Volume, 1500 * PI) and near(volume(), s["volume"]),
+        ([b.Shape.Volume for b in other], volume()),
     )
     h.check("no error text", p.message.text() == "", p.message.text())
     h.check("choose Two Sides", ui.choose(p.direction, "Two Sides"))

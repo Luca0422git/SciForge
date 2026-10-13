@@ -17,7 +17,6 @@ Numbers by hand: walls of a 40 x 30 outline, 10 high: Side 1 t inside (40x30 - (
 (30-2t)), Side 2 t outside ((40+2t)x(30+2t) - 40x30), Center half each way. The L's
 wall on the left of its first line (+X): 20 t + 10 t - t^2.
 """
-
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore

@@ -660,6 +660,11 @@ def _target(feature, profiles, options):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
+    if created is not None:
+        from .components_core import same_new
+
+        if not same_new(meta.get("operation"), options["operation"]):
+            created = None  # New Body <-> New Component: the result moves (made again)
     if options["operation"] in ("new_body", "new_component"):
         if created is not None:
             return created, src
@@ -689,6 +694,15 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
     rail_refs = curves.normalize(rail_refs) if options["guide"] == "rails" else []
     centerline_refs = curves.normalize(centerline_refs) if options["guide"] == "centerline" else []
     tool_shape(profiles, rail_refs, centerline_refs, options)  # fails early with the reason
+    if options["operation"] == "join":
+        # Fusion: a Join that does not touch the part makes a new body (never a lump).
+        from .sweep import base_global
+
+        base = base_global(_source_body(profiles), feature)
+        if base is not None and (
+            auto_operation(base, profiles, rail_refs, centerline_refs, options) == "new_body"
+        ):
+            options = dict(options, operation="new_body")
     target, src = _target(feature, profiles, options)
     native = native_type(profiles, rail_refs, centerline_refs, options, target) if target else None
     type_id = native or FP_TYPE

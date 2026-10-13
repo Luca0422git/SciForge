@@ -812,6 +812,20 @@ def _source_body(profiles):
     return body
 
 
+def base_global(body, feature=None):
+    """The solid `body` has where `feature` goes (before it, or at the end), in global
+    coordinates; None when the body has no solid there yet."""
+    if body is None:
+        return None
+    before = feature if feature is not None and owner_body(feature) is body else None
+    tip = before.BaseFeature if before is not None else body.Tip
+    if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
+        return None
+    shape = tip.Shape.copy()
+    shape.Placement = body.getGlobalPlacement().multiply(shape.Placement)
+    return shape
+
+
 def _target(feature, profiles, options):
     """(target body or None for 'make a new one', source body)."""
     src = _source_body(profiles)
@@ -819,6 +833,11 @@ def _target(feature, profiles, options):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
+    if created is not None:
+        from .components_core import same_new
+
+        if not same_new(meta.get("operation"), options["operation"]):
+            created = None  # New Body <-> New Component: the result moves (made again)
     if options["operation"] in ("new_body", "new_component"):
         if created is not None:
             return created, src
@@ -858,6 +877,14 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
     rail_refs = curves.normalize(rail_refs) if not single(options) else []
     # Fails early with the reason (no path, path in pieces, ...): nothing is built then.
     tool_shape(profiles, path_refs, rail_refs, options)
+    if options["operation"] == "join":
+        # Fusion: a Join that does not touch the part makes a new body (never a lump).
+        base = base_global(_source_body(profiles), feature)
+        if (
+            base is not None
+            and auto_operation(base, profiles, path_refs, rail_refs, options) == "new_body"
+        ):
+            options = dict(options, operation="new_body")
     target, src = _target(feature, profiles, options)
     two = _two_sides(profiles, path_refs, options)
     native = native_type(profiles, path_refs, options, target, two) if target else None

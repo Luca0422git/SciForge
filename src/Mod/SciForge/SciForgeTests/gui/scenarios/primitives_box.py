@@ -68,7 +68,7 @@ def waiting_for_plane():
     h.check(
         "Fusion's fields",
         [p.operation.itemText(i) for i in range(p.operation.count())]
-        == ["Join", "Cut", "Intersect", "New Body"]
+        == ["Join", "Cut", "Intersect", "New Body", "New Component"]
         and p.length.widget.isVisible()
         and p.width.widget.isVisible()
         and p.height.widget.isVisible(),

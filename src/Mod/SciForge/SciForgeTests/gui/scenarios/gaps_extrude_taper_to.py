@@ -14,7 +14,6 @@ Path X3, a circle on the XZ plane beside the plate, Two Sides: side one 10 widen
 Numbers by hand: frustum of a square a x a growing by d per side over h: h/3 (a^2 + b^2 +
 ab) with b = a + 2d; a cone frustum: pi h / 3 (r1^2 + r1 r2 + r2^2).
 """
-
 import math
 
 import FreeCAD as App
