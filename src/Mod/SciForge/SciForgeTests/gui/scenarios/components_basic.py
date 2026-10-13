@@ -261,6 +261,33 @@ def d_bracket_steps():
     h.check("Bracket's body is the active one again", body is not None and body.Label == "Body1")
 
 
+def d_root_menu():
+    """New Component from the design's row goes to the root, whatever is active."""
+    t.row_menu(state["doc"], "New Component")
+
+
+def d_root_dialog():
+    panel = cs.new_component_panel()
+    if not h.check("dialog from the design's row", panel is not None):
+        return
+    h.check(
+        "Parent is the root (Bracket is active)",
+        panel.parent_box.currentText().endswith("(root)"),
+        panel.parent_box.currentText(),
+    )
+    # Bracket and Pin were renamed: no component is called Component<n>, so Component1.
+    h.check("Component1 proposed", panel.name.text() == "Component1", panel.name.text())
+
+
+def d_root_cancel():
+    h.task_button("Cancel")
+
+
+def d_root_nothing():
+    h.check("Cancel made nothing", len(cs.components()) == 2, [p.Label for p in cs.components()])
+    h.check("Bracket still active", cs.active_label() == "Bracket", cs.active_label())
+
+
 # -- Path E: rename --------------------------------------------------------------------------------
 def e_rename():
     cs.rename_row("Pin", "Axle")
@@ -420,6 +447,10 @@ h.run(
             d_made,
             d_activate_bracket,
             d_bracket_steps,
+            d_root_menu,
+            d_root_dialog,
+            d_root_cancel,
+            d_root_nothing,
             e_rename,
             e_renamed,
             f_isolate,

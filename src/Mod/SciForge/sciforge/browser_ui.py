@@ -969,9 +969,11 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self.refresh(force=True)
 
     def _new_component(self, parent):
+        """New Component from a row's menu: inside that component (the design's row: at the
+        root), whatever is active."""
         from . import components_ui
 
-        components_ui.open_new_component(parent)
+        components_ui.open_new_component(parent, use_active=False)
 
     def _components_from_bodies(self, bodies):
         from . import components_ui
