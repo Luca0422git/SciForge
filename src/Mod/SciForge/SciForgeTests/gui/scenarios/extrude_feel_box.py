@@ -10,7 +10,8 @@ Press Pull  Q, click the right side face (x = 40), ViewCube FRONT: the arrow poi
             to whatever is on top, as with a real mouse). Type -3: red. Click the box,
             type 7, Esc: Press Pull is cancelled, nothing made, no box and no red left.
 Extrude     corner view, E, click the same face, ViewCube FRONT: the same for its arrow.
-            Click the box, type 9, Esc: cancelled, nothing made, no box left.
+            Click the box, type 0, Enter: Extrude stays open (0 makes nothing), says why,
+            and the box keeps the keyboard. Esc: cancelled, nothing made, no box left.
 Edit        a 10 x 10 square sketched on the top face, E, -6, OK (a pocket). Double-click
             "Extrude 2" in the timeline: the pocket shows in red at once. Esc: none left.
             Q, top face, -3, OK. Double-click "Press Pull 1": red at once; Esc: none left.
@@ -310,12 +311,27 @@ def e_grabbed():
     h.check("Extrude: the preview grew", h.solid_volume() > s["volume"] + 1.0, h.solid_volume())
 
 
-def e_box_esc():
+def e_box_zero_enter():
+    """The trap found in review: 0 and Enter in the box keep Extrude open (a distance of 0
+    makes nothing) and the box keeps the keyboard; Esc must still cancel then."""
     boxes = a.value_boxes()
     if not h.check("the value box is there", len(boxes) == 1, len(boxes)):
         return
-    a.type_in_box(boxes[0], "9", enter=False)
-    h.check("the box has the keyboard", boxes[0].hasFocus(), a.focus_name())
+    a.type_in_box(boxes[0], "0", enter=True)
+
+
+e_box_zero_enter.wait_ms = 1000
+
+
+def e_box_esc():
+    p = xpanel()
+    h.check("0 + Enter in the box keeps Extrude open", p is not None)
+    if p is not None:
+        h.check("and it says why", "zero" in p.message.text(), p.message.text())
+    boxes = a.value_boxes()
+    if not h.check("the value box is there", len(boxes) == 1, len(boxes)):
+        return
+    h.check("the box still has the keyboard", boxes[0].hasFocus(), a.focus_name())
     QtTest.QTest.keyClick(boxes[0], QtCore.Qt.Key_Escape)
 
 
@@ -537,6 +553,7 @@ h.run(
         e_pan,
         e_heads,
         e_grabbed,
+        e_box_zero_enter,
         e_box_esc,
         e_cancelled,
         sketch_on_top,
