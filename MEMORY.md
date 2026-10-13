@@ -55,6 +55,18 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   fixes (#4, #6, #7) that already have Python workarounds, so the quick update on the official
   FreeCAD 1.1.4 is the normal delivery. Never start a 3-hour Windows build without one of those
   two reasons (Luca waited hours on builds that were not needed).
+- **2026-10-13: testing happens in one overall run; features reach Luca as soon as they are
+  merged.** Luca: "could we leave the testing to an overall testing run. I want to try out the
+  features asap". So: merge, push, and let GitHub's "SciForge tests" run on that push be the
+  test; fix what it finds and push again. No long local sweeps before a push (a few minutes on
+  the scenario of the exact change is fine); no adversarial review round when it would hold a
+  merge back. The quick-update download still comes only from a green run, so a red run costs
+  Luca a wait, not a broken install (he can ask to get it on red runs too, marked untested).
+- **2026-10-13: research Fusion's behaviour before building anything that imitates it.**
+  Luca: "Your job is to also research how Fusion works while building it. not just fucking
+  around and doing whatever you think is right." The sketch right-click menu had no OK /
+  Cancel and nothing told a line to end. Each imitation names its source in the parity doc
+  (Autodesk help/course, forum answer) or is marked a guess.
 
 ## Status by phase (outline section 10)
 
@@ -97,8 +109,8 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       models (2 documented gaps: sloped neighbours, shared corners -> need C++ per-face offset, 9.1)
 - [x] Fusion-style Extrude (E): join/cut/new body, one side/two sides/symmetric, distance/all,
       taper, drag arrow, auto-switch to Cut when dragged into material
-- [x] Right-click marking menu (8 slots + list, Repeat last command; OK/Cancel while a command
-      is open). **Slot order unconfirmed.**
+- [x] Right-click marking menu (8 slots + list, Repeat last command; OK at 3 o'clock and Cancel
+      at 9 o'clock while a command is open, Autodesk's gesture doc). **Other slots unconfirmed.**
 - [x] Browser panel with Fusion's structure (7.2), eye toggles, rename, activate
 - [x] Change Parameters (7.4): user params (App::VarSet "Parameters"), model params, bare names
 - [x] Construct presets (19 Fusion entries -> attacher modes; Offset Plane/Midplane computed);
@@ -513,7 +525,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     marker (`timeline_ops._show_only_tip`, scenario `timeline_roll_view`); a sketch on a face
     or plane of another body goes into that body and makes it active
     (`sketch_ui.create_sketch`, scenario `sketch_other_body`); the marking menu offers OK
-    (top slot) and Cancel (first list row) while a dialog is open (`taskui.dialog_button`
+    and Cancel while a dialog is open (since 2026-10-13 at 3 and 9 o'clock; `taskui.dialog_button`
     clicks FreeCAD's own panel button, scenario `marking_menu_command`); E pressed while a
     sketch is open extrudes that sketch even when an extrude already uses it (it took "the
     newest unused sketch" instead; `ExtrudePanel(sketch=...)`, scenario
@@ -2095,6 +2107,86 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Old scenarios that relied on the automatic 10 mm or on a preview right after E were updated
   (extrude_multibody*, sketch_areas*). Unit 330, golden 294 + 1 xfail.
 
+### 2026-10-13 (afternoon): Orbit, Extrude loose ends, ending a line, arrows in front (main branch)
+- Luca's requests, in order: finish the plan's #2 items (orbit, Fusion-like sketching, last
+  night's loose ends); "the chamfer tool doesn't have an arrow to drag"; "there's no way to
+  end a line when sketching. there should be an OK and Cancel option on the right click
+  radial menu"; "arrows for dragging get occluded by bodies"; "how often do the tests fail?";
+  "leave the testing to an overall testing run. I want to try out the features asap".
+- **Orbit** (`sf/orbit`, agent + adversarial review + fix round, merged ba6516af20, CI #100
+  green): Orbit drop-down in the navigation bar (Constrained = FreeCAD OrbitStyle 2, Free =
+  Rounded Arcball 4; `Mod/SciForge/OrbitMode`; through `theme.keep_and_set`), middle double-
+  click = Fit, Ctrl+Shift+middle-drag = zoom, Shift+middle click sets an orbit centre (green
+  9 px dot, picture only; SciForge's own camera maths in `orbit.py`, since NavigationStylePy
+  has no methods), Set / Reset Orbit Center in the right-click menu. `orbit_ui._ViewFilter`
+  holds a middle press back until the mouse moves 4 px. Review findings fixed (25afb323e8):
+  the second press of a double-click must never be forwarded once acted on (FreeCAD was left
+  panning by itself); anything keyed by document name must be forgotten on
+  `slotDeletedDocument` (the next "Unnamed" inherited an invisible pivot); widget lists are
+  pruned with `shiboken6.isValid` (a dead wrapper's address is reused); the commands are
+  inactive without a view; the two orbit entries are an exclusive QActionGroup. Facts: FreeCAD
+  drops the first move of a drag (`spin` needs two logged positions), so the pivot orbit starts
+  where the 4 px were crossed (1.4 % apart from FreeCAD's own); Shift+middle click on edit-mode
+  sketch geometry sets nothing (`getObjectInfo` is None there); FreeCAD's OverlayManager grabs
+  the mouse during synthetic drags near the right overlay (test artefact).
+- **Extrude loose ends** (`sf/extrude-loose-ends`, 7 commits, merged 0328b2b13f without its
+  last review round, Luca's "asap"): value boxes on every handle (`taskui.BoxCarrier` on the
+  handle classes, `taskui.ValueBoxes` per dialog, `arrow_box_core.spot(avoid, avoid_rects)` +
+  outward search), digits typed over the 3D view go into the box of the handle last dragged or
+  hovered (`taskui.TypeOverView`, one key filter per Panel, replaced the revolve / primitives /
+  pipe copies), the sketch shows while an extrude is edited (shown and hidden outside the undo
+  step), a multi-body extrude moves along the timeline (`timeline_ops` `_follower_places` /
+  `_place_followers`; golden `extrude_multi_move`), the "Bodies to Cut" row highlights its
+  bodies (`cut_preview.BodyHighlight`), the chamfer arrow sits on the face toward the viewer
+  and is sized for the screen (`blend.toward_face`, `taskui.mm_per_pixel`,
+  `arrow_box_core.handle_size`). Its final run caught an R4 regression (boxes on one spot at 0
+  with Start Offset: the taper band and the longer arrow's head blocked every spot) and a
+  timing budget (extrude_feel_cut's held drag takes 2.3 s on this shared box). Scenarios not
+  run on the final tree: revolve*, primitives*, patterns*, bodies*, shell_draft*,
+  inspect_construct*, timeline_browser*, sweep_loft_rib (CI covers them).
+- **Ending a line** (66eeca63a8, research first: Autodesk's sketch basics course and "Create
+  lines" help, forum answers): Esc exits the Line command; the green check or a double-click
+  on the end point ends the chain and stays in the tool; a line ending on existing geometry
+  ends the chain; Enter completes the tool; the marking menu has OK on the drag-right gesture
+  (3 o'clock) and Cancel at 9 o'clock while a command is active. Built: `sketch_marking` shows
+  OK / Cancel there while a tool runs (OK = `SketchSession.finish_tool`, Cancel = Esc); the part
+  menu moved OK / Cancel to the same slots (they were at the top and in the list, a guess);
+  Enter with nothing typed completes the tool (`_typed_since_commit`); `LineChain.break_chain`
+  on a double-click at the chain's point; `_ends_on_geometry` ends the chain on a Coincident /
+  PointOnObject at the new end (not the origin or axes: a line along the X axis gets one).
+  Traps found by the scenarios: FreeCAD's Sketcher keeps a task panel open for the whole sketch
+  session, so "a dialog is open" must not count it (its Close button leaves the sketch; and it
+  is the active dialog in every design while a sketch is edited anywhere:
+  `sketch_mode.sketch_edited_anywhere`); QLineEdit lets Return go on up to the parent after
+  `returnPressed`, so the dimension box's Enter reached the view and ended the Dimension tool
+  (`DimensionEditor.keyPressEvent` stops it); FreeCAD's grid snap moves a click within about
+  2 mm of a 10 mm grid line onto it (tests click at 5, 15, 25...). Scenario `sketch_end_line`.
+- **Arrows in front of bodies** (`taskui.on_top_root`): Coin's `SoAnnotation` renders after
+  the scene without depth test, `SoPickStyle.SHAPE_ON_TOP` sorts the handle's pick in front of
+  a nearer body so a press on the visible arrow starts the drag. Applied to `ArrowDragger`, the
+  extrude taper disc and the hole's position handle (the other handles were already
+  annotations with their own screen-space hit tests). Scenario `handles_on_top` (camera below
+  the block: the arrow's pixel is blue and the drag works). `View3DInventorPy.setViewDirection`
+  did nothing in that test; `setCameraOrientation` with a quaternion works.
+- **Sketching that feels like Fusion** (`sf/sketch-feel`, 6 commits): guides in every drawing
+  tool, level / upright marks, tangent arc in L, fixed geometry green, selection and hover
+  colours pinned. Adversarial review found 6 problems (Ctrl+Z after a tangent arc then a click
+  corrupts the sketch: FreeCAD's line tool keeps a stale suggested Coincident GeoId across undo;
+  pressing L mid-line keeps the forgotten start; a press with no move never arms the arc; marks
+  stay on Leave; synthetic click snaps to the edge on a rotated-offset sketch in a tilted view;
+  tool kind from `recent.last()`); the fix round is running. Not merged yet.
+- **How often do the tests fail** (Luca; from GitHub's run list, 100 runs): 40 cancelled by a
+  newer push, 59 finished: 47 green, 12 red (one in five). Unit + golden red once (#96, fake
+  FreeCAD without ParamGet); the Windows golden job never red; the other 11 reds were GUI
+  scenarios, about half real product bugs the tests caught (crash after sketching, pattern on
+  path, sketch on a face hanging, settings left changed after quitting), half differences of
+  GitHub's slower machine and window size (edge click hit the face, dialog covered the point,
+  preview not ready, a Ctrl line level only there). Since the four-way split (#57): 7 reds in
+  43 finished runs.
+- Process: the three agents again built in isolated worktrees with reviewers; two review
+  rounds (orbit, sketch) and the extrude agent's own final batch each found real bugs. From
+  here on (Luca's decision above) CI is the overall test; merges go out at once.
+
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
   tools? **Yes.** Probes in real FreeCAD 1.1.4: a filter that replaces a mouse event by a
@@ -2121,12 +2213,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 ## Next steps (in order)
 
 0. **The current plan is `docs/sciforge/plan.md`** (2026-10-12, after the research report
-   `reports/Fusion sketching ViewCube and navigation.md`). Done on 2026-10-12: stable orbit
-   (A1), the Python ViewCube (B), sketch inference for Line (C1-C4, Ctrl in every tool), the
-   full-build fix (install rules). Next: A2-A3 (orbit choice, mouse details), inference in
-   the other sketch tools, glyphs beside the geometry, tangent-arc drag in L; then selection,
-   components, joints, versions. Luca's Fusion checks (plan, last section) tune the details.
-   The items below are older and partly superseded by it.
+   `reports/Fusion sketching ViewCube and navigation.md`). Done: A (orbit, 2026-10-13), B (the
+   Python ViewCube), C1-C4 for Line and (on `sf/sketch-feel`, fix round running, then merge)
+   guides in every tool, marks, the tangent arc, green fixed geometry. Next: merge
+   `sf/sketch-feel` after its fix round (its review notes are in the session log), then
+   selection like Fusion, components, joints, versions. Luca's Fusion checks (plan, last
+   section) tune the details. The items below are older and partly superseded by it.
+0a. Open from 2026-10-13: Fusion's floating green check near the pointer while drawing a line
+   (not built; OK is in the right-click menu); Move's triad, Scale's arrows and Draft's disc
+   have no value box; the quick update is only produced on green runs (Luca may want it on
+   red runs too, marked untested).
 1. Done: all feature builds and QA rounds are merged (see the 2026-10-12 log). Open items
    left by the QA rounds, none blocking:
    - a length formula typed into an angle box is accepted (Fusion refuses it);

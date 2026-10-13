@@ -82,3 +82,13 @@ signed off**.
   first of two holes leaves the second on its face), `thread_second_after_modeled` (a thread
   whose face an earlier thread split keeps working).
 - Unit tests: `SciForgeTests/unit/test_thread_core.py` (sizes, groove, volumes, lengths).
+
+## Value boxes and typing over the view (2026-10-13)
+
+Every drag handle of this dialog has a value box beside it (`taskui.ValueBoxes`): it shows the
+field's text with units, follows the handle, takes a value or formula (Enter = OK, a click away
+keeps it), never covers a handle or another box, and goes with the dialog. A digit, minus or
+decimal point typed with the mouse over the 3D view goes into the box of the handle last dragged
+or hovered (else the main one), with its text selected (`taskui.TypeOverView`; FreeCAD's view
+keys 0-6 no longer turn the view while the dialog is open). Which handle a digit goes to is
+SciForge's guess at Fusion's rule.

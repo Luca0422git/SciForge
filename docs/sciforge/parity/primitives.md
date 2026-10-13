@@ -116,3 +116,13 @@ for coils and pipes), built with
 | Exact Fusion defaults (to confirm with Luca): Torus Position starts On Center; Clockwise = right-hand coil; for square and triangle sections Section Size is the circle round the section; how pipe squares/triangles are turned; the coil starts centred on the plane | Taken from the docs, not compared with a capture |
 | Sharp path corners in Pipe | Mitred (cut on the corner's bisecting plane); to compare with a capture of Fusion's |
 | Coil section | FreeCAD sweeps an upright section along the helix (Fusion's section may lean with the pitch) |
+
+## Value boxes and typing over the view (2026-10-13)
+
+Every drag handle of this dialog has a value box beside it (`taskui.ValueBoxes`): it shows the
+field's text with units, follows the handle, takes a value or formula (Enter = OK, a click away
+keeps it), never covers a handle or another box, and goes with the dialog. A digit, minus or
+decimal point typed with the mouse over the 3D view goes into the box of the handle last dragged
+or hovered (else the main one), with its text selected (`taskui.TypeOverView`; FreeCAD's view
+keys 0-6 no longer turn the view while the dialog is open). Which handle a digit goes to is
+SciForge's guess at Fusion's rule.

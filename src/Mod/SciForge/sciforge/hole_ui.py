@@ -13,6 +13,7 @@ hole sets its depth (drag it down to drill deeper), the one at its rim its diame
 Problems are shown in the dialog, which then stays open. One undo step; double-click the
 hole in the timeline to edit it.
 """
+
 import math
 
 import FreeCAD as App
@@ -22,7 +23,7 @@ from . import commands, drag_guard, hole, log, preview, ui_icon_path, warn
 from . import hole_common as common
 from . import thread_tables as tables
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
+from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes, on_top_root
 
 PLACEMENT_LABELS = [("Single Hole", "single"), ("From Sketch (Multiple Holes)", "sketch")]
 EXTENT_LABELS = [("Distance", "distance"), ("To", "to"), ("All", "all")]
@@ -53,7 +54,7 @@ class PointDragger:
         from pivy import coin
 
         self.view = Gui.ActiveDocument.ActiveView
-        self.root = coin.SoSeparator()
+        self.root = on_top_root(coin)  # over the part and grabbable through it
         place = coin.SoTransform()
         base = placement.Base
         place.translation.setValue(base.x, base.y, base.z)

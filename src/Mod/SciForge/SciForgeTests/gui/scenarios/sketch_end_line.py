@@ -31,7 +31,7 @@ from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
-EMPTY = V(45, 45, 0)
+EMPTY = V(55, 20, 0)
 s = {}
 
 
@@ -153,11 +153,11 @@ def b_l():
 
 
 def b_p1():
-    si.click(V(0, 8, 0))
+    si.click(V(0, 5, 0))
 
 
 def b_p2():
-    si.click(V(40, 8, 0))
+    si.click(V(40, 5, 0))
 
 
 def b_drawn():
@@ -187,11 +187,11 @@ def c_l():
 
 
 def c_p1():
-    si.click(V(0, 16, 0))
+    si.click(V(0, 15, 0))
 
 
 def c_p2():
-    si.click(V(40, 16, 0))
+    si.click(V(40, 15, 0))
 
 
 def c_drawn():
@@ -217,11 +217,11 @@ def d_l():
 
 
 def d_p1():
-    si.click(V(0, 24, 0))
+    si.click(V(0, 25, 0))
 
 
 def d_aim():
-    si.move_towards(V(30, 24, 0), V(1, 0, 0))
+    si.move_towards(V(30, 25, 0), V(1, 0, 0))
 
 
 def d_type():
@@ -250,18 +250,19 @@ def e_l():
 
 
 def e_p1():
-    si.click(V(0, 32, 0))
+    si.click(V(0, 35, 0))
 
 
 def e_p2():
-    si.click(V(40, 32, 0))
+    si.click(V(40, 35, 0))
 
 
 def e_drawn():
     h.check("E: five lines", count() == 5, count())
     c = chain()
     h.check("E: the chain goes on from the end", c.active and c.current is not None, c.current)
-    h.double_click(V(40, 32, 0))
+    s["e_end"] = line_at(4)[1]  # where the line really ended (FreeCAD snaps to its grid)
+    h.double_click(s["e_end"])
 
 
 e_drawn.wait_ms = 700
@@ -279,11 +280,11 @@ def e_after_dbl():
 
 
 def e_q1():
-    si.click(V(10, 38, 0))
+    si.click(V(10, 37, 0))
 
 
 def e_q2():
-    si.click(V(30, 38, 0))
+    si.click(V(30, 37, 0))
 
 
 def e_new_chain():
@@ -292,7 +293,7 @@ def e_new_chain():
         a, b = line_at(5)
         h.check(
             "E: it starts at the new first click, not at the old end",
-            si.vnear(a, V(10, 38, 0), CLICK),
+            si.vnear(a, V(10, 37, 0), CLICK),
             all_lines(),
         )
     h.press(QtCore.Qt.Key_Escape)
@@ -304,11 +305,11 @@ def f_l():
 
 
 def f_p1():
-    si.click(V(0, 42, 0))
+    si.click(V(0, 45, 0))
 
 
 def f_p2():
-    si.click(V(40, 32, 0))  # the end of line E
+    si.click(s["e_end"])  # exactly the end of line E
 
 
 def f_drawn():
@@ -325,11 +326,11 @@ def f_drawn():
 
 
 def f_q1():
-    si.click(V(10, 44, 0))
+    si.click(V(10, 47, 0))
 
 
 def f_q2():
-    si.click(V(30, 44, 0))
+    si.click(V(30, 47, 0))
 
 
 def f_new_chain():
@@ -337,7 +338,7 @@ def f_new_chain():
     if count() >= 8:
         a, b = line_at(7)
         h.check(
-            "F: it starts at the new first click", si.vnear(a, V(10, 44, 0), CLICK), all_lines()
+            "F: it starts at the new first click", si.vnear(a, V(10, 47, 0), CLICK), all_lines()
         )
     h.press(QtCore.Qt.Key_Escape)
 

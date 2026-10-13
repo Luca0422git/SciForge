@@ -20,6 +20,8 @@ with Refine on; value boxes in `sciforge/blend_field.py`. Status: **first pass +
 | Only edges that can be rounded light up under the mouse | Same (selection filter: smooth edges, vertices, sketches, other bodies do not highlight) |
 | Live preview | The result is shown solid; the part before the fillet is shown see-through around it, with the picks highlighted at their original corner (so they stay clickable) |
 | Blue drag arrow on the first picked edge | Same. It lies on the face next to the edge, its tip on the line where the round starts, pointing away from the edge; drag it out to make the round bigger |
+| A value box floating next to the drag arrow; digits typed over the view go into it | Same since 2026-10-13 (`taskui.ValueBoxes`): the box shows the dialog's value with units, follows the arrow, takes a value or formula (Enter = OK). A digit typed with the mouse over the 3D view goes into it |
+| The chamfer's arrow is where you can see it | Same since 2026-10-13 (Luca: "the chamfer tool doesn't have an arrow to drag"): Equal Distance and Distance and Angle put the arrow on the face toward the viewer, as the fillet does; it is sized for the screen (about 75 px, never longer than about half the picked edge, never shorter than about 1 mm), so it shows on a 400 mm part and on a 4 mm part. Two Distances keeps one arrow per face. Drawn in front of the part and grabbable through it |
 | Radius field, units, parameters and formulas (`r`, `r * 2`, `0.1 in`) | Same: a formula is kept on the feature as an expression (the value follows the parameter) and listed under the boxes ("Radius = r*2"); a bare number is always mm (degrees for an angle); a typo is explained in the dialog and OK waits; no FreeCAD pop-up |
 | Dragging the arrow back through the edge | The size stops at 0.1 mm and the arrow comes back to the value shown when the mouse is let go |
 | Impossible radius: the dialog says so, OK stays disabled | The dialog explains it in plain words and proposes the largest radius that fits; OK waits; the preview keeps the last good result; **nothing** is printed to the Report view |
@@ -50,7 +52,6 @@ PartDesign feature), as before.
 | Several selection sets with different radii in one fillet | One `PartDesign::Fillet` = one radius. Today: one fillet step per radius |
 | Continuity: Curvature (G2), Tangency weight | OpenCASCADE builds circular (G1) rounds only |
 | Corner Type: Setback (fillet), Miter / Blend (chamfer) | Not offered by OpenCASCADE's builders |
-| A value box floating next to the drag arrow | The value is typed in the dialog |
 | Window (drag-box) selection of edges inside the dialog | Not handled specially yet |
 | A formula shown *inside* the value box | FreeCAD's number box can only show the number: the formula is listed under the boxes (as in Extrude) |
 | Edges of several bodies in one fillet | One `PartDesign::Fillet` belongs to one body: edges of another body are not picked (they do not light up) |

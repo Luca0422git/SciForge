@@ -15,6 +15,7 @@
 - Panel: a task-dialog base that wraps the edit in one undo step: OK keeps it,
   Cancel/Esc removes it again, like Fusion.
 """
+
 import math
 import re
 import time
@@ -24,7 +25,6 @@ import FreeCADGui as Gui
 
 from . import drag_guard, log, warn
 from .compat import QtCore, QtGui, QtWidgets
-
 
 _OPEN = {"dialog": None}
 
@@ -274,6 +274,20 @@ def handle_size_at(view, point, pixels=None, lo=None, hi=None):
     pixels = arrow_box_core.ARROW_PIXELS if pixels is None else pixels
     lo = arrow_box_core.MIN_SIZE if lo is None else lo
     return arrow_box_core.handle_size(mm_per_pixel(view, point), pixels, lo, hi)
+
+
+def on_top_root(coin):
+    """The root node of a drag handle: drawn over the part and grabbable through it, as
+    Fusion's manipulators are (Luca, 2026-10-13: "arrows for dragging get occluded by
+    bodies"). Coin's SoAnnotation renders its children after everything else without
+    depth testing, so the arrow shows in front of a body that is nearer to the camera;
+    its pick style SHAPE_ON_TOP sorts the handle's pick in front of that body's, so a
+    press on the visible arrow starts the drag instead of selecting the face over it."""
+    root = coin.SoAnnotation()
+    pick = coin.SoPickStyle()
+    pick.style = coin.SoPickStyle.SHAPE_ON_TOP
+    root.addChild(pick)
+    return root
 
 
 BOX_TAKEN = {"time": 0.0}  # when a click elsewhere last took a value typed in an arrow's box
@@ -927,7 +941,7 @@ class ArrowDragger(BoxCarrier):
         self.direction = App.Vector(direction)
         if self.direction.Length > 1e-12:
             self.direction.normalize()
-        self.root = coin.SoSeparator()
+        self.root = on_top_root(coin)
         place = coin.SoTransform()
         place.translation.setValue(origin.x, origin.y, origin.z)
         # SoTranslate1Dragger moves along its local X axis; turn X onto `direction`.

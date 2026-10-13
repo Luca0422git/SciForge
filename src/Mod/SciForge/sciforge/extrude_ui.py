@@ -17,6 +17,7 @@ picked the operation yourself; a cut shows in red while the dialog is open. A ne
 extrude starts at 0 and shows nothing until you drag or type; the profile's sketch stays
 in view until OK. Problems are shown in the dialog, which then stays open.
 """
+
 import math
 import time
 
@@ -127,7 +128,7 @@ class AngleDragger(BoxCarrier):
         self.zero = App.Vector(zero).normalize()
         self.radius = radius
         self.width = width
-        self.root = coin.SoSeparator()
+        self.root = taskui.on_top_root(coin)  # over the part and grabbable through it
         place = coin.SoTransform()
         place.translation.setValue(pivot.x, pivot.y, pivot.z)
         x = self.zero

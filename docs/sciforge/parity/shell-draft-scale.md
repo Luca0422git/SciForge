@@ -73,3 +73,13 @@ corner used as the point follows edits of earlier steps.
 | Per-face wall thickness (outline 7.6 mentions it) | Not in Fusion's Shell dialog; OpenCASCADE supports it but FreeCAD exposes no Python call |
 | A corner whose name FreeCAD loses (a Pad's corner after its length changes) | The corner with the same number is used: right as long as the part's topology does not change |
 | A face of a later step that moved for good (a wall made thicker) | Found again by where it is (same kind, facing the same way, nearest): right for the usual edits; FreeCAD has no history of SciForge's own features' faces to follow instead |
+
+## Value boxes and typing over the view (2026-10-13)
+
+Every drag handle of this dialog has a value box beside it (`taskui.ValueBoxes`): it shows the
+field's text with units, follows the handle, takes a value or formula (Enter = OK, a click away
+keeps it), never covers a handle or another box, and goes with the dialog. A digit, minus or
+decimal point typed with the mouse over the 3D view goes into the box of the handle last dragged
+or hovered (else the main one), with its text selected (`taskui.TypeOverView`; FreeCAD's view
+keys 0-6 no longer turn the view while the dialog is open). Which handle a digit goes to is
+SciForge's guess at Fusion's rule.

@@ -133,3 +133,13 @@ formula is in the model's note.
 - **Operation New Component** is out of scope (SciForge has no components yet).
 - **Profile Scaling default.** The default is "Scale"; Luca should confirm that this matches
   his Fusion.
+
+## Value boxes and typing over the view (2026-10-13)
+
+Every drag handle of this dialog has a value box beside it (`taskui.ValueBoxes`): it shows the
+field's text with units, follows the handle, takes a value or formula (Enter = OK, a click away
+keeps it), never covers a handle or another box, and goes with the dialog. A digit, minus or
+decimal point typed with the mouse over the 3D view goes into the box of the handle last dragged
+or hovered (else the main one), with its text selected (`taskui.TypeOverView`; FreeCAD's view
+keys 0-6 no longer turn the view while the dialog is open). Which handle a digit goes to is
+SciForge's guess at Fusion's rule.
