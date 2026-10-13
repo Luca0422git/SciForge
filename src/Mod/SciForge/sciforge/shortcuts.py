@@ -103,8 +103,12 @@ def apply():
     keys = {normalise(k) for k in mapping.values() if k}
     # Park every FreeCAD shortcut on one of our keys (including on our target commands
     # themselves, e.g. the Sketcher's own "D"), so each key has exactly one owner.
-    kept = _kept()
-    stored = {name: kept.GetString(name) for name in kept.GetStrings()}
+    try:
+        kept = _kept()
+        stored = {name: kept.GetString(name) for name in kept.GetStrings()}
+    except Exception as exc:  # the keys still work, only not kept across a quit
+        warn("shortcuts: cannot keep FreeCAD's keys: %s" % exc)
+        kept, stored = None, {}
     for name in Gui.listCommands():
         try:
             cmd = Gui.Command.get(name)
@@ -116,7 +120,8 @@ def apply():
                     cmd.setShortcut("")
             elif current and normalise(current) in keys:
                 _parked[name] = current
-                kept.SetString(name, current)
+                if kept is not None:
+                    kept.SetString(name, current)
                 cmd.setShortcut("")
         except Exception:
             pass
@@ -157,9 +162,13 @@ def _give_back(parked):
     import FreeCAD
     import FreeCADGui as Gui
 
-    kept = _kept()
-    for name in kept.GetStrings():
-        parked.setdefault(name, kept.GetString(name))
+    try:
+        kept = _kept()
+        for name in kept.GetStrings():
+            parked.setdefault(name, kept.GetString(name))
+    except Exception as exc:
+        warn("shortcuts: cannot read the kept keys: %s" % exc)
+        kept = None
     for name, previous in parked.items():
         try:
             cmd = Gui.Command.get(name)
@@ -167,7 +176,8 @@ def _give_back(parked):
                 cmd.setShortcut(previous)
             else:  # (its workbench is not loaded yet: FreeCAD reads it from here then)
                 FreeCAD.ParamGet(SHORTCUT_PREFS).SetString(name, previous)
-            kept.RemString(name)
+            if kept is not None:
+                kept.RemString(name)
         except Exception as exc:
             warn("could not give back the key of %s: %s" % (name, exc))
 

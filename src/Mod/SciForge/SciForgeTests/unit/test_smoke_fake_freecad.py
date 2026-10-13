@@ -68,6 +68,30 @@ class FakeCommand:
         return {"menuText": "Fake", "shortcut": self.shortcut}
 
 
+class FakeParams:
+    """A FreeCAD parameter group: Get/Set/Rem<Kind>(name), and Get<Kind>s() for the names."""
+
+    KINDS = ("Bool", "Int", "Unsigned", "Float", "String")
+
+    def __init__(self):
+        self.values = {kind: {} for kind in self.KINDS}
+
+    def __getattr__(self, attr):
+        prefix, kind = attr[:3], attr[3:]
+        if prefix not in ("Get", "Set", "Rem"):
+            raise AttributeError(attr)
+        if prefix == "Get" and kind.endswith("s") and kind[:-1] in self.KINDS:
+            return lambda: list(self.values[kind[:-1]])
+        if kind not in self.KINDS:
+            raise AttributeError(attr)
+        table = self.values[kind]
+        if prefix == "Get":
+            return lambda name, default=None: table.get(name, default)
+        if prefix == "Set":
+            return lambda name, value: table.__setitem__(name, value)
+        return lambda name: table.pop(name, None)
+
+
 class FakeWorkbench:
     # Real FreeCAD does not call the base __init__ either, so build lazily.
     def appendToolbar(self, name, cmds):
@@ -117,6 +141,8 @@ class SmokeTest(unittest.TestCase):
         fc.Version = lambda: ["1", "1", "4", "0000"]
         fc.getUserAppDataDir = lambda: user_dir
         fc.ActiveDocument = None
+        params = self.params = {}
+        fc.ParamGet = lambda path: params.setdefault(path, FakeParams())
 
         gui = types.ModuleType("FreeCADGui")
         gui.Workbench = FakeWorkbench
@@ -192,6 +218,10 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(shortcuts.bound_keys().get("F"), "SciForge_Fillet")
         self.assertEqual(shortcuts.bound_keys().get("F6"), "Std_ViewFitAll")
         self.assertEqual(self.commands["Sketcher_Trimming"].shortcut, "", "clashing key parked")
+        # The parked key is kept in the preferences too (FreeCAD saves a key set from Python
+        # when it quits: with SciForge still on, the empty key would be kept for good).
+        kept = self.params[shortcuts.PARKED]
+        self.assertEqual(kept.GetString("Sketcher_Trimming"), "T", "parked key kept")
 
         # Leaving for the Sketcher (editing a sketch) keeps the SciForge interface ...
         wb.Deactivated()
@@ -203,6 +233,15 @@ class SmokeTest(unittest.TestCase):
         shell.on_workbench("PartDesignWorkbench")
         self.assertEqual(shortcuts.bound_keys(), {})
         self.assertEqual(self.commands["Sketcher_Trimming"].shortcut, "T", "parked key restored")
+        self.assertEqual(kept.GetStrings(), [], "nothing left kept once given back")
+
+        # A session that ended with SciForge on: the key was saved empty, the kept one remains.
+        wb.Activated()
+        shortcuts.restore.__globals__["_bound"].clear()  # quit: nothing given back...
+        shortcuts.restore.__globals__["_parked"].clear()
+        self.assertEqual(self.commands["Sketcher_Trimming"].shortcut, "")
+        shell.on_workbench("PartDesignWorkbench")  # next start, SciForge off
+        self.assertEqual(self.commands["Sketcher_Trimming"].shortcut, "T", "given back next time")
 
     def test_ribbon_mode_adds_no_plain_toolbars(self):
         wb = self._load_workbench()
