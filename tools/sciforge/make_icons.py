@@ -1577,6 +1577,158 @@ def _():
     )
 
 
+# ---- MESH tab (SciForge's own drawings: a gold triangle mesh is "a mesh body") ---------------
+def mesh_patch(points, fill=None, edge=None, inner=()):
+    """A gold mesh piece: the outline `points` filled, its triangle lines from the first point
+    and the extra `inner` lines."""
+    fill = fill or GOLD[1]
+    edge = edge or GOLD[2]
+    out = poly(points, fill)
+    for a in points[2:-1]:
+        out += line(points[0][0], points[0][1], a[0], a[1], edge, 1.1)
+    for x1, y1, x2, y2 in inner:
+        out += line(x1, y1, x2, y2, edge, 1.1)
+    return out
+
+
+HEX = [(24, 7), (39, 15), (39, 33), (24, 41), (9, 33), (9, 15)]
+
+
+@icon("mesh_repair")
+def _():
+    # a mesh with a dark hole, and the green plus that fills it
+    pts = HEX
+    out = mesh_patch(pts, inner=[(24, 7, 24, 41), (9, 15, 39, 33), (39, 15, 9, 33)])
+    out += poly([(24, 24), (39, 15), (39, 33)], DARK)
+    return out + plus_badge(35, 35, 8)
+
+
+@icon("mesh_remesh")
+def _():
+    # coarse triangles on the left, an even fine grid on the right
+    out = poly([(6, 10), (24, 10), (24, 38), (6, 38)], GOLD[1])
+    out += line(6, 10, 24, 38, GOLD[2], 1.2) + line(6, 38, 24, 10, GOLD[2], 1.0)
+    out += poly([(24, 10), (42, 10), (42, 38), (24, 38)], GOLD[0])
+    for k in range(1, 4):
+        y = 10 + 7 * k
+        out += line(24, y, 42, y, GOLD[2], 0.9)
+    for k in range(1, 3):
+        x = 24 + 6 * k
+        out += line(x, 10, x, 38, GOLD[2], 0.9)
+    for k in range(4):
+        out += line(24, 17 + 7 * k - 7, 42, 17 + 7 * k, GOLD[2], 0.7)
+    return out
+
+
+@icon("mesh_reduce")
+def _():
+    # a dense mesh becomes a few big triangles
+    out = poly([(4, 12), (18, 12), (18, 36), (4, 36)], GOLD[1])
+    for k in range(1, 4):
+        out += line(4, 12 + 6 * k, 18, 12 + 6 * k, GOLD[2], 0.8)
+    out += line(4, 12, 18, 36, GOLD[2], 0.8) + line(11, 12, 11, 36, GOLD[2], 0.8)
+    out += arrow(20, 24, 28, 24, WHITE, 2.0, 4.5)
+    out += poly([(30, 12), (44, 12), (44, 36), (30, 36)], GOLD[1])
+    out += line(30, 12, 44, 36, GOLD[2], 1.2)
+    return out
+
+
+@icon("mesh_smooth")
+def _():
+    # a jagged mesh edge and the smooth line it becomes
+    out = poly(
+        [(6, 38), (6, 26), (12, 18), (18, 26), (24, 14), (30, 24), (36, 16), (42, 26), (42, 38)],
+        GOLD[1],
+    )
+    out += path("M6 22 C14 12 22 30 30 18 C36 9 40 14 42 20", "#7cc4f5", 2.6)
+    return out
+
+
+@icon("mesh_plane_cut")
+def _():
+    # a mesh piece and a blue plane through it, the part past the plane faded
+    out = mesh_patch(
+        [(8, 14), (30, 8), (40, 18), (40, 36), (18, 42), (8, 32)],
+        inner=[(30, 8, 18, 42), (40, 18, 8, 32)],
+    )
+    out += poly([(4, 30), (30, 4), (44, 12), (18, 38)], "#5aaee8", 'fill-opacity="0.75"')
+    return out
+
+
+@icon("mesh_separate")
+def _():
+    out = mesh_patch([(4, 14), (18, 10), (20, 30), (6, 36)])
+    out += mesh_patch([(28, 18), (42, 14), (44, 34), (30, 38)])
+    out += arrow(22, 6, 30, 6, WHITE, 2.0, 4) + arrow(24, 42, 16, 42, WHITE, 2.0, 4)
+    return out
+
+
+@icon("mesh_combine")
+def _():
+    out = mesh_patch([(4, 12), (26, 8), (28, 30), (8, 34)])
+    out += mesh_patch([(18, 18), (42, 14), (44, 38), (20, 40)], GOLD[0])
+    return out
+
+
+@icon("mesh_reverse_normal")
+def _():
+    out = mesh_patch([(8, 34), (24, 12), (40, 34)])
+    out += arrow(24, 30, 24, 4, "#7cc4f5", 2.4, 5)
+    out += arrow(30, 34, 30, 46, "#ef6f6c", 2.0, 4.5)
+    return out
+
+
+@icon("mesh_shell")
+def _():
+    # a hollow mesh ring
+    out = mesh_patch(HEX, inner=[(24, 7, 24, 41), (9, 15, 39, 33), (39, 15, 9, 33)])
+    out += poly([(24, 15), (32, 19.5), (32, 28.5), (24, 33), (16, 28.5), (16, 19.5)], DARK)
+    return out
+
+
+@icon("mesh_erase_fill")
+def _():
+    out = mesh_patch(HEX, inner=[(24, 7, 24, 41), (9, 15, 39, 33), (39, 15, 9, 33)])
+    out += circle(24, 24, 9, "#bfe5ff", "#2f7fbf", 1.6)
+    out += line(18, 24, 30, 24, "#2f7fbf", 1.0) + line(24, 18, 24, 30, "#2f7fbf", 1.0)
+    return out
+
+
+@icon("mesh_delete_faces")
+def _():
+    out = mesh_patch(HEX, inner=[(24, 7, 24, 41), (9, 15, 39, 33), (39, 15, 9, 33)])
+    out += poly([(24, 24), (39, 15), (39, 33)], RED)
+    return out + line(30, 21, 36, 27, WHITE, 2.0) + line(36, 21, 30, 27, WHITE, 2.0)
+
+
+@icon("mesh_face_groups")
+def _():
+    out = poly([(24, 24), (24, 7), (39, 15), (39, 33)], GOLD[1])
+    out += poly([(24, 24), (39, 33), (24, 41), (9, 33)], "#7cc4f5")
+    out += poly([(24, 24), (9, 33), (9, 15), (24, 7)], "#a8e6b0")
+    for a, b, c, d in ((24, 7, 24, 24), (39, 33, 24, 24), (9, 33, 24, 24)):
+        out += line(a, b, c, d, DARK, 1.6)
+    return out
+
+
+@icon("mesh_tessellate")
+def _():
+    # a solid block on the left becomes triangles on the right
+    out = block(0, 0, 0, 12, 12, 12, GREY, 12, 30, 0.9)
+    out += arrow(21, 24, 28, 24, WHITE, 2.0, 4.5)
+    out += mesh_patch([(30, 14), (44, 14), (44, 36), (30, 36)], inner=[(30, 25, 44, 25)])
+    return out
+
+
+@icon("mesh_section")
+def _():
+    # a mesh with the orange line where a plane cuts it, on a sketch plane
+    out = path("M4 34 L18 42 L44 30 L30 22 Z", STROKE, 1.4, extra='stroke-dasharray="3 2"')
+    out += mesh_patch([(12, 8), (34, 6), (38, 26), (14, 30)], inner=[(34, 6, 14, 30)])
+    out += path("M13 20 C20 16 28 22 37 17", "#f2a66a", 2.6)
+    return out
+
+
 @icon("not_available")
 def _():
     return circle(24, 24, 14, "none", "#7d8593", 2.4) + line(14, 34, 34, 14, "#7d8593", 2.4)

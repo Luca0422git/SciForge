@@ -44,7 +44,7 @@ BODY_TYPES = {"PartDesign::Body"}
 COMPONENT_TYPES = {"App::Part"}
 # Fusion lists mesh bodies beside solid bodies (Bodies folder) and canvases (reference
 # images) in a Canvases folder of their own.
-MESH_TYPES = {"Mesh::Feature"}
+MESH_TYPES = {"Mesh::Feature", "Mesh::FeaturePython"}
 CANVAS_TYPES = {"Image::ImagePlane"}
 ORIGIN_ROLES = ("Origin", "X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane")
 ORIGIN_LABELS = {
@@ -379,6 +379,7 @@ MENUS = {
     ],
     "mesh_body": [
         "Convert Mesh",
+        "Repair",
         "Edit Feature",
         "-",
         "Show/Hide",

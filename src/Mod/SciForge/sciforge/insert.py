@@ -286,8 +286,10 @@ def update_mesh_body(obj, unit, flip):
 
 
 def is_mesh_body(obj):
+    """A mesh body: an inserted mesh, or the MESH tab's step that holds a body now
+    (Mesh::FeaturePython, mesh.py)."""
     try:
-        return obj is not None and obj.TypeId == MESH_TYPE
+        return obj is not None and obj.TypeId in (MESH_TYPE, "Mesh::FeaturePython")
     except Exception:
         return False
 

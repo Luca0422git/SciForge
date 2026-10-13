@@ -195,8 +195,9 @@ def estimate_time_note(triangles):
 
 
 # -- the shapes to export ------------------------------------------------------------------
-def exportable_bodies(doc, selected_only=False, names=None):
-    """The bodies that have a solid: all shown ones of the design, or the chosen ones."""
+def exportable_bodies(doc, selected_only=False, names=None, meshes=True):
+    """The bodies that have a solid, then the mesh bodies (MESH tab; Fusion's 3D Print and
+    Save As Mesh take them too): all shown ones of the design, or the chosen ones."""
     found = []
     for body in bodies.list_bodies(doc):
         if names is not None and body.Name not in names:
@@ -205,12 +206,51 @@ def exportable_bodies(doc, selected_only=False, names=None):
             continue
         if bodies.has_solid(body):
             found.append(body)
+    if meshes:
+        try:
+            from . import mesh
+
+            found += mesh.exportable(doc, names)
+        except Exception as exc:
+            warn("export: mesh bodies left out (%s)" % exc)
     return found
+
+
+def is_mesh_body(body):
+    try:
+        return body.TypeId in ("Mesh::Feature", "Mesh::FeaturePython")
+    except Exception:
+        return False
+
+
+def can_export(body):
+    """A body with a solid, or a mesh body with triangles."""
+    if is_mesh_body(body):
+        return body.Mesh.CountFacets > 0
+    return bodies.has_solid(body)
+
+
+def solid_bodies(body_list):
+    return [b for b in body_list if not is_mesh_body(b)]
 
 
 def shape_of(body):
     """The body's solid in design coordinates."""
     return bodies.global_shape(body)
+
+
+def body_mesh(body, surface=None, normal=None, level=DEFAULT_REFINEMENT):
+    """The triangles a body is exported as: a solid meshed at the refinement, a mesh body's
+    own triangles as they are (where it stands in the design)."""
+    if is_mesh_body(body):
+        from . import mesh
+
+        return mesh.global_mesh(body)
+    return mesh_of(shape_of(body), surface, normal, level)
+
+
+def body_triangles(body_list, level=DEFAULT_REFINEMENT, surface=None, normal=None):
+    return sum(body_mesh(b, surface, normal, level).CountFacets for b in body_list)
 
 
 # -- meshes --------------------------------------------------------------------------------
@@ -351,7 +391,7 @@ def export_mesh_files(
     path = with_extension(path, extension)
     meshes = []
     for body in body_list:
-        mesh = mesh_of(shape_of(body), surface, normal, level)
+        mesh = body_mesh(body, surface, normal, level)
         if not mesh.isSolid():
             warn("%s: the mesh is not watertight (open edges); a slicer may complain" % body.Label)
         meshes.append((body.Label, mesh))
@@ -376,6 +416,12 @@ def export_step(body_list, path):
 
     if not body_list:
         raise ExportError("Pick at least one body to export.")
+    body_list = solid_bodies(body_list)
+    if not body_list:
+        raise ExportError(
+            "STEP holds solid bodies only: convert the mesh bodies first (MESH > Convert "
+            "Mesh), or export them as STL, 3MF or OBJ."
+        )
     path = with_extension(path, ".step")
     folder = os.path.dirname(path)
     if folder and not os.path.isdir(folder):
@@ -409,8 +455,9 @@ def export_everything(doc, folder, body_list=None, screenshot=None, base=None):
     os.makedirs(folder, exist_ok=True)
     files = export_everything_plan(folder, base)
     written = {}
-    export_step(body_list, files["step"])
-    written["step"] = files["step"]
+    if solid_bodies(body_list):  # mesh bodies have no STEP form
+        export_step(body_list, files["step"])
+        written["step"] = files["step"]
     for key, fmt in (("stl", "STL (Binary)"), ("3mf", "3MF"), ("obj", "OBJ")):
         export_mesh_files(doc, body_list, fmt, files[key])
         written[key] = files[key]

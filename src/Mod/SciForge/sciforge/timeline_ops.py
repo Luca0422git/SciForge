@@ -533,7 +533,7 @@ def snapshot(doc, deps=True):
         features.append(
             {
                 "name": obj.Name,
-                "label": obj.Label,
+                "label": _step_label(obj),
                 "type_id": "App::Part" if component else type_key(obj),
                 "body": body.Name if body is not None else None,
                 "key": _key(obj),
@@ -1183,6 +1183,11 @@ def profile_sketch(obj):
     return None
 
 
+# Helpers that read their step instead of being read by it (a mesh Separate's bodies): they
+# go when their step goes.
+GOES_WITH_STEP = ("MeshPiece",)
+
+
 def _helpers_of(doc, names, gone):
     """Helpers made for the steps ``names`` that nothing else uses."""
     found = []
@@ -1190,6 +1195,9 @@ def _helpers_of(doc, names, gone):
         obj = doc.getObject(n)
         if obj is None:
             continue
+        for o in obj.InList:
+            if getattr(o, ROLE, "") in GOES_WITH_STEP and o.Name not in gone and o not in found:
+                found.append(o)
         for o in obj.OutList:
             if not is_helper(o) or o.Name in gone or o in found:
                 continue
@@ -1674,12 +1682,26 @@ def suppress_many(doc, names, on):
 
 
 # -- rename ------------------------------------------------------------------------------
+# A mesh body's steps all carry the body's name as Label (the browser shows it); the step's
+# own name in the timeline is kept here (empty: Fusion's "Repair 2").
+STEP_LABEL = "SciForgeStepLabel"
+
+
+def _step_label(obj):
+    if STEP_LABEL in obj.PropertiesList:
+        return getattr(obj, STEP_LABEL, "") or obj.Name
+    return obj.Label
+
+
 def rename(doc, name, text):
     obj = doc.getObject(name)
     text = (text or "").strip()
-    if obj is None or not text or text == obj.Label:
+    if obj is None or not text or text == _step_label(obj):
         return False
-    _transaction(doc, "Rename %s" % obj.Label)
-    obj.Label = text
+    _transaction(doc, "Rename %s" % _step_label(obj))
+    if STEP_LABEL in obj.PropertiesList:
+        setattr(obj, STEP_LABEL, text)
+    else:
+        obj.Label = text
     doc.commitTransaction()
     return True
