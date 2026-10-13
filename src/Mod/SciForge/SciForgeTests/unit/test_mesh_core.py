@@ -304,6 +304,117 @@ class PlaneTests(unittest.TestCase):
             mc.fan_split((0, 1, 2), (1, 0), [7])
 
 
+def polyline_length(line):
+    return sum(mc.length(mc.sub(a, b)) for a, b in zip(line, line[1:]))
+
+
+class SectionTests(unittest.TestCase):
+    def section(self, pts, facets, z, normal=(0, 0, 1)):
+        segments = mc.plane_section_segments(pts, facets, (0, 0, z), normal, 1e-9)
+        return mc.chain_segments(segments, 1e-7)
+
+    def test_box_through_the_middle(self):
+        lines = self.section(*box(), 2.5)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0][0], lines[0][-1])  # closed
+        self.assertAlmostEqual(polyline_length(lines[0]), 60.0)
+
+    def test_flat_bottom_gives_its_outline_either_way(self):
+        for normal in [(0, 0, 1), (0, 0, -1)]:
+            lines = self.section(*box(), 0.0, normal)
+            self.assertEqual(len(lines), 1, normal)
+            self.assertAlmostEqual(polyline_length(lines[0]), 60.0)  # no diagonals
+
+    def test_ring_of_corners_on_the_plane_is_not_doubled(self):
+        pts, facets = sphere(10.0, 16)  # a ring of 32 corners at z = 0
+        lines = self.section(pts, facets, 0.0)
+        self.assertEqual(len(lines), 1)
+        self.assertAlmostEqual(polyline_length(lines[0]), 32 * 20.0 * math.sin(math.pi / 32))
+
+    def test_touching_gives_nothing(self):
+        self.assertEqual(self.section(*box(), 9.0), [])  # above the box
+        # two faces meeting at an edge that lies on the plane, both above it (a ridge)
+        pts = [(0, 0, 0), (1, 0, 0), (0.5, 1, 1), (0.5, -1, 1)]
+        self.assertEqual(self.section(pts, [(0, 1, 2), (1, 0, 3)], 0.0), [])
+
+    def test_a_face_on_the_plane_gives_its_outline(self):
+        lines = self.section(*box(), 5.0)  # the plane on the top face
+        self.assertEqual(len(lines), 1)
+        self.assertAlmostEqual(polyline_length(lines[0]), 60.0)
+
+    def test_two_bodies_two_lines(self):
+        a_pts, a_facets = box()
+        b_pts, b_facets = box(30, 0, 0, 40, 10, 5)
+        pts = a_pts + b_pts
+        facets = a_facets + [tuple(i + len(a_pts) for i in f) for f in b_facets]
+        lines = self.section(pts, facets, 1.0)
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(sorted(round(polyline_length(x), 6) for x in lines), [40.0, 60.0])
+
+    def test_chain_open_line_and_doubled_segment(self):
+        segments = [
+            ((0, 0, 0), (1, 0, 0)),
+            ((1, 0, 0), (2, 0, 0)),
+            ((2, 0, 0), (1, 0, 0)),  # the same segment met again
+        ]
+        lines = mc.chain_segments(segments, 1e-6)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(sorted([lines[0][0], lines[0][-1]]), [(0, 0, 0), (2, 0, 0)])
+        self.assertEqual(len(lines[0]), 3)
+
+
+class HelperTests(unittest.TestCase):
+    def test_offset_box_out_and_in(self):
+        pts, facets = box()
+        out = mc.offset_points(pts, facets, 1.0)
+        self.assertAlmostEqual(mc.signed_volume(out, facets), 22 * 12 * 7, places=2)
+        inner = mc.offset_points(pts, facets, -1.0)
+        self.assertAlmostEqual(mc.signed_volume(inner, facets), 18 * 8 * 3, places=2)
+
+    def test_fill_loop_closes_a_hole(self):
+        pts, facets = box()
+        open_facets = [f for f in facets if not all(pts[i][2] == 5.0 for i in f)]  # no top
+        loops = mc.boundary_loops(open_facets)
+        self.assertEqual(len(loops), 1)
+        patch = mc.fill_loop(pts, loops[0])
+        self.assertTrue(closed(open_facets + patch))
+        self.assertAlmostEqual(mc.signed_volume(pts, open_facets + patch), 1000.0)
+
+    def test_triangulate_l_shape(self):
+        poly = [(0, 0), (2, 0), (2, 1), (1, 1), (1, 2), (0, 2)]
+        tris = mc.triangulate_polygon_2d(poly)
+        self.assertEqual(len(tris), 4)
+        area = sum(mc.signed_area_2d([poly[a], poly[b], poly[c]]) for a, b, c in tris)
+        self.assertAlmostEqual(area, 3.0)
+
+    def test_simplify_polyline(self):
+        line = [(float(x), 1e-6 * (x % 2), 0.0) for x in range(11)]
+        self.assertEqual(mc.simplify_polyline(line, 1e-3), [line[0], line[-1]])
+        square = [(0, 0, 0), (5, 0, 0), (10, 0, 0), (10, 5, 0), (10, 10, 0), (0, 10, 0)]
+        self.assertEqual(
+            sorted(mc.simplify_polyline(square, 1e-6, closed=True)),
+            sorted([(0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0)]),
+        )
+
+    def test_find_facets_by_centre(self):
+        pts, facets = box()
+        picks = [mc.centroid(pts, facets[3]), mc.centroid(pts, facets[7]), (99.0, 99.0, 99.0)]
+        found, lost = mc.find_facets(pts, facets, picks, 1e-6)
+        self.assertEqual(sorted(found), [3, 7])
+        self.assertEqual(lost, 1)
+
+    def test_brush_takes_the_faces_nearby(self):
+        pts, facets = sphere(10.0, 16)
+        few = mc.facets_near(pts, facets, 0, 2.0)
+        self.assertIn(0, few)
+        self.assertLess(len(few), len(facets) // 10)
+        self.assertEqual(len(mc.facets_near(pts, facets, 0, 100.0)), len(facets))
+
+    def test_match_points_2d(self):
+        targets = [(0.0, 0.0), (1.0, 0.0)]
+        self.assertEqual(mc.match_points_2d(targets, [(1.0000001, 0.0), (5.0, 5.0)], 1e-4), {0: 1})
+
+
 class RebuildTests(unittest.TestCase):
     def test_blocky_box_is_exact(self):
         pts, facets = box()

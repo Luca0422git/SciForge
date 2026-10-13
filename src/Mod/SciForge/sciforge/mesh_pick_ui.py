@@ -114,7 +114,10 @@ class FacePickPanel(mesh_ui.MeshPanel):
             self._neighbours = core.facet_neighbours(facets)
         radius = max(float(self.brush.value()), 0.0)
         found = core.facets_near(points, facets, seed, radius, self._neighbours)
-        remove = bool(QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ControlModifier)
+        held = getattr(self, "pick_modifiers", None)
+        if held is None:
+            held = QtWidgets.QApplication.keyboardModifiers()
+        remove = bool(held & QtCore.Qt.ControlModifier)
         current = set(self.picked_faces)
         if remove:
             current -= set(found)

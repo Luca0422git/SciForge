@@ -66,6 +66,11 @@ class _Observer:
 
     def addSelection(self, doc, obj, sub, pnt):
         panel = self.panel
+        try:
+            # the keys held at the click itself (Ctrl+click takes faces off)
+            panel.pick_modifiers = QtWidgets.QApplication.keyboardModifiers()
+        except Exception:
+            pass
         QtCore.QTimer.singleShot(30, lambda p=pnt: panel.selection_changed(p))
 
 

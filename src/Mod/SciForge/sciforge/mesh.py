@@ -1842,12 +1842,11 @@ def install_watch():
 def section_polylines(mesh, origin, normal, tolerance):
     """Where the plane cuts the mesh, as simplified polylines ([[points]], closed ones end
     where they start)."""
-    import FreeCAD as App
-
-    sections = mesh.crossSections([(App.Vector(*origin), App.Vector(*normal))], 1e-4, True)
+    points, facets = topology(mesh)
+    eps = max(size_of(mesh) * 1e-7, 1e-9)  # STL corners are single precision
+    segments = core.plane_section_segments(points, facets, origin, normal, eps)
     lines = []
-    for polyline in sections[0] if sections else []:
-        pts = [(p.x, p.y, p.z) for p in polyline]
+    for pts in core.chain_segments(segments, max(eps * 10.0, 1e-9)):
         if len(pts) < 2:
             continue
         closed = core.length(core.sub(pts[0], pts[-1])) <= tolerance

@@ -749,6 +749,99 @@ def fill_loop(points, loop):
     return [(loop[a], loop[c], loop[b]) for a, b, c in triangles]
 
 
+def plane_section_segments(points, facets, origin, normal, eps):
+    """Where the plane cuts the facets, as segments [(p, q)]. Points within `eps` of the plane
+    count as on it. An edge lying in the plane comes once, and only where the surface really
+    crosses or ends there: between faces on both sides, or at the rim of faces lying in the
+    plane (a ring of corners on the plane is not doubled; a flat bottom gives its outline,
+    not its triangles' diagonals; where the surface only touches the plane, nothing)."""
+    n = unit(normal)
+    dist = []
+    for p in points:
+        x = dot(sub(p, origin), n)
+        dist.append(0.0 if abs(x) <= eps else x)
+    segments = []
+    in_plane = {}  # edge on the plane -> the side of each face it belongs to (0: in the plane)
+    for a, b, c in facets:
+        da, db, dc = dist[a], dist[b], dist[c]
+        if (da > 0 and db > 0 and dc > 0) or (da < 0 and db < 0 and dc < 0):
+            continue
+        on = [v for v, dv in ((a, da), (b, db), (c, dc)) if dv == 0.0]
+        if len(on) == 3:
+            for u, v in ((a, b), (b, c), (c, a)):
+                in_plane.setdefault((min(u, v), max(u, v)), []).append(0)
+            continue
+        if len(on) == 2:
+            third = [v for v in (a, b, c) if v not in on][0]
+            edge = (min(on), max(on))
+            in_plane.setdefault(edge, []).append(1 if dist[third] > 0 else -1)
+            continue
+        cut = [points[v] for v in on]
+        for u, v in ((a, b), (b, c), (c, a)):
+            if u > v:
+                u, v = v, u  # the same numbers for the face on the other side of the edge
+            du, dv = dist[u], dist[v]
+            if du * dv < 0:
+                t = du / (du - dv)
+                cut.append(add(points[u], scale(sub(points[v], points[u]), t)))
+        if len(cut) == 2 and length(sub(cut[0], cut[1])) > eps:
+            segments.append((cut[0], cut[1]))
+    for (u, v), sides in in_plane.items():
+        if len(set(sides)) > 1 or (len(sides) == 1 and sides[0] != 0):
+            segments.append((points[u], points[v]))
+    return segments
+
+
+def chain_segments(segments, quantum):
+    """Join segments sharing ends (within `quantum`) into polylines; a segment met twice
+    counts once. Open lines first, then closed ones (which end where they start)."""
+
+    def key(p):
+        return (round(p[0] / quantum), round(p[1] / quantum), round(p[2] / quantum))
+
+    where = {}
+    edges = {}
+    for p, q in segments:
+        kp, kq = key(p), key(q)
+        if kp == kq:
+            continue
+        where.setdefault(kp, p)
+        where.setdefault(kq, q)
+        edges.setdefault((min(kp, kq), max(kp, kq)), True)
+    links = {}
+    for kp, kq in edges:
+        links.setdefault(kp, []).append(kq)
+        links.setdefault(kq, []).append(kp)
+    used = set()
+
+    def walk(start):
+        line = [start]
+        here = start
+        while True:
+            step = None
+            for other in links.get(here, []):
+                edge = (min(here, other), max(here, other))
+                if edge not in used:
+                    step = other
+                    used.add(edge)
+                    break
+            if step is None:
+                return line
+            line.append(step)
+            here = step
+            if here == start:
+                return line
+
+    lines = []
+    starts = [k for k in links if len(links[k]) % 2 == 1] + list(links)
+    for start in starts:
+        while any((min(start, o), max(start, o)) not in used for o in links[start]):
+            keys = walk(start)
+            if len(keys) >= 2:
+                lines.append([where[k] for k in keys])
+    return lines
+
+
 def simplify_polyline(points, tolerance, closed=False):
     """Douglas-Peucker: the fewest points keeping the line within `tolerance` of the original
     (a section of a dense mesh would otherwise put thousands of lines in a sketch)."""
