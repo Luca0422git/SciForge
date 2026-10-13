@@ -9,6 +9,8 @@ The command looks at what is clicked, like Fusion:
                               at 0, and OK at 0 waits for a distance (no empty step)
   a face made by a fillet  -> edit that fillet's radius (or a chamfer's size)
   edges                    -> new fillet, the distance is the radius
+  sketch areas (profiles)  -> Extrude of all of them (also areas picked inside the open
+                              sketch, or a shaded area clicked while the dialog waits)
 Nothing selected: the dialog opens and waits. Click more faces (or edges) to add them,
 click a picked one again to drop it. Tangent Chain also picks the faces that continue
 a picked face smoothly (a filleted run). Problems are shown in the dialog.
@@ -192,7 +194,26 @@ class PressPullPanel(Panel):
         self.picker = None
         if self.mode is None:
             self._shade_profiles()
+            self._say_what_to_click()
         self._watch_selection()
+
+    def _say_what_to_click(self):
+        """Nothing picked yet. With no solid, sketch areas are all Press Pull can use: say
+        so (they are shaded, a click extrudes one) instead of asking for a solid."""
+        if self.mode is not None or self._closed:
+            return
+        if self.body is not None and self.tip is not None and not self.tip.Shape.isNull():
+            return
+        if self.picker is not None and self.picker.regions:
+            self.message.setText("")
+            self.what.setText("Click a sketch area (shaded blue) to extrude it.")
+        else:
+            self.message.setText("Make a solid first (Create Sketch, then Extrude).")
+
+    def picks_sketch_areas(self):
+        """Sketch areas (profiles) can be clicked until faces or edges are picked; otherwise a click
+        goes through them to what is behind (sketch_area_pick)."""
+        return not self._closed and self.mode is None
 
     def feature(self):
         return self.target
@@ -224,7 +245,7 @@ class PressPullPanel(Panel):
                 Gui.ActiveDocument.ActiveView,
                 sketches,
                 lambda sketch, sub: QtCore.QTimer.singleShot(
-                    0, lambda: self._to_extrude(sketch, sub)
+                    0, lambda: self._to_extrude([(sketch, sub)])
                 ),
                 occluder=occluder,
             )
@@ -250,8 +271,7 @@ class PressPullPanel(Panel):
         picks = _picks()
         if picks:
             self._take(picks)
-        elif self.body is None or self.tip is None or self.tip.Shape.isNull():
-            self.message.setText("Make a solid first (Create Sketch, then Extrude).")
+        # (nothing picked and no solid: _say_what_to_click, once the sketch areas are shaded)
         try:
             Gui.Selection.clearSelection()
         except Exception:
@@ -260,11 +280,15 @@ class PressPullPanel(Panel):
     def _take(self, picks):
         """Use clicked faces/edges: the first pick decides what Press Pull does."""
         if self.mode is None:
-            for obj, short, _point in picks:
-                if obj.isDerivedFrom("Sketcher::SketchObject") and short.startswith("InternalFace"):
-                    # Fusion: Press Pull on a sketch profile is an Extrude.
-                    QtCore.QTimer.singleShot(0, lambda o=obj, s=short: self._to_extrude(o, s))
-                    return
+            areas = [
+                (obj, short)
+                for obj, short, _point in picks
+                if obj.isDerivedFrom("Sketcher::SketchObject") and short.startswith("InternalFace")
+            ]
+            if areas:
+                # Fusion: Press Pull on sketch profiles is an Extrude of all of them.
+                QtCore.QTimer.singleShot(0, lambda: self._to_extrude(areas))
+                return
         for obj, short, point in picks:
             if obj.isDerivedFrom("Sketcher::SketchObject"):
                 continue  # sketch lines are not part of the solid
@@ -273,8 +297,8 @@ class PressPullPanel(Panel):
             elif short.startswith("Edge"):
                 self._edge_picked(obj, short)
 
-    def _to_extrude(self, sketch, short):
-        """Close Press Pull and start Extrude on the sketch (its clicked area, if any)."""
+    def _to_extrude(self, profiles):
+        """Close Press Pull and start Extrude on the sketch areas [(sketch, "InternalFaceN")]."""
         if self._closed:
             return
         try:
@@ -282,8 +306,8 @@ class PressPullPanel(Panel):
 
             doc = self.doc
             self.reject()
-            Gui.Control.showDialog(ExtrudePanel(doc, profiles=[(sketch, short)]))
-            log("press pull on a sketch area: extrude started")
+            Gui.Control.showDialog(ExtrudePanel(doc, profiles=list(profiles)))
+            log("press pull on %d sketch area(s): extrude started" % len(profiles))
         except Exception as exc:
             warn("press pull on a sketch: %s" % exc)
 
@@ -523,7 +547,7 @@ class PressPullPanel(Panel):
                 return  # the click was on a sketch area: Extrude takes over
             self._take(picks)  # a face of any body, also when the active body is empty
             if self.mode is None and (self.tip is None or self.tip.Shape.isNull()):
-                self.message.setText("Make a solid first (Create Sketch, then Extrude).")
+                self._say_what_to_click()
             if self.mode is not None:
                 self._unshade()  # faces or edges chosen: sketch areas no longer apply
         except Exception as exc:
@@ -727,13 +751,40 @@ class PressPullCommand:
 
     def Activated(self):
         try:
+            from . import extrude_ui
+
+            # Q in a sketch with areas picked in it (Fusion): Press Pull on sketch profiles
+            # is an Extrude of exactly those (read before the sketch closes).
+            sketch = extrude_ui._sketch_in_edit()
+            picked = extrude_ui.sketch_areas_picked(sketch)
             if not commands.finish_open_dialog():
                 return
             doc = App.ActiveDocument
+            profiles = extrude_ui.sketch_areas_profiles(sketch, picked)
+            if profiles:
+                # Opened right after this command returns, in an undo step of its own: FreeCAD
+                # keeps the step of leaving the sketch open until then, and a dialog opened
+                # inside it would undo that too on Cancel (the sketch hidden). As E does.
+                QtCore.QTimer.singleShot(0, lambda: _extrude_areas(doc, sketch, profiles))
+                return
             Gui.Control.showDialog(PressPullPanel(doc))
             log("press pull started")
         except Exception as exc:
             warn("Press Pull failed to start: %s" % exc)
+
+
+def _extrude_areas(doc, sketch, profiles):
+    try:
+        from . import extrude_ui
+
+        if doc is None or doc.Name not in App.listDocuments():
+            return
+        if Gui.Control.activeDialog() and not commands.finish_open_dialog():
+            return
+        Gui.Control.showDialog(extrude_ui.ExtrudePanel(doc, profiles=profiles, sketch=sketch))
+        log("press pull on %d picked sketch area(s): extrude started" % len(profiles))
+    except Exception as exc:
+        warn("Press Pull failed to start: %s" % exc)
 
 
 def edit(obj):

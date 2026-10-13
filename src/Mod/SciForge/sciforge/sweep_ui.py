@@ -722,6 +722,11 @@ class SweepPanel(Panel):
             )
         return ""
 
+    def picks_sketch_areas(self):
+        """Sketch areas (profiles) can be clicked while the Profile box takes the clicks; otherwise
+        a click goes through them to what is behind (sketch_area_pick)."""
+        return not self._closed and self.active == "profiles"
+
     def feature(self):
         return self.target
 

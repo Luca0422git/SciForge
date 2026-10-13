@@ -10,7 +10,11 @@ a Fusion sketch:
   (Enter keeps it, Esc keeps the measured value). Double-clicking a dimension opens
   the same box instead of FreeCAD's "Insert length" window.
 - Closed regions (profiles) are shaded light blue while you draw, also where curves
-  cross (sketch_regions.py).
+  cross (sketch_regions.py). A click inside one (not on a curve) picks it for E / Q,
+  Ctrl or Shift + click adds more (sketch_areas.py). After Finish Sketch the areas stay
+  clickable: FreeCAD's sketch areas (MakeInternals) are on for every sketch; with no
+  command running they come before the face they are drawn on, and commands that cannot
+  use them click through them (sketch_area_pick.py).
 - The SKETCH PALETTE sits at the top of the sketch panel (sketch_palette.py): Look At,
   grid, snap, slice, show profiles/points/dimensions/constraints/projected geometry.
 - Sketch curves use Fusion's colours on the dark background (blue = not fully
@@ -97,6 +101,15 @@ PARAMS = [
     # selection"...) as blocking message boxes instead.
     (NOTIFICATIONS, "Bool", "NonIntrusiveNotificationsEnabled", True),
     (NOTIFICATIONS, "Int", "MaxOpenNotifications", 0),
+    # Fusion: every closed area of a sketch is a profile you can click, also after Finish
+    # Sketch and before any command (then E or Q uses it). FreeCAD can do that when a
+    # sketch makes its "internal faces" (MakeInternals): new sketches get it from this
+    # preference, older ones when they are opened (sketch_areas.ensure_areas).
+    (SKETCHER, "Bool", "MakeInternals", True),
+    # ... and shades those areas in this colour (RRGGBBAA, AA = opacity): the light blue
+    # of SciForge's profiles (ProfileShading.FILL), strong enough to see on the dark
+    # background. FreeCAD's own is a dim 0x54ABFF40.
+    (SKETCHER_GENERAL, "Unsigned", "SketchFaceColor", 0x73C4FF80),
 ]
 
 # Sketch palette options (Fusion's defaults); remembered between sessions.
@@ -225,6 +238,14 @@ def enable():
         _state["app_observer"] = app_observer
     except Exception as exc:
         warn("sketch mode: cannot follow sketch editing: %s" % exc)
+    try:
+        from . import sketch_area_pick
+
+        # Fusion: a finished sketch's areas come before the face they are drawn on, and
+        # commands that cannot use them see through them
+        sketch_area_pick.enable()
+    except Exception as exc:
+        warn("sketch areas: %s" % exc)
     sketch = editing_sketch()
     if sketch is not None:
         _start(sketch)
@@ -235,6 +256,12 @@ def disable():
         return
     _state["on"] = False
     _end()
+    try:
+        from . import sketch_area_pick
+
+        sketch_area_pick.disable()
+    except Exception as exc:
+        warn("sketch areas: %s" % exc)
     for key, remove in (
         ("observer", Gui.removeDocumentObserver),
         ("app_observer", App.removeDocumentObserver),
@@ -299,6 +326,20 @@ def current():
     return session
 
 
+def picked_areas(sketch):
+    """The areas picked inside the open sketch `sketch` (a point inside each, sketch mm),
+    for E / Q to extrude (sketch_areas.profiles turns them into the sketch's areas once
+    it is closed); [] when none are picked or another sketch is open."""
+    session = current()
+    if session is None or sketch is None or session.sketch is not sketch:
+        return []
+    try:
+        return session.areas.points()
+    except Exception as exc:
+        warn("sketch areas: %s" % exc)
+        return []
+
+
 class _GuiObserver:
     """FreeCAD tells us when a sketch opens/closes; the work runs later from a timer."""
 
@@ -310,12 +351,32 @@ class _GuiObserver:
                 QtCore.QTimer.singleShot(0, lambda: _start_named(doc, name))
         except Exception as exc:
             warn("sketch mode: %s" % exc)
+        _areas_later("update")  # (a sketch is open: no shift, areas let clicks through)
 
     def slotResetEdit(self, vp):
         try:
             QtCore.QTimer.singleShot(0, _end_if_closed)
         except Exception as exc:
             warn("sketch mode: %s" % exc)
+        _areas_later("update")
+
+    def slotDeletedDocument(self, doc):
+        try:
+            from . import sketch_area_pick
+
+            sketch_area_pick.forget(doc.Document.Name)
+        except Exception as exc:
+            warn("sketch areas: %s" % exc)
+
+
+def _areas_later(name):
+    """sketch_area_pick.<name>() from a Qt timer (not inside FreeCAD's signal)."""
+    try:
+        from . import sketch_area_pick
+
+        sketch_area_pick.later(getattr(sketch_area_pick, name))
+    except Exception as exc:
+        warn("sketch areas: %s" % exc)
 
 
 class _AppObserver:
@@ -624,6 +685,11 @@ class SketchSession:
         self.last_press = None
         self._enter_follow = False
         self.shading = ProfileShading(self)
+        from .sketch_areas import AreaPicker, ensure_areas
+
+        # Fusion: click inside a closed area to pick it as a profile for E / Q
+        self.areas = AreaPicker(self)
+        ensure_areas(sketch)  # an older sketch: its areas can be clicked after Finish Sketch
         self.display = DisplayOptions(self)
         self.polygon = PolygonPreview(self)
         from .sketch_line import LineChain
@@ -676,6 +742,7 @@ class SketchSession:
             return
         try:
             self.shading.update()
+            self.areas.refresh(self.shading.shaded)
             self.display.apply()
         except Exception as exc:
             warn("sketch display: %s" % exc)
@@ -782,6 +849,8 @@ class SketchSession:
                 self.set_slice(value)
             elif name == "profile":
                 self.shading.set_visible(value)
+                if not value:
+                    self.areas.clear()  # hidden profiles cannot stay picked
             elif name in ("points", "dimensions", "constraints", "projected"):
                 self.display.apply()
         except Exception as exc:
@@ -886,6 +955,7 @@ class SketchSession:
         self.line.stop()
         if self.infer is not None:
             self.infer.reset()
+        self.areas.clear()  # Fusion: Esc also drops the picked profiles
         try:
             from . import sketch_pick_ui, sketch_tools_ui
 
@@ -1090,7 +1160,7 @@ class SketchSession:
             pass
         self.close_editor(commit=True)
         remove_stray_editors(self.gl)
-        for part in (self.polygon, self.shading, self.display):
+        for part in (self.polygon, self.areas, self.shading, self.display):
             try:
                 part.remove()
             except Exception as exc:
@@ -1198,7 +1268,17 @@ class _ViewFilter(QtCore.QObject):
             if session.infer is not None and session.infer.mouse(obj, event):
                 return True
             kind = event.type()
+            if kind == QtCore.QEvent.MouseMove:
+                if event.buttons() == QtCore.Qt.NoButton:
+                    session.areas.moved(event.position().toPoint())
+                return False
+            if kind == QtCore.QEvent.Leave:
+                session.areas.left()
+                return False
             if kind == QtCore.QEvent.MouseButtonPress:
+                if event.button() == QtCore.Qt.LeftButton:
+                    # (before the value box closes: that click is not a pick)
+                    session.areas.pressed(event.position().toPoint(), event.modifiers())
                 session.last_press = event.position().toPoint()
                 if session.editor is not None and not session.editor.underMouse():
                     QtCore.QTimer.singleShot(0, lambda: session.close_editor(commit=True))
@@ -1207,6 +1287,8 @@ class _ViewFilter(QtCore.QObject):
                     self.right_pressed = event.globalPosition().toPoint()
                     return True
             elif kind == QtCore.QEvent.MouseButtonRelease:
+                if event.button() == QtCore.Qt.LeftButton:
+                    session.areas.released(event.position().toPoint())
                 if event.button() == QtCore.Qt.RightButton and self.right_pressed is not None:
                     start, self.right_pressed = self.right_pressed, None
                     pos = event.globalPosition().toPoint()
@@ -1760,6 +1842,7 @@ class ProfileShading:
         self.root.addChild(self.coords)
         self.root.addChild(self.faces)
         self.count = 0
+        self.shaded = []
         self.attached = False
 
     def set_visible(self, on):
@@ -1788,11 +1871,13 @@ class ProfileShading:
         faces = sketch_regions.sketch_regions(sketch)
         self.count = len(faces)
         points, index = [], []
+        self.shaded = []  # (face, [(x, y)], triangles) per area: what can be picked
         for face in faces:
             try:
                 verts, tris = face.tessellate(0.05)
             except Exception:
                 continue
+            self.shaded.append((face, [(v.x, v.y) for v in verts], tris))
             base = len(points)
             points += [(v.x, v.y, 0.0) for v in verts]
             for a, b, c in tris:
