@@ -258,7 +258,7 @@ class Inference:
             start = self.last_start
         if tool == "line" and self.arc.handle(obj, event, ctrl, start):
             return SWALLOW
-        step = self._step(polylines) if tool is not None else None
+        step = self._step(start) if tool is not None else None
         if ctrl and setting("CtrlFree"):
             self.overlay.clear()
             self.last = None
@@ -338,13 +338,13 @@ class Inference:
             polylines = self._polylines()
         return core.preview_anchor(self.kind, polylines)
 
-    def _step(self, polylines=None):
+    def _step(self, start):
         """Which click of the shape is being placed (0-based), or None when the tool
-        asks for a size now. The line's state comes from its preview (FreeCAD refuses
-        a zero-length second click, so counting clicks could drift); the others count
-        their clicks since the shape began."""
+        asks for a size now. The line's state comes from its preview (`start`: FreeCAD
+        refuses a zero-length second click, so counting clicks could drift); the others
+        count their clicks since the shape began."""
         if self.kind == "line":
-            return 0 if self._start_point(polylines) is None else 1
+            return 0 if start is None else 1
         n = len(self.placed)
         return n if n < core.POINTS.get(self.kind, 0) else None
 
