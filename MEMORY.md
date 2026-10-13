@@ -2204,8 +2204,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   preview not ready, a Ctrl line level only there). Since the four-way split (#57): 7 reds in
   43 finished runs.
 - Process: the three agents again built in isolated worktrees with reviewers; two review
-  rounds (orbit, sketch) and the extrude agent's own final batch each found real bugs. From
-  here on (Luca's decision above) CI is the overall test; merges go out at once.
+  rounds (orbit, sketch) and the extrude agent's own final batch each found real bugs.
+  Luca first asked for CI as the only test ("try the features asap"); after two red runs in
+  a row (#102, #104) he said "if the tests keep the updates from failing, bring back the
+  tests": **every scenario touched by a change, and the whole area it belongs to (all
+  sketch_* for a sketch change), runs locally before a push**; CI stays the full run.
 - **CI #102 (a5c0b167cf) red, 12 scenarios; the lessons.** (1) `on_top_root` had put the
   SoPickStyle at child 0 of every handle root; six extrude scenarios read the handle's place
   from `root.getChild(0).translation` and broke. Fixed by giving `on_top_root(coin, place)`
@@ -2223,6 +2226,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   (nothing under the mouse, no face toggled). Kept as product behaviour (the arrow is drawn
   there now, so it is grabbable there); the test clicks beside the arrow. Rule for tests:
   never click a face on a handle's screen line, even where the handle is inside the part.
+- **CI #104 (200b29b656): one red check**, sketch_infer_tools C (the Circle tool's level
+  guide from a hovered end): the test's `hover()` sent one move onto the point and GitHub's
+  slower machine lost it while the tool was still starting (passes locally). `hover()` now
+  sends several small moves and re-hovers until `infer.acquired` holds the point, as a hand
+  does. Rule for tests: a hover that must acquire a point is verified, never assumed.
 - Housekeeping: the agents' worktrees (`.claude/worktrees/agent-*`, all clean, branches
   merged) and the two stale ones from the first inspect / primitives QA rounds
   (`wf_f0015b22-593-18/19`, superseded by inspect_qa* / primitives_qa* on the main branch)

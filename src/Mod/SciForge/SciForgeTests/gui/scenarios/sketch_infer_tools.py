@@ -71,13 +71,37 @@ def approach(raw, towards=V(-1.0, 1.5, 0)):
         move(g(raw + towards * f))
 
 
+def acquired_point(point):
+    """True when the inference's newest acquired vertex is `point` (sketch coordinates)."""
+    try:
+        sess = session()
+        keys = sess.infer.acquired
+        keyed = sess.infer._geometry()[3]
+        if not keys or keys[-1] not in keyed:
+            return False
+        x, y = keyed[keys[-1]][0], keyed[keys[-1]][1]
+        return si.near(x, point.x, 1e-6) and si.near(y, point.y, 1e-6)
+    except Exception:
+        return False
+
+
 def hover(point):
-    """Rest the mouse on a sketch point, coming from the side (acquires it)."""
-    for f in (2.0, 1.0, 0.0):
-        move(g(point + V(1.0, 0.6, 0) * f))
+    """Rest the mouse on a sketch point, coming from the side (acquires it). A hand sends
+    many moves while it comes to rest; a few are sent here, and the acquire is checked:
+    GitHub's slower machine once dropped a single move onto the point (CI #104) while the
+    tool was still starting, and no guide followed."""
     from PySide6 import QtTest
 
+    for f in (2.0, 1.0, 0.5, 0.2, 0.0):
+        move(g(point + V(1.0, 0.6, 0) * f))
     QtTest.QTest.qWait(80)
+    for _ in range(4):
+        if acquired_point(point):
+            return
+        QtTest.QTest.qWait(150)
+        for f in (0.3, 0.1, 0.0):
+            move(g(point + V(1.0, 0.6, 0) * f))
+        QtTest.QTest.qWait(80)
 
 
 def shot(name):
