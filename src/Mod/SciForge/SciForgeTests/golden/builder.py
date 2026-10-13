@@ -14,7 +14,6 @@ Conventions (documented for model authors in golden/README.md):
   * Every feature gets Refine = True, because Fusion never leaves the extra
     seam faces FreeCAD keeps by default (face counts are compared exactly).
 """
-
 import math
 
 import FreeCAD as App

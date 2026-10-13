@@ -19,6 +19,7 @@ origin, and a plate 40 x 30 x 10 at x = 60 with a through hole r 5 in its middle
   G  Without history (the design's menu): Q on the plate's top, 2, OK: baked into the
      body, no step; Undo.
 """
+
 import math
 
 import FreeCAD as App
@@ -54,9 +55,7 @@ def body_of_import(name):
 # -- setup: the STEP files and FreeCAD's import ---------------------------------------------
 def setup_files():
     cube_shape = Part.makeBox(20, 20, 20)
-    plate_shape = Part.makeBox(40, 30, 10, V(60, 0, 0)).cut(
-        Part.makeCylinder(5, 10, V(80, 15, 0))
-    )
+    plate_shape = Part.makeBox(40, 30, 10, V(60, 0, 0)).cut(Part.makeCylinder(5, 10, V(80, 15, 0)))
     state["cube_file"] = d.step_file("cube", cube_shape)
     state["plate_file"] = d.step_file("plate", plate_shape)
 
@@ -100,7 +99,9 @@ def a_done():
         return
     h.check("20 x 20 x 25", d.near(d.volume(body), 10000), d.volume(body))
     titles = [x for x in t.titles() if x in ("Base Feature 1", "Press Pull 1")]
-    h.check("Base Feature then Press Pull", titles == ["Base Feature 1", "Press Pull 1"], t.titles())
+    h.check(
+        "Base Feature then Press Pull", titles == ["Base Feature 1", "Press Pull 1"], t.titles()
+    )
     h.check("the imported solid is hidden", not d.shown(state["cube"]))
     h.check("the body shows", d.shown(body))
     h.check("the body is in the browser", body.Label in t.labels(), t.labels())
@@ -226,8 +227,11 @@ def f_edit():
 
 def f_edit_dialog():
     p = d.press_pull_panel()
-    h.check("the Offset Face dialog edits it", p is not None and p.title == "Offset Face"
-            and p.editing, p)
+    h.check(
+        "the Offset Face dialog edits it",
+        p is not None and p.title == "Offset Face" and p.editing,
+        p,
+    )
     d.type_distance("4")
 
 

@@ -4,6 +4,7 @@ scenarios/modify_*.py): the design's right-click menu (Capture Design History), 
 before history goes, the Finish Base Feature bar, the Press Pull / Offset Face / Modify
 dialogs, STEP files made with FreeCAD's own Part / Import for test input. Not a scenario
 (it lives outside scenarios/)."""
+
 import os
 
 import FreeCAD as App

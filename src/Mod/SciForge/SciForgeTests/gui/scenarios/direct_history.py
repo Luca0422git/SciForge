@@ -18,6 +18,7 @@ Part: box 0..40 x 0..30 x 10 made with Create Sketch + Extrude, a through hole r
   G  The design's menu now offers "Capture Design History": the timeline comes back with
      the body's Base Feature; a Press Pull after it is a step of its own again.
 """
+
 import math
 import os
 
@@ -54,8 +55,11 @@ def a_part_made():
     h.check("two extrudes", len(state["steps"]) == 2, state["steps"])
     h.check("timeline shown", d.timeline_shown())
     entries = d.design_menu_entries()
-    h.check("the design's menu offers Do Not Capture Design History",
-            "Do Not Capture Design History" in entries, entries)
+    h.check(
+        "the design's menu offers Do Not Capture Design History",
+        "Do Not Capture Design History" in entries,
+        entries,
+    )
 
 
 def a_menu():
@@ -103,8 +107,11 @@ def c_undo():
 def c_undone():
     d.wait_timeline()
     h.check("undo: history captured again", not d.is_direct())
-    h.check("undo: the steps are back", [o.Name for o in steps()] == state["steps"],
-            [o.Name for o in steps()])
+    h.check(
+        "undo: the steps are back",
+        [o.Name for o in steps()] == state["steps"],
+        [o.Name for o in steps()],
+    )
     h.check("undo: timeline shown", d.timeline_shown())
     h.check("undo: same volume", d.near(vol(), 12000 - HOLE), vol())
 
@@ -144,8 +151,10 @@ def d_ok():
 def d_baked():
     h.check("grown by 5: 18000 - 375 pi", d.near(vol(), 18000 - 1.5 * HOLE), vol())
     h.check("still one step (no Press Pull step)", len(steps()) == 1, [o.Name for o in steps()])
-    h.check("no Press Pull in the design", not [o for o in d.doc().Objects
-                                                 if getattr(o, "SciForgeType", "") == "PressPull"])
+    h.check(
+        "no Press Pull in the design",
+        not [o for o in d.doc().Objects if getattr(o, "SciForgeType", "") == "PressPull"],
+    )
     h.fit()
 
 
@@ -224,8 +233,11 @@ def f_reopened():
 # -- G ------------------------------------------------------------------------------------------
 def g_menu():
     entries = d.design_menu_entries()
-    h.check("the design's menu offers Capture Design History",
-            "Capture Design History" in entries, entries)
+    h.check(
+        "the design's menu offers Capture Design History",
+        "Capture Design History" in entries,
+        entries,
+    )
     d.design_menu("Capture Design History")
 
 
