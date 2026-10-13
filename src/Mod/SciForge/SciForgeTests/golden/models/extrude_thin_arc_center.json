@@ -1,0 +1,52 @@
+{
+  "id": "extrude_thin_arc_center",
+  "title": "Thin Extrude of an open quarter arc, wall centred on the curve (2 mm), 5 high",
+  "tags": [
+    "extrude",
+    "thin",
+    "open-profile"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XY",
+      "curves": [
+        {
+          "arc": [
+            0,
+            0,
+            10,
+            0,
+            90
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "curves": "p1",
+      "distance": 5,
+      "thin": {
+        "location": "center",
+        "thickness": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 157.07963267948966,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      11,
+      11,
+      5
+    ],
+    "source": "analytic",
+    "note": "Center: 1 mm each side of the R10 arc, a quarter ring from R9 to R11: (121 - 81) pi / 4 = 10 pi mm^2, 5 high = 50 pi. The ends are cut square to the arc (on the X and Y axes). Faces: 2 round, 2 ends, top, bottom."
+  }
+}

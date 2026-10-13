@@ -13,6 +13,7 @@ shows the picked ones in a stronger blue, show_faces() highlights picked body fa
 Mouse events come through FreeCAD's view.addEventCallback, which runs Python safely
 (unlike raw pivy callbacks, see taskui.ArrowDragger).
 """
+
 import time
 
 import FreeCAD as App
@@ -126,16 +127,24 @@ class ProfilePicker:
     and faces let clicks through. The shaded regions here take the clicks, and an arrow
     behind a sketch (a cut going down into the part, with the sketch kept in view until OK)
     stays grabbable, as Fusion's arrows always are. Off for the other dialogs: Sweep and
-    Loft pick sketch lines as paths and rails, so FreeCAD must still find them."""
+    Loft pick sketch lines as paths and rails, so FreeCAD must still find them.
 
-    def __init__(self, view, sketches, on_pick, occluder=None, clicks_through=False):
+    on_curve (a thin extrude): the visible sketches' curves can be clicked too; a click
+    within a few pixels of a curve calls on_curve(sketch, "EdgeN") instead of picking the
+    area beside it. show_curves() draws the picked curves."""
+
+    CURVE_PIXELS = 6  # a click this close to a sketch curve picks the curve
+
+    def __init__(self, view, sketches, on_pick, occluder=None, clicks_through=False, on_curve=None):
         from pivy import coin
 
         self.coin = coin
         self.view = view
         self.on_pick = on_pick
+        self.on_curve = on_curve
         self.occluder = occluder  # () -> the part (global) that can hide regions
         self.regions = []  # (sketch, sub, face, material)
+        self.curves = []  # (sketch, sub, [global points along the curve]) for on_curve
         self.selected = set()  # {(sketch name, sub)}
         self.dimmed = False  # picked profiles faded (a red cut preview is shown over them)
         self.face_materials = []  # materials of the highlighted body faces
@@ -149,6 +158,11 @@ class ProfilePicker:
         self.root.addChild(offset)
         self.face_root = coin.SoSeparator()  # picked body faces
         self.root.addChild(self.face_root)
+        self.curve_root = coin.SoSeparator()  # picked (and hovered) sketch curves
+        self.root.addChild(self.curve_root)
+        self.hover_root = coin.SoSeparator()
+        self.root.addChild(self.hover_root)
+        self.hovered_curve = None
         from . import extrude
 
         for sketch in sketches:
@@ -159,6 +173,10 @@ class ProfilePicker:
                 continue
             for sub, face in found:
                 self.regions.append((sketch, sub, face, self._add_face(face, self.root)))
+            if on_curve is not None and _visible(sketch):
+                self._offer_curves(sketch)
+                if not found and clicks_through:
+                    self._let_clicks_through(sketch)  # its curves are picked here
             if found and clicks_through:
                 self._let_clicks_through(sketch)
         self.hovered = None
@@ -184,6 +202,102 @@ class ProfilePicker:
                 self.unpickable.append((root, style))
             except Exception:
                 pass  # no view of the sketch: nothing to click there anyway
+
+    # -- sketch curves (thin extrude) ---------------------------------------------------
+    def _offer_curves(self, sketch):
+        from . import curves
+
+        try:
+            count = len(sketch.Shape.Edges)
+        except Exception:
+            return
+        for i in range(1, count + 1):
+            edge = curves.edge_of(sketch, "Edge%d" % i)
+            if edge is None:
+                continue
+            try:
+                points = edge.discretize(Deflection=0.05) if edge.Length > 0 else []
+            except Exception:
+                points = []
+            if len(points) < 2:
+                try:
+                    points = edge.discretize(24)
+                except Exception:
+                    continue
+            self.curves.append((sketch, "Edge%d" % i, points))
+
+    def _screen(self, point):
+        x, y = self.view.getPointOnViewport(App.Vector(point))
+        return float(x), float(y)
+
+    def curve_at(self, position):
+        """(sketch, "EdgeN") of the curve within CURVE_PIXELS of the mouse, nearest first;
+        None when there is none (or the part hides it)."""
+        import math
+
+        if not self.curves:
+            return None
+        px, py = float(position[0]), float(position[1])
+        best = None
+        for sketch, sub, points in self.curves:
+            try:
+                screen = [self._screen(p) for p in points]
+            except Exception:
+                continue
+            for (ax, ay), (bx, by), a, b in zip(screen, screen[1:], points, points[1:]):
+                dx, dy = bx - ax, by - ay
+                length2 = dx * dx + dy * dy
+                t = 0.0 if length2 < 1e-12 else ((px - ax) * dx + (py - ay) * dy) / length2
+                t = max(0.0, min(1.0, t))
+                d = math.hypot(px - (ax + dx * t), py - (ay + dy * t))
+                if d <= self.CURVE_PIXELS and (best is None or d < best[0]):
+                    best = (d, sketch, sub, a + (b - a) * t)
+        if best is None:
+            return None
+        if self.occluder is not None:
+            try:
+                shape = self.occluder()
+            except Exception:
+                shape = None
+            _start, direction = mouse_ray(self.view, position)
+            if hidden_by(shape, best[3], direction):
+                return None
+        return best[1], best[2]
+
+    def _line(self, parent, points, color, width):
+        coin = self.coin
+        sep = coin.SoSeparator()
+        style = coin.SoDrawStyle()
+        style.lineWidth = width
+        sep.addChild(style)
+        material = coin.SoBaseColor()
+        material.rgb.setValue(*color)
+        sep.addChild(material)
+        coords = coin.SoCoordinate3()
+        coords.point.setValues(0, len(points), [(p.x, p.y, p.z) for p in points])
+        sep.addChild(coords)
+        line = coin.SoLineSet()
+        line.numVertices.setValue(len(points))
+        sep.addChild(line)
+        parent.addChild(sep)
+
+    def show_curves(self, keys):
+        """Draw the picked curves {(sketch name, "EdgeN")} in the picked blue."""
+        self.curve_root.removeAllChildren()
+        for sketch, sub, points in self.curves:
+            if (sketch.Name, sub) in keys:
+                self._line(self.curve_root, points, PICKED, 5)
+
+    def _hover_curve(self, hit):
+        if hit == self.hovered_curve:
+            return
+        self.hovered_curve = hit
+        self.hover_root.removeAllChildren()
+        if hit is None:
+            return
+        for sketch, sub, points in self.curves:
+            if (sketch, sub) == hit:
+                self._line(self.hover_root, points, FILL, 4)
 
     def _add_face(self, face, parent, color=FILL, transparency=IDLE_TRANSPARENCY):
         coin = self.coin
@@ -282,7 +396,12 @@ class ProfilePicker:
     # -- events -------------------------------------------------------------------------
     def _moved(self, info):
         try:
-            hit = self.region_at(info["Position"])
+            if self.on_curve is not None:
+                curve = self.curve_at(info["Position"])
+                self._hover_curve(curve)
+                if curve is not None:
+                    info = None  # on a curve: no area lights up under it
+            hit = self.region_at(info["Position"]) if info is not None else None
             if hit is not self.hovered:
                 previous, self.hovered = self.hovered, hit
                 if previous is not None:
@@ -300,6 +419,12 @@ class ProfilePicker:
             position = tuple(info["Position"])
             if handle_at(self.view, position):
                 return  # a drag handle sits in front of the region: the press drags it
+            if self.on_curve is not None:
+                curve = self.curve_at(position)
+                if curve is not None:
+                    self.last_click = time.time()
+                    self.on_curve(curve[0], curve[1])
+                    return
             hit = self.region_at(position, check_hidden=True)
             if hit is not None:
                 self.last_click = time.time()
@@ -330,6 +455,14 @@ class ProfilePicker:
                 pass  # the sketch was deleted with its scene
         self.unpickable = []
         self.regions = []
+
+
+def _visible(sketch):
+    try:
+        view = sketch.ViewObject
+        return bool(view.Visibility) if view is not None else bool(sketch.Visibility)
+    except Exception:
+        return False
 
 
 # -- which sketches can be extruded ------------------------------------------------------------

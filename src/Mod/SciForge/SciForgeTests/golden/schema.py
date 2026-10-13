@@ -53,6 +53,9 @@ STEP_KEYS = {
             "extent2",
             "taper2",
             "to2",
+            # Thin Extrude (sciforge/extrude.py, extrude_prism.py)
+            "thin",
+            "curves",
         },
     ),
     "revolve": ({"id", "profile", "axis"}, {"angle", "operation", "comment"}),
@@ -216,6 +219,21 @@ def _check_extrude(where, step, seen):
     for name in step.get("more_profiles", []):
         if seen.get(name) != "sketch":
             _fail(where, "'more_profiles' must name earlier sketch steps, got %r" % name)
+    thin = step.get("thin")
+    if thin is not None:
+        if not isinstance(thin, dict) or set(thin) - {
+            "location",
+            "thickness",
+            "location2",
+            "thickness2",
+        }:
+            _fail(where, "'thin' is {location, thickness, location2, thickness2}")
+        for key in ("location", "location2"):
+            if thin.get(key, "side1") not in ("side1", "center", "side2"):
+                _fail(where, "'thin.%s' must be side1, center or side2" % key)
+        for key in ("thickness", "thickness2"):
+            if key in thin:
+                _check_number(where + ".thin." + key, thin[key], positive=True)
     regions = step.get("regions")
     if regions is not None:
         if "profile" not in step or not isinstance(regions, list) or not regions:
@@ -282,8 +300,13 @@ def validate(model):
             if plane not in PLANES:
                 _fail(here, "'plane' must be one of %s" % (PLANES,))
             _check_geometry(here, step["geometry"])
-        if op == "extrude" and ("profile" in step) == ("face" in step):
+        if op == "extrude" and "curves" not in step and ("profile" in step) == ("face" in step):
             _fail(here, "extrude needs exactly one of 'profile' (a sketch) or 'face' (a selector)")
+        if op == "extrude" and "curves" in step:
+            if "thin" not in step:
+                _fail(here, "'curves' are the profile of a thin extrude only (add 'thin')")
+            if "face" in step or ("profile" in step and "regions" not in step):
+                _fail(here, "'curves' go alone, or with 'profile' + 'regions' (areas)")
         if op == "revolve" or (op == "extrude" and "profile" in step):
             if seen.get(step["profile"]) != "sketch":
                 _fail(here, "'profile' must name an earlier sketch step, got %r" % step["profile"])

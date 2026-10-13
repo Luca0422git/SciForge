@@ -1,0 +1,79 @@
+{
+  "id": "extrude_thin_to_cylinder_face",
+  "title": "Thin Extrude (2 mm, Side 1) of a rectangle up To Object the round face of a cylinder above it, joined",
+  "tags": [
+    "extrude",
+    "thin",
+    "to-object"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "circle": [
+            15,
+            40,
+            30
+          ],
+          "name": "bar"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "direction": "symmetric",
+      "distance": 100
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            10
+          ],
+          "name": "post"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "type": "cylinder",
+          "count": 1
+        }
+      },
+      "thin": {
+        "location": "side1",
+        "thickness": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 284952.9175035916,
+    "solids": 1,
+    "bbox": [
+      -50,
+      -15,
+      0,
+      50,
+      45,
+      70
+    ],
+    "source": "analytic",
+    "note": "Cylinder R30 along X through (y 15, z 40), 100 long: 90000 pi = 282743.3388. The wall is 40x10 minus 36x6 (2 mm inside), each column of it up to the cylinder's underside z(y) = 40 - sqrt(900 - (y - 15)^2): 40 * int_0^10 z dy - 36 * int_2^8 z dy = 2209.5787 (with int sqrt(r^2-u^2) du = (u sqrt(r^2-u^2) + r^2 asin(u/r))/2)."
+  }
+}

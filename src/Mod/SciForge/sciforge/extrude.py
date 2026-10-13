@@ -9,6 +9,8 @@ Profiles (what is extruded), a list of (object, sub-element):
                               them when the sketch's MakeInternals is on (ensure_regions).
   (sketch, "")                the whole sketch (holes stay holes), as FreeCAD does
   (feature, "Face6")          a flat face of a body
+  (sketch, "Edge3")           a sketch curve (thin extrude only: connected curves are one
+                              open profile, and the wall follows it)
 
 Options (dict, see DEFAULTS):
   operation    join | cut | intersect | new_body
@@ -22,6 +24,11 @@ Options (dict, see DEFAULTS):
   taper        degrees, positive widens (Fusion: outward)
   distance2 / extent2 / extent_object2 / taper2   the second side (two_sides)
   flip         extent "all": go against the profile normal
+  thin         Fusion's Thin Extrude: a wall along the profile's outline (closed areas,
+               flat faces) or along open sketch curves, instead of the filled profile
+  wall_location  side1 | center | side2: where the wall lies against the outline (side1:
+               into a closed profile, on the left of an open curve), wall_thickness its
+               thickness (mm); wall_location2 / wall_thickness2 for side two (two_sides)
   expressions  {"distance" | "distance2" | "taper" | "taper2": "width * 2"}: values typed as
                a formula of parameters (Fusion's fields take "width", "width*2"); they
                become expressions on the feature, so it follows the parameters
@@ -35,6 +42,8 @@ What is built:
   new_body       a new PartDesign Body holding a Pad (the first solid of an empty body is
                  simply a Pad there: that already is a new body)
   intersect      SciForge's ExtrudeFeature: the body keeps what lies inside the extrusion
+  thin, tapers PartDesign cannot build (up to an object or a body, a join through All)
+                 SciForge's ExtrudeFeature too, which then joins, cuts or intersects
 A hidden PartDesign SubShapeBinder carries the profile into the feature when FreeCAD
 cannot link it directly: a start offset, profiles from several sketches, or a profile
 in another body. Fusion-only choices (start, measurement, operation, original picks)
@@ -55,7 +64,6 @@ A Join that touches no body at all makes a new body (Fusion). Followers link the
 """
 
 import json
-import math
 
 import FreeCAD as App
 
@@ -64,6 +72,8 @@ DIRECTIONS = ("one_side", "two_sides", "symmetric")
 EXTENTS = ("distance", "to_object", "all")
 STARTS = ("profile", "offset", "object")
 MEASUREMENTS = ("half", "whole")
+WALL_LOCATIONS = ("side1", "center", "side2")
+WALL_NAMES = {"side1": "Side 1", "center": "Center", "side2": "Side 2"}  # feature enum
 
 DEFAULTS = {
     "operation": "join",
@@ -82,6 +92,11 @@ DEFAULTS = {
     "measurement": "whole",
     "flip": False,
     "bodies": None,
+    "thin": False,
+    "wall_location": "side1",
+    "wall_thickness": 1.0,
+    "wall_location2": "side1",
+    "wall_thickness2": 1.0,
 }
 
 META = "SciForgeExtrude"
@@ -254,6 +269,136 @@ def global_faces(profiles):
     return found
 
 
+# -- curves (thin extrude) --------------------------------------------------------------------
+def is_curve(profile):
+    """True for a sketch curve picked as a thin extrude's open profile."""
+    obj, sub = profile
+    return is_sketch(obj) and (sub or "").startswith("Edge")
+
+
+def local_curves(obj, sub):
+    """[(key, edge)] of one profile's curves in its body's coordinates: a sketch curve, or
+    the loose curves a hidden profile binder carries (key orders them as drawn)."""
+    if is_sketch(obj):
+        if not (sub or "").startswith("Edge"):
+            return []
+        try:
+            edge = obj.getSubObject(sub)
+        except Exception:
+            return []
+        if edge is None or edge.isNull() or edge.ShapeType != "Edge":
+            return []
+        return [((obj.Name, int(sub[4:])), edge)]
+    if sub or obj is None or getattr(obj, ROLE, "") != "ExtrudeProfile":
+        return []
+    shape = obj.Shape
+    if shape.isNull():
+        return []
+    taken = [e for f in shape.Faces for e in f.Edges]
+    free = [e for e in shape.Edges if not any(e.isSame(t) for t in taken)]
+    return [((obj.Name, i), e) for i, e in enumerate(free)]
+
+
+def chain_wires(keyed_edges):
+    """Connected curves as wires, each running the way its first-drawn curve runs (so
+    "Side 1", on the left of the curve, does not depend on the order of the picks)."""
+    import Part
+
+    edges = [e for _k, e in keyed_edges]
+    if not edges:
+        return []
+    try:
+        groups = Part.sortEdges(edges, 1e-6)
+    except Exception:
+        groups = [[e] for e in edges]
+    wires = []
+    for group in groups:
+        try:
+            wire = Part.Wire(group)
+        except Exception:
+            continue
+        first = min(
+            (k for k, e in keyed_edges if any(_same_edge(e, g) for g in group)),
+            default=None,
+        )
+        drawn = next((e for k, e in keyed_edges if k == first), None)
+        if drawn is not None and _runs_against(wire, drawn):
+            wire = wire.reversed()
+        wires.append(wire)
+    return wires
+
+
+def _same_edge(a, b):
+    try:
+        if a.isSame(b):
+            return True
+        u = (a.FirstParameter + a.LastParameter) / 2.0
+        v = (b.FirstParameter + b.LastParameter) / 2.0
+        return (a.valueAt(u) - b.valueAt(v)).Length < 1e-7 and abs(a.Length - b.Length) < 1e-7
+    except Exception:
+        return False
+
+
+def _travel(edge, ordered=None):
+    """The way `edge` runs at its middle (its orientation in a wire counts)."""
+    mid = (edge.FirstParameter + edge.LastParameter) / 2.0
+    tangent = edge.tangentAt(mid)
+    if (ordered or edge).Orientation == "Reversed":
+        tangent = tangent * -1.0
+    return edge.valueAt(mid), tangent
+
+
+def _runs_against(wire, drawn):
+    point, way = _travel(drawn)
+    for edge in wire.OrderedEdges:
+        mid = (edge.FirstParameter + edge.LastParameter) / 2.0
+        if (edge.valueAt(mid) - point).Length < 1e-6:
+            return _travel(edge, edge)[1].dot(way) < 0
+    return False
+
+
+def global_wires(profiles):
+    """The open curves of a thin extrude's profiles, chained, in global coordinates."""
+    keyed = []
+    for obj, sub in normalize(profiles):
+        keyed += [(k, _to_global(e, obj)) for k, e in local_curves(obj, sub)]
+    return chain_wires(keyed)
+
+
+def section_faces(profiles, options):
+    """The faces the extrusion starts from (global): the profile's areas and faces, or the
+    walls of a thin extrude (side one's)."""
+    faces = global_faces(profiles)
+    if not options.get("thin"):
+        return faces
+    from . import extrude_prism
+
+    try:
+        walls = extrude_prism.thin_walls(
+            faces,
+            global_wires(profiles),
+            profile_normal(profiles),
+            options["wall_location"],
+            options["wall_thickness"],
+        )
+    except extrude_prism.PrismError as exc:
+        raise ExtrudeError(str(exc))
+    return [w.face for w in walls]
+
+
+def profile_point(profiles):
+    """A point on the profile: inside its first area or face, else the middle of its first
+    curve (global)."""
+    faces = global_faces(profiles)
+    if faces:
+        return interior_point(faces[0])
+    wires = global_wires(profiles)
+    if wires:
+        edge = wires[0].OrderedEdges[0]
+        return edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+    raise ExtrudeError("The profile has no closed area to extrude.")
+
+
 def face_normal(face):
     """Outward normal at the middle of a face (normalAt already handles Reversed faces)."""
     u0, u1, v0, v1 = face.ParameterRange
@@ -313,19 +458,31 @@ def profile_normal(profiles, local=False):
 
 def profile_frame(profiles):
     """(a point inside the first profile, its normal), global: where the arrow goes."""
-    faces = global_faces(profiles)
-    if not faces:
-        raise ExtrudeError("The profile has no closed area to extrude.")
-    return interior_point(faces[0]), profile_normal(profiles)
+    return profile_point(profiles), profile_normal(profiles)
 
 
-def check_profiles(profiles):
-    """Raise ExtrudeError unless the profiles can be extruded together."""
+def check_profiles(profiles, thin=False):
+    """Raise ExtrudeError unless the profiles can be extruded together. A thin extrude also
+    takes sketch curves (open profiles)."""
     profiles = normalize(profiles)
     if not profiles:
         raise ExtrudeError("Select a profile: click inside a sketch area or on a flat face.")
     normal = profile_normal(profiles)
     for obj, sub in profiles:
+        if is_curve((obj, sub)):
+            if not thin:
+                raise ExtrudeError(
+                    "A sketch curve is a profile of a thin extrude only. Choose Thin Extrude, "
+                    "or click inside a closed area."
+                )
+            if not local_curves(obj, sub):
+                raise ExtrudeError("A curve picked from %s is gone. Pick it again." % obj.Label)
+            own = obj.getGlobalPlacement().Rotation.multVec(Z)
+            if abs(abs(own.dot(normal)) - 1.0) > 1e-6:
+                raise ExtrudeError(
+                    "All profiles must lie in parallel planes. Extrude the others separately."
+                )
+            continue
         faces = local_faces(obj, sub)
         if not faces:
             raise ExtrudeError(
@@ -365,6 +522,14 @@ def profile_label(profiles):
     profiles = normalize(profiles)
     if not profiles:
         return "Nothing selected"
+    curves = [p for p in profiles if is_curve(p)]
+    if curves:
+        names = sorted({obj.Label for obj, _ in profiles})
+        areas = len(profiles) - len(curves)
+        text = "%d curve%s" % (len(curves), "" if len(curves) == 1 else "s")
+        if areas:
+            text += " + %d profile%s" % (areas, "" if areas == 1 else "s")
+        return "%s (%s)" % (text, ", ".join(names))
     if len(profiles) == 1:
         obj, sub = profiles[0]
         if is_sketch(obj):
@@ -391,7 +556,24 @@ def options_with_defaults(options):
         raise ExtrudeError("unknown start %r" % merged["start"])
     if merged["measurement"] not in MEASUREMENTS:
         raise ExtrudeError("unknown measurement %r" % merged["measurement"])
+    merged["thin"] = bool(merged.get("thin"))
+    for name in ("wall_location", "wall_location2"):
+        if merged[name] not in WALL_LOCATIONS:
+            raise ExtrudeError("unknown wall location %r" % merged[name])
     return merged
+
+
+def thin_spec(options):
+    """The prism builder's "thin" entry (extrude_prism.build), or None."""
+    if not options.get("thin"):
+        return None
+    two = options["direction"] == "two_sides"
+    return {
+        "location": options["wall_location"],
+        "thickness": float(options["wall_thickness"]),
+        "location2": options["wall_location2" if two else "wall_location"],
+        "thickness2": float(options["wall_thickness2" if two else "wall_thickness"]),
+    }
 
 
 def taper_possible(options, extent):
@@ -409,8 +591,9 @@ def native_taper(operation, extent):
 
 def own_feature_needed(options):
     """True when the extrude is SciForge's own feature instead of a Pad/Pocket: Intersect,
-    and tapers PartDesign cannot build (Fusion tapers every extent)."""
-    if options["operation"] == "intersect":
+    thin extrudes (PartDesign has no thin Pad) and tapers PartDesign cannot build (Fusion
+    tapers every extent)."""
+    if options["operation"] == "intersect" or options.get("thin"):
         return True
     sides = [("extent", "taper")]
     if options["direction"] == "two_sides":
@@ -435,6 +618,13 @@ def check_options(options):
             raise NeedsPick("Click the face, plane or body to extrude to%s." % where)
         if abs(float(options[taper])) >= 89.9:
             raise ExtrudeError("The taper angle%s must be between -89.9 and 89.9 degrees." % where)
+    if options.get("thin"):
+        walls = [("wall_thickness", "")]
+        if options["direction"] == "two_sides":
+            walls.append(("wall_thickness2", " (side two)"))
+        for key, where in walls:
+            if float(options[key]) < 1e-6:
+                raise ExtrudeError("The wall thickness%s must be more than zero." % where)
     if options["direction"] == "symmetric" and options["extent"] == "to_object":
         raise ExtrudeError("Symmetric extrudes go a distance or through all.")
     if options["start"] == "object" and options.get("start_object") is None:
@@ -504,7 +694,7 @@ def start_offset_of(profiles, options):
             raise ExtrudeError(
                 "The start face must be parallel to the profile. Pick a parallel face or plane."
             )
-        origin = interior_point(global_faces(profiles)[0])
+        origin = profile_point(profiles)
         return (point - origin).dot(n)
     return 0.0
 
@@ -512,7 +702,7 @@ def start_offset_of(profiles, options):
 def side_of(ref, profiles, options):
     """+1 if the object lies along the profile normal, else -1 (To Object picks the side)."""
     shape = _ref_global(ref)
-    origin = interior_point(global_faces(profiles)[0])
+    origin = profile_point(profiles)
     origin = origin + profile_normal(profiles) * start_offset_of(profiles, options)
     n = profile_normal(profiles)
     if shape is None or shape.isNull():
@@ -603,9 +793,9 @@ def _set_enum(obj, prop, items):
 
 class ExtrudeFeature:
     """SciForge's own extrude: Intersect (the body keeps what lies inside the extrusion),
-    and Join/Cut with a taper PartDesign cannot build (up to an object, a join through
-    All). Saved documents store "sciforge.extrude.ExtrudeFeature": keep the name stable;
-    files from before "Operation" existed are Intersect extrudes."""
+    thin extrudes, and Join/Cut with a taper PartDesign cannot build (up to an object or
+    a body, a join through All). Saved documents store "sciforge.extrude.ExtrudeFeature":
+    keep the name stable; files from before "Operation" existed are Intersect extrudes."""
 
     def __init__(self, obj):
         obj.Proxy = self
@@ -634,6 +824,18 @@ class ExtrudeFeature:
         add("App::PropertyDistance", "StartOffset", "Start this far from the profile plane")
         if add("App::PropertyBool", "Refine", "Merge coplanar faces, like Fusion"):
             obj.Refine = True
+        # Thin extrude (files from before these existed are solid extrudes).
+        add("App::PropertyBool", "Thin", "A wall along the profile instead of the area", "Thin")
+        for suffix in ("", "2"):
+            if add(
+                "App::PropertyEnumeration",
+                "WallLocation" + suffix,
+                "Where the wall lies against the profile",
+                "Thin",
+            ):
+                setattr(obj, "WallLocation" + suffix, [WALL_NAMES[k] for k in WALL_LOCATIONS])
+            if add("App::PropertyLength", "WallThickness" + suffix, "Wall thickness", "Thin"):
+                setattr(obj, "WallThickness" + suffix, 1.0)
         if "SciForgeType" not in obj.PropertiesList:
             obj.addProperty("App::PropertyString", "SciForgeType", "Base", "", 4)
             obj.SciForgeType = "Extrude"
@@ -652,11 +854,15 @@ class ExtrudeFeature:
                 "%s needs a solid before it in the timeline."
                 % ("Cut" if operation == "Cut" else "Intersect")
             )
-        faces = []
+        thin = bool(getattr(obj, "Thin", False))
+        faces, curves = [], []
         for linked, subs in obj.Profiles:
             for sub in subs or [""]:
                 faces += local_faces(linked, sub)
-        if not faces:
+                if thin:
+                    curves += local_curves(linked, sub)
+        wires = chain_wires(curves)
+        if not faces and not wires:
             raise ExtrudeError("Select a profile to extrude.")
         profiles = [(linked, (subs or [""])[0]) for linked, subs in obj.Profiles]
         normal = _profile_normal_in_body(profiles, obj)
@@ -680,9 +886,22 @@ class ExtrudeFeature:
             "taper2": obj.TaperAngle2.Value,
             "target2": target(obj.UpToFace2),
         }
+        if thin:
+            names = {v: k for k, v in WALL_NAMES.items()}
+            spec["thin"] = {
+                "location": names.get(obj.WallLocation, "side1"),
+                "thickness": obj.WallThickness.Value,
+                "location2": names.get(obj.WallLocation2, "side1"),
+                "thickness2": obj.WallThickness2.Value,
+            }
+            if obj.SideType != "Two sides":
+                spec["thin"]["location2"] = spec["thin"]["location"]
+                spec["thin"]["thickness2"] = spec["thin"]["thickness"]
         self.tool = None
         try:
-            tool = prism.build(faces, normal, spec, reach=[base.Shape] if has_base else [])
+            tool = prism.build(
+                faces, normal, spec, reach=[base.Shape] if has_base else [], wires=wires
+            )
             self.tool = tool  # the extruded volume (body coordinates), for the cut preview
             if operation == "Intersect":
                 result = base.Shape.common(tool)
@@ -700,14 +919,19 @@ class ExtrudeFeature:
             raise ExtrudeError(
                 "The extrusion does not overlap the body, so Intersect would leave nothing."
             )
-        if len(result.Solids) > 1:
+        if len(result.Solids) > 1 and not _allows_pieces(obj):
             raise ExtrudeError(
                 "%s would leave %d separate pieces; a body holds one solid. "
                 "Change the profile or the distance." % (operation, len(result.Solids))
             )
         if operation == "Cut" and abs(result.Volume - base.Shape.Volume) < 1e-9:
             raise ExtrudeError("The cut does not touch the body. Flip it or pick another object.")
-        obj.Shape = result.Solids[0] if len(result.Solids) == 1 else result
+        if len(result.Solids) == 1:
+            obj.Shape = result.Solids[0]
+        else:
+            import Part
+
+            obj.Shape = Part.makeCompound(result.Solids)
 
     def dumps(self):
         return None
@@ -717,6 +941,14 @@ class ExtrudeFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _allows_pieces(feature):
+    """True when the feature's body may hold several separate solids (FreeCAD 1.1's
+    "AllowCompound", on by default; PartDesign's Pad accepts a join that leaves two pieces
+    there too, and a thin extrude of a ring is two walls)."""
+    body = owner_body(feature)
+    return body is None or bool(getattr(body, "AllowCompound", False))
 
 
 def _profile_normal_in_body(profiles, feature):
@@ -997,6 +1229,7 @@ def _apply(feature, body, profiles, options, refs):
                 options["taper2"],
                 refs.get(2),
             )
+        _fp_thin(feature, options)
         feature.Refine = True
         return
     cut = feature.TypeId == "PartDesign::Pocket"
@@ -1032,15 +1265,30 @@ def _fp_side(feature, suffix, extent, length, taper, ref):
         join = getattr(feature, "Operation", "Intersect") == "Join"
         setattr(feature, "Type" + suffix, "UpToLast" if join else "ThroughAll")
     else:
+        # A flat face or plane, a curved face (its whole surface) or a whole body (where the
+        # extrusion first meets it): extrude_prism ends the side there, taper included.
         obj, sub = ref
-        if not sub and obj.TypeId not in PLANE_TYPES:
-            what = "A taper" if feature.Operation != "Intersect" else "Intersect"
-            raise ExtrudeError(
-                "%s can go up to a flat face or a plane, not a whole body. Pick a face of it."
-                % what
-            )
         setattr(feature, "Type" + suffix, "UpToFace")
         setattr(feature, "UpToFace" + suffix, (obj, [sub] if sub else [""]))
+
+
+def _fp_thin(feature, options):
+    """A thin extrude's wall on SciForge's own feature (Fusion's Thin Extrude)."""
+    if "Thin" not in feature.PropertiesList:
+        ExtrudeFeature.ensure_properties(feature)
+    thin = bool(options.get("thin"))
+    if feature.Thin != thin:
+        feature.Thin = thin
+    for suffix, location, thickness in (
+        ("", "wall_location", "wall_thickness"),
+        ("2", "wall_location2", "wall_thickness2"),
+    ):
+        name = WALL_NAMES[options[location]]
+        if getattr(feature, "WallLocation" + suffix) != name:
+            setattr(feature, "WallLocation" + suffix, name)
+        value = max(float(options[thickness]), 1e-6)
+        if abs(getattr(feature, "WallThickness" + suffix).Value - value) > 1e-12:
+            setattr(feature, "WallThickness" + suffix, value)
 
 
 # Dialog value -> the feature property that holds it (Pad, Pocket and SciForge's own).
@@ -1049,6 +1297,8 @@ EXPRESSION_PROPS = {
     "distance2": "Length2",
     "taper": "TaperAngle",
     "taper2": "TaperAngle2",
+    "wall_thickness": "WallThickness",
+    "wall_thickness2": "WallThickness2",
 }
 
 
@@ -1060,6 +1310,10 @@ def _expression_used(key, options):
         return two and options["extent2"] == "distance"
     if key == "taper2":
         return two
+    if key == "wall_thickness":
+        return bool(options.get("thin"))
+    if key == "wall_thickness2":
+        return bool(options.get("thin")) and two
     return True
 
 
@@ -1184,8 +1438,8 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
     the profile sketches in view (the dialog's preview; it hides them on OK)."""
     from .extrude_bodies import merge_tip, nothing_touched, participants_for, sync_followers
 
-    profiles = check_profiles(profiles)
     options = options_with_defaults(options)
+    profiles = check_profiles(profiles, thin=options["thin"])
     check_options(options)
     participants = participants_for(feature, profiles, options)
     if participants is not None and not participants:
@@ -1502,6 +1756,13 @@ def read(feature):
     options["extent2"] = extent_of(feature.Type2)
     options["taper"] = feature.TaperAngle.Value
     options["taper2"] = feature.TaperAngle2.Value
+    if intersect and bool(getattr(feature, "Thin", False)):
+        names = {v: k for k, v in WALL_NAMES.items()}
+        options["thin"] = True
+        options["wall_location"] = names.get(feature.WallLocation, "side1")
+        options["wall_thickness"] = feature.WallThickness.Value
+        options["wall_location2"] = names.get(feature.WallLocation2, "side1")
+        options["wall_thickness2"] = feature.WallThickness2.Value
     options["extent_object"] = _ref_load(doc, meta.get("extent_object")) or _link_ref(feature, "")
     options["extent_object2"] = _ref_load(doc, meta.get("extent_object2")) or _link_ref(
         feature, "2"

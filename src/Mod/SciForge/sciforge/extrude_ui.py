@@ -31,7 +31,17 @@ from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, BoxCarrier, DistanceField, Panel, ValueBoxes
 
 ZERO_HINT = "Drag the arrow or type a distance."
+SOLID_HINT = (
+    "Click inside sketch areas (shaded blue) or on flat faces.\n"
+    "Click a picked one again to drop it."
+)
+THIN_HINT = (
+    "Click sketch areas, flat faces or sketch curves (the wall follows a line or an arc).\n"
+    "Click a picked one again to drop it."
+)
 
+TYPE_LABELS = [("Extrude", "solid"), ("Thin Extrude", "thin")]
+WALL_LABELS = [("Side 1", "side1"), ("Center", "center"), ("Side 2", "side2")]
 START_LABELS = [("Profile Plane", "profile"), ("Offset", "offset"), ("Object", "object")]
 DIRECTION_LABELS = [
     ("One Side", "one_side"),
@@ -526,10 +536,14 @@ class ExtrudePanel(Panel):
             "extent_object": SelectionField(self, "extent_object", "Select object"),
             "extent_object2": SelectionField(self, "extent_object2", "Select object (side 2)"),
         }
-        self.profile_hint = QtWidgets.QLabel(
-            "Click inside sketch areas (shaded blue) or on flat faces.\n"
-            "Click a picked one again to drop it."
+        # Fusion's Type: a solid extrude, or a thin wall along the profile (Thin Extrude).
+        self.kind = _combo(TYPE_LABELS, "thin" if self.options.get("thin") else "solid")
+        self.kind.setToolTip(
+            "Thin Extrude: a wall of the Wall Thickness along the profile's outline, or along "
+            "open sketch curves"
         )
+        form.addRow("Type", self.kind)
+        self.profile_hint = QtWidgets.QLabel(SOLID_HINT)
         self.profile_hint.setWordWrap(True)
         form.addRow("Profiles", self.fields["profiles"].widget)
         form.addRow(self.profile_hint)
@@ -566,6 +580,13 @@ class ExtrudePanel(Panel):
         form.addRow(self.measurement_label, self.measurement)
         self.taper = DistanceField(self.options["taper"], unit="deg", on_change=self._taper_typed)
         form.addRow("Taper Angle", self.taper.widget)
+        self.wall_location = _combo(WALL_LABELS, self.options["wall_location"])
+        self.wall_location_label = QtWidgets.QLabel("Wall Location")
+        form.addRow(self.wall_location_label, self.wall_location)
+        self.wall_thickness = DistanceField(self.options["wall_thickness"], on_change=self._typed)
+        self.wall_thickness.widget.setProperty("minimum", 0.0)
+        self.wall_thickness_label = QtWidgets.QLabel("Wall Thickness")
+        form.addRow(self.wall_thickness_label, self.wall_thickness.widget)
         self.side2_label = QtWidgets.QLabel("<b>Side Two</b>")
         form.addRow(self.side2_label)
         self.extent2 = _combo(EXTENT_LABELS, self.options["extent2"])
@@ -579,6 +600,13 @@ class ExtrudePanel(Panel):
         self.taper2 = DistanceField(self.options["taper2"], unit="deg", on_change=self._typed)
         self.taper2_label = QtWidgets.QLabel("Taper Angle")
         form.addRow(self.taper2_label, self.taper2.widget)
+        self.wall_location2 = _combo(WALL_LABELS, self.options["wall_location2"])
+        self.wall_location2_label = QtWidgets.QLabel("Wall Location")
+        form.addRow(self.wall_location2_label, self.wall_location2)
+        self.wall_thickness2 = DistanceField(self.options["wall_thickness2"], on_change=self._typed)
+        self.wall_thickness2.widget.setProperty("minimum", 0.0)
+        self.wall_thickness2_label = QtWidgets.QLabel("Wall Thickness")
+        form.addRow(self.wall_thickness2_label, self.wall_thickness2.widget)
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
         form.addRow("Operation", self.operation)
         self._build_bodies_row(form)
@@ -598,10 +626,21 @@ class ExtrudePanel(Panel):
                 ("distance2", self.distance2),
                 ("taper", self.taper),
                 ("taper2", self.taper2),
+                ("wall_thickness", self.wall_thickness),
+                ("wall_thickness2", self.wall_thickness2),
             )
         ]
-        for box in (self.start, self.direction, self.extent, self.extent2, self.measurement):
+        for box in (
+            self.start,
+            self.direction,
+            self.extent,
+            self.extent2,
+            self.measurement,
+            self.wall_location,
+            self.wall_location2,
+        ):
             box.currentIndexChanged.connect(self._typed)
+        self.kind.currentIndexChanged.connect(self._kind_changed)
         self.operation.activated.connect(self._operation_picked)
         # The row's label follows the operation, also when it changes by itself.
         self.operation.currentIndexChanged.connect(lambda _i: self._update_bodies_row())
@@ -624,6 +663,11 @@ class ExtrudePanel(Panel):
             self.distance2.set_value(self.options["distance2"])
             self.taper.set_value(self.options["taper"])
             self.taper2.set_value(self.options["taper2"])
+            _set_combo(self.kind, "thin" if self.options.get("thin") else "solid")
+            _set_combo(self.wall_location, self.options["wall_location"])
+            _set_combo(self.wall_location2, self.options["wall_location2"])
+            self.wall_thickness.set_value(self.options["wall_thickness"])
+            self.wall_thickness2.set_value(self.options["wall_thickness2"])
             self.flip.setChecked(bool(self.options.get("flip")))
             for name in ("start_object", "extent_object", "extent_object2"):
                 self.fields[name].set_text(_ref_text(self.options.get(name)))
@@ -639,7 +683,17 @@ class ExtrudePanel(Panel):
         extent2 = self.extent2.currentData()
         two = direction == "two_sides"
         symmetric = direction == "symmetric"
+        thin = self.kind.currentData() == "thin"
+        self.profile_hint.setText(THIN_HINT if thin else SOLID_HINT)
         for widget, show in (
+            (self.wall_location, thin),
+            (self.wall_location_label, thin),
+            (self.wall_thickness.widget, thin),
+            (self.wall_thickness_label, thin),
+            (self.wall_location2, thin and two),
+            (self.wall_location2_label, thin and two),
+            (self.wall_thickness2.widget, thin and two),
+            (self.wall_thickness2_label, thin and two),
             (self.start_offset.widget, start == "offset"),
             (self.start_offset_label, start == "offset"),
             (self.fields["start_object"].widget, start == "object"),
@@ -688,6 +742,11 @@ class ExtrudePanel(Panel):
         self.options["taper2"] = self.taper2.value()
         self.options["operation"] = self.operation.currentData()
         self.options["flip"] = self.flip.isChecked()
+        self.options["thin"] = self.kind.currentData() == "thin"
+        self.options["wall_location"] = self.wall_location.currentData()
+        self.options["wall_location2"] = self.wall_location2.currentData()
+        self.options["wall_thickness"] = self.wall_thickness.value()
+        self.options["wall_thickness2"] = self.wall_thickness2.value()
         if self.options["direction"] == "symmetric" and self.options["extent"] == "to_object":
             self.options["extent"] = "distance"
             self._quiet = True
@@ -700,6 +759,8 @@ class ExtrudePanel(Panel):
         "distance2": "Distance (side two)",
         "taper": "Taper Angle",
         "taper2": "Taper Angle (side two)",
+        "wall_thickness": "Wall Thickness",
+        "wall_thickness2": "Wall Thickness (side two)",
     }
 
     def show_formulas(self):
@@ -803,9 +864,17 @@ class ExtrudePanel(Panel):
 
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
+        self._make_picker()
+
+    def _make_picker(self):
+        """The shaded sketch areas to click (and, for a thin extrude, the sketch curves)."""
+        if self.picker is not None:
+            self.picker.remove()
+            self.picker = None
         extra = [obj for obj, _ in self.profiles if extrude.is_sketch(obj)]
         if self.from_sketch is not None:
             extra.append(self.from_sketch)
+        thin = self.kind.currentData() == "thin" if hasattr(self, "kind") else False
         try:
             self.picker = profile_pick.ProfilePicker(
                 Gui.ActiveDocument.ActiveView,
@@ -815,6 +884,15 @@ class ExtrudePanel(Panel):
                 ),
                 occluder=self._occluder,
                 clicks_through=True,  # the sketch stays in view: its arrows stay grabbable
+                on_curve=(
+                    (
+                        lambda sketch, sub: QtCore.QTimer.singleShot(
+                            0, lambda: self._curve_clicked(sketch, sub)
+                        )
+                    )
+                    if thin
+                    else None
+                ),
             )
         except Exception as exc:
             warn("profile shading unavailable: %s" % exc)
@@ -845,6 +923,55 @@ class ExtrudePanel(Panel):
             self._toggle((sketch, sub))
         except Exception as exc:
             warn("extrude pick: %s" % exc)
+
+    def _curve_clicked(self, sketch, sub):
+        """Thin extrude: a click on a sketch curve picks the curves connected to it (Fusion's
+        open profile); a click on a picked one drops them."""
+        if self._closed:
+            return
+        try:
+            if self.active != "profiles" or taskui.box_click_taken():
+                return
+            from . import curves
+
+            chain = [(sketch, name) for name in curves.chain(sketch, sub, tangent=False)]
+            keys = {extrude.key(p) for p in self.profiles}
+            if all(extrude.key(c) in keys for c in chain):
+                drop = {extrude.key(c) for c in chain}
+                self.profiles = [p for p in self.profiles if extrude.key(p) not in drop]
+            else:
+                self.profiles = self.profiles + [c for c in chain if extrude.key(c) not in keys]
+            self._profiles_changed()
+        except Exception as exc:
+            warn("extrude curve pick: %s" % exc)
+
+    def _kind_changed(self, *_):
+        """Extrude <-> Thin Extrude: the curves become clickable (or not); curves already
+        picked are no profile of a solid extrude, so they go when Thin is turned off."""
+        if self._quiet:
+            return
+        try:
+            thin = self.kind.currentData() == "thin"
+            dropped = False
+            if not thin:
+                if any(extrude.is_curve(p) for p in self.profiles):
+                    self.profiles = [p for p in self.profiles if not extrude.is_curve(p)]
+                    dropped = True
+            self._make_picker()
+            self._update_visibility()  # the wall fields come and go with the type
+            self._collect()
+            self._profiles_changed()
+            if dropped:
+                # Kept until the next pick builds something (shown by show_status).
+                self.error = (
+                    "Sketch curves are profiles of a thin extrude only, so they were "
+                    "dropped. Pick an area or a face, or choose Thin Extrude again."
+                )
+                self.message.setText("⚠ " + self.error)
+            elif not self.profiles:
+                self._changed(new_geometry=True)
+        except Exception as exc:
+            warn("extrude type: %s" % exc)
 
     def _selection_changed(self):
         if self._closed:
@@ -1008,6 +1135,7 @@ class ExtrudePanel(Panel):
             self.picker.set_selected(
                 [extrude.key(p) for p in self.profiles if extrude.is_sketch(p[0])]
             )
+            self.picker.show_curves({extrude.key(p) for p in self.profiles if extrude.is_curve(p)})
             faces = []
             for obj, sub in self.profiles:
                 if not extrude.is_sketch(obj):
@@ -1033,7 +1161,7 @@ class ExtrudePanel(Panel):
             self.info.setText("")
             return
         try:
-            extrude.check_profiles(self.profiles)
+            extrude.check_profiles(self.profiles, thin=self.kind.currentData() == "thin")
         except extrude.ExtrudeError as exc:
             self.error = str(exc)
             self.message.setText("⚠ " + self.error)
@@ -1254,6 +1382,8 @@ class ExtrudePanel(Panel):
             taper=options["taper2"],
             extent_object=options.get("extent_object2"),
             flip=False,
+            wall_location=options["wall_location2"],
+            wall_thickness=options["wall_thickness2"],
         )
         if options["extent2"] == "distance":
             alone["distance"] = -float(options["distance2"])
@@ -1393,6 +1523,11 @@ class ExtrudePanel(Panel):
             "taper2",
             "measurement",
             "flip",
+            "thin",
+            "wall_location",
+            "wall_thickness",
+            "wall_location2",
+            "wall_thickness2",
         )
         picked = [self.options.get(k) for k in ("start_object", "extent_object", "extent_object2")]
         refs = tuple((ref[0].Name, ref[1]) if ref else None for ref in picked)
@@ -1714,7 +1849,8 @@ class ExtrudePanel(Panel):
             return
         try:
             point, normal = extrude.profile_frame(self.profiles)
-            faces = extrude.global_faces(self.profiles)
+            # The profile's areas and faces, and a thin extrude's curves (edges, a box).
+            faces = extrude.global_faces(self.profiles) + extrude.global_wires(self.profiles)
             box = faces[0].BoundBox
             for face in faces[1:]:
                 box.add(face.BoundBox)

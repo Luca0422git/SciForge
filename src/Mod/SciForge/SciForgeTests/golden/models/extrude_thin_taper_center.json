@@ -1,0 +1,53 @@
+{
+  "id": "extrude_thin_taper_center",
+  "title": "Thin Extrude of a rectangle, wall centred (2 mm), widening 5 degrees over 10: the wall keeps its thickness",
+  "tags": [
+    "extrude",
+    "thin",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "outline"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10,
+      "taper": 5,
+      "thin": {
+        "location": "center",
+        "thickness": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2869.990930820739,
+    "faces": 10,
+    "solids": 1,
+    "bbox": [
+      -1.87488663525924,
+      -1.87488663525924,
+      0,
+      41.87488663525924,
+      31.87488663525924,
+      10
+    ],
+    "source": "analytic",
+    "note": "The wall runs from 1 mm outside (42x32) to 1 mm inside (38x28) the outline; both sides lean out by d = 10 tan 5 deg = 0.874887 per side. Each drafted rectangle a x b: V = h/6 (ab + 4 (a+d)(b+d) + (a+2d)(b+2d)); 42x32 minus 38x28 = 2869.9909. Faces: 4 outer, 4 inner, top, bottom."
+  }
+}

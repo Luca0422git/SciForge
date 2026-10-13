@@ -14,6 +14,7 @@ Conventions (documented for model authors in golden/README.md):
   * Every feature gets Refine = True, because Fusion never leaves the extra
     seam faces FreeCAD keeps by default (face counts are compared exactly).
 """
+
 import math
 
 import FreeCAD as App
@@ -168,6 +169,27 @@ class Builder:
             options["start_object"] = self._extrude_ref(step, step["start_from"])
         if "bodies" in step:  # the dialog's "Bodies to Cut" row (golden/extrude_bodies_ops.py)
             options["bodies"] = self._extrude_bodies(step)
+        if "thin" in step:  # Fusion's Thin Extrude: a wall along the profile
+            thin = step["thin"]
+            options.update(
+                thin=True,
+                wall_location=thin.get("location", "side1"),
+                wall_thickness=thin.get("thickness", 1.0),
+                wall_location2=thin.get("location2", thin.get("location", "side1")),
+                wall_thickness2=thin.get("thickness2", thin.get("thickness", 1.0)),
+            )
+        if "curves" in step:  # a thin extrude's open profile: sketch curves
+            from .sweep_loft_ops import curves_of
+
+            curves = curves_of(self, step["curves"], "extrude %r" % step["id"])
+            if "profile" in step and "regions" in step:
+                sketch = self.objects[step["profile"]]
+                curves += [self._region(step, [sketch], p) for p in step["regions"]]
+            try:
+                feature = extrude.make(self.body, curves, options, step["id"])
+            except extrude.ExtrudeError as exc:
+                raise BuildError("extrude %r: %s" % (step["id"], exc))
+            return self._extruded(step, feature)
         if "face" in step:  # Fusion: pick a flat face of the part as the profile
             tip = self.body.Tip
             names = selectors.select(tip.Shape, step["face"], "faces")
@@ -187,6 +209,11 @@ class Builder:
             feature = extrude.make(self.body, profile, options, step["id"])
         except extrude.ExtrudeError as exc:
             raise BuildError("extrude %r: %s" % (step["id"], exc))
+        return self._extruded(step, feature)
+
+    def _extruded(self, step, feature):
+        from sciforge import extrude
+
         self.objects[step["id"]] = feature
         self.ops[step["id"]] = "extrude"
         body = extrude.owner_body(feature)
@@ -217,6 +244,10 @@ class Builder:
             return (self._origin(_PLANE_ROLE[spec["plane"]]), "")
         if "face" in spec:
             tip = self._tip()
+            if "of" in spec:  # a face of another body: the one a step made
+                from sciforge import extrude
+
+                tip = extrude.owner_body(self.objects[spec["of"]]).Tip
             names = selectors.select(tip.Shape, spec["face"], "faces")
             if len(names) != 1:
                 raise BuildError("extrude %r: the face selector must pick one face" % step["id"])
