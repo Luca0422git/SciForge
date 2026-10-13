@@ -3,6 +3,7 @@
 would (nothing selected, a simple part on screen), and record what each does:
 errors, pop-ups, a task panel. An error or a pop-up is a FAIL. Also writes
 ribbon_sweep-report.json with one entry per command."""
+
 import json
 import os
 
@@ -15,9 +16,14 @@ from SciForgeTests.gui import harness as h
 TABS = tuple((os.environ.get("SWEEP_TABS") or "solid,sketch").split(","))
 # Dialogs that are the command itself (Fusion opens a window for these too).
 INTENDED = {
-    "Insert SVG": "Import file",
-    "Insert DXF": "Import file",
-    "Insert Mesh": "Import Mesh",
+    "Insert SVG": "Insert SVG",  # the file picker (insert_ui.TITLES)
+    "Insert DXF": "Insert DXF",
+    "Insert Mesh": "Insert Mesh",
+    "Insert STEP": "Insert STEP",
+    "Canvas": "Insert Canvas",
+    # Fusion saves the open design before inserting another one into it: an unsaved
+    # design (the sweep's) gets the Save dialog first (versions_ui.save_design).
+    "Insert Component": "Save",
     "Change Parameters": "Parameters",
     "Manage Materials": "Materials",
     "3D Print": "3D Print",

@@ -6,6 +6,7 @@ also have drop-downs, number fields, selection boxes and the timeline; these hel
 operate them the way a person does (clicks and key presses through Qt), never by
 setting values in code. Not a scenario itself (it lives outside scenarios/).
 """
+
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 from PySide6 import QtTest
@@ -16,22 +17,41 @@ def _process():
 
 
 def choose(combo, text):
-    """Pick `text` in a drop-down with the keyboard (Up/Down, like a person who clicked it)."""
+    """Pick `text` in a drop-down with the keyboard (Up/Down, like a person who clicked it).
+    The list is waited for before the keys (it may open late on a slow machine: CI #110's
+    fillet_qa_more P17 lost its keys once); if it never shows, the same keys go to the closed
+    drop-down, which steps through its items as well (Tab into it and press Down)."""
     target = combo.findText(text)
     if target < 0:
         raise ValueError("%r is not in the drop-down %s" % (text, combo.objectName()))
+    # No shortcut when it already shows `text`: choosing it again is a real choice (Extrude,
+    # Revolve, Sweep, Loft, Pipe and the primitives lock a picked Operation on `activated`).
     combo.setFocus()
     QtTest.QTest.mouseClick(combo, QtCore.Qt.LeftButton)  # opens the list
     _process()
     view = combo.view()
-    delta = target - combo.currentIndex()
+    for _ in range(40):  # up to a second, as a person waits to see the list
+        if view.isVisible():
+            break
+        QtTest.QTest.qWait(25)
+    if view.isVisible():
+        _step(view, target - combo.currentIndex())
+        QtTest.QTest.keyClick(view, QtCore.Qt.Key_Return)
+        _process()
+    if combo.currentText() != text:
+        if view.isVisible():
+            QtTest.QTest.keyClick(view, QtCore.Qt.Key_Escape)
+            _process()
+        combo.setFocus()
+        _step(combo, target - combo.currentIndex())
+    return combo.currentText() == text
+
+
+def _step(widget, delta):
     key = QtCore.Qt.Key_Down if delta > 0 else QtCore.Qt.Key_Up
     for _ in range(abs(delta)):
-        QtTest.QTest.keyClick(view, key)
+        QtTest.QTest.keyClick(widget, key)
         _process()
-    QtTest.QTest.keyClick(view, QtCore.Qt.Key_Return)
-    _process()
-    return combo.currentText() == text
 
 
 def type_into(widget, text):

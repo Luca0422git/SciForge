@@ -39,6 +39,10 @@ class LabelTests(unittest.TestCase):
     def test_bodies_are_numbered_per_component(self):
         self.assertEqual(core.body_label([]), "Body1")
         self.assertEqual(core.body_label(["Body1"]), "Body2")
+        # every body counts, as in bodies._next_label: FreeCAD's first "Body" then Body2
+        self.assertEqual(core.body_label(["Body"]), "Body2")
+        self.assertEqual(core.body_label(["Body", "Body2"]), "Body3")
+        self.assertEqual(core.body_label(["Wheel"]), "Body2")
 
 
 class TreeTests(unittest.TestCase):

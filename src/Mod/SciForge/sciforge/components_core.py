@@ -103,5 +103,13 @@ def visible_steps(step_components, parents, active):
 
 
 def body_label(labels, base="Body"):
-    """Fusion numbers bodies per component: the first body of a new component is Body1."""
-    return next_label(labels, base)
+    """Fusion numbers bodies per component: the first body of a new component is Body1,
+    the next one Body2. Every body already in the component counts (a renamed one, or the
+    first root body that keeps FreeCAD's own "Body" label), the same rule as
+    bodies._next_label, so Extrude's New Body and Combine's New Body name alike: with
+    "Body" there, the next body is Body2, never a second "1"."""
+    taken = set(labels)
+    n = len(labels) + 1
+    while "%s%d" % (base, n) in taken:
+        n += 1
+    return "%s%d" % (base, n)
