@@ -529,11 +529,12 @@ def step_print():
     """Utilities > 3D Print: a 3MF a slicer can read, with the body's volume."""
     import Mesh
 
-    from sciforge import commands, make3d_ui
+    from sciforge import commands, export_ui
 
     Gui.runCommand("SciForge_3DPrint")
-    dialog = make3d_ui.PrintDialog.last
+    dialog = export_ui.PrintDialog.last
     dialog.open_folder.setChecked(False)
+    dialog.send.setChecked(False)
     path = os.path.join(OUT_DIR, "print-test.3mf")
     ok = dialog.save(path)
     body = commands.active_body()

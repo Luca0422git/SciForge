@@ -8,6 +8,7 @@ the 3D view, F2 renames, Delete deletes, right click opens Fusion's menu for
 that kind of row. Structure: browser_core.py; deleting goes through
 timeline_ops.py (one undo step, later steps kept working where possible).
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -229,7 +230,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self._building = False
         self._syncing = False
         self._tree = None
-        self._expanded = {"document", "bodies", "sketches", "settings", "construction"}
+        self._expanded = {"document", "bodies", "sketches", "settings", "construction", "canvases"}
         self._doc = None
         self._renaming = None
         self._hover = None
@@ -486,7 +487,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             obj = self._object(node)
             if node["kind"] == "body" and obj is not None:
                 self._activate(obj)
-            elif node["kind"] in ("sketch", "construction", "analysis") and obj is not None:
+            elif (
+                node["kind"] in ("sketch", "construction", "analysis", "mesh_body", "canvas")
+                and obj is not None
+            ):
                 _later(_edit_object, obj)  # Fusion: double-click a section to edit it
         except Exception as exc:
             warn("browser: %s" % exc)
@@ -523,7 +527,17 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             return True
         return super().event(event)
 
-    RENAMABLE = ("body", "sketch", "construction", "analysis", "saved_view", "document")
+    RENAMABLE = (
+        "body",
+        "sketch",
+        "construction",
+        "analysis",
+        "saved_view",
+        "document",
+        "mesh_body",
+        "canvas",
+    )
+    OBJECT_KINDS = ("body", "sketch", "construction", "analysis", "mesh_body", "canvas")
 
     def rename(self, item):
         """The name becomes editable in place (Enter keeps it, Esc cancels)."""
@@ -577,14 +591,41 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         steps = [n["object"] for n in nodes if n["kind"] in ("sketch", "construction", "analysis")]
         body_names = [n["object"] for n in nodes if n["kind"] == "body"]
         views = [n["object"] for n in nodes if n["kind"] == "saved_view"]
+        plain = [n["object"] for n in nodes if n["kind"] in ("mesh_body", "canvas")]
         Gui.Selection.clearSelection()
         if steps:
             ops.delete(doc, [s for s in steps if doc.getObject(s) is not None])
         if body_names:
             ops.delete_bodies(doc, body_names)
+        if plain:
+            self._delete_plain(doc, plain)
         for name in views:
             self._delete_view(name)
         self.refresh(force=True)
+
+    def _delete_plain(self, doc, names):
+        """Delete mesh bodies and canvases (no history to re-link), one undo step."""
+        doc.openTransaction("Delete")
+        try:
+            for name in names:
+                if doc.getObject(name) is not None:
+                    doc.removeObject(name)
+        except Exception as exc:
+            warn("browser delete: %s" % exc)
+        doc.commitTransaction()
+        try:
+            App.closeActiveTransaction()
+        except Exception:
+            pass
+        doc.recompute()
+
+    def _run_with(self, obj, command):
+        """Run a command on a browser row's object (it is selected first, as a click does)."""
+        if obj is None or not commands.finish_open_dialog():
+            return
+        Gui.Selection.clearSelection()
+        Gui.Selection.addSelection(obj.Document.Name, obj.Name)
+        Gui.runCommand(command)
 
     # -- named views ----------------------------------------------------------------
     def new_named_view(self):
@@ -682,13 +723,16 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Show All Bodies": lambda: self._show_all("body", True),
             "Show All Sketches": lambda: self._show_all("sketch", True),
             "Hide All Sketches": lambda: self._show_all("sketch", False),
+            "Convert Mesh": lambda: self._run_with(obj, "SciForge_ConvertMesh"),
+            "Edit Canvas": lambda: _edit_object(obj),
+            "Calibrate": lambda: self._run_with(obj, "SciForge_CalibrateCanvas"),
         }
         if node["kind"] == "body" and _isolated.get(doc.Name if doc else None):
             handlers["Isolate"] = lambda: self._unisolate()
         entries = core.menu_for(node)
         if node["visible"] is None and "Show/Hide" in entries:
             entries.remove("Show/Hide")
-        if node["kind"] in ("body", "sketch", "construction", "analysis") and obj is None:
+        if node["kind"] in self.OBJECT_KINDS and obj is None:
             return None
         added = False
         for entry in entries:
@@ -709,7 +753,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 else menu.addAction(text)
             )
             self._handlers[action] = handlers.get(entry)
-            if entry in ("Edit Sketch", "Edit Feature"):
+            if entry in ("Edit Sketch", "Edit Feature", "Edit Canvas"):
                 font = action.font()
                 font.setBold(True)
                 action.setFont(font)

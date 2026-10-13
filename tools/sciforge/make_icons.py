@@ -14,6 +14,7 @@ traced from or derived from another product's artwork.
 
 Every icon is drawn on a 48x48 canvas. Edit a recipe below and re-run.
 """
+
 import math
 import os
 import sys
@@ -1392,6 +1393,60 @@ def _():
         + line(15, 16, 33, 16, "#8a93a3", 2.2)
         + line(15, 24, 33, 24, "#8a93a3", 2.2)
         + line(15, 32, 27, 32, "#8a93a3", 2.2)
+    )
+
+
+@icon("insert_step")
+def _():
+    # Two bodies arriving from a file (a tag with "STEP" over a grey block)
+    return (
+        block(0, 0, 0, 16, 16, 12, GREY, 30, 30)
+        + rect(4, 4, 28, 16, WHITE, 2)
+        + '<text x="18" y="16" font-family="sans-serif" font-size="9" '
+        'font-weight="bold" text-anchor="middle" fill="%s">STEP</text>' % DBLUE[2]
+    )
+
+
+@icon("convert_mesh")
+def _():
+    # A triangle mesh on the left turning into a smooth block on the right
+    pts = [(6, 20), (18, 14), (18, 34), (6, 40)]
+    out = poly(pts, GOLD[1]) + line(6, 20, 18, 34, GOLD[2], 1.2) + line(18, 14, 6, 40, GOLD[2], 1.2)
+    out += arrow(20, 27, 28, 27, WHITE, 2.2, 4.5)
+    out += block(0, 0, 0, 12, 12, 12, GREY, 36, 30, 0.9)
+    return out
+
+
+@icon("export")
+def _():
+    # A box leaving through an opening to the right
+    return (
+        path("M8 10 H26 V40 H8 Z", STROKE, 2.4)
+        + block(0, 0, 0, 10, 10, 10, GREY, 17, 28, 0.7)
+        + arrow(24, 24, 42, 24, WHITE, 2.6, 6)
+    )
+
+
+@icon("export_all")
+def _():
+    # A folder with several files flying out of it
+    return (
+        path("M6 14 H18 L21 18 H40 V38 H6 Z", STROKE, 2.2, DARK)
+        + rect(14, 22, 10, 12, WHITE, 1.5)
+        + rect(20, 19, 10, 12, "#cfe6ff", 1.5)
+        + rect(26, 16, 10, 12, GOLD[1], 1.5)
+        + arrow(30, 10, 42, 6, WHITE, 2.2, 5)
+    )
+
+
+@icon("calibrate")
+def _():
+    # Two points on a picture with a measured distance between them
+    return (
+        rect(6, 10, 36, 28, "#5aaee8", 2)
+        + line(13, 30, 35, 18, WHITE, 2.0)
+        + pt(13, 30, "#f6dc8c", 3.2)
+        + pt(35, 18, "#f6dc8c", 3.2)
     )
 
 

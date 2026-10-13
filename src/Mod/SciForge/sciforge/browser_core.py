@@ -41,6 +41,10 @@ CONSTRUCTION_TYPES = {
 }
 SKETCH_TYPES = {"Sketcher::SketchObject"}
 BODY_TYPES = {"PartDesign::Body"}
+# Fusion lists mesh bodies beside solid bodies (Bodies folder) and canvases (reference
+# images) in a Canvases folder of their own.
+MESH_TYPES = {"Mesh::Feature"}
+CANVAS_TYPES = {"Image::ImagePlane"}
 ORIGIN_ROLES = ("Origin", "X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane")
 ORIGIN_LABELS = {
     "Origin": "O",
@@ -117,7 +121,7 @@ def _item(prefix, obj, icon, kind, **extra):
 
 def build(doc_label, objects, units="mm", active_body=None, views=()):
     """The whole browser tree for a document. ``views``: names of saved named views."""
-    bodies, sketches, construction, origin, analysis = [], [], [], [], []
+    bodies, sketches, construction, origin, analysis, canvases = [], [], [], [], [], []
     # Fusion's design has one origin. FreeCAD gives every body its own: show the active
     # body's, else the first body's (a reopened file has no active body yet).
     origin_body = active_body
@@ -131,6 +135,10 @@ def build(doc_label, objects, units="mm", active_body=None, views=()):
             if node["active"]:
                 node["tip"] = node["tip"] or "Active body: new features go here"
             bodies.append(node)
+        elif type_id in MESH_TYPES:
+            bodies.append(_item("mesh:", obj, "insert_mesh", "mesh_body"))
+        elif type_id in CANVAS_TYPES:
+            canvases.append(_item("canvas:", obj, "canvas", "canvas"))
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
         elif type_id in CONSTRUCTION_TYPES:
@@ -192,6 +200,8 @@ def build(doc_label, objects, units="mm", active_body=None, views=()):
         children.append(_folder("sketches", "Sketches", sketches))
     if construction:
         children.append(_folder("construction", "Construction", construction))
+    if canvases:
+        children.append(_folder("canvases", "Canvases", canvases))
     return _node("document", doc_label, "document", "document", children=children)
 
 
@@ -285,6 +295,27 @@ MENUS = {
         "Show/Hide",
         "Find in Window",
         "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "mesh_body": [
+        "Convert Mesh",
+        "Edit Feature",
+        "-",
+        "Show/Hide",
+        "Find in Window",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "canvas": [
+        "Edit Canvas",
+        "Calibrate",
+        "-",
+        "Show/Hide",
+        "Find in Window",
         "-",
         "Rename",
         "Delete",
