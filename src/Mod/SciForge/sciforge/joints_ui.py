@@ -161,7 +161,10 @@ class SnapHover:
             if pick is None or not self.allow(pick):
                 self.clear()
                 return
-            key = (pick.part.Name, pick.obj.Name, pick.element)
+            # the part may have moved since (the joint itself moves it): its place is part
+            # of the key, else the snaps would be drawn where it stood
+            plc = pick.part.Placement
+            key = (pick.part.Name, pick.obj.Name, pick.element, tuple(plc.Base), plc.Rotation.Q)
             if key != self.key:
                 self.key = key
                 self.pick = pick
@@ -411,6 +414,8 @@ _STANDALONE = {"animator": None, "shortcut": None}
 def animate(joint, loop=True):
     """Animate Joint (browser right-click): plays until Esc or another command."""
     stop_animation()
+    if not commands.finish_open_dialog():  # a command in progress ends (and its Esc with it)
+        return None
     if joint is None or joints.fusion_type(joint) == "rigid":
         commands.tell("A rigid joint has no motion to animate.")
         return None
@@ -455,6 +460,7 @@ class _JointsPanel(BodyPanel):
         self.markers = []
         self.animator = None
         self.notice = ""  # a refusal to show until the next good pick
+        self.transaction_name = transaction
         super().__init__(doc, transaction, editing)
         stop_animation()
         try:
@@ -491,6 +497,17 @@ class _JointsPanel(BodyPanel):
 
     def allow_hover(self, pick):
         return self.active in self.hover_boxes and self.allow_pick(pick)
+
+    def restart(self):
+        """Take back everything the dialog changed so far (a joint being made, the component
+        it moved, the ground it added) and keep waiting in a fresh undo step."""
+        self.stop_animation()
+        try:
+            preview.end_transaction(self.doc, abort=True)
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
+        self.doc.openTransaction(self.transaction_name)
+        preview.recompute(self.doc)
 
     def refuse(self, text):
         """Show why a click was refused; it stays until the next good pick."""
@@ -643,6 +660,7 @@ class _Limits:
     def __init__(self, panel, layout, unit, on_change):
         self.panel = panel
         self.unit = unit
+        self.on_change = on_change
         self.rows = {}
         self.caption = QtWidgets.QLabel("Angle limits" if unit == "deg" else "Slide limits")
         font = self.caption.font()
@@ -654,9 +672,23 @@ class _Limits:
             check.setObjectName("SciForgeJoint_%s_%s" % (unit, key))
             field = DistanceField(0.0, unit=unit, on_change=lambda v: on_change())
             field.widget.setEnabled(False)
-            check.toggled.connect(lambda on, f=field: (f.widget.setEnabled(on), on_change()))
+            check.toggled.connect(lambda on, k=key: self._toggled(k, on))
             layout.addRow(check, field.widget)
             self.rows[key] = (check, field)
+
+    def _toggled(self, key, on):
+        """A limit switched on starts at the joint's value now, so switching it on moves
+        nothing until a value is typed."""
+        try:
+            _check, field = self.rows[key]
+            field.widget.setEnabled(on)
+            joint = getattr(self.panel, "joint", None)
+            if on and joint is not None and not self.panel._quiet:
+                angle, slide = joints.value(joint)
+                field.set_value(round(angle if self.unit == "deg" else slide, 6))
+            self.on_change()
+        except Exception as exc:
+            warn("joint limits: %s" % exc)
 
     def set_visible(self, shown):
         self.caption.setVisible(shown)
@@ -696,6 +728,8 @@ class JointPanel(_JointsPanel):
         self.first = feature is None
         self._announce = ""
         self._pending_animation = False
+        self._realign = False  # a Position / type / axis change: the component goes to it
+        self._rejoin = False
         super().__init__(doc, "Joint" if feature is None else "Edit Joint", feature is not None)
         JointPanel.last = self
         self.target = feature
@@ -821,6 +855,10 @@ class JointPanel(_JointsPanel):
     def allow_click(self, pick):
         return pick.part is not None  # the same component again is refused with a message
 
+    def allow_object(self, obj):
+        """A joint origin's row in the browser is a snap too (Fusion: pick it anywhere)."""
+        return self.active in ("comp1", "comp2") and joints.is_joint_origin(obj)
+
     def picked_raw(self, root, sub, point):
         pick = joints.resolve_selection(root, sub, point)
         if pick is None:
@@ -861,14 +899,12 @@ class JointPanel(_JointsPanel):
         self.clear_markers()
         self.stop_animation()
         if self.joint is not None and self.first:
-            # the joint being made goes with its picks; the component comes back
-            try:
-                joints.delete_joint(self.joint)
-            except Exception as exc:
-                warn("Joint: %s" % exc)
+            # the joint being made goes with its picks; the component comes back, and the
+            # ground the joint added goes
             self.joint = None
             self.target = None
-            preview.recompute(self.doc)
+            self._announce = ""
+            self.restart()
 
     # -- fields ------------------------------------------------------------------------------------
     def _offset(self, key, value):
@@ -880,14 +916,19 @@ class JointPanel(_JointsPanel):
             except Exception as exc:
                 self.message.setText("⚠ %s" % exc)
                 return
+        self._realign = True
         self.changed()
 
     def _type_changed(self):
         kind = self.type_box.currentData()
         self._show_type_rows(kind)
+        # Fusion plays the new motion once as soon as the type is picked
+        self._pending_animation = self.joint is not None and kind != "rigid"
+        self._realign = True
         self.changed()
 
     def _axes_changed(self):
+        self._realign = True
         self.changed()
 
     def _limits_changed(self):
@@ -903,7 +944,8 @@ class JointPanel(_JointsPanel):
         self._start_animation(loop=True)
 
     def _start_animation(self, loop=False):
-        self.stop_animation()
+        # the playing one stops; the Animate button keeps the state the person gave it
+        _JointsPanel.stop_animation(self)
         if self.joint is None or joints.fusion_type(self.joint) == "rigid":
             return
         self.animator = Animator(self.joint, on_done=self._animation_done, loop=loop)
@@ -940,7 +982,7 @@ class JointPanel(_JointsPanel):
         offset["flip"] = self.flip.isChecked()
         axes = {}
         for label, (box, _c) in self.axis_boxes.items():
-            if box.isVisible():
+            if not box.isHidden():  # shown for this type (the Motion tab may be behind)
                 axes[AXIS_KEYS[label]] = box.currentData()
         made = False
         if self.joint is None:
@@ -957,7 +999,7 @@ class JointPanel(_JointsPanel):
                 else ""
             )
         else:
-            if getattr(self, "_rejoin", False):
+            if self._rejoin:
                 self._rejoin = False
                 joints._set_json(
                     self.joint,
@@ -977,9 +1019,16 @@ class JointPanel(_JointsPanel):
                 joints.set_axes(self.joint, **axes)
         self._apply_limits()
         attach_views(self.doc)
-        code = joints.align(self.joint, first=made)
-        if made:
-            self._pending_animation = True
+        realign, self._realign = made or self._realign, False
+        if realign:
+            # the component goes where the picks, Offsets, Angle, Flip and type put it
+            code = joints.align(self.joint, first=made)
+            if made:
+                self._pending_animation = True
+        else:
+            code = joints.solve(self.doc)  # only the limits changed: nothing else moves
+        if code == 0:
+            joints.keep_in_limits(self.joint)
         self.solve_check(code)
 
     def _apply_limits(self):
@@ -1021,6 +1070,7 @@ class JointPanel(_JointsPanel):
         self.stop_animation()
         if ok and self.joint is not None:
             try:
+                joints.go_to_rest(self.joint)
                 joints.save_baseline(self.doc)
             except Exception as exc:
                 warn("Joint: %s" % exc)
@@ -1042,6 +1092,7 @@ class AsBuiltPanel(_JointsPanel):
         self.parts = []
         self.position_pick = None
         self.position_snap = None
+        self._remake = False  # the components, the type or the position changed
         super().__init__(
             doc, "As-Built Joint" if feature is None else "Edit As-Built Joint", feature is not None
         )
@@ -1122,6 +1173,7 @@ class AsBuiltPanel(_JointsPanel):
             self.clear_markers()
             self.show_marker(snap["frame"])
             self.took()
+            self._remake = True
             self.changed()
             return
         if part in self.parts:
@@ -1133,6 +1185,7 @@ class AsBuiltPanel(_JointsPanel):
             self.parts.append(part)
         self.fields["components"].set_text(", ".join(p.Label for p in self.parts))
         self.took()
+        self._remake = True
         if len(self.parts) == 2 and self.type_box.currentData() != "rigid":
             self.activate("position")
         self.changed()
@@ -1145,20 +1198,15 @@ class AsBuiltPanel(_JointsPanel):
             self.position_pick = self.position_snap = None
             self.fields["position"].set_text("")
             self.clear_markers()
-        self._drop_joint()
-
-    def _drop_joint(self):
         if self.joint is not None and not self.editing:
-            try:
-                joints.delete_joint(self.joint)
-            except Exception as exc:
-                warn("As-Built Joint: %s" % exc)
             self.joint = None
             self.target = None
+            self.restart()  # the joint and the ground it added go
 
     def _type_changed(self):
         kind = self.type_box.currentData()
         self._show_rows(kind)
+        self._remake = True
         if kind != "rigid" and len(self.parts) == 2 and self.position_pick is None:
             self.activate("position")
         self.changed()
@@ -1169,27 +1217,25 @@ class AsBuiltPanel(_JointsPanel):
             raise NeedsPick("Click two components (in the view or the browser).")
         if kind != "rigid" and self.position_snap is None:
             raise NeedsPick("Click a snap point for the joint's position (its axis).")
-        if self.joint is not None and (
-            self.editing
-            and joints.fusion_type(self.joint) == kind
-            and {joints.part1(self.joint), joints.part2(self.joint)} == set(self.parts)
-            and self.position_pick is None
-        ):
-            pass  # only the limits changed
-        else:
-            self._drop_joint()
-            if self.editing and self.joint is not None:
-                joints.delete_joint(self.joint)
-                self.joint = None
+        position = (self.position_pick, self.position_snap) if kind != "rigid" else (None, None)
+        if self.joint is None:
             self.joint = joints.create_as_built_joint(
-                self.doc, kind, self.parts[0], self.parts[1], self.position_pick, self.position_snap
+                self.doc, kind, self.parts[0], self.parts[1], *position
             )
             self.target = self.joint
+        elif self._remake:
+            # the same joint, redefined (Edit keeps it in its place in the timeline)
+            joints.set_as_built(self.joint, kind, self.parts[0], self.parts[1], *position)
+            joints.ensure_ground(self.joint)
+        self._remake = False
         angle = self.angle_limits.values() if kind in core.ANGLE_LIMITS else None
         slide = self.slide_limits.values() if kind in core.LENGTH_LIMITS else None
         joints.set_limits(self.joint, angle=angle, slide=slide)
         attach_views(self.doc)
-        self.solve_check(joints.solve(self.doc))
+        code = joints.solve(self.doc)
+        if code == 0:
+            joints.keep_in_limits(self.joint)
+        self.solve_check(code)
 
     def preview_steps(self):
         return [self.joint] if self.joint is not None else []
@@ -1199,8 +1245,9 @@ class AsBuiltPanel(_JointsPanel):
 
     def before_close(self, ok):
         self.stop_animation()
-        if ok:
+        if ok and self.joint is not None:
             try:
+                joints.go_to_rest(self.joint)
                 joints.save_baseline(self.doc)
             except Exception as exc:
                 warn("As-Built Joint: %s" % exc)
@@ -1814,10 +1861,11 @@ class Watch:
 
     def slotDeletedObject(self, obj):
         try:
-            if joints.is_part(obj) or joints.is_joint(obj) or joints.is_rigid_group(obj):
-                self._later(obj.Document, tidy=True)
-            elif obj.TypeId == "PartDesign::Body" or obj.TypeId == "App::Part":
-                self._later(obj.Document, tidy=True)
+            doc = obj.Document
+            if getattr(doc, "Transacting", False):
+                return  # an undo / redo brings its joints back or takes them itself
+            if joints.is_part(obj) or obj.TypeId in ("PartDesign::Body", "App::Part"):
+                self._later(doc, tidy=True)
         except Exception:
             pass
 
@@ -1851,6 +1899,12 @@ class Watch:
                 self._later(doc, tidy)
                 return
             attach_views(doc)
+            # Never inside a dialog's undo step (opening a step would close the dialog's:
+            # what a dialog deletes is its own business) nor while one is pending.
+            if tidy and (
+                getattr(doc, "HasPendingTransaction", False) or Gui.Control.activeDialog()
+            ):
+                tidy = False
             if tidy:
                 doc.openTransaction("Remove joints of deleted components")
                 removed = joints.tidy(doc)
@@ -2037,7 +2091,11 @@ def edit_joint(feature):
 
 
 def edit_joint_limits(feature):
-    _edit(JointPanel, feature, show_motion=True)
+    """Edit Joint Limits (browser right-click): the joint's dialog on its limits."""
+    if getattr(feature, joints.TYPE_PROP, "") == "AsBuiltJoint":
+        _edit(AsBuiltPanel, feature)  # its limits are in its one page
+    else:
+        _edit(JointPanel, feature, show_motion=True)
 
 
 def edit_as_built(feature):

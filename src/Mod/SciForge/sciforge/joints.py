@@ -60,8 +60,7 @@ except Exception as _exc:  # pragma: no cover - only outside FreeCAD
     warn("FreeCAD's Assembly joints are not available: %s" % _exc)
 
 
-class JointError(core.JointError):
-    pass
+JointError = core.JointError  # one error type for the maths and the document side
 
 
 def _utils():
@@ -679,6 +678,15 @@ class JointProxy(_JointBase):
                 joint.recompute()
             except Exception:
                 pass
+        elif prop == "Suppressed" and getattr(joint, PROPS["role"], "") == "":
+            # a Pin-Slot's hidden slot joint is off whenever the joint is (the timeline's
+            # Suppress sets only the joint)
+            for helper in helpers_of(joint):
+                try:
+                    if bool(helper.Suppressed) != bool(joint.Suppressed):
+                        helper.Suppressed = bool(joint.Suppressed)
+                except Exception:
+                    pass
 
     def findPlacement(self, joint, ref, index=0):
         try:
@@ -1173,16 +1181,92 @@ def own_jcs1(joint):
     )
 
 
+_LAST_BROKEN = []  # labels of the joints the last solve could not satisfy
+
+
+def satisfied(joint, tol=1e-4):
+    """True when the joint's two (stored) joint origins sit as its type demands. FreeCAD's
+    solver reports success on a flipped or torn arrangement when joints fight each other
+    (its equations accept a half turn), so every solve is checked against this."""
+    try:
+        j1, j2 = jcs_global(joint, 0), jcs_global(joint, 1)
+    except Exception:
+        return True
+    zv = App.Vector(0, 0, 1)
+    xv = App.Vector(1, 0, 0)
+    d = j1.Base - j2.Base
+    z1, z2 = j1.Rotation.multVec(zv), j2.Rotation.multVec(zv)
+    x1, x2 = j1.Rotation.multVec(xv), j2.Rotation.multVec(xv)
+
+    def same(a, b):
+        return a.dot(b) > 1.0 - 1e-6
+
+    def on_axis():
+        return (d - z2 * d.dot(z2)).Length < tol
+
+    kind = getattr(joint, "JointType", "")
+    if kind == "Fixed":
+        return d.Length < tol and same(z1, z2) and same(x1, x2)
+    if kind == "Revolute":
+        return d.Length < tol and same(z1, z2)
+    if kind == "Cylindrical":
+        return same(z1, z2) and on_axis()
+    if kind == "Slider":
+        return same(z1, z2) and same(x1, x2) and on_axis()
+    if kind == "Ball":
+        return d.Length < tol
+    if kind == "Distance":
+        if getattr(joint, PROPS["role"], "") == HELPER_ROLE:
+            # a point (on a vertex) in a plane (on a face), whichever side each is on
+            first = element_name(joint.Reference1[1][0]) if joint.Reference1 else ""
+            plane, point = (j2, j1) if first.startswith("Vertex") else (j1, j2)
+            return abs((point.Base - plane.Base).dot(plane.Rotation.multVec(zv))) < tol
+        return same(z1, z2) and abs(d.dot(z2)) < tol
+    return True
+
+
+def broken_joints(doc):
+    """The active joints (and helpers) the current placements do not satisfy, among those
+    the solver works on (chained to a grounded part)."""
+    asm = assembly(doc)
+    if asm is None:
+        return []
+    found = []
+    for obj in doc.Objects:
+        if not (is_joint(obj) or is_helper(obj)) or getattr(obj, "Suppressed", False):
+            continue
+        p1, p2 = part1(obj), part2(obj)
+        if p1 is None or p2 is None:
+            continue
+        try:
+            if not (asm.isPartConnected(p1) or asm.isPartConnected(p2)):
+                continue
+        except Exception:
+            pass
+        if not satisfied(obj):
+            parent = getattr(obj, PROPS["parent"], None) if is_helper(obj) else None
+            found.append(parent if parent is not None else obj)
+    return found
+
+
 def solve(doc):
-    """Run FreeCAD's solver; 0 when it worked (see solve_message)."""
+    """Run FreeCAD's solver; 0 when it worked (see solve_message): -2 when it said it did
+    but the joints are not all satisfied."""
     asm = assembly(doc)
     if asm is None:
         return 0
     try:
-        return int(asm.solve())
+        code = int(asm.solve())
     except Exception as exc:
         warn("joints: solve failed: %s" % exc)
         return -1
+    if code == 0:
+        broken = broken_joints(doc)
+        _LAST_BROKEN[:] = sorted({b.Label for b in broken})
+        if broken:
+            log("joints the solver could not satisfy: %s" % ", ".join(_LAST_BROKEN))
+            return -2
+    return code
 
 
 SOLVE_MESSAGES = {
@@ -1191,12 +1275,16 @@ SOLVE_MESSAGES = {
     "body in the browser).",
     -1: "The joints cannot all be satisfied together (one of them fights another). Undo the "
     "last change or suppress a joint.",
+    -2: "The joints cannot all be satisfied together: %s fights the others. Change it, "
+    "suppress a joint, or Cancel.",
 }
 
 
 def solve_message(code):
     if code == 0:
         return ""
+    if code == -2:
+        return SOLVE_MESSAGES[-2] % (", ".join(_LAST_BROKEN) or "a joint")
     return SOLVE_MESSAGES.get(code, "The solver could not place the components (code %s)." % code)
 
 
@@ -1299,18 +1387,29 @@ def drive(joint, angle=None, slide=None, do_solve=True):
     return value(joint)
 
 
-def preview_transform(joint, phase, span):
-    """The animated preview Fusion plays after the second pick: (angle, slide) to drive to
-    at `phase` (0..1), or a whole transform for a Ball / Planar joint."""
-    kind = fusion_type(joint)
+def keep_in_limits(joint):
+    """A joint standing outside its limits (they were just set) goes to the nearest one.
+    Returns True when it moved."""
     lim = limits(joint)
-    angle0, slide0 = value(joint)
-    angle = slide = None
-    if kind in ("revolute", "cylindrical", "pinslot"):
-        angle = core.sweep(phase, angle0, lim["angle"]["min"], lim["angle"]["max"], 90.0)
-    if kind in ("slider", "cylindrical", "pinslot"):
-        slide = core.sweep(phase, slide0, lim["slide"]["min"], lim["slide"]["max"], span)
-    return angle, slide
+    angle, slide = value(joint)
+    a = core.clamp(angle, lim["angle"]["min"], lim["angle"]["max"]) if has_angle(joint) else None
+    s = core.clamp(slide, lim["slide"]["min"], lim["slide"]["max"]) if has_slide(joint) else None
+    if (a is None or abs(a - angle) < 1e-9) and (s is None or abs(s - slide) < 1e-9):
+        return False
+    drive(joint, angle=a, slide=s)
+    return True
+
+
+def go_to_rest(joint):
+    """Put the joint at its Rest value(s), when set (Fusion: where the motion settles).
+    Returns True when it moved."""
+    lim = limits(joint)
+    angle = lim["angle"]["rest"] if has_angle(joint) else None
+    slide = lim["slide"]["rest"] if has_slide(joint) else None
+    if angle is None and slide is None:
+        return False
+    drive(joint, angle=angle, slide=slide)
+    return True
 
 
 def wobble(joint, phase, span):
@@ -1515,6 +1614,7 @@ def rebuild_rigid_group(group):
     frame = App.Placement(anchor.Placement)
     for member in members[1:]:
         helper = _new_joint_object(doc, "rigid", "Helper", MEMBER_ROLE, label=group.Label + " link")
+        _set_json(helper, PROPS["offset"], dict(default_offset(), mate=False))  # as they stand
         setattr(helper, PROPS["parent"], group)
         helper.Visibility = False
         _set_json(helper, PROPS["snap1"], as_built_record(frame))
@@ -1533,6 +1633,14 @@ def create_as_built_joint(doc, fusion_type, part_a, part_b, origin_pick=None, or
     """A joint between two components where they stand. `origin_pick` / `origin_snap` give
     the joint origin (the axis of the motion) for every type but Rigid; the side it was
     picked on follows that geometry, the other side keeps the place as built."""
+    _check_as_built(fusion_type, part_a, part_b, origin_pick, origin_snap)
+    joint = _new_joint_object(doc, fusion_type, "AsBuiltJoint")
+    set_as_built(joint, fusion_type, part_a, part_b, origin_pick, origin_snap)
+    ensure_ground(joint)
+    return joint
+
+
+def _check_as_built(fusion_type, part_a, part_b, origin_pick, origin_snap):
     if part_a is None or part_b is None:
         raise JointError("Pick two components.")
     if part_a is part_b:
@@ -1541,9 +1649,39 @@ def create_as_built_joint(doc, fusion_type, part_a, part_b, origin_pick=None, or
         raise JointError("Unknown joint type %r." % (fusion_type,))
     if fusion_type != "rigid" and (origin_pick is None or origin_snap is None):
         raise JointError("Pick the joint's position (a snap point) on one of the components.")
-    joint = _new_joint_object(doc, fusion_type, "AsBuiltJoint")
+
+
+def _snap_frame(pick, snap):
+    """The global frame of a stored snap (kind + the element it sits on) on today's geometry."""
+    if snap.get("frame") is not None:
+        return App.Placement(snap["frame"])
+    candidates = snap_candidates(pick)
+    for c in candidates:
+        if c["kind"] == snap.get("kind") and c.get("at", "") == snap.get("at", ""):
+            return App.Placement(c["frame"])
+    if candidates:
+        return App.Placement(candidates[0]["frame"])
+    raise JointError("The joint's position is gone from %s. Pick it again." % pick.part.Label)
+
+
+def set_as_built(joint, fusion_type, part_a, part_b, origin_pick=None, origin_snap=None):
+    """(Re)define an as-built joint in place (Edit keeps the same joint, its place in the
+    timeline and its limits): the type, the two components where they stand now and the
+    position of its axis."""
+    _check_as_built(fusion_type, part_a, part_b, origin_pick, origin_snap)
+    old = getattr(joint, PROPS["fusion"], "")
+    setattr(joint, PROPS["fusion"], fusion_type)
+    joint.JointType = core.FREECAD_TYPE[fusion_type]
+    if old and old != fusion_type and joint.Label.startswith(core.TITLES.get(old, "?") + " "):
+        joint.Label = label_for(joint.Document, fusion_type)
+    # where they stand: the two joint origins are the same frame, nothing mates or flips
+    _set_json(joint, PROPS["offset"], dict(default_offset(), mate=False))
+    _set_json(joint, PROPS["axes"], default_axes(fusion_type))
     # the joint origin: the picked snap (global), else component 2's own origin
-    frame = App.Placement(origin_snap["frame"]) if origin_snap else App.Placement(part_b.Placement)
+    if origin_pick is not None and origin_snap is not None:
+        frame = _snap_frame(origin_pick, origin_snap)
+    else:
+        frame = App.Placement(part_b.Placement)
     refs = []
     for index, part in ((0, part_a), (1, part_b)):
         key = PROPS["snap1" if index == 0 else "snap2"]
@@ -1561,7 +1699,6 @@ def create_as_built_joint(doc, fusion_type, part_a, part_b, origin_pick=None, or
     joint.Reference1, joint.Reference2 = refs
     refresh_placements(joint)
     sync_helper(joint)
-    ensure_ground(joint)
     return joint
 
 
@@ -1649,10 +1786,103 @@ def place_joint_origin(obj):
 
 # -- tidying up ------------------------------------------------------------------------------------
 def _dead_ref(ref):
+    """True when a joint reference lost its part, or the object inside the part whose
+    element it names (a body deleted from a component)."""
     try:
-        return ref is None or ref[0] is None or ref[0].Document is None
+        if ref is None or ref[0] is None or ref[0].Document is None:
+            return True
+        doc = ref[0].Document
+        subs = list(ref[1]) if len(ref) > 1 else []
+        for name in (subs[0].split(".")[:-1] if subs else []):
+            if name and doc.getObject(name) is None:
+                return True
+        return False
     except Exception:
         return True
+
+
+def _references(joint, target):
+    """True when one of the joint's references is on `target`: the part itself, or a body
+    (a nested component) inside the part on the way to the element."""
+    for ref in (joint.Reference1, joint.Reference2):
+        try:
+            if not ref:
+                continue
+            if ref[0] is target:
+                return True
+            subs = list(ref[1]) if len(ref) > 1 else []
+            if subs and target.Name in subs[0].split(".")[:-1]:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def remove_joints_of(part):
+    """Fusion deletes a component's joints with it: the joints, Pin-Slot helpers and
+    rigid-group links on `part` (a part, or a body or component inside one), and its
+    ground, go now (called while it is being deleted, so it is the same undo step). A rigid
+    group left with one member goes too. Returns the names removed."""
+    doc = part.Document
+    doomed = []
+    for obj in doc.Objects:
+        if obj is part:
+            continue
+        if (is_joint(obj) or is_helper(obj)) and _references(obj, part):
+            doomed.append(obj)
+            doomed.extend(h for h in helpers_of(obj) if h not in doomed)
+        elif "ObjectToGround" in obj.PropertiesList and obj.ObjectToGround is part:
+            doomed.append(obj)
+    for group in rigid_groups(doc):
+        left = [m for m in group.Members if m is not None and m is not part]
+        if len(left) < 2 and any(m is part for m in group.Members):
+            doomed.append(group)
+            doomed.extend(h for h in helpers_of(group) if h not in doomed)
+    names = []
+    for obj in doomed:
+        try:
+            name = obj.Name
+            if doc.getObject(name) is not None:
+                doc.removeObject(name)
+                names.append(name)
+        except Exception as exc:
+            warn("joints: could not remove %s: %s" % (getattr(obj, "Label", "?"), exc))
+    if names:
+        log("joints removed with %s: %s" % (part.Label, ", ".join(names)))
+    return names
+
+
+class _DeleteWatch:
+    """Removes a part's joints while the part itself is being deleted (same undo step as
+    the delete, whoever deletes it: the browser, the timeline, a component's Delete, a
+    script). Not while FreeCAD undoes or redoes: the joints come and go with the step."""
+
+    def slotDeletedObject(self, obj):
+        try:
+            doc = obj.Document
+            if doc is None or App.isRestoring() or getattr(doc, "Transacting", False):
+                return
+            if assembly(doc) is None:
+                return
+            if is_part(obj) or obj.TypeId in ("PartDesign::Body", "App::Part"):
+                remove_joints_of(obj)
+            elif is_joint(obj) or is_rigid_group(obj):
+                # a Pin-Slot's slot joint and a rigid group's links go with it (the timeline
+                # and the browser delete only the step itself)
+                for helper in helpers_of(obj):
+                    if doc.getObject(helper.Name) is not None:
+                        doc.removeObject(helper.Name)
+        except Exception as exc:
+            warn("joints: %s" % exc)
+
+
+_DELETE_WATCH = {"observer": None}
+
+
+def install_delete_watch():
+    if _DELETE_WATCH["observer"] is None:
+        _DELETE_WATCH["observer"] = _DeleteWatch()
+        App.addDocumentObserver(_DELETE_WATCH["observer"])
 
 
 def tidy(doc):
@@ -1702,3 +1932,9 @@ def describe(joint):
     kind = core.TITLES.get(fusion_type(joint), "Joint")
     names = " - ".join(p.Label for p in (p1, p2) if p is not None)
     return "%s joint: %s" % (kind, names) if names else kind
+
+
+try:
+    install_delete_watch()
+except Exception as _exc:  # never let an import fail the commands
+    warn("joints delete watch unavailable: %s" % _exc)

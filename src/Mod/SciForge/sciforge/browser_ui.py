@@ -274,6 +274,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self._syncing = False
         self._tree = None
         self._expanded = {"document", "bodies", "sketches", "settings", "construction"}
+        self._expanded |= {"joints", "joint_origins"}  # new joints show at once
         self._doc = None
         self._renaming = None
         self._hover = None

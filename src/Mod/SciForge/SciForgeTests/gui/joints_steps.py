@@ -8,6 +8,9 @@ standing beside it, made with Extrude > New Body). Body2's top face centre is (6
 Body1's (20, 15, 10).
 """
 
+import math
+import time
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtWidgets
@@ -17,6 +20,8 @@ from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
 
 V = App.Vector
+Z = App.Vector(0, 0, 1)
+X = App.Vector(1, 0, 0)
 PLATE = (0, 0, 40, 30)
 PLATE_HEIGHT = 10
 BLOCK = (50, 0, 70, 10)
@@ -140,3 +145,121 @@ def no_dialog(where):
 def body_placement(body):
     p = body.Placement
     return (round(p.Base.x, 4), round(p.Base.y, 4), round(p.Base.z, 4))
+
+
+# -- the usual joint: the block's top onto the plate's top --------------------------------
+BLOCK_TOP = V(58, 6, 20)  # a click near the block's top centre (60, 5, 20)
+PLATE_TOP = V(19, 14, 10)  # a click near the plate's top centre (20, 15, 10)
+HOME = [50, 0, 0, 70, 10, 20]  # the block where it was made
+ON_PLATE = [10, 10, 10, 30, 20, 30]  # upside down, centred on the plate's top
+
+
+def click_tab(p, label):
+    """Click a tab of the dialog (Position / Motion) on its title."""
+    from SciForgeTests.gui import widget_input as w
+
+    bar = p.tabs.tabBar()
+    for i in range(bar.count()):
+        if bar.tabText(i) == label:
+            w.click(bar, bar.tabRect(i).center())
+            return h.check(
+                "tab %s shown" % label, p.tabs.currentIndex() == i, p.tabs.currentIndex()
+            )
+    return h.check("a tab %r" % label, False)
+
+
+def frames(joint):
+    """(joint origin 1, joint origin 2) as global placements (the stored ones: they coincide
+    when the joint is at 0)."""
+    jm = joints_module()
+    return jm.jcs_global(joint, 0), jm.jcs_global(joint, 1)
+
+
+def sample(joint, part, seconds=2.0):
+    """Watch a moving joint (an animation playing) for a while: one record per moment."""
+    jm = joints_module()
+    out = []
+    end = time.time() + seconds
+    while time.time() < end:
+        wait(40)
+        try:
+            j1, j2 = frames(joint)
+            angle, slide = jm.value(joint)
+            out.append(
+                {
+                    "angle": angle,
+                    "slide": slide,
+                    "j1": j1,
+                    "j2": j2,
+                    "plc": App.Placement(part.Placement),
+                    "box": part.Shape.BoundBox,
+                }
+            )
+        except Exception:
+            pass
+    return out
+
+
+def spread(values):
+    values = list(values)
+    return (max(values) - min(values)) if values else 0.0
+
+
+def tilt(a, b):
+    """Angle in degrees between two directions."""
+    c = max(-1.0, min(1.0, App.Vector(a).normalize().dot(App.Vector(b).normalize())))
+    return math.degrees(math.acos(c))
+
+
+def offset_of(rec):
+    """Joint origin 1 - joint origin 2 (global vector)."""
+    return rec["j1"].Base - rec["j2"].Base
+
+
+def z_of(plc):
+    return plc.Rotation.multVec(Z)
+
+
+def x_of(plc):
+    return plc.Rotation.multVec(X)
+
+
+def along(vec, axis, tol=1e-5):
+    """True when vec has no part across `axis` (it lies on the line)."""
+    a = App.Vector(axis).normalize()
+    return (vec - a * vec.dot(a)).Length <= tol
+
+
+def pick_pair(prefix="pair", wait_after=900):
+    """Steps: J, click the block's top, click the plate's top (the block lands on it)."""
+
+    def press():
+        press_j()
+
+    def first():
+        h.click(BLOCK_TOP)
+
+    def second():
+        h.click(PLATE_TOP)
+
+    second.wait_ms = wait_after
+    steps = [press, first, second]
+    for step in steps:
+        step.__name__ = "%s_%s" % (prefix, step.__name__)
+    return steps
+
+
+def block_box(name, expect, tol=1e-4):
+    return box_is(name, block().Shape.BoundBox, expect, tol)
+
+
+def browser_menu(label, entry):
+    from SciForgeTests.gui import timeline_input as t
+
+    return t.row_menu(label, entry)
+
+
+def timeline_menu(title, entry):
+    from SciForgeTests.gui import timeline_input as t
+
+    return t.menu(title, entry)

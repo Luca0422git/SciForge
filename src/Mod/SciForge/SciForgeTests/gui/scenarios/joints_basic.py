@@ -8,7 +8,7 @@ Plate = 0..40 x 0..30 x 10, Block = 50..70 x 0..10 x 20 (Extrude New Body).
      near the centre: component 1 taken, the triad stays, the box for component 2 waits.
      Click the plate's top face near its centre: the block flies onto the plate, faces mating
      (top against top: the block stands upside down on the plate, 10..30 high, centred on
-     (20, 15)), keeping its heading; the motion is previewed and comes back. Type Revolute;
+     (20, 15)), keeping its heading. Type Revolute: the new motion plays once and comes back;
      the plate was grounded (nothing held it), the note says so. OK: one "Revolute 1" in the
      timeline and in the browser's Joints folder; the plate's row shows the anchor. Ctrl+Z
      puts the block back where it was and removes the joint; Ctrl+Y brings both back.
@@ -19,6 +19,7 @@ Plate = 0..40 x 0..30 x 10, Block = 50..70 x 0..10 x 20 (Extrude New Body).
      The same component twice is refused with a message. J with only one body in another
      design says why.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -58,11 +59,19 @@ def a_hover_block():
 def a_snaps_shown():
     p = j.panel()
     kinds = j.snap_kinds(p)
-    h.check("snap points on the top face: centre, corners, midpoints", kinds == ["centre", "midpoint", "vertex"], kinds)
+    h.check(
+        "snap points on the top face: centre, corners, midpoints",
+        kinds == ["centre", "midpoint", "vertex"],
+        kinds,
+    )
     h.check("the centre is the nearest", j.hot_kind(p) == "centre", j.hot_kind(p))
     hov = p.hover
     if hov is not None and hov.hot is not None:
-        h.check("the triad stands at the face centre", (hov.hot["point"] - V(60, 5, 20)).Length < 1e-6, hov.hot["point"])
+        h.check(
+            "the triad stands at the face centre",
+            (hov.hot["point"] - V(60, 5, 20)).Length < 1e-6,
+            hov.hot["point"],
+        )
     h.shot("A-snaps")
 
 
@@ -72,7 +81,11 @@ def a_click_block():
 
 def a_block_taken():
     p = j.panel()
-    h.check("component 1 = the block", p.picks["comp1"] is not None and p.picks["comp1"].part is j.block(), p.picks["comp1"])
+    h.check(
+        "component 1 = the block",
+        p.picks["comp1"] is not None and p.picks["comp1"].part is j.block(),
+        p.picks["comp1"],
+    )
     h.check("component 2 box waits now", p.active == "comp2", p.active)
     h.check("a triad marker stays", len(p.markers) == 1, len(p.markers))
     h.check("nothing moved yet", j.block().Shape.BoundBox.XMin == 50, j.block().Shape.BoundBox)
@@ -86,7 +99,9 @@ def a_joined():
     p = j.panel()
     joints = j.joint_list()
     h.check("one joint made", len(joints) == 1, len(joints))
-    j.box_is("block on the plate: 10..30 x 10..20 x 10..30", j.block().Shape.BoundBox, ON_PLATE, 1e-4)
+    j.box_is(
+        "block on the plate: 10..30 x 10..20 x 10..30", j.block().Shape.BoundBox, ON_PLATE, 1e-4
+    )
     h.check("the plate was grounded by itself", j.joints_module().is_grounded(j.plate()))
     h.check("the note says so", "grounded" in p.note.text().lower(), p.note.text())
     h.check("the markers are gone", not p.markers, len(p.markers))
@@ -106,8 +121,11 @@ def a_preview_done():
 
 def a_revolute():
     p = j.panel()
-    p.tabs.setCurrentIndex(1)
+    j.click_tab(p, "Motion")
     j.choose_type(p, "Revolute")
+
+
+a_revolute.wait_ms = 2600  # the new motion plays once (Fusion) and comes back
 
 
 def a_revolute_set():
@@ -119,9 +137,6 @@ def a_revolute_set():
     h.check("Animate button shown", p.animate.isVisible())
     h.check("angle limits shown", p.angle_limits.rows["min"][0].isVisible())
     j.box_is("block still on the plate", j.block().Shape.BoundBox, ON_PLATE, 1e-4)
-
-
-a_revolute_set.wait_ms = 2600
 
 
 def a_ok():
@@ -172,7 +187,11 @@ def b_dialog():
     if p is None:
         return
     h.check("type shows Revolute", p.type_box.currentData() == "revolute", p.type_box.currentData())
-    h.check("component boxes filled", bool(p.fields["comp1"].button.text()) and "Select" not in p.fields["comp1"].button.text(), p.fields["comp1"].button.text())
+    h.check(
+        "component boxes filled",
+        bool(p.fields["comp1"].button.text()) and "Select" not in p.fields["comp1"].button.text(),
+        p.fields["comp1"].button.text(),
+    )
 
 
 def b_angle():
@@ -181,7 +200,12 @@ def b_angle():
 
 
 def b_turned():
-    j.box_is("Angle 90 turned the block (10 x 20 footprint)", j.block().Shape.BoundBox, [15, 5, 10, 25, 25, 30], 1e-4)
+    j.box_is(
+        "Angle 90 turned the block (10 x 20 footprint)",
+        j.block().Shape.BoundBox,
+        [15, 5, 10, 25, 25, 30],
+        1e-4,
+    )
 
 
 def b_offset_z():
@@ -235,7 +259,9 @@ def c_delete_joint():
 def c_deleted():
     h.check("joint deleted from the timeline", not j.joint_list())
     j.box_is("the block stays where it was", j.block().Shape.BoundBox, ON_PLATE, 1e-4)
-    helpers = [o for o in App.ActiveDocument.Objects if getattr(o, "SciForgeRole", "") in ("JointHelper",)]
+    helpers = [
+        o for o in App.ActiveDocument.Objects if getattr(o, "SciForgeRole", "") in ("JointHelper",)
+    ]
     h.check("no helper left", not helpers)
 
 
@@ -265,7 +291,11 @@ def c_pick_plate():
 
 def c_moved():
     p = j.panel()
-    h.check("corner snap taken", p.snaps["comp2"] is not None and p.snaps["comp2"]["kind"] == "vertex", p.snaps["comp2"])
+    h.check(
+        "corner snap taken",
+        p.snaps["comp2"] is not None and p.snaps["comp2"]["kind"] == "vertex",
+        p.snaps["comp2"],
+    )
     h.check("the block moved", j.block().Shape.BoundBox.XMin != 10, j.block().Shape.BoundBox)
 
 
