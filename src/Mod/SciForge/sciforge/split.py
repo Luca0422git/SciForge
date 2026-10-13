@@ -22,7 +22,6 @@ by where they were when the split was made, so editing an earlier step keeps eac
 in its own body. Deleting the Split Body step removes the new bodies again (bodies_gui.Watch
 and delete.py), as in Fusion.
 """
-
 import FreeCAD as App
 import Part
 

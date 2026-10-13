@@ -7,7 +7,6 @@ document, so they are saved with it and any expression can use them
 Model parameters are the dimensions already in the design: feature values
 (extrude length, fillet radius, ...) and sketch dimensions.
 """
-
 import FreeCAD as App
 
 from . import parameters_core as core

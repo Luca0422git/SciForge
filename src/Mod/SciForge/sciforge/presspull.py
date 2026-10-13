@@ -8,7 +8,6 @@ This module has no GUI code, so golden models can create it headless.
 Saved documents store the class path "sciforge.presspull.PressPullFeature";
 keep the name and properties stable.
 """
-
 import FreeCAD as App
 
 from . import curves
@@ -75,11 +74,7 @@ class PressPullFeature:
         notes = []
         pieces = []
         obj.Shape = core.press_pull(
-            base_obj.Shape,
-            faces,
-            obj.Distance.Value,
-            refine=obj.Refine,
-            report=notes,
+            base_obj.Shape, faces, obj.Distance.Value, refine=obj.Refine, report=notes,
             pieces=pieces,
         )
         if pieces and obj.Distance.Value < 0:

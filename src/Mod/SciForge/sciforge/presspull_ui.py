@@ -15,7 +15,6 @@ Nothing selected: the dialog opens and waits. Click more faces (or edges) to add
 click a picked one again to drop it. Tangent Chain also picks the faces that continue
 a picked face smoothly (a filleted run). Problems are shown in the dialog.
 """
-
 import FreeCAD as App
 import FreeCADGui as Gui
 

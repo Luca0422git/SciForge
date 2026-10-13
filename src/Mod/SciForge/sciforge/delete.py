@@ -21,7 +21,6 @@ copied or split from can be deleted: its copies keep their shape.
 
 Everything is one undo step.
 """
-
 import FreeCAD as App
 
 from . import bodies
