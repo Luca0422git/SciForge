@@ -8,18 +8,29 @@ the 3D view, F2 renames, Delete deletes, right click opens Fusion's menu for
 that kind of row. Structure: browser_core.py; deleting goes through
 timeline_ops.py (one undo step, later steps kept working where possible).
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import _remember, browser_core as core
-from . import commands, timeline_ops as ops, ui_icon, warn
+from . import commands, components, timeline_ops as ops, ui_icon, warn
 from .compat import QtCore, QtGui, QtWidgets
 from .inline_edit import InlineEditor
 
 ROLE_NODE = QtCore.Qt.UserRole
 EYE = 18  # width of the eye area at the start of a row
+RADIO = 14  # the activate mark at the end of a component row (Fusion's radio button)
 META_VIEW = "SciForge.NamedView."
-_isolated = {}  # document name -> names of bodies Isolate hid
+# Rows that can be dragged onto a component (or the design's row) to move them there, and
+# the rows they can be dropped on.
+DRAGGABLE = ("body", "component")
+DROP_TARGETS = ("component", "document")
+
+
+def _isolated_names(doc):
+    from . import components_ui
+
+    return components_ui.ISOLATED.get(doc.Name if doc else None)
 
 
 def _used_up_bodies(doc):
@@ -46,6 +57,7 @@ def _objects(doc):
             visible = obj.ViewObject.Visibility if obj.ViewObject is not None else None
             if visible is not None and getattr(obj, "Role", None) in core.ORIGIN_ROLES:
                 visible = _origin_visible(obj)
+            container = components.container_of(obj)
             row = {
                 "name": obj.Name,
                 "label": obj.Label,
@@ -58,6 +70,9 @@ def _objects(doc):
                 ),
                 "role": getattr(obj, "Role", None),
                 "sciforge_type": getattr(obj, "SciForgeType", ""),
+                # The component the row is in (None: the root); a component's own row
+                # carries its parent component, like any other member.
+                "component": container.Name if container is not None else None,
             }
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
@@ -131,7 +146,7 @@ def _edit_object(obj):
     try:
         body = ops.body_of(obj)
         if body is not None:
-            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+            components.activate_body(body)  # and its component
     except Exception:
         pass
     taskui.edit_object(obj)
@@ -163,6 +178,18 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
     def eye_rect(self, rect):
         return QtCore.QRect(rect.left() + 1, rect.top() + (rect.height() - 16) // 2, 16, 16)
 
+    @staticmethod
+    def has_radio(node):
+        """Component rows and the design's row carry Fusion's activate mark."""
+        return node is not None and node["kind"] in ("component", "document")
+
+    def radio_rect(self, rect):
+        """The activate mark: a ring at the end of the row, filled for the active one
+        (Autodesk's API help: "the radio button to the right of a component node")."""
+        return QtCore.QRect(
+            rect.right() - RADIO - 6, rect.top() + (rect.height() - RADIO) // 2, RADIO, RADIO
+        )
+
     def paint(self, painter, option, index):
         node = self._node(index)
         if node is None:
@@ -171,8 +198,9 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
             icon = ui_icon("eye" if node["visible"] else "eye_off")
             mode = QtGui.QIcon.Normal if node["visible"] else QtGui.QIcon.Disabled
             icon.paint(painter, self.eye_rect(option.rect), QtCore.Qt.AlignCenter, mode)
+        radio = self.has_radio(node)
         shifted = QtWidgets.QStyleOptionViewItem(option)
-        shifted.rect = option.rect.adjusted(EYE + 2, 0, 0, 0)
+        shifted.rect = option.rect.adjusted(EYE + 2, 0, -(RADIO + 10) if radio else 0, 0)
         if node["status"] == "error":
             shifted.palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#ff8a80"))
         elif node["status"] == "warning":
@@ -183,28 +211,59 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
             font.setStrikeOut(True)
             shifted.font = font
         super().paint(painter, shifted, index)
+        if radio or node["key"] == self.tree._drop_key:
+            painter.save()
+            try:
+                painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+                if radio:
+                    ring = self.radio_rect(option.rect).adjusted(2, 2, -2, -2)
+                    pen = QtGui.QPen(QtGui.QColor("#4da3ff" if node["active"] else "#9aa4b5"))
+                    pen.setWidthF(1.4)
+                    painter.setPen(pen)
+                    painter.setBrush(
+                        QtGui.QBrush(QtGui.QColor("#4da3ff"))
+                        if node["active"]
+                        else QtCore.Qt.NoBrush
+                    )
+                    painter.drawEllipse(ring)
+                if node["key"] == self.tree._drop_key:
+                    # A dragged body or component is over this row: it can be dropped here.
+                    pen = QtGui.QPen(QtGui.QColor("#4da3ff"))
+                    pen.setWidthF(1.5)
+                    painter.setPen(pen)
+                    painter.setBrush(QtCore.Qt.NoBrush)
+                    painter.drawRoundedRect(option.rect.adjusted(1, 1, -2, -2), 3, 3)
+            finally:
+                painter.restore()
 
     def sizeHint(self, option, index):
         size = super().sizeHint(option, index)
-        return QtCore.QSize(size.width() + EYE + 2, max(size.height(), 24))
+        return QtCore.QSize(size.width() + EYE + 2 + RADIO + 10, max(size.height(), 24))
 
     def updateEditorGeometry(self, editor, option, index):
         editor.setGeometry(option.rect.adjusted(EYE + 22, 0, 0, 0))
 
     def editorEvent(self, event, model, option, index):
         node = self._node(index)
-        if node is None or node["visible"] is None:
+        if node is None:
             return False
-        if event.type() in (
+        if event.type() not in (
             QtCore.QEvent.MouseButtonPress,
             QtCore.QEvent.MouseButtonRelease,
             QtCore.QEvent.MouseButtonDblClick,
         ):
-            if self.eye_rect(option.rect).contains(event.position().toPoint()):
-                if event.type() == QtCore.QEvent.MouseButtonRelease:
-                    key = node["key"]
-                    QtCore.QTimer.singleShot(0, lambda: self.tree.toggle_eye(key))
-                return True
+            return False
+        pos = event.position().toPoint()
+        if node["visible"] is not None and self.eye_rect(option.rect).contains(pos):
+            if event.type() == QtCore.QEvent.MouseButtonRelease:
+                key = node["key"]
+                QtCore.QTimer.singleShot(0, lambda: self.tree.toggle_eye(key))
+            return True
+        if self.has_radio(node) and self.radio_rect(option.rect).contains(pos):
+            if event.type() == QtCore.QEvent.MouseButtonRelease:
+                key = node["key"]
+                QtCore.QTimer.singleShot(0, lambda: self.tree.activate_key(key))
+            return True
         return False
 
 
@@ -230,17 +289,23 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self._syncing = False
         self._tree = None
         self._expanded = {"document", "bodies", "sketches", "settings", "construction"}
+        # Component rows and their Bodies / Sketches folders start open (keys are made per
+        # component); this remembers the ones the user closed.
+        self._collapsed = set()
         self._doc = None
         self._renaming = None
         self._hover = None
         self._handlers = {}
         self._busy = 0
+        self._press = None  # (row key, pos) of a left press on a draggable row
+        self._dragging = False
+        self._drop_key = None  # row under a dragged body / component
         self.itemClicked.connect(self._clicked)
         self.itemDoubleClicked.connect(self._double_clicked)
         self.itemEntered.connect(self._entered)
         self.itemSelectionChanged.connect(self._selection_changed)
-        self.itemExpanded.connect(lambda i: self._expanded.add(i.data(1, ROLE_NODE)["key"]))
-        self.itemCollapsed.connect(lambda i: self._expanded.discard(i.data(1, ROLE_NODE)["key"]))
+        self.itemExpanded.connect(lambda i: self._opened(i.data(1, ROLE_NODE)["key"]))
+        self.itemCollapsed.connect(lambda i: self._closed(i.data(1, ROLE_NODE)["key"]))
         self.customContextMenuRequested.connect(self._menu)
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(500)
@@ -278,18 +343,35 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             self._observer = None
 
     # -- building ------------------------------------------------------------------
+    def _opened(self, key):
+        self._expanded.add(key)
+        self._collapsed.discard(key)
+
+    def _closed(self, key):
+        self._expanded.discard(key)
+        self._collapsed.add(key)
+
+    def _starts_open(self, key):
+        if key in self._expanded:
+            return True
+        if key in self._collapsed:
+            return False
+        return key.startswith(("component:", "bodies:", "sketches:"))
+
     def tree(self):
         doc = App.ActiveDocument
         self._doc = doc
         if doc is None:
             return core._node("document", "(no design open)", "document", "document")
         body = commands.active_body()
+        component = components.active_component(doc)
         return core.build(
             doc.Label,
             _objects(doc),
             units(doc),
             body.Name if body is not None else None,
             saved_views(doc),
+            active_component=component.Name if component is not None else None,
         )
 
     def refresh(self, force=False):
@@ -329,15 +411,19 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             font = item.font(1)
             font.setBold(True)
             item.setFont(1, font)
-            item.setText(1, node["label"] + "  ●")
+            if node["kind"] == "body":
+                item.setText(1, node["label"] + "  ●")
+            # A component's mark is the filled ring at the end of its row (the delegate).
         tips = [node["tip"]] if node["tip"] else []
         if node["visible"] is not None:
             tips.append("Click the eye to show or hide")
+        if node["kind"] in ("component", "document") and not node["active"]:
+            tips.append("Click the ring at the end of the row to activate")
         if tips:
             item.setToolTip(1, "\n".join(tips))
         for child in node["children"]:
             self._add(item, child)
-        item.setExpanded(node["key"] in self._expanded)
+        item.setExpanded(self._starts_open(node["key"]))
         return item
 
     def _items(self):
@@ -371,6 +457,80 @@ class BrowserWidget(QtWidgets.QTreeWidget):
     def label_point(self, item):
         rect = self.visualRect(self.indexFromItem(item, 1))
         return QtCore.QPoint(rect.left() + EYE + 30, rect.center().y())
+
+    def radio_point(self, item):
+        """Viewport point of a component row's activate ring (for a click)."""
+        rect = self.visualRect(self.indexFromItem(item, 1))
+        return self.delegate.radio_rect(rect).center()
+
+    # -- drag a body or component onto a component -----------------------------------
+    def _node_at(self, pos):
+        item = self.itemAt(pos)
+        return (item, item.data(1, ROLE_NODE)) if item is not None else (None, None)
+
+    def mousePressEvent(self, event):
+        self._press = None
+        try:
+            if event.button() == QtCore.Qt.LeftButton:
+                pos = event.position().toPoint()
+                item, node = self._node_at(pos)
+                if node is not None and node["kind"] in DRAGGABLE:
+                    rect = self.visualItemRect(item)
+                    if not self.delegate.eye_rect(rect).contains(pos):
+                        self._press = (node["key"], pos)
+        except Exception as exc:
+            warn("browser: %s" % exc)
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        try:
+            if self._press is not None and event.buttons() & QtCore.Qt.LeftButton:
+                pos = event.position().toPoint()
+                if self._dragging or (pos - self._press[1]).manhattanLength() > 12:
+                    self._dragging = True
+                    _item, node = self._node_at(pos)
+                    key = node["key"] if node is not None and node["kind"] in DROP_TARGETS else None
+                    if key == self._press[0]:
+                        key = None
+                    if key != self._drop_key:
+                        self._drop_key = key
+                        self.viewport().update()
+                    return  # a dragged row does not stretch the selection
+        except Exception as exc:
+            warn("browser: %s" % exc)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        dragging, press, key = self._dragging, self._press, self._drop_key
+        self._dragging, self._press, self._drop_key = False, None, None
+        if dragging:
+            self.viewport().update()
+            try:
+                moving = [i.data(1, ROLE_NODE) for i in self.selectedItems()]
+                moving = [n for n in moving if n["kind"] in DRAGGABLE]
+                pressed = core.find(self._tree, press[0]) if self._tree is not None else None
+                if pressed is not None and pressed["key"] not in [n["key"] for n in moving]:
+                    moving = [pressed]
+                target = core.find(self._tree, key) if key and self._tree is not None else None
+                if target is not None and moving:
+                    _later(self.move_to, moving, target)
+            except Exception as exc:
+                warn("browser drag: %s" % exc)
+            return
+        super().mouseReleaseEvent(event)
+
+    def move_to(self, nodes, target_node):
+        """Move bodies / components into the component of ``target_node`` (the design's
+        row: the root). Fusion: drag a body onto a component in the browser."""
+        from . import components_ui
+
+        doc = self._doc
+        if doc is None or not commands.finish_open_dialog():
+            return
+        target = self._object(target_node) if target_node["kind"] == "component" else None
+        objs = [self._object(n) for n in nodes if n["kind"] in DRAGGABLE]
+        components_ui.move_objects(doc, [o for o in objs if o is not None], target)
+        self.refresh(force=True)
 
     # -- selection: browser <-> 3D view ----------------------------------------------
     def _sync_selection(self):
@@ -486,6 +646,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             obj = self._object(node)
             if node["kind"] == "body" and obj is not None:
                 self._activate(obj)
+            elif node["kind"] == "component" and obj is not None:
+                self.activate_component(obj)
+            elif node["kind"] == "document" and self._doc is not None:
+                self.activate_component(None)
             elif node["kind"] in ("sketch", "construction", "analysis") and obj is not None:
                 _later(_edit_object, obj)  # Fusion: double-click a section to edit it
         except Exception as exc:
@@ -494,8 +658,30 @@ class BrowserWidget(QtWidgets.QTreeWidget):
     def _activate(self, body):
         if not commands.finish_open_dialog():  # a command keeps the body it started in
             return
-        Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+        components.activate_body(body)  # and its component
         self._refresh_soon()
+
+    def activate_component(self, component):
+        """Make a component (None: the root) the active one: new work goes there."""
+        if not commands.finish_open_dialog():  # a command keeps the component it started in
+            return
+        components.set_active(component, self._doc)
+        self._refresh_soon()
+
+    def activate_key(self, key):
+        """The activate ring of a row was clicked."""
+        try:
+            node = core.find(self._tree, key) if self._tree is not None else None
+            if node is None:
+                return
+            if node["kind"] == "document":
+                self.activate_component(None)
+            elif node["kind"] == "component":
+                obj = self._object(node)
+                if obj is not None:
+                    self.activate_component(obj)
+        except Exception as exc:
+            warn("browser: %s" % exc)
 
     def keyPressEvent(self, event):
         try:
@@ -523,7 +709,15 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             return True
         return super().event(event)
 
-    RENAMABLE = ("body", "sketch", "construction", "analysis", "saved_view", "document")
+    RENAMABLE = (
+        "body",
+        "component",
+        "sketch",
+        "construction",
+        "analysis",
+        "saved_view",
+        "document",
+    )
 
     def rename(self, item):
         """The name becomes editable in place (Enter keeps it, Esc cancels)."""
@@ -576,12 +770,18 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             return
         steps = [n["object"] for n in nodes if n["kind"] in ("sketch", "construction", "analysis")]
         body_names = [n["object"] for n in nodes if n["kind"] == "body"]
+        part_names = [n["object"] for n in nodes if n["kind"] == "component"]
         views = [n["object"] for n in nodes if n["kind"] == "saved_view"]
         Gui.Selection.clearSelection()
         if steps:
             ops.delete(doc, [s for s in steps if doc.getObject(s) is not None])
         if body_names:
-            ops.delete_bodies(doc, body_names)
+            ops.delete_bodies(doc, [b for b in body_names if doc.getObject(b) is not None])
+        if part_names:
+            from . import components_ui
+
+            parts = [doc.getObject(n) for n in part_names]
+            components_ui.delete_components(doc, [p for p in parts if p is not None])
         for name in views:
             self._delete_view(name)
         self.refresh(force=True)
@@ -626,7 +826,6 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         item = self.itemAt(pos)
         if item is None:
             return
-        node = item.data(1, ROLE_NODE)
         # A right-click is not a pick for a command waiting for picks: the row is
         # marked here only, the command ends when a menu entry runs.
         quiet = bool(Gui.Control.activeDialog())
@@ -660,6 +859,11 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         menu.setObjectName("SciForgeBrowserMenu")
         self._handlers = {}
         doc = self._doc
+        selected_nodes = [i.data(1, ROLE_NODE) for i in self.selectedItems()]
+        selected_bodies = [self._object(n) for n in selected_nodes if n["kind"] == "body"]
+        selected_bodies = [b for b in selected_bodies if b is not None] or (
+            [obj] if node["kind"] == "body" and obj is not None else []
+        )
         handlers = {
             "Show/Hide": lambda: self._set_visible(node, not node["visible"]),
             "Rename": lambda key=node["key"]: self._rename_key(key),
@@ -667,6 +871,13 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Edit Sketch": lambda: _edit_object(obj),
             "Edit Feature": lambda: _edit_object(obj),
             "Activate Body": lambda: self._activate(obj),
+            "Activate": lambda: self.activate_component(
+                obj if node["kind"] == "component" else None
+            ),
+            "New Component": lambda: self._new_component(
+                obj if node["kind"] == "component" else None
+            ),
+            "Create Components from Bodies": lambda: self._components_from_bodies(selected_bodies),
             "Isolate": lambda: self._isolate(obj),
             "Find in Window": lambda: self._find_in_window(obj),
             "Find in Timeline": lambda: self._find_in_timeline(node),
@@ -683,13 +894,18 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Show All Sketches": lambda: self._show_all("sketch", True),
             "Hide All Sketches": lambda: self._show_all("sketch", False),
         }
-        if node["kind"] == "body" and _isolated.get(doc.Name if doc else None):
+        isolated = _isolated_names(doc)
+        if node["kind"] in ("body", "component") and isolated:
             handlers["Isolate"] = lambda: self._unisolate()
         entries = core.menu_for(node)
         if node["visible"] is None and "Show/Hide" in entries:
             entries.remove("Show/Hide")
-        if node["kind"] in ("body", "sketch", "construction", "analysis") and obj is None:
-            return None
+        if node["kind"] in ("body", "component", "sketch", "construction", "analysis"):
+            if obj is None:
+                return None
+        if node["kind"] == "document" and not components.list_components(doc):
+            # Without components the design's row is not a component to activate.
+            entries = [e for e in entries if e != "Activate"]
         added = False
         for entry in entries:
             if entry == "-":
@@ -699,9 +915,13 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             text = entry
             if entry == "Show/Hide":
                 text = "Hide" if node["visible"] else "Show"
-            if entry == "Isolate" and _isolated.get(doc.Name if doc else None):
+            if entry == "Isolate" and isolated:
                 text = "Exit Isolate"
-            if entry == "Activate Body" and node["active"]:
+            if entry in ("Activate Body", "Activate") and node["active"]:
+                continue
+            if entry == "Move to Component":
+                if self._move_menu(menu, node, obj):
+                    added = True
                 continue
             action = (
                 menu.addAction(ui_icon("delete"), text)
@@ -716,33 +936,72 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             added = True
         return menu if added else None
 
-    def _isolate(self, body):
-        doc = self._doc
-        hidden = []
-        for other in ops.bodies(doc):
-            if other is not body and other.ViewObject is not None and other.ViewObject.Visibility:
-                other.ViewObject.Visibility = False
-                hidden.append(other.Name)
-        if body.ViewObject is not None:
-            body.ViewObject.Visibility = True
-        _isolated[doc.Name] = hidden
+    def _move_menu(self, menu, node, obj):
+        """ "Move to Component" with one entry per component a row can go into (and the
+        root). Fusion moves bodies by dragging them in the browser; SciForge has both."""
+        if obj is None or self._doc is None:
+            return False
+        moving = [self._object(n) for n in self._selected_draggable()] or [obj]
+        moving = [o for o in moving if o is not None]
+        targets = components.move_targets(self._doc, moving)
+        if not targets:
+            return False
+        sub = menu.addMenu("Move to Component")
+        sub.setObjectName("SciForgeMoveToMenu")
+        for label, target in targets:
+            action = sub.addAction(label)
+            self._handlers[action] = lambda t=target, m=list(moving): self._move_objects(m, t)
+        return True
+
+    def _selected_draggable(self):
+        return [
+            i.data(1, ROLE_NODE)
+            for i in self.selectedItems()
+            if i.data(1, ROLE_NODE)["kind"] in DRAGGABLE
+        ]
+
+    def _move_objects(self, objs, target):
+        from . import components_ui
+
+        if self._doc is None or not commands.finish_open_dialog():
+            return
+        components_ui.move_objects(self._doc, objs, target)
+        self.refresh(force=True)
+
+    def _new_component(self, parent):
+        from . import components_ui
+
+        components_ui.open_new_component(parent)
+
+    def _components_from_bodies(self, bodies):
+        from . import components_ui
+
+        if self._doc is None or not commands.finish_open_dialog():
+            return
+        components_ui.create_from_bodies(self._doc, bodies)
+        self.refresh(force=True)
+
+    def _isolate(self, obj):
+        from . import components_ui
+
+        components_ui.isolate(obj)
         self.refresh(force=True)
 
     def _unisolate(self):
-        doc = self._doc
-        for name in _isolated.pop(doc.Name, []):
-            obj = doc.getObject(name)
-            if obj is not None and obj.ViewObject is not None:
-                obj.ViewObject.Visibility = True
+        from . import components_ui
+
+        components_ui.unisolate(self._doc)
         self.refresh(force=True)
 
     def _show_all(self, kind, visible):
+        from . import components_ui
+
         types = core.BODY_TYPES if kind == "body" else core.SKETCH_TYPES
         for obj in self._doc.Objects:
             if obj.TypeId in types and obj.ViewObject is not None:
                 obj.ViewObject.Visibility = visible
         if kind == "body":
-            _isolated.pop(self._doc.Name, None)
+            components_ui.ISOLATED.pop(self._doc.Name, None)
         self.refresh(force=True)
 
     def _find_in_window(self, obj):
@@ -755,9 +1014,16 @@ class BrowserWidget(QtWidgets.QTreeWidget):
     def _find_in_timeline(self, node):
         from . import timeline_ui
 
-        if node["kind"] == "body":
-            body = self._object(node)
-            names = [o.Name for o, b in ops.steps(self._doc) if b is body]
+        if node["kind"] in ("body", "component"):
+            target = self._object(node)
+            if node["kind"] == "body":
+                names = [o.Name for o, b in ops.steps(self._doc) if b is target]
+            else:  # the component's own step and every step inside it
+                names = [
+                    o.Name
+                    for o, b in ops.steps(self._doc)
+                    if o is target or components.is_inside(b if b is not None else o, target)
+                ]
             w = timeline_ui.widget()
             if w is not None and names:
                 w.refresh()
@@ -778,7 +1044,13 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             return
         body = ops.body_of(plane)
         if body is not None:
-            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+            components.activate_body(body)
+        else:
+            # A component's own origin plane: the sketch goes into that component (its
+            # preferred body, or a new one), on the body's plane of the same role.
+            owner = components.origin_owner(plane)
+            if components.is_component(owner):
+                components.set_active(owner, self._doc)
         Gui.Selection.clearSelection()
         Gui.Selection.addSelection(plane.Document.Name, plane.Name)
         Gui.runCommand("SciForge_NewSketch")

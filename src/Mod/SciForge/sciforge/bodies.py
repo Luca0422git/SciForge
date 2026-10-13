@@ -19,6 +19,7 @@ Tools that "use up" bodies (Combine without Keep Tools) hide them while that ste
 the design, and show them again when the step is deleted, undone, suppressed or rolled back
 (sync_consumed, run after every recompute/undo by bodies_gui.Watch).
 """
+
 import json
 
 import FreeCAD as App
@@ -73,8 +74,11 @@ def body_of(obj):
     return parent
 
 
-def _next_label(doc):
-    taken = {b.Label for b in list_bodies(doc)}
+def _next_label(doc, container=None):
+    """Fusion numbers bodies per component: the bodies in the same container count."""
+    from . import components
+
+    taken = {b.Label for b in components.bodies_in(doc, container)}
     n = len(taken) + 1
     while "Body%d" % n in taken:
         n += 1
@@ -82,16 +86,17 @@ def _next_label(doc):
 
 
 def new_body(doc, label=None, like=None):
-    """A new empty body. `like`: a body whose container (App::Part) the new one joins.
-    The label follows Fusion's numbering (Body1, Body2...) unless one is given."""
-    label = label or _next_label(doc)  # before adding: the new body is not counted
-    body = doc.addObject(BODY, "Body")
+    """A new empty body. `like`: a body whose container (the component, an App::Part) the
+    new one joins. The label follows Fusion's numbering (Body1, Body2... per component)
+    unless one is given."""
     container = None
     if like is not None:
         try:
             container = like.getParentGeoFeatureGroup()
         except Exception:
             container = None
+    label = label or _next_label(doc, container)  # before adding: the new body is not counted
+    body = doc.addObject(BODY, "Body")
     if container is not None and hasattr(container, "addObject"):
         container.addObject(body)
     body.Label = label

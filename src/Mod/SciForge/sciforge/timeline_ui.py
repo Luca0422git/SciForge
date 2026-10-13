@@ -20,7 +20,7 @@ timeline_ops.py, the layout logic by timeline_core.py."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import _remember, timeline_core as core
+from . import _remember, components, timeline_core as core
 from . import timeline_ops as ops
 from . import ui_icon, warn
 from .compat import QtCore, QtGui, QtWidgets, Signal
@@ -519,11 +519,15 @@ class TimelineWidget(QtWidgets.QWidget):
             return  # never pull the widgets from under the mouse or the keyboard
         try:
             doc = _doc()
+            active = None
             if doc is None:
                 timeline, name = core.build([], {}), None
             else:
                 timeline, name = ops.timeline(doc, deps=False), doc.Name
-            sig = core.signature(timeline, name)
+                active = components.active_component(doc)
+            # Fusion: with a component active, the timeline shows that component's
+            # features (and those of the components inside it); the root shows all.
+            sig = core.signature(timeline, (name, active.Name if active is not None else None))
         except Exception as exc:  # e.g. an object deleted mid-read
             _remember("info", "timeline refresh skipped: %s" % exc)
             return
@@ -534,6 +538,7 @@ class TimelineWidget(QtWidgets.QWidget):
         self._doc_name = name
         self._timeline = timeline
         self._items = list(timeline.items)
+        self._hidden = _hidden_steps(doc, timeline, active)
         self._selected = [n for n in self._selected if timeline.find(n) is not None]
         self._rebuild()
 
@@ -543,7 +548,13 @@ class TimelineWidget(QtWidgets.QWidget):
         return _doc()
 
     def titles(self):
-        """Step names in timeline order ("Sketch 1", "Extrude 1", ...); used by tests."""
+        """Step names in timeline order ("Sketch 1", "Extrude 1", ...) as shown: with a
+        component active, only its steps; used by tests."""
+        hidden = getattr(self, "_hidden", set())
+        return [item.display for item in self._items if item.name not in hidden]
+
+    def all_titles(self):
+        """Every step's name, also those the active component hides."""
         return [item.display for item in self._items]
 
     def items(self):
@@ -586,34 +597,55 @@ class TimelineWidget(QtWidgets.QWidget):
             self._row.addStretch(1)
             return
         marker = self._timeline.marker
+        hidden = getattr(self, "_hidden", set())  # steps of other components (Fusion)
         # (widget, slot left of it, slot right of it) for drops and the marker
         self._slots = []
+        placed = [False]
+
+        def marker_before(index):
+            """The marker stands before the first shown step at or after its slot."""
+            if not placed[0] and index >= marker:
+                self._row.addWidget(self._make_marker())
+                placed[0] = True
+
         for seg in core.segments(self._timeline, self._open_groups):
             if seg[0] == "step":
                 item = seg[1]
-                if item.index == marker:
-                    self._row.addWidget(self._make_marker())
+                if item.name in hidden:
+                    continue
+                marker_before(item.index)
                 self._add_step(item)
                 continue
             _kind, gid, name, members, opened = seg
+            shown = [m for m in members if m.name not in hidden]
+            if not shown:
+                continue
             start, end = members[0].index, members[-1].index + 1
-            if start == marker:
-                self._row.addWidget(self._make_marker())
-            header = _GroupButton(self, gid, name, members, opened)
+            marker_before(shown[0].index)
+            header = _GroupButton(self, gid, name, shown, opened)
             self._row.addWidget(header)
             self._slots.append((header, start, start if opened else end))
             if not opened:
                 continue
-            for item in members:
-                if item.index == marker and item.index != start:
-                    self._row.addWidget(self._make_marker())
+            for item in shown:
+                if item is not shown[0]:
+                    marker_before(item.index)
                 self._add_step(item)
             cap = QtWidgets.QFrame()
             cap.setProperty("role", "group_end")
             cap.setFixedSize(3, ICON + 4)
             self._row.addWidget(cap)
-        if marker >= len(self._items):
+        if not placed[0]:
             self._row.addWidget(self._make_marker())
+        if hidden:
+            note = QtWidgets.QLabel("%d steps of other components" % len(hidden))
+            note.setObjectName("SciForgeTimelineHiddenNote")
+            note.setStyleSheet("color: #8a94a6; padding-left: 8px;")
+            note.setToolTip(
+                "The timeline shows the active component's steps. Activate the design's "
+                "top row in the browser to see every step."
+            )
+            self._row.addWidget(note)
         self._row.addStretch(1)
         self._update_selection_look()
         # Fusion keeps the history marker in view: a new step (or a marker move) on a
@@ -965,7 +997,7 @@ class TimelineWidget(QtWidgets.QWidget):
         try:
             body = ops.body_of(obj)
             if body is not None:
-                Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+                components.activate_body(body)  # and its component
         except Exception:
             pass
         from . import taskui
@@ -1252,9 +1284,8 @@ class TimelineWidget(QtWidgets.QWidget):
             actions[action] = fn
             return action
 
-        edit = add(
-            "Edit Sketch" if item.kind == "sketch" else "Edit Feature", lambda: self.edit(item.name)
-        )
+        first = {"sketch": "Edit Sketch", "component": "Activate"}.get(item.kind, "Edit Feature")
+        edit = add(first, lambda: self.edit(item.name))
         font = edit.font()
         font.setBold(True)
         edit.setFont(font)
@@ -1293,6 +1324,21 @@ class TimelineWidget(QtWidgets.QWidget):
             self._busy -= 1
         if chosen in actions:
             _later(actions[chosen])
+
+
+def _hidden_steps(doc, timeline, active):
+    """Names of the steps the active component hides (none when the root is active)."""
+    if doc is None or active is None:
+        return set()
+    hidden = set()
+    for item in timeline.items:
+        try:
+            unit = doc.getObject(item.body) if item.body else doc.getObject(item.name)
+            if unit is None or not components.is_inside(unit, active):
+                hidden.add(item.name)
+        except Exception:
+            hidden.add(item.name)
+    return hidden
 
 
 def _ensure_dock():

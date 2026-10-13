@@ -308,6 +308,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       edges / faces found again after FreeCAD loses their names (sweep, loft, Press Pull).
       5 QA scenarios (`sweep_loft_qa_sweep/_loft/_rib/_web/_part.py`, 21 paths), golden
       `sf_web_depth_thin_wall`.
+- [x] Components, Fusion-style (branch `sf/components`, 2026-10-13): components are
+      `App::Part` containers (the root is the document), one active component gets every new
+      sketch / body / feature, New Component (dialog: Name, Parent, From Bodies, Activate),
+      Activate (the ring in the browser), Isolate, Create Components from Bodies, Move to
+      Component (drag in the browser or the menu), nested components, rename / delete /
+      undo / save-reopen, a Component step in the timeline and the active component's
+      timeline filter, Operation New Component in Extrude / Revolve / Sweep / Loft. Spec +
+      gaps: `docs/sciforge/parity/components.md`. 3 scenarios (`components_*.py`, 20
+      paths), unit tests `test_components_core.py`. **Not yet checked by Luca.**
 - [x] Body tools QA pass (branch `sf/bodies-qa`): 12 problems fixed (used-up body left active,
       Combine edit hiding its tools, tool clicks swallowed by the Join preview, Move type
       chosen first eating the body click, browser/timeline Delete breaking Combines, New Body
@@ -318,6 +327,20 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       `bodies_combine_new_body_target_deleted`.
 
 ## Known issues / findings
+
+- **Components (2026-10-13, branch `sf/components`)**: a component is an `App::Part`; the
+  root is the document itself; the active component is the active body's container, else
+  FreeCAD's `"part"` active-object slot (`components.active_component`); `find_body()` /
+  `ensure_body()` only give bodies inside the active component. Facts from the probe:
+  `setActiveObject("part", None)` clears the slot; FreeCAD's `PartDesign_Body` puts the
+  body into the active Part; `part.addObject(body)` moves a body with its sketches; hiding
+  a Part leaves the children's `Visibility` flags; `doc.removeObject(part)` orphans the
+  children (SciForge removes bodies first); a reopened file has no active part or body;
+  activating a body from Python never sets the "part" slot (only FreeCAD's tree
+  double-click does). FreeCAD makes labels unique by default, so a component named after
+  body "Body" became "Body001" and a second "Body1" would become "Body1001": SciForge
+  switches on `Preferences/Document/DuplicateLabels` while it is on (`theme.VIEWER_SETTINGS`,
+  kept and given back). Spec: `docs/sciforge/parity/components.md`.
 
 - **Lesson (2026-10-10): green tests, unusable product.** Luca's first real session: Create Sketch
   opened FreeCAD pop-ups, dragging the Extrude arrow crashed, Extrude ignored clicks on profiles
@@ -1269,6 +1292,36 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   Scale's default for profiles.
 
 ## Session log
+
+### 2026-10-13: Components (branch `sf/components`, plan "Next" item 2)
+- Researched Fusion first (Autodesk's hosts are unreachable from the sandbox: the web
+  search summaries of Autodesk's API manual, Learn courses, help "Isolate", Knowledge
+  article on dragging bodies, the timeline blog and Community threads are cited at the top
+  of `docs/sciforge/parity/components.md`; the guesses are listed there too).
+- Built: `components_core.py` (pure logic, 24 unit tests), `components.py` (model, no Qt),
+  `components_ui.py` (New Component dialog with Name / Parent / From Bodies / Activate,
+  Move to Component dialog, commands `SciForge_NewComponent` (ribbon ASSEMBLE),
+  `_ActivateComponent`, `_Isolate`, `_Unisolate`, `_ComponentsFromBodies`,
+  `_MoveToComponent`), the browser's component tree (component rows with their Origin /
+  Bodies / Sketches / Construction and nested components, the activate ring at the end of
+  component rows and the design's row, menus, drag a body or component onto a component,
+  Isolate / Exit Isolate for components), the timeline (a Component step at the creation,
+  every step knows its component, with a component active only its steps show plus a
+  note counting the hidden ones), the New Component operation in Extrude / Revolve /
+  Sweep / Loft (core + dialogs; a failed preview removes the empty component again),
+  Create Sketch on a component's origin plane, `find_body` / `ensure_body` component-aware.
+- Scenarios `components_basic` (9 paths, 232 checks), `components_extrude` (5 paths,
+  170), `components_move` (6 paths, 218), all green; smoke, journey, timeline_browser,
+  timeline_browser_2, timeline_browser_qa, timeline_browser_qa2 green on the branch.
+- Lessons: `App::Part` labels clash with body labels (duplicate labels switched on, see
+  Known issues); a browser test helper that walks rows must start at the design's row (the
+  only top-level item); a submenu in a Qt test must be opened by clicking its entry (a
+  hand-popped submenu's click never reaches the parent menu's `exec`); the New Component
+  dialog's "(root)" parent and the right-click command's "where the body was" are two
+  different defaults (`components.KEEP`).
+- Gaps (in the parity doc): rolling before a component's step does not hide it, no
+  ghosting of inactive components, no sheet-metal / external components, the sketch of a
+  body moves with the body (FreeCAD needs sketches inside bodies), Parent is a drop-down.
 
 ### 2026-10-09: Session 1
 - Forked FreeCAD 1.1.4 (latest stable) into the repo with full history, pushed in stages.

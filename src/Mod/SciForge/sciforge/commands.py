@@ -15,28 +15,35 @@ def active_body():
 
 
 def find_body():
-    """The active body; else the body of the selection or the document's first body,
-    which is then made active (a reopened file has no active body)."""
-    body = active_body()
-    if body is not None:
-        return body
+    """The active body; else a body of the active component (the one that was active
+    there last, the selection's, or the oldest one), which is then made active (a
+    reopened file has no active body). New work always goes into the active component:
+    with no component in the design that is the whole document, as before."""
+    from . import components
+
     doc = App.ActiveDocument
     if doc is None:
         return None
+    body = active_body()
+    if body is not None:
+        components.sync_part_slot(body)  # the active body's component is the active one
+        return body
+    component = components.active_component(doc)
     candidates = []
+    preferred = components.preferred_body(doc, component)
+    if preferred is not None:
+        candidates.append(preferred)
     for sel in Gui.Selection.getSelectionEx():
         parent = sel.Object.getParentGeoFeatureGroup()
         if parent is not None and parent.TypeId == "PartDesign::Body":
             candidates.append(parent)
         elif sel.Object.TypeId == "PartDesign::Body":
             candidates.append(sel.Object)
-    candidates += doc.findObjects("PartDesign::Body")
+    candidates = [b for b in candidates if components.container_of(b) is component]
+    candidates += components.bodies_in(doc, component)
     if not candidates:
         return None
-    try:
-        Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", candidates[0])
-    except Exception as exc:
-        warn("could not activate %s: %s" % (candidates[0].Label, exc))
+    components.activate_body(candidates[0])
     return candidates[0]
 
 
@@ -121,20 +128,35 @@ def finish_open_dialog():
 def ensure_body():
     """Make sure a document and an active PartDesign body exist, like Fusion
     quietly creating a component. Returns the body or None."""
+    from . import components
+
     if App.ActiveDocument is None:
         App.newDocument("Design")
     doc = App.ActiveDocument
     body = find_body()
     if body is not None:
         return body
+    component = components.active_component(doc)  # the new body goes in here
     try:
         Gui.runCommand("PartDesign_Body")
+        body = active_body()
     except Exception:
+        body = None
+    if body is None:
         body = doc.addObject("PartDesign::Body", "Body")
-        Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
         doc.recompute()
-        return body
-    return active_body()
+    try:
+        # FreeCAD's Body command uses its own "part" slot, which can lag behind the active
+        # component (a body-less component was just activated): put the body where it goes.
+        # Inside a component the body is numbered per component, like Fusion (Body1); at
+        # the root FreeCAD's own label stays, as before components.
+        if component is not None:
+            components.place(body, component)
+            body.Label = components.body_label_in(doc, component)
+    except Exception as exc:
+        warn("could not place the new body: %s" % exc)
+    components.activate_body(body)
+    return body
 
 
 class _Command:

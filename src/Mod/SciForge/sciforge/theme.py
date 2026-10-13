@@ -5,6 +5,7 @@ Colours were measured from screenshots of Fusion's stock dark theme
 (docs/sciforge/parity/ui-shell.md). Everything changed here is remembered and
 put back by restore(), so leaving SciForge returns FreeCAD exactly as it was.
 """
+
 from . import log, ui_icon_path, warn
 
 CHROME = "#3b4453"  # ribbon, panels, timeline
@@ -173,6 +174,10 @@ VIEWER_SETTINGS = [
     (_NAVICUBE_PARAMS, "Unsigned", "BaseColor", (0xF0F0F0 << 8) | 0xE6),
     (_NAVICUBE_PARAMS, "Unsigned", "EmphaseColor", _rgba("#4a4f57")),
     (_NAVICUBE_PARAMS, "Unsigned", "HiliteColor", _rgba("#6fb7f0")),
+    # Components (Fusion): every component has its own Body1, and Create Components from
+    # Bodies names the component after its body. FreeCAD would rename the second "Body1"
+    # to "Body1001" unless duplicate labels are allowed (its own tree copes with them).
+    ("User parameter:BaseApp/Preferences/Document", "Bool", "DuplicateLabels", True),
 ]
 
 _saved_qss = None

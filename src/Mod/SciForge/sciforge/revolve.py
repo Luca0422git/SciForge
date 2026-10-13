@@ -47,13 +47,14 @@ sketches or from another body, an axis in another body). Fusion-only choices (ty
 direction, the picks as made) are stored as JSON in the hidden "SciForgeRevolve"
 property, so editing the revolve from the timeline offers them again.
 """
+
 import json
 
 import FreeCAD as App
 
 from . import extrude
 
-OPERATIONS = ("join", "cut", "intersect", "new_body")
+OPERATIONS = ("join", "cut", "intersect", "new_body", "new_component")
 TYPES = ("angle", "to", "full")
 DIRECTIONS = ("one_side", "two_sides", "symmetric")
 
@@ -1269,15 +1270,12 @@ def _local_axis(body, feature, axis, helpers, old):
     return (link, "Edge1")
 
 
-def _new_body(src_body):
-    doc = src_body.Document
-    body = doc.addObject("PartDesign::Body", "Body")
-    container = src_body.getParentGeoFeatureGroup()
-    if container is not None and hasattr(container, "addObject"):
-        container.addObject(body)
-    count = len([o for o in doc.Objects if o.TypeId == "PartDesign::Body"])
-    body.Label = "Body%d" % count
-    return body
+def _new_body(src_body, component=False):
+    """A new body beside the source body (New Body), or inside a new component (New
+    Component)."""
+    from . import components
+
+    return components.body_for_new(src_body, component)
 
 
 def _source_body(profiles):
@@ -1294,9 +1292,11 @@ def _structure(feature, profiles, options):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
-    if options["operation"] == "new_body":
+    if options["operation"] in ("new_body", "new_component"):
         if created is not None:
             target = created
+        elif options["operation"] == "new_component":
+            target = None  # always a new component with a new body in it
         elif feature is not None and owner_body(feature) is src and not _has_solid(src, feature):
             target = src  # the first solid of a body already is a new body
         elif feature is None and not _has_solid(src):
@@ -1333,7 +1333,7 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
     old_meta = load_meta(feature) if feature is not None else {}
     created = None
     if target is None:
-        target = created = _new_body(src)
+        target = created = _new_body(src, options["operation"] == "new_component")
     elif old_meta.get("created_body") == target.Name:
         created = target
     before = feature if (feature is not None and owner_body(feature) is target) else None
@@ -1720,8 +1720,12 @@ def _remove(feature, keep_body=True):
     if not keep_body and body is not None and meta.get("created_body") == body.Name:
         rest = [o for o in body.Group if o.TypeId != "App::Origin"]
         if not rest:
+            from . import components
+
+            container = components.container_of(body)
             body.removeObjectsFromDocument()
             doc.removeObject(body.Name)
+            components.drop_if_empty(container)  # a New Component that failed
 
 
 def remove(feature):
@@ -1872,7 +1876,8 @@ def read(feature):
     elif feature.TypeId == "PartDesign::Groove":
         options["operation"] = "cut"
     else:
-        options["operation"] = "new_body" if meta.get("operation") == "new_body" else "join"
+        made = meta.get("operation")
+        options["operation"] = made if made in ("new_body", "new_component") else "join"
     angle = feature.Angle.Value
     sign = -1.0 if feature.Reversed else 1.0
     if feature.Type == "TwoAngles":

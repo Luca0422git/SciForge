@@ -53,12 +53,13 @@ drives (SciForgeRole "ExtrudeFollower", never a timeline step of its own):
 A Join that touches no body at all makes a new body (Fusion). Followers link the lead
 ("Source"), so edits, formulas and reopened files flow through it.
 """
+
 import json
 import math
 
 import FreeCAD as App
 
-OPERATIONS = ("join", "cut", "intersect", "new_body")
+OPERATIONS = ("join", "cut", "intersect", "new_body", "new_component")
 DIRECTIONS = ("one_side", "two_sides", "symmetric")
 EXTENTS = ("distance", "to_object", "all")
 STARTS = ("profile", "offset", "object")
@@ -450,7 +451,13 @@ def feature_type(operation, options=None):
 
 
 # The operation of SciForge's own extrude feature (its "Operation" property).
-OWN_OPERATIONS = {"intersect": "Intersect", "join": "Join", "new_body": "Join", "cut": "Cut"}
+OWN_OPERATIONS = {
+    "intersect": "Intersect",
+    "join": "Join",
+    "new_body": "Join",
+    "new_component": "Join",
+    "cut": "Cut",
+}
 
 
 def _ref_shape(ref):
@@ -1134,15 +1141,12 @@ def hide_sketches(profiles):
 _hide_sketches = hide_sketches  # first-version name
 
 
-def _new_body(src_body):
-    doc = src_body.Document
-    body = doc.addObject("PartDesign::Body", "Body")
-    container = src_body.getParentGeoFeatureGroup()
-    if container is not None and hasattr(container, "addObject"):
-        container.addObject(body)
-    count = len([o for o in doc.Objects if o.TypeId == "PartDesign::Body"])
-    body.Label = "Body%d" % count
-    return body
+def _new_body(src_body, component=False):
+    """A new body beside the source body (New Body), or inside a new component (New
+    Component, Fusion's fifth operation)."""
+    from . import components
+
+    return components.body_for_new(src_body, component)
 
 
 def _structure(feature, profiles, options, participants=None):
@@ -1154,9 +1158,11 @@ def _structure(feature, profiles, options, participants=None):
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
     op = options["operation"]
-    if op == "new_body":
+    if op in ("new_body", "new_component"):
         if created is not None:
             target = created
+        elif op == "new_component":
+            target = None  # always a new component with a new body in it
         elif feature is not None and owner_body(feature) is src and not _has_solid(src, feature):
             target = src  # the first solid of a body is already a new body
         elif feature is None and not _has_solid(src):
@@ -1209,7 +1215,7 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
     old_meta = load_meta(feature) if feature is not None else {}
     created = None
     if target is None:
-        target = created = _new_body(src)
+        target = created = _new_body(src, options["operation"] == "new_component")
     elif old_meta.get("created_body") == target.Name:
         created = target  # still the body this extrude made
     before = feature if (feature is not None and owner_body(feature) is target) else None
@@ -1385,8 +1391,12 @@ def _remove(feature, keep_body=True):
     if not keep_body and body is not None and meta.get("created_body") == body.Name:
         rest = [o for o in body.Group if o.TypeId != "App::Origin"]
         if not rest:
+            from . import components
+
+            container = components.container_of(body)
             body.removeObjectsFromDocument()
             doc.removeObject(body.Name)
+            components.drop_if_empty(container)  # a New Component that failed
             return
     if was_tip:
         show_tip(body)
@@ -1466,7 +1476,8 @@ def read(feature):
     elif cut:
         operation = "cut"
     else:
-        operation = "new_body" if meta.get("operation") == "new_body" else "join"
+        made = meta.get("operation")
+        operation = made if made in ("new_body", "new_component") else "join"
     options["operation"] = operation
     for name in ("start", "measurement"):
         if meta.get(name) in (STARTS if name == "start" else MEASUREMENTS):

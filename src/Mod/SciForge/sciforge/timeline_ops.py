@@ -9,6 +9,7 @@ timeline with the reason, like Fusion, instead of FreeCAD printing errors in the
 Report view: the recomputes started here run with the Report view's error output
 muted, and the timeline reads every step's state afterwards.
 """
+
 import json
 
 import FreeCAD as App
@@ -321,7 +322,18 @@ def is_helper(obj):
     return bool(getattr(obj, ROLE, "")) or getattr(obj, "SciForgeTimeline", True) is False
 
 
+def is_component(obj):
+    """A component (Fusion): shown in the timeline as a Component step where it was made,
+    never rolled back (steps outside bodies are not), never suppressed."""
+    try:
+        return obj.TypeId == "App::Part"
+    except Exception:
+        return False
+
+
 def _is_step(obj):
+    if is_component(obj):
+        return True
     if obj.TypeId in NOT_STEPS or is_helper(obj):
         return False
     kind = getattr(obj, "SciForgeType", "")
@@ -505,29 +517,38 @@ def _key(obj):
 def snapshot(doc, deps=True):
     """(features, tips) for timeline_core.build(). ``deps`` (what each step uses) is
     only needed to reorder; the timeline's 0.4 s refresh leaves it out."""
+    from . import components
+
     features = []
     for obj, body in steps(doc):
         off = is_suppressed(obj)
+        component = is_component(obj)
         # A suppressed step is off, not broken: FreeCAD's complaints about it (its face
         # went with what was suppressed) are not shown, like Fusion.
-        kind, reason = ("", "") if off else problem(obj)
-        if not off and not kind:
+        kind, reason = ("", "") if (off or component) else problem(obj)
+        if not off and not kind and not component:
             # A multi-body extrude is one step: a problem in another body shows on it.
             kind, reason = _follower_problem(obj)
+        container = components.container_of(body if body is not None else obj)
         features.append(
             {
                 "name": obj.Name,
                 "label": obj.Label,
-                "type_id": type_key(obj),
+                "type_id": "App::Part" if component else type_key(obj),
                 "body": body.Name if body is not None else None,
                 "key": _key(obj),
                 "created": float(obj.ID),
                 "suppressed": off,
                 "error": reason if kind == "error" else "",
                 "warning": reason if kind == "warning" else "",
-                "deps": sorted(uses(obj)) if deps else [],
+                "deps": sorted(uses(obj)) if (deps and not component) else [],
                 "group": getattr(obj, GROUP, "") or "",
                 "group_name": getattr(obj, GROUP_NAME, "") or "",
+                # Fusion's timeline knows which component each feature belongs to.
+                "component": container.Label if container is not None else "",
+                "component_name": container.Name if container is not None else "",
+                # A component step is called by the component's name (Component1, Bracket).
+                "own_label": component,
             }
         )
     tips = {}
@@ -870,7 +891,7 @@ def _restore_links(doc, snap):
 
 
 def can_suppress(obj):
-    return obj is not None and obj.TypeId not in NOT_STEPS
+    return obj is not None and obj.TypeId not in NOT_STEPS and not is_component(obj)
 
 
 def _set_suppressed(obj, on):
@@ -1025,6 +1046,19 @@ def delete(doc, names):
     names = [n for n in names if doc.getObject(n) is not None]
     if not names:
         return False
+    # A component step is the component: Delete takes it with everything inside it.
+    parts = [n for n in names if is_component(doc.getObject(n))]
+    if parts:
+        from . import components
+
+        names = [n for n in names if n not in parts]
+        if names:
+            delete(doc, names)
+        for n in parts:
+            obj = doc.getObject(n)
+            if obj is not None:
+                components.remove(doc, obj)
+        return True
     title = ", ".join(_label(doc, n) for n in names[:3])
     # A multi-body extrude's hidden steps in the other bodies go with it.
     names = names + [n for n in followers(doc, names) if n not in names]
@@ -1086,9 +1120,10 @@ def delete(doc, names):
     return True
 
 
-def delete_bodies(doc, names):
+def delete_bodies(doc, names, transaction=True):
     """Delete bodies with everything in them (Fusion: Delete on a body). Sketches of
-    other bodies that sat on their faces stay where they were, with a warning."""
+    other bodies that sat on their faces stay where they were, with a warning.
+    ``transaction=False``: inside the caller's own undo step (deleting a component)."""
     targets = [doc.getObject(n) for n in names]
     targets = [b for b in targets if b is not None and b.TypeId == "PartDesign::Body"]
     if not targets:
@@ -1099,7 +1134,8 @@ def delete_bodies(doc, names):
         gone.update(o.Name for o in body.Group)
     # Steps an extrude in a deleted body drove in other bodies go with it.
     stray = [n for n in followers(doc, gone) if n not in gone]
-    _transaction(doc, "Delete %s" % ", ".join(b.Label for b in targets[:3]))
+    if transaction:
+        _transaction(doc, "Delete %s" % ", ".join(b.Label for b in targets[:3]))
     try:
         for name in stray:
             obj = doc.getObject(name)
@@ -1125,12 +1161,15 @@ def delete_bodies(doc, names):
                     body.removeObject(obj)
                     doc.removeObject(obj.Name)
             doc.removeObject(body.Name)
-        recompute(doc)
+        if transaction:
+            recompute(doc)
     except Exception:
-        doc.abortTransaction()
-        recompute(doc)
+        if transaction:
+            doc.abortTransaction()
+            recompute(doc)
         raise
-    doc.commitTransaction()
+    if transaction:
+        doc.commitTransaction()
     return True
 
 
