@@ -84,6 +84,11 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `check` | `expect` | measure the part at this point (before an edit, for example) |
 | `sketch_polygon` | `sketch`, `center`, `point` (middle of an edge, or a corner), `sides`, `circumscribed`, `diameter`, `name` | Circumscribed / Inscribed Polygon in a sketch (golden/sketch_ops.py) |
 | `sketch_trim` | `sketch`, `points` (one Trim click each) | Trim (T) in a sketch |
+| `extrude` + `bodies` | `"auto"` (every body in the extrusion's way) or a list of step ids (their bodies) | the Extrude dialog's "Bodies to Cut / Join / Intersect" row (`golden/extrude_bodies_ops.py`) |
+| `use_body` | `step` | the next sketches go into that step's body |
+| `expect_bodies` | `bodies` {step id: {`volume`, `solids`}}, `used_up` [step ids], `followers` {step id: n}, `steps` {step id: times listed in the timeline} | check several bodies at this point |
+| `reopen_check` | `bodies` (as above) | save, open the file as a second design, check the bodies there |
+| `expect_move_refused` | `target`, `before`, `reason` | dragging a step before another in the timeline is refused |
 
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).

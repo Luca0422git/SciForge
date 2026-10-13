@@ -1,0 +1,125 @@
+{
+  "id": "extrude_multi_cut_edit",
+  "title": "Cut through both bodies, then its distance edited from 5 to 8: both follow",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            40,
+            15
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 5,
+      "flip": true,
+      "operation": "cut",
+      "bodies": "auto"
+    },
+    {
+      "op": "edit",
+      "target": "x1",
+      "set": {
+        "distance": 8
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 3200,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 3200,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 6400,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Each box loses 10*10*8 = 800."
+  }
+}

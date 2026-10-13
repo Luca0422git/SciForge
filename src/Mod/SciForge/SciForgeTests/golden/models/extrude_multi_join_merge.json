@@ -1,0 +1,121 @@
+{
+  "id": "extrude_multi_join_merge",
+  "title": "Join from inside both bodies: the bodies merge into one",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            40,
+            15
+          ]
+        }
+      ],
+      "offset": 5
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 10,
+      "operation": "join",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 10000,
+          "solids": 1
+        }
+      },
+      "used_up": [
+        "e2"
+      ],
+      "followers": {
+        "x1": 1
+      },
+      "steps": {
+        "x1": 1
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 10000,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      15
+    ],
+    "source": "analytic",
+    "note": "4000 + 4000 + 30*10*10 (z 5..15) - 2 * 10*10*5 (inside the boxes) = 10000."
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "id": "extrude_multi_join_fills_hole",
+  "title": "A disc extruded into the round hole of a plate joins the plate (it touches the wall)",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body",
+    "join"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        },
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "regions": [
+        [
+          2,
+          2
+        ]
+      ],
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "join",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 12000,
+          "solids": 1
+        },
+        "x1": {
+          "volume": 12000,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "solids": 1,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "The r5 disc fills the plate's hole exactly: one 40 x 30 x 10 block in the same body (x1's body is e1's)."
+  }
+}

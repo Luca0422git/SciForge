@@ -1,0 +1,124 @@
+{
+  "id": "extrude_multi_cut",
+  "title": "Cut from Body1's top across the gap into Body2: both bodies are cut, one timeline step",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            40,
+            15
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 5,
+      "flip": true,
+      "operation": "cut",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 3500,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 3500,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "x1": 1
+      },
+      "steps": {
+        "x1": 1
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 7000,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Each box 20*20*10 = 4000 loses 10*10*5 = 500 (x 10..20 / 30..40, y 5..15, z 5..10)."
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "id": "extrude_multi_join_edge_touch",
+  "title": "Join whose side only meets the next body along an edge: that body is not merged",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            20,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            5,
+            5,
+            20,
+            15
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 5,
+      "operation": "join",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 4750,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 4000,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "x1": 0
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 8750,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      15
+    ],
+    "source": "analytic",
+    "note": "Body2 (x 20..40) sits against Body1; the 15 x 10 x 5 boss on Body1's top ends at x = 20, so it meets Body2 only along its top edge: Body1 4000 + 750, Body2 4000."
+  }
+}

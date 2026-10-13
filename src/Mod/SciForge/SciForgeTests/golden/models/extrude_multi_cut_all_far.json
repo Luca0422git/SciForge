@@ -1,0 +1,121 @@
+{
+  "id": "extrude_multi_cut_all_far",
+  "title": "Cut All reaches a second body 300 mm higher",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ],
+      "offset": 300
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            40,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 5,
+      "extent": "through_all",
+      "operation": "cut",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 3000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 3000,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "x1": 1
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 6000,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      310
+    ],
+    "source": "analytic",
+    "note": "Body2 at z 300..310; the cut goes through both: 4000 - 1000 each."
+  }
+}

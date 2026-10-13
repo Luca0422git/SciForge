@@ -25,6 +25,10 @@ Options (dict, see DEFAULTS):
   expressions  {"distance" | "distance2" | "taper" | "taper2": "width * 2"}: values typed as
                a formula of parameters (Fusion's fields take "width", "width*2"); they
                become expressions on the feature, so it follows the parameters
+  bodies       the bodies a Join, Cut or Intersect acts on (the dialog's "Bodies to Cut"
+               row): a list of bodies, "auto" (every body the extrusion passes through,
+               see touched_bodies), or None (an existing extrude keeps its own list; a new
+               one acts on the profile's body only, as the first version did)
 
 What is built:
   join / cut     a PartDesign Pad / Pocket in the body the profile belongs to
@@ -36,6 +40,18 @@ cannot link it directly: a start offset, profiles from several sketches, or a pr
 in another body. Fusion-only choices (start, measurement, operation, original picks)
 are stored as JSON in the feature's hidden "SciForgeExtrude" property, so editing the
 extrude from the timeline offers them again.
+
+Several bodies (Fusion's extrude acts on every body it passes through, one timeline step):
+the feature above is the "lead", in the profile's body when that body takes part, else in
+the oldest one that does. Every other body gets a hidden "follower" step that the lead
+drives (SciForgeRole "ExtrudeFollower", never a timeline step of its own):
+  cut / intersect  an ExtrudeFollower (below) that cuts that body with the lead's
+                   extrusion, or keeps only what lies inside it
+  join             one CombineFeature right after the lead that merges the other bodies
+                   into the lead's body; they are then used up (hidden), like Combine's
+                   tools
+A Join that touches no body at all makes a new body (Fusion). Followers link the lead
+("Source"), so edits, formulas and reopened files flow through it.
 """
 import json
 import math
@@ -64,10 +80,12 @@ DEFAULTS = {
     "taper2": 0.0,
     "measurement": "whole",
     "flip": False,
+    "bodies": None,
 }
 
 META = "SciForgeExtrude"
 ROLE = "SciForgeRole"
+FOLLOWER_ROLE = "ExtrudeFollower"  # hidden steps a multi-body extrude drives
 INTERSECT_TYPE = "PartDesign::FeaturePython"
 PLANE_TYPES = ("App::Plane", "PartDesign::Plane")
 Z = App.Vector(0, 0, 1)
@@ -556,7 +574,7 @@ def _mark(obj, role):
 
 
 def is_helper(obj):
-    return getattr(obj, ROLE, "") in ("ExtrudeProfile", "ExtrudeRef")
+    return getattr(obj, ROLE, "") in ("ExtrudeProfile", "ExtrudeRef", FOLLOWER_ROLE)
 
 
 # -- the intersect feature -----------------------------------------------------------------
@@ -1127,8 +1145,9 @@ def _new_body(src_body):
     return body
 
 
-def _structure(feature, profiles, options):
-    """(target body or None for 'make a new one', feature type, needs binder)."""
+def _structure(feature, profiles, options, participants=None):
+    """(target body or None for 'make a new one', feature type, needs binder).
+    `participants`: the bodies a multi-body extrude acts on (None: the profile's body)."""
     src = _source_body(profiles)
     meta = load_meta(feature) if feature is not None else {}
     created = None
@@ -1144,6 +1163,10 @@ def _structure(feature, profiles, options):
             target = src
         else:
             target = None  # a new body
+    elif participants:
+        from .extrude_bodies import lead_body
+
+        target = lead_body(src, participants)
     else:
         target = src
     return target, feature_type(op, options), src
@@ -1153,16 +1176,27 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
     """Create the extrude, or rebuild `feature` with new profiles/options.
     Returns the feature (a different object when its kind had to change). hide=False keeps
     the profile sketches in view (the dialog's preview; it hides them on OK)."""
+    from .extrude_bodies import merge_tip, nothing_touched, participants_for, sync_followers
+
     profiles = check_profiles(profiles)
     options = options_with_defaults(options)
     check_options(options)
-    target, type_id, src = _structure(feature, profiles, options)
+    participants = participants_for(feature, profiles, options)
+    if participants is not None and not participants:
+        if options["operation"] == "join":
+            # Fusion: a Join that touches no body makes a new body.
+            options = dict(options, operation="new_body")
+            participants = None
+        else:
+            raise ExtrudeError(nothing_touched(options))
+    target, type_id, src = _structure(feature, profiles, options, participants)
     if feature is not None:
         same_type = feature.TypeId == type_id and (
             type_id != INTERSECT_TYPE or is_intersect(feature)
         )
         if owner_body(feature) is target and same_type:
             _update(feature, target, profiles, options, hide)
+            sync_followers(feature, participants, options)
             return feature
         blocking = dependents(feature)
         if blocking:
@@ -1180,7 +1214,23 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
         created = target  # still the body this extrude made
     before = feature if (feature is not None and owner_body(feature) is target) else None
     was_tip = before is not None and target.Tip is before
-    new = _insert(target, type_id, name, before)
+    after = None
+    if feature is not None and before is None and created is None:
+        # The extrude moves to another body (its sketch's body was left out, or taken
+        # back): it goes in at its own place in time there, not after that body's later
+        # steps (the timeline would show it jump to the end, its cut would come too late).
+        from .extrude_bodies import place_in
+
+        after = place_in(target, feature)
+        if after is target.Tip:
+            after = None
+    if after is not None:
+        new = feature.Document.addObject(type_id, name)
+        target.insertObject(new, after, True)
+    else:
+        new = _insert(target, type_id, name, before)
+    if feature is not None:
+        _keep_timeline_place(new, feature)
     if type_id == INTERSECT_TYPE:
         ExtrudeFeature(new)
         _attach_view_provider(new)
@@ -1191,14 +1241,41 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
         # Nothing half-made stays behind; the old feature is still there, untouched.
         _remove(new, keep_body=created is None or (feature is not None and before is not None))
         raise
+    # The other bodies' steps follow the new lead (before the old one goes, with its links).
+    sync_followers(new, participants, options, old=feature)
     if feature is not None:
         label = feature.Label
         _remove(feature, keep_body=owner_body(feature) is target)
         new.Label = label
-    if before is None or was_tip:
+    if (before is None and after is None) or was_tip:
         target.Tip = new
         show_tip(target)
+    elif after is not None:
+        from .extrude_bodies import _show_only_tip
+
+        _show_only_tip(target)  # the new step is in the middle: the body's end stays shown
+    merge_tip(new)
     return new
+
+
+def _keep_timeline_place(new, old):
+    """A step rebuilt as a new object (another operation, another body) keeps the place of
+    the one it replaces in the timeline, and its timeline group: the timeline orders steps
+    by when they were made, and the new object is younger than every later step."""
+    try:
+        from . import timeline_ops
+
+        key = timeline_ops._key(old)
+        rank = timeline_ops.RANK
+        timeline_ops._add_prop(new, "App::PropertyFloat", rank, "Place in the design timeline")
+        setattr(new, rank, float(key))
+        gid = getattr(old, timeline_ops.GROUP, "") or ""
+        if gid:
+            timeline_ops._set_group(new, gid, getattr(old, timeline_ops.GROUP_NAME, "") or "")
+    except Exception as exc:
+        from . import warn
+
+        warn("extrude: the timeline place was not kept: %s" % exc)
 
 
 def _update(feature, body, profiles, options, hide=True):
@@ -1294,6 +1371,10 @@ def _remove(feature, keep_body=True):
     """Delete an extrude with its helpers (and the body it created, when asked)."""
     meta = load_meta(feature)
     doc = feature.Document
+    from .extrude_bodies import followers_of, remove_follower
+
+    for follower in followers_of(feature):  # the steps it drove in other bodies go too
+        remove_follower(follower)
     body = owner_body(feature)
     was_tip = body is not None and body.Tip is feature
     helpers = [doc.getObject(n) for n in meta.get("helpers", [])]
@@ -1447,6 +1528,9 @@ def read(feature):
         }
     except Exception:
         options["expressions"] = {}
+    from .extrude_bodies import stored_bodies
+
+    options["bodies"] = stored_bodies(feature)
     return profiles, options
 
 
@@ -1491,12 +1575,10 @@ def tool_shape(feature):
             shape.Placement = feature.getGlobalPlacement().multiply(sub.Placement)
         if shape.isNull() or not shape.Solids:
             return None
-        through = _through_all(feature)
-        base = getattr(feature, "BaseFeature", None)
-        if through and base is not None and not base.Shape.isNull():
+        box = _parts_box(feature) if _through_all(feature) else None
+        if box is not None:
             import Part
 
-            box = _to_global(base.Shape, base).BoundBox
             box.enlarge(max(box.DiagonalLength * 1e-3, 1e-3))
             limit = Part.makeBox(
                 box.XLength, box.YLength, box.ZLength, App.Vector(box.XMin, box.YMin, box.ZMin)
@@ -1507,6 +1589,29 @@ def tool_shape(feature):
         return shape
     except Exception:
         return None
+
+
+def _parts_box(feature):
+    """The box around every part the extrude acts on, as they were before it (its own body
+    and the bodies it cuts through: R8), in global coordinates; None when there is none."""
+    steps = [feature]
+    try:
+        from .extrude_bodies import followers_of, is_merge
+
+        steps += [f for f in followers_of(feature) if not is_merge(f)]
+    except Exception:
+        pass
+    box = None
+    for step in steps:
+        base = getattr(step, "BaseFeature", None)
+        if base is None or base.Shape.isNull():
+            continue
+        found = _to_global(base.Shape, base).BoundBox
+        if box is None:
+            box = found
+        else:
+            box.add(found)
+    return box
 
 
 def _through_all(feature):

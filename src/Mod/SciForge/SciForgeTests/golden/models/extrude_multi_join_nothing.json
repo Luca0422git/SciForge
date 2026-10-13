@@ -1,0 +1,111 @@
+{
+  "id": "extrude_multi_join_nothing",
+  "title": "Join away from every body makes a new body (Fusion)",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            100,
+            0,
+            120,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 10,
+      "operation": "join",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 4000
+        },
+        "e2": {
+          "volume": 4000
+        },
+        "x1": {
+          "volume": 4000,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4000,
+    "solids": 1,
+    "bbox": [
+      100,
+      0,
+      0,
+      120,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "The new body (measured: the body of x1) is 20*20*10; Body1 keeps 4000."
+  }
+}
