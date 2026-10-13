@@ -88,7 +88,7 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `use_body` | `step` | the next sketches go into that step's body |
 | `expect_bodies` | `bodies` {step id: {`volume`, `solids`}}, `used_up` [step ids], `followers` {step id: n}, `steps` {step id: times listed in the timeline} | check several bodies at this point |
 | `reopen_check` | `bodies` (as above) | save, open the file as a second design, check the bodies there |
-| `expect_move_refused` | `target`, `before`, `reason` | dragging a step before another in the timeline is refused |
+| `expect_move_refused` | `target`, `before` or `after`, `reason` | dragging a step before / after another in the timeline is refused (a multi-body extrude moves with its hidden steps; only a move before a body it changes exists is refused) |
 
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).

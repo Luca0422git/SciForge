@@ -23,8 +23,10 @@ Bodies are named by a step that made them (its body): "e1" is the body of extrud
       Saves the design, opens the file as a second design, recomputes it and checks the
       bodies there (the follower steps come back from the file).
 
-  {"op": "expect_move_refused", "target": "f1", "before": "x1", "reason": "several bodies"}
-      Dragging a step before another in the timeline is refused with that reason.
+  {"op": "expect_move_refused", "target": "e2", "after": "x1", "reason": "does not exist"}
+      Dragging a step before / after another in the timeline is refused with that reason
+      (a multi-body extrude moves with its hidden steps, builder.op_move; only a move
+      that would put it before a body it changes exists is refused).
 """
 
 import os
@@ -149,13 +151,14 @@ def op_reopen_check(self, step):
 
 
 def op_expect_move_refused(self, step):
-    """Dragging `target` before `before` in the timeline must be refused with the reason
-    (a multi-body extrude's order against its other bodies' steps is fixed for now)."""
+    """Dragging `target` before `before` (or after `after`) in the timeline must be refused
+    with the reason: a multi-body extrude cannot come before a body it changes exists."""
     from sciforge import timeline_ops
 
     name = self.objects[step["target"]].Name
+    ref = step.get("before", step.get("after"))
     names = timeline_ops.timeline(self.doc).names()
-    slot = names.index(self.objects[step["before"]].Name)
+    slot = names.index(self.objects[ref].Name) + (0 if "before" in step else 1)
     try:
         timeline_ops.move(self.doc, name, slot)
     except timeline_ops.TimelineError as exc:

@@ -1199,20 +1199,27 @@ def plan(doc, name, slot):
 
 def move(doc, name, slot):
     """Move a step to ``slot`` of the timeline. Raises TimelineError with the reason
-    (like Fusion's red marker) when the move is impossible or would break a step."""
+    (like Fusion's red marker) when the move is impossible or would break a step. A
+    multi-body extrude moves with its hidden follower steps: each goes to the matching
+    place in its own body (right after the last step of that body older than the
+    extrude's new place); a move that would put the extrude before a body it cuts even
+    exists is refused."""
     tl = timeline(doc)
     p = core.plan_move(tl, name, slot)
     if not p.ok:
         if p.reason:
             raise TimelineError(p.reason)
         return False
-    crossed = _crosses_followers(doc, tl, p)
-    if crossed is not None:
-        raise TimelineError(
-            "%s changes several bodies; it cannot move past steps of those bodies yet."
-            % crossed
-        )
-    geometry = _rebase_geometry(doc, tl, p)
+    places = _follower_places(doc, p.order)
+    for follower, place in places.items():
+        if place is None:
+            lead, own = getattr(follower, "Source", None), body_of(follower)
+            item = tl.find(lead.Name) if lead is not None else None
+            raise TimelineError(
+                "%s changes %s, and %s does not exist yet at that place in the timeline."
+                % (item.display if item is not None else lead.Label, own.Label, own.Label)
+            )
+    geometry = _rebase_geometry(doc, tl, p, bodies_of(places))
     broken_before = _errors(doc)
     moving = tl.find(name)
     _transaction(doc, "Move %s" % moving.display)
@@ -1230,6 +1237,7 @@ def move(doc, name, slot):
             obj = doc.getObject(n)
             _add_prop(obj, "App::PropertyFloat", RANK, "Place in the design timeline")
             setattr(obj, RANK, float(key))
+        _place_followers(doc, places)
         names = {i.group: i.group_name for i in tl.items if i.group}
         for n, gid in core.groups_after_move(tl, p).items():
             _set_group(doc.getObject(n), gid, names.get(gid, ""))
@@ -1255,39 +1263,93 @@ def move(doc, name, slot):
     return True
 
 
-def _crosses_followers(doc, tl, p):
-    """The title of a multi-body extrude whose order against the steps of its other bodies
-    the move would change, or None. Its hidden follower steps sit at a fixed place in those
-    bodies' histories, so such a move would leave the timeline and the bodies disagreeing
-    (version 1: refused, like Fusion refuses moves that break a step)."""
-    old, new = list(tl.names()), list(p.order)
+def _is_merge(obj):
+    try:
+        from . import extrude_bodies
+
+        return extrude_bodies.is_merge(obj)
+    except Exception:
+        return False
+
+
+def _follower_places(doc, order):
+    """{follower step: the step of its body it must come right after} for the timeline in
+    the order ``order`` (step names): the last step of that body older than its extrude.
+    None when the body has no solid step there yet (the extrude would come before the
+    body: refused). A Join's merge is not here: it sits right after its extrude."""
+    from . import extrude_bodies
+
+    times = {n: i for i, n in enumerate(order)}
+    followers = []
     for obj in doc.Objects:
-        if not is_follower(obj):
+        if not is_follower(obj) or _is_merge(obj):
             continue
         lead = getattr(obj, "Source", None)
-        own = body_of(obj)
-        if lead is None or own is None or lead.Name not in old or lead.Name not in new:
+        if lead is None or lead.Name not in times or body_of(obj) is None:
             continue
-        others = [i.name for i in tl.items if i.body == own.Name and i.name != lead.Name]
+        followers.append(obj)
+        times[obj.Name] = times[lead.Name]  # a follower is at its extrude's time
+    found = {}
+    for obj in followers:
+        lead, own = obj.Source, body_of(obj)
+        found[obj] = extrude_bodies.place_in(own, lead, times, at_marker=False, skip=(obj,))
+    return found
 
-        def before(order):
-            at = order.index(lead.Name)
-            return {n for n in others if n in order and order.index(n) < at}
 
-        if before(old) != before(new):
-            item = tl.find(lead.Name)
-            return item.display if item is not None else lead.Label
+def bodies_of(places):
+    """The bodies whose steps a follower move can re-link (names)."""
+    names = set()
+    for follower in places:
+        body = body_of(follower)
+        if body is not None:
+            names.add(body.Name)
+    return names
+
+
+def _previous_solid(body, obj):
+    """The solid step right before ``obj`` in ``body``'s history, or None."""
+    previous = None
+    for o in body.Group:
+        if o is obj:
+            return previous
+        if _is_solid_step(o):
+            previous = o
     return None
+
+
+def _place_followers(doc, places):
+    """Put each follower (and each Join's merge) at its place in its body's history after
+    a move; PartDesign re-links the bodies' histories around them."""
+    for follower, place in places.items():
+        body = body_of(follower)
+        if body is None or place is None or _previous_solid(body, follower) is place:
+            continue
+        body.removeObject(follower)
+        body.insertObject(follower, place, True)
+    for obj in doc.Objects:
+        if not is_follower(obj) or not _is_merge(obj):
+            continue
+        lead, body = getattr(obj, "Source", None), body_of(obj)
+        if lead is None or body is None or body_of(lead) is not body:
+            continue
+        if _previous_solid(body, obj) is not lead:
+            body.removeObject(obj)
+            body.insertObject(obj, lead, True)
 
 
 REBASE_PROPS = ("Base", "Faces")  # fillet/chamfer/draft/shell edges; Press Pull faces
 
 
-def _rebase_geometry(doc, tl, p):
+def _rebase_geometry(doc, tl, p, follower_bodies=()):
     """For each solid step whose previous step changes with the move: the edges/faces
-    it picked on that previous step, as shapes, to find them again afterwards."""
+    it picked on that previous step, as shapes, to find them again afterwards. In a body
+    where a follower step moves, every solid step is looked at (its base can change)."""
     found = {}
-    for name in core.rebased(tl, p):
+    names = list(core.rebased(tl, p))
+    for item in tl.items:
+        if item.solid and item.body in follower_bodies and item.name not in names:
+            names.append(item.name)
+    for name in names:
         obj = doc.getObject(name)
         base = getattr(obj, "BaseFeature", None) if obj is not None else None
         if base is None:
