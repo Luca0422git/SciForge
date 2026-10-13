@@ -62,7 +62,7 @@ from Autodesk's artwork). Parts:
 4. Home icon; Home stored per design; the right-click menu above.
 5. Scenarios for each, with real clicks and drags on the cube.
 
-### C. Sketching that feels like Fusion [large; starts with a feasibility test]
+### C. Sketching that feels like Fusion [large] — done 2026-10-13 except items noted in `parity/sketch.md` gaps
 
 What Fusion does while you draw: hover a point to "acquire" it; dashed guide lines show
 when the cursor lines up with it; a line close to level or plumb snaps and shows a small

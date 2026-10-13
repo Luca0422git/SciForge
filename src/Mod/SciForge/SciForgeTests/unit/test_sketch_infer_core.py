@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The maths of SciForge's sketch inference (sciforge/sketch_infer_core.py): guides,
 level/upright, perpendicular, parallel. Runs without FreeCAD."""
+
 import math
 import os
 import sys
@@ -18,7 +19,9 @@ def rot(v, deg):
     return (v[0] * math.cos(r) - v[1] * math.sin(r), v[0] * math.sin(r) + v[1] * math.cos(r))
 
 
-def run(raw, start=None, acquired=(), lines=(), vertices=(), curves=(), par_lines=(), **opts):
+def run(
+    raw, start=None, acquired=(), lines=(), vertices=(), curves=(), par_lines=(), anchors=(), **opts
+):
     opt = core.Options(**opts)
     return core.infer(
         raw,
@@ -30,6 +33,7 @@ def run(raw, start=None, acquired=(), lines=(), vertices=(), curves=(), par_line
         PX,
         opt,
         list(par_lines),
+        list(anchors),
     )
 
 
@@ -78,6 +82,17 @@ class Guides(unittest.TestCase):
         a = ((1, 1), start)
         # 30 degrees: no level/upright; straight above the start would be a guide
         self.assertIsNone(run((0.5, 30.0), start=start, acquired=[a], hv_deg=0.1))
+
+    def test_a_shapes_own_placed_points_make_no_guide(self):
+        """A rectangle's first corner (an anchor, known to a pixel or so) gives no guide
+        to its second corner; a far point still does."""
+        corner = ((7, 1), (10.0, 5.0))
+        other = ((3, 2), (40.0, 30.0))
+        self.assertIsNone(run((10.5, 20.0), acquired=[corner], anchors=[(10.0, 5.0)]))
+        self.assertIsNone(run((10.5, 20.0), acquired=[corner], anchors=[(10.4, 5.3)]))  # 2 px
+        r = run((10.5, 29.4), acquired=[corner, other], anchors=[(10.0, 5.0)])
+        self.assertEqual(r.point, (10.5, 30.0))
+        self.assertEqual([g.key for g in r.guides], [(3, 2)])
 
 
 class LevelUpright(unittest.TestCase):
@@ -263,6 +278,165 @@ class Helpers(unittest.TestCase):
     def test_options_refuse_unknown_names(self):
         with self.assertRaises(AttributeError):
             core.Options(guide_pixels=3)
+
+    def test_level_and_upright_marks_sit_beside_the_line_near_its_end(self):
+        level = core.level_mark((0.0, 0.0), (20.0, 0.0), 2.0)
+        self.assertEqual(
+            [tuple(round(v, 9) for v in p) for p in level[0]], [(16.8, -2.4), (20.0, -2.4)]
+        )
+        upright = core.upright_mark((5.0, 0.0), (5.0, 10.0), 2.0)
+        self.assertEqual(
+            [tuple(round(v, 9) for v in p) for p in upright[0]], [(7.4, 7.6), (7.4, 10.8)]
+        )
+
+    def test_tangent_mark_lies_outside_the_joint(self):
+        strokes = core.tangent_mark((0.0, 0.0), (1.0, 0.0), (0.0, -1.0), 2.0)
+        self.assertEqual(strokes, [[(-1.6, -2.4), (1.6, -2.4)]])
+
+
+class OtherTools(unittest.TestCase):
+    """The previews of the other drawing tools: where the direction starts and which
+    preview point follows the pointer."""
+
+    RECT = [[(5.0, 7.0), (25.0, 7.0)], [(25.0, 7.0), (25.0, 20.0)],
+            [(25.0, 20.0), (5.0, 20.0)], [(5.0, 20.0), (5.0, 7.0)]]  # fmt: skip
+
+    def slot(self):
+        # two half circles (arc ends opposite each other) and two lines
+        arc1 = [(2.7, 10.9), (0.0, 7.0), (7.9, 2.9)]
+        arc2 = [(27.9, 16.0), (30.0, 20.0), (22.6, 24.0)]
+        return [arc1, arc2, [(2.7, 10.9), (22.6, 24.0)], [(7.9, 2.9), (27.9, 16.0)]]
+
+    def test_every_drawing_command_has_a_kind_and_a_point_count(self):
+        for command, kind in core.TOOLS.items():
+            self.assertIn(kind, core.POINTS, command)
+        self.assertEqual(core.TOOLS["SciForge_SketchLine"], "line")
+        self.assertEqual(core.POINTS["slot"], 2)  # the third click is the width
+
+    def test_line_direction_starts_at_its_first_point(self):
+        self.assertEqual(core.preview_anchor("line", [[(1.0, 2.0), (9.0, 2.0)]]), (1.0, 2.0))
+        self.assertIsNone(core.preview_anchor("line", []))
+        self.assertIsNone(core.preview_anchor("line", [[(1.0, 2.0)]]))
+
+    def test_slot_direction_starts_at_its_first_centre(self):
+        anchor = core.preview_anchor("slot", self.slot())
+        self.assertAlmostEqual(anchor[0], 5.3)
+        self.assertAlmostEqual(anchor[1], 6.9)
+        self.assertIsNone(core.preview_anchor("slot", [[(0.0, 0.0), (1.0, 1.0)]]))
+
+    def test_shapes_without_a_direction(self):
+        self.assertIsNone(core.preview_anchor("rect", self.RECT))
+        self.assertIsNone(core.preview_anchor("circle", [[(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)]]))
+
+    def test_what_a_preview_shows(self):
+        circle = [[(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0), (1.0, 0.0)]]
+        self.assertIsNone(core.preview_kind([]))
+        self.assertEqual(core.preview_kind([[(1.0, 2.0), (9.0, 2.0)]]), "line")
+        self.assertEqual(core.preview_kind(circle), "circle")
+        self.assertEqual(core.preview_kind(self.RECT), "rect")
+        self.assertEqual(core.preview_kind(self.RECT + [[(0.0, 0.0), (1.0, 1.0)]]), "polygon")
+        self.assertEqual(core.preview_kind(self.slot()), "slot")
+        self.assertEqual(core.preview_kind(circle + self.RECT[:2]), "arc")
+        self.assertEqual(core.preview_kind(circle + self.RECT[:1]), "arc3")
+
+    def test_a_tool_started_another_way_is_told_by_its_preview(self):
+        # SciForge last ran the circle tool, but FreeCAD previews a rectangle
+        self.assertEqual(core.tool_kind("circle", self.RECT), "rect")
+        self.assertEqual(core.tool_kind("circle", []), "circle")  # nothing shown yet
+        circle = [[(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)]]
+        self.assertEqual(core.tool_kind("arc", circle), "arc")  # an arc starts as a circle
+        self.assertEqual(core.tool_kind("polygon", self.RECT), "polygon")  # four sides
+        self.assertIsNone(core.tool_kind(None, self.RECT))  # an unknown tool stays unknown
+
+    def test_the_preview_point_that_follows_the_pointer(self):
+        self.assertEqual(
+            core.preview_pointer("line", [[(1.0, 2.0), (9.0, 2.0)]], (9.0, 2.0)), (9.0, 2.0)
+        )
+        self.assertEqual(core.preview_pointer("rect", self.RECT, (24.8, 19.7)), (25.0, 20.0))
+        pointer = core.preview_pointer("slot", self.slot(), (25.0, 20.0))
+        self.assertAlmostEqual(pointer[0], 25.25)
+        self.assertAlmostEqual(pointer[1], 20.0)
+        self.assertIsNone(core.preview_pointer("circle", [], (0.0, 0.0)))
+
+
+class TangentArc(unittest.TestCase):
+    """Fusion's tangent arc from the end of a line: press, drag, release."""
+
+    def test_arc_turning_left(self):
+        arc = core.tangent_arc((0.0, 0.0), (1.0, 0.0), (10.0, 10.0), 2.0)
+        self.assertAlmostEqual(arc.centre[0], 0.0)
+        self.assertAlmostEqual(arc.centre[1], 10.0)
+        self.assertAlmostEqual(arc.radius, 10.0)
+        self.assertEqual(arc.joint_pos, 1)  # counterclockwise: the joint is the start
+        self.assertEqual(arc.free_pos, 2)
+        s, e = arc.point(arc.a1), arc.point(arc.a2)
+        self.assertAlmostEqual(s[0], 0.0)
+        self.assertAlmostEqual(s[1], 0.0)
+        self.assertAlmostEqual(e[0], 10.0)
+        self.assertAlmostEqual(e[1], 10.0)
+        self.assertAlmostEqual(arc.a2 - arc.a1, math.pi / 2)
+
+    def test_arc_turning_right_runs_the_other_way_round(self):
+        arc = core.tangent_arc((0.0, 0.0), (1.0, 0.0), (10.0, -10.0), 2.0)
+        self.assertAlmostEqual(arc.centre[1], -10.0)
+        self.assertEqual(arc.joint_pos, 2)  # clockwise: as a ccw arc the joint is its end
+        self.assertEqual(arc.free_pos, 1)
+        p, s = arc.point(arc.a1), arc.point(arc.a2)
+        self.assertAlmostEqual(p[0], 10.0)
+        self.assertAlmostEqual(p[1], -10.0)
+        self.assertAlmostEqual(s[0], 0.0)
+        self.assertAlmostEqual(s[1], 0.0)
+
+    def test_dragging_back_behind_the_start_makes_a_big_arc(self):
+        arc = core.tangent_arc((0.0, 0.0), (1.0, 0.0), (-10.0, 10.0), 2.0)
+        self.assertAlmostEqual(arc.radius, 10.0)
+        self.assertAlmostEqual(arc.a2 - arc.a1, 1.5 * math.pi)
+
+    def test_straight_ahead_or_too_close_is_no_arc(self):
+        self.assertIsNone(core.tangent_arc((0.0, 0.0), (1.0, 0.0), (10.0, 0.05), 2.0))
+        self.assertIsNone(core.tangent_arc((0.0, 0.0), (1.0, 0.0), (-10.0, 0.05), 2.0))
+        self.assertIsNone(core.tangent_arc((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), 2.0))
+
+    def test_a_slanted_tangent(self):
+        t = core.unit((3.0, 4.0))
+        arc = core.tangent_arc((1.0, 1.0), t, (-3.0, 4.0), 0.5)
+        # the centre is on the normal through the start, both ends on the circle
+        radial = core.sub((1.0, 1.0), arc.centre)
+        self.assertAlmostEqual(core.dot(radial, t), 0.0)
+        self.assertAlmostEqual(core.dist(arc.centre, (-3.0, 4.0)), arc.radius)
+        pts = arc.points(10)
+        self.assertEqual(len(pts), 11)
+        self.assertAlmostEqual(core.dist(pts[0], arc.centre), arc.radius)
+
+    def test_chain_tangent_from_the_newest_line_ending_here(self):
+        curves = [("line", 4, (0.0, 0.0), (10.0, 0.0)), ("line", 2, (10.0, 0.0), (10.0, 5.0))]
+        t, end = core.chain_tangent((10.0, 0.0), curves, 1e-6)
+        self.assertEqual(end, (4, 2))
+        self.assertEqual(t, (1.0, 0.0))
+
+    def test_chain_tangent_from_a_line_starting_here_goes_backwards(self):
+        curves = [("line", 2, (10.0, 0.0), (10.0, 5.0))]
+        t, end = core.chain_tangent((10.0, 0.0), curves, 1e-6)
+        self.assertEqual(end, (2, 1))
+        self.assertEqual(t, (0.0, -1.0))
+
+    def test_chain_tangent_follows_an_arc_round(self):
+        # a quarter arc about (0, 10) from (0, 0) counterclockwise up to (10, 10)
+        arc = ("arc", 5, (0.0, 10.0), (0.0, 0.0), (10.0, 10.0))
+        t, end = core.chain_tangent((10.0, 10.0), [arc], 1e-6)
+        self.assertEqual(end, (5, 2))
+        self.assertAlmostEqual(t[0], 0.0)
+        self.assertAlmostEqual(t[1], 1.0)
+        # the chain leaving at the arc's start runs the arc backwards
+        t, end = core.chain_tangent((0.0, 0.0), [arc], 1e-6)
+        self.assertEqual(end, (5, 1))
+        self.assertAlmostEqual(t[0], -1.0)
+        self.assertAlmostEqual(t[1], 0.0)
+
+    def test_no_curve_ends_here(self):
+        self.assertIsNone(
+            core.chain_tangent((3.0, 3.0), [("line", 1, (0.0, 0.0), (1.0, 0.0))], 1e-6)
+        )
 
 
 if __name__ == "__main__":

@@ -46,6 +46,9 @@ class LineChain:
         self.chain_start = None
         self.current = None
         self.seen = len(sketch.Geometry)
+        if self.session.infer is not None:
+            # L again halfway through a line: the old start must not pull the new one
+            self.session.infer.reset()
         Gui.runCommand(COMMAND)
 
     def stop(self):
@@ -67,6 +70,8 @@ class LineChain:
             warn("line: %s" % exc)
         try:
             self.seen = len(self.session.sketch.Geometry)
+            if self.session.infer is not None:
+                self.session.infer.reset()  # the chain's record goes with it
             Gui.runCommand(COMMAND)
         except Exception as exc:
             warn("line: %s" % exc)
@@ -114,6 +119,10 @@ class LineChain:
             if count < self.seen:  # undone
                 self.seen = count
                 self.chain_start = None
+                if self.session.infer is not None:
+                    # FreeCAD's tool still holds the point it was started on (gone
+                    # now): started again, else the next line is joined to itself
+                    self.session.infer.line_undone()
                 return
             if count == self.seen:
                 return
@@ -143,6 +152,10 @@ class LineChain:
                 return
             if self._click_at(end):
                 self.current = end
+                if self.session.infer is not None:
+                    # the chain's point, for a press-and-drag there before any move
+                    # (FreeCAD previews nothing then): the tangent arc
+                    self.session.infer.last_start = (end.x, end.y)
             else:
                 self.chain_start = None
                 self.current = None
@@ -161,7 +174,7 @@ class LineChain:
         world = session.sketch.getGlobalPlacement().multVec(sketch_point)
         x, y = session.view.getPointOnViewport(world)
         ratio = gl.devicePixelRatioF()
-        pos = QtCore.QPointF(x / ratio, gl.height() - y / ratio)
+        pos = QtCore.QPointF(round(x / ratio), round(gl.height() - y / ratio))
         if not (0 <= pos.x() < gl.width() and 0 <= pos.y() < gl.height()):
             return None
         return pos
@@ -174,6 +187,7 @@ class LineChain:
         pos = self._pixel(sketch_point)
         if gl is None or pos is None:
             return False
+        pos = self._aim_at_vertex(pos)
         hand = gl.mapFromGlobal(QtGui.QCursor.pos())
         left, none = QtCore.Qt.LeftButton, QtCore.Qt.NoButton
         mods = QtCore.Qt.NoModifier
@@ -199,6 +213,46 @@ class LineChain:
             QtWidgets.QApplication.sendEvent(gl, event)
         log("line: next line from the end of the last one")
         return True
+
+    def _aim_at_vertex(self, pos):
+        """FreeCAD's click takes what its last mouse move found under the pixel: on a
+        tilted view (a sketch on a turned plane) the point's own pixel can find the
+        line through it instead, and the next line then only sits on that line, a bit
+        short of its end. The pointer is moved over the pixels around (within 3) until
+        FreeCAD lights up a point; that pixel is clicked. Else the pixel itself."""
+        session = self.session
+        gl = session.gl
+        sketch = session.sketch
+        none = QtCore.Qt.NoButton
+
+        def point_lit():
+            pre = Gui.Selection.getPreselection()
+            if getattr(pre, "Object", None) is not sketch:
+                return False
+            names = getattr(pre, "SubElementNames", None) or ()
+            return any(n.rsplit(".", 1)[-1].startswith("Vertex") for n in names)
+
+        try:
+            for radius in range(0, 4):
+                for dx in range(-radius, radius + 1):
+                    for dy in range(-radius, radius + 1):
+                        if max(abs(dx), abs(dy)) != radius:
+                            continue
+                        at = QtCore.QPointF(pos.x() + dx, pos.y() + dy)
+                        event = QtGui.QMouseEvent(
+                            QtCore.QEvent.MouseMove,
+                            at,
+                            QtCore.QPointF(gl.mapToGlobal(at.toPoint())),
+                            none,
+                            none,
+                            QtCore.Qt.NoModifier,
+                        )
+                        QtWidgets.QApplication.sendEvent(gl, event)
+                        if point_lit():
+                            return at
+        except Exception as exc:
+            warn("line: %s" % exc)
+        return pos
 
 
 def _ends_on_geometry(sketch, index):

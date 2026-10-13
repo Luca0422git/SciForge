@@ -2168,13 +2168,33 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   annotations with their own screen-space hit tests). Scenario `handles_on_top` (camera below
   the block: the arrow's pixel is blue and the drag works). `View3DInventorPy.setViewDirection`
   did nothing in that test; `setCameraOrientation` with a quaternion works.
-- **Sketching that feels like Fusion** (`sf/sketch-feel`, 6 commits): guides in every drawing
-  tool, level / upright marks, tangent arc in L, fixed geometry green, selection and hover
-  colours pinned. Adversarial review found 6 problems (Ctrl+Z after a tangent arc then a click
-  corrupts the sketch: FreeCAD's line tool keeps a stale suggested Coincident GeoId across undo;
-  pressing L mid-line keeps the forgotten start; a press with no move never arms the arc; marks
-  stay on Leave; synthetic click snaps to the edge on a rotated-offset sketch in a tilted view;
-  tool kind from `recent.last()`); the fix round is running. Not merged yet.
+- **Sketching that feels like Fusion** (`sf/sketch-feel`, 7 commits, merged after its fix
+  round): guides in every drawing tool (`sketch_infer.py`, the constraint added in the glued
+  step; referenced curves held still with a temporary Block while the shape is made exact),
+  SciForge's level / upright marks, the tangent arc in L (press on the chain's point, drag > 6
+  px, SciForge's own preview; FreeCAD never sees the gesture, its line tool is restarted from
+  the arc's end), fixed geometry green (`sketch_mode.FixedColour` repaints FreeCAD's Coin
+  material nodes after each of its recolourings; `CurvesMaterials0/1`, `PointsMaterials_0`),
+  SelectionColor / HighlightColor pinned (FreeCAD-wide; `#3b5bdb` is what FreeCAD's own packs
+  write). Adversarial review found 6 problems, all fixed (1c36fc5713): Ctrl+Z while the line
+  tool draws then a click corrupted the sketch (FreeCAD's handler keeps its last clicked point
+  across undo and joined the next curve to a reused GeoId: `Inference.line_undone` stops and
+  restarts the tool, `_repair_self_joins` removes a self-joined Coincident); L again mid-line
+  kept the forgotten start (the remembered start is used only within the pick radius); a press
+  with no move never armed the arc (`infer.last_start` set after the chain click); marks stayed
+  on Leave; the synthetic chain click snapped to the edge on a turned plane in a tilted view
+  (`_aim_at_vertex` scans the pixels around until FreeCAD preselects a Vertex); the tool kind
+  from `recent.last()` was stale for a tool started outside SciForge (the preview's shape wins).
+  Facts: FreeCAD's new tools act on the press and commit on the release; a zero-length press is
+  refused; `Gui.runCommand("Sketcher_CreateLine")` while it runs restarts it;
+  `EditCurvesCoordinate` is single precision (identify a vertex with it, never use it as a
+  coordinate); with the pointer on the line's own start FreeCAD previews nothing;
+  `moveGeometry` solves the whole sketch (free geometry drifted 2 um: the temporary Block);
+  `Gui::ToolHandler::addCursorTail` has no switch; under xvfb `grabWindow(0)` pixel checks
+  work; `QCursor.setPos` during a press-drag makes X send a move with no button (ends the
+  gesture). Merge note: my end-of-line work and the branch both edited `LineChain._continue`;
+  the merged version sets `current`, then `infer.last_start`, after a successful chain click,
+  and `break_chain` resets the inference like `start()`.
 - **How often do the tests fail** (Luca; from GitHub's run list, 100 runs): 40 cancelled by a
   newer push, 59 finished: 47 green, 12 red (one in five). Unit + golden red once (#96, fake
   FreeCAD without ParamGet); the Windows golden job never red; the other 11 reds were GUI
@@ -2214,11 +2234,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 0. **The current plan is `docs/sciforge/plan.md`** (2026-10-12, after the research report
    `reports/Fusion sketching ViewCube and navigation.md`). Done: A (orbit, 2026-10-13), B (the
-   Python ViewCube), C1-C4 for Line and (on `sf/sketch-feel`, fix round running, then merge)
-   guides in every tool, marks, the tangent arc, green fixed geometry. Next: merge
-   `sf/sketch-feel` after its fix round (its review notes are in the session log), then
-   selection like Fusion, components, joints, versions. Luca's Fusion checks (plan, last
-   section) tune the details. The items below are older and partly superseded by it.
+   Python ViewCube), C (2026-10-13: guides in every tool, marks, the tangent arc, green fixed
+   geometry; left: Shift midpoint, the arc's end-angle and slot width guides, Fusion's floating
+   check). Next: selection like Fusion, components, joints, versions. Luca's Fusion checks
+   (plan, last section) tune the details. The items below are older and partly superseded.
 0a. Open from 2026-10-13: Fusion's floating green check near the pointer while drawing a line
    (not built; OK is in the right-click menu); Move's triad, Scale's arrows and Draft's disc
    have no value box; the quick update is only produced on green runs (Luca may want it on
