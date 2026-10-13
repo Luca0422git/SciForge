@@ -583,11 +583,12 @@ def s_check():
     h.check("S: exactly 90 degrees", abs(deg - 90.0) < 1e-5, deg)
     # the slot's sides and arcs are where the pixel put them (a quarter of a degree
     # off) and the solver turns them exact after the move; the slanted line, free and
-    # joined to the slot, is held still meanwhile
+    # joined to the slot, is held still meanwhile (without that it drifted by 2 microns;
+    # what is left is the solver's own precision, a tenth of a micron at most)
     h.check(
         "S: the slanted line did not move",
-        si.vnear(other.EndPoint, V(55.3, -33.2, 0), 1e-9)
-        and si.vnear(other.StartPoint, V(35.3, -45.2, 0), 1e-9),
+        si.vnear(other.EndPoint, V(55.3, -33.2, 0), 1e-6)
+        and si.vnear(other.StartPoint, V(35.3, -45.2, 0), 1e-6),
         (other.StartPoint, other.EndPoint),
     )
     h.check(
