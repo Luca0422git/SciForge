@@ -164,7 +164,7 @@ def ensure_body():
         # the root FreeCAD's own label stays, as before components.
         if component is not None:
             components.place(body, component)
-            body.Label = components.body_label_in(doc, component)
+            body.Label = components.body_label_in(doc, component, exclude=body)
     except Exception as exc:
         warn("could not place the new body: %s" % exc)
     components.activate_body(body)

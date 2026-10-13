@@ -203,8 +203,11 @@ def new_component(doc, label=None, parent=None):
     return part
 
 
-def body_label_in(doc, container):
-    return core.body_label([b.Label for b in bodies_in(doc, container)])
+def body_label_in(doc, container, exclude=None):
+    """The next body label in a component. `exclude`: a body already placed there that is
+    being named (it must not count itself)."""
+    labels = [b.Label for b in bodies_in(doc, container) if b is not exclude]
+    return core.body_label(labels)
 
 
 def new_body_in(doc, container, label=None):
