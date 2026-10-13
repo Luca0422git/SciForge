@@ -2074,6 +2074,16 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   `--only golden`: the journey's "Extruding into the part picks Cut" checked right after setting
   the distance, and R8 decides the automatic operation with the preview (60 ms later). Caught
   by CI run #93; the journey now waits for the preview.
+- CI run #95 found (sketch_areas_more, scenarios sharing one profile): FreeCAD saves its
+  preferences when it quits, so everything SciForge changes in them must keep the user's own
+  value in the preferences too, not in memory. sketch_mode's settings (make sketch areas, area
+  colour, Esc...) now use `theme.keep_and_set / give_back` (backup group
+  `Mod/SciForge/SketchBackup`, like the viewer's `ViewerBackup`), and FreeCAD's own keys
+  parked by `shortcuts.py` are kept in `Mod/SciForge/ParkedShortcuts` (a shortcut set from
+  Python is saved by FreeCAD: after quitting with SciForge on, L / C / D... were saved empty for
+  good). Both are given back when SciForge goes off and at a start in another workbench.
+  `run_tests.sh --scenario a,b` runs several scenarios in one profile, as CI does: use it to
+  reproduce such failures (sketch_areas,sketch_areas_more fails on the old code).
 - Old scenarios that relied on the automatic 10 mm or on a preview right after E were updated
   (extrude_multibody*, sketch_areas*). Unit 330, golden 294 + 1 xfail.
 

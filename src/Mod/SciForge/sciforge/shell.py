@@ -66,13 +66,14 @@ def on_workbench(name):
         elif _state["on"]:
             disable()
         else:
-            # SciForge is off: put back viewer and sketch settings a session that ended with
-            # SciForge on left behind (FreeCAD's own cube, orbit, background, sketch areas).
-            # Nothing to do if none.
-            from . import sketch_mode, theme
+            # SciForge is off: put back viewer and sketch settings and FreeCAD's keys a session
+            # that ended with SciForge on left behind (FreeCAD's own cube, orbit, background,
+            # sketch areas, L / C / D...). Nothing to do if none.
+            from . import shortcuts, sketch_mode, theme
 
             theme.restore()
             sketch_mode.give_back_left_over()
+            shortcuts.give_back_left_over()
     except Exception as exc:
         warn("workbench change to %s: %s" % (name, exc))
 
@@ -88,10 +89,11 @@ def startup():
         workbench = Gui.activeWorkbench()
         name = workbench.name() if workbench is not None else ""
         if name and name != SCIFORGE_WB and not _state["on"]:
-            from . import sketch_mode, theme
+            from . import shortcuts, sketch_mode, theme
 
             theme.restore()
             sketch_mode.give_back_left_over()
+            shortcuts.give_back_left_over()
     except Exception as exc:
         warn("startup check: %s" % exc)
 
