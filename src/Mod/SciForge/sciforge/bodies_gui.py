@@ -22,6 +22,8 @@ ICONS = {
     "SplitBody": "split_body",
     "MoveCopy": "move",
     "DeleteFace": "delete",
+    "RigidGroup": "rigid_group",  # joints_ui.py reuses this view provider for its steps
+    "Position": "position",
 }
 
 

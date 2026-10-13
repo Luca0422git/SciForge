@@ -163,7 +163,7 @@ def ensure_body():
         # Inside a component the body is numbered per component, like Fusion (Body1); at
         # the root FreeCAD's own label stays, as before components.
         if component is not None:
-            components.place(body, component)
+            components.place(body, component, keep_position=False)  # a new, empty body
             body.Label = components.body_label_in(doc, component, exclude=body)
     except Exception as exc:
         warn("could not place the new body: %s" % exc)

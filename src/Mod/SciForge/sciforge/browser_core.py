@@ -120,6 +120,18 @@ def _item(prefix, obj, icon, kind, **extra):
     )
 
 
+JOINT_TYPES = {"Joint": "joint", "AsBuiltJoint": "joint", "RigidGroup": "rigid_group"}
+JOINT_ICONS = {
+    "rigid": "joint",
+    "revolute": "joint_revolute",
+    "slider": "joint_slider",
+    "cylindrical": "joint_cylindrical",
+    "pinslot": "joint_pinslot",
+    "planar": "joint_planar",
+    "ball": "joint_ball",
+}
+
+
 def _origin_node(obj):
     role = obj["role"]
     icon = "point" if role == "Origin" else ("offset_plane" if role.endswith("Plane") else "axis")
@@ -139,6 +151,7 @@ def _folders(objects, active_body, component):
     (root only), Origin, Bodies, Sketches, Construction, in Fusion's order, each only once
     it has something in it. ``objects``: the rows that belong to this component."""
     bodies, sketches, construction, origin, analysis, canvases = [], [], [], [], [], []
+    joints, joint_origins = [], []
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
         # Fusion's design has one origin. FreeCAD gives every body its own: show the active
@@ -153,15 +166,43 @@ def _folders(objects, active_body, component):
             origin_body = owners[0] if owners else None
     for obj in objects:
         type_id = obj["type_id"]
+        sciforge_type = obj.get("sciforge_type") or ""
         if type_id in BODY_TYPES:
-            node = _item("body:", obj, "box", "body", active=obj["name"] == active_body)
+            grounded = bool(obj.get("grounded"))
+            node = _item(
+                "body:",
+                obj,
+                "ground" if grounded else "box",
+                "body",
+                active=obj["name"] == active_body,
+                grounded=grounded,
+            )
             if node["active"]:
                 node["tip"] = node["tip"] or "Active body: new features go here"
+            if grounded:
+                node["tip"] = (
+                    node["tip"] + "; " if node["tip"] else ""
+                ) + "Grounded: it cannot move"
             bodies.append(node)
         elif type_id in MESH_TYPES:
             bodies.append(_item("mesh:", obj, "insert_mesh", "mesh_body"))
         elif type_id in CANVAS_TYPES:
             canvases.append(_item("canvas:", obj, "canvas", "canvas"))
+        elif sciforge_type in JOINT_TYPES:
+            kind = JOINT_TYPES[sciforge_type]
+            icon = (
+                "rigid_group"
+                if kind == "rigid_group"
+                else JOINT_ICONS.get(obj.get("joint_type"), "joint")
+            )
+            if sciforge_type == "AsBuiltJoint":
+                icon = "joint_asbuilt"
+            node = _item("joint:", obj, icon, kind, joint_type=obj.get("joint_type"))
+            if obj.get("describe"):
+                node["tip"] = node["tip"] or obj["describe"]
+            joints.append(node)
+        elif sciforge_type == "JointOrigin":
+            joint_origins.append(_item("joint_origin:", obj, "joint_origin", "joint_origin"))
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
         elif type_id in CONSTRUCTION_TYPES:
@@ -186,6 +227,10 @@ def _folders(objects, active_body, component):
         folders.append(_folder("origin" + suffix, "Origin", origin))
     if bodies:
         folders.append(_folder("bodies" + suffix, "Bodies", bodies))
+    if joints:
+        folders.append(_folder("joints" + suffix, "Joints", joints))
+    if joint_origins:
+        folders.append(_folder("joint_origins" + suffix, "Joint Origins", joint_origins))
     if sketches:
         folders.append(_folder("sketches" + suffix, "Sketches", sketches))
     if construction:
@@ -213,6 +258,7 @@ def _component_nodes(by_component, parent, active_body, active_component, seen):
             "component",
             active=name == active_component,
             children=children,
+            grounded=bool(obj.get("grounded")),  # the menu then offers Unground
         )
         if node["active"]:
             node["tip"] = node["tip"] or "Active component: new sketches and bodies go here"
@@ -334,6 +380,8 @@ MENUS = {
         "Activate",
         "New Component",
         "-",
+        "Ground",
+        "-",
         "Show/Hide",
         "Isolate",
         "Find in Window",
@@ -353,6 +401,37 @@ MENUS = {
         "Find in Timeline",
         "-",
         "Move to Component",
+        "Rename",
+        "Delete",
+    ],
+    "joint": [
+        "Edit Joint",
+        "Edit Joint Limits",
+        "Drive Joints",
+        "Animate Joint",
+        "-",
+        "Show/Hide",
+        "Suppress",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "rigid_group": [
+        "Edit Rigid Group",
+        "-",
+        "Suppress",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "joint_origin": [
+        "Edit Joint Origin",
+        "-",
+        "Show/Hide",
+        "Find in Timeline",
+        "-",
         "Rename",
         "Delete",
     ],

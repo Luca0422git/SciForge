@@ -158,6 +158,7 @@ SHORTCUTS = {
     "Sketcher_Offset": "O",
     "Sketcher_Projection": "P",
     "Std_TransformManip": "M",
+    "SciForge_Joint": "J",
     "Std_Measure": "I",
     "Std_ViewFitAll": "F6",
     "SciForge_ToggleViewCube": "Ctrl+Alt+V",  # Fusion: show/hide the ViewCube

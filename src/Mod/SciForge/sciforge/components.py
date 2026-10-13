@@ -249,9 +249,11 @@ def drop_if_empty(component):
         return False
 
 
-def place(obj, component):
+def place(obj, component, keep_position=True):
     """Move a body or component into ``component`` (None: the root). Returns True when it
-    moved. Refused (False) when it would put a component inside itself."""
+    moved. Refused (False) when it would put a component inside itself. ``keep_position``:
+    it stays where it is in the design (a moved existing body); False for a new, empty body,
+    which starts at its new component's origin like any body made there."""
     if obj is None:
         return False
     if component is not None and (component is obj or is_inside(component, obj)):
@@ -260,12 +262,33 @@ def place(obj, component):
     current = container_of(obj)
     if current is component:
         return False
+    # The body stays where it is on the screen (Fusion): a component that a joint or Move
+    # has moved carries a Placement of its own, so the moved object's own Placement is
+    # changed by the difference between the old and the new container.
+    before = _container_placement(current)
+    after = _container_placement(component)
     if current is not None:
         current.removeObject(obj)
     if component is not None:
         component.addObject(obj)
+    try:
+        if keep_position and not before.isSame(after, 1e-12):
+            obj.Placement = after.inverse().multiply(before).multiply(obj.Placement)
+    except Exception as exc:
+        warn("%s: could not keep its position: %s" % (obj.Label, exc))
     log("%s moved to %s" % (obj.Label, component.Label if component is not None else "the root"))
     return True
+
+
+def _container_placement(component):
+    """The placement a component gives what is inside it, in the design (its own placement
+    times its parents'); identity for the root."""
+    if component is None:
+        return App.Placement()
+    try:
+        return component.getGlobalPlacement()
+    except Exception:
+        return App.Placement(component.Placement)
 
 
 KEEP = object()  # from_bodies: each component goes where its body was

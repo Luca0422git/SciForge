@@ -46,9 +46,43 @@ def _used_up_bodies(doc):
         return set()
 
 
+def _joints():
+    from . import joints
+
+    return joints
+
+
+def _grounded_names(doc):
+    try:
+        return {g.ObjectToGround.Name for g in _joints().grounds(doc) if g.ObjectToGround}
+    except Exception:
+        return set()
+
+
+def _joint_row(row, obj):
+    """What the browser's Joints / Joint Origins folders need to know about a joint."""
+    kind = row.get("sciforge_type") or ""
+    if kind not in core.JOINT_TYPES and kind != "JointOrigin":
+        return
+    try:
+        joints = _joints()
+        if kind in ("Joint", "AsBuiltJoint"):
+            row["joint_type"] = joints.fusion_type(obj)
+            row["describe"] = joints.describe(obj)
+        if ops.is_suppressed(obj):
+            row["suppressed"] = True
+        else:
+            problem, reason = ops.problem(obj)
+            if problem:
+                row[problem] = reason
+    except Exception:
+        pass
+
+
 def _objects(doc):
     rows = []
     used_up = _used_up_bodies(doc)
+    grounded = _grounded_names(doc)
     for obj in doc.Objects:
         if obj.Name in used_up:
             continue
@@ -73,7 +107,9 @@ def _objects(doc):
                 # The component the row is in (None: the root); a component's own row
                 # carries its parent component, like any other member.
                 "component": container.Name if container is not None else None,
+                "grounded": obj.Name in grounded,
             }
+            _joint_row(row, obj)
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
                     row["suppressed"] = True  # off, not broken: greyed, like Fusion
@@ -150,6 +186,13 @@ def _edit_object(obj):
     except Exception:
         pass
     taskui.edit_object(obj)
+
+
+def _joint_action(name, obj):
+    """A joint entry of the right-click menu (joints_ui does the work)."""
+    from . import joints_ui
+
+    getattr(joints_ui, name)(obj)
 
 
 def _later(fn, *args):
@@ -295,6 +338,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "settings",
             "construction",
             "canvases",
+            "joints",  # new joints show at once
+            "joint_origins",
         }
         # Component rows and their Bodies / Sketches folders start open (keys are made per
         # component); this remembers the ones the user closed.
@@ -738,6 +783,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "analysis",
         "mesh_body",
         "canvas",
+        "joint",
+        "rigid_group",
+        "joint_origin",
     )
 
     def rename(self, item):
@@ -789,7 +837,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         doc = self._doc
         if doc is None or not commands.finish_open_dialog():
             return
-        steps = [n["object"] for n in nodes if n["kind"] in ("sketch", "construction", "analysis")]
+        step_kinds = ("sketch", "construction", "analysis", "joint", "rigid_group", "joint_origin")
+        steps = [n["object"] for n in nodes if n["kind"] in step_kinds]
         body_names = [n["object"] for n in nodes if n["kind"] == "body"]
         part_names = [n["object"] for n in nodes if n["kind"] == "component"]
         views = [n["object"] for n in nodes if n["kind"] == "saved_view"]
@@ -944,6 +993,14 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Convert Mesh": lambda: self._run_with(obj, "SciForge_ConvertMesh"),
             "Edit Canvas": lambda: _edit_object(obj),
             "Calibrate": lambda: self._run_with(obj, "SciForge_CalibrateCanvas"),
+            "Ground": lambda: _joint_action("toggle_ground", obj),
+            "Edit Joint": lambda: _edit_object(obj),
+            "Edit Rigid Group": lambda: _edit_object(obj),
+            "Edit Joint Origin": lambda: _edit_object(obj),
+            "Edit Joint Limits": lambda: _joint_action("edit_joint_limits", obj),
+            "Drive Joints": lambda: _joint_action("drive", obj),
+            "Animate Joint": lambda: _joint_action("animate", obj),
+            "Suppress": lambda: self._toggle_suppress(obj),
         }
         isolated = _isolated_names(doc)
         if node["kind"] in ("body", "component") and isolated:
@@ -967,6 +1024,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 text = "Hide" if node["visible"] else "Show"
             if entry == "Isolate" and isolated:
                 text = "Exit Isolate"
+            if entry == "Ground":
+                text = "Unground" if node.get("grounded") else "Ground"
+            if entry == "Suppress":
+                text = "Unsuppress" if node.get("status") == "suppressed" else "Suppress"
             if entry in ("Activate Body", "Activate") and node["active"]:
                 continue
             if entry == "Move to Component":
@@ -979,12 +1040,21 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 else menu.addAction(text)
             )
             self._handlers[action] = handlers.get(entry)
-            if entry in ("Edit Sketch", "Edit Feature", "Edit Canvas"):
+            if entry.startswith("Edit ") and entry != "Edit Joint Limits":
                 font = action.font()
                 font.setBold(True)
                 action.setFont(font)
             added = True
         return menu if added else None
+
+    def _toggle_suppress(self, obj):
+        if obj is None or self._doc is None or not commands.finish_open_dialog():
+            return
+        try:
+            ops.toggle_suppress(self._doc, obj.Name)
+        except Exception as exc:
+            commands.tell(str(exc))
+        self.refresh(force=True)
 
     def _move_menu(self, menu, node, obj):
         """ "Move to Component" with one entry per component a row can go into (and the

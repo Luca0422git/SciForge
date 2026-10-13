@@ -73,6 +73,11 @@ KINDS = {
     "base": ("Base Feature", "document"),
     "component": ("Component", "new_component"),
     "group": ("Group", "folder"),
+    "joint": ("Joint", "joint"),
+    "as_built_joint": ("As-Built Joint", "joint_asbuilt"),
+    "joint_origin": ("Joint Origin", "joint_origin"),
+    "rigid_group": ("Rigid Group", "rigid_group"),
+    "position": ("Position", "position"),
     "other": ("Feature", "workspace_design"),
 }
 
@@ -155,6 +160,11 @@ KIND_BY_SCIFORGE_TYPE = {
     "InsertMesh": "insert_mesh",
     "ConvertMesh": "convert_mesh",
     "InsertSTEP": "insert_step",
+    "Joint": "joint",
+    "AsBuiltJoint": "as_built_joint",
+    "JointOrigin": "joint_origin",
+    "RigidGroup": "rigid_group",
+    "Position": "position",
 }
 
 # Steps that are not a solid: they never carry the history marker (FreeCAD's Tip).
@@ -168,6 +178,11 @@ NON_SOLID_KINDS = {
     "group",
     "component",
     "insert_mesh",
+    "joint",
+    "as_built_joint",
+    "joint_origin",
+    "rigid_group",
+    "position",
 }
 
 

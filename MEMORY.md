@@ -2547,6 +2547,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 ## Merge notes 2026-10-13 night (insert + selection onto main)
 
+- **Joints merged (2026-10-13 night, `sf/joints`):** session log in
+  `docs/sciforge/sessions/joints.md` (built, FreeCAD facts, gaps). Merge follow-ups:
+  browser folders Joints / Joint Origins per component, component rows show
+  Ground/Unground, `components.place` keeps a body's position when it changes component
+  (a component a joint moved carries a Placement; new empty bodies opt out with
+  `keep_position=False`).
 - `sf/insert` and `sf/selection` merged after components and versions. Conflicts: browser
   (components' per-component folders + insert's mesh bodies and Canvases folder: canvases
   now live per component), timeline kinds (`component` + `insert_mesh`), the app menu (one
