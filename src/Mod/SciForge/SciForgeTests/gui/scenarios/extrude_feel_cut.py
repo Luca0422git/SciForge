@@ -189,7 +189,7 @@ def dragged_red():
     h.check("the arrow was grabbed", len(held) > 10, len(held))
     h.check("R2+R7: red shows while the button is still down",
             any(x["red"] == 1 and x["cut"] for x in held), held[-5:])
-    h.check("never more than one red node", all(x["red"] <= 1 for x in samples))
+    h.check("never more than one red node", bool(samples) and all(x["red"] <= 1 for x in samples))
     p = xpanel()
     h.check("dragged into the part: Cut", p.operation.currentData() == "cut",
             (p.operation.currentText(), p.distance.value()))
@@ -361,7 +361,7 @@ def pp_dragged():
     h.check("R7: material pushed away shows red during the drag",
             any(x["red"] == 1 and x["field"] < 0 for x in held), held[-3:])
     h.check("R3: the box shows the dialog's value during the drag",
-            all(x["box"] == x["field_text"] for x in held),
+            bool(held) and all(x["box"] == x["field_text"] for x in held),
             [(x["box"], x["field_text"]) for x in held if x["box"] != x["field_text"]][:5])
     p = ppanel()
     h.check("pushed in", p is not None and p.field.value() < -0.5, p and p.field.value())

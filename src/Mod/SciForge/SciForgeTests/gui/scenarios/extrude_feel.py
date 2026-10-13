@@ -202,14 +202,14 @@ def live_checks():
         )
     h.check(
         "R3: the box shows the dialog's value all along the drag",
-        all(x["box_text"] == x["field_text"] for x in held),
+        bool(held) and all(x["box_text"] == x["field_text"] for x in held),
         [(x["box_text"], x["field_text"]) for x in held if x["box_text"] != x["field_text"]][:5],
     )
     ys = [x["box_y"] for x in held if x["box_y"] is not None]
     h.check("R3: the box moves up with the arrow", ys and ys[-1] < ys[0] - 20, ys[:3] + ys[-3:])
     h.check(
         "R6: the sketch stays visible during the drag",
-        all(x["sketch"] for x in samples),
+        bool(samples) and all(x["sketch"] for x in samples),
         [x["sketch"] for x in samples][:5],
     )
     p = panel()
