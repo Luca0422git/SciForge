@@ -106,6 +106,80 @@ parallel off/on, a typed length beating a guide, undo/redo. 2026-10-13: `sketch_
 outside SciForge). Unit tests `test_sketch_infer_core.py`. Settings added: `TangentArc`,
 `DragPixels` (6).
 
+## The remaining sketch tools and constraints (branch `sf/sketch-tools`, 2026-10-13)
+
+Researched before building. Autodesk's own hosts cannot be opened from the sandbox, so
+the **Autodesk** rows come from web-search summaries of these pages (titles as Autodesk
+names them): Fusion help "Create midpoint lines in a sketch", "Create rectangles",
+"Create circles in a sketch", "Create arcs in a sketch", "Create polygons", "Create
+slots in a sketch" and "Slots in sketches", "Create conic curves in sketches" and "Conic
+curves in sketches", "Project to surface", "Create splines in a sketch", "Trim or extend
+sketch geometry", "Add chamfers to sketch geometry", "Project and include geometry in
+sketches", "Add a collinear / concentric / midpoint / curvature constraint to a sketch";
+the Fusion API reference (SketchCircles.addByTwoTangents / addByThreeTangents with a hint
+point, SketchLines.addEdgePolygon, Sketch.addCenterPointSlot, SketchConicCurves.add with
+0 < rho < 1, SketchCurve.breakCurve); Autodesk's shortcut table and the blog "15+
+Essential Fusion Shortcuts"; the Autodesk support article on wrapping a sketch onto a
+surface. **Forum** rows: Autodesk Community threads ("3-Tangent Circle Sketch Tool":
+lines only; "Is there a way to specify tangency direction/side": the click picks the
+quadrant; "Sketching bug: Escape and Return behave differently for Lines and Splines":
+Esc cancels a spline in progress, Enter commits it; "Find sketch objects centre point";
+"Curvature constraint unable to select geometry"). **Guess**: no source found; SciForge's
+choice, to be checked in Luca's Fusion.
+
+### New drawing tools
+
+| Tool | Fusion (source) | SciForge |
+|---|---|---|
+| Midpoint Line | Click the middle, then the end (or type the length and angle, then click); the line is symmetric about the first click; repeats; Enter ends (Autodesk) | SciForge's own tool (`sketch_draw_tools.MidpointLine`): length and angle boxes, a level/upright line snaps and gets Horizontal/Vertical, a first click on a point or curve puts the line's middle on it (Symmetric, FreeCAD's form of Fusion's midpoint constraint); in empty space a point is left at the middle (Guess: keeps the middle to dimension from) |
+| 3-Point Rectangle | First corner, second corner (length and direction), third point (width); length and width can be typed; repeats; Enter ends (Autodesk) | FreeCAD's rectangle started in its "3 corners" mode (perpendicular and parallel sides, coincident corners) |
+| 2-Point Circle | Two clicks are the ends of a diameter; a typed diameter becomes a dimension; repeats (Autodesk) | SciForge's own tool: diameter box; a click on a point or curve makes the circle pass through it |
+| 2-Tangent Circle | Pick 2 lines, then type the radius and/or click: the click picks which of the possible circles (the quadrant) (Autodesk; API hint point; Forum) | SciForge's own tool: two line clicks (selected lines count), the circle in the pointer's quadrant follows the mouse, radius box; Tangent to both lines, a typed radius becomes a dimension |
+| 3-Tangent Circle | Pick 3 lines (lines only: Forum, Autodesk staff); the circle nearest the pointer (API hint point) | SciForge's own tool: three line clicks, then the circle of the possible ones (incircle and excircles; two between parallel lines) whose centre is nearest the pointer follows it; a click places it; Tangent to all three |
+| Tangent Arc | Click an end point of existing geometry (the arc starts tangent there), click the end or type a radius; repeat; Enter ends (Autodesk). The Line tool's press-and-drag arc is the other way in (Autodesk blog) | SciForge's own tool: first click on the end of a line or arc, the arc follows the pointer, radius box, Tangent at the start, the far end snaps like any point |
+| Edge Polygon | Click the two ends of one edge (or type its length and angle), set the number of sides, click the side the polygon goes to (Autodesk) | SciForge's own tool: edge length, angle and sides boxes (U / J change the sides, as the other polygons), the third click picks the side; equal sides on a construction circle like SciForge's other polygons |
+| Overall Slot | Click the two ends of the slot (overall length; distance and angle can be typed), then click or type the width (Autodesk) | SciForge's slot tool, overall mode: length, angle and width boxes; a construction line along the overall length |
+| Center Point Slot | Click the slot's centre, then an arc centre, then the width (click, or type the diameter of the ends) (Autodesk; API: width, half length, angle; a construction centre line) | SciForge's slot tool, centre-point mode: the clicked centre sits on the middle of a construction centre line |
+| Conic Curve | Click the start, the end, the apex; drag the rho handle or type rho (0 < rho < 1; elliptical below 0.5, parabolic at 0.5, hyperbolic above); Enter; guidelines from the ends to the apex give tangency (Autodesk; API) | SciForge's own tool: an exact rational quadratic B-spline (poles start, apex, end; apex weight rho/(1-rho), held by a Weight constraint), two construction guidelines from the ends to the apex; rho box (0.5 to start) and a rho handle on the line from the chord's middle to the apex |
+| Project to Surface | Pick faces, then sketch curves / edges / points; Projection type Closest Point or Along Vector; OK (Autodesk) | A dialog (Faces, Curves, Type, Direction); the result is a 3D curve feature next to the sketch (FreeCAD sketches are flat: the projected curves cannot live in the sketch itself) |
+
+### New constraints
+
+| Constraint | Fusion (source) | SciForge |
+|---|---|---|
+| Collinear | Click two lines; they come onto one line; a badge shows (Autodesk) | Tangent between the two lines (in FreeCAD's solver a line-line tangency is exactly collinear) |
+| Concentric | Click two circles / arcs / ellipses; their centres meet (Autodesk) | Coincident between the two centres |
+| Midpoint | Click a point, then a line (or the other way); the point goes to the line's middle (Autodesk; Autodesk blog) | Symmetric (the line's two ends about the point); for an arc: the point on the arc and a construction line from the centre that bisects the arc's ends |
+| Curvature (G2) | Pick a spline and a curve chained to it; smooth G2 join (Autodesk); in practice spline-to-spline (Forum) | FreeCAD's solver has no curvature constraint (19 constraint types in `Sketcher/App/Constraint.h`, none for curvature; no curvature class in `planegcs/Constraints.h`). Spline + line: exact G2 (tangent end to end plus the spline's next pole on the line: curvature 0 at the joint, checked in FreeCAD). Spline + arc / circle / spline: Tangent (G1) and a note saying so |
+| The pick flow (all four) | Start the command, click the two things, the constraint is added, the command waits for the next pair; with two fitting things selected first it applies at once; Esc ends (Autodesk "select the geometry to constrain"; the rest Guess) | Same, with a hint next to the pointer for each click; a wrong pick says why and waits |
+
+### FreeCAD's tools under the SKETCH tab: the audit
+
+| Tool | Fusion (source) | FreeCAD 1.1.4 as it was | SciForge now |
+|---|---|---|---|
+| 2-Point / Center Rectangle | Repeats until Enter / Esc; width and height boxes; H/V sides, coincident corners; the centre one has a centre point (Autodesk; Forum) | Same (continuous mode, value boxes, H/V; centre point + Symmetric) | Unchanged |
+| Center Diameter / 3-Point Circle | Diameter box; repeats (Autodesk) | Same (FreeCAD's circle box shows the diameter) | Unchanged |
+| 3-Point / Center Point Arc | Start, end, a point on the arc / centre, start, end (Autodesk) | Same order | Unchanged |
+| Ellipse | Centre, major axis, minor axis (Autodesk) | Same order; FreeCAD also adds its axis lines and foci as construction | Unchanged (the foci are FreeCAD's) |
+| Center to Center Slot | Click the two arc centres, then click or **type the width** (the diameter of the ends) (Autodesk) | The third value box is the end **radius**: typing 10 made a 20 mm wide slot | SciForge's slot tool, centre-to-centre mode: a width box; a typed width becomes the ends' diameter dimension |
+| Three Point Arc Slot | The two end centres, a point on the centre arc, the width (Autodesk) | Not in FreeCAD: the menu ran the centre-point arc slot | SciForge's slot tool, three-point arc mode |
+| Center Point Arc Slot | Centre, start, end, width (Autodesk; Inventor help for the same tool) | Same clicks | Unchanged |
+| Fit Point / Control Point Spline | Click points; Enter or the check commits the spline; Esc cancels the spline in progress (Autodesk; Forum) | Right click or Esc commits; SciForge's Enter ("complete the tool") dropped the spline | Enter and OK commit the spline and end the tool; Esc cancels the spline in progress |
+| Point | Click points; repeats (Autodesk) | Same | Unchanged |
+| Fillet | Pick a corner or two curves, type the radius (Autodesk) | Radius from the mouse | Unchanged (SciForge already opens the radius box) |
+| Chamfer | Pick a corner or two lines, drag or type the distance; Equal distance / Distance and angle / Two distances (Autodesk) | Distance from the mouse, no dimension | Gap (see Known gaps) |
+| Trim | Hover shows the piece, a click deletes it back to the nearest intersections, **press and drag across several pieces trims each one**, a curve with no intersection is deleted (Autodesk) | Click trims; no drag | SciForge's Trim (T): a click trims as FreeCAD's trim does, a press-drag trims every piece the pointer crosses (one undo step) |
+| Extend | Hover previews, **one click** extends to the nearest (extended) intersection; nothing in range: nothing happens (Autodesk) | Two steps: click the curve, then drag its end and click again | SciForge's Extend: hover preview, one click extends the clicked end to the nearest curve it meets; the end gets a point-on-curve constraint |
+| Break | Click a curve: it is broken at the intersections nearest to the click into 2 or 3 pieces, joined by constraints (Autodesk API breakCurve; Autodesk help) | FreeCAD's Split: the curve is split at the clicked point | SciForge's Break: at the nearest intersections on each side of the click (2 or 3 pieces, coincident joints); a curve with no intersection says so |
+| Sketch Dimension, Toggle Construction, Intersect | D / X / Intersect as Fusion (Autodesk) | Same (D: SciForge's value box since 2026-10-10) | Unchanged |
+
+### Keys (Autodesk shortcut table)
+
+Fusion's sketch defaults: L Line, R 2-Point Rectangle, C Center Diameter Circle, D Sketch
+Dimension, T Trim, O Offset, P Project, X Normal/Construction (and, everywhere, E Extrude,
+Q Press Pull, M Move/Copy, S the toolbox). No other sketch tool has a default key. T runs
+SciForge's Trim and P SciForge's Project (`config.PREFERRED`).
+
 ## Known gaps
 
 | Fusion | Why not yet |

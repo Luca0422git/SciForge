@@ -97,6 +97,9 @@ class _PickCommand:
 
     def Activated(self):
         try:
+            session = sketch_mode.current()
+            if session is not None:
+                session.stop_tool()  # SciForge's own drawing tool gives way
             sketch = sketch_mode.editing_sketch()
             if sketch is None:
                 commands.tell(
