@@ -574,6 +574,16 @@ def arrow_spot():
     return None
 
 
+def arrow_spot_in_view():
+    """arrow_spot(), after fitting the view if the arrow went out of it (a stuck arrow
+    follows the mouse; a person zooms out to find it)."""
+    found = arrow_spot()
+    if found is None:
+        h.fit()
+        found = arrow_spot()
+    return found
+
+
 def arrow_release_during_recompute(name):
     found = arrow_spot()
     if not h.check("%s: a spot on the arrow" % name, found is not None):
@@ -679,7 +689,7 @@ def e4_after():
 
 def e7_click():
     """A click on the arrow (a person checking it lets go)."""
-    found = arrow_spot()
+    found = arrow_spot_in_view()
     if not h.check("E7: a spot on the arrow", found is not None):
         return
     _p3, pos, _axis = found
@@ -724,7 +734,7 @@ def e7_new_arrows():
 
 
 def e7_drag():
-    found = arrow_spot()
+    found = arrow_spot_in_view()
     if not h.check("E7: a spot on the new arrow", found is not None):
         return
     start_case(coin_arrow())
