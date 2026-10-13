@@ -2485,10 +2485,17 @@ update onto the installed SciForge). Red: fix core patches #8-#13, push, re-trig
   lists: duplicate labels, AutoSaver, long-press menu), `shell.py`, `MEMORY.md`, `plan.md`.
   Then run `selection_*`, `extrude_presspull_qa`, `fillet_qa_more`, `marking_menu_command`,
   `components_basic`, smoke/journey, push.
-- `sf/joints` (agent told to stop and commit "WIP joints: ..." at the pause; may be partial):
-  Joint (J) two-click picker, 7 types, As-Built, Ground, Rigid Group, limits, on FreeCAD's
-  Assembly workbench; the component contract is in `docs/sciforge/parity/components.md`.
-  Read its WIP commit message and parity doc first; finish, test, merge.
+- `sf/joints` (e21f43f8ce "WIP joints: ..."): done: `joints_core.py` (28 unit tests),
+  `joints.py` (a hidden SciForgeAssembly root owns only the joints; all 7 types, snap points,
+  align/solve, Ground, Drive + limits, As-Built, Rigid Group, Joint Origin, Capture/Revert,
+  save/reload verified headless), `joints_ui.py` (dialogs, browser, timeline, ribbon, J key),
+  an `extrude.py` cross-body binder fix, scenario `joints_basic` green (84 checks). Not done:
+  scenarios `joints_types` / `joints_asbuilt_group` / `joints_drive` (plan in the agent's
+  report: per type J, click (58,6,20) then (19,14,10), Motion tab, limits, Animate, OK, undo;
+  helpers in `SciForgeTests/gui/joints_steps.py`), the regression runs (`bodies_move`,
+  `bodies_qa*`, `timeline_browser_qa2`, `extrude_multibody`), the adversarial review, the
+  parity doc's final status, a MEMORY entry. Finish those, then merge after `sf/components`
+  (already on main) with the contract in `docs/sciforge/parity/components.md`.
 If these branches are gone (new container), rebuild them from the reports summarised in the
 session logs below and in `docs/sciforge/plan.md`; the parity docs name every behaviour.
 
