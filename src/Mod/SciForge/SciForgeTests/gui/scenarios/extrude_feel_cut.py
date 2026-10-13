@@ -182,7 +182,9 @@ def drag_into_part():
     drag.run()
 
 
-drag_into_part.wait_ms = 40 * 20 + 300 + 1200
+# A pocket is rebuilt on the way: on a busy machine the drag's moves wait for the
+# rebuilds (2.3 s for the whole drag on a shared 4-CPU box), so the step has room.
+drag_into_part.wait_ms = 40 * 20 + 300 + 2500
 
 
 def dragged_red():
@@ -409,7 +411,7 @@ def pp_drag_down():
     drag.run()
 
 
-pp_drag_down.wait_ms = 40 * 20 + 300 + 1200
+pp_drag_down.wait_ms = 40 * 20 + 300 + 2500  # as drag_into_part
 
 
 def pp_dragged():

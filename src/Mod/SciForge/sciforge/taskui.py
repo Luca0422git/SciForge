@@ -331,6 +331,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         self.edited = False  # the user typed in the box since it last showed the field
         self.anchor = None  # widget pixel of the arrow point it sits next to
         self.handle_pixels = None  # (tail, tip, radius) of the handle on the screen, pixels
+        self._placed = None  # what the last placement was worked out from (nothing new: skip)
         self.textEdited.connect(self._typed)
         self.returnPressed.connect(self._enter)
         self.hide()
@@ -370,13 +371,14 @@ class ArrowValueBox(QtWidgets.QLineEdit):
                 radius = arrow_box_core.HEAD * size
         self.place_segment(view, point, tail, tip, radius)
 
-    def place_segment(self, view, anchor, tail, tip, radius, avoid=()):
+    def place_segment(self, view, anchor, tail, tip, radius, avoid=(), avoid_rects=()):
         """Sit beside a handle whose grabbable part runs from the 3D point `tail` to the 3D
         point `tip` and is `radius` mm wide (half its width); `anchor` is the 3D point the
         box belongs to (the handle's middle). The box goes beside the handle as it shows on
         the screen, never over it (nor over the dialog's other handles, `avoid`: their
-        (tail, tip, radius) in pixels), so an arrow that points sideways (a side face in
-        the Front view) stays grabbable. Hidden when the anchor is off screen."""
+        (tail, tip, radius) in pixels, nor over its other boxes, `avoid_rects`), so an
+        arrow that points sideways (a side face in the Front view) stays grabbable. Hidden
+        when the anchor is off screen."""
         from . import arrow_box_core
 
         parent = self.parentWidget()
@@ -413,6 +415,18 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         self.handle_pixels = (tail_px, tip_px, radius_px)
         tail, tip, radius = tail_px, tip_px, radius_px
         box = (self.width(), self.height())
+        # Placed again only when something moved (the box is polled every 30 ms by its
+        # handle; working out the spot each time cost a tenth of a millisecond per handle).
+        key = (
+            (round(ax), round(ay), round(tail[0]), round(tail[1]), round(tip[0]), round(tip[1])),
+            round(radius),
+            box,
+            tuple(tuple(map(round, (t[0], t[1], p[0], p[1], r))) for (t, p, r) in avoid),
+            tuple(avoid_rects),
+        )
+        if key == self._placed and self.isVisible():
+            return
+        self._placed = key
         left, top = arrow_box_core.spot(
             (ax, ay),
             tail,
@@ -423,6 +437,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             other_side=self.other_side,
             past_tip=self.past_tip,
             avoid=avoid,
+            avoid_rects=avoid_rects,
         )
         if self.pos() != QtCore.QPoint(left, top):
             self.move(left, top)
@@ -562,6 +577,8 @@ class BoxCarrier:
         self.box_key = key
         self.follow_box()
 
+    HOVER_EVERY = 4  # polls: the mouse over the handle is looked for every 120 ms
+
     def follow_box(self):
         """Keep the box next to the handle and showing the dialog's value: run on every
         poll (it follows a drag and a turned or zoomed view). A handle in use (dragged, or
@@ -577,8 +594,13 @@ class BoxCarrier:
             anchor, tail, tip, radius = self.box_geometry()
             owner = self.box_owner
             avoid = owner.other_handles(box) if owner is not None else ()
-            box.place_segment(self.view, anchor, tail, tip, radius, avoid=avoid)
-            if owner is not None and (self.box_active() or box.handle_hovered()):
+            rects = owner.other_boxes(box) if owner is not None else ()
+            box.place_segment(self.view, anchor, tail, tip, radius, avoid=avoid, avoid_rects=rects)
+            if owner is None:
+                return
+            self._box_polls = getattr(self, "_box_polls", 0) + 1
+            hovered = self._box_polls % self.HOVER_EVERY == 0 and box.handle_hovered()
+            if self.box_active() or hovered:
                 owner.used(self.box_key)
         except RuntimeError:
             self.value_box = None  # the box went with its dialog
@@ -660,6 +682,20 @@ class ValueBoxes:
             try:
                 if other.isVisible() and other.handle_pixels is not None:
                     found.append(other.handle_pixels)
+            except RuntimeError:
+                pass
+        return found
+
+    def other_boxes(self, box):
+        """The other boxes shown, [(left, top, width, height)] in view pixels: a box never
+        lands on one of them (two arrows on one spot, at 0)."""
+        found = []
+        for other in self.boxes.values():
+            if other is box or not _alive(other):
+                continue
+            try:
+                if other.isVisible() and other.handle_pixels is not None:
+                    found.append((other.x(), other.y(), other.width(), other.height()))
             except RuntimeError:
                 pass
         return found

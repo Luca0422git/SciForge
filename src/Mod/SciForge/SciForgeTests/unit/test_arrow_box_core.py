@@ -113,6 +113,39 @@ class Spot(unittest.TestCase):
         self.assertGreaterEqual(core.clearance(tail, tip, rect(corner)), 8)
         self.assertTrue(inside(corner), corner)
 
+    def test_two_boxes_on_one_spot_with_a_third_handle_next_to_them(self):
+        # Extrude with Start: Offset, both at 0 (the numbers of a real run): the distance
+        # arrow and the shorter offset arrow stand on one spot, the taper's curved handle
+        # sits to their right. "Past the offset arrow's tip" is on the distance arrow's
+        # head, the right side is over the taper, so the boxes must not both go left.
+        distance = ((715.0, 372.0), (715.0, 222.0), 15.0)
+        offset = ((715.0, 350.0), (715.0, 245.0), 11.0)
+        taper = ((808.0, 299.0), (838.0, 299.0), 13.0)
+        first = core.spot(
+            (715, 297), distance[0], distance[1], 15.0, BOX, VIEW, avoid=[taper, offset]
+        )
+        self.assertGreaterEqual(core.clearance(taper[0], taper[1], rect(first)), 13.0)
+        second = core.spot(
+            (715, 297),
+            offset[0],
+            offset[1],
+            11.0,
+            BOX,
+            VIEW,
+            past_tip=True,
+            avoid=[distance, taper],
+            avoid_rects=[rect(first)],
+        )
+        self.assertGreaterEqual(core.rect_gap(rect(second), rect(first)), 1.0, (first, second))
+        for seg in (distance, offset, taper):
+            self.assertGreaterEqual(core.clearance(seg[0], seg[1], rect(second)), seg[2])
+        self.assertTrue(inside(second), second)
+
+    def test_rect_gap(self):
+        self.assertEqual(core.rect_gap((0, 0, 10, 10), (20, 0, 10, 10)), 10.0)
+        self.assertEqual(core.rect_gap((0, 0, 10, 10), (5, 5, 10, 10)), -5.0)
+        self.assertEqual(core.rect_gap((0, 0, 10, 10), (10, 10, 10, 10)), 0.0)
+
     def test_handle_size_follows_the_screen_scale(self):
         # 0.7 mm per pixel (a 400 mm part after Fit): about 75 px for the whole arrow.
         size = core.handle_size(0.7)
