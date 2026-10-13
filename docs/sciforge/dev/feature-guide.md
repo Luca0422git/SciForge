@@ -35,6 +35,20 @@ Subclass `taskui.Panel` (see `extrude_ui.py`, `presspull_ui.py`, `construct_ui.p
 Widgets: `taskui.DistanceField` (unit-aware, can `bind(obj, prop)` so `=Parameters.x` works),
 `taskui.ArrowDragger(origin, direction, distance, size, on_drag, on_release)` (blue drag arrow).
 
+Value boxes (Fusion shows the value beside every handle): give the dialog
+`self.value_boxes = taskui.ValueBoxes(self, default="distance")` and, after making a handle,
+`self.value_boxes.attach(handle, "distance", lambda: field.widget.text(), commit)` where
+`commit(text)` takes what was typed (a `preview.FormulaInput(...).take(text)`, or
+`field.take(field.parse(text))`). Call `self.value_boxes.discard()` in `cleanup()`. Every
+handle class is a `taskui.BoxCarrier` (`ArrowDragger`, `extrude_ui.AngleDragger`,
+`handles3d` handles, `primitives_ui.LinearHandle`, `revolve_ui.AngleHandle`): a new handle
+implements `box_geometry()` (anchor, tail, tip, half-width in mm) and calls `follow_box()`
+from its poll and `drop_box()` in `remove()`. The box never covers a handle of the dialog
+(`arrow_box_core.spot`). Digits typed with the mouse over the 3D view go into the current
+box by themselves (`taskui.TypeOverView`, installed by `Panel`); a dialog without a box can
+name a field with `typing_field()`. Size a handle for the screen with
+`taskui.handle_size_at(view, point, hi=...)` (about 75 px for the arrow, whatever the part).
+
 Picking:
 - Sketch profiles: `profile_pick.ProfilePicker(view, sketches, on_pick)` shades closed regions and
   picks a click inside one. `profile_pick.ray_plane(view, pos, base, normal)` for your own maths.
