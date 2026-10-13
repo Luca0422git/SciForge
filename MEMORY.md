@@ -2206,6 +2206,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - Process: the three agents again built in isolated worktrees with reviewers; two review
   rounds (orbit, sketch) and the extrude agent's own final batch each found real bugs. From
   here on (Luca's decision above) CI is the overall test; merges go out at once.
+- Housekeeping: the agents' worktrees (`.claude/worktrees/agent-*`, all clean, branches
+  merged) and the two stale ones from the first inspect / primitives QA rounds
+  (`wf_f0015b22-593-18/19`, superseded by inspect_qa* / primitives_qa* on the main branch)
+  were removed; the stale ones' uncommitted edits are kept as patches in the session's
+  scratchpad (`old-worktrees/*.diff`), not in the repo. 3 GB freed.
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
