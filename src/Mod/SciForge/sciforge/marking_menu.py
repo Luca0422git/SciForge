@@ -184,16 +184,22 @@ def open_at(global_pos):
     return menu
 
 
-def _open_for_state(global_pos):
+def _open_for_state(global_pos, view_widget=None):
     """Fusion: inside a sketch the right click offers the sketch's own tools. Decided here,
     at the click, so it does not depend on which of the two right-click filters on the 3D
     view runs first: Qt runs the filter installed last first, and this part filter was
     installed again after switching to another program and back while a sketch was open
-    (Luca saw the part menu in a sketch)."""
+    (Luca saw the part menu in a sketch). Only in the view of the open sketch: another
+    design's view keeps the part menu."""
     try:
         from . import sketch_mode
 
-        if sketch_mode.current() is not None:
+        session = sketch_mode.current()
+        if (
+            session is not None
+            and session.gl is not None
+            and (view_widget is None or sketch_mode._same(view_widget, session.gl))
+        ):
             from . import sketch_marking
 
             return sketch_marking.open_at(global_pos)
@@ -219,7 +225,7 @@ class _RightClickFilter(QtCore.QObject):
                 start, self.pressed_at = self.pressed_at, None
                 pos = event.globalPosition().toPoint()
                 if start is not None and (pos - start).manhattanLength() <= CLICK_SLOP:
-                    _open_for_state(pos)
+                    _open_for_state(pos, obj)
                 return True
             if kind == QtCore.QEvent.ContextMenu:
                 return True  # FreeCAD's own context menu is replaced

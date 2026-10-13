@@ -12,6 +12,8 @@ B  Leave SciForge for another program and come back (what Qt does then), right c
    still the sketch menu, twice.
 C  The design's window is activated again (another design tab and back): still the sketch
    menu.
+E  A second design while the sketch stays open in the first: right click in its view gives
+   the part menu; back in the first design's tab, the sketch menu again.
 D  Finish Sketch from the menu, right click: the part menu.
 """
 import FreeCAD as App
@@ -128,6 +130,35 @@ def c_right_click():
 
 def c_menu():
     check_sketch_menu("C")
+    close_menu()
+    # E: a second design while the sketch stays open in the first
+    App.newDocument("SketchMenuOther")
+    h.fit()
+
+
+def e_other_view():
+    right_click()
+
+
+def e_part_menu():
+    labels = si.marking_labels()
+    h.check("E: the other design's view gives a menu", si.marking_menu() is not None, labels)
+    h.check("E: it is the part menu (the sketch is in the other design)", "Create Sketch" in labels, labels)
+    h.check("E: no Finish Sketch there", "Finish Sketch" not in labels, labels)
+    close_menu()
+    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    for sub in area.subWindowList():
+        if "SketchMenuSwitch" in sub.windowTitle():
+            area.setActiveSubWindow(sub)  # back to the first design's tab
+    QtWidgets.QApplication.processEvents()
+
+
+def e_back():
+    right_click()
+
+
+def e_sketch_menu_again():
+    check_sketch_menu("E (back in the sketch's design)")
     si.marking_slot("Finish Sketch")
 
 
@@ -160,6 +191,10 @@ h.run(
         b_menu_again,
         c_right_click,
         c_menu,
+        e_other_view,
+        e_part_menu,
+        e_back,
+        e_sketch_menu_again,
         d_right_click,
         d_menu,
     ],

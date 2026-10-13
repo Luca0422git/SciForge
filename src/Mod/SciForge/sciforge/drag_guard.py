@@ -54,6 +54,7 @@ def end_lost_drag(handle, idle=False):
         try:
             from . import handles3d
 
+            handles3d.stop_watching(handle)  # its Qt release watcher has nothing left to do
             handles3d.touch()
         except Exception:
             pass
@@ -97,6 +98,9 @@ def release_grab(node, view):
     give the grab back, so the viewer never keeps a pointer to a freed node (cause 4)."""
     try:
         action = _event_action(view)
+    except Exception:
+        return False  # the 3D view is gone (design closed): there is no grab to give back
+    try:
         grabber = action.getGrabber()
         if grabber is not None and grabber == node:
             action.releaseGrabber()

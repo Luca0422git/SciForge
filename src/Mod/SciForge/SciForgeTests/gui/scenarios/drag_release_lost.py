@@ -485,6 +485,7 @@ def h2b_double_click():
     p3, pos = found
     st["under"] = d.under(pos)
     d.move(pos)
+    st["n0"] = len(st["spy"].calls)
     d.click(pos)
     st["second"] = time.time()
     QtTest.QTest.qWait(150)  # a person's double-click
@@ -496,10 +497,11 @@ def h2b_double_click():
 def h2b_after():
     case_kept("H2b")
     judge("H2b", o_dragging, o_distance, o_final)
-    late = [t for t in st["spy"].calls if t >= st.get("second", 0) + 0.12]
+    # each click's drag ends with an on_release: two of them, whatever the timing
+    ended = len(st["spy"].calls) - st.get("n0", 0)
     h.check(
-        "H2b: the second click's drag ended too (on_release after it)",
-        bool(late),
+        "H2b: the second click's drag ended too (an on_release for each click)",
+        ended >= 2,
         [round(t - st.get("second", 0), 3) for t in st["spy"].calls],
     )
 

@@ -1588,7 +1588,17 @@ class DimensionEditor(QtWidgets.QFrame):
         """Set the dimension; False (and a message) when the value is not possible."""
         index = self._follow()
         if index is None:
-            log("dimension box closed: its dimension no longer exists")
+            log("dimension box closed: its dimension changed or no longer exists")
+            if not self._fresh and self.edit.text().strip():
+                try:
+                    from . import commands
+
+                    commands.tell(
+                        "The sketch changed while the dimension box was open: "
+                        "the value was not set."
+                    )
+                except Exception:
+                    pass
             return True  # nothing left to set
         self.index = index
         text = self.edit.text()
