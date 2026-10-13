@@ -235,8 +235,9 @@ class HistoryOffDialog(QtWidgets.QDialog):
         text = QtWidgets.QLabel(
             "Stop recording the design's history?\n\n"
             "Every step in the timeline is baked into its body and the timeline goes away: "
-            "the bodies keep their shape, but their steps can no longer be edited. Sketches "
-            "and construction planes stay. From now on every command changes the bodies "
+            "the bodies keep their shape, but their steps can no longer be edited. Bodies a "
+            "Combine or a Remove took out of the design are deleted. Sketches and "
+            "construction planes stay. From now on every command changes the bodies "
             "directly.\n\n"
             "Ctrl+Z brings the history back. Capture Design History starts a new timeline "
             "with the bodies as base features."
@@ -265,12 +266,15 @@ def ask_history_off(doc):
     _DIALOGS["history_off"] = dialog
 
     def done(result, name=doc.Name):
-        _DIALOGS.pop("history_off", None)
-        QtCore.QTimer.singleShot(0, _refocus_main)
-        if not result:
-            log("design history kept")
-            return
-        QtCore.QTimer.singleShot(0, lambda: _history_off(name))
+        try:
+            _DIALOGS.pop("history_off", None)
+            QtCore.QTimer.singleShot(0, _refocus_main)
+            if not result:
+                log("design history kept")
+                return
+            QtCore.QTimer.singleShot(0, lambda: _history_off(name))
+        except Exception as exc:
+            warn("Do Not Capture Design History: %s" % exc)
 
     dialog.finished.connect(done)
     dialog.open()

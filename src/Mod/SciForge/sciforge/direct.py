@@ -511,6 +511,7 @@ def freeze(doc, targets, base_id=None, fresh=None):
                 pass
     for body in doomed:
         if bodies.alive(body):
+            log("%s was taken out of the design (Combine / Remove): deleted" % body.Label)
             _remove_body(body)
     _drop_dead_history(doc, replaced)
     return [base for _b, base, _h, _n in made if base is not None]
