@@ -201,6 +201,11 @@ class PressPullPanel(Panel):
         else:
             self.message.setText("Make a solid first (Create Sketch, then Extrude).")
 
+    def picks_sketch_areas(self):
+        """Sketch areas (profiles) can be clicked until faces or edges are picked; otherwise a click
+        goes through them to what is behind (sketch_area_pick)."""
+        return not self._closed and self.mode is None
+
     def feature(self):
         return self.target
 

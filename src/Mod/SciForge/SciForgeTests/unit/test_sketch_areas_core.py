@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Picking sketch areas inside an open sketch (sciforge/sketch_areas_core.py): which area
 is under the pointer and what a click does to the picked areas. Runs without FreeCAD."""
+import math
 import os
 import sys
 import unittest
@@ -83,6 +84,33 @@ class AfterTheSketchChanged(unittest.TestCase):
 
     def test_picked_regions_in_pick_order(self):
         self.assertEqual(core.picked_regions([(40, 10), (10, 10)], AREAS), [1, 0])
+
+
+
+class InFrontOfTheFace(unittest.TestCase):
+    """front_shift: a finished sketch drawn a hair toward the camera (sketch_area_pick)."""
+
+    def test_toward_the_camera(self):
+        self.assertGreater(core.front_shift(-1.0, 100.0), 0)  # normal points at the camera
+        self.assertLess(core.front_shift(1.0, 100.0), 0)  # seen from behind
+        self.assertLess(core.front_shift(0.0, 100.0), 0)  # edge-on: either way is fine
+
+    def test_tiny_and_a_power_of_two(self):
+        for distance in (0.0, 1.0, 50.0, 300.0, 5000.0, 1e6):
+            size = core.front_shift(-1.0, distance)
+            self.assertGreaterEqual(size, core.SHIFT_MIN)
+            self.assertLessEqual(size, max(2 * core.SHIFT_MIN, 2 * core.SHIFT_PER_MM * distance))
+            exponent = math.log(size, 2)
+            self.assertAlmostEqual(exponent, round(exponent))
+
+    def test_grows_with_the_distance_in_steps(self):
+        near = core.front_shift(-1.0, 100.0)
+        self.assertEqual(near, core.front_shift(-1.0, 110.0))  # small zoom: no change
+        self.assertGreater(core.front_shift(-1.0, 10000.0), near)  # far camera: larger
+
+    def test_never_visible_on_a_part(self):
+        # 300 mm away (a 40 mm part filling the view): well under a tenth of a pixel
+        self.assertLess(core.front_shift(-1.0, 300.0), 0.02)
 
 
 if __name__ == "__main__":

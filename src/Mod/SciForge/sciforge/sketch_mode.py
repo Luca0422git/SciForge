@@ -12,7 +12,9 @@ a Fusion sketch:
 - Closed regions (profiles) are shaded light blue while you draw, also where curves
   cross (sketch_regions.py). A click inside one (not on a curve) picks it for E / Q,
   Ctrl or Shift + click adds more (sketch_areas.py). After Finish Sketch the areas stay
-  clickable: FreeCAD's sketch areas (MakeInternals) are on for every sketch.
+  clickable: FreeCAD's sketch areas (MakeInternals) are on for every sketch; with no
+  command running they come before the face they are drawn on, and commands that cannot
+  use them click through them (sketch_area_pick.py).
 - The SKETCH PALETTE sits at the top of the sketch panel (sketch_palette.py): Look At,
   grid, snap, slice, show profiles/points/dimensions/constraints/projected geometry.
 - Sketch curves use Fusion's colours on the dark background (blue = not fully
@@ -236,6 +238,14 @@ def enable():
         _state["app_observer"] = app_observer
     except Exception as exc:
         warn("sketch mode: cannot follow sketch editing: %s" % exc)
+    try:
+        from . import sketch_area_pick
+
+        # Fusion: a finished sketch's areas come before the face they are drawn on, and
+        # commands that cannot use them see through them
+        sketch_area_pick.enable()
+    except Exception as exc:
+        warn("sketch areas: %s" % exc)
     sketch = editing_sketch()
     if sketch is not None:
         _start(sketch)
@@ -246,6 +256,12 @@ def disable():
         return
     _state["on"] = False
     _end()
+    try:
+        from . import sketch_area_pick
+
+        sketch_area_pick.disable()
+    except Exception as exc:
+        warn("sketch areas: %s" % exc)
     for key, remove in (
         ("observer", Gui.removeDocumentObserver),
         ("app_observer", App.removeDocumentObserver),
@@ -335,12 +351,32 @@ class _GuiObserver:
                 QtCore.QTimer.singleShot(0, lambda: _start_named(doc, name))
         except Exception as exc:
             warn("sketch mode: %s" % exc)
+        _areas_later("update")  # (a sketch is open: no shift, areas let clicks through)
 
     def slotResetEdit(self, vp):
         try:
             QtCore.QTimer.singleShot(0, _end_if_closed)
         except Exception as exc:
             warn("sketch mode: %s" % exc)
+        _areas_later("update")
+
+    def slotDeletedDocument(self, doc):
+        try:
+            from . import sketch_area_pick
+
+            sketch_area_pick.forget(doc.Document.Name)
+        except Exception as exc:
+            warn("sketch areas: %s" % exc)
+
+
+def _areas_later(name):
+    """sketch_area_pick.<name>() from a Qt timer (not inside FreeCAD's signal)."""
+    try:
+        from . import sketch_area_pick
+
+        sketch_area_pick.later(getattr(sketch_area_pick, name))
+    except Exception as exc:
+        warn("sketch areas: %s" % exc)
 
 
 class _AppObserver:

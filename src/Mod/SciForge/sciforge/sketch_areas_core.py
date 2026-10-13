@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The rules of picking sketch areas (profiles) inside an open sketch; sketch_areas.py
-does the mouse and the drawing.
+does the mouse and the drawing. (Also front_shift, for a finished sketch drawn on a face:
+sketch_area_pick.py.)
 
 Fusion, in an open sketch with no drawing tool running:
 - a click inside a closed area (not on a curve, a point or a dimension) selects that
@@ -15,6 +16,7 @@ areas are worked out again after every change of the sketch and their order can 
 
 No FreeCAD, no Qt here: plain (x, y) tuples, so it is unit tested.
 """
+import math
 
 
 def in_triangle(x, y, a, b, c, eps=1e-12):
@@ -109,3 +111,19 @@ def click(picks, regions, point, additive, anchor=None):
         return [p for p in picks if p not in same]
     new = tuple(anchor) if anchor is not None else (point[0], point[1])
     return picks + [new] if additive else [new]
+
+
+# -- a finished sketch in front of the face it is drawn on (sketch_area_pick.py) ----------
+SHIFT_MIN = 0.004  # mm
+SHIFT_PER_MM = 4e-5  # of the distance to the camera: Coin compares depths in floats
+
+
+def front_shift(facing, distance):
+    """How far (mm, along the sketch's normal) a finished sketch is drawn toward the camera
+    so that a click on it beats the face it lies on: a few thousandths of a mm, more for a
+    far camera, in steps of powers of two (it changes rarely while the view turns or
+    zooms). facing: the sketch normal . the view direction (< 0: the normal points at the
+    camera, the shift is positive); distance: camera to sketch, mm."""
+    size = max(SHIFT_MIN, SHIFT_PER_MM * max(0.0, distance))
+    size = 2.0 ** math.ceil(math.log(size, 2))
+    return size if facing < 0 else -size

@@ -56,6 +56,12 @@ def plan(entries):
             if index not in found["curves"][obj]:
                 found["curves"][obj].append(index)
             continue
+        if obj.TypeId == "Sketcher::SketchObject" and short.startswith("InternalFace"):
+            # a closed area clicked after Finish Sketch: it is made by the curves around it
+            found["refused"] = (
+                "A sketch area goes with the curves around it: edit the sketch to change it."
+            )
+            continue
         if obj.TypeId == "Sketcher::SketchObject" and short:
             found["refused"] = "Points of a sketch are deleted with the sketch's curves."
             continue
