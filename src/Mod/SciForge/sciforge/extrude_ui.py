@@ -453,6 +453,10 @@ class ExtrudePanel(Panel):
     auto_pick = True  # take the single area of a sketch just finished, like Fusion
 
     def __init__(self, doc, feature=None, profiles=None, sketch=None):
+        # Editing: the profile's sketch shows while the dialog is open (Fusion), shown here
+        # before the dialog's undo step opens and hidden again after it closed (_close), so
+        # the step holds only the edit and Undo after OK never shows or hides the sketch.
+        self._shown_sketches = _show_profile_sketches(feature) if feature is not None else []
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
         # The sketch that was open when E was pressed: its areas are the profiles, also
@@ -1896,8 +1900,10 @@ class ExtrudePanel(Panel):
             return False
         feature = self.target
         # Fusion hides the profile's sketch once the extrude is made (inside this step:
-        # Undo shows it again).
-        extrude.hide_sketches(self.profiles)
+        # Undo shows it again). A sketch shown for the edit is hidden again after the step
+        # (_close), not in it.
+        shown = [obj.Name for obj in self._shown_sketches]
+        extrude.hide_sketches([p for p in self.profiles if p[0].Name not in shown])
         self.cleanup()
         preview.end_transaction(self.doc)
         self._close()
@@ -1918,6 +1924,11 @@ class ExtrudePanel(Panel):
         self._close()
         return True
 
+    def _close(self):
+        _hide_again(self._shown_sketches)  # after the undo step: never part of it
+        self._shown_sketches = []
+        super()._close()
+
     def cleanup(self):
         self._unwatch()
         self.escape.remove()
@@ -1930,6 +1941,36 @@ class ExtrudePanel(Panel):
         except Exception as exc:
             warn("cut preview: %s" % exc)
         super().cleanup()
+
+
+def _show_profile_sketches(feature):
+    """Show the hidden sketches an existing extrude is made from, for the time it is edited
+    (Fusion shows the profile while you edit). Returns the sketches shown here, to hide
+    again afterwards. Called with no undo step open: FreeCAD then records no change."""
+    shown = []
+    try:
+        profiles, _options = extrude.read(feature)
+    except Exception as exc:
+        warn("could not read the profiles of %s: %s" % (feature.Label, exc))
+        return shown
+    for obj, _sub in profiles:
+        try:
+            if extrude.is_sketch(obj) and obj.ViewObject is not None:
+                if not obj.ViewObject.Visibility and not any(o is obj for o in shown):
+                    obj.ViewObject.Visibility = True
+                    shown.append(obj)
+        except Exception:
+            pass
+    return shown
+
+
+def _hide_again(sketches):
+    for obj in sketches:
+        try:
+            if obj.Document.getObject(obj.Name) is not None and obj.ViewObject is not None:
+                obj.ViewObject.Visibility = False
+        except Exception:
+            pass
 
 
 # FreeCAD's failure texts that talk about FreeCAD, said the way a Fusion user needs them.
