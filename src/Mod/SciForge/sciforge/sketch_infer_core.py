@@ -607,6 +607,57 @@ def preview_anchor(kind, polylines):
     return None
 
 
+def preview_kind(polylines):
+    """The shape a preview (FreeCAD's edit curve as polylines) belongs to, as far as it
+    can be told from its parts: "line", "circle" (a circle, or the first step of an arc
+    or three-point circle), "rect" (four sides), "polygon", "slot" (two arcs, two
+    sides), "arc" (an arc and two radius lines), "arc3" (a circle and a line), or
+    None for no preview."""
+    if not polylines:
+        return None
+    sizes = [len(p) for p in polylines]
+    curved = sum(1 for n in sizes if n > 2)
+    straight = len(sizes) - curved
+    if len(sizes) == 1:
+        return "line" if sizes[0] == 2 else "circle"
+    if curved == 0:
+        return "rect" if straight == 4 else "polygon"
+    if curved == 2 and straight == 2:
+        return "slot"
+    if curved == 1 and straight == 2:
+        return "arc"
+    if curved == 1 and straight == 1:
+        return "arc3"
+    return None
+
+
+# which previews a tool of each kind can show (the arc tools start with a circle, a
+# four-sided polygon looks like a rectangle)
+PREVIEWS = {
+    "line": ("line",),
+    "rect": ("rect",),
+    "rect_center": ("rect",),
+    "circle": ("circle",),
+    "circle3": ("circle",),
+    "arc": ("circle", "arc"),
+    "arc3": ("circle", "arc3", "arc"),
+    "slot": ("slot",),
+    "polygon": ("polygon", "rect"),
+}
+
+
+def tool_kind(recorded, polylines):
+    """The kind of shape being drawn: the tool SciForge last ran (`recorded`, a kind or
+    None), unless FreeCAD's preview shows another shape (a tool started another way,
+    FreeCAD's own toolbar): then what the preview shows. No preview: the record."""
+    if recorded is None:
+        return None
+    shown = preview_kind(polylines)
+    if shown is None or shown in PREVIEWS.get(recorded, ()):
+        return recorded
+    return shown
+
+
 def preview_pointer(kind, polylines, near):
     """The point of FreeCAD's preview that follows the pointer (the line's end, a slot's
     second centre, otherwise the preview vertex nearest to `near`), or None. A typed

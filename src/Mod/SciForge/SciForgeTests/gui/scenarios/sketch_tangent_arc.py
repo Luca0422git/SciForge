@@ -164,6 +164,21 @@ def line_b():
     si.click(g(V(30, 0, 0)))
 
 
+def press_without_moving():
+    """Straight after the chain click, with no mouse move at all (FreeCAD previews
+    nothing then), a press on B arms the gesture; a release with no drag adds nothing."""
+    pos = h.screen_point(g(V(30, 0, 0)))
+    QtTest.QTest.mousePress(h.gl_widget(), QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pos)
+    QtWidgets.QApplication.processEvents()
+    h.check(
+        "a press on the chain's point before any move arms the tangent arc",
+        infer_state().get("arc") == "armed",
+        infer_state().get("arc"),
+    )
+    release_at(pos)
+    h.check("...and a release without a drag adds nothing", len(s["sk"].Geometry) == s["count"] + 1)
+
+
 def chained():
     lines = si.lines(s["sk"])
     h.check("the line A-B was drawn", len(s["sk"].Geometry) == s["count"] + 1, len(lines))
@@ -508,6 +523,7 @@ h.run(
             line_key,
             line_a,
             line_b,
+            press_without_moving,
             chained,
             a_press,
             a_drag,

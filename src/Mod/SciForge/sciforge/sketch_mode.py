@@ -61,10 +61,12 @@ ORANGE = "#f5a142"  # construction
 PURPLE = "#c084fc"  # projected / included geometry
 GLYPH = "#9fe0a8"  # constraint symbols
 DRIVEN = "#9fb4cc"  # driven (reference) dimensions
-# Selected and hovered curves: FreeCAD's own dark-theme shades, pinned here so they stay
-# apart from the under-constrained blue whatever FreeCAD theme the user had (its light
-# theme hovers in green, which would read as "fixed"). Fusion's are unknown (a guess).
-SELECT = "#3b5bdb"  # selected curves and points (also the part's selection colour)
+# Selected and hovered curves, pinned here so they stay apart from the under-constrained
+# blue whatever FreeCAD theme the user had. SELECT is the value FreeCAD's own theme packs
+# write (Light and Dark alike), HOVER its Dark pack's (the Light pack hovers in green,
+# which would read as "fixed"). Fusion's are unknown (a guess). Both are FreeCAD-wide:
+# the part's selection and hover colours follow them too.
+SELECT = "#3b5bdb"  # selected curves and points
 HOVER = "#246eab"  # under the pointer
 
 # (group, kind, name, value) set while SciForge is on; old values come back in disable().
@@ -1325,6 +1327,8 @@ class _ViewFilter(QtCore.QObject):
                 return False
             if kind == QtCore.QEvent.Leave:
                 session.areas.left()
+                if session.infer is not None:
+                    session.infer.leave()  # no guide or mark stays behind
                 return False
             if kind == QtCore.QEvent.MouseButtonPress:
                 if event.button() == QtCore.Qt.LeftButton:

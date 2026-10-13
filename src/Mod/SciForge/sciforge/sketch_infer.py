@@ -155,6 +155,7 @@ class Inference:
         self.tool_points = []  # vertex keys of the shapes this tool run drew
         self.tool_on = False
         self.kind = None  # the shape the tool draws ("line", "rect"...), core.TOOLS
+        self.tool_base = session.sketch.GeometryCount  # curves before this tool run
         self.placed = []  # points of the clicks since the shape began (about, see _plan)
         self.current = {"points": []}  # (Result, px) per click of the shape being drawn
         self.pending = []  # records of finished shapes, applied from a timer
@@ -176,7 +177,14 @@ class Inference:
         self._cache = None
 
     def reset(self):
-        """The tool stopped (Esc, another tool): forget everything of this command."""
+        """The tool stopped or started afresh (Esc, another tool, L again): forget
+        everything of this command; the next mouse event begins a new tool run (its
+        curves count from now)."""
+        self.tool_on = False
+        try:
+            self.tool_base = self.session.sketch.GeometryCount
+        except Exception:
+            pass
         self.acquired = []
         self.hovered_lines = []
         self.tool_points = []
@@ -191,6 +199,15 @@ class Inference:
     def close(self):
         self.reset()
         self.overlay.remove()
+
+    def leave(self):
+        """The pointer left the 3D view: no guide or mark stays behind (an arc being
+        dragged keeps the button held, so no Leave comes while it runs)."""
+        try:
+            self.overlay.clear()
+            self.last = None
+        except Exception as exc:
+            warn("sketch inference: %s" % exc)
 
     # -- the mouse ---------------------------------------------------------------------
     def mouse(self, obj, event):
@@ -241,21 +258,25 @@ class Inference:
                 self.tool_on = False
                 self.reset()
             return None
-        tool = self._tool()
+        recorded = self._tool()
+        polylines = self._polylines() if recorded is not None else []
+        tool = core.tool_kind(recorded, polylines)
         if tool != self.kind or (tool is not None and not self.tool_on):
+            self.reset()
             self.tool_on = tool is not None
             self.kind = tool
-            self.reset()
-            self.seen = session.sketch.GeometryCount
+            self.seen = self.tool_base = session.sketch.GeometryCount
         ctrl = bool(event.modifiers() & QtCore.Qt.ControlModifier)
-        polylines = self._polylines() if tool is not None else []
         start = self._start_point(polylines)
         if start is not None:
             self.last_start = start
-        elif not polylines and tool == "line":
+        elif not polylines and tool == "line" and self.last_start is not None:
             # with the pointer on the line's own start FreeCAD previews nothing (a line
-            # of no length): the start is where it was at the last move
-            start = self.last_start
+            # of no length): the start is where it was at the last move. Only there:
+            # anywhere else an empty preview means the tool waits for its first click
+            view = _ViewMap(session, obj, event.position())
+            if view.ok and core.dist(view.raw, self.last_start) <= _pick_pixels() * view.px:
+                start = self.last_start
         if tool == "line" and self.arc.handle(obj, event, ctrl, start):
             return SWALLOW
         step = self._step(start) if tool is not None else None
@@ -515,6 +536,7 @@ class Inference:
             self.pending = []
             self.last_start = None
             QtCore.QTimer.singleShot(0, self._resync)
+            QtCore.QTimer.singleShot(0, self.line_undone)
             return
         if kind != "commit":
             return
@@ -552,6 +574,57 @@ class Inference:
         except Exception as exc:
             warn("sketch inference: %s" % exc)
 
+    def line_undone(self):
+        """Undo or redo while the line tool is drawing: FreeCAD's tool keeps the sketch
+        point it was started on (the end of a curve that may be gone now), and would
+        join the next line to itself ("Both points are equal", the solver fails from
+        then on). The tool is stopped and started again, then the chain goes on from
+        the end of the newest curve this run drew, or waits for a click."""
+        session = self.session
+        try:
+            if session.closed or not self._drawing() or self._tool() != "line":
+                return
+            from . import commands
+
+            sketch = session.sketch
+            count = sketch.GeometryCount
+            Gui.runCommand("Sketcher_StopOperation")
+            Gui.runCommand("Sketcher_CreateLine")
+            self.seen = count
+            self.last_start = None
+            self.current = {"points": []}
+            self.placed = []
+            self.arc.reset()
+            self.overlay.clear()
+            line = session.line
+            line.seen = count  # the chain counts from here too
+            end = self._chain_end(sketch, count) if count > self.tool_base else None
+            if end is not None and line._click_at(App.Vector(end[0], end[1], 0)):
+                self.last_start = end
+                log("sketch: line tool started again from the end of curve %d" % count)
+            else:
+                line.chain_start = None
+                commands.tell("Line: click where to start.")
+        except Exception as exc:
+            warn("sketch inference: %s" % exc)
+
+    def _chain_end(self, sketch, count):
+        """The free end of the newest curve (the end the chain would go on from): a
+        line's end; an arc's end that does not touch the curve before it."""
+        geo = sketch.Geometry[count - 1]
+        if geo.TypeId == "Part::GeomLineSegment":
+            return _xy(geo.EndPoint)
+        if geo.TypeId != "Part::GeomArcOfCircle":
+            return None
+        ends = [_xy(geo.StartPoint), _xy(geo.EndPoint)]
+        if count >= 2:
+            before = sketch.Geometry[count - 2]
+            touched = [vertex_point(before, pos) for pos in VERTEX_POSITIONS.get(before.TypeId, ())]
+            free = [e for e in ends if not any(p and core.dist(e, p) < 1e-6 for p in touched)]
+            if len(free) == 1:
+                return free[0]
+        return ends[1]
+
     def _apply(self):
         self._queued = False
         session = self.session
@@ -566,6 +639,7 @@ class Inference:
                 return
             new = list(range(self.seen, count))
             self.seen = count
+            self._repair_self_joins(sketch)
             if not new:
                 return
             geos = sketch.Geometry
@@ -578,6 +652,35 @@ class Inference:
             self._apply_shape(new, geos, pending[-1])
         except Exception as exc:
             warn("sketch inference: %s" % exc)
+
+    def _repair_self_joins(self, sketch):
+        """A Coincident between two points of the same curve (FreeCAD's line tool after
+        an undo joined a line's start to its own end: "Both points are equal") makes
+        every solve fail: taken out, in a step glued to the one before."""
+        bad = [
+            i
+            for i, c in enumerate(sketch.Constraints)
+            if c.Type == "Coincident" and c.First == c.Second and c.First >= 0
+        ]
+        if not bad:
+            return
+        doc = self.session.doc
+        self._applying = True
+        doc.openTransaction(INFER_STEP)
+        try:
+            for i in reversed(bad):
+                sketch.delConstraint(i)
+            sketch.solve()
+        except Exception:
+            doc.abortTransaction()
+            self._applying = False
+            raise
+        doc.commitTransaction()
+        self._applying = False
+        log(
+            "sketch: removed %d constraint(s) joining a point of a curve to itself (curve %s)"
+            % (len(bad), ", ".join(str(sketch.Constraints[i].First + 1) for i in bad[:1]))
+        )
 
     def _apply_shape(self, new, geos, record):
         """Put the new shape's points exactly where the guides/inference said and add
@@ -933,7 +1036,10 @@ class TangentArc:
             if session.closed or point is None:
                 return
             Gui.runCommand("Sketcher_CreateLine")
-            if not session.line._click_at(App.Vector(point[0], point[1], 0)):
+            if session.line._click_at(App.Vector(point[0], point[1], 0)):
+                # the chain's point, for a press there before any move (no preview then)
+                self.infer.last_start = (point[0], point[1])
+            else:
                 from . import commands
 
                 commands.tell("Line: click the end of the arc to go on from it.")

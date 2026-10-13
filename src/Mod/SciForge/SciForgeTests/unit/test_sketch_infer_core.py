@@ -328,6 +328,26 @@ class OtherTools(unittest.TestCase):
         self.assertIsNone(core.preview_anchor("rect", self.RECT))
         self.assertIsNone(core.preview_anchor("circle", [[(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)]]))
 
+    def test_what_a_preview_shows(self):
+        circle = [[(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0), (1.0, 0.0)]]
+        self.assertIsNone(core.preview_kind([]))
+        self.assertEqual(core.preview_kind([[(1.0, 2.0), (9.0, 2.0)]]), "line")
+        self.assertEqual(core.preview_kind(circle), "circle")
+        self.assertEqual(core.preview_kind(self.RECT), "rect")
+        self.assertEqual(core.preview_kind(self.RECT + [[(0.0, 0.0), (1.0, 1.0)]]), "polygon")
+        self.assertEqual(core.preview_kind(self.slot()), "slot")
+        self.assertEqual(core.preview_kind(circle + self.RECT[:2]), "arc")
+        self.assertEqual(core.preview_kind(circle + self.RECT[:1]), "arc3")
+
+    def test_a_tool_started_another_way_is_told_by_its_preview(self):
+        # SciForge last ran the circle tool, but FreeCAD previews a rectangle
+        self.assertEqual(core.tool_kind("circle", self.RECT), "rect")
+        self.assertEqual(core.tool_kind("circle", []), "circle")  # nothing shown yet
+        circle = [[(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)]]
+        self.assertEqual(core.tool_kind("arc", circle), "arc")  # an arc starts as a circle
+        self.assertEqual(core.tool_kind("polygon", self.RECT), "polygon")  # four sides
+        self.assertIsNone(core.tool_kind(None, self.RECT))  # an unknown tool stays unknown
+
     def test_the_preview_point_that_follows_the_pointer(self):
         self.assertEqual(
             core.preview_pointer("line", [[(1.0, 2.0), (9.0, 2.0)]], (9.0, 2.0)), (9.0, 2.0)
