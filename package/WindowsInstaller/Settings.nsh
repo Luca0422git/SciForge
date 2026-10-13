@@ -34,7 +34,8 @@ These typically need to be modified for each FreeCAD release
 
 #--------------------------------
 # get version info from freecadcmd
-!system '${FILES_FREECAD}\bin\freecadcmd.exe --safe-mode "${__FILEDIR__}\write_version_nsh.py"' = 0
+# SCIFORGE: the program is SciForgeCmd.exe; it reports ExeName = SciForge (APP_NAME)
+!system '${FILES_FREECAD}\bin\SciForgeCmd.exe --safe-mode "${__FILEDIR__}\write_version_nsh.py"' = 0
 !include "${__FILEDIR__}\version.nsh"
 !delfile "${__FILEDIR__}\version.nsh"
 

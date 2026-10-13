@@ -36,5 +36,6 @@ if %ERRORLEVEL% neq 0 exit 1
 ninja -C build install
 if %ERRORLEVEL% neq 0 exit 1
 
-ren %LIBRARY_PREFIX%\bin\FreeCAD.exe freecad.exe
-ren %LIBRARY_PREFIX%\bin\FreeCADCmd.exe freecadcmd.exe
+@REM SCIFORGE: the programs are built as SciForge.exe and SciForgeCmd.exe (src/Main) and keep
+@REM those names, so the Task Manager and the installer show "SciForge"
+@REM (docs/sciforge/core-patches.md #12). FreeCAD's pipeline renamed its own to lower case here.

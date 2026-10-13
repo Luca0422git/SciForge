@@ -5,7 +5,9 @@ set -x
 
 conda_env="$(pwd)/../.pixi/envs/default/"
 
-copy_dir="FreeCAD_Windows"
+# SCIFORGE: the bundle is SciForge's; the programs are SciForge.exe and SciForgeCmd.exe
+# (docs/sciforge/core-patches.md #12).
+copy_dir="SciForge_Windows"
 mkdir -p ${copy_dir}/bin
 
 # Copy Conda's Python and (U)CRT to FreeCAD/bin
@@ -25,8 +27,8 @@ cp -a ${conda_env}/Library/mingw-w64/bin/* ${copy_dir}/bin
 cp -a ${conda_env}/Library/share ${copy_dir}/share
 # get all the dependency .dlls
 cp -a ${conda_env}/Library/bin/*.dll ${copy_dir}/bin
-# Copy FreeCAD build
-cp -a ${conda_env}/Library/bin/freecad* ${copy_dir}/bin
+# Copy FreeCAD build (SCIFORGE: the programs, then FreeCAD's libraries and Python modules)
+cp -a ${conda_env}/Library/bin/SciForge*.exe ${copy_dir}/bin
 cp -a ${conda_env}/Library/bin/FreeCAD* ${copy_dir}/bin
 cp -a ${conda_env}/Library/data ${copy_dir}/data
 cp -a ${conda_env}/Library/Ext ${copy_dir}/Ext
@@ -53,13 +55,13 @@ echo 'Prefix = ../lib/qt6' >> ${copy_dir}/bin/qt6.conf
 # convenient shortcuts to run the binaries
 if [ -x /c/ProgramData/chocolatey/tools/shimgen.exe ]; then
     pushd ${copy_dir}
-    /c/ProgramData/chocolatey/tools/shimgen.exe -p bin/freecadcmd.exe -i "$(pwd)/../../../WindowsInstaller/icons/FreeCAD.ico" -o "$(pwd)/FreeCADCmd.exe"
-    /c/ProgramData/chocolatey/tools/shimgen.exe --gui -p bin/freecad.exe -i "$(pwd)/../../../WindowsInstaller/icons/FreeCAD.ico" -o "$(pwd)/FreeCAD.exe"
+    /c/ProgramData/chocolatey/tools/shimgen.exe -p bin/SciForgeCmd.exe -i "$(pwd)/../../../WindowsInstaller/icons/SciForge.ico" -o "$(pwd)/SciForgeCmd.exe"
+    /c/ProgramData/chocolatey/tools/shimgen.exe --gui -p bin/SciForge.exe -i "$(pwd)/../../../WindowsInstaller/icons/SciForge.ico" -o "$(pwd)/SciForge.exe"
     popd
 fi
 
 python_version=$("${copy_dir}"/bin/python.exe -c 'import platform; print("py" + platform.python_version_tuple()[0] + platform.python_version_tuple()[1])')
-version_name="FreeCAD_${BUILD_TAG}-Windows-$(uname -m)-${python_version}"
+version_name="SciForge_${BUILD_TAG}-Windows-$(uname -m)-${python_version}"  # SCIFORGE
 
 echo -e "################"
 echo -e "version_name:  ${version_name}"
@@ -118,7 +120,7 @@ if [[ "${WINDOWS_SIGN_RELEASE:-0}" == "1" ]]; then
     done
 
     # Manually check the important one!
-    signtool verify -pa "$SIGN_DIR/bin/FreeCAD.exe"
+    signtool verify -pa "$SIGN_DIR/bin/SciForge.exe"
 
     echo "Signing completed."
   else
@@ -128,9 +130,9 @@ else
   echo "Not logged into Azure -- skipping signing."
 fi
 
-echo "Running FreeCAD command-line smoke test..."
-if ! "$SIGN_DIR/bin/freecadcmd.exe" --safe-mode --version; then
-  echo "FreeCAD command-line smoke test failed; the Windows bundle cannot start."
+echo "Running SciForge command-line smoke test..."
+if ! "$SIGN_DIR/bin/SciForgeCmd.exe" --safe-mode --version; then
+  echo "SciForge command-line smoke test failed; the Windows bundle cannot start."
   exit 1
 fi
 

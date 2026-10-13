@@ -52,5 +52,7 @@ cmake \
 cmake --build build
 cmake --install build
 
-mv ${PREFIX}/bin/FreeCAD ${PREFIX}/bin/freecad || true
-mv ${PREFIX}/bin/FreeCADCmd ${PREFIX}/bin/freecadcmd || true
+# SCIFORGE: the programs are built as SciForge and SciForgeCmd (src/Main/CMakeLists.txt);
+# lower-case names on Linux, as FreeCAD's pipeline does (docs/sciforge/core-patches.md #12).
+mv ${PREFIX}/bin/SciForge ${PREFIX}/bin/sciforge || true
+mv ${PREFIX}/bin/SciForgeCmd ${PREFIX}/bin/sciforgecmd || true

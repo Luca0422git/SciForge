@@ -7,6 +7,9 @@
 
 # list of all languages the installer is translated to
 !insertmacro LANG "english" # first language is the default
+# SCIFORGE: English only. The other language files name FreeCAD literally in their texts,
+# so they would describe the wrong program (docs/sciforge/core-patches.md #13).
+!if 0
 !insertmacro LANG "arabic"
 !insertmacro LANG "basque"
 !insertmacro LANG "catalan"
@@ -31,3 +34,4 @@
 !insertmacro LANG "swedish"
 !insertmacro LANG "turkish"
 !insertmacro LANG "ukrainian"
+!endif

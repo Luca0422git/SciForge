@@ -10,7 +10,7 @@ Var FileAssociation
 
 # ----------------------------------
 
-Section "un.FreeCAD" un.SecUnProgramFiles
+Section "un.${APP_NAME}" un.SecUnProgramFiles # SCIFORGE
 
   SectionIn RO
 
@@ -18,7 +18,7 @@ Section "un.FreeCAD" un.SecUnProgramFiles
   ReadRegStr $0 SHCTX "${APP_UNINST_KEY}" "StartMenu"
   RMDir /r "$0"
   # delete desktop icon
-  Delete "$DESKTOP\${APP_NAME} ${APP_SERIES_NAME}.lnk"
+  Delete "$DESKTOP\${APP_NAME}.lnk" # SCIFORGE: "SciForge.lnk"
 
   # remove file extension .FCStd
   ReadRegStr $R0 SHCTX "Software\Classes\${APP_EXT}" ""
@@ -41,8 +41,8 @@ Section "un.FreeCAD" un.SecUnProgramFiles
 
   ${if} $MultiUser.Privileges == "Admin"
    DeleteRegKey HKCR "${APP_REGNAME_DOC}"
-   # see https://nsis.sourceforge.io/Docs/AppendixB.html#library_install for a description of UnInstallLib
-   !insertmacro UnInstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED $SYSDIR\FCStdThumbnail.dll
+   # SCIFORGE: FreeCAD's thumbnail DLL was never installed by SciForge, so it is not
+   # unregistered here either (that would break a FreeCAD installation's previews)
   ${endif}
 
   # Uninstaller itself

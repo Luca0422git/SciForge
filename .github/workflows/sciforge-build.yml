@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # SciForge: full build of the fork (C++ and all), producing files Luca downloads and tests:
-#   Windows: portable .7z (unzip anywhere, run bin\FreeCAD.exe)
+#   Windows: the installer (SciForge_...-installer.exe: Program Files\SciForge, Start menu
+#            entry, uninstaller; installs next to FreeCAD) and the portable .7z (unzip
+#            anywhere, run bin\SciForge.exe)
 #   Linux:   .AppImage
 # Before compiling, quick checks (about 10 minutes): every SciForge file is installed, the
 # unit tests, and the golden models on the official FreeCAD for Windows. A problem they can
@@ -14,9 +16,10 @@
 # every push because a build takes hours (free on this public repository, but slow).
 # Pushing a tag named sciforge-v* also starts it.
 #
-# Packaging reuses FreeCAD's own pipeline (package/rattler-build). Until the branding
-# pass lands, the Windows installer is not built: it would install as "FreeCAD" and could
-# collide with a real FreeCAD installation. The portable .7z is self-contained.
+# Packaging reuses FreeCAD's own pipeline (package/rattler-build, package/WindowsInstaller),
+# rebranded by the branding pass (docs/sciforge/core-patches.md #8 to #13): the program is
+# SciForge.exe, settings live in %APPDATA%\SciForge, the installer uses its own registry
+# keys, so a real FreeCAD on the same machine is not touched.
 
 name: SciForge build
 
@@ -138,9 +141,17 @@ jobs:
           fetch-depth: 2
           submodules: recursive
 
+      # The file names are SciForge_<build>-Windows-x86_64-py311.7z / -installer.exe and
+      # SciForge_<build>-Linux-x86_64-py311.AppImage: the date and commit, or the tag's name.
       - name: Build name
         shell: bash
-        run: echo "BUILD_TAG=sciforge-$(date -u +%Y%m%d)-${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#sciforge-}"
+          else
+            tag="$(date -u +%Y%m%d)-${GITHUB_SHA::8}"
+          fi
+          echo "BUILD_TAG=${tag}" >> "$GITHUB_ENV"
 
       - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
         with:
@@ -219,11 +230,13 @@ jobs:
           pixi exec --spec ccache -- ccache --show-stats --verbose
           du -sh /d/ccache 2>/dev/null || true
 
+      # Windows: the portable .7z and then the NSIS installer from the same folder
+      # (package/rattler-build/windows/create_bundle.sh, package/WindowsInstaller).
       - name: Package
         shell: bash
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
-          MAKE_INSTALLER: "false"
+          MAKE_INSTALLER: "true"
           UPLOAD_RELEASE: "false"
         run: |
           set -euo pipefail
@@ -253,8 +266,19 @@ jobs:
           (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)
           tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --only base
 
-      # ---- Windows: upload the portable build, then test it --------------
+      # ---- Windows: upload the installer and the portable build, then test ---
       # Uploaded first: a failing test must not throw away 3 hours of compiling (run #3).
+      - name: Upload Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: SciForge-Windows-installer-${{ env.BUILD_TAG }}
+          path: |
+            package/rattler-build/windows/*-installer.exe
+            package/rattler-build/windows/*-installer.exe-SHA256.txt
+          retention-days: 30
+          compression-level: 0
+
       - name: Upload Windows portable build
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -262,7 +286,7 @@ jobs:
           name: SciForge-Windows-portable-${{ env.BUILD_TAG }}
           path: |
             package/rattler-build/windows/*.7z
-            package/rattler-build/windows/*-SHA256.txt
+            package/rattler-build/windows/*.7z-SHA256.txt
           retention-days: 30
           compression-level: 0
 

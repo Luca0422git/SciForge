@@ -67,9 +67,9 @@ Section -ProgramFiles SecProgramFiles
   ${DetailPrintToBoth} "Extracting files to '$INSTDIR\Mod\'"
   SetOutPath "$INSTDIR\Mod"
   File /r "${FILES_FREECAD}\Mod\*.*"
-  ${DetailPrintToBoth} "Extracting thumbnailer"
-  SetOutPath "$INSTDIR"
-  File /r "${FILES_THUMBS}"
+  # SCIFORGE: FreeCAD's Explorer thumbnail DLL is not shipped: it registers system-wide
+  # (System32\FCStdThumbnail.dll) and would replace or remove a FreeCAD installation's
+  # (docs/sciforge/core-patches.md #13).
 
   SetDetailsPrint both
   DetailPrint "Writing uninstaller to '$INSTDIR'"
