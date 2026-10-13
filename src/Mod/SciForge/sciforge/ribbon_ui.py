@@ -2,6 +2,7 @@
 """The Fusion-style ribbon: quick-access bar, workspace button, tabs, groups with
 large icons and a drop-down menu under each group name. Layout comes from
 ribbon_config.py; this module only turns that data into Qt widgets."""
+
 import FreeCADGui as Gui
 
 from . import log, registry, ribbon_config as cfg, ui_icon, warn
@@ -297,9 +298,27 @@ class RibbonWidget(QtWidgets.QWidget):
         )
         return button
 
+    FILE_ENTRIES = [  # Fusion's File menu items SciForge has (label, command, icon)
+        ("Save As", "SciForge_SaveAs", "qa_save"),
+        ("Version History", "SciForge_VersionHistory", "document"),
+        ("Recover Documents", "SciForge_RecoverDocuments", "document"),
+        ("Insert Design", "SciForge_InsertDesign", "insert_component"),
+        ("Project and Recovery Settings", "SciForge_FilesSettings", "folder"),
+    ]
+
     def _show_app_menu(self, button):
-        """All of FreeCAD's menus, since the menu bar is hidden like in Fusion."""
+        """SciForge's file commands (Fusion's File menu), then all of FreeCAD's menus, since
+        the menu bar is hidden like in Fusion."""
         menu = QtWidgets.QMenu(button)
+        available = registry.available_commands()
+        for label, command, icon in self.FILE_ENTRIES:
+            resolved = resolve(command, available)
+            action = menu.addAction(ui_icon(icon), label)
+            if resolved:
+                action.triggered.connect(lambda _=False, r=resolved, t=label: run(r, t))
+            else:
+                action.setEnabled(False)
+        menu.addSeparator()
         for action in Gui.getMainWindow().menuBar().actions():
             if action.menu() is not None and action.text():
                 menu.addMenu(action.menu())

@@ -161,6 +161,8 @@ SHORTCUTS = {
     "Std_Measure": "I",
     "Std_ViewFitAll": "F6",
     "SciForge_ToggleViewCube": "Ctrl+Alt+V",  # Fusion: show/hide the ViewCube
+    "SciForge_DataPanel": "Ctrl+Alt+P",  # Fusion: show/hide the Data Panel
+    "SciForge_RecoverySaveNow": "Ctrl+Shift+S",  # Fusion: write a recovery copy now
     # FreeCAD only honours its own Ctrl+Z etc. while its menu bar is visible, and
     # SciForge hides the menu bar: without these, undo/redo/save/delete keys did nothing.
     "Std_Undo": "Ctrl+Z",
@@ -182,4 +184,6 @@ PREFERRED = {
     "Std_Delete": "SciForge_Delete",
     "Sketcher_CreateLine": "SciForge_SketchLine",
     "Sketcher_Offset": "SciForge_SketchOffset",
+    # Fusion's Save: Name + Location on the first save, a version description after.
+    "Std_Save": "SciForge_Save",
 }

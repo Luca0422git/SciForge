@@ -43,6 +43,18 @@ def find_body():
 _TOLD = {"msg": None}  # the newest tell() message (an older one is not shown again)
 
 
+def preferred(name):
+    """SciForge's own version of a FreeCAD command when it exists (config.PREFERRED), else
+    the command itself: Ctrl+S inside a dialog must run the same Save as the key does."""
+    better = config.PREFERRED.get(name)
+    try:
+        if better and better in Gui.listCommands():
+            return better
+    except Exception:
+        pass
+    return name
+
+
 def tell(msg):
     """A short message next to the mouse pointer (and in the log), for when a command
     cannot start: silence made it look like the keys and buttons were broken."""

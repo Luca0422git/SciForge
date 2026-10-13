@@ -114,7 +114,9 @@ Route: a **SciForge "inference layer" in Python** on top of FreeCAD's tools:
    Position, Motion Link. FreeCAD 1.1's Assembly solver already does most joint types,
    limits and motion, so this is mostly Fusion-style picking and dialogs on top.
 4. **Versions and recovery** [medium]: a version on every save with a history list (local
-   files, git underneath), autosave and crash recovery.
+   files, git underneath), autosave and crash recovery. — done 2026-10-13 (branch
+   `sf/versions`, `parity/versions.md`): also the Data Panel and Insert Design by relative
+   path.
 5. **Import of bought parts and meshes** [medium]: STEP into a component, mesh to solid,
    DXF/SVG into a sketch, a calibrated canvas (reference image).
 6. **Sketch Text and Emboss** [medium].

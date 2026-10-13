@@ -15,6 +15,13 @@ NOT_REPEATABLE = {
     "Std_Save",
     "Std_Open",
     "Std_New",
+    "SciForge_Save",
+    "SciForge_SaveAs",
+    "SciForge_RecoverySaveNow",
+    "SciForge_VersionHistory",
+    "SciForge_RecoverDocuments",
+    "SciForge_DataPanel",
+    "SciForge_FilesSettings",
 }
 
 

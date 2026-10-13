@@ -20,6 +20,7 @@ Path 7, save while the dialog is open (Ctrl+S): the file never holds a half-made
 
 Numbers by hand: a 40 x 30 x 10 box (see blend_steps for the round/corner formulas).
 """
+
 import os
 import tempfile
 
@@ -29,6 +30,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import versions_input as vi
 
 V = App.Vector
 s = {}
@@ -544,6 +546,15 @@ def p7_ctrl_s():
     h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
 
 
+def p7_describe():
+    """Fusion's Save asks for a version description on a saved design; Enter skips it."""
+    h.check("P7 the fillet dialog finished first", not dialog_open())
+    h.check(
+        "P7 then the Save dialog asks for a version description", vi.version_dialog() is not None
+    )
+    vi.accept_save()
+
+
 def p7_saved():
     h.check("P7 Ctrl+S finished the dialog first", not dialog_open())
     h.check("P7 the fillet was kept", len(b.blends()) == 4, b.blends())
@@ -655,6 +666,7 @@ h.run(
         p7_save_first,
         p7_pick,
         p7_ctrl_s,
+        p7_describe,
         p7_saved,
         p7_open,
         p7_reopened,

@@ -14,6 +14,7 @@ Path 27, parameters typed in the Extrude fields like in Fusion ("width", "-depth
          "width*2"): the extrude follows when the parameter changes; a plain number
          typed later stops that. The same in Press Pull ("width/10").
 """
+
 import os
 import tempfile
 
@@ -24,6 +25,7 @@ from PySide import QtCore, QtWidgets
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import versions_input as vi
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
@@ -186,6 +188,13 @@ def p22_ctrl_s():
     h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
 
 
+def p22_describe():
+    """Fusion's Save asks for a version description on a saved design; Enter skips it."""
+    h.check("the extrude dialog finished first", not dialog_open())
+    h.check("then the Save dialog asks for a version description", vi.version_dialog() is not None)
+    vi.accept_save()
+
+
 def p22_saved():
     h.check("Ctrl+S finished the extrude (OK)", not dialog_open())
     h.check("the extrude is kept", near(vol(s["a"]), 18000.0), vol(s["a"]))
@@ -208,6 +217,12 @@ def p22_nothing_yet():
     p = xpanel()
     h.check("Extrude waits (nothing picked)", p is not None and p.target is None)
     h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
+
+
+def p22_cancel_describe():
+    h.check("the empty extrude dialog was cancelled first", not dialog_open())
+    h.check("then the Save dialog asks for a version description", vi.version_dialog() is not None)
+    vi.accept_save()
 
 
 def p22_cancelled_saved():
@@ -533,9 +548,11 @@ h.run(
         step(pick_top, "p22_pick"),
         p22_type,
         p22_ctrl_s,
+        p22_describe,
         p22_saved,
         p22_reopened,
         p22_nothing_yet,
+        p22_cancel_describe,
         p22_cancelled_saved,
         *block_steps("b", "QAB"),
         p23_extrude_in_b,

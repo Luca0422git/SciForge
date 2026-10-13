@@ -14,6 +14,7 @@ SaveFinishes: Ctrl+S / Ctrl+N / Ctrl+O while the dialog is open finish it first 
   possible, else Cancel), like starting any other command: a saved file never holds a
   half-made fillet.
 """
+
 import re
 
 import FreeCAD as App
@@ -280,6 +281,8 @@ def _finish_then(panel, command):
     try:
         if panel is not None and not getattr(panel, "_closed", True):
             panel.finish()
-        Gui.runCommand(command)
+        from . import commands
+
+        Gui.runCommand(commands.preferred(command))
     except Exception as exc:
         warn("%s with the dialog open: %s" % (command, exc))
