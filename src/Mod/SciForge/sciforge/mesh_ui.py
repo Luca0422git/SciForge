@@ -93,6 +93,18 @@ class MeshPanel(insert_ui._InsertPanel):
         self.fields = {}
         self.active = None
         self.preview = None
+        self.observer = None
+        try:
+            self._start(body, feature)
+        except Exception:
+            # half open: nothing may stay behind (the selection observer, the keys)
+            try:
+                self.cleanup()
+            except Exception as exc:
+                log("%s: %s" % (self.title, exc))
+            raise
+
+    def _start(self, body, feature):
         self.add_field(
             "body", self.body_label, "Select a body" if self.solid_source else "Select a mesh body"
         )
@@ -518,7 +530,9 @@ class ReducePanel(MeshPanel):
     wait_text = "Click the mesh body to reduce."
 
     def build(self):
-        self.target = self.combo("Reduce Target", core.REDUCE_TARGETS, "Tolerance", self.changed)
+        self.reduce_target = self.combo(
+            "Reduce Target", core.REDUCE_TARGETS, "Tolerance", self.changed
+        )
         self.tolerance = self.number(
             "Tolerance", core.DEFAULT_TOLERANCE, "mm", lambda: self.changed()
         )
@@ -531,7 +545,7 @@ class ReducePanel(MeshPanel):
         self._rows_for_target()
 
     def _rows_for_target(self):
-        target = self.target.currentText()
+        target = self.reduce_target.currentText()
         self.tolerance.widget.setEnabled(target == "Tolerance")
         self.proportion.setEnabled(target == "Proportion")
         self.face_count.setEnabled(target == "Face Count")
@@ -558,7 +572,7 @@ class ReducePanel(MeshPanel):
     def load(self, feature):
         self._quiet = True
         try:
-            self.target.setCurrentText(feature.Target)
+            self.reduce_target.setCurrentText(feature.Target)
             self.tolerance.set_value(float(feature.Tolerance))
             self.proportion.setValue(float(feature.Proportion))
             self.face_count.setValue(int(feature.FaceCount))
@@ -568,7 +582,7 @@ class ReducePanel(MeshPanel):
         self._rows_for_target()
 
     def write(self, step):
-        step.Target = self.target.currentText()
+        step.Target = self.reduce_target.currentText()
         step.Tolerance = max(1e-6, float(self.tolerance.value()))
         step.Proportion = float(self.proportion.value())
         step.FaceCount = int(self.face_count.value())
