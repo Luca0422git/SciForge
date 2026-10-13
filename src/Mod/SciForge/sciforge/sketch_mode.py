@@ -765,6 +765,29 @@ class SketchSession:
             self.fillet_watch.committed()
         if kind == "commit" and grew:
             QtCore.QTimer.singleShot(0, lambda: self._new_dimension(count - 1))
+        if kind in ("undo", "redo") and self.editor is not None:
+            QtCore.QTimer.singleShot(0, self._close_editor_after_undo)
+
+    def _close_editor_after_undo(self):
+        """Undo and Redo put the sketch's curves and dimensions back as whole lists, so the
+        numbers the box knows its dimension by can now belong to another one (a curve deleted,
+        a dimension opened, Undo: the typed value went into the wrong dimension). The box
+        closes without setting anything, and says so when something was typed in it."""
+        editor = self.editor
+        if editor is None or self.closed:
+            return
+        typed = False
+        try:
+            text = editor.edit.text().strip()
+            typed = bool(text) and not editor._fresh
+        except Exception:
+            pass
+        editor.discard()
+        if typed:
+            from . import commands
+
+            commands.tell("Undo changed the sketch while the dimension box was open: the value "
+                          "was not set.")
 
     def _repair(self):
         """FreeCAD's trim can leave an invalid constraint behind (sketch_fix.py)."""

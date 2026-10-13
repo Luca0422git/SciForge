@@ -15,6 +15,11 @@ B  Line, Sketch Dimension on it: the box opens. Undo on the application bar (twi
    left to set), no "Invalid constraint index", no box left.
 C  Dimension the line again, type 30 (no Enter), Finish Sketch from the ribbon: the value
    is kept, the box is gone, and none is left on the view after the sketch closed.
+D  Three lines 10, 15, 20 with their dimensions. Delete the middle line (its dimension
+   goes, the 20 line takes its numbers), double-click the 20 dimension, type 30, Undo: the
+   box closes and no length changes (it used to set the 15 line to 30: review finding).
+E  Double-click the 10 dimension, type 25 (no Enter), Extrude on the ribbon: 25 is set
+   before the sketch closes, and the finished sketch shows it (not left to recompute).
 """
 import math
 
@@ -215,6 +220,123 @@ def c_done():
     h.shot("C-finished")
 
 
+# == D: Undo while the box is open on a dimension whose curve numbers moved =============
+def d_new():
+    App.newDocument("DimBoxUndo")
+    h.fit()
+    h.ribbon("Create Sketch")
+
+
+def d_pick():
+    h.click(V(12, -8, 0))
+
+
+def d_lines():
+    """Three upright lines 10, 15 and 20 long, each with its length dimension (one undo
+    step of their own)."""
+    import Part
+    import Sketcher
+
+    sk = s["dsk"] = h.in_sketch()
+    if not h.check("D: sketch open", sk is not None):
+        return
+    doc = sk.Document
+    doc.openTransaction("Three lines")
+    for x, length in ((0, 10), (15, 15), (30, 20)):
+        i = sk.addGeometry(Part.LineSegment(V(x, 0, 0), V(x, length, 0)), False)
+        sk.addConstraint(Sketcher.Constraint("Distance", i, float(length)))
+    doc.commitTransaction()
+    sk.recompute()
+    h.fit()
+
+
+def d_delete_middle():
+    if editor() is not None:  # (a box opened by itself on the new dimensions: not this test)
+        esc()
+    si.click(V(15, 7, 0))
+
+
+def d_deleted():
+    h.press(QtCore.Qt.Key_Delete)
+
+
+def d_open_box():
+    sk = s["dsk"]
+    h.check("D: the middle line and its dimension went", len(sk.Geometry) == 2, len(sk.Geometry))
+    # The 20 line is curve 1 now, and its dimension is the second one.
+    index = [i for i, c in enumerate(sk.Constraints) if c.Type == "Distance" and abs(c.Value - 20) < 1e-6]
+    if not h.check("D: the 20 dimension is there", len(index) == 1, sk.Constraints):
+        return
+    point = si.dimension_label(sk, index[0])
+    h.move(h.screen_point(point + V(2, 1, 0)))
+    h.move(h.screen_point(point))
+    h.double_click(point)
+
+
+def d_type():
+    ed = editor()
+    h.check("D: double-click opens the box on the 20 dimension", ed is not None)
+    if ed is not None:
+        ed.edit.setFocus()
+        ed.edit.selectAll()
+        from PySide6 import QtTest
+
+        QtTest.QTest.keyClicks(QtWidgets.QApplication.focusWidget(), "30")
+        QtWidgets.QApplication.processEvents()
+    h.check("Undo button", dialog_input.quick_access("Undo"))
+
+
+def d_after_undo():
+    sk = s["dsk"]
+    h.check("D: Undo brought the middle line back", len(sk.Geometry) == 3, len(sk.Geometry))
+    h.check("D: Undo closed the box (its dimension's numbers moved)", editor() is None)
+    h.check("D: no box left on the view", not boxes_on_view(), boxes_on_view())
+    h.click(EMPTY)
+
+
+def d_nothing_set():
+    sk = s["dsk"]
+    lengths = sorted(round(g.length(), 6) for g in sk.Geometry)
+    h.check("D: no length changed (30 went nowhere)", lengths == [10.0, 15.0, 20.0], lengths)
+    h.shot("D-undo")
+
+
+# == E: a value typed in the box, then a command from the ribbon =========================
+def e_open_box():
+    sk = s["dsk"]
+    index = [i for i, c in enumerate(sk.Constraints) if c.Type == "Distance" and abs(c.Value - 10) < 1e-6]
+    if not h.check("E: the 10 dimension is there", len(index) == 1, sk.Constraints):
+        return
+    point = si.dimension_label(sk, index[0])
+    h.move(h.screen_point(point + V(2, 1, 0)))
+    h.move(h.screen_point(point))
+    h.double_click(point)
+
+
+def e_type():
+    ed = editor()
+    h.check("E: the box is open on the 10 dimension", ed is not None)
+    if ed is not None:
+        ed.edit.setFocus()
+        ed.edit.selectAll()
+        from PySide6 import QtTest
+
+        QtTest.QTest.keyClicks(QtWidgets.QApplication.focusWidget(), "25")
+        QtWidgets.QApplication.processEvents()
+    h.ribbon("Extrude")
+
+
+def e_done():
+    sk = s["dsk"]
+    h.check("E: the ribbon command closed the sketch", h.in_sketch() is None)
+    lengths = sorted(round(e.Length, 6) for e in sk.Shape.Edges)
+    h.check("E: the typed 25 was set, and the finished sketch shows it", 25.0 in lengths, lengths)
+    h.check("E: the sketch is up to date (not left to recompute)", "Touched" not in sk.State, sk.State)
+    h.check("E: no box left on the view", not boxes_on_view(), boxes_on_view())
+    if Gui.Control.activeDialog():
+        h.task_button("Cancel")
+
+
 h.run(
     "sketch_dim_box_closes",
     [
@@ -244,5 +366,17 @@ h.run(
         c_type,
         c_finish,
         c_done,
+        d_new,
+        d_pick,
+        d_lines,
+        d_delete_middle,
+        d_deleted,
+        d_open_box,
+        d_type,
+        d_after_undo,
+        d_nothing_set,
+        e_open_box,
+        e_type,
+        e_done,
     ],
 )

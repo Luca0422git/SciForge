@@ -79,6 +79,16 @@ def leave_edit():
         return
     obj = gdoc.getInEdit().Object
     if obj is not None and obj.TypeId == "Sketcher::SketchObject":
+        try:
+            from . import sketch_mode
+
+            session = sketch_mode.current()
+            if session is not None:
+                # A value typed in the dimension box is set before the sketch closes (and is
+                # recomputed with it), whatever closes the sketch: a ribbon command, Finish.
+                session.close_editor(commit=True)
+        except Exception as exc:
+            warn("dimension box: %s" % exc)
         Gui.runCommand("Sketcher_LeaveSketch")
     else:
         gdoc.resetEdit()
