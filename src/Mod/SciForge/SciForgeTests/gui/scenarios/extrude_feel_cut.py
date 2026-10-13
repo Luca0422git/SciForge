@@ -13,7 +13,9 @@ R7  E, type -6: Cut, and the removed volume shows as one red see-through node ov
     Cancel: no red left, the scene is as before E, the part too.
     E, -6, OK: the pocket is made, no red left. Undo; E, -6, Ctrl+Z: no red left.
 Press Pull on the top face:
-R5  it starts at 0; OK at 0 keeps the dialog open and makes no step.
+R5  it starts at 0; OK at 0 keeps the dialog open and makes no step. Type 5, then 0 and
+    Enter at once (in the dialog's field, then in the value box): the dialog stays open and
+    still says why a moment later (the preview rebuild that followed wiped the message).
 R3  a value box next to its arrow shows the dialog's distance.
 R2  dragging the arrow down with the button held: the part follows while the button is
     still down, and the material pushed away shows in red (R7).
@@ -22,7 +24,8 @@ R3  click the box, type 5, Enter: 40 x 30 x 15, done (Enter = OK), no box and no
 """
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore
+from PySide import QtCore, QtWidgets
+from PySide6 import QtTest
 
 from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import blend_steps as bs
@@ -320,6 +323,65 @@ def pp_ok_at_zero():
     h.check("R5: no empty step was made", not zero_steps, zero_steps)
 
 
+def type_enter(widget, text):
+    """Click a dialog field, select what is there, type `text` and press Enter at once."""
+    QtTest.QTest.mouseClick(
+        widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, QtCore.QPoint(10, widget.height() // 2)
+    )
+    QtWidgets.QApplication.processEvents()
+    widget.setFocus()
+    QtTest.QTest.keyClick(widget, QtCore.Qt.Key_A, QtCore.Qt.ControlModifier)
+    QtTest.QTest.keyClicks(widget, text)
+    QtTest.QTest.keyClick(widget, QtCore.Qt.Key_Return)
+    QtWidgets.QApplication.processEvents()
+
+
+def pp_type_5():
+    ui.type_into(ppanel().field.widget, "5")
+
+
+def pp_zero_enter_field():
+    h.check("5 typed: 40 x 30 x 15", near(h.solid_volume(), 1200.0 * 15), h.solid_volume())
+    type_enter(ppanel().field.widget, "0")
+
+
+pp_zero_enter_field.wait_ms = 1000  # well past the preview's next rebuild
+
+
+def zero_still_said(where):
+    p = ppanel()
+    h.check("R5: 0 + Enter in %s keeps Press Pull open" % where, p is not None)
+    if p is None:
+        return None
+    h.check("R5: a moment later it still says why (%s)" % where, "zero" in p.message.text(),
+            repr(p.message.text()))
+    h.check("the preview is back at 0 (%s)" % where, near(h.solid_volume(), BOX),
+            h.solid_volume())
+    zero_steps = [o.Name for o in press_pulls() if o is not p.target]
+    h.check("R5: no step was made (%s)" % where, not zero_steps, zero_steps)
+    return p
+
+
+def pp_zero_said_field():
+    p = zero_still_said("the field")
+    if p is not None:
+        ui.type_into(p.field.widget, "5")
+
+
+def pp_zero_enter_box():
+    h.check("5 typed again: 40 x 30 x 15", near(h.solid_volume(), 1200.0 * 15), h.solid_volume())
+    boxes = a.value_boxes()
+    if h.check("the value box is there", len(boxes) == 1, len(boxes)):
+        a.type_in_box(boxes[0], "0", enter=True)
+
+
+pp_zero_enter_box.wait_ms = 1000
+
+
+def pp_zero_said_box():
+    zero_still_said("the value box")
+
+
 def pp_drag_down():
     p = ppanel()
     s["pp_samples"] = samples = []
@@ -434,6 +496,11 @@ h.run(
         click_top_face,
         pp_opened,
         pp_ok_at_zero,
+        pp_type_5,
+        pp_zero_enter_field,
+        pp_zero_said_field,
+        pp_zero_enter_box,
+        pp_zero_said_box,
         pp_drag_down,
         pp_dragged,
         pp_red_slab,

@@ -239,10 +239,12 @@ class ArrowValueBox(QtWidgets.QLineEdit):
     """The value box next to a drag arrow in the 3D view, like Fusion's: it shows exactly
     what the dialog's field shows (with units) and moves with the arrow while it is
     dragged. Click it and type a value or a formula; Enter (or clicking elsewhere) takes
-    it like the dialog's field does. It never takes the keyboard by itself.
+    it like the dialog's field does. Esc cancels the command, as it does anywhere else.
+    It never takes the keyboard by itself, and it never covers the arrow's heads.
 
     text():        what to show (the dialog field's text)
     commit(text):  the user typed `text` here and pressed Enter
+    cancel():      Esc was pressed in the box (the dialog cancels, like Esc elsewhere)
     The dialog owns the box (the arrows are rebuilt often; typing must survive that);
     discard() it when the dialog closes."""
 
@@ -251,9 +253,8 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         " border: 1px solid #3fa9f5; border-radius: 2px; padding: 1px 4px;"
         " selection-background-color: #3fa9f5; selection-color: #ffffff; }"
     )
-    GAP = 14  # pixels between the arrow and the box
 
-    def __init__(self, text, commit, parent=None):
+    def __init__(self, text, commit, parent=None, cancel=None):
         super().__init__(parent if parent is not None else view_widget())
         self.setObjectName("SciForgeArrowValue")
         self.setStyleSheet(self.STYLE)
@@ -261,6 +262,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
         self._text = text
         self._commit = commit
+        self._cancel = cancel
         self.edited = False  # the user typed in the box since it last showed the field
         self.anchor = None  # widget pixel of the arrow point it sits next to
         self.textEdited.connect(self._typed)
@@ -285,20 +287,49 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         except Exception as exc:
             warn("value box: %s" % exc)
 
-    def place(self, view, point):
-        """Sit just right of the 3D `point` (on the arrow); hidden when it is off screen."""
+    def place(self, view, point, direction=None, size=0.0):
+        """Sit beside the arrow whose middle is the 3D `point`. The arrow points along
+        `direction`; `size` is its size (its tips are arrow_box_core.REACH sizes from the
+        middle). The box goes beside the arrow as it shows on the screen, never over its
+        heads, so an arrow that points sideways (a side face in the Front view) stays
+        grabbable. Hidden when the point is off screen."""
+        from . import arrow_box_core
+
         parent = self.parentWidget()
         if parent is None:
             return
-        x, y = view.getPointOnViewport(point)
         ratio = parent.devicePixelRatioF() or 1.0
-        px, py = int(x / ratio), int(parent.height() - y / ratio)
-        if not (0 <= px < parent.width() and 0 <= py < parent.height()):
+        height = parent.height()
+
+        def pixel(p):
+            x, y = view.getPointOnViewport(p)
+            return x / ratio, height - y / ratio
+
+        ax, ay = pixel(point)
+        if not (0 <= ax < parent.width() and 0 <= ay < height):
             self.hide()
             return
-        self.anchor = QtCore.QPoint(px, py)
-        left = min(px + self.GAP, parent.width() - self.width() - 2)
-        top = max(0, min(py - self.height() // 2, parent.height() - self.height() - 2))
+        self.anchor = QtCore.QPoint(int(ax), int(ay))
+        tail = tip = (ax, ay)
+        radius = 0.0
+        if direction is not None and size > 0:
+            along = App.Vector(direction)
+            if along.Length > 1e-12:
+                along.normalize()
+                tail = pixel(point - along * (arrow_box_core.REACH * size))
+                tip = pixel(point + along * (arrow_box_core.REACH * size))
+                # How wide the heads look: a head's radius across the line of sight.
+                look = App.Vector(view.getViewDirection())
+                side = look.cross(along)
+                if side.Length < 1e-9:
+                    side = look.cross(App.Vector(1, 0, 0))
+                    if side.Length < 1e-9:
+                        side = look.cross(App.Vector(0, 1, 0))
+                side.normalize()
+                edge = pixel(point + side * (arrow_box_core.HEAD * size))
+                radius = ((edge[0] - ax) ** 2 + (edge[1] - ay) ** 2) ** 0.5
+        box = (self.width(), self.height())
+        left, top = arrow_box_core.spot((ax, ay), tail, tip, radius, box, (parent.width(), height))
         if self.pos() != QtCore.QPoint(left, top):
             self.move(left, top)
         if not self.isVisible():
@@ -322,6 +353,33 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         except Exception as exc:
             warn("value box: %s" % exc)
         self.refresh()
+
+    def event(self, event):
+        # Esc while typing here cancels the command, as everywhere in Fusion. Claimed before
+        # Qt looks for shortcuts, so it reaches keyPressEvent below.
+        try:
+            if (
+                event.type() == QtCore.QEvent.ShortcutOverride
+                and event.key() == QtCore.Qt.Key_Escape
+            ):
+                event.accept()
+                return True
+        except Exception:
+            pass
+        return super().event(event)
+
+    def keyPressEvent(self, event):
+        try:
+            if event.key() == QtCore.Qt.Key_Escape:
+                event.accept()
+                self.edited = False  # what was typed is dropped with the command
+                if self._cancel is not None:
+                    self._cancel()
+                return
+        except Exception as exc:
+            warn("value box: %s" % exc)
+            return
+        super().keyPressEvent(event)
 
     def focusInEvent(self, event):
         super().focusInEvent(event)
@@ -349,6 +407,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         """Remove the box for good (the dialog closes)."""
         self._commit = lambda _text: None
         self._text = lambda: ""
+        self._cancel = None
         if not _alive(self):
             return
         try:
@@ -430,7 +489,7 @@ class ArrowDragger:
     def anchor(self):
         """The 3D point the value box sits next to: the arrow's middle, which is where the
         extrusion ends. (Its heads stick out on both sides; for a cut the far one is inside
-        the part, so the box goes by the middle, next to the arrow either way.)"""
+        the part, so the box goes beside the middle, clear of both heads.)"""
         return self.origin + self.direction * self.distance()
 
     def _show_value(self):
@@ -443,7 +502,7 @@ class ArrowDragger:
             self.value_box = None
             return
         box.refresh()
-        box.place(self.view, self.anchor())
+        box.place(self.view, self.anchor(), self.direction, self.size)
 
     def _poll(self):
         try:
