@@ -112,6 +112,35 @@ def spaced_done():
     vc.animations(False)
 
 
+def stopped_turn():
+    """A turn stopped part way: an arrow click, then a zoom 120 ms later (FreeCAD's zoom
+    stops its turning animation). The view stays tilted: no arrows there."""
+    vc.animations(True)
+    vc.click("turn-right")
+    QtCore.QTimer.singleShot(120, lambda: h.view().zoomIn())
+
+
+stopped_turn.wait_ms = 1800
+
+
+def stopped_done():
+    from sciforge import viewcube, viewcube_ui
+
+    straight = viewcube.face_on(viewcube_ui.orientation_of(h.view())) is not None
+    targets = vc.cube().targets()
+    if straight:
+        print("[SciForge] viewcube_arrows: the zoom did not stop the turn here", flush=True)
+        h.check("at a face: the arrows are there", all(x in targets for x in ARROWS), sorted(targets))
+    else:
+        h.check(
+            "a turn stopped part way leaves no arrows on the tilted view",
+            not any(x in targets for x in ARROWS),
+            sorted(targets),
+        )
+    vc.animations(False)
+    vc.click("front")
+
+
 def rolled_shot():
     h.shot("2-rolled")
 
@@ -130,5 +159,5 @@ h.run(
     + step("roll-ccw", "FRONT upright", (0, 1, 0), (0, 0, 1))
     + step("roll-ccw", "FRONT turned counter-clockwise", (0, 1, 0), (1, 0, 0))
     + step("roll-cw", "FRONT upright again", (0, 1, 0), (0, 0, 1))
-    + [quick_clicks, quick_done, spaced_clicks, spaced_done],
+    + [quick_clicks, quick_done, spaced_clicks, spaced_done, stopped_turn, stopped_done],
 )

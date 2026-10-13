@@ -9,9 +9,11 @@ R3  E with nothing selected takes the square (the only area of the sketch just f
 R2  Click the square again, type -5: a cut, in red. Click the box, type 0, Enter: Extrude
     stays open and says why, the preview is gone and so is its red.
 R4  Start: Offset with the distance still at 0: the two arrows sit on one spot; their two
-    value boxes do not cover each other. The same for Two Sides with both sides at 0.
+    value boxes do not cover each other. The same for Two Sides with both sides at 0. Then
+    side two 5 (side one still 0): down into the box, so Cut, in red.
 R5  One Side, -5. Click the box, type 30 (no Enter), click the top face beside the square:
-    30 is taken, and that click is not a pick (the face is not added as a profile).
+    30 is taken, and that click is not a pick (the face is not added as a profile). Again
+    with 20 and a click on the square itself: 20 is taken, the square stays picked.
 R1  Create Sketch on the top face, Q with nothing picked in it: Press Pull opens. Esc: the
     sketch is still shown and the undo list is as before. Again: Q, the top face, 2, OK:
     Press Pull is an undo step of its own; one Undo takes it back and nothing else.
@@ -201,6 +203,19 @@ def two_sides_boxes():
         )
     h.shot("R4-two-sides")
     if p is not None:
+        ui.type_into(p.distance2.widget, "5")  # side two down into the box, side one still 0
+
+
+def side_two_into_box():
+    """Side one still at 0, side two 5 down into the box: built as side two alone, it starts
+    inside the box, so the automatic operation is Cut (a cached answer from both sides at 0,
+    tested the other way, said Join: review finding)."""
+    p = xpanel()
+    op = p.operation.currentText() if p is not None else None
+    h.check("side two alone into the box: Cut", op == "Cut", op)
+    h.check("in red", len(a.cut_nodes()) == 1, len(a.cut_nodes()))
+    h.check("box less 10 x 10 x 5", near(h.solid_volume(), BOX - 500.0), h.solid_volume())
+    if p is not None:
         h.check("One Side", ui.choose(p.direction, "One Side"))
         a.give_distance("-5")
 
@@ -229,6 +244,23 @@ def click_was_not_a_pick():
     )
     h.check("and no complaint about it", p is not None and "belongs" not in p.message.text(), p and p.message.text())
     h.shot("R5-left-box")
+    boxes = a.value_boxes()
+    if h.check("the value box is there", len(boxes) == 1, len(boxes)):
+        a.type_in_box(boxes[0], "20", enter=False)
+    h.click(SQUARE)  # this time on the picked area itself
+
+
+click_was_not_a_pick.wait_ms = 1200
+
+
+def area_click_was_not_a_pick():
+    p = xpanel()
+    h.check("leaving the box took 20", p is not None and near(abs(p.distance.value()), 20.0), p and p.distance.value())
+    h.check(
+        "the click on the square that left the box did not drop it",
+        p is not None and len(p.profiles) == 1,
+        p and p.profiles,
+    )
     h.task_button("Cancel")
 
 
@@ -331,8 +363,10 @@ h.run(
         zero_refused,
         offset_boxes,
         two_sides_boxes,
+        side_two_into_box,
         type_30,
         click_was_not_a_pick,
+        area_click_was_not_a_pick,
         q_sketch,
         q_pick_top,
         q_in_sketch,

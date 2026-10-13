@@ -256,7 +256,8 @@ class ArrowValueBox(QtWidgets.QLineEdit):
     commit(text):  the user typed `text` here and pressed Enter
     cancel():      Esc was pressed in the box (the dialog cancels, like Esc elsewhere)
     other_side:    the box starts on the arrow's other side (a second arrow that can sit on
-                   the first one: the start offset's, side two's)
+                   the first one: side two's)
+    past_tip:      the box starts past the arrow's tip (a third one: the start offset's)
     The dialog owns the box (the arrows are rebuilt often; typing must survive that);
     discard() it when the dialog closes."""
 
@@ -266,9 +267,10 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         " selection-background-color: #3fa9f5; selection-color: #ffffff; }"
     )
 
-    def __init__(self, text, commit, parent=None, cancel=None, other_side=False):
+    def __init__(self, text, commit, parent=None, cancel=None, other_side=False, past_tip=False):
         super().__init__(parent if parent is not None else view_widget())
         self.other_side = other_side  # starts on the arrow's other side (arrow_box_core.spot)
+        self.past_tip = past_tip  # starts past the arrow's tip
         self.setObjectName("SciForgeArrowValue")
         self.setStyleSheet(self.STYLE)
         self.setFocusPolicy(QtCore.Qt.ClickFocus)  # never by Tab, never by itself
@@ -343,7 +345,14 @@ class ArrowValueBox(QtWidgets.QLineEdit):
                 radius = ((edge[0] - ax) ** 2 + (edge[1] - ay) ** 2) ** 0.5
         box = (self.width(), self.height())
         left, top = arrow_box_core.spot(
-            (ax, ay), tail, tip, radius, box, (parent.width(), height), other_side=self.other_side
+            (ax, ay),
+            tail,
+            tip,
+            radius,
+            box,
+            (parent.width(), height),
+            other_side=self.other_side,
+            past_tip=self.past_tip,
         )
         if self.pos() != QtCore.QPoint(left, top):
             self.move(left, top)

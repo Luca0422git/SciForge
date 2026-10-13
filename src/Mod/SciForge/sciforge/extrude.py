@@ -1575,7 +1575,10 @@ def tool_shape(feature):
             shape.Placement = feature.getGlobalPlacement().multiply(sub.Placement)
         if shape.isNull() or not shape.Solids:
             return None
-        box = _parts_box(feature) if _through_all(feature) else None
+        through = _through_all(feature)
+        if through:
+            shape = _with_far_bodies(feature, shape)
+        box = _parts_box(feature) if through else None
         if box is not None:
             import Part
 
@@ -1589,6 +1592,30 @@ def tool_shape(feature):
         return shape
     except Exception:
         return None
+
+
+def _with_far_bodies(feature, shape):
+    """A cut through All acts on every body in its way (R8), but the extrude's own tool
+    (FreeCAD's) only reaches a little past the sketch's body: the tools its hidden steps in
+    the other bodies use (built to reach them) are added, so the red reaches them too."""
+    try:
+        from . import bodies
+        from .extrude_bodies import follower_tool, followers_of, is_merge
+
+        followers = [f for f in followers_of(feature) if not is_merge(f)]
+    except Exception:
+        return shape
+    for follower in followers:
+        base = getattr(follower, "BaseFeature", None)
+        try:
+            if base is None or base.Shape.isNull():
+                continue
+            more = follower_tool(feature, bodies.global_shape(base))
+            if more is not None and not more.isNull() and more.Solids:
+                shape = shape.fuse(more)
+        except Exception:
+            continue
+    return shape
 
 
 def _parts_box(feature):

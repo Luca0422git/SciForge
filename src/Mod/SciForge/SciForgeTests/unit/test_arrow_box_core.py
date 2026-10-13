@@ -65,6 +65,22 @@ class Spot(unittest.TestCase):
             self.assertFalse(overlap_x > 0 and overlap_y > 0, (first, second, gap))
             self.assertGreaterEqual(core.clearance(tail, tip, rect(second)), 10)
 
+    def test_three_arrows_on_one_spot_keep_their_boxes_apart(self):
+        # Start: Offset and Two Sides, all at 0: three arrows on one spot (review finding).
+        for tail, tip in (((700, 460), (700, 340)), ((620, 400), (780, 400))):
+            corners = [
+                core.spot((700, 400), tail, tip, 10, BOX, VIEW),
+                core.spot((700, 400), tail, tip, 10, BOX, VIEW, other_side=True),
+                core.spot((700, 400), tail, tip, 10, BOX, VIEW, past_tip=True),
+            ]
+            for i in range(3):
+                self.assertGreaterEqual(core.clearance(tail, tip, rect(corners[i])), 10)
+                for j in range(i + 1, 3):
+                    a, b = corners[i], corners[j]
+                    overlap_x = min(a[0] + BOX[0], b[0] + BOX[0]) - max(a[0], b[0])
+                    overlap_y = min(a[1] + BOX[1], b[1] + BOX[1]) - max(a[1], b[1])
+                    self.assertFalse(overlap_x > 0 and overlap_y > 0, corners)
+
     def test_arrow_pointing_at_the_viewer(self):
         # Seen end on, the arrow is a disc around its middle: the box goes right of it.
         corner = self.check_clear((700, 400), (700, 400), (700, 400), 15)

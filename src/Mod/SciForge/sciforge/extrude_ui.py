@@ -811,8 +811,8 @@ class ExtrudePanel(Panel):
         if self._closed:
             return
         try:
-            if self.active != "profiles":
-                return
+            if self.active != "profiles" or taskui.box_click_taken():
+                return  # (the click that left an arrow's value box: not a pick)
             self._toggle((sketch, sub))
         except Exception as exc:
             warn("extrude pick: %s" % exc)
@@ -1387,7 +1387,10 @@ class ExtrudePanel(Panel):
         """Fusion's automatic Cut test (the extrusion starts inside a body). It depends only
         on where the extrusion starts and which way it goes: typing 5 then 6 tests once."""
         try:
-            key = self._way_signature(side_only=True)
+            # Which sides the preview leaves out at 0 counts too: Two Sides with side one
+            # still at 0 is built as side two alone, the other way (review finding).
+            zero = None if self.editing else frozenset(self._zero_sides())
+            key = (self._way_signature(side_only=True), zero)
         except Exception:
             key = None
         cached = getattr(self, "_inside_cache", None)
@@ -1710,8 +1713,10 @@ class ExtrudePanel(Panel):
                 lambda text: self._box_typed(key, text),
                 cancel=self.escape.press,
                 # At 0 the distance arrow sits on the offset arrow, and side two's on side
-                # one's: their boxes go to the other side, so neither covers the other.
-                other_side=key in ("offset", "distance2"),
+                # one's: their boxes start elsewhere (side two's on the other side, the
+                # offset's past its tip), so none covers another.
+                other_side=key == "distance2",
+                past_tip=key == "offset",
             )
         except Exception as exc:
             warn("value box unavailable: %s" % exc)

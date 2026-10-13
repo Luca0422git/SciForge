@@ -273,16 +273,22 @@ class ViewCube(QtWidgets.QWidget):
         q = orientation_of(view)
         if self.q is None or not viewcube.same_orientation(q, self.q, 1e-9):
             self.set_orientation(q)
+        elif getattr(self, "face_from_aim", False) and self._turning_to(q) is None:
+            # The arrows were kept for a turn that is over or was stopped (a zoom or a pan
+            # stops FreeCAD's animation part way): only a face seen straight on has them.
+            self.set_orientation(q)
 
     def set_orientation(self, q):
         self.q = q
         self.parts = viewcube.layout(q, CX, CY, SIZE)
         self.face = viewcube.face_on(q)
+        self.face_from_aim = False
         if self.face is None:
             # An arrow click is still turning the view to a face: the arrows stay, so a
             # quick second click adds up (and does not fall through to the model).
             aim = self._turning_to(q)
             self.face = viewcube.face_on(aim) if aim is not None else None
+            self.face_from_aim = self.face is not None
         self.buttons = [
             c
             for c in viewcube.controls(CX, CY, SIZE, HOME_AT)
