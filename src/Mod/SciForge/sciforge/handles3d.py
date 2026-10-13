@@ -21,6 +21,7 @@ import FreeCADGui as Gui
 
 from . import drag_guard, warn
 from .compat import QtCore
+from .taskui import BoxCarrier
 
 BLUE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
 BLUE_ACTIVE = (0.55, 0.80, 1.0)
@@ -135,8 +136,9 @@ def _rotation_y_to(direction):
     return App.Rotation(App.Vector(0, 1, 0), App.Vector(direction))
 
 
-class _Handle:
-    """What LinearHandle and PathHandle share: callbacks, polling, hover colour."""
+class _Handle(BoxCarrier):
+    """What LinearHandle and PathHandle share: callbacks, polling, hover colour, and a
+    value box when the dialog gives one (taskui.BoxCarrier)."""
 
     POLL_MS = 30
     GRAB_PIXELS = 12.0
@@ -231,6 +233,9 @@ class _Handle:
     def dragging(self):
         return self._drag
 
+    def box_active(self):
+        return bool(self._drag or self._hover)
+
     def busy(self, seconds=0.6):
         """True while dragging and just after: that click is the handle's, not a pick."""
         return self._drag or time.time() - self._last_event < seconds
@@ -259,6 +264,7 @@ class _Handle:
                 touch()  # also a release found from Qt's mouse state (pickpanel.Arrow)
                 if self.on_release:
                     self.on_release(self.value())
+            self.follow_box()
         except Exception as exc:
             warn("handle drag: %s" % exc)
 
@@ -278,6 +284,7 @@ class _Handle:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        self.drop_box()
 
 
 def angle_handle(*args, **kwargs):
@@ -369,6 +376,13 @@ class LinearHandle(_Handle):
 
     def tip_point(self):
         return self.base_point() + self.direction * self.size
+
+    def box_geometry(self):
+        """The ball (0.12 sizes) at the base, the shaft and the head up to the tip."""
+        base = self.base_point()
+        anchor = base + self.direction * (0.5 * self.size)
+        tail = base - self.direction * (0.12 * self.size)
+        return anchor, tail, self.tip_point(), 0.16 * self.size
 
     def value(self):
         return self._value
@@ -474,6 +488,10 @@ class PathHandle(_Handle):
 
     def point(self):
         return self.edge.valueAt(self._value)
+
+    def box_geometry(self):
+        point = self.point()
+        return point, point, point, 0.12 * self.size
 
     def _apply(self, value):
         self._value = float(value)

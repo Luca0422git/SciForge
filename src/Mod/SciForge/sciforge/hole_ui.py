@@ -22,7 +22,7 @@ from . import commands, drag_guard, hole, log, preview, ui_icon_path, warn
 from . import hole_common as common
 from . import thread_tables as tables
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, DistanceField, Panel
+from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
 
 PLACEMENT_LABELS = [("Single Hole", "single"), ("From Sketch (Multiple Holes)", "sketch")]
 EXTENT_LABELS = [("Distance", "distance"), ("To", "to"), ("All", "all")]
@@ -249,6 +249,9 @@ class HolePanel(Panel):
         self.subs = []
         self.draggers = {}
         self.dragger = None  # the depth arrow (tests)
+        # The value boxes next to the depth and diameter arrows; a number typed over the
+        # view goes to the arrow used last, else to the depth.
+        self.value_boxes = ValueBoxes(self, default="depth")
         self.observer = None
         self.gate = None
         self.depth_base = None
@@ -1355,6 +1358,7 @@ class HolePanel(Panel):
                 )
                 common.on_top(arrow.root)
                 self.dragger = self.draggers["depth"] = arrow
+                self._attach_box("depth")
             if self.tap_type.currentData() == "simple":
                 side = self._side(normal)
                 # The arrow is drawn around its middle: its inner end sits on the rim, clear
@@ -1372,8 +1376,28 @@ class HolePanel(Panel):
                 )
                 common.on_top(arrow.root)
                 self.draggers["diameter"] = arrow
+                self._attach_box("diameter")
         except Exception as exc:
             warn("hole handles unavailable: %s" % exc)
+
+    def _attach_box(self, key):
+        """The value box next to the arrow `key` ("depth", "diameter"): the field's text,
+        and a value or formula typed in it goes to that field."""
+        field = self.value_fields[key]
+        return self.value_boxes.attach(
+            self.draggers.get(key),
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+        )
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        for formula in self.formula_inputs:
+            if formula.key == key:
+                formula.take(text)
+                return
 
     @staticmethod
     def _side(normal):
@@ -1538,6 +1562,7 @@ class HolePanel(Panel):
         self.undo_guard.remove()
         self.enter.remove()
         self._remove_draggers()
+        self.value_boxes.discard()
         super().cleanup()
 
 

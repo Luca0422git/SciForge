@@ -27,7 +27,7 @@ from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_
 from . import bodies, extrude_bodies, ui_icon_path, warn
 from . import extrude_bodies_core as bodies_core
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, ArrowValueBox, DistanceField, Panel
+from .taskui import ArrowDragger, BoxCarrier, DistanceField, Panel, ValueBoxes
 
 ZERO_HINT = "Drag the arrow or type a distance."
 
@@ -108,12 +108,13 @@ class SelectionField:
         self.button.setText(text or self.empty)
 
 
-class AngleDragger:
+class AngleDragger(BoxCarrier):
     """Fusion's taper handle: a short curved blue arrow at the end of the extrusion that
     turns about the profile's edge (`pivot`, axis `axis`). At angle 0 it sits `radius`
     along `zero` (the extrusion direction); positive angles turn it to axis x zero, the
     outward side. Watched with a Qt timer like taskui.ArrowDragger (Coin's dragger
-    callbacks run Python without its lock and crashed FreeCAD)."""
+    callbacks run Python without its lock and crashed FreeCAD). It can carry a value box
+    (taskui.BoxCarrier): the box sits beside the curved band, clear of its heads."""
 
     POLL_MS = 30
 
@@ -125,6 +126,7 @@ class AngleDragger:
         self.axis = App.Vector(axis).normalize()
         self.zero = App.Vector(zero).normalize()
         self.radius = radius
+        self.width = width
         self.root = coin.SoSeparator()
         place = coin.SoTransform()
         place.translation.setValue(pivot.x, pivot.y, pivot.z)
@@ -202,15 +204,32 @@ class AngleDragger:
         sep.addChild(faces)
         return sep
 
+    def point_at(self, degrees):
+        """Where the band's middle is at `degrees` (3D)."""
+        out = self.zero.cross(self.axis) * -1.0  # local +Y: the outward side
+        a = math.radians(degrees)
+        return self.pivot + (self.zero * math.cos(a) + out * math.sin(a)) * self.radius
+
     def screen_points(self, degrees):
         """(where the handle is now, where it is at `degrees`) in 3D, for tests and hints."""
-        out = self.zero.cross(self.axis) * -1.0  # local +Y: the outward side
+        return self.point_at(self.angle()), self.point_at(degrees)
 
-        def at(angle):
-            a = math.radians(angle)
-            return self.pivot + (self.zero * math.cos(a) + out * math.sin(a)) * self.radius
+    def box_geometry(self):
+        """The curved band as the box sees it: its middle, the tips of its two heads (the
+        band is short, so the chord between them is where it lies) and the heads'
+        half-width. The box goes beside the band, along the extrusion."""
+        radius = max(self.radius, 1e-6)
+        span = min(0.3, 1.6 * self.width / radius) + 1.2 * self.width / radius  # radians
+        now = self.angle()
+        reach = math.degrees(span)
+        anchor = self.point_at(now)
+        return anchor, self.point_at(now - reach), self.point_at(now + reach), 0.75 * self.width
 
-        return at(self.angle()), at(degrees)
+    def box_active(self):
+        try:
+            return bool(self.dragger.isActive.getValue())
+        except Exception:
+            return False
 
     def angle(self):
         q = self.dragger.rotation.getValue().getValue()  # (x, y, z, w) about local z
@@ -239,6 +258,7 @@ class AngleDragger:
             if self._was_active and not active and self.on_release:
                 self.on_release(value)
             self._was_active = active
+            self.follow_box()
         except Exception as exc:
             warn("taper drag: %s" % exc)
 
@@ -252,6 +272,7 @@ class AngleDragger:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        self.drop_box()
 
 
 class ViewProviderExtrude:
@@ -464,7 +485,9 @@ class ExtrudePanel(Panel):
         self.picker = None
         self.observer = None
         self._quiet = False
-        self.value_boxes = {}  # the value box next to each arrow ({"distance": box, ...})
+        # The value box next to each handle (distance, side two, offset, taper); a number
+        # typed over the view goes to the handle used last, else to the distance.
+        self.value_boxes = ValueBoxes(self, default="distance")
         self.cut_view = None  # the red cut preview (cut_preview.CutPreview)
         self._init_bodies()
         if feature is not None:
@@ -1669,8 +1692,8 @@ class ExtrudePanel(Panel):
                     size * 0.7,
                     on_drag=self._offset_dragged,
                     on_release=self._offset_released,
-                    value_box=self._value_box("offset"),
                 )
+                self._attach_box("offset")
             if options["extent"] == "distance":
                 self.dragger = self.draggers["distance"] = ArrowDragger(
                     start,
@@ -1679,8 +1702,8 @@ class ExtrudePanel(Panel):
                     size,
                     on_drag=self._dragged,
                     on_release=self._dragged,
-                    value_box=self._value_box("distance"),
                 )
+                self._attach_box("distance")
             if options["direction"] == "two_sides" and options["extent2"] == "distance":
                 self.draggers["distance2"] = ArrowDragger(
                     start,
@@ -1689,40 +1712,49 @@ class ExtrudePanel(Panel):
                     size,
                     on_drag=self._dragged2,
                     on_release=self._dragged2,
-                    value_box=self._value_box("distance2"),
                 )
+                self._attach_box("distance2")
             self._make_taper_handle(faces, start, normal, size)
         except Exception as exc:
             warn("extrude handles unavailable: %s" % exc)
 
-    # -- the value boxes next to the arrows ---------------------------------------------------
+    # -- the value boxes next to the handles --------------------------------------------------
+    BOX_FIELDS = {
+        "distance": "distance",
+        "distance2": "distance2",
+        "offset": "start_offset",
+        "taper": "taper",
+    }
+
+    def _attach_box(self, key):
+        """Give the handle `key` its value box: it shows the matching dialog field's text and
+        takes a value or formula typed in it. The boxes are made once and kept by the dialog
+        (self.value_boxes): the handles are rebuilt often, and what is being typed must
+        survive that."""
+        handle = self.draggers.get(key)
+        field = getattr(self, self.BOX_FIELDS[key])
+        return self.value_boxes.attach(
+            handle,
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+            # At 0 the distance arrow sits on the offset arrow, and side two's on side
+            # one's: their boxes start elsewhere (side two's on the other side, the
+            # offset's past its tip), so none covers another.
+            other_side=key == "distance2",
+            past_tip=key == "offset",
+        )
+
     def _value_box(self, key):
-        """The box that shows (and takes) the value of the arrow `key`. Made once and kept by
-        the dialog: the arrows are rebuilt often, and what is being typed must survive that."""
-        box = self.value_boxes.get(key)
-        if box is not None and taskui._alive(box):
-            return box
-        field = {
-            "distance": self.distance,
-            "distance2": self.distance2,
-            "offset": self.start_offset,
-        }[key]
-        try:
-            box = ArrowValueBox(
-                lambda: field.widget.text(),
-                lambda text: self._box_typed(key, text),
-                cancel=self.escape.press,
-                # At 0 the distance arrow sits on the offset arrow, and side two's on side
-                # one's: their boxes start elsewhere (side two's on the other side, the
-                # offset's past its tip), so none covers another.
-                other_side=key == "distance2",
-                past_tip=key == "offset",
-            )
-        except Exception as exc:
-            warn("value box unavailable: %s" % exc)
-            return None
-        self.value_boxes[key] = box
-        return box
+        """The value box of the handle `key` (made if needed), or None."""
+        field = getattr(self, self.BOX_FIELDS[key])
+        return self.value_boxes.box(
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+            other_side=key == "distance2",
+            past_tip=key == "offset",
+        )
 
     def _box_typed(self, key, text):
         """A value typed in the box next to an arrow: taken like the same text typed in the
@@ -1742,12 +1774,7 @@ class ExtrudePanel(Panel):
         self.start_offset.take(value)
 
     def _discard_value_boxes(self):
-        for box in self.value_boxes.values():
-            try:
-                box.discard()
-            except Exception:
-                pass
-        self.value_boxes = {}
+        self.value_boxes.discard()
 
     # -- the red cut preview -------------------------------------------------------------------
     def _update_cut_preview(self):
@@ -1825,6 +1852,7 @@ class ExtrudePanel(Panel):
             on_release=self._taper_dragged,
         )
         self.draggers["taper"].sign = sign
+        self._attach_box("taper")  # the angle, next to the curved handle
 
     # -- OK / Cancel ----------------------------------------------------------------------------
     def accept(self):

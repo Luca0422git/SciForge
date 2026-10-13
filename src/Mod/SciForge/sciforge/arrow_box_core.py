@@ -69,7 +69,9 @@ def clearance(tail, tip, rect):
     )
 
 
-def spot(anchor, tail, tip, radius, box, view, gap=GAP, other_side=False, past_tip=False):
+def spot(
+    anchor, tail, tip, radius, box, view, gap=GAP, other_side=False, past_tip=False, avoid=()
+):
     """Top-left corner (x, y) of a box of size `box` (w, h) beside an arrow on the screen.
 
     anchor     the arrow's middle (where the extrusion ends), in view pixels
@@ -80,9 +82,11 @@ def spot(anchor, tail, tip, radius, box, view, gap=GAP, other_side=False, past_t
                for a second arrow that can sit on the first one (both at 0), so the two
                boxes do not cover each other
     past_tip   the box starts past the arrow's tip (a third arrow on the same spot)
+    avoid      the dialog's other handles, [(tail, tip, radius)] in pixels: the box covers
+               none of them either (a pattern's two arrows meet at a corner)
     The box keeps `gap` pixels plus `radius` away from the arrow's line, never covers a
-    head, and stays inside the view (only when nothing fits does it go where it covers the
-    arrow least)."""
+    head (its own or another handle's), and stays inside the view (only when nothing fits
+    does it go where it covers the handles least)."""
     ax, ay = float(anchor[0]), float(anchor[1])
     tail = (float(tail[0]), float(tail[1]))
     tip = (float(tip[0]), float(tip[1]))
@@ -111,8 +115,11 @@ def spot(anchor, tail, tip, radius, box, view, gap=GAP, other_side=False, past_t
     for cx, cy in centres:
         left = max(EDGE, min(cx - width / 2.0, view_w - width - EDGE))
         top = max(EDGE, min(cy - height / 2.0, view_h - height - EDGE))
-        clear = clearance(tail, tip, (left, top, width, height))
-        if clear >= radius + 1.0:
+        rect = (left, top, width, height)
+        clear = clearance(tail, tip, rect) - radius
+        for other_tail, other_tip, other_radius in avoid:
+            clear = min(clear, clearance(other_tail, other_tip, rect) - float(other_radius))
+        if clear >= 1.0:
             return int(round(left)), int(round(top))
         if best is None or clear > best[0]:
             best = (clear, left, top)

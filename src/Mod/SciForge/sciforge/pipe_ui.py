@@ -23,14 +23,13 @@ from .primitives_ui import (
     LinearHandle,
     SelectionField,
     EnterTakesNumber,
-    TypeOverView,
     _plain,
     clear_selection_soon,
     combo,
     safe,
     set_combo,
 )
-from .taskui import DistanceField, Panel
+from .taskui import DistanceField, Panel, ValueBoxes
 
 SECTION_LABELS = [("Circular", "circular"), ("Square", "square"), ("Triangular", "triangular")]
 PATH_COLOR = (0.12, 0.53, 0.90)
@@ -182,7 +181,8 @@ class PipePanel(Panel):
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
-        self.typing = TypeOverView(self)
+        # The value box next to each handle (the ball on the path, the section size arrow).
+        self.value_boxes = ValueBoxes(self, default="section_size")
         self._last_handle = None
         self.target = feature
         self.editing = feature is not None
@@ -705,6 +705,12 @@ class PipePanel(Panel):
                 on_drag=self._distance_dragged,
                 on_release=self._distance_released,
             )
+            self.value_boxes.attach(
+                self.handles["distance"],
+                "distance",
+                lambda: self.distance.text(),
+                self._box_distance,
+            )
             normal = pipe.sketch_normal([o for o, _ in self.path])
             up = pipe.up_vector(tangent, normal, _wire(self.path))
             side = up.cross(tangent)
@@ -721,8 +727,35 @@ class PipePanel(Panel):
                 scale=0.5,
                 name="section_size",
             )
+            self.value_boxes.attach(
+                self.handles["section_size"],
+                "section_size",
+                lambda: self.size.widget.text(),
+                self._box_size,
+            )
         except Exception as exc:
             warn("pipe handles unavailable: %s" % exc)
+
+    def _box_distance(self, text):
+        """A distance (0..1 along the path) typed in the box next to the ball."""
+        if self._closed:
+            return
+        try:
+            value = float(text.strip().replace(",", "."))
+        except ValueError:
+            self.message.setText("⚠ Type a number between 0 and 1 (how far along the path).")
+            return
+        self._last_handle = "distance"
+        self.distance.setValue(max(0.01, min(1.0, value)))
+
+    def _box_size(self, text):
+        if self._closed:
+            return
+        self._last_handle = "section_size"
+        for formula in self.formula_inputs:
+            if formula.key == "section_size":
+                formula.take(text)
+                return
 
     @safe
     def _distance_dragged(self, value):
@@ -823,8 +856,9 @@ class PipePanel(Panel):
         self.escape.remove()
         self.undo_guard.remove()
         self.enter.remove()
-        self.typing.remove()
+        self._remove_typing()
         self._remove_handles()
+        self.value_boxes.discard()
         self._hide_shown()
         super().cleanup()
 

@@ -6,6 +6,12 @@
 - ArrowDragger: the arrow you drag in the 3D view to set a distance (Coin3D).
 - ArrowValueBox: the small value box next to an arrow (Fusion shows the distance there
   while you drag, and you can type a new one in it).
+- BoxCarrier: what any drag handle (an arrow, a turning disc, a ball on a line) needs to
+  carry such a box: where its grabbable part is, and a hook its poll calls.
+- ValueBoxes: a dialog's boxes, one per handle, kept while the handles are rebuilt, and
+  which one a number typed over the 3D view goes to.
+- TypeOverView: digits typed with the mouse over the 3D view go into that box (Fusion),
+  not to FreeCAD's view keys.
 - Panel: a task-dialog base that wraps the edit in one undo step: OK keeps it,
   Cancel/Esc removes it again, like Fusion.
 """
@@ -16,7 +22,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import drag_guard, log, warn
-from .compat import QtCore, QtWidgets
+from .compat import QtCore, QtGui, QtWidgets
 
 
 _OPEN = {"dialog": None}
@@ -280,6 +286,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         self._cancel = cancel
         self.edited = False  # the user typed in the box since it last showed the field
         self.anchor = None  # widget pixel of the arrow point it sits next to
+        self.handle_pixels = None  # (tail, tip, radius) of the handle on the screen, pixels
         self.textEdited.connect(self._typed)
         self.returnPressed.connect(self._enter)
         self.hide()
@@ -303,11 +310,29 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             warn("value box: %s" % exc)
 
     def place(self, view, point, direction=None, size=0.0):
-        """Sit beside the arrow whose middle is the 3D `point`. The arrow points along
-        `direction`; `size` is its size (its tips are arrow_box_core.REACH sizes from the
-        middle). The box goes beside the arrow as it shows on the screen, never over its
-        heads, so an arrow that points sideways (a side face in the Front view) stays
-        grabbable. Hidden when the point is off screen."""
+        """Sit beside the arrow (Coin's SoTranslate1Dragger) whose middle is the 3D
+        `point`. The arrow points along `direction`; `size` is its size (its tips are
+        arrow_box_core.REACH sizes from the middle, its heads arrow_box_core.HEAD wide)."""
+        from . import arrow_box_core
+
+        tail = tip = point
+        radius = 0.0
+        if direction is not None and size > 0:
+            along = App.Vector(direction)
+            if along.Length > 1e-12:
+                along.normalize()
+                tail = point - along * (arrow_box_core.REACH * size)
+                tip = point + along * (arrow_box_core.REACH * size)
+                radius = arrow_box_core.HEAD * size
+        self.place_segment(view, point, tail, tip, radius)
+
+    def place_segment(self, view, anchor, tail, tip, radius, avoid=()):
+        """Sit beside a handle whose grabbable part runs from the 3D point `tail` to the 3D
+        point `tip` and is `radius` mm wide (half its width); `anchor` is the 3D point the
+        box belongs to (the handle's middle). The box goes beside the handle as it shows on
+        the screen, never over it (nor over the dialog's other handles, `avoid`: their
+        (tail, tip, radius) in pixels), so an arrow that points sideways (a side face in
+        the Front view) stays grabbable. Hidden when the anchor is off screen."""
         from . import arrow_box_core
 
         parent = self.parentWidget()
@@ -320,29 +345,29 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             x, y = view.getPointOnViewport(p)
             return x / ratio, height - y / ratio
 
-        ax, ay = pixel(point)
+        anchor = App.Vector(anchor)
+        ax, ay = pixel(anchor)
         if not (0 <= ax < parent.width() and 0 <= ay < height):
             self.hide()
             return
         self.anchor = QtCore.QPoint(int(ax), int(ay))
-        tail = tip = (ax, ay)
-        radius = 0.0
-        if direction is not None and size > 0:
-            along = App.Vector(direction)
-            if along.Length > 1e-12:
-                along.normalize()
-                tail = pixel(point - along * (arrow_box_core.REACH * size))
-                tip = pixel(point + along * (arrow_box_core.REACH * size))
-                # How wide the heads look: a head's radius across the line of sight.
-                look = App.Vector(view.getViewDirection())
-                side = look.cross(along)
+        tail_px = pixel(App.Vector(tail))
+        tip_px = pixel(App.Vector(tip))
+        radius_px = 0.0
+        if radius > 0:
+            # How wide the handle looks: its radius across the line of sight.
+            look = App.Vector(view.getViewDirection())
+            along = App.Vector(tip) - App.Vector(tail)
+            side = look.cross(along) if along.Length > 1e-9 else App.Vector()
+            if side.Length < 1e-9:
+                side = look.cross(App.Vector(1, 0, 0))
                 if side.Length < 1e-9:
-                    side = look.cross(App.Vector(1, 0, 0))
-                    if side.Length < 1e-9:
-                        side = look.cross(App.Vector(0, 1, 0))
-                side.normalize()
-                edge = pixel(point + side * (arrow_box_core.HEAD * size))
-                radius = ((edge[0] - ax) ** 2 + (edge[1] - ay) ** 2) ** 0.5
+                    side = look.cross(App.Vector(0, 1, 0))
+            side.normalize()
+            edge = pixel(anchor + side * radius)
+            radius_px = ((edge[0] - ax) ** 2 + (edge[1] - ay) ** 2) ** 0.5
+        self.handle_pixels = (tail_px, tip_px, radius_px)
+        tail, tip, radius = tail_px, tip_px, radius_px
         box = (self.width(), self.height())
         left, top = arrow_box_core.spot(
             (ax, ay),
@@ -353,12 +378,33 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             (parent.width(), height),
             other_side=self.other_side,
             past_tip=self.past_tip,
+            avoid=avoid,
         )
         if self.pos() != QtCore.QPoint(left, top):
             self.move(left, top)
         if not self.isVisible():
             self.show()
             self.raise_()
+
+    HOVER_PIXELS = 14.0
+
+    def handle_hovered(self):
+        """True while the mouse is over the handle this box belongs to (as last placed)."""
+        pixels = self.handle_pixels
+        parent = self.parentWidget()
+        if pixels is None or parent is None or not self.isVisible():
+            return False
+        try:
+            from . import arrow_box_core
+
+            pos = parent.mapFromGlobal(QtGui.QCursor.pos())
+            if not parent.rect().contains(pos):
+                return False
+            tail, tip, radius = pixels
+            gap = arrow_box_core._segment_point(tail, tip, (pos.x(), pos.y()))
+            return gap <= radius + self.HOVER_PIXELS
+        except Exception:
+            return False
 
     # -- typing --------------------------------------------------------------------------
     def _typed(self, _text):
@@ -444,7 +490,334 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             pass
 
 
-class ArrowDragger:
+class BoxCarrier:
+    """What a drag handle needs to carry a value box (Fusion shows the value next to every
+    handle you can drag): where its grabbable part is, and a hook its poll calls so the box
+    follows the handle, a turned view and the dialog's value. A handle class adds this to
+    its bases and implements box_geometry() (and box_active() when it knows when it is
+    dragged or hovered); its poll calls follow_box() and its remove() drop_box(). The
+    dialog owns the box (taskui.ValueBoxes) and attaches it with attach_box()."""
+
+    value_box = None  # the ArrowValueBox that follows this handle, or None
+    box_owner = None  # the dialog's ValueBoxes (told which handle is in use)
+    box_key = None  # this handle's key in it
+
+    def box_geometry(self):
+        """(anchor, tail, tip, radius): the 3D point the box belongs to (the handle's
+        middle), the two ends of the handle's grabbable part (3D) and its half-width (mm).
+        Override."""
+        raise NotImplementedError
+
+    def box_active(self):
+        """True while this handle is dragged (or hovered, when the handle knows)."""
+        return False
+
+    def attach_box(self, box, owner=None, key=None):
+        self.value_box = box
+        self.box_owner = owner
+        self.box_key = key
+        self.follow_box()
+
+    def follow_box(self):
+        """Keep the box next to the handle and showing the dialog's value: run on every
+        poll (it follows a drag and a turned or zoomed view). A handle in use (dragged, or
+        the mouse over it) becomes the one a number typed over the view goes to."""
+        box = self.value_box
+        if box is None:
+            return
+        if not _alive(box):
+            self.value_box = None
+            return
+        try:
+            box.refresh()
+            anchor, tail, tip, radius = self.box_geometry()
+            owner = self.box_owner
+            avoid = owner.other_handles(box) if owner is not None else ()
+            box.place_segment(self.view, anchor, tail, tip, radius, avoid=avoid)
+            if owner is not None and (self.box_active() or box.handle_hovered()):
+                owner.used(self.box_key)
+        except RuntimeError:
+            self.value_box = None  # the box went with its dialog
+        except Exception as exc:
+            warn("value box: %s" % exc)
+
+    def drop_box(self):
+        """The handle goes (rebuilt or removed): the box stays with the dialog, hidden until
+        the next handle shows it again. Never hidden while the user types in it (hiding
+        would take the keyboard away mid-value)."""
+        box, self.value_box = self.value_box, None
+        self.box_owner = None
+        if box is not None and _alive(box):
+            try:
+                if not box.hasFocus():
+                    box.hide()
+            except RuntimeError:
+                pass
+
+
+class ValueBoxes:
+    """The value boxes of one dialog, one per handle (by key: "distance", "taper",
+    "radius"...). Made once and kept by the dialog: the handles are rebuilt often, and what
+    is being typed must survive that. Remembers which handle was used last (dragged, or
+    the mouse over it): a number typed over the 3D view goes into its box, else into the
+    `default` key's box, else into the first box shown. discard() when the dialog closes."""
+
+    def __init__(self, panel, default=None):
+        self.panel = panel
+        self.default = default
+        self.boxes = {}
+        self.last = None
+
+    def box(self, key, text, commit, other_side=False, past_tip=False):
+        """The box for `key` (made on the first call): text() gives what it shows (the
+        dialog field's text), commit(text) takes what was typed in it."""
+        box = self.boxes.get(key)
+        if box is not None and _alive(box):
+            return box
+        try:
+            box = ArrowValueBox(
+                text, commit, cancel=self._cancel, other_side=other_side, past_tip=past_tip
+            )
+        except Exception as exc:
+            warn("value box unavailable: %s" % exc)
+            return None
+        self.boxes[key] = box
+        return box
+
+    def attach(self, handle, key, text, commit, **where):
+        """Give `handle` (a BoxCarrier) its box."""
+        box = self.box(key, text, commit, **where)
+        if box is not None and handle is not None:
+            try:
+                handle.attach_box(box, owner=self, key=key)
+            except Exception as exc:
+                warn("value box: %s" % exc)
+        return box
+
+    def _cancel(self):
+        """Esc in a box cancels the command (as Esc does anywhere)."""
+        panel = self.panel
+        escape = getattr(panel, "escape", None)
+        if escape is not None and hasattr(escape, "press"):
+            escape.press()
+            return
+        QtCore.QTimer.singleShot(0, lambda: _reject(panel))
+
+    def used(self, key):
+        self.last = key
+
+    def other_handles(self, box):
+        """The handles of the other boxes shown, [(tail, tip, radius)] in view pixels (as
+        last placed): a box must not cover them either."""
+        found = []
+        for other in self.boxes.values():
+            if other is box or not _alive(other):
+                continue
+            try:
+                if other.isVisible() and other.handle_pixels is not None:
+                    found.append(other.handle_pixels)
+            except RuntimeError:
+                pass
+        return found
+
+    def current(self):
+        """The box a number typed over the 3D view goes to, or None when none is shown."""
+        for key in (self.last, self.default):
+            box = self.boxes.get(key) if key else None
+            if box is not None and _alive(box) and box.isVisible():
+                return box
+        for box in self.boxes.values():
+            if _alive(box) and box.isVisible():
+                return box
+        return None
+
+    def shown(self):
+        """{key: box} of the boxes on the screen now."""
+        return {k: b for k, b in self.boxes.items() if _alive(b) and b.isVisible()}
+
+    def discard(self):
+        boxes, self.boxes = list(self.boxes.values()), {}
+        self.last = None
+        for box in boxes:
+            try:
+                box.discard()
+            except Exception:
+                pass
+
+
+def _reject(panel):
+    try:
+        if panel is not None and not getattr(panel, "_closed", True):
+            panel.reject()
+    except Exception as exc:
+        warn("Esc: %s" % exc)
+
+
+def _value_keys():
+    """The keys that are part of a value: digits, the decimal point (or comma) and minus
+    (sketch_mode.VALUE_KEYS, the sketch's own list of them)."""
+    try:
+        from . import sketch_mode
+
+        return sketch_mode.VALUE_KEYS
+    except Exception:
+        return {getattr(QtCore.Qt, "Key_%d" % d) for d in range(10)} | {
+            QtCore.Qt.Key_Period,
+            QtCore.Qt.Key_Comma,
+            QtCore.Qt.Key_Minus,
+        }
+
+
+def is_value_key(event):
+    """A digit (or . , -) typed without Ctrl / Alt / Meta."""
+    try:
+        mods = event.modifiers() & ~(QtCore.Qt.KeypadModifier | QtCore.Qt.ShiftModifier)
+        return event.key() in _value_keys() and mods == QtCore.Qt.NoModifier
+    except Exception:
+        return False
+
+
+def sketch_open():
+    """True while a sketch is being edited (its own keys then rule)."""
+    try:
+        from . import sketch_mode
+
+        if sketch_mode.current() is not None:
+            return True
+    except Exception:
+        pass
+    try:
+        edit = Gui.ActiveDocument.getInEdit() if Gui.ActiveDocument is not None else None
+        obj = edit.Object if edit is not None else None
+        return obj is not None and obj.TypeId == "Sketcher::SketchObject"
+    except Exception:
+        return False
+
+
+def _typing_somewhere():
+    """True when a text field (a dialog field, a value box) has the keyboard: the keys are
+    its, never ours."""
+    focus = QtWidgets.QApplication.focusWidget()
+    return isinstance(focus, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox))
+
+
+class TypeOverView:
+    """Fusion: with a command open, a number typed while the mouse is over the 3D view goes
+    into the value box next to the handle, and Enter finishes. FreeCAD took those digits
+    as its view keys (0 isometric, 1 front, 2 top ...): the view jumped and the number was
+    lost. A digit, a minus sign or a decimal point typed on the 3D view now goes into the
+    dialog's current value box (`panel.typing_box()`: the box of the handle last dragged
+    or hovered, else the main one), which takes the keyboard with its text selected, so the
+    person types straight on; Enter there is OK, as always in the box. A dialog without a
+    box (or none shown yet) can name a field instead (`panel.typing_field()`: the Box
+    dialog while it is placed). An event filter on the 3D view's widgets (where the keys
+    arrive), active only while the dialog is open; it never acts inside an open sketch,
+    while a field or box has the keyboard, or on one of SciForge's own key shortcuts.
+    remove() when the dialog closes (taskui.Panel does both)."""
+
+    BURST = 1.5  # seconds: keys this close follow each other into the same field
+    VIEWER = "Gui::View3DInventorViewer"
+
+    def __init__(self, panel):
+        self.panel = panel
+        self.last = (None, 0.0)
+        self.targets = []
+        guard = self
+
+        class KeyFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                return guard._filter(obj, event)
+
+        self.filter = KeyFilter()
+        try:
+            gl = view_widget()
+            if gl is not None:
+                self.targets.append(gl)
+                parent = gl.parentWidget()
+                if parent is not None and parent.metaObject().className() == self.VIEWER:
+                    self.targets.append(parent)  # a real keyboard sends the keys here
+            for widget in self.targets:
+                widget.installEventFilter(self.filter)
+        except Exception as exc:
+            warn("typing over the view: %s" % exc)
+
+    def _filter(self, obj, event):
+        try:
+            kind = event.type()
+            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
+                return False
+            panel = self.panel
+            if panel is None or getattr(panel, "_closed", True):
+                return False
+            if not isinstance(event, QtGui.QKeyEvent) or not is_value_key(event):
+                return False
+            text = event.text()
+            if not text or _typing_somewhere() or sketch_open() or _shortcut_key(text):
+                return False
+            target = panel.typing_box() if hasattr(panel, "typing_box") else None
+            if target is None and hasattr(panel, "typing_field"):
+                target = panel.typing_field()
+            if target is None:
+                return False
+            event.accept()  # ShortcutOverride accepted: FreeCAD's view key does not fire
+            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
+                now = time.time()
+                fresh = self.last[0] is not target or now - self.last[1] > self.BURST
+                self.last = (target, now)
+                key = event.key()
+                QtCore.QTimer.singleShot(0, lambda: self._type(target, key, text, fresh))
+            return True
+        except Exception as exc:
+            warn("typing over the view: %s" % exc)
+            return False
+
+    def _type(self, target, key, text, fresh):
+        try:
+            if self.panel is None or getattr(self.panel, "_closed", True):
+                return
+            if isinstance(target, ArrowValueBox):
+                edit = target if _alive(target) else None
+                if edit is None or not edit.isVisible():
+                    return
+                edit.setFocus(QtCore.Qt.OtherFocusReason)
+                edit.selectAll()  # the first key replaces the value, like Fusion's box
+            else:
+                edit = target.widget.findChild(QtWidgets.QLineEdit)
+                if edit is None:
+                    return
+                if fresh or not edit.hasFocus():
+                    target.widget.setFocus()
+                if fresh:
+                    edit.selectAll()
+            # Sent as a key press, so the box reacts as to a person's typing.
+            press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, press)
+            release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, key, QtCore.Qt.NoModifier, text)
+            QtWidgets.QApplication.sendEvent(edit, release)
+        except Exception as exc:
+            warn("typing a value: %s" % exc)
+
+    def remove(self):
+        for widget in self.targets:
+            try:
+                widget.removeEventFilter(self.filter)
+            except Exception:
+                pass
+        self.targets = []
+        self.panel = None
+
+
+def _shortcut_key(text):
+    """True when `text` is one of SciForge's own key shortcuts (never stolen)."""
+    try:
+        from . import shortcuts
+
+        return shortcuts.normalise(text) in shortcuts.bound_keys()
+    except Exception:
+        return False
+
+
+class ArrowDragger(BoxCarrier):
     """A 1D drag handle at `origin` pointing along `direction` (both App.Vector).
 
     on_drag(distance) is called while dragging, on_release(distance) at the end.
@@ -474,7 +847,6 @@ class ArrowDragger:
         self.direction = App.Vector(direction)
         if self.direction.Length > 1e-12:
             self.direction.normalize()
-        self.value_box = value_box  # an ArrowValueBox that follows the arrow, or None
         self.root = coin.SoSeparator()
         place = coin.SoTransform()
         place.translation.setValue(origin.x, origin.y, origin.z)
@@ -503,7 +875,8 @@ class ArrowDragger:
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
-        self._show_value()
+        if value_box is not None:
+            self.attach_box(value_box)  # an ArrowValueBox that follows the arrow
 
     def distance(self):
         return self.dragger.translation.getValue()[0] * self.size
@@ -518,17 +891,22 @@ class ArrowDragger:
         the part, so the box goes beside the middle, clear of both heads.)"""
         return self.origin + self.direction * self.distance()
 
+    def box_geometry(self):
+        """Coin's arrow: a bar REACH sizes each way from the middle, heads HEAD sizes wide."""
+        from . import arrow_box_core
+
+        anchor = self.anchor()
+        reach = self.direction * (arrow_box_core.REACH * self.size)
+        return anchor, anchor - reach, anchor + reach, arrow_box_core.HEAD * self.size
+
+    def box_active(self):
+        try:
+            return bool(self.dragger.isActive.getValue())
+        except Exception:
+            return False
+
     def _show_value(self):
-        """Keep the value box next to the arrow and showing the dialog's value. Also run on
-        every poll: it follows the drag, and a turned or zoomed view."""
-        box = self.value_box
-        if box is None:
-            return
-        if not _alive(box):
-            self.value_box = None
-            return
-        box.refresh()
-        box.place(self.view, self.anchor(), self.direction, self.size)
+        self.follow_box()
 
     def _poll(self):
         try:
@@ -556,15 +934,7 @@ class ArrowDragger:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
-        box, self.value_box = self.value_box, None
-        if box is not None and _alive(box):
-            try:
-                # The dialog owns it; the next arrow shows it again. Never hidden while the
-                # user types in it (hiding would take the keyboard away mid-value).
-                if not box.hasFocus():
-                    box.hide()
-            except RuntimeError:
-                pass
+        self.drop_box()
 
 
 def _end_transaction(doc, abort=False):
@@ -612,9 +982,37 @@ class Panel:
         doc.openTransaction(transaction)
         self._closed = False
         set_current(self)
+        # Digits typed with the mouse over the 3D view go into the dialog's value box
+        # (TypeOverView); removed with cleanup() / _close().
+        try:
+            self.typing = TypeOverView(self)
+        except Exception as exc:
+            warn("typing over the view: %s" % exc)
+            self.typing = None
 
     def finish_layout(self):
         self.layout.addRow(self.message)
+
+    # -- a number typed over the 3D view --------------------------------------------------
+    def typing_box(self):
+        """The value box a number typed over the 3D view goes to: the dialog's
+        ValueBoxes' current one (self.value_boxes), or None."""
+        boxes = getattr(self, "value_boxes", None)
+        if isinstance(boxes, ValueBoxes):
+            return boxes.current()
+        return None
+
+    def typing_field(self):
+        """The dialog field such a number goes to when no box is shown (override), or None."""
+        return None
+
+    def _remove_typing(self):
+        typing, self.typing = getattr(self, "typing", None), None
+        if typing is not None:
+            try:
+                typing.remove()
+            except Exception:
+                pass
 
     # -- live preview ---------------------------------------------------------
     def schedule(self):
@@ -742,6 +1140,7 @@ class Panel:
     def _close(self):
         if _OPEN["dialog"] is self:
             _OPEN["dialog"] = None
+        self._remove_typing()
         Gui.Control.closeDialog()
         # Fusion clears the selection when a command ends. A selection left behind
         # was picked up by the next command (a second Extrude re-used the first
@@ -760,3 +1159,4 @@ class Panel:
     def cleanup(self):
         """Remove draggers/observers (override, call super)."""
         self._closed = True
+        self._remove_typing()

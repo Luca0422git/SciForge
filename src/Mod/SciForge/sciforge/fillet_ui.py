@@ -26,7 +26,7 @@ import FreeCADGui as Gui
 from . import blend, commands, log, ui_icon, ui_icon_path, warn
 from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, Panel, _end_transaction
+from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction
 
 GHOST = 75  # transparency (%) of the part before the blend while the preview is shown
 MIN_DRAG = 0.1  # mm: dragging an arrow back through its edge stops here (and it shows "mm")
@@ -307,6 +307,7 @@ class BlendPanel(Panel):
         self.error = None
         self.options = blend.default_options(self.kind)
         self.arrows = []  # (ArrowDragger, spot, origin, direction) in global coordinates
+        self.value_boxes = ValueBoxes(self)  # the value box next to each arrow
         self.fields = {}  # option name -> ValueField
         self.formula_error = ""
         self.keep = None  # blend.References of the later steps (kept on their edges)
@@ -770,8 +771,30 @@ class BlendPanel(Panel):
                     on_release=lambda d, s=spot: self._dragged(s, d, True),
                 )
                 self.arrows.append((dragger, spot, origin, direction))
+                self._attach_box(dragger, spot["what"], len(self.arrows) - 1)
         except Exception as exc:
             warn("%s arrow unavailable: %s" % (self.title, exc))
+
+    def _attach_box(self, dragger, what, index):
+        """The value box next to an arrow: the text of the size box it sets (radius, a
+        chamfer distance...), and a value or formula typed in it goes to that box. Several
+        arrows can set one size (one per edge): each has a box of its own."""
+        field = self.fields.get(what)
+        if field is None:
+            return None
+        return self.value_boxes.attach(
+            dragger,
+            "%s#%d" % (what, index),
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(what, text),
+        )
+
+    def _box_typed(self, what, text):
+        if self._closed:
+            return
+        field = self.fields.get(what)
+        if field is not None:
+            field.take_text(text)
 
     # -- display -------------------------------------------------------------------------
     # Nothing here changes a document or view property: FreeCAD records those in the undo
@@ -1012,6 +1035,7 @@ class BlendPanel(Panel):
             except Exception:
                 pass
         self._remove_arrows()
+        self.value_boxes.discard()
         if self._keys is not None:
             try:
                 self.view.removeEventCallback("SoKeyboardEvent", self._keys)

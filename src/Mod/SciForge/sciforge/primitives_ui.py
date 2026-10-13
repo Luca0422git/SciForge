@@ -27,7 +27,7 @@ from . import warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_core import nearest_snap, nice_floor, round_to
-from .taskui import DistanceField, Panel
+from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
 
 OPERATION_LABELS = [
     ("Join", "join"),
@@ -134,105 +134,9 @@ def view_scale(view, point):
         return 0.1
 
 
-class TypeOverView:
-    """Fusion: with a command open, a number typed while the mouse is over the 3D view goes
-    into the command's value (its box next to the mouse or the arrow); Fusion has no view
-    keys on the digits. FreeCAD took them as its view keys (0 isometric, 1 front, 2 top...):
-    the view jumped and the number was lost (found by the primitives QA, as by the revolve
-    QA). Digits, a minus sign and a decimal point typed on the 3D view now go into the
-    dialog's field `panel.typing_field()` (the first one replaces its text, the next ones
-    follow); the field keeps the keyboard, so Tab goes on to the next field and Enter is
-    OK. remove() when the dialog closes."""
-
-    KEYS = set("0123456789-.,")
-    BURST = 1.5  # seconds: keys this close follow each other into the same field
-
-    def __init__(self, panel):
-        self.panel = panel
-        self.last = (None, 0.0)
-        guard = self
-
-        class KeyFilter(QtCore.QObject):
-            def eventFilter(self, obj, event):
-                return guard._filter(obj, event)
-
-        self.filter = KeyFilter()
-        QtWidgets.QApplication.instance().installEventFilter(self.filter)
-
-    @staticmethod
-    def _on_view(widget):
-        while widget is not None:
-            try:
-                name = widget.metaObject().className()
-            except Exception:
-                return False
-            if name in ("Gui::View3DInventorViewer", "QOpenGLWidget", "Gui::View3DInventor"):
-                return True
-            if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox)):
-                return False
-            widget = widget.parentWidget() if isinstance(widget, QtWidgets.QWidget) else None
-        return False
-
-    def _filter(self, obj, event):
-        from .compat import QtGui
-
-        try:
-            kind = event.type()
-            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
-                return False
-            if self.panel is None or getattr(self.panel, "_closed", True):
-                return False
-            if not isinstance(event, QtGui.QKeyEvent):
-                return False
-            mods = event.modifiers()
-            if mods & (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier | QtCore.Qt.MetaModifier):
-                return False
-            text = event.text()
-            if not text or text not in self.KEYS or not isinstance(obj, QtWidgets.QWidget):
-                return False
-            if not self._on_view(obj):
-                return False
-            field = self.panel.typing_field()
-            if field is None:
-                return False
-            event.accept()  # ShortcutOverride accepted: FreeCAD's view key does not fire
-            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
-                now = time.time()
-                fresh = self.last[0] is not field or now - self.last[1] > self.BURST
-                self.last = (field, now)
-                key = event.key()
-                QtCore.QTimer.singleShot(0, lambda: self._type(field, key, text, fresh))
-            return True
-        except Exception:
-            return False
-
-    def _type(self, field, key, text, fresh):
-        from .compat import QtGui
-
-        try:
-            if self.panel is None or getattr(self.panel, "_closed", True):
-                return
-            edit = field.widget.findChild(QtWidgets.QLineEdit)
-            if edit is None:
-                return
-            if fresh or not edit.hasFocus():
-                field.widget.setFocus()
-            if fresh:
-                edit.selectAll()
-            # Sent as a key press, so the field reacts as to a person's typing.
-            press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier, text)
-            QtWidgets.QApplication.sendEvent(edit, press)
-            release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, key, QtCore.Qt.NoModifier, text)
-            QtWidgets.QApplication.sendEvent(edit, release)
-        except Exception as exc:
-            warn("typing a value: %s" % exc)
-
-    def remove(self):
-        try:
-            QtWidgets.QApplication.instance().removeEventFilter(self.filter)
-        except Exception:
-            pass
-        self.panel = None
+# Digits typed over the 3D view: taskui.TypeOverView (every dialog has it now; found here
+# first by the primitives QA). While a shape is placed they go into typing_field(), after
+# that into the value box of the handle used last (typing_box()).
 
 
 class EnterTakesNumber(QtCore.QObject):
@@ -273,12 +177,13 @@ _GRAB = {"time": 0.0}  # when a handle last took a press (one press moves one ha
 
 
 # -- the drag handle ----------------------------------------------------------------------------
-class LinearHandle:
+class LinearHandle(BoxCarrier):
     """Fusion's blue arrow you drag along a line: a ball with an arrow head, at
     origin + direction * value * scale. Drawn on top of the part, so it can be grabbed
     where the part is in front of it (a Coin dragger cannot); FreeCAD's mouse callbacks
     (view.addEventCallback, safe) only record the mouse, a Qt timer applies it (pivy
-    dragger callbacks run Python without its lock and crash FreeCAD)."""
+    dragger callbacks run Python without its lock and crash FreeCAD). It carries the
+    dialog's value box when given one (taskui.BoxCarrier)."""
 
     POLL_MS = 30
     GRAB_PIXELS = 14.0
@@ -370,6 +275,22 @@ class LinearHandle:
 
     def position(self):
         return self.point_at(self._value)
+
+    def box_geometry(self):
+        """The ball (0.3 sizes) at the handle's position, the arrow to 1.325 sizes along it
+        (turned round when the value is negative)."""
+        p = self.position()
+        sign = -1.0 if self._value * self.scale < 0 else 1.0
+        along = self.direction * sign
+        return (
+            p + along * (0.5 * self.size),
+            p - along * (0.3 * self.size),
+            p + along * (1.325 * self.size),
+            0.3 * self.size,
+        )
+
+    def box_active(self):
+        return bool(self._drag or self._hover)
 
     def value(self):
         return self._value
@@ -542,6 +463,7 @@ class LinearHandle:
                 self._pending = None
                 if self.on_release:
                     self.on_release(self._value)
+            self.follow_box()
         except Exception as exc:
             warn("handle drag: %s" % exc)
 
@@ -564,6 +486,7 @@ class LinearHandle:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        self.drop_box()
 
 
 # -- placing on the plane -------------------------------------------------------------------------------
@@ -883,7 +806,9 @@ class PlacedPanel(Panel):
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
-        self.typing = TypeOverView(self)
+        # A number typed over the view goes to the box of the handle used last, else to
+        # the READY_KEY's (Height); while placing, to typing_field().
+        self.value_boxes = ValueBoxes(self, default=self.READY_KEY)
         self.target = feature
         self.editing = feature is not None
         self.ref = None
@@ -1588,8 +1513,40 @@ class PlacedPanel(Panel):
                     scale=scale,
                     name=name,
                 )
+                self._attach_box(name)
             except Exception as exc:
                 warn("%s handle %s unavailable: %s" % (self.title, name, exc))
+
+    def _attach_box(self, name):
+        """The value box next to the handle `name`: it shows its field's text and takes a
+        value or formula typed in it (as the field does)."""
+        field = self._visible_field(name)
+        if field is None:
+            return None
+        return self.value_boxes.attach(
+            self.handles.get(name),
+            name,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(name, text),
+        )
+
+    def _box_typed(self, name, text):
+        if self._closed:
+            return
+        self._last_handle = name
+        for formula in getattr(self, "formula_inputs", []):
+            if formula.key == name:
+                formula.take(text)
+                return
+        field = self.fields.get(name)
+        if field is None:
+            return
+        try:
+            value = field.parse(text.strip().lstrip("="))
+        except ValueError as exc:
+            self.message.setText("⚠ " + str(exc))
+            return
+        field.take(value)
 
     @safe
     def _handle_dragged(self, name, apply, value):
@@ -1691,8 +1648,9 @@ class PlacedPanel(Panel):
         self.escape.remove()
         self.undo_guard.remove()
         self.enter.remove()
-        self.typing.remove()
+        self._remove_typing()
         self._remove_handles()
+        self.value_boxes.discard()
         super().cleanup()
 
 

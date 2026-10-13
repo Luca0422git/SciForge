@@ -129,7 +129,7 @@ def check_heads(what, panel):
         abs(tip.x() - tail.x()) > 40 and abs(tip.y() - tail.y()) < 6,
         ((tail.x(), tail.y()), (tip.x(), tip.y())),
     )
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     h.check("%s: one value box" % what, len(boxes) == 1, len(boxes))
     heads = head_pixels(dragger)
     h.check(
@@ -239,7 +239,7 @@ def pp_box_esc():
         h.solid_volume(),
     )
     check_heads("Press Pull at -3", p)
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if not h.check("the value box is there", len(boxes) == 1, len(boxes)):
         return
     a.type_in_box(boxes[0], "7", enter=False)
@@ -314,7 +314,7 @@ def e_grabbed():
 def e_box_zero_enter():
     """The trap found in review: 0 and Enter in the box keep Extrude open (a distance of 0
     makes nothing) and the box keeps the keyboard; Esc must still cancel then."""
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if not h.check("the value box is there", len(boxes) == 1, len(boxes)):
         return
     a.type_in_box(boxes[0], "0", enter=True)
@@ -328,7 +328,7 @@ def e_box_esc():
     h.check("0 + Enter in the box keeps Extrude open", p is not None)
     if p is not None:
         h.check("and it says why", "zero" in p.message.text(), p.message.text())
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if not h.check("the value box is there", len(boxes) == 1, len(boxes)):
         return
     h.check("the box still has the keyboard", boxes[0].hasFocus(), a.focus_name())
@@ -421,8 +421,8 @@ def pocket_red_at_once(where=""):
         )
     h.check(
         "its value box shows -6%s" % where,
-        [b.text() for b in a.value_boxes()] == [p.distance.widget.text()] if p else False,
-        [b.text() for b in a.value_boxes()],
+        [b.text() for b in a.value_boxes(arrows_only=True)] == [p.distance.widget.text()] if p else False,
+        [b.text() for b in a.value_boxes(arrows_only=True)],
     )
     h.shot("4-edit-red" + where.replace(" ", "-"))
     h.press(QtCore.Qt.Key_Escape)

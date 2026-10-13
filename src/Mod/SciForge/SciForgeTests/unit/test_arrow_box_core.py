@@ -101,6 +101,18 @@ class Spot(unittest.TestCase):
         corner = self.check_clear((700, 15), (620, 15), (780, 15), 6, view=view)
         self.assertGreater(corner[0], 780)
 
+    def test_box_keeps_off_another_handle(self):
+        # Two arrows from one corner (a pattern's two directions): the second arrow's box
+        # must not cover the first arrow either.
+        first = ((560, 388), (760, 388), 8)  # level, to the right, from the corner
+        anchor, tail, tip = (600, 380), (600, 455), (600, 305)  # upright, from the corner
+        plain = core.spot(anchor, tail, tip, 8, BOX, VIEW)
+        self.assertLess(core.clearance(first[0], first[1], rect(plain)), 8)  # it would
+        corner = core.spot(anchor, tail, tip, 8, BOX, VIEW, avoid=[first])
+        self.assertGreaterEqual(core.clearance(first[0], first[1], rect(corner)), 8)
+        self.assertGreaterEqual(core.clearance(tail, tip, rect(corner)), 8)
+        self.assertTrue(inside(corner), corner)
+
     def test_clearance(self):
         self.assertEqual(core.clearance((0, 0), (100, 0), (40, -5, 10, 10)), 0.0)  # crosses
         self.assertEqual(core.clearance((0, 0), (100, 100), (40, 40, 10, 10)), 0.0)  # inside

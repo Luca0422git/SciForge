@@ -21,7 +21,7 @@ import FreeCADGui as Gui
 
 from . import commands, hole_common, log, pickpanel, preview, shelling, ui_icon_path, warn
 from .compat import QtWidgets
-from .taskui import DistanceField
+from .taskui import DistanceField, ValueBoxes
 
 PICK_HELP = (
     "Click faces to take away (click one again to drop it).\n"
@@ -104,6 +104,7 @@ class ShellPanel(pickpanel.PickPanel):
         self.formulas = {"inside": "", "outside": ""}
         self.formula_errors = {}
         self.arrows = []  # (pickpanel.Arrow, spot, origin, direction) in global coordinates
+        self.value_boxes = ValueBoxes(self, default="inside#0")  # the box next to each arrow
         self._chains = {}
         if feature is not None:
             self.body = shelling.owner_body(feature)
@@ -449,8 +450,28 @@ class ShellPanel(pickpanel.PickPanel):
                     on_release=lambda d, w=spot["what"]: self._dragged(w, d, True),
                 )
                 self.arrows.append((dragger, spot, origin, direction))
+                self._attach_box(dragger, spot["what"], len(self.arrows) - 1)
         except Exception as exc:
             warn("Shell arrow unavailable: %s" % exc)
+
+    def _attach_box(self, dragger, what, index):
+        """The value box next to an arrow: the thickness field's text (inside or outside),
+        and a value or formula typed in it goes to that field."""
+        field = self.inside if what == "inside" else self.outside
+        return self.value_boxes.attach(
+            dragger,
+            "%s#%d" % (what, index),
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(what, text),
+        )
+
+    def _box_typed(self, what, text):
+        if self._closed:
+            return
+        for formula in self._formula_inputs:
+            if formula.key == what:
+                formula.take(text)
+                return
 
     # -- preview --------------------------------------------------------------------------
     def _preview(self):
@@ -569,6 +590,7 @@ class ShellPanel(pickpanel.PickPanel):
 
     def cleanup(self):
         self._remove_arrows()
+        self.value_boxes.discard()
         super().cleanup()
 
 

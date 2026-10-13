@@ -27,7 +27,7 @@ from . import hole_common as common
 from . import profile_pick
 from .compat import QtCore, QtGui, QtWidgets
 from .pattern_core import PatternError, default_distance
-from .taskui import ArrowDragger, DistanceField, Panel
+from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
 
 PATTERN_TYPES = [
     ("Faces", "faces"),
@@ -621,6 +621,9 @@ class PatternPanel(Panel):
         self._quiet = False
         self._syncing = False
         self.handles = {}
+        # The value box next to each handle (distance, distance 2, angle); a number typed
+        # over the view goes to the handle used last, else to the distance.
+        self.value_boxes = ValueBoxes(self, default="distance")
         self.dots = None
         self.marks = None
         self.axis_picker = None
@@ -1915,6 +1918,7 @@ class PatternPanel(Panel):
                     common.on_top(self.handles[key].root)  # Fusion never hides its arrows
                     self.handles[key].origin = origin  # tests aim at the arrow
                     self.handles[key].direction = direction
+                    self._attach_box(key)
             elif self.kind == "path":
                 path = pattern._Path(pattern.path_edges(self.options["path"]))
                 start = path.locate(center)
@@ -1932,6 +1936,7 @@ class PatternPanel(Panel):
                 common.on_top(self.handles["distance"].root)
                 self.handles["distance"].origin = origin
                 self.handles["distance"].direction = direction
+                self._attach_box("distance")
             elif self.kind == "circular":
                 point, axis = pattern.axis_of(self.options["axis"])
                 offset = center - point
@@ -1955,8 +1960,30 @@ class PatternPanel(Panel):
                     on_release=self._angle_dragged,
                 )
                 common.on_top(self.handles["angle"].root)
+                self._attach_box("angle")
         except Exception as exc:
             warn("%s handles unavailable: %s" % (self.title, exc))
+
+    def _attach_box(self, key):
+        """The value box next to the handle `key`: its field's text, and a value or formula
+        typed in it goes to that field."""
+        field = self._value_fields().get(key)
+        if field is None:
+            return None
+        return self.value_boxes.attach(
+            self.handles.get(key),
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+        )
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        for formula in self.formula_inputs:
+            if formula.key == key:
+                formula.take(text)
+                return
 
     # -- OK / Cancel -----------------------------------------------------------------------------
     def accept(self):
@@ -2012,6 +2039,7 @@ class PatternPanel(Panel):
             except Exception:
                 pass
         self._remove_handles()
+        self.value_boxes.discard()
         if self.dots is not None:
             self.dots.remove()
             self.dots = None

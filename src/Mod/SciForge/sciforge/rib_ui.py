@@ -17,7 +17,7 @@ from . import commands, curve_pick, curves, extrude, log, preview, profile_pick,
 from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .hole_common import SelectionField
-from .taskui import ArrowDragger, DistanceField, Panel
+from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
 
 safe = curve_pick.safe("rib")
 
@@ -63,6 +63,9 @@ class RibPanel(Panel):
         self.error = ""
         self.dirty = False
         self.arrows = {}
+        # The value box next to each arrow; a number typed over the view goes to the arrow
+        # used last, else to the thickness.
+        self.value_boxes = ValueBoxes(self, default="thickness")
         self.overlay = None
         self.observer = None
         self._quiet = False
@@ -426,6 +429,7 @@ class RibPanel(Panel):
                 on_drag=self._thickness_dragged,
                 on_release=self._thickness_dragged,
             )
+            self._attach_box("thickness")
             if self.options["depth_type"] == "depth":
                 self.arrows["depth"] = ArrowDragger(
                     mid + across * (half + gap),
@@ -435,8 +439,31 @@ class RibPanel(Panel):
                     on_drag=self._depth_dragged,
                     on_release=self._depth_dragged,
                 )
+                self._attach_box("depth")
         except Exception as exc:
             warn("%s arrows unavailable: %s" % (self.title, exc))
+
+    def _attach_box(self, key):
+        """The value box next to the arrow `key`: the field's text, and a value typed in it
+        goes to that field."""
+        field = getattr(self, key)
+        return self.value_boxes.attach(
+            self.arrows.get(key),
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+        )
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        field = getattr(self, key)
+        try:
+            value = field.parse(text.strip().lstrip("="))
+        except ValueError as exc:
+            self.message.setText("⚠ " + str(exc))
+            return
+        field.take(value)
 
     @safe
     def _thickness_dragged(self, distance):
@@ -529,6 +556,7 @@ class RibPanel(Panel):
             except Exception:
                 pass
         self._remove_arrows()
+        self.value_boxes.discard()
         self._hide_shown()
         super().cleanup()
 

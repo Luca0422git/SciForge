@@ -107,7 +107,7 @@ def opened_at_zero():
     h.check("R5: the dialog says what to do", p.info.text() == zero_hint(), p.info.text())
     h.check("R5: no warning at 0", p.message.text() == "", p.message.text())
     h.check("R6: the sketch stays visible after E", sketch_shown() is True)
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     h.check("R3: one value box next to the arrow", len(boxes) == 1, len(boxes))
     if boxes and p.dragger is not None:
         box = boxes[0]
@@ -159,7 +159,7 @@ def live_drag():
         q = panel()
         if q is None:
             return
-        boxes = a.value_boxes()
+        boxes = a.value_boxes(arrows_only=True)
         box = boxes[0] if boxes else None
         samples.append(
             {
@@ -222,7 +222,7 @@ def live_checks():
         near(h.solid_volume(), AREA * value, 1e-6),
         (h.solid_volume(), value),
     )
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     h.check(
         "R3: the box still shows the dialog's value",
         boxes and boxes[0].text() == p.distance.widget.text(),
@@ -244,7 +244,7 @@ def zero_again():
     h.check("R5: the arrow stays at 0", "distance" in p.draggers, list(p.draggers))
     h.check("R5: the hint is back, no warning", p.info.text() == zero_hint() and
             p.message.text() == "", (p.info.text(), p.message.text()))
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     h.check("R3: the box shows 0", boxes and boxes[0].text() == p.distance.widget.text(),
             boxes and boxes[0].text())
 
@@ -269,7 +269,7 @@ def symmetric_shown():
     h.check("symmetric 20 whole: 40 x 30 x 20", near(h.solid_volume(), AREA * 20), h.solid_volume())
     h.check("the arrow sits at half (10)", p.dragger and near(p.dragger.distance(), 10.0),
             p.dragger and p.dragger.distance())
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     h.check("R3: the box shows the whole length (the dialog's 20)",
             boxes and boxes[0].text() == p.distance.widget.text() and "20" in boxes[0].text(),
             boxes and boxes[0].text())
@@ -286,7 +286,7 @@ def two_sides_shown():
     h.check("side one alone is shown meanwhile (20 up)", near(h.solid_volume(), AREA * 20),
             h.solid_volume())
     h.check("side two's arrow is there", "distance2" in p.draggers, list(p.draggers))
-    h.check("two value boxes (one per arrow)", len(a.value_boxes()) == 2, len(a.value_boxes()))
+    h.check("two value boxes (one per arrow)", len(a.value_boxes(arrows_only=True)) == 2, len(a.value_boxes(arrows_only=True)))
     h.task_button("OK")
 
 
@@ -312,7 +312,7 @@ def one_side_again():
 def box_type_15():
     p = panel()
     h.check("one side 20: 24000", near(h.solid_volume(), AREA * 20), h.solid_volume())
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if not h.check("the value box is there", len(boxes) == 1, len(boxes)):
         return
     a.type_in_box(boxes[0], "15", enter=False)
@@ -332,7 +332,7 @@ def box_type_formula():
     from sciforge import parameters
 
     parameters.add_user(App.ActiveDocument, "width", "mm", "12")  # in Change Parameters
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if not h.check("the value box is there", len(boxes) == 1, len(boxes)):
         return
     s["feature"] = panel().target
@@ -411,7 +411,7 @@ def from_sketch_opened():
     h.check("R5: starts at 0 here too", near(p.distance.value(), 0.0) and p.target is None,
             (p.distance.value(), p.target))
     h.check("R6: the sketch E was pressed in stays visible", sketch_shown("square") is True)
-    h.check("R3: the value box is there", len(a.value_boxes()) == 1, len(a.value_boxes()))
+    h.check("R3: the value box is there", len(a.value_boxes(arrows_only=True)) == 1, len(a.value_boxes(arrows_only=True)))
     ui.type_into(p.distance.widget, "5")
 
 
