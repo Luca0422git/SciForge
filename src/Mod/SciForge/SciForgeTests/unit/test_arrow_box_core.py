@@ -113,6 +113,21 @@ class Spot(unittest.TestCase):
         self.assertGreaterEqual(core.clearance(tail, tip, rect(corner)), 8)
         self.assertTrue(inside(corner), corner)
 
+    def test_handle_size_follows_the_screen_scale(self):
+        # 0.7 mm per pixel (a 400 mm part after Fit): about 75 px for the whole arrow.
+        size = core.handle_size(0.7)
+        self.assertAlmostEqual(size, 0.7 * core.ARROW_PIXELS)
+        self.assertGreaterEqual(2 * core.REACH * size / 0.7, 50.0)
+        # A 40 x 30 x 10 box (0.07 mm per pixel): the same on the screen.
+        self.assertAlmostEqual(core.handle_size(0.07), 0.07 * core.ARROW_PIXELS)
+
+    def test_handle_size_stays_on_a_tiny_part_and_off_a_short_edge(self):
+        # A 4 mm part: the arrow stays about 1 mm long instead of flying off the part.
+        self.assertEqual(core.handle_size(0.006), core.MIN_SIZE)
+        # A short picked edge (12 mm): the whole arrow is at most about half of it.
+        size = core.handle_size(0.7, hi=12.0 / 6.0)
+        self.assertLessEqual(2 * core.REACH * size, 6.0 + 1e-9)
+
     def test_clearance(self):
         self.assertEqual(core.clearance((0, 0), (100, 0), (40, -5, 10, 10)), 0.0)  # crosses
         self.assertEqual(core.clearance((0, 0), (100, 100), (40, 40, 10, 10)), 0.0)  # inside

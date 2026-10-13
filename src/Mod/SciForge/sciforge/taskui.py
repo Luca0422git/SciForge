@@ -15,6 +15,7 @@
 - Panel: a task-dialog base that wraps the edit in one undo step: OK keeps it,
   Cancel/Esc removes it again, like Fusion.
 """
+import math
 import re
 import time
 
@@ -230,6 +231,49 @@ def view_widget():
     except Exception:
         pass
     return None
+
+
+def mm_per_pixel(view, point):
+    """How many millimetres one pixel of the 3D view covers at the 3D `point`: from the
+    camera (orthographic: its height over the view's height; perspective: the width of the
+    view at the point's depth), so a handle can be given a size that looks the same on the
+    screen whatever the part is. Falls back to measuring two pixels of the view."""
+    try:
+        from pivy import coin
+
+        camera = view.getCameraNode()
+        gl = view_widget()
+        ratio = (gl.devicePixelRatioF() if gl is not None else 1.0) or 1.0
+        height_px = max(float(view.getSize()[1]) / ratio, 1.0)
+        if camera.isOfType(coin.SoOrthographicCamera.getClassTypeId()):
+            height = float(camera.height.getValue())
+        else:
+            position = App.Vector(*camera.position.getValue().getValue())
+            look = App.Vector(view.getViewDirection())
+            depth = max((App.Vector(point) - position).dot(look), 1e-6)
+            height = 2.0 * depth * math.tan(float(camera.heightAngle.getValue()) / 2.0)
+        if height > 0:
+            return height / height_px
+    except Exception:
+        pass
+    try:
+        x, y = view.getPointOnViewport(App.Vector(point))
+        a = view.getPoint((int(x), int(y)))
+        b = view.getPoint((int(x) + 10, int(y)))
+        return max((a - b).Length / 10.0, 1e-6)
+    except Exception:
+        return 0.1
+
+
+def handle_size_at(view, point, pixels=None, lo=None, hi=None):
+    """The size (mm) of a drag arrow at the 3D `point` that looks the same on the screen
+    whatever the part is (arrow_box_core.handle_size, with the view's own scale).
+    `hi` (mm) caps it for a short picked edge, `lo` keeps it visible on a tiny part."""
+    from . import arrow_box_core
+
+    pixels = arrow_box_core.ARROW_PIXELS if pixels is None else pixels
+    lo = arrow_box_core.MIN_SIZE if lo is None else lo
+    return arrow_box_core.handle_size(mm_per_pixel(view, point), pixels, lo, hi)
 
 
 BOX_TAKEN = {"time": 0.0}  # when a click elsewhere last took a value typed in an arrow's box

@@ -903,12 +903,23 @@ def arrow_spots(kind, info, refs, options, toward=None):
             face = element(info.shape, first_face)
             index = 1 if face is not None and face.isSame(data["faces"][1]) else 0
         elif toward is not None:
-            index = 0 if data["normals"][0].dot(toward) >= data["normals"][1].dot(toward) else 1
+            index = toward_face(data["normals"], toward)
         half = max(data["gamma"] / 2.0, math.radians(5))
         per_unit = min(max(1.0 / math.tan(half), 0.2), 5.0)
         return [side(index, "radius", per_unit)]
     ref = reference_face(info, names[0], bool(options.get("flip")))
-    spots = [side(ref, "distance", 1.0)]
     if options.get("chamfer_type") == "two":
-        spots.append(side(1 - ref, "distance2", 1.0))
-    return spots
+        # One arrow per face: each sets the distance measured on its own face.
+        return [side(ref, "distance", 1.0), side(1 - ref, "distance2", 1.0)]
+    # Equal Distance, and Distance and Angle: one arrow, on the face toward the viewer (on
+    # the reference face it was invisible behind the part for the top-back edge of a box in
+    # the iso view; Luca: "the chamfer tool doesn't have an arrow to drag"). For Distance
+    # and Angle it still sets Distance 1, which is measured on the reference face.
+    index = ref if toward is None else toward_face(data["normals"], toward)
+    return [side(index, "distance", 1.0)]
+
+
+def toward_face(normals, toward):
+    """Which of an edge's two faces (0 or 1) faces the viewer more: the one whose normal
+    points most along `toward` (out of the screen). An arrow drawn on it can be seen."""
+    return 0 if normals[0].dot(toward) >= normals[1].dot(toward) else 1

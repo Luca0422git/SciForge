@@ -101,6 +101,20 @@ class MessageTests(unittest.TestCase):
                 "chamfer", info, ["Edge1"], {"chamfer_type": "angle", "distance": 1, "angle": 180}
             )
 
+    def test_arrow_goes_on_the_face_toward_the_viewer(self):
+        class Vec:
+            def __init__(self, x, y, z):
+                self.v = (x, y, z)
+
+            def dot(self, other):
+                return sum(a * b for a, b in zip(self.v, other.v))
+
+        top, back = Vec(0, 0, 1), Vec(0, 1, 0)
+        iso = Vec(1, -1, 1)  # out of the screen in the default iso view
+        self.assertEqual(blend.toward_face([top, back], iso), 0)
+        self.assertEqual(blend.toward_face([back, top], iso), 1)
+        self.assertEqual(blend.toward_face([top, back], Vec(0, 1, 0.1)), 1)
+
     def test_angle_chamfer_must_reach_the_other_face(self):
         """Distance and Angle: the bevel leaves the measured face at the angle and meets the
         other face only if angle + corner angle < 180 (below 90 degrees on a box edge)."""

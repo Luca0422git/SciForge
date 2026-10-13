@@ -26,7 +26,7 @@ import FreeCADGui as Gui
 from . import blend, commands, log, ui_icon, ui_icon_path, warn
 from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction
+from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction, handle_size_at
 
 GHOST = 75  # transparency (%) of the part before the blend while the preview is shown
 MIN_DRAG = 0.1  # mm: dragging an arrow back through its edge stops here (and it shows "mm")
@@ -751,9 +751,17 @@ class BlendPanel(Panel):
             placement = self.body.getGlobalPlacement() if self.body else App.Placement()
             local_toward = placement.Rotation.inverted().multVec(toward)
             spots = blend.arrow_spots(self.kind, self.info, self.refs, self.options, local_toward)
-            box = self.info.shape.BoundBox
-            size = max(1.5, min(box.DiagonalLength * 0.05, 8.0))
+            # The arrow looks the same size on the screen whatever the part is (about 75 px
+            # after Fit, like Extrude's), but never longer than about half the picked edge
+            # (it would dwarf a short one) and never shorter than about 1 mm (a tiny part):
+            # at 8 mm it was 16 px on a 400 mm part, and 1.5 mm put it off a 4 mm part.
+            longest = self.info.shape.BoundBox.DiagonalLength * 0.3
+            if self.refs and self.refs[0].startswith("Edge"):
+                edge = blend.element(self.info.shape, self.refs[0])
+                if edge is not None and edge.Length > 1e-6:
+                    longest = edge.Length
             for spot in spots:
+                size = handle_size_at(view, placement.multVec(spot["point"]), hi=longest / 6.0)
                 # The arrow's inner tip sits on the line where the blend starts; it lies on the
                 # face (lifted a little) and points away from the edge.
                 local = (

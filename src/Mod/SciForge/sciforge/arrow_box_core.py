@@ -22,6 +22,22 @@ REACH = 1.5
 HEAD = 0.25
 GAP = 6.0  # pixels between the arrow (its heads included) and the box
 EDGE = 2.0  # pixels kept free at the view's border
+# A drag arrow's size on the screen: Fusion's arrows look the same size whatever the part
+# is, about this many pixels for one arrow size (the whole arrow is 2 * REACH sizes long:
+# about 75 px). Extrude's arrows come out near this after Fit.
+ARROW_PIXELS = 25.0
+MIN_SIZE = 0.35  # mm: the whole arrow is at least about 1 mm long
+
+
+def handle_size(mm_per_pixel, pixels=ARROW_PIXELS, lo=MIN_SIZE, hi=None):
+    """The size (mm) of a drag arrow that shows `pixels` pixels per size on a screen where
+    one pixel is `mm_per_pixel` mm, kept between `lo` and `hi` (mm). `hi` stops the arrow
+    from dwarfing a short picked edge (about half its length for the whole arrow: pass its
+    length / (4 * REACH)); `lo` keeps it visible on a tiny part."""
+    size = max(float(mm_per_pixel), 0.0) * float(pixels)
+    if hi is not None:
+        size = min(size, max(float(hi), 1e-6))
+    return max(size, float(lo))
 
 
 def _segment_point(a, b, p):
