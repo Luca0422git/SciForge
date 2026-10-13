@@ -1102,7 +1102,8 @@ class ExtrudePanel(Panel):
             if wanted and self.options.get(name) is None and self.active != name:
                 self.activate(name)
                 new_geometry = True
-        self._auto_operation()
+        # The automatic operation is decided when the preview is rebuilt (_apply): it tests
+        # every body in the way, too slow for each mouse move of a drag.
         self.dirty = True
         if new_geometry:
             self._geometry_changed = True
@@ -1127,6 +1128,7 @@ class ExtrudePanel(Panel):
     def _apply(self):
         if not self.profiles:
             return
+        self._auto_operation()
         self.waiting = ""
         try:
             before = self.target
