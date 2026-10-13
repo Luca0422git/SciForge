@@ -50,13 +50,22 @@ def _rgba(hex_color):
     return (value << 8) | 0xFF
 
 
-# Fusion's sketch colours, made for SciForge's dark 3D view.
+# Fusion's sketch colours, made for SciForge's dark 3D view. Fusion: blue until fully
+# defined, then black (white on a dark background); fixed geometry green; construction
+# orange; projected purple. The exact shades are SciForge's own (Fusion's are not
+# published): checked only by eye so far.
 BLUE = "#5cb3ff"  # curves that can still move (under-constrained)
 WHITE = "#f0f0f0"  # fully constrained curves, dimension text
+GREEN = "#4ad66d"  # fixed curves and points (Fix/Unfix); FreeCAD has no colour for them
 ORANGE = "#f5a142"  # construction
 PURPLE = "#c084fc"  # projected / included geometry
 GLYPH = "#9fe0a8"  # constraint symbols
 DRIVEN = "#9fb4cc"  # driven (reference) dimensions
+# Selected and hovered curves: FreeCAD's own dark-theme shades, pinned here so they stay
+# apart from the under-constrained blue whatever FreeCAD theme the user had (its light
+# theme hovers in green, which would read as "fixed"). Fusion's are unknown (a guess).
+SELECT = "#3b5bdb"  # selected curves and points (also the part's selection colour)
+HOVER = "#246eab"  # under the pointer
 
 # (group, kind, name, value) set while SciForge is on; old values come back in disable().
 PARAMS = [
@@ -91,6 +100,9 @@ PARAMS = [
     (VIEW, "Unsigned", "NonDrivingConstrDimColor", _rgba(DRIVEN)),
     (VIEW, "Unsigned", "CursorTextColor", _rgba(WHITE)),
     (VIEW, "Unsigned", "CursorCrosshairColor", _rgba(WHITE)),
+    # a selected or hovered curve must be told apart from an under-constrained one
+    (VIEW, "Unsigned", "SelectionColor", _rgba(SELECT)),
+    (VIEW, "Unsigned", "HighlightColor", _rgba(HOVER)),
     # FreeCAD's pop-up balloons at the bottom of the window ("Autoconstraints cause
     # redundancy. Removing them" when a line from the origin along an axis snaps twice,
     # "Sub shape not found: Sketch.?InternalFace1"...): FreeCAD's wording, nothing a
@@ -702,6 +714,7 @@ class SketchSession:
         self.areas = AreaPicker(self)
         ensure_areas(sketch)  # an older sketch: its areas can be clicked after Finish Sketch
         self.display = DisplayOptions(self)
+        self.fixed = FixedColour(self)
         self.polygon = PolygonPreview(self)
         from .sketch_line import LineChain
 
@@ -746,6 +759,7 @@ class SketchSession:
     def changed(self, prop):
         if self.infer is not None:
             self.infer.invalidate()
+        self.fixed.invalidate()
         self._refresh.start()
 
     def _refreshed(self):
@@ -755,6 +769,7 @@ class SketchSession:
             self.shading.update()
             self.areas.refresh(self.shading.shaded)
             self.display.apply()
+            self.fixed.apply()
         except Exception as exc:
             warn("sketch display: %s" % exc)
 
@@ -1194,7 +1209,7 @@ class SketchSession:
             pass
         self.close_editor(commit=True)
         remove_stray_editors(self.gl)
-        for part in (self.polygon, self.areas, self.shading, self.display):
+        for part in (self.polygon, self.areas, self.shading, self.display, self.fixed):
             try:
                 part.remove()
             except Exception as exc:
@@ -1302,6 +1317,8 @@ class _ViewFilter(QtCore.QObject):
             if session.infer is not None and session.infer.mouse(obj, event):
                 return True
             kind = event.type()
+            if kind in _REDRAWS:
+                session.fixed.poke()  # FreeCAD recolours curves after these
             if kind == QtCore.QEvent.MouseMove:
                 if event.buttons() == QtCore.Qt.NoButton:
                     session.areas.moved(event.position().toPoint())
@@ -1337,6 +1354,14 @@ class _ViewFilter(QtCore.QObject):
         except Exception as exc:
             warn("sketch view: %s" % exc)
         return False
+
+
+_REDRAWS = (
+    QtCore.QEvent.MouseMove,
+    QtCore.QEvent.MouseButtonPress,
+    QtCore.QEvent.MouseButtonRelease,
+    QtCore.QEvent.Leave,
+)
 
 
 # Keys that mean something else in a sketch than on the part (Fusion): M moves/copies
@@ -2021,6 +2046,195 @@ class DisplayOptions:
         except Exception:
             pass
         self.saved_styles = {}
+
+
+# -- fixed curves and points (green) ---------------------------------------------------
+def _rgb(hex_color):
+    value = int(hex_color.lstrip("#"), 16)
+    return ((value >> 16) / 255.0, ((value >> 8) & 0xFF) / 255.0, (value & 0xFF) / 255.0)
+
+
+def point_slots(type_id):
+    """The point markers FreeCAD draws for a geometry, in its order: a point, a line's
+    or spline's start and end, a circle's or ellipse's centre, an arc's start, end and
+    centre (EditModeGeometryCoinConverter)."""
+    if type_id == "Part::GeomPoint":
+        return (1,)
+    if type_id in ("Part::GeomLineSegment", "Part::GeomBSplineCurve"):
+        return (1, 2)
+    if type_id in ("Part::GeomCircle", "Part::GeomEllipse"):
+        return (3,)
+    if type_id.startswith("Part::GeomArcOf"):
+        return (1, 2, 3)
+    return ()
+
+
+def fixed_items(constraints):
+    """(blocked curve indices, locked (geo, pos) points) from a sketch's constraints.
+    FreeCAD's Block fixes a curve; Lock is a DistanceX and a DistanceY from the origin
+    to a point (SciForge's Fix/Unfix: Block on curves, Lock on points)."""
+    blocked, dx, dy = set(), set(), set()
+    for c in constraints:
+        if c.Type == "Block":
+            blocked.add(c.First)
+        elif c.Type in ("DistanceX", "DistanceY") and c.First == -1 and c.FirstPos == 1:
+            if c.Second >= 0:
+                (dx if c.Type == "DistanceX" else dy).add((c.Second, c.SecondPos))
+    return blocked, dx & dy
+
+
+class FixedColour:
+    """Fusion shows fixed geometry green. FreeCAD has no colour for that: a blocked curve
+    or a locked point is fully constrained, so it paints it white here. After each of
+    FreeCAD's own recolourings (a mouse move, a click, a selection change, a solve) the
+    fixed curves and points are painted green in the sketch's Coin material nodes. A
+    selected or hovered fixed curve keeps FreeCAD's selection colours."""
+
+    SLOW_MS = 300
+
+    def __init__(self, session):
+        self.session = session
+        self._items = None  # (blocked curves, locked points), rebuilt after a change
+        self._map = None  # material index per curve / point, rebuilt after a change
+        self._poked = False
+        self._timer = QtCore.QTimer()
+        self._timer.setInterval(self.SLOW_MS)
+        self._timer.timeout.connect(self.apply)
+        self._observer = _SelectionPoke(self)
+        try:
+            Gui.Selection.addObserver(self._observer)
+        except Exception as exc:
+            warn("sketch fixed colour: %s" % exc)
+
+    def invalidate(self):
+        self._items = None
+        self._map = None
+
+    def poke(self):
+        """FreeCAD is about to recolour (a mouse event, a selection change): paint again
+        right after it, from the event loop. Nothing to do while nothing is fixed."""
+        try:
+            if self._poked or self.session.closed:
+                return
+            if self._items is not None and not (self._items[0] or self._items[1]):
+                return
+            self._poked = True
+            QtCore.QTimer.singleShot(0, self._apply_poked)
+        except Exception as exc:
+            warn("sketch fixed colour: %s" % exc)
+
+    def _apply_poked(self):
+        self._poked = False
+        self.apply()
+
+    def _fixed(self):
+        if self._items is None:
+            self._items = fixed_items(self.session.sketch.Constraints)
+        return self._items
+
+    def _mapping(self):
+        """{sublayer: {geo: material index}} for the normal (0) and construction (1)
+        curve layers and {(geo, pos): point index}, as FreeCAD lays its Coin nodes out:
+        curves per sublayer in geometry order, points of every geometry in order."""
+        if self._map is not None:
+            return self._map
+        sketch = self.session.sketch
+        internal = set()
+        for c in sketch.Constraints:
+            if c.Type == "InternalAlignment":
+                internal.add(c.First)
+        curves = {0: {}, 1: {}}
+        counts = {0: 0, 1: 0}
+        points = {}
+        n = 0
+        for i, geo in enumerate(sketch.Geometry):
+            type_id = geo.TypeId
+            if type_id != "Part::GeomPoint" and i not in internal:
+                try:
+                    sub = 1 if sketch.getConstruction(i) else 0
+                except Exception:
+                    sub = 0
+                curves[sub][i] = counts[sub]
+                counts[sub] += 1
+            for pos in point_slots(type_id):
+                points[(i, pos)] = n
+                n += 1
+        self._map = (curves, points)
+        return self._map
+
+    def apply(self):
+        if self.session.closed:
+            return
+        try:
+            blocked, locked = self._fixed()
+            if not blocked and not locked:
+                self._timer.stop()
+                return
+            if not self._timer.isActive():
+                self._timer.start()
+            root = self.session.view.getSceneGraph()
+            curves, points = self._mapping()
+            for sub, name in ((0, "CurvesMaterials0"), (1, "CurvesMaterials1")):
+                self._paint(root, name, [curves[sub][g] for g in blocked if g in curves[sub]])
+            self._paint(root, "PointsMaterials_0", [points[k] for k in locked if k in points])
+        except Exception as exc:
+            self._timer.stop()
+            warn("sketch fixed colour: %s" % exc)
+
+    def _paint(self, root, name, indices):
+        """Paint the given entries of a material node green, unless FreeCAD painted them
+        as selected or hovered."""
+        if not indices:
+            return
+        from pivy import coin
+
+        node, _ = find_node(root, name)
+        if node is None:
+            return
+        field = node.diffuseColor
+        values = field.getValues(0)
+        green = _rgb(GREEN)
+        keep = (_rgb(SELECT), _rgb(HOVER))
+        for i in indices:
+            if i >= len(values):
+                continue
+            current = values[i].getValue()
+            if _same_colour(current, green) or any(_same_colour(current, k) for k in keep):
+                continue
+            field.set1Value(i, coin.SbColor(*green))
+
+    def remove(self):
+        self._timer.stop()
+        try:
+            Gui.Selection.removeObserver(self._observer)
+        except Exception:
+            pass
+
+
+def _same_colour(a, b, tol=0.02):
+    return all(abs(float(a[i]) - b[i]) <= tol for i in range(3))
+
+
+class _SelectionPoke:
+    """A selection change makes FreeCAD recolour the sketch: paint the fixed ones again."""
+
+    def __init__(self, fixed):
+        self.fixed = fixed
+
+    def addSelection(self, *_args):
+        self.fixed.poke()
+
+    def removeSelection(self, *_args):
+        self.fixed.poke()
+
+    def clearSelection(self, *_args):
+        self.fixed.poke()
+
+    def setPreselection(self, *_args):
+        self.fixed.poke()
+
+    def removePreselection(self, *_args):
+        self.fixed.poke()
 
 
 def _bools(text):
