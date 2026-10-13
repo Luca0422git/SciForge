@@ -328,6 +328,17 @@ def f7_made():
     h.check("F7 OK made the step", len(embosses()) == 1 and panel() is None, embosses())
     b = s["body"].Shape.BoundBox
     h.check("F7 the letters rise above the ball", b.ZMax > 20.0 + 0.4, b.ZMax)
+    from sciforge import parameters
+
+    rows = [
+        r
+        for r in parameters.model_parameters(App.ActiveDocument)
+        if r["owner"].startswith("Emboss")
+    ]
+    labels = [r["label"] for r in rows]
+    h.check("F7 its depth is a model parameter (Change Parameters)", "Depth" in labels, labels)
+    depth = next((r["value"] for r in rows if r["label"] == "Depth"), None)
+    h.check("F7 0.5 mm there", depth is not None and abs(depth - 0.5) < 1e-9, depth)
 
 
 for step in (f3_preview, f3_check, f4_check, f5_off_the_face, f5_back_on, f7_projected):

@@ -1828,18 +1828,32 @@ def sync_all():
         pass
 
 
-def remove_orphans(doc_name):
-    """Texts whose sketch was deleted go too."""
+def remove_orphans(doc_name, tries=0):
+    """Texts whose sketch was deleted (by FreeCAD's own Delete; SciForge's takes them along)
+    go too, as their own undo step, like the copies of a deleted pattern."""
     try:
         doc = App.getDocument(doc_name)
     except Exception:
         return
     try:
+        if getattr(doc, "Transacting", False) or getattr(doc, "Restoring", False):
+            return  # an undo / redo / opening brings its texts along itself
+        if getattr(doc, "Recomputing", False) or doc.HasPendingTransaction:
+            if tries < 50:
+                QtCore.QTimer.singleShot(100, lambda: remove_orphans(doc_name, tries + 1))
+            return
         lost = [o for o in doc.Objects if text.is_text(o) and o.Sketch is None]
-        for obj in lost:
-            doc.removeObject(obj.Name)
-        if lost:
-            log("removed %d text(s) whose sketch was deleted" % len(lost))
+        if not lost:
+            return
+        doc.openTransaction("Delete texts of a deleted sketch")
+        try:
+            for obj in lost:
+                text.remove(obj)
+        except Exception:
+            doc.abortTransaction()
+            raise
+        doc.commitTransaction()
+        log("removed %d text(s) whose sketch was deleted" % len(lost))
     except Exception as exc:
         warn("text: %s" % exc)
 

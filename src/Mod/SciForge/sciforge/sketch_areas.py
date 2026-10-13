@@ -15,7 +15,6 @@ closes the sketch, profiles() finds the area of the closed sketch that holds eac
 Mouse events come from the sketch's view filter (sketch_mode._ViewFilter); everything that
 looks at the sketch runs later from a Qt timer, never inside FreeCAD's own click handling.
 """
-
 import FreeCAD as App
 import FreeCADGui as Gui
 

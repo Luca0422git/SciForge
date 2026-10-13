@@ -89,9 +89,13 @@ def _selection(tip):
 def _picks():
     """[(object, short name, picked point or None)] of the selection, through body paths."""
     from . import profile_pick
+    from . import text as sketch_text
 
     found = []
     for sel in Gui.Selection.getSelectionEx():
+        if not sel.SubElementNames and sketch_text.is_text(sel.Object):
+            found.append((sel.Object, "", None))  # a sketch text picked as a whole
+            continue
         points = list(getattr(sel, "PickedPoints", []) or [])
         for i, name in enumerate(sel.SubElementNames):
             obj, short = profile_pick.resolve(sel.Object, name)
@@ -279,26 +283,32 @@ class PressPullPanel(Panel):
 
     def _take(self, picks):
         """Use clicked faces/edges: the first pick decides what Press Pull does."""
+        from . import text as sketch_text
+
         if self.mode is None:
             areas = [
                 (obj, short)
                 for obj, short, _point in picks
                 if obj.isDerivedFrom("Sketcher::SketchObject") and short.startswith("InternalFace")
             ]
+            for obj, _short, _point in picks:  # a sketch text is one profile, as a whole
+                if sketch_text.is_text(obj) and (obj, "") not in areas:
+                    areas.append((obj, ""))
             if areas:
                 # Fusion: Press Pull on sketch profiles is an Extrude of all of them.
                 QtCore.QTimer.singleShot(0, lambda: self._to_extrude(areas))
                 return
         for obj, short, point in picks:
-            if obj.isDerivedFrom("Sketcher::SketchObject"):
-                continue  # sketch lines are not part of the solid
+            if obj.isDerivedFrom("Sketcher::SketchObject") or sketch_text.is_text(obj):
+                continue  # sketch lines and texts are not part of the solid
             if short.startswith("Face"):
                 self._face_picked(obj, short, point)
             elif short.startswith("Edge"):
                 self._edge_picked(obj, short)
 
     def _to_extrude(self, profiles):
-        """Close Press Pull and start Extrude on the sketch areas [(sketch, "InternalFaceN")]."""
+        """Close Press Pull and start Extrude on the sketch areas [(sketch, "InternalFaceN")]
+        (a sketch text: (text, ""))."""
         if self._closed:
             return
         try:

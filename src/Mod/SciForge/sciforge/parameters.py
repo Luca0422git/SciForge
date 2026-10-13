@@ -41,6 +41,13 @@ SCIFORGE_PROPS = {
         ("FactorY", "Y Scale"),
         ("FactorZ", "Z Scale"),
     ],
+    "SketchText": [("TextHeight", "Text Height")],
+    "Emboss": [
+        ("Depth", "Depth"),
+        ("HorizontalDistance", "Horizontal Distance"),
+        ("VerticalDistance", "Vertical Distance"),
+        ("RotationAngle", "Rotation Angle"),
+    ],
 }
 DIMENSION_TYPES = {"Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle"}
 
