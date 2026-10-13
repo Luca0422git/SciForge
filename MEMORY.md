@@ -2084,6 +2084,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   good). Both are given back when SciForge goes off and at a start in another workbench.
   `run_tests.sh --scenario a,b` runs several scenarios in one profile, as CI does: use it to
   reproduce such failures (sketch_areas,sketch_areas_more fails on the old code).
+- Final state: CI run #97 green on 6cda6e43f8 (unit, golden, smoke, journey, all scenario
+  shards, Windows golden); quick update artifact `SciForge-quick-update-6cda6e43f89d9d849ff78b57deb7a3033e7d3ebd`
+  for Luca. No Windows full build was started (the compile cache is checked on the next one).
 - Old scenarios that relied on the automatic 10 mm or on a preview right after E were updated
   (extrude_multibody*, sketch_areas*). Unit 330, golden 294 + 1 xfail.
 
