@@ -1,0 +1,3 @@
+# The test fixtures are small input files; the repository ignores *.obj (object code), these
+# are Wavefront meshes.
+!*.obj

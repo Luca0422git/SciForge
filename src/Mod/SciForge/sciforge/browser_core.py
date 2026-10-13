@@ -42,6 +42,10 @@ CONSTRUCTION_TYPES = {
 SKETCH_TYPES = {"Sketcher::SketchObject"}
 BODY_TYPES = {"PartDesign::Body"}
 COMPONENT_TYPES = {"App::Part"}
+# Fusion lists mesh bodies beside solid bodies (Bodies folder) and canvases (reference
+# images) in a Canvases folder of their own.
+MESH_TYPES = {"Mesh::Feature"}
+CANVAS_TYPES = {"Image::ImagePlane"}
 ORIGIN_ROLES = ("Origin", "X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane")
 ORIGIN_LABELS = {
     "Origin": "O",
@@ -134,7 +138,7 @@ def _folders(objects, active_body, component):
     """The folders of one component (``component``: its name, None for the root): Analysis
     (root only), Origin, Bodies, Sketches, Construction, in Fusion's order, each only once
     it has something in it. ``objects``: the rows that belong to this component."""
-    bodies, sketches, construction, origin, analysis = [], [], [], [], []
+    bodies, sketches, construction, origin, analysis, canvases = [], [], [], [], [], []
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
         # Fusion's design has one origin. FreeCAD gives every body its own: show the active
@@ -154,6 +158,10 @@ def _folders(objects, active_body, component):
             if node["active"]:
                 node["tip"] = node["tip"] or "Active body: new features go here"
             bodies.append(node)
+        elif type_id in MESH_TYPES:
+            bodies.append(_item("mesh:", obj, "insert_mesh", "mesh_body"))
+        elif type_id in CANVAS_TYPES:
+            canvases.append(_item("canvas:", obj, "canvas", "canvas"))
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
         elif type_id in CONSTRUCTION_TYPES:
@@ -182,6 +190,8 @@ def _folders(objects, active_body, component):
         folders.append(_folder("sketches" + suffix, "Sketches", sketches))
     if construction:
         folders.append(_folder("construction" + suffix, "Construction", construction))
+    if canvases:
+        folders.append(_folder("canvases" + suffix, "Canvases", canvases))
     return folders
 
 
@@ -363,6 +373,27 @@ MENUS = {
         "Show/Hide",
         "Find in Window",
         "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "mesh_body": [
+        "Convert Mesh",
+        "Edit Feature",
+        "-",
+        "Show/Hide",
+        "Find in Window",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "canvas": [
+        "Edit Canvas",
+        "Calibrate",
+        "-",
+        "Show/Hide",
+        "Find in Window",
         "-",
         "Rename",
         "Delete",

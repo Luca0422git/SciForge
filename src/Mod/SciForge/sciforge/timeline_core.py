@@ -67,6 +67,9 @@ KINDS = {
     "point": ("Point", "point"),
     "ucs": ("Coordinate System", "ucs"),
     "derive": ("Derive", "derive"),
+    "insert_mesh": ("Insert Mesh", "insert_mesh"),
+    "convert_mesh": ("Convert Mesh", "convert_mesh"),
+    "insert_step": ("Insert STEP", "insert_step"),
     "base": ("Base Feature", "document"),
     "component": ("Component", "new_component"),
     "group": ("Group", "folder"),
@@ -149,10 +152,23 @@ KIND_BY_SCIFORGE_TYPE = {
     "DeleteFace": "delete_face",
     "Move": "move",
     "MoveCopy": "move",
+    "InsertMesh": "insert_mesh",
+    "ConvertMesh": "convert_mesh",
+    "InsertSTEP": "insert_step",
 }
 
 # Steps that are not a solid: they never carry the history marker (FreeCAD's Tip).
-NON_SOLID_KINDS = {"sketch", "plane", "axis", "point", "ucs", "derive", "group", "component"}
+NON_SOLID_KINDS = {
+    "sketch",
+    "plane",
+    "axis",
+    "point",
+    "ucs",
+    "derive",
+    "group",
+    "component",
+    "insert_mesh",
+}
 
 
 def _words(camel):

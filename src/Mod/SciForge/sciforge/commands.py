@@ -305,7 +305,6 @@ def _feature_commands():
         "presspull_ui": lambda m: {"SciForge_PressPull": m.PressPullCommand},
         "parameters_ui": lambda m: {"SciForge_ChangeParameters": m.ChangeParametersCommand},
         "construct_ui": lambda m: m.command_classes(),
-        "make3d_ui": lambda m: {"SciForge_3DPrint": m.PrintCommand},
     }
     found = {}
     here = os.path.dirname(os.path.abspath(__file__))

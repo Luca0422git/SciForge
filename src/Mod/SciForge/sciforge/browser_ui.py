@@ -288,7 +288,14 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self._building = False
         self._syncing = False
         self._tree = None
-        self._expanded = {"document", "bodies", "sketches", "settings", "construction"}
+        self._expanded = {
+            "document",
+            "bodies",
+            "sketches",
+            "settings",
+            "construction",
+            "canvases",
+        }
         # Component rows and their Bodies / Sketches folders start open (keys are made per
         # component); this remembers the ones the user closed.
         self._collapsed = set()
@@ -650,7 +657,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 self.activate_component(obj)
             elif node["kind"] == "document" and self._doc is not None:
                 self.activate_component(None)
-            elif node["kind"] in ("sketch", "construction", "analysis") and obj is not None:
+            elif (
+                node["kind"] in ("sketch", "construction", "analysis", "mesh_body", "canvas")
+                and obj is not None
+            ):
                 _later(_edit_object, obj)  # Fusion: double-click a section to edit it
         except Exception as exc:
             warn("browser: %s" % exc)
@@ -717,6 +727,17 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "analysis",
         "saved_view",
         "document",
+        "mesh_body",
+        "canvas",
+    )
+    OBJECT_KINDS = (
+        "body",
+        "component",
+        "sketch",
+        "construction",
+        "analysis",
+        "mesh_body",
+        "canvas",
     )
 
     def rename(self, item):
@@ -772,6 +793,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         body_names = [n["object"] for n in nodes if n["kind"] == "body"]
         part_names = [n["object"] for n in nodes if n["kind"] == "component"]
         views = [n["object"] for n in nodes if n["kind"] == "saved_view"]
+        plain = [n["object"] for n in nodes if n["kind"] in ("mesh_body", "canvas")]
         Gui.Selection.clearSelection()
         if steps:
             ops.delete(doc, [s for s in steps if doc.getObject(s) is not None])
@@ -782,9 +804,35 @@ class BrowserWidget(QtWidgets.QTreeWidget):
 
             parts = [doc.getObject(n) for n in part_names]
             components_ui.delete_components(doc, [p for p in parts if p is not None])
+        if plain:
+            self._delete_plain(doc, plain)
         for name in views:
             self._delete_view(name)
         self.refresh(force=True)
+
+    def _delete_plain(self, doc, names):
+        """Delete mesh bodies and canvases (no history to re-link), one undo step."""
+        doc.openTransaction("Delete")
+        try:
+            for name in names:
+                if doc.getObject(name) is not None:
+                    doc.removeObject(name)
+        except Exception as exc:
+            warn("browser delete: %s" % exc)
+        doc.commitTransaction()
+        try:
+            App.closeActiveTransaction()
+        except Exception:
+            pass
+        doc.recompute()
+
+    def _run_with(self, obj, command):
+        """Run a command on a browser row's object (it is selected first, as a click does)."""
+        if obj is None or not commands.finish_open_dialog():
+            return
+        Gui.Selection.clearSelection()
+        Gui.Selection.addSelection(obj.Document.Name, obj.Name)
+        Gui.runCommand(command)
 
     # -- named views ----------------------------------------------------------------
     def new_named_view(self):
@@ -893,6 +941,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Show All Bodies": lambda: self._show_all("body", True),
             "Show All Sketches": lambda: self._show_all("sketch", True),
             "Hide All Sketches": lambda: self._show_all("sketch", False),
+            "Convert Mesh": lambda: self._run_with(obj, "SciForge_ConvertMesh"),
+            "Edit Canvas": lambda: _edit_object(obj),
+            "Calibrate": lambda: self._run_with(obj, "SciForge_CalibrateCanvas"),
         }
         isolated = _isolated_names(doc)
         if node["kind"] in ("body", "component") and isolated:
@@ -900,9 +951,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         entries = core.menu_for(node)
         if node["visible"] is None and "Show/Hide" in entries:
             entries.remove("Show/Hide")
-        if node["kind"] in ("body", "component", "sketch", "construction", "analysis"):
-            if obj is None:
-                return None
+        if node["kind"] in self.OBJECT_KINDS and obj is None:
+            return None
         if node["kind"] == "document" and not components.list_components(doc):
             # Without components the design's row is not a component to activate.
             entries = [e for e in entries if e != "Activate"]
@@ -929,7 +979,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 else menu.addAction(text)
             )
             self._handlers[action] = handlers.get(entry)
-            if entry in ("Edit Sketch", "Edit Feature"):
+            if entry in ("Edit Sketch", "Edit Feature", "Edit Canvas"):
                 font = action.font()
                 font.setBold(True)
                 action.setFont(font)

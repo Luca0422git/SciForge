@@ -203,10 +203,15 @@ INSERT = group(
     ["Insert Component", "Canvas", "Insert Mesh"],
     [
         item("Decal", None, "decal"),
-        item("Canvas", None, "canvas"),
-        item("Insert SVG", "Std_Import", "insert_svg"),
-        item("Insert DXF", "Std_Import", "insert_dxf"),
-        item("Insert Mesh", "Mesh_Import", "insert_mesh"),
+        item("Canvas", "SciForge_InsertCanvas", "canvas", note="A reference image on a plane."),
+        item("Insert SVG", "SciForge_InsertSVG", "insert_svg", note="SVG curves into a sketch."),
+        item("Insert DXF", "SciForge_InsertDXF", "insert_dxf", note="DXF curves into a sketch."),
+        item(
+            "Insert Mesh",
+            "SciForge_InsertMesh",
+            "insert_mesh",
+            note="An STL, OBJ or 3MF file as a mesh body.",
+        ),
         SEP,
         item(
             "Insert Component",
@@ -215,6 +220,14 @@ INSERT = group(
             note="Another design's bodies, linked to its file by a relative path",
         ),
         item("Insert Derive", None, "derive"),
+        # Fusion brings STEP files in through its Data Panel (upload, then Insert into the
+        # design); SciForge has no cloud panel, so the file is picked straight away.
+        item(
+            "Insert STEP",
+            "SciForge_InsertSTEP",
+            "insert_step",
+            note="Bodies from a STEP file, with their names and colours.",
+        ),
     ],
 )
 
@@ -288,7 +301,7 @@ MESH_CREATE = group(
     "CREATE",
     ["Insert Mesh"],
     [
-        item("Insert Mesh", "Mesh_Import", "insert_mesh"),
+        item("Insert Mesh", "SciForge_InsertMesh", "insert_mesh"),
         item("Tessellate", "Mesh_FromPartShape", "insert_mesh"),
     ],
 )
@@ -319,7 +332,12 @@ MESH_CONVERT = group(
     "CONVERT",
     ["Convert Mesh"],
     [
-        item("Convert Mesh", "Part_ShapeFromMesh", "insert_mesh"),
+        item(
+            "Convert Mesh",
+            ("SciForge_ConvertMesh", "Part_ShapeFromMesh"),
+            "convert_mesh",
+            note="A mesh body into a solid body: faceted, or prismatic (flat faces merged).",
+        ),
     ],
 )
 
@@ -327,10 +345,26 @@ MESH_CONVERT = group(
 UTIL_MAKE = group(
     "u_make",
     "MAKE",
-    ["3D Print"],
+    ["3D Print", "Export"],
     [
-        item("3D Print", "SciForge_3DPrint", "insert_mesh", note="Save a body as 3MF or STL."),
-        item("Export", "Std_Export", "qa_save"),
+        item(
+            "3D Print",
+            "SciForge_3DPrint",
+            "insert_mesh",
+            note="Bodies as 3MF, STL or OBJ for your slicer, with the mesh refinement.",
+        ),
+        item(
+            "Export",
+            ("SciForge_Export", "Std_Export"),
+            "export",
+            note="STEP, STL, 3MF or OBJ of the design or of chosen bodies.",
+        ),
+        item(
+            "Export Everything",
+            "SciForge_ExportEverything",
+            "export_all",
+            note="The whole design as STEP + STL + 3MF + a picture, in a folder beside it.",
+        ),
     ],
 )
 UTIL_ADDINS = group(
@@ -533,6 +567,34 @@ TABS = [
             FINISH_SKETCH,
         ],
     },
+]
+
+# Fusion's File menu (the application menu), in its order; cloud-only entries (upload,
+# share, recover documents) are left out. Shown first by the quick-access Menu button,
+# above FreeCAD's own menus (ribbon_ui).
+# Fusion's File menu (the app bar's Menu button opens it, FreeCAD's own menus below).
+FILE_MENU = [
+    item("New Design", "SciForge_NewDesign", "qa_new", "Ctrl+N"),
+    item("Open", "Std_Open", "qa_open", "Ctrl+O"),
+    item("Recover Documents", "SciForge_RecoverDocuments", "document"),
+    SEP,
+    item("Save", ("SciForge_Save", "Std_Save"), "qa_save", "Ctrl+S"),
+    item("Save As", ("SciForge_SaveAs", "Std_SaveAs"), "qa_save"),
+    item("Version History", "SciForge_VersionHistory", "document"),
+    SEP,
+    item("Export", ("SciForge_Export", "Std_Export"), "export"),
+    item("3D Print", "SciForge_3DPrint", "insert_mesh"),
+    item("Export Everything", "SciForge_ExportEverything", "export_all"),
+    item("Capture Image", "Std_ViewScreenShot", "canvas"),
+    SEP,
+    item("Insert Mesh", "SciForge_InsertMesh", "insert_mesh"),
+    item("Insert STEP", "SciForge_InsertSTEP", "insert_step"),
+    item("Insert SVG", "SciForge_InsertSVG", "insert_svg"),
+    item("Insert DXF", "SciForge_InsertDXF", "insert_dxf"),
+    item("Canvas", "SciForge_InsertCanvas", "canvas"),
+    item("Insert Design", "SciForge_InsertDesign", "insert_component"),
+    SEP,
+    item("Project and Recovery Settings", "SciForge_FilesSettings", "folder"),
 ]
 
 # Quick-access buttons at the top left, like Fusion's application bar.

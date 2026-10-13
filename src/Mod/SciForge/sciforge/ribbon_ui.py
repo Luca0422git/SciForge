@@ -298,31 +298,33 @@ class RibbonWidget(QtWidgets.QWidget):
         )
         return button
 
-    FILE_ENTRIES = [  # Fusion's File menu items SciForge has (label, command, icon)
-        ("Save As", "SciForge_SaveAs", "qa_save"),
-        ("Version History", "SciForge_VersionHistory", "document"),
-        ("Recover Documents", "SciForge_RecoverDocuments", "document"),
-        ("Insert Design", "SciForge_InsertDesign", "insert_component"),
-        ("Project and Recovery Settings", "SciForge_FilesSettings", "folder"),
-    ]
-
     def _show_app_menu(self, button):
-        """SciForge's file commands (Fusion's File menu), then all of FreeCAD's menus, since
-        the menu bar is hidden like in Fusion."""
+        """Fusion's File menu (ribbon_config.FILE_MENU) on top, then all of FreeCAD's menus,
+        since the menu bar is hidden like in Fusion."""
         menu = QtWidgets.QMenu(button)
-        available = registry.available_commands()
-        for label, command, icon in self.FILE_ENTRIES:
-            resolved = resolve(command, available)
-            action = menu.addAction(ui_icon(icon), label)
-            if resolved:
-                action.triggered.connect(lambda _=False, r=resolved, t=label: run(r, t))
-            else:
-                action.setEnabled(False)
-        menu.addSeparator()
+        menu.setObjectName("SciForgeAppMenu")
+        try:
+            self._fill_file_menu(menu.addMenu(ui_icon("document"), "File"))
+            menu.addSeparator()
+        except Exception as exc:
+            warn("file menu: %s" % exc)
         for action in Gui.getMainWindow().menuBar().actions():
             if action.menu() is not None and action.text():
                 menu.addMenu(action.menu())
         menu.exec_(button.mapToGlobal(QtCore.QPoint(0, button.height())))
+
+    def _fill_file_menu(self, menu):
+        menu.setObjectName("SciForgeFileMenu")
+        available = set(Gui.listCommands())
+        for entry in cfg.FILE_MENU:
+            if entry is cfg.SEP:
+                menu.addSeparator()
+                continue
+            resolved = resolve(entry["command"], available)
+            action = menu.addAction(ui_icon(entry["icon"]), _menu_text(entry))
+            action.setEnabled(bool(resolved) and is_active(resolved))
+            action.triggered.connect(lambda _=False, r=resolved, e=entry: run(r, e["label"]))
+        return menu
 
     # -- behaviour ------------------------------------------------------
     def select_tab(self, tab_id, user=False):

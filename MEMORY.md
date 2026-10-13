@@ -245,6 +245,24 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       `bodies.py` helpers for every multi-body tool. Spec + gaps: `docs/sciforge/parity/
       bodies.md`. 6 scenarios (`bodies_*.py`), 24 golden models (`bodies_*`), unit tests
       `test_bodies_schema.py`. Ribbon: Split Body runs `SciForge_SplitBody` (was greyed).
+- [x] Insert, import, export, make (7.12; branch `sf/insert`; spec + sources + gaps in
+      `docs/sciforge/parity/insert-export.md`): Insert Mesh (STL/OBJ/3MF -> a mesh body in
+      the Bodies folder, Unit Type, Flip Up, Center, Move to Ground, position/angle fields,
+      the Move manipulator, timeline step, edit later), Convert Mesh (Parametric / Base
+      Feature, Faceted / Prismatic; `insert.ConvertMeshFeature`), Insert STEP (one body per
+      solid with names and colours, `ImportGui`), Insert SVG / DXF into a new or the open
+      sketch (plane picker, X/Y/angle/scale/flips, DXF units, layers, one sketch per layer;
+      fixed geometry), Canvas (opacity, Display Through = Coin annotation, Selectable, flips,
+      offsets, scales, Canvases folder, Edit Canvas, Calibrate with two clicks + a distance),
+      Export dialog (STEP / STL binary+ASCII / 3MF / OBJ, whole design or ticked bodies,
+      Unit Type, One File Per Body, Refinement Low/Medium/High/Custom, triangle count), 3D
+      Print (formats, refinement, save + open folder, or Send to 3D Print Utility = the
+      slicer, remembered), Export Everything (STEP+STL+3MF+OBJ+PNG+README beside the design,
+      folder opened). `make3d*.py` replaced by `export.py` / `export_ui.py`. Ribbon: INSERT
+      group wired (+ Insert STEP), MESH tab, UTILITIES > MAKE, a File menu on the quick-access
+      Menu button (`ribbon_config.FILE_MENU`). 9 scenarios (`insert_*.py`, `export_*.py`,
+      320 checks), fixtures in `SciForgeTests/fixtures/`, unit tests `test_insert_core.py`,
+      `test_export_core.py`.
 - [x] Fillet (F) and Chamfer, Fusion-style, plus a QA pass (branch `sf/fillet-qa`): picks of
       edges / faces / timeline features, Tangent Chain, blue arrows, live preview, errors in
       the dialog, timeline edit; QA added mm-safe value boxes with parameters/formulas,
@@ -358,7 +376,23 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   body "Body" became "Body001" and a second "Body1" would become "Body1001": SciForge
   switches on `Preferences/Document/DuplicateLabels` while it is on (`theme.VIEWER_SETTINGS`,
   kept and given back). Spec: `docs/sciforge/parity/components.md`.
-
+- **FreeCAD facts found by the insert / export work (2026-10-13):** `Mesh::Feature.Mesh`
+  comes back with the body's Placement baked into its points, bounds and Topology (copy it
+  and set `Placement = App.Placement()` first: `insert.kernel_copy`); setting `.Mesh` resets
+  the feature's Placement. `shape.Edges` already carry the shape's Placement (never multiply
+  it on again). `Shape.transformGeometry` turns lines and circles into B-splines: move sketch
+  geometry by its own points instead (`insert.transformed_geometry`). `Import.export` writes
+  no colours; `ImportGui.export` / `ImportGui.insert` do. `Image::ImagePlane.ImageFile` is a
+  PropertyFileIncluded in 1.x (the picture travels inside the FCStd). `App.newDocument(name,
+  label, hidden=True, temp=True)` makes a throw-away document, but in the GUI closing it
+  leaves `App.ActiveDocument` on the dead one: `App.setActiveDocument(previous)` after
+  (`insert.restore_active_document`). FreeCAD's DXF importer opens its own modal dialog in
+  the GUI (`Mod/Draft/dxfShowDialog`): a scenario hung on it until the timeout (the FreeCAD
+  log stayed empty: output is lost when the process is killed). FreeCAD's 3MF writer leaves
+  objects unnamed (SciForge writes the names into the zip). Enter in a spin box of a QDialog
+  or task panel presses OK (Fusion's Enter): tests commit typed spin values with Tab, and a
+  separate dialog window is not the active window under xvfb, so `interpretText()` stands
+  in for the focus change (`insert_steps.set_spin`).
 - **Lesson (2026-10-10): green tests, unusable product.** Luca's first real session: Create Sketch
   opened FreeCAD pop-ups, dragging the Extrude arrow crashed, Extrude ignored clicks on profiles
   and faces, a stuck dialog made E/Q/Create Sketch silently do nothing. The smoke test called
@@ -2290,6 +2324,39 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   for Luca. No Windows full build was started (the compile cache is checked on the next one).
 - Old scenarios that relied on the automatic 10 mm or on a preview right after E were updated
   (extrude_multibody*, sketch_areas*). Unit 330, golden 294 + 1 xfail.
+
+### 2026-10-13: Insert, import, export, make (branch `sf/insert`)
+- Research first (Autodesk help and support pages through search summaries, forum answers,
+  the API reference; the help site is unreachable from the sandbox): the Insert Mesh dialog
+  (Unit Type order, Flip Up, Center, Move to Ground), Convert Mesh (Parametric / Base
+  Feature, Faceted / Prismatic), the canvas dialog (50 % opacity + Display Through defaults,
+  Calibrate = two points + a distance, right-click in the Canvases folder), Insert SVG / DXF
+  (X/Y/angle/scale/flips, DXF units, layers, one sketch per layer, geometry fixed after OK),
+  Save As Mesh / 3D Print (formats, Unit Type, Structure, Refinement presets + options, Send
+  to 3D Print Utility). Spec with sources and gaps: `docs/sciforge/parity/insert-export.md`.
+- Built in Python on FreeCAD's Mesh, MeshPart, Import/ImportGui, importSVG, importDXF and
+  Image::ImagePlane: `insert.py` / `insert_ui.py`, `export.py` / `export_ui.py` (the old
+  `make3d*.py` 3D Print replaced), browser (mesh bodies in Bodies, a Canvases folder, Convert
+  Mesh / Edit Canvas / Calibrate on right-click), timeline kinds, ribbon wiring (INSERT, MESH,
+  UTILITIES > MAKE, the File menu), 5 new icons. Fixtures made by FreeCAD in
+  `SciForgeTests/fixtures/make_fixtures.py` (STL/OBJ/3MF box, cylinder STL, two-part STEP
+  with colours, SVG, two-layer DXF, an 80 x 40 PNG with two dots 60 px apart).
+- 9 scenarios with real clicks, all green locally: insert_mesh (65), insert_step (22),
+  insert_svg (38), insert_dxf (35), insert_canvas (48), export_formats (53), export_print
+  (41), export_everything (27), insert_reopen (24). Bugs they caught before anything shipped:
+  the mesh placement applied twice (Center landed at 2x), the imported circle moved twice
+  (shape.Edges carry the placement), B-splines from transformGeometry, "Plate001" labels
+  from FreeCAD's label numbering, the DXF import dialog hang, the dead active document after
+  a temp document, the collapsed Canvases folder (eye and right-click missed the row), Enter
+  in a spin box pressing OK and saving the 3D print early.
+- Decisions: Insert Mesh starts at the design's unit (Fusion: Centimeter, a known ten-times
+  annoyance; Luca to confirm); canvases stay out of the timeline (assumed); the converted
+  mesh body is hidden after Convert Mesh (assumed); Insert STEP is a plain file pick (Fusion
+  needs its cloud Data Panel) and makes bodies, components later; Export Everything is
+  SciForge's own (the ownership guarantee), Medium refinement, PNG of the current view.
+- Not done (listed in the doc's gaps): manipulators for SVG / DXF / canvas, Convert Mesh
+  Organic and surface fitting, Max Edge Length / Aspect Ratio / Preview Mesh in 3D Print,
+  IGES / DXF / other export formats, Fusion's exact refinement numbers (from memory).
 
 ### 2026-10-13 (afternoon): Orbit, Extrude loose ends, ending a line, arrows in front (main branch)
 - Luca's requests, in order: finish the plan's #2 items (orbit, Fusion-like sketching, last
