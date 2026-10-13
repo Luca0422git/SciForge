@@ -98,6 +98,16 @@ def ensure_regions(sketch):
         with preview.quiet():  # a sketch FreeCAD cannot make areas from just has none
             sketch.recompute()
         _remember_empty(sketch)
+    elif "Touched" in sketch.State and _being_edited(sketch):
+        # A sketch open for editing with changes: FreeCAD makes its areas when it is
+        # recomputed (Finish Sketch), so they would be the ones from before the changes.
+        # (SciForge turns the areas on for every new sketch, so the recompute above no
+        # longer does this the first time a sketch is looked at.) Only an open sketch:
+        # recomputing a touched sketch inside a dialog's undo step threw away the Redo
+        # list (sweep_loft_qa_sweep P4).
+        with preview.quiet():
+            sketch.recompute()
+        _remember_empty(sketch)
     elif sketch.InternalShape.isNull() and not sketch.Shape.isNull():
         # A sketch with no closed area (a path, a rib line) never gets an InternalShape: it
         # was recomputed every time a dialog looked for areas, and inside a dialog's undo
@@ -111,6 +121,18 @@ def ensure_regions(sketch):
 
 
 _EMPTY = {}  # (document, sketch) -> stamp of a sketch shape that has no closed area
+
+
+def _being_edited(sketch):
+    """True if the sketch is open for editing (only with a GUI; never headless)."""
+    try:
+        import FreeCADGui as Gui
+
+        gdoc = Gui.getDocument(sketch.Document.Name)
+        edit = gdoc.getInEdit() if gdoc is not None else None
+        return edit is not None and edit.Object is sketch
+    except Exception:
+        return False
 
 
 def _stamp(sketch):
