@@ -14,6 +14,12 @@ Fusion, while you draw a line:
 A point or curve right under the pointer always wins: that is FreeCAD's own snapping
 (end points, middles, centres, curves), which SciForge leaves alone.
 
+The same guides apply to every point the other drawing tools place (rectangle corners,
+circle centres and rim points, arc points, polygon centre and corner, slot centres); the
+level/upright/perpendicular direction applies to the line and to the slot's centre line.
+Fusion's tangent arc (press on the end of the line being drawn and drag) has its maths
+here too (tangent_arc, chain_tangent).
+
 No FreeCAD, no Qt here: plain (x, y) tuples in sketch millimetres, so it is unit tested.
 `px` is how many millimetres one screen pixel is at the moment, so tolerances given in
 pixels feel the same at every zoom.
@@ -26,6 +32,48 @@ PERPENDICULAR, PARALLEL = "perp", "parallel"
 # a guide keeps one coordinate of a point: "x" = straight above/below it (a vertical
 # guide line), "y" = level with it (a horizontal guide line)
 SAME_X, SAME_Y = "x", "y"
+
+# Which FreeCAD / SciForge drawing command places which kind of shape. The guides apply
+# to the points a tool places with a click (POINTS says how many); after that a tool
+# asks for sizes (a corner radius, a slot's width, an arc's angle), which get no guides.
+TOOLS = {
+    "SciForge_SketchLine": "line",
+    "Sketcher_CreateLine": "line",
+    "Sketcher_CreateRectangle": "rect",
+    "Sketcher_CreateRectangle_Center": "rect_center",
+    "Sketcher_CreateCircle": "circle",
+    "Sketcher_Create3PointCircle": "circle3",
+    "Sketcher_CreateArc": "arc",
+    "Sketcher_Create3PointArc": "arc3",
+    "Sketcher_CreateSlot": "slot",
+    "SciForge_PolygonCircumscribed": "polygon",
+    "SciForge_PolygonInscribed": "polygon",
+    "Sketcher_CreateHexagon": "polygon",
+    "Sketcher_CreateTriangle": "polygon",
+    "Sketcher_CreateSquare": "polygon",
+    "Sketcher_CreatePentagon": "polygon",
+    "Sketcher_CreateHeptagon": "polygon",
+    "Sketcher_CreateOctagon": "polygon",
+    "Sketcher_CreateRegularPolygon": "polygon",
+}
+# clicked points per shape: line start/end; rectangle two corners (or centre + corner);
+# circle centre + rim point (or three rim points); arc centre + start (its end is on the
+# circle at the pointer's angle: no guide), or three points; polygon centre + corner;
+# slot two centres (the third click gives the width)
+POINTS = {
+    "line": 2,
+    "rect": 2,
+    "rect_center": 2,
+    "circle": 2,
+    "circle3": 3,
+    "arc": 2,
+    "arc3": 3,
+    "slot": 2,
+    "polygon": 2,
+}
+# shapes whose second point is the end of a direction from the first (level / upright /
+# perpendicular apply, and the constraint goes on a line of the shape)
+DIRECTION = ("line", "slot")
 
 
 class Options:
@@ -244,17 +292,22 @@ def remember(items, item, keep):
 
 
 # -- the inference ----------------------------------------------------------------
-def infer(raw, start, acquired, lines, vertices, curves, px, opt, parallel_lines=()):
-    """Where the line tool's point should go (a Result), or None to leave the pointer
-    alone.
+def infer(raw, start, acquired, lines, vertices, curves, px, opt, parallel_lines=(), anchors=()):
+    """Where the point the tool is placing should go (a Result), or None to leave the
+    pointer alone.
 
     raw        the pointer on the sketch
-    start      the first point of the line being drawn, or None before the first click
+    start      the point the new direction starts from (a line's first point, a slot's
+               first centre), or None when the point has no direction (before the first
+               click; a rectangle corner, a circle's centre...)
     acquired   [(key, point)] points that make guides (hovered + this command's)
     lines      [(geo, a, b)] lines a new line can be perpendicular to (not construction)
     vertices   [(key, point)] every point FreeCAD snaps to
     curves     every curve FreeCAD snaps to (see curve_distance)
     parallel_lines  [(geo, a, b)] hovered lines a new line can be parallel to
+    anchors    points this shape already placed (a rectangle's first corner, a circle's
+               centre): no guide from them (lining the new point up with them would
+               flatten the shape; for a line, level/upright covers it)
     """
     pick = opt.pick_px * px
     if nearest_vertex(raw, vertices, pick) is not None:
@@ -267,7 +320,7 @@ def infer(raw, start, acquired, lines, vertices, curves, px, opt, parallel_lines
     direction = None
     if start is not None and dist(raw, start) >= opt.min_len_px * px:
         direction = _direction(raw, start, lines, parallel_lines, px, opt)
-    best_x, best_y = _guides(raw, start, acquired, px, opt)
+    best_x, best_y = _guides(raw, start, acquired, px, opt, anchors)
     result = _combine(raw, start, direction, best_x, best_y, px, opt)
     if result is not None:
         result.start = start
@@ -369,14 +422,17 @@ def _direction(raw, start, lines, parallel_lines, px, opt):
     return None
 
 
-def _guides(raw, start, acquired, px, opt):
+def _guides(raw, start, acquired, px, opt, anchors=()):
     """The nearest vertical guide (same x) and horizontal guide (same y), or None."""
     tol = opt.guide_px * px
     eps = max(1e-4, 0.05 * px)
+    near = opt.pick_px * px  # anchors are where FreeCAD put them, known to a pixel or so
     best_x = best_y = None
     for key, point in acquired:
         if start is not None and dist(point, start) <= eps:
             continue  # the line's own start: level/upright covers it
+        if any(dist(point, a) <= near for a in anchors):
+            continue  # a point of the shape being drawn
         dx, dy = abs(raw[0] - point[0]), abs(raw[1] - point[1])
         if dx <= tol and (best_x is None or dx < best_x[0]):
             best_x = (dx, Guide(key, point, SAME_X))
@@ -503,3 +559,162 @@ def parallel_mark(a, b, size):
         c = add(mid, mul(n, size * k))
         strokes.append([add(c, mul(d, -size * 0.6)), add(c, mul(d, size * 0.6))])
     return strokes
+
+
+# The marks sit near the pointer's end: FreeCAD's length and angle boxes cover the
+# middle of the line (above it and below it).
+MARK_ALONG = 0.92
+
+
+def level_mark(a, b, size):
+    """SciForge's level mark: a short horizontal stroke under the level line a-b, near
+    its end b (shown while drawing; FreeCAD's own glyph takes over after the click)."""
+    at = add(a, mul(sub(b, a), MARK_ALONG))
+    c = (at[0], at[1] - size * 1.2)
+    return [[(c[0] - size * 0.8, c[1]), (c[0] + size * 0.8, c[1])]]
+
+
+def upright_mark(a, b, size):
+    """SciForge's upright mark: a short vertical stroke beside the upright line a-b,
+    near its end b."""
+    at = add(a, mul(sub(b, a), MARK_ALONG))
+    c = (at[0] + size * 1.2, at[1])
+    return [[(c[0], c[1] - size * 0.8), (c[0], c[1] + size * 0.8)]]
+
+
+def tangent_mark(joint, tangent, away, size):
+    """SciForge's tangent mark while a tangent arc is dragged: a short stroke along the
+    tangent, a little outside the joint (on the side away from the arc's centre)."""
+    c = add(joint, mul(away, size * 1.2))
+    return [[add(c, mul(tangent, -size * 0.8)), add(c, mul(tangent, size * 0.8))]]
+
+
+# -- the other tools' previews --------------------------------------------------------
+def preview_anchor(kind, polylines):
+    """The point the direction of the shape's next point starts from, read from
+    FreeCAD's preview (its edit curve, split into polylines), or None. A line: its first
+    point; a slot: the centre of its first arc (a half circle: the middle of the chord
+    between the arc's ends). Other shapes have no direction."""
+    if kind == "line":
+        if len(polylines) == 1 and len(polylines[0]) == 2:
+            return polylines[0][0]
+        return None
+    if kind == "slot":
+        if len(polylines) >= 3 and len(polylines[0]) >= 3:
+            arc = polylines[0]
+            return mul(add(arc[0], arc[-1]), 0.5)
+        return None
+    return None
+
+
+def preview_pointer(kind, polylines, near):
+    """The point of FreeCAD's preview that follows the pointer (the line's end, a slot's
+    second centre, otherwise the preview vertex nearest to `near`), or None. A typed
+    value puts it elsewhere: then the guide is not shown and nothing is added."""
+    if not polylines:
+        return None
+    if kind == "line":
+        return polylines[0][1] if len(polylines[0]) == 2 else None
+    if kind == "slot":
+        if len(polylines) >= 3 and len(polylines[1]) >= 3:
+            arc = polylines[1]
+            return mul(add(arc[0], arc[-1]), 0.5)
+        return None
+    best = None
+    for poly in polylines:
+        for p in poly:
+            d = dist(p, near)
+            if best is None or d < best[0]:
+                best = (d, p)
+    return best[1] if best else None
+
+
+# -- the tangent arc (Fusion's Line tool: press on the last point and drag) -----------
+class Arc:
+    """An arc of a circle: centre, radius, counterclockwise from angle a1 to a2 (as
+    FreeCAD's Part.ArcOfCircle), `joint_pos` the end (1 = start, 2 = end) that joins the
+    previous curve, `free_pos` the other one (where the pointer is)."""
+
+    def __init__(self, centre, radius, a1, a2, joint_pos):
+        self.centre = centre
+        self.radius = radius
+        self.a1 = a1
+        self.a2 = a2
+        self.joint_pos = joint_pos
+        self.free_pos = 2 if joint_pos == 1 else 1
+
+    def point(self, angle):
+        return (
+            self.centre[0] + self.radius * math.cos(angle),
+            self.centre[1] + self.radius * math.sin(angle),
+        )
+
+    def points(self, n=48):
+        """A polyline along the arc (for the preview)."""
+        step = (self.a2 - self.a1) / n
+        return [self.point(self.a1 + i * step) for i in range(n + 1)]
+
+    def __repr__(self):
+        return "Arc(%r, %r, %r, %r, joint=%r)" % (
+            self.centre,
+            self.radius,
+            self.a1,
+            self.a2,
+            self.joint_pos,
+        )
+
+
+def tangent_arc(start, tangent, point, min_len, straight_deg=1.0):
+    """The arc that leaves `start` in the direction `tangent` (unit) and ends at `point`,
+    or None when the point is too close (min_len) or straight ahead/behind (within
+    straight_deg: that is a line, not an arc). The arc's centre lies on the normal at
+    the start; the pointer's side picks the side, so moving across the tangent flips
+    the arc (Fusion)."""
+    d = sub(point, start)
+    if length(d) < min_len:
+        return None
+    n = (-tangent[1], tangent[0])  # the left normal
+    dn = dot(d, n)
+    if abs(dn) <= length(d) * math.sin(math.radians(straight_deg)):
+        return None
+    k = dot(d, d) / (2.0 * dn)  # signed: + = centre on the left = turning left (ccw)
+    centre = add(start, mul(n, k))
+    radius = abs(k)
+    a_start = math.atan2(start[1] - centre[1], start[0] - centre[0])
+    a_point = math.atan2(point[1] - centre[1], point[0] - centre[0])
+    if k > 0:
+        # counterclockwise from the start to the point: the joint is the arc's start
+        a1, a2 = a_start, a_point
+        joint = 1
+    else:
+        # clockwise from the start: as a counterclockwise arc it runs point -> start
+        a1, a2 = a_point, a_start
+        joint = 2
+    while a2 <= a1:
+        a2 += 2 * math.pi
+    return Arc(centre, radius, a1, a2, joint)
+
+
+def chain_tangent(start, curves, eps):
+    """The direction a chain of curves leaves `start` in, and the curve's end there:
+    (unit tangent, (geo, pos)), or None when no curve ends at `start`. `curves` newest
+    first: ("line", geo, a, b) or ("arc", geo, centre, start point, end point) with
+    FreeCAD's counterclockwise arcs. A line's far end tells its direction; an arc's
+    tangent at its end follows the arc round."""
+    for curve in curves:
+        if curve[0] == "line":
+            _, geo, a, b = curve
+            for here, far, pos in ((b, a, 2), (a, b, 1)):
+                if dist(here, start) <= eps:
+                    t = unit(sub(here, far))
+                    if t is not None:
+                        return t, (geo, pos)
+        elif curve[0] == "arc":
+            _, geo, centre, sp, ep = curve
+            for here, pos, sign in ((ep, 2, 1.0), (sp, 1, -1.0)):
+                if dist(here, start) <= eps:
+                    radial = sub(here, centre)
+                    t = unit((-radial[1] * sign, radial[0] * sign))
+                    if t is not None:
+                        return t, (geo, pos)
+    return None

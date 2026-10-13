@@ -514,3 +514,40 @@ def move_towards(point, direction, steps=(3.0, 2.0, 1.0)):
     for f in steps:
         h.move(h.screen_point(point - direction * f))
     h.move(h.screen_point(point))
+
+
+def screen_colours(point, radius=2):
+    """The colours drawn on screen around the 3D point (a window grab, so what the
+    person sees): {(dx, dy): "#rrggbb"} for the pixels within `radius`. Lines are a
+    pixel or two wide, so a check looks for its colour among them."""
+    gl = h.gl_widget()
+    pos = gl.mapToGlobal(h.screen_point(point))
+    image = QtWidgets.QApplication.primaryScreen().grabWindow(0).toImage()
+    ratio = image.devicePixelRatio()
+    found = {}
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            colour = image.pixelColor(int((pos.x() + dx) * ratio), int((pos.y() + dy) * ratio))
+            found[(dx, dy)] = colour.name()
+    return found
+
+
+def rgb(hex_colour):
+    value = int(hex_colour.lstrip("#"), 16)
+    return ((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF)
+
+
+def colour_near(hex_colour, colours, tolerance=40):
+    """True when one of the screen colours (screen_colours) is within `tolerance` per
+    channel of `hex_colour` (the renderer blends line edges a little)."""
+    want = rgb(hex_colour)
+    for name in colours.values():
+        have = rgb(name)
+        if all(abs(have[i] - want[i]) <= tolerance for i in range(3)):
+            return True
+    return False
+
+
+def brightest(colours):
+    """The brightest of the screen colours (the line, not the dark background)."""
+    return max(colours.values(), key=lambda name: sum(rgb(name)))
