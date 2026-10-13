@@ -197,6 +197,57 @@ def _decode(kind, text):
     return text
 
 
+def keep_and_set(settings, backup_path=BACKUP):
+    """Set SciForge's values of `settings` [(path, kind, name, value)], after keeping the
+    user's own values in FreeCAD's preferences under `backup_path` (a value kept from a
+    session that ended with SciForge on is the user's and stays)."""
+    import FreeCAD as App
+
+    backup = App.ParamGet(backup_path)
+    saved = backup.GetStrings()
+    for path, kind, name, _ in settings:
+        key = _backup_key(path, name)
+        if key in saved:
+            continue  # kept from a session that ended with SciForge on: the user's value
+        try:
+            group = App.ParamGet(path)
+            # Whether the user had set it at all: if not, give_back() removes it again so
+            # FreeCAD falls back to its own default (not to 0/False).
+            if name in getattr(group, "Get" + kind + "s")():
+                backup.SetString(key, _encode(kind, getattr(group, "Get" + kind)(name)))
+            else:
+                backup.SetString(key, _ABSENT)
+        except Exception as exc:
+            warn("cannot keep %s: %s" % (name, exc))
+    for path, kind, name, value in settings:
+        try:
+            getattr(App.ParamGet(path), "Set" + kind)(name, value)
+        except Exception as exc:
+            warn("cannot set %s: %s" % (name, exc))
+
+
+def give_back(settings, backup_path=BACKUP):
+    """Put back the user's own values kept by keep_and_set (nothing when none is kept)."""
+    import FreeCAD as App
+
+    backup = App.ParamGet(backup_path)
+    saved = backup.GetStrings()
+    for path, kind, name, _ in settings:
+        key = _backup_key(path, name)
+        if key not in saved:
+            continue
+        try:
+            text = backup.GetString(key)
+            group = App.ParamGet(path)
+            if text == _ABSENT:
+                getattr(group, "Rem" + kind)(name)
+            else:
+                getattr(group, "Set" + kind)(name, _decode(kind, text))
+            backup.RemString(key)
+        except Exception as exc:
+            warn("cannot give back %s: %s" % (name, exc))
+
+
 def apply():
     global _saved_qss
     try:
@@ -209,23 +260,7 @@ def apply():
     except Exception as exc:
         warn("theme: could not apply stylesheet: %s" % exc)
     try:
-        import FreeCAD as App
-
-        backup = App.ParamGet(BACKUP)
-        saved = backup.GetStrings()
-        for path, kind, name, _ in VIEWER_SETTINGS:
-            key = _backup_key(path, name)
-            if key in saved:
-                continue  # kept from a session that ended with SciForge on: the user's value
-            group = App.ParamGet(path)
-            # Whether the user had set it at all: if not, restore() removes it again so
-            # FreeCAD falls back to its own default (not to 0/False).
-            if name in getattr(group, "Get" + kind + "s")():
-                backup.SetString(key, _encode(kind, getattr(group, "Get" + kind)(name)))
-            else:
-                backup.SetString(key, _ABSENT)
-        for path, kind, name, value in VIEWER_SETTINGS:
-            getattr(App.ParamGet(path), "Set" + kind)(name, value)
+        keep_and_set(VIEWER_SETTINGS)
     except Exception as exc:
         warn("theme: could not apply viewer settings: %s" % exc)
     log("theme applied")
@@ -242,20 +277,6 @@ def restore():
     except Exception as exc:
         warn("theme: could not restore stylesheet: %s" % exc)
     try:
-        import FreeCAD as App
-
-        backup = App.ParamGet(BACKUP)
-        saved = backup.GetStrings()
-        for path, kind, name, _ in VIEWER_SETTINGS:
-            key = _backup_key(path, name)
-            if key not in saved:
-                continue
-            text = backup.GetString(key)
-            group = App.ParamGet(path)
-            if text == _ABSENT:
-                getattr(group, "Rem" + kind)(name)
-            else:
-                getattr(group, "Set" + kind)(name, _decode(kind, text))
-            backup.RemString(key)
+        give_back(VIEWER_SETTINGS)
     except Exception as exc:
         warn("theme: could not restore viewer settings: %s" % exc)

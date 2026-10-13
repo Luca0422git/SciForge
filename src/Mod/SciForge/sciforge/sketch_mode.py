@@ -227,7 +227,7 @@ def enable():
         repair_snap()
     except Exception as exc:
         warn("sketch snapping: %s" % exc)
-    _save_and_apply(PARAMS + [(SNAP, "Bool", "SnapToGrid", option("snap"))])
+    _save_and_apply(_all_params())
     _patch_profilelib()
     try:
         observer = _GuiObserver()
@@ -276,31 +276,42 @@ def disable():
     _restore_params()
 
 
+# The user's own values of the settings above, kept until SciForge is switched off. In
+# FreeCAD's preferences, not in memory: FreeCAD saves its preferences when it quits, so
+# after quitting with SciForge on, memory alone took SciForge's values for the user's next
+# time (FreeCAD's "make sketch areas" stayed on with SciForge off; CI run #95).
+BACKUP = "User parameter:BaseApp/Preferences/Mod/SciForge/SketchBackup"
+
+
+def _all_params():
+    return PARAMS + [(SNAP, "Bool", "SnapToGrid", option("snap"))]
+
+
 def _save_and_apply(params):
-    if not _state["saved"]:
-        for path, kind, name, _ in params:
-            try:
-                group = App.ParamGet(path)
-                existed = name in getattr(group, "Get" + kind + "s")()
-                value = getattr(group, "Get" + kind)(name) if existed else None
-                _state["saved"].append((path, kind, name, value))
-            except Exception as exc:
-                warn("sketch mode: cannot read %s: %s" % (name, exc))
-    for path, kind, name, value in params:
-        _set_param(path, kind, name, value)
+    from . import theme
+
+    try:
+        theme.keep_and_set(params, BACKUP)
+    except Exception as exc:
+        warn("sketch mode: cannot set FreeCAD's sketch settings: %s" % exc)
+    _state["saved"] = list(params)
 
 
 def _restore_params():
-    for path, kind, name, value in _state["saved"]:
-        try:
-            group = App.ParamGet(path)
-            if value is None:
-                getattr(group, "Rem" + kind)(name)
-            else:
-                getattr(group, "Set" + kind)(name, value)
-        except Exception as exc:
-            warn("sketch mode: cannot restore %s: %s" % (name, exc))
+    from . import theme
+
+    try:
+        theme.give_back(_all_params(), BACKUP)
+    except Exception as exc:
+        warn("sketch mode: cannot give FreeCAD's sketch settings back: %s" % exc)
     _state["saved"] = []
+
+
+def give_back_left_over():
+    """SciForge is off: put back FreeCAD's sketch settings a session that ended with SciForge
+    on left behind (nothing to do when none were kept)."""
+    if not _state["on"]:
+        _restore_params()
 
 
 # -- which sketch is open --------------------------------------------------------------

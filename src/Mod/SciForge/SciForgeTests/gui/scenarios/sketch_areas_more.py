@@ -201,6 +201,14 @@ def freecad_preferences():
         "SketchFaceColor" not in general.GetUnsigneds(),
         general.GetUnsigneds(),
     )
+    # Also after an earlier session that ended with SciForge on (CI runs several scenarios in
+    # one profile; FreeCAD saves its preferences when it quits): FreeCAD's own keys are back.
+    distx = Gui.Command.get("Sketcher_ConstrainDistanceX")
+    h.check(
+        "and FreeCAD's own L key",
+        distx is not None and distx.getShortcut() == "L",
+        distx and distx.getShortcut(),
+    )
     import Part
     import Sketcher
 

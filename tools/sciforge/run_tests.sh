@@ -6,7 +6,8 @@
 #
 #   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR]
 #                               [--only unit|golden|gui|scenarios|base]
-#                               [--scenario NAME]   (one file of SciForgeTests/gui/scenarios)
+#                               [--scenario NAME[,NAME...]]   (files of SciForgeTests/gui/
+#                                                   scenarios; several share one profile)
 #                               [--shard K/N]       (every N-th scenario, from the K-th)
 #
 # --freecad  folder from tools/sciforge/get_freecad.sh (default .sciforge-cache/freecad),
@@ -158,7 +159,8 @@ run_scenarios() {
         [ "${name}" = "__init__" ] && continue
         index=$((index + 1))
         [ $(((index - 1) % SHARD_COUNT + 1)) -ne "${SHARD_INDEX}" ] && continue
-        [ -n "${SCENARIO:-}" ] && [ "${name}" != "${SCENARIO}" ] && continue
+        # --scenario a,b,c: those, in name order, sharing one profile (as a CI shard does)
+        [ -n "${SCENARIO:-}" ] && [[ ",${SCENARIO}," != *",${name},"* ]] && continue
         # Through the launcher: a scenario that does not even load fails at once
         # instead of leaving FreeCAD open until the timeout.
         SCIFORGE_SCENARIO="${name}" SCIFORGE_SCENARIO_FILE="${file}" SCIFORGE_SMOKE_OUT="${OUT}" \

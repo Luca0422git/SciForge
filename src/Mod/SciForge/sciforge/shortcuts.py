@@ -21,6 +21,18 @@ from . import config, log, warn
 _bound = {}  # normalised key -> (command name, QShortcut)
 _parked = {}  # FreeCAD command -> the shortcut it had before
 
+# A shortcut set from Python goes into FreeCAD's preferences, and FreeCAD saves those when
+# it quits: after quitting with SciForge on, FreeCAD's own keys (L, C, D...) were saved
+# empty and never came back. The parked keys are kept here too, until they are given back.
+PARKED = "User parameter:BaseApp/Preferences/Mod/SciForge/ParkedShortcuts"
+SHORTCUT_PREFS = "User parameter:BaseApp/Preferences/Shortcut"  # FreeCAD's own
+
+
+def _kept():
+    import FreeCAD
+
+    return FreeCAD.ParamGet(PARKED)
+
 
 def _overrides():
     try:
@@ -91,12 +103,20 @@ def apply():
     keys = {normalise(k) for k in mapping.values() if k}
     # Park every FreeCAD shortcut on one of our keys (including on our target commands
     # themselves, e.g. the Sketcher's own "D"), so each key has exactly one owner.
+    kept = _kept()
+    stored = {name: kept.GetString(name) for name in kept.GetStrings()}
     for name in Gui.listCommands():
         try:
             cmd = Gui.Command.get(name)
             current = cmd.getShortcut() if cmd else ""
-            if current and normalise(current) in keys:
+            if name in stored:
+                # parked in a session that ended with SciForge on: that key is the user's
+                _parked[name] = stored[name]
+                if current:
+                    cmd.setShortcut("")
+            elif current and normalise(current) in keys:
                 _parked[name] = current
+                kept.SetString(name, current)
                 cmd.setShortcut("")
         except Exception:
             pass
@@ -120,8 +140,6 @@ def apply():
 
 
 def restore():
-    import FreeCADGui as Gui
-
     for _, shortcut in _bound.values():
         try:
             shortcut.setEnabled(False)
@@ -129,11 +147,37 @@ def restore():
         except Exception:
             pass
     _bound.clear()
-    for name, previous in list(_parked.items()):
+    _give_back(dict(_parked))
+    _parked.clear()
+
+
+def _give_back(parked):
+    """Give FreeCAD's own keys back: `parked` {command: key} plus any kept from a session
+    that ended with SciForge on."""
+    import FreeCAD
+    import FreeCADGui as Gui
+
+    kept = _kept()
+    for name in kept.GetStrings():
+        parked.setdefault(name, kept.GetString(name))
+    for name, previous in parked.items():
         try:
             cmd = Gui.Command.get(name)
             if cmd is not None:
                 cmd.setShortcut(previous)
-        except Exception:
-            pass
-    _parked.clear()
+            else:  # (its workbench is not loaded yet: FreeCAD reads it from here then)
+                FreeCAD.ParamGet(SHORTCUT_PREFS).SetString(name, previous)
+            kept.RemString(name)
+        except Exception as exc:
+            warn("could not give back the key of %s: %s" % (name, exc))
+
+
+def give_back_left_over():
+    """SciForge is off: give back FreeCAD's keys a session that ended with SciForge on left
+    parked (nothing to do when none are kept)."""
+    if _bound:
+        return
+    try:
+        _give_back({})
+    except Exception as exc:
+        warn("shortcuts: %s" % exc)
