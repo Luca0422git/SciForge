@@ -10,6 +10,7 @@ Physical Material):
   FreeCAD's own callbacks: the work runs a moment later from a Qt timer.
 - BodyPick: what a click in the 3D view (or the browser) means for a body tool.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -151,6 +152,10 @@ class Watch:
     def slotDeletedDocument(self, doc):
         try:
             bodies.forget(doc.Name)
+            from . import components, components_ui
+
+            components.forget(doc.Name)  # the body last active in each component
+            components_ui.ISOLATED.pop(doc.Name, None)
         except Exception:
             pass
 

@@ -19,6 +19,7 @@ point; the revolve stops there and follows the object when it moves.
 Revolving into material switches to Cut, unless you picked the operation yourself.
 Problems are shown in the dialog, which then stays open.
 """
+
 import math
 import time
 
@@ -41,6 +42,7 @@ OPERATION_LABELS = [
     ("Cut", "cut"),
     ("Intersect", "intersect"),
     ("New Body", "new_body"),
+    ("New Component", "new_component"),
 ]
 ACTIVE_STYLE = "QPushButton { background: #1f6fbf; color: white; border: 1px solid #5aa0e6; }"
 HANDLE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
@@ -2256,7 +2258,9 @@ class RevolvePanel(Panel):
         new_body = revolve.owner_body(feature)
         if new_body is not None and new_body is not self.body:
             try:
-                Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", new_body)
+                from . import components
+
+                components.activate_body(new_body)  # and its (new) component
             except Exception as exc:
                 warn("could not activate %s: %s" % (new_body.Label, exc))
         log("%s done" % self.title)

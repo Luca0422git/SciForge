@@ -41,6 +41,7 @@ CONSTRUCTION_TYPES = {
 }
 SKETCH_TYPES = {"Sketcher::SketchObject"}
 BODY_TYPES = {"PartDesign::Body"}
+COMPONENT_TYPES = {"App::Part"}
 ORIGIN_ROLES = ("Origin", "X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane")
 ORIGIN_LABELS = {
     "Origin": "O",
@@ -115,15 +116,37 @@ def _item(prefix, obj, icon, kind, **extra):
     )
 
 
-def build(doc_label, objects, units="mm", active_body=None, views=()):
-    """The whole browser tree for a document. ``views``: names of saved named views."""
+def _origin_node(obj):
+    role = obj["role"]
+    icon = "point" if role == "Origin" else ("offset_plane" if role.endswith("Plane") else "axis")
+    return _node(
+        "origin:" + obj["name"],
+        ORIGIN_LABELS[role],
+        icon,
+        "origin",
+        obj["name"],
+        obj["visible"],
+        role=role,
+    )
+
+
+def _folders(objects, active_body, component):
+    """The folders of one component (``component``: its name, None for the root): Analysis
+    (root only), Origin, Bodies, Sketches, Construction, in Fusion's order, each only once
+    it has something in it. ``objects``: the rows that belong to this component."""
     bodies, sketches, construction, origin, analysis = [], [], [], [], []
-    # Fusion's design has one origin. FreeCAD gives every body its own: show the active
-    # body's, else the first body's (a reopened file has no active body yet).
-    origin_body = active_body
-    if origin_body is None:
-        owners = [o["body"] for o in objects if o.get("role") in ORIGIN_ROLES and o["body"]]
-        origin_body = owners[0] if owners else None
+    body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
+    if component is None:
+        # Fusion's design has one origin. FreeCAD gives every body its own: show the active
+        # body's, else the first body's (a reopened file has no active body yet).
+        origin_body = active_body if active_body in body_names else None
+        if origin_body is None:
+            owners = [
+                o["body"]
+                for o in objects
+                if o.get("role") in ORIGIN_ROLES and o["body"] in body_names
+            ]
+            origin_body = owners[0] if owners else None
     for obj in objects:
         type_id = obj["type_id"]
         if type_id in BODY_TYPES:
@@ -140,27 +163,62 @@ def build(doc_label, objects, units="mm", active_body=None, views=()):
             construction.append(_item("construct:", obj, icon, "construction"))
         elif is_analysis(obj):
             analysis.append(_item("analysis:", obj, "section", "analysis"))
-        elif obj.get("role") in ORIGIN_ROLES and (
-            origin_body is None or obj["body"] == origin_body
-        ):
-            role = obj["role"]
-            icon = (
-                "point"
-                if role == "Origin"
-                else ("offset_plane" if role.endswith("Plane") else "axis")
-            )
-            origin.append(
-                _node(
-                    "origin:" + obj["name"],
-                    ORIGIN_LABELS[role],
-                    icon,
-                    "origin",
-                    obj["name"],
-                    obj["visible"],
-                    role=role,
-                )
-            )
+        elif obj.get("role") in ORIGIN_ROLES:
+            if component is None:
+                if origin_body is not None and obj["body"] == origin_body:
+                    origin.append(_origin_node(obj))
+            elif not obj.get("body"):
+                origin.append(_origin_node(obj))  # the component's own origin
     origin.sort(key=lambda n: ORIGIN_ROLES.index(n["role"]))
+    folders = []
+    if analysis and component is None:
+        folders.append(_folder("analysis", "Analysis", analysis))
+    suffix = "" if component is None else ":" + component
+    if origin:
+        folders.append(_folder("origin" + suffix, "Origin", origin))
+    if bodies:
+        folders.append(_folder("bodies" + suffix, "Bodies", bodies))
+    if sketches:
+        folders.append(_folder("sketches" + suffix, "Sketches", sketches))
+    if construction:
+        folders.append(_folder("construction" + suffix, "Construction", construction))
+    return folders
+
+
+def _component_nodes(by_component, parent, active_body, active_component, seen):
+    """The component rows inside ``parent`` (a component name, None for the root), each
+    with its folders and its own components, in the order they were made."""
+    nodes = []
+    for obj in by_component.get(parent, []):
+        if obj["type_id"] not in COMPONENT_TYPES or obj["name"] in seen:
+            continue
+        seen.add(obj["name"])
+        name = obj["name"]
+        children = _folders(by_component.get(name, []), active_body, name)
+        children += _component_nodes(by_component, name, active_body, active_component, seen)
+        node = _item(
+            "component:",
+            obj,
+            "new_component",
+            "component",
+            active=name == active_component,
+            children=children,
+        )
+        if node["active"]:
+            node["tip"] = node["tip"] or "Active component: new sketches and bodies go here"
+        nodes.append(node)
+    return nodes
+
+
+def build(doc_label, objects, units="mm", active_body=None, views=(), active_component=None):
+    """The whole browser tree for a document. ``views``: names of saved named views;
+    ``active_component``: name of the active component (None: the root is active). Each
+    row may carry "component": the name of the component it is in (None: the root)."""
+    by_component = {}
+    for obj in objects:
+        by_component.setdefault(obj.get("component"), []).append(obj)
+    folders = _folders(by_component.get(None, []), active_body, None)
+    components = _component_nodes(by_component, None, active_body, active_component, set())
     settings = _node(
         "settings",
         "Document Settings",
@@ -182,17 +240,13 @@ def build(doc_label, objects, units="mm", active_body=None, views=()):
     ]
     named += [_node("saved_view:" + name, name, "nav_lookat", "saved_view", name) for name in views]
     children = [settings, _node("views", "Named Views", "folder", "views", children=named)]
-    if analysis:
-        children.append(_folder("analysis", "Analysis", analysis))
-    if origin:
-        children.append(_folder("origin", "Origin", origin))
-    if bodies:
-        children.append(_folder("bodies", "Bodies", bodies))
-    if sketches:
-        children.append(_folder("sketches", "Sketches", sketches))
-    if construction:
-        children.append(_folder("construction", "Construction", construction))
-    return _node("document", doc_label, "document", "document", children=children)
+    children += folders
+    children += components  # Fusion lists the components after the root's own folders
+    root = _node("document", doc_label, "document", "document", children=children)
+    root["active"] = active_component is None  # the root component's activate mark
+    if root["active"] and components:
+        root["tip"] = "Active component (root): new sketches and bodies go here"
+    return root
 
 
 def signature(tree):
@@ -249,7 +303,16 @@ def path_to(tree, key, _path=None):
 # What the right-click menu offers per kind of node, in Fusion's order. The UI
 # leaves out entries that do not apply (e.g. no Delete for an origin plane).
 MENUS = {
-    "document": ["Show All Bodies", "Show All Sketches", "Hide All Sketches", "-", "Rename"],
+    "document": [
+        "Activate",
+        "New Component",
+        "-",
+        "Show All Bodies",
+        "Show All Sketches",
+        "Hide All Sketches",
+        "-",
+        "Rename",
+    ],
     "units": ["Change Active Units"],
     "settings": ["Change Active Units"],
     "views": ["New Named View"],
@@ -257,14 +320,29 @@ MENUS = {
     "saved_view": ["Go to View", "-", "Rename", "Delete"],
     "folder": ["Show/Hide"],
     "origin": ["Show/Hide", "-", "Create Sketch"],
-    "body": [
-        "Activate Body",
+    "component": [
+        "Activate",
+        "New Component",
         "-",
         "Show/Hide",
         "Isolate",
         "Find in Window",
         "Find in Timeline",
         "-",
+        "Move to Component",
+        "Rename",
+        "Delete",
+    ],
+    "body": [
+        "Activate Body",
+        "Create Components from Bodies",
+        "-",
+        "Show/Hide",
+        "Isolate",
+        "Find in Window",
+        "Find in Timeline",
+        "-",
+        "Move to Component",
         "Rename",
         "Delete",
     ],

@@ -233,15 +233,20 @@ def create_sketch(body, target):
     A face or plane of another body puts the sketch in that body and makes it active, as
     in Fusion, where Extrude then joins the body that was clicked. (In `body` the sketch
     would reach out of its body, and the extrude would join the wrong one.)"""
-    from . import timeline_ops
+    from . import components, timeline_ops
 
     owner = timeline_ops.body_of(target[0])
     if owner is not None and owner is not body:
         body = owner
         try:
-            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+            components.activate_body(body)  # and its component
         except Exception as exc:
             warn("could not activate %s: %s" % (body.Label, exc))
+    if target[0].TypeId in PLANE_TYPES and not target[1]:
+        # A component's own origin plane (clicked in the browser) lies where the body's
+        # plane of the same role lies: the sketch hangs on the body's, inside the body.
+        if components.is_component(components.origin_owner(target[0])):
+            target = (components.same_role_plane(body, target[0]), "")
     target = _earliest(target)
     doc = body.Document
     doc.openTransaction("Create Sketch")
@@ -303,7 +308,9 @@ def edit_sketch(sketch):
     body = sketch.getParentGeoFeatureGroup()
     if body is not None and body.TypeId == "PartDesign::Body":
         try:
-            Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+            from . import components
+
+            components.activate_body(body)  # and its component
         except Exception as exc:
             warn("could not activate %s: %s" % (body.Label, exc))
     open_sketch(sketch)

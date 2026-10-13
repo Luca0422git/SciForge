@@ -9,6 +9,7 @@ the side must run along; Centerline: one curve the profiles stay square to. Clos
 last profile back to the first. Lofting into material switches to Cut, unless you picked the
 operation yourself. Problems are shown in the dialog, which then stays open.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -26,6 +27,7 @@ OPERATION_LABELS = [
     ("Cut", "cut"),
     ("Intersect", "intersect"),
     ("New Body", "new_body"),
+    ("New Component", "new_component"),
 ]
 MERGE_GAP = (
     "Not in SciForge yet: the loft keeps one side face per profile curve (Fusion's Keep). "
@@ -673,7 +675,9 @@ class LoftPanel(Panel):
             extrude.show_tip(body)
             if body is not self.body:
                 try:
-                    Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+                    from . import components
+
+                    components.activate_body(body)  # and its (new) component
                 except Exception as exc:
                     warn("could not activate %s: %s" % (body.Label, exc))
         log("%s done" % self.title)

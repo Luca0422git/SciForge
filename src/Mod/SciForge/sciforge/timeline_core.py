@@ -68,12 +68,14 @@ KINDS = {
     "ucs": ("Coordinate System", "ucs"),
     "derive": ("Derive", "derive"),
     "base": ("Base Feature", "document"),
+    "component": ("Component", "new_component"),
     "group": ("Group", "folder"),
     "other": ("Feature", "workspace_design"),
 }
 
 KIND_BY_TYPEID = {
     "Sketcher::SketchObject": "sketch",
+    "App::Part": "component",  # a component's creation (Fusion shows it in the timeline)
     "PartDesign::Pad": "extrude",
     "PartDesign::Pocket": "extrude",  # Fusion calls cut extrudes "Extrude" too
     "PartDesign::Revolution": "revolve",
@@ -150,7 +152,7 @@ KIND_BY_SCIFORGE_TYPE = {
 }
 
 # Steps that are not a solid: they never carry the history marker (FreeCAD's Tip).
-NON_SOLID_KINDS = {"sketch", "plane", "axis", "point", "ucs", "derive", "group"}
+NON_SOLID_KINDS = {"sketch", "plane", "axis", "point", "ucs", "derive", "group", "component"}
 
 
 def _words(camel):
@@ -221,6 +223,8 @@ class Item:
     deps: tuple = field(default=())
     group: str = ""  # timeline group id ("" = not in a group)
     group_name: str = ""
+    component: str = ""  # the component the step belongs to ("" = the root)
+    component_name: str = ""
 
     @property
     def icon(self):
@@ -380,6 +384,8 @@ def build(features, tips, marker_before=None):
         title = "%s %d" % (base, numbers[i])
         label = f.get("label", f["name"])
         display = title if is_default_label(label, f["name"]) else label
+        if f.get("own_label") and label:
+            display = label  # a component step is called by the component's name
         if solid[i]:
             state = "done" if active[i] else "rolled_back"
         elif f.get("body") is None:
@@ -406,16 +412,22 @@ def build(features, tips, marker_before=None):
                 deps=tuple(f.get("deps", ())),
                 group=f.get("group") or "",
                 group_name=f.get("group_name") or "",
+                component=f.get("component") or "",
+                component_name=f.get("component_name") or "",
             )
         )
     return Timeline(tuple(items), marker, dict(tips), before)
 
 
 def tooltip(item):
-    """Hover text: the step's name, then why it is red/yellow or that it is off."""
+    """Hover text: the step's name, its component, then why it is red/yellow or off."""
     lines = [item.display]
-    if item.display != item.title:
+    if item.display != item.title and item.kind != "component":
         lines.append(item.title)
+    if item.kind == "component":
+        lines.append("Component (its bodies and sketches are in the browser)")
+    if item.component:
+        lines.append("In component: %s" % item.component)
     if item.suppressed:
         lines.append("Suppressed")
     elif item.state == "rolled_back":

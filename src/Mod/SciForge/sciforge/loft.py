@@ -27,6 +27,7 @@ What is built:
   need profiles in parallel planes; between two profiles the sections are moved, turned and
   scaled so they touch the rails).
 """
+
 import json
 
 import FreeCAD as App
@@ -34,7 +35,7 @@ import FreeCAD as App
 from . import curves, extrude
 
 GUIDES = ("rails", "centerline")
-OPERATIONS = ("join", "cut", "intersect", "new_body")
+OPERATIONS = ("join", "cut", "intersect", "new_body", "new_component")
 DEFAULTS = {"operation": "join", "guide": "rails", "closed": False, "chain": True}
 
 META = "SciForgeLoft"
@@ -617,7 +618,7 @@ def _native_section(profile, body):
 def native_type(profiles, rail_refs, centerline_refs, options, body):
     if body is None:
         return None
-    if options["operation"] not in ("join", "cut", "new_body"):
+    if options["operation"] not in ("join", "cut", "new_body", "new_component"):
         return None
     if options["guide"] == "rails" and curves.normalize(rail_refs):
         return None
@@ -659,9 +660,11 @@ def _target(feature, profiles, options):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
-    if options["operation"] == "new_body":
+    if options["operation"] in ("new_body", "new_component"):
         if created is not None:
             return created, src
+        if options["operation"] == "new_component":
+            return None, src  # always a new component with a new body in it
         if feature is not None and owner_body(feature) is src and not _has_solid(src, feature):
             return src, src
         if feature is None and not _has_solid(src):
@@ -670,15 +673,12 @@ def _target(feature, profiles, options):
     return src, src
 
 
-def _new_body(src_body):
-    doc = src_body.Document
-    count = len([o for o in doc.Objects if o.TypeId == "PartDesign::Body"]) + 1
-    body = doc.addObject("PartDesign::Body", "Body")
-    container = src_body.getParentGeoFeatureGroup()
-    if container is not None and hasattr(container, "addObject"):
-        container.addObject(body)
-    body.Label = "Body%d" % count
-    return body
+def _new_body(src_body, component=False):
+    """A new body beside the source body (New Body), or inside a new component (New
+    Component)."""
+    from . import components
+
+    return components.body_for_new(src_body, component)
 
 
 def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=None, hide=True):
@@ -708,7 +708,7 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
     old_meta = load_meta(feature) if feature is not None else {}
     created = None
     if target is None:
-        target = created = _new_body(src)
+        target = created = _new_body(src, options["operation"] == "new_component")
         type_id = FP_TYPE
     elif old_meta.get("created_body") == target.Name:
         created = target
@@ -817,8 +817,12 @@ def _remove(feature, keep_body=True):
     if not keep_body and body is not None and meta.get("created_body") == body.Name:
         rest = [o for o in body.Group if o.TypeId != "App::Origin"]
         if not rest:
+            from . import components
+
+            container = components.container_of(body)
             body.removeObjectsFromDocument()
             doc.removeObject(body.Name)
+            components.drop_if_empty(container)  # a New Component that failed
             return
     if was_tip:
         extrude.show_tip(body)
@@ -858,8 +862,8 @@ def read(feature):
     profiles = _refs_load(doc, meta.get("profiles"))
     if is_own(feature):
         options.update(fp_options(feature))
-        if meta.get("operation") == "new_body":
-            options["operation"] = "new_body"
+        if meta.get("operation") in ("new_body", "new_component"):
+            options["operation"] = meta["operation"]
         if not profiles:
             profiles = _links(feature.Profiles)
         return (
@@ -868,10 +872,11 @@ def read(feature):
             _links(feature.Centerline),
             options_with_defaults(options),
         )
+    made = meta.get("operation")
     options["operation"] = (
         "cut"
         if feature.TypeId == "PartDesign::SubtractiveLoft"
-        else ("new_body" if meta.get("operation") == "new_body" else "join")
+        else (made if made in ("new_body", "new_component") else "join")
     )
     options["closed"] = bool(feature.Closed)
     if not profiles:

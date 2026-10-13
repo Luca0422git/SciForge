@@ -40,10 +40,12 @@ by Luca.**
 ## Browser
 
 Order: Document Settings (Units), Named Views, Analysis (once there is one), Origin, Bodies,
-Sketches, Construction. Folders appear once they have something in them. Each row: expand
-arrow, eye, icon, name. Features are not listed (they are in the timeline). One origin (the
-active body's, else the first body's; FreeCAD gives every body its own). Suppressed sketches
-and planes are greyed and struck through, not shown as warnings.
+Sketches, Construction, then the components (each with its own Origin, Bodies, Sketches,
+Construction and nested components; the activate ring at the end of a component row and of
+the design's row: `parity/components.md`). Folders appear once they have something in them.
+Each row: expand arrow, eye, icon, name. Features are not listed (they are in the timeline).
+One origin (the active body's, else the first body's; FreeCAD gives every body its own).
+Suppressed sketches and planes are greyed and struck through, not shown as warnings.
 
 - Eye: shows/hides; a folder's eye does all of its rows. Origin planes/axes show what is really
   on screen (FreeCAD shows them through their Origin); turning one on alone hides the others.

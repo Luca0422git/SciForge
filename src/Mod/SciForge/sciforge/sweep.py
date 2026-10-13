@@ -31,6 +31,7 @@ What is built:
 Fusion-only choices are stored as JSON in the hidden "SciForgeSweep" property, so editing
 the sweep from the timeline offers them again.
 """
+
 import json
 import math
 
@@ -41,7 +42,7 @@ from . import curves, extrude
 TYPES = ("single", "rail")
 ORIENTATIONS = ("perpendicular", "parallel")
 SCALINGS = ("scale", "stretch", "none")
-OPERATIONS = ("join", "cut", "intersect", "new_body")
+OPERATIONS = ("join", "cut", "intersect", "new_body", "new_component")
 
 DEFAULTS = {
     "type": "single",
@@ -777,7 +778,7 @@ def native_type(profiles, path_refs, options, body, two_sides):
     """FreeCAD's own Pipe type when it builds exactly this sweep, else None."""
     if body is None or not single(options):
         return None
-    if options["operation"] not in ("join", "cut", "new_body"):
+    if options["operation"] not in ("join", "cut", "new_body", "new_component"):
         return None
     if abs(options["taper"]) > 1e-9 or abs(options["twist"]) > 1e-9:
         return None
@@ -818,9 +819,11 @@ def _target(feature, profiles, options):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
-    if options["operation"] == "new_body":
+    if options["operation"] in ("new_body", "new_component"):
         if created is not None:
             return created, src
+        if options["operation"] == "new_component":
+            return None, src  # always a new component with a new body in it
         if feature is not None and owner_body(feature) is src and not _has_solid(src, feature):
             return src, src
         if feature is None and not _has_solid(src):
@@ -829,15 +832,12 @@ def _target(feature, profiles, options):
     return src, src
 
 
-def _new_body(src_body):
-    doc = src_body.Document
-    count = len([o for o in doc.Objects if o.TypeId == "PartDesign::Body"]) + 1
-    body = doc.addObject("PartDesign::Body", "Body")
-    container = src_body.getParentGeoFeatureGroup()
-    if container is not None and hasattr(container, "addObject"):
-        container.addObject(body)
-    body.Label = "Body%d" % count
-    return body
+def _new_body(src_body, component=False):
+    """A new body beside the source body (New Body), or inside a new component (New
+    Component)."""
+    from . import components
+
+    return components.body_for_new(src_body, component)
 
 
 def _two_sides(profiles, path_refs, options):
@@ -878,7 +878,7 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
     old_meta = load_meta(feature) if feature is not None else {}
     created = None
     if target is None:
-        target = created = _new_body(src)
+        target = created = _new_body(src, options["operation"] == "new_component")
         type_id = FP_TYPE  # the profile and path stay in their own body
     elif old_meta.get("created_body") == target.Name:
         created = target
@@ -1006,8 +1006,12 @@ def _remove(feature, keep_body=True):
     if not keep_body and body is not None and meta.get("created_body") == body.Name:
         rest = [o for o in body.Group if o.TypeId != "App::Origin"]
         if not rest:
+            from . import components
+
+            container = components.container_of(body)
             body.removeObjectsFromDocument()
             doc.removeObject(body.Name)
+            components.drop_if_empty(container)  # a New Component that failed
             return
     if was_tip:
         extrude.show_tip(body)
@@ -1048,16 +1052,17 @@ def read(feature):
             options[name] = meta[name]
     if is_own(feature):
         options.update(fp_options(feature))
-        if meta.get("operation") == "new_body":
-            options["operation"] = "new_body"
+        if meta.get("operation") in ("new_body", "new_component"):
+            options["operation"] = meta["operation"]
         profiles = _links(feature.Profiles)
         path_refs = _links(feature.Path)
         rail_refs = _links(feature.GuideRail)
         return profiles, path_refs, rail_refs, options_with_defaults(options)
+    made = meta.get("operation")
     options["operation"] = (
         "cut"
         if feature.TypeId == "PartDesign::SubtractivePipe"
-        else ("new_body" if meta.get("operation") == "new_body" else "join")
+        else (made if made in ("new_body", "new_component") else "join")
     )
     options["type"] = "single"
     options["orientation"] = "parallel" if feature.Mode == "Fixed" else "perpendicular"

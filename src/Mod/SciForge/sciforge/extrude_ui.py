@@ -45,6 +45,7 @@ OPERATION_LABELS = [
     ("Cut", "cut"),
     ("Intersect", "intersect"),
     ("New Body", "new_body"),
+    ("New Component", "new_component"),
 ]
 ACTIVE_STYLE = "QPushButton { background: #1f6fbf; color: white; border: 1px solid #5aa0e6; }"
 # An arrow drag rebuilds the preview many times a second: when testing the bodies in the
@@ -1948,7 +1949,9 @@ class ExtrudePanel(Panel):
         new_body = extrude.owner_body(feature)
         if new_body is not None and new_body is not self.body:
             try:
-                Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", new_body)
+                from . import components
+
+                components.activate_body(new_body)  # and its (new) component
             except Exception as exc:
                 warn("could not activate %s: %s" % (new_body.Label, exc))
         log("%s done" % self.title)

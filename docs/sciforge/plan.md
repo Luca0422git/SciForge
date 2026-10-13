@@ -108,7 +108,11 @@ Route: a **SciForge "inference layer" in Python** on top of FreeCAD's tools:
    right-to-left what it touches; click and hold for "Select Other" (FreeCAD's Clarify
    Selection under it); selection filters.
 2. **Components** [large]: many components in one design, one active component that gets
-   new work, New Component, the browser's component tree.
+   new work, New Component, the browser's component tree. Done 2026-10-13 (branch
+   `sf/components`, `parity/components.md`): the model (`App::Part` = component, the root
+   is the document, the active body lies in the active component) is the contract the
+   Joints work builds on. Left: ghosting of inactive components, rolling before a
+   component's step, external components.
 3. **Joints** [large]: Fusion's two-click joint picking (snap points on each part), the 7
    joint types, As-built joints, Ground, Rigid Group, limits, Drive Joints, Capture
    Position, Motion Link. FreeCAD 1.1's Assembly solver already does most joint types,
