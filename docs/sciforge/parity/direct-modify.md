@@ -3,7 +3,8 @@
 Capture Design History on/off, Create Base Feature, Press Pull / Offset Face / Delete on bodies
 without history, Replace Face, Split Face, Silhouette Split, Align, Remove.
 
-Status: **being built** (branch `sf/direct`).
+Status: **built, not yet signed off** (branch `sf/direct`; the **Guess** rows and the known
+gaps below need checking in Luca's Fusion).
 
 ## Fusion's behaviour, researched before building
 
@@ -134,4 +135,87 @@ checked in Luca's Fusion).
 
 ## What SciForge does (and how it maps onto FreeCAD)
 
-(Filled in as each part is built and tested.)
+Code (all in `src/Mod/SciForge/sciforge/`):
+
+| File | What |
+|---|---|
+| `direct_core.py` | Qt-free rules (unit tested): which steps a bake removes, base feature ids and titles, the history menu label, what Delete says when the gap cannot close |
+| `direct.py`, `direct_ui.py` | Capture Design History on/off, Create / Finish Base Feature, editing a base feature, solids without history made into bodies, the bake after each command |
+| `presspull_ui.py`, `presspull.py` | Press Pull on solids without history; Offset Face (Modify > Offset Face) |
+| `delete.py` | Delete on faces of solids without history; the healing refusal |
+| `replace_face.py`, `replace_face_ui.py` | Replace Face |
+| `split_face.py`, `split_face_ui.py` | Split Face |
+| `silhouette.py`, `silhouette_ui.py` | Silhouette Split |
+| `align_core.py`, `align.py`, `align_ui.py` | Align (the maths is Qt-free and unit tested) |
+| `remove.py`, `remove_ui.py` | Remove |
+| `modify_common.py` | what the Modify dialogs share (a click on a solid without history makes it a body; the origin squares) |
+
+### The model: how a design "without history" is kept in FreeCAD
+
+FreeCAD has no direct-modeling mode. SciForge keeps every body a PartDesign Body in both
+modes, so every SciForge command works the same way on it, and stores the difference in the
+body's **first step**:
+
+* A body without history has exactly one solid step: FreeCAD's `PartDesign::FeatureBase`,
+  which takes its solid from a hidden plain `Part::Feature` (the "base shape", Label
+  "Body (base)", it lives in the body's component because FreeCAD refuses links out of a
+  component). Sketches and construction planes stay in the body.
+* "Baking" a change: the command builds its step exactly as in a parametric design (same
+  code, same preview), and when it is OK'd the result is copied into the base shape and the
+  new steps are deleted, all inside the command's own undo step (`preview.end_transaction`,
+  `taskui._end_transaction` and `delete.run` call `direct.takes_commit` /
+  `bake_before_commit`; a FreeCAD command that commits by itself is baked as an undo step of
+  its own). So Ctrl+Z / Ctrl+Y undo and redo a direct edit like any other.
+* Whether the design captures history is a hidden `App::FeaturePython` "SciForgeDesign"
+  (`CaptureHistory`), not the document's metadata: an object property is undone with Ctrl+Z,
+  metadata is not.
+* A base feature in a parametric design is the same thing: the body's first step, marked with
+  a base feature id (`SciForgeBaseId`) so the timeline shows it as "Base Feature N".
+
+| Fusion | SciForge |
+|---|---|
+| H1, H2: the design's right-click menu "Do not capture Design History"; also in the timeline's settings menu | same entry in the browser's top row menu and in the timeline's settings (gear) menu |
+| H3: the question before the history goes (Delete Parametric History / Cancel) | a question in SciForge's own words: Remove History / Cancel. Cancel keeps everything |
+| H3: the timeline and every feature removed, the bodies keep their shape | every body is baked into one frozen step; the timeline panel hides; the sketches and construction planes stay; bodies a Combine or a Remove used up are deleted (they are not in the design any more) |
+| H4: every command changes the bodies directly | Press Pull, Offset Face, Fillet, Extrude (join / cut / new body), Delete on faces, Replace Face, Split Face, Align, Move, Combine...: the command's step is baked at OK, nothing is recorded |
+| H5: Capture Design History: a new timeline starting with one Base Feature | the entry (same menu) brings the timeline back; each body's frozen step becomes a Base Feature (they share one base feature id); later commands are steps again |
+| H6: undo in both modes | turning history off and on are one undo step each; direct edits undo and redo |
+| H7: STEP files open without history | FreeCAD's own STEP import gives plain solids (no body). The first Press Pull, Offset Face, Delete on a face or Modify pick on one makes it a body whose base feature holds the imported solid; the import is then hidden (Cancel shows it again). The same works for any plain solid (a converted mesh, a Part workbench solid) |
+| B1, B2, B4: Create Base Feature, edits not recorded one by one, Finish Base Feature, one timeline item | CREATE > Create Base Feature opens a bar over the view ("Finish Base Feature" button, also in the CREATE menu). Bodies made while it is open belong to it: whatever is done to them (sketches, extrudes, Press Pull, Delete, fillets...) is baked into their base feature at each OK, their sketches leave the timeline. Finish closes it |
+| B5: edit the base feature later | double-click "Base Feature N" in the timeline: the marker rolls back to it, the bar says what is edited, edits on its bodies are baked into it (no new step), Finish puts the marker back where it was and the later steps rebuild on the edited solid |
+| B6: Press Pull (Automatic) on a face of a base feature edits it | in a parametric design Press Pull adds a Press Pull step after the base feature (Fusion's "New Offset"); inside an open base feature it is baked into it |
+| P2: Modify > Offset Face, an Offset Face item, double-click to edit | same (Press Pull's faces mode without its fillet / sketch-area modes); the step is titled "Offset Face N" |
+| P4, P5: Delete on faces heals; refused when the neighbours cannot close the gap | same (OpenCASCADE's `BRepAlgoAPI_Defeaturing`); the refusal says why and what to do instead, next to the pointer, nothing changes |
+| R1-R4: Replace Face | Source Faces (one body), Tangent Chain (on by default), Target (a face of any body, an origin square, a construction plane); live preview; a "Replace Face N" step, editable. The target must lie across the faces' way, else the reason is said in the dialog and OK keeps it open. A step sees the design as it is at its place in the timeline: editing the target's own earlier step moves the replaced faces with it |
+| S1-S4: Split Face | Faces to Split, Splitting Tool (a sketch or one of its curves, an origin square, a construction plane, a face of any body, another body), Split Type (Split with Surface by default, Along Vector with its Direction, Closest Point), Extend Splitting Tool (off by default, only for Split with Surface); one body with more faces; a "Split Face N" step |
+| L1-L5: Silhouette Split | View Direction (an origin square or construction plane, an axis, a straight edge, a flat face, a cylinder's axis; a ball's face gives none and is refused), Target Body, Operation Split Faces Only (default) / Split Solid Body (refused when the outline is not flat, as in Fusion) / Split Shelled Body; split pieces become new bodies like Split Body's |
+| A1-A6: Align | Objects (Bodies / Components), From, To, Flip, Angle (90 degrees per click about the To geometry); two flat faces end up facing each other; an "Align N" step (bodies: a step in the body; components: a step outside the bodies that set the component's placement, deleting it puts the component back); no key (A is Appearance) |
+| X1-X3: Remove | Modify > Remove (selection first, or a dialog that waits for clicks) and Remove in a body's / component's browser menu: a "Remove N" step per body (named after the component for a component); the body hides and leaves the browser; rolling the marker before it, deleting or suppressing it brings the body back. In a design without history Remove deletes (there is no timeline to hold it) and says so |
+
+### Tested
+
+Scenarios (real mouse and keyboard in FreeCAD 1.1.4 under xvfb): `direct_history`,
+`direct_step_box`, `direct_base_feature`, `direct_components`, `direct_commands`, `modify_replace_face`,
+`modify_split_face`, `modify_silhouette`, `modify_align`, `modify_remove`. Golden models
+(`golden/models/direct_*.json`, analytic numbers): Replace Face up / edited down, Split Face
+(origin plane, then a Press Pull on one half, Closest Point, Extend), Silhouette Split (faces,
+solid, edited back), Align (faces facing, Flip + Angle), Remove, history off / on with a Press
+Pull after it. Unit tests: `test_direct_core.py`, `test_align_core.py`,
+`test_direct_schema.py`.
+
+## Known gaps (never faked: listed here)
+
+| Fusion behaviour | SciForge now | Why |
+|---|---|---|
+| Capture Design History makes one Base Feature for all bodies | one "Base Feature" item per body (they share an id, editing one opens a session for that body) | FreeCAD's base is a step of each body; one item for several bodies needs the timeline module to group items by id |
+| Fusion keeps "pseudo features" (extrude, fillet, hole) in the browser of a direct design, editable for fillets / chamfers / holes | not built: the features are baked away; sketches stay | nothing of a baked feature is left to edit; would need a recognizer of fillets / holes in a plain solid |
+| Press Pull's Offset Type (Automatic / Edit Feature / New Offset) | no Offset Type choice: on an extrude's face Press Pull edits the extrude (the presspull module), on a base feature's face it adds a Press Pull step (New Offset), inside an open base feature it is baked into it | a third option would change the Press Pull dialog shared with the extrude area |
+| B3: an open base feature refuses bodies made before it | they can be changed; those changes are recorded as normal steps (with their own timeline items), not baked into the base feature | refusing would block Luca's common case (pull a face of another body while a base feature is open) without a gain; documented here |
+| a base feature open while the design is saved | saving keeps the marker where the session put it; reopening shows the design rolled back to the base feature, without the session (double-click the base feature and Finish, or drag the marker to the end) | the session lives in memory, not in the file |
+| Replace Face onto any curved target | flat faces / planes, and round targets that are a cylinder or a ball; other curved targets are refused with the reason | the inner side of a free-form surface is not well defined in OpenCASCADE without a closed solid; cylinders and balls are |
+| faces split by Split Face stay split whatever comes later | they stay split until a later step that tidies faces (Refine: an Extrude join, a Press Pull of the neighbour) merges faces lying in one plane again | FreeCAD's `removeSplitter` merges coplanar faces; SciForge's steps refine like Fusion's |
+| Split Shelled Body on a closed shelled body: the parting surface between inner and outer outline | a non-flat outline is swept along the view direction to make the parting surface; inner outlines hidden behind the outer surface are not used | OpenCASCADE's outline (`HLRBRep`, `reflectLines` "OutLine") gives the visible outline only |
+| Silhouette Split along a direction where the outline is only existing edges (a box seen along its diagonal) | refused with the reason | the outline then is the box's own edges: nothing to split |
+| Remove of a component | its bodies get Remove steps and hide; the component's row stays in the browser | the browser module lists components whatever their bodies do |
+| A STEP file opened from the Data Panel / Open opens as a design without history | FreeCAD's import adds plain solids to the open (parametric) design; they become bodies on the first edit | opening files is the insert / versions modules' area |
+| the plain solids FreeCAD's STEP import makes are listed in the timeline with the importer's name (e.g. "Open CASCADE STEP translator 7.8 2") until edited | as said | the timeline module lists every plain solid; when one is made a body it is hidden behind the body's Base Feature |
