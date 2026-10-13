@@ -19,7 +19,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import profile_pick, warn
+from . import handles3d, profile_pick, warn
 from .compat import QtCore, QtGui, QtWidgets
 
 HANDLE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
@@ -396,10 +396,14 @@ class PathHandle:
                     _GRAB["time"] = time.time()
                     self._drag = True
                     self._last_event = time.time()
+                    # The release of a drag ending over the part is kept by FreeCAD's
+                    # selection; Qt's is watched too (handles3d.ReleaseWatch).
+                    handles3d.watch_release(self)
             elif self._drag:
                 self._drag = False
                 self._released = True
                 self._last_event = time.time()
+                handles3d.stop_watching(self)
         except Exception as exc:
             warn("path handle: %s" % exc)
 
@@ -443,6 +447,10 @@ class PathHandle:
     def remove(self):
         try:
             self._timer.stop()
+        except Exception:
+            pass
+        try:
+            handles3d.stop_watching(self)
         except Exception:
             pass
         for kind, callback in getattr(self, "callbacks", []):
