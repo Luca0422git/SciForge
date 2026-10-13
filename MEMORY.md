@@ -2011,8 +2011,43 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     SoHandleEventAction, applied to their sub-graph, never during a recompute) and gives the
     grab back before removal. Scenario `drag_release_lost` (M1, M2c, M4, M8, H2b, H3, P2, E4,
     E7; without the fix 29+ checks fail and E7 crashes FreeCAD); 16 drag regressions pass.
-  - In progress: R1-R3, R5-R8 (branches sf/extrude-feel, sf/sketch-areas, sf/extrude-bodies;
-    investigations in the session scratchpad, plans in r1-r7/r8-investigation.json).
+  - R1-R3, R5-R8: done overnight, see the 2026-10-13 entry below.
+
+### 2026-10-13: Luca's Extrude and sketch requests R1-R8, then a bug review (main branch)
+- Built in three branches by a workflow (implement, adversarial review, fix), merged one by one
+  with tests after each merge:
+  - `sf/extrude-feel` (R2 live drag, R3 value box, R5 start at 0, R6 sketch kept until OK, R7
+    red cuts), merged 05:45 + review fixes 07:49.
+  - `sf/sketch-areas` (R1: pick one closed area, inside the open sketch and after Finish
+    Sketch), merged 08:44. Its scenarios now type the distance (`arrow_input.give_distance`:
+    type, then wait until the preview timer and recompute are done).
+  - `sf/extrude-bodies` (R8: one Extrude through several bodies, "Bodies to Cut" row), merged
+    about 09:00. Merge decisions: the automatic operation and the bodies test use what the
+    preview builds (`_build_options()`: a side still at 0 left out); the bodies list goes into
+    the build options; `extrude.tool_shape` clips a Through All red preview to the box of every
+    body it cuts (`_parts_box`, lead + followers), not only the sketch's body.
+- R8 changed one behaviour on purpose: a profile that touches no body (sketch_areas: area A
+  beside the extruded B) now makes a New Body (Fusion) instead of a Join; this closes the old
+  open item "Extrude Join away from the part says separate solids". sketch_areas checks it.
+- Independent review of everything written on 2026-10-12/13 (3 reviewers: drag + Extrude,
+  sketch, ViewCube + CI). Fixed, each with a scenario step:
+  - Q in an open sketch with nothing picked opened Press Pull inside FreeCAD's "leave sketch"
+    undo step (Esc undid the leave; after OK one Undo took both). Now opened after the
+    command, like E (`presspull_ui._open_after_sketch`).
+  - OK refused at distance 0 left the red cut drawn; the last profile dropped at 0 left its
+    arrows and value box; at 0 the offset / side-two value boxes sat on the distance box
+    (`arrow_box_core.spot(other_side=True)`); the click that leaves a value box was taken as a
+    pick (a face added as a profile): `taskui.box_click_taken()` makes the dialogs ignore it.
+    Scenario `extrude_review_fixes`.
+  - ViewCube: Home at the Home direction after a pan, with animation on, ended off-centre
+    (FreeCAD's move animation kept sliding after the fit: `stopAnimating` first); two arrow
+    clicks 150 ms apart: the arrows vanished while turning and the second click hit the model;
+    the cube's see-through style reached its right-click menu. `viewcube_home`,
+    `viewcube_arrows` (both fail on the old code with animation on).
+  - Full build: the scenario jobs say "the Linux build did not finish" instead of a download
+    error when the Linux build failed.
+- Old scenarios that relied on the automatic 10 mm or on a preview right after E were updated
+  (extrude_multibody*, sketch_areas*). Unit 330, golden 294 + 1 xfail.
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch

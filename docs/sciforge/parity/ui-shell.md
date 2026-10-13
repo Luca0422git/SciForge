@@ -100,7 +100,11 @@ Matches Fusion (Autodesk sources, see the research report):
   Shift + middle-drag: turns about Z, tilts, never rolls. A click that moves up to 5 px is
   still a click.
 - House icon: Go Home. Home belongs to the design (document `Meta`, key `SciForgeHome`,
-  saved in the file); without one: the isometric view from front-right-top, fitted.
+  saved in the file); without one: the isometric view from front-right-top, fitted. Also
+  right after a pan or zoom at the Home direction with FreeCAD's animation on (the model
+  ends centred; review fix 2026-10-13).
+- Arrow clicks add up: a second click while the view is still turning (a normal
+  double-click, 150 ms) turns on from where the first one is going.
 - Right-click: Go Home; Orthographic / Perspective; Set Current View as Home > Fit to View
   / Fixed Distance; Reset Home. Ctrl+Alt+V shows or hides the cube (remembered).
 - X/Y/Z triad in red/green/blue.
