@@ -303,20 +303,33 @@ def _overlaps(shape, tool, contact=False, volume=VOLUME_TOL):
         return False
 
 
-# Quick tests before a costly boolean: a point strictly inside both solids (or on both faces)
-# answers at once; only when none is found does the exact boolean decide.
-FRACTIONS = ((0.5, 0.5), (0.31, 0.37), (0.69, 0.63), (0.37, 0.69), (0.63, 0.31))
+# Quick tests before a costly boolean: a point strictly inside both solids (or inside one face
+# and on another) answers at once; only when none is found does the exact boolean decide.
+# The points sit at irrational fractions of a face's parameter range (a symmetric design puts
+# edges at 1/2, 1/3, 1/4: a point on an edge next to a tapered neighbour said "inside") and
+# keep a margin of 1 % of that range from the face's edges.
+FRACTIONS = (
+    (0.4142, 0.5858),
+    (0.2929, 0.3820),
+    (0.7071, 0.6180),
+    (0.3820, 0.7071),
+    (0.6180, 0.2929),
+)
+MARGIN = 0.01
 
 
 def _face_samples(face):
-    """A few points inside a face, at odd fractions of its parameter range (clear of its
-    edges)."""
+    """A few points well inside a face (clear of its edges by a margin)."""
     found = []
     try:
         u0, u1, v0, v1 = face.ParameterRange
+        du, dv = (u1 - u0) * MARGIN, (v1 - v0) * MARGIN
         for fu, fv in FRACTIONS:
             u, v = u0 + (u1 - u0) * fu, v0 + (v1 - v0) * fv
-            if face.isPartOfDomain(u, v):
+            if all(
+                face.isPartOfDomain(u + a, v + b)
+                for a, b in ((0.0, 0.0), (du, 0.0), (-du, 0.0), (0.0, dv), (0.0, -dv))
+            ):
                 found.append(face.valueAt(u, v))
     except Exception:
         pass
