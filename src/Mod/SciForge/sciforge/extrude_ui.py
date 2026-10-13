@@ -1194,6 +1194,10 @@ class ExtrudePanel(Panel):
         stored = read.pop("bodies", None)
         if stored is not None:
             self._stored_bodies = [b.Name for b in stored]
+        else:
+            # Made before extrudes acted on several bodies: it acts on its own body only.
+            body = extrude.owner_body(self.target) if self.target is not None else None
+            self._stored_bodies = [body.Name] if body is not None else None
 
     def _build_bodies_row(self, form):
         self.fields["bodies"] = SelectionField(self, "bodies", "No bodies")

@@ -11,7 +11,8 @@ by itself, as in Fusion.
      "Bodies to Cut" row says "2 bodies" and "Body1, Body2", both bodies are cut (3500 /
      3500).
   B  Click the row, click Body2: it is left out (4000, "1 body"); click it again: back
-     (3500). Extent All: 3000 / 3000. OK: exactly one new timeline step; Undo / Redo.
+     (3500). The same with Body1, the sketch's own body (the cut then lives in Body2).
+     Extent All: 3000 / 3000. OK: exactly one new timeline step; Undo / Redo.
   C  Double-click the step: the row lists both bodies; Extent Distance, -8: 3200 / 3200.
   D  Marker dragged before the step: 4000 / 4000; to the end: 3200 / 3200. Suppress and
      Unsuppress from the step's menu; Undo / Redo.
@@ -229,6 +230,26 @@ def b_taken_back():
     p = xpanel()
     h.check("Body2 back: 2 bodies", row(p) is not None and row(p)[1] == "2 bodies", row(p))
     check_volumes("Body2 back", 3500, 3500)
+    h.click(V(4, 17, 10))  # Body1's top (the sketch's own body), away from the cut
+
+
+def b_body1_out():
+    p = xpanel()
+    r = row(p)
+    h.check("Body1 left out: 1 body", r is not None and r[1] == "1 body", r)
+    h.check(
+        "Body1 left out: only Body2 named",
+        r is not None and r[2].splitlines()[0] == body2().Label,
+        r,
+    )
+    check_volumes("the sketch's own body left out", 4000, 3500)
+    h.click(V(4, 17, 10))
+
+
+def b_body1_back():
+    p = xpanel()
+    h.check("Body1 back: 2 bodies", row(p) is not None and row(p)[1] == "2 bodies", row(p))
+    check_volumes("Body1 back", 3500, 3500)
     if p is not None:
         h.check("choose Extent: All", ui.choose(p.extent, "All"))
 
@@ -555,6 +576,8 @@ h.run(
         b_row_active,
         b_left_out,
         b_taken_back,
+        b_body1_out,
+        b_body1_back,
         b_all,
         b_done,
         b_undone,
