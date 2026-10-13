@@ -18,14 +18,19 @@ An item's command is:
 SEP = None  # separator line inside a menu
 
 
-def item(label, command, icon=None, key="", note=""):
-    """One menu entry. key = Fusion's shortcut, shown at the right of the menu."""
-    return {"label": label, "command": command, "icon": icon, "key": key, "note": note}
+def item(label, command, icon=None, key="", note="", checked=None):
+    """One menu entry. key = Fusion's shortcut, shown at the right of the menu.
+    checked = "module:function" in the sciforge package that says whether the entry is the
+    current choice (a tick in the menu, e.g. the orbit mode)."""
+    entry = {"label": label, "command": command, "icon": icon, "key": key, "note": note}
+    if checked:
+        entry["checked"] = checked
+    return entry
 
 
-def sub(label, items, icon=None):
-    """A submenu (shown with a little arrow)."""
-    return {"label": label, "submenu": items, "icon": icon}
+def sub(label, items, icon=None, note=""):
+    """A submenu (shown with a little arrow; in the navigation bar, a drop-down button)."""
+    return {"label": label, "submenu": items, "icon": icon, "note": note}
 
 
 def group(gid, title, big, items):
@@ -524,9 +529,30 @@ QUICK_ACCESS = [
     item("Redo", "Std_Redo", "qa_redo", "Ctrl+Y"),
 ]
 
-# Navigation bar floating at the bottom centre of the 3D view.
+# Navigation bar floating at the bottom centre of the 3D view. Orbit is a drop-down with
+# Fusion's two orbit modes (the tick shows the current one; orbit_ui.py).
 NAV_BAR = [
-    item("Orbit", None, "nav_orbit", note="Shift + middle mouse button"),
+    sub(
+        "Orbit",
+        [
+            item(
+                "Constrained Orbit",
+                "SciForge_OrbitConstrained",
+                "nav_orbit",
+                note="Turns about the up axis and tilts; never rolls",
+                checked="orbit_ui:is_constrained",
+            ),
+            item(
+                "Free Orbit",
+                "SciForge_OrbitFree",
+                "nav_orbit",
+                note="Tumbles in any direction, rolling included",
+                checked="orbit_ui:is_free",
+            ),
+        ],
+        "nav_orbit",
+        note="Shift + middle mouse button",
+    ),
     item("Look At", "Std_AlignToSelection", "nav_lookat"),
     item("Pan", None, "nav_pan", note="Middle mouse button"),
     item("Zoom Window", "Std_ViewBoxZoom", "nav_zoom"),
@@ -569,6 +595,9 @@ MARKING_LIST = [
     item("Show All", "Std_ShowObjects", "nav_display"),
     item("Fit", "Std_ViewFitAll", "nav_fit", "F6"),
     item("Look At", "Std_AlignToSelection", "nav_lookat"),
+    SEP,
+    item("Set Orbit Center", "SciForge_SetOrbitCenter", "orbit_center"),
+    item("Reset Orbit Center", "SciForge_ResetOrbitCenter", "orbit_center"),
 ]
 
 

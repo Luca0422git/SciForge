@@ -152,6 +152,11 @@ _NAVICUBE_PARAMS = "User parameter:BaseApp/Preferences/NaviCube"
 # the orbit is Fusion's Constrained Orbit: it turns about the up axis and tilts, never
 # rolls (FreeCAD's "Free Turntable", 2; FreeCAD 1.1's default "Rounded Arcball", 4, rolls
 # the model off axis). OrbitStyle comes after NavigationStyle: a new style re-reads it.
+# The Orbit drop-down of the navigation bar (orbit_ui.py) may change OrbitStyle to the
+# Free orbit afterwards; the user's own value kept here still comes back.
+# The orbit turns about the middle of the window (RotationMode 0, Fusion turns about the
+# model's centre after a fit) or about the orbit centre a person sets with Shift + middle
+# click (orbit_ui.py draws its own green dot; FreeCAD's red dot stays hidden).
 # FreeCAD's own cube (the NaviCube) is hidden: SciForge draws Fusion's ViewCube itself
 # (viewcube_ui.py). Its colours below only matter if someone turns it back on.
 # A light ViewCube with dark labels and a blue hover.
@@ -161,6 +166,8 @@ VIEWER_SETTINGS = [
     (_VIEW_PARAMS, "Unsigned", "BackgroundColor", _rgba(VIEW)),
     (_VIEW_PARAMS, "String", "NavigationStyle", "Gui::RevitNavigationStyle"),
     (_VIEW_PARAMS, "Int", "OrbitStyle", 2),
+    (_VIEW_PARAMS, "Int", "RotationMode", 0),
+    (_VIEW_PARAMS, "Bool", "ShowRotationCenter", False),
     (_VIEW_PARAMS, "Bool", "ZoomAtCursor", True),
     (_VIEW_PARAMS, "Bool", "ShowNaviCube", False),
     (_NAVICUBE_PARAMS, "Unsigned", "BaseColor", (0xF0F0F0 << 8) | 0xE6),
@@ -263,6 +270,14 @@ def apply():
         keep_and_set(VIEWER_SETTINGS)
     except Exception as exc:
         warn("theme: could not apply viewer settings: %s" % exc)
+    try:
+        # The remembered orbit choice (Constrained or Free) replaces the OrbitStyle above;
+        # the user's own value is already kept.
+        from . import orbit_ui
+
+        orbit_ui.apply_mode()
+    except Exception as exc:
+        warn("theme: could not apply the orbit choice: %s" % exc)
     log("theme applied")
 
 

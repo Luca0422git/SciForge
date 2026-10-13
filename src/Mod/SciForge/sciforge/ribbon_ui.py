@@ -5,7 +5,7 @@ ribbon_config.py; this module only turns that data into Qt widgets."""
 import FreeCADGui as Gui
 
 from . import log, registry, ribbon_config as cfg, ui_icon, warn
-from .compat import QtCore, QtWidgets
+from .compat import QtCore, QtGui, QtWidgets
 
 BIG = 36  # ribbon icon size (Fusion: about 36-40 px at 100% scaling)
 SMALL = 18  # menu / quick-access icon size
@@ -54,11 +54,26 @@ def _menu_text(entry):
     return entry["label"] + ("\t" + entry["key"] if entry.get("key") else "")
 
 
+def is_checked(spec):
+    """Whether a "module:function" entry (ribbon_config.item(checked=...)) is the current
+    choice. Never raises: a broken spec shows unticked."""
+    try:
+        import importlib
+
+        module_name, function_name = spec.split(":", 1)
+        module = importlib.import_module("." + module_name, __package__)
+        return bool(getattr(module, function_name)())
+    except Exception as exc:
+        warn("menu tick %s: %s" % (spec, exc))
+        return False
+
+
 def build_menu(parent, entries, available):
     """QMenu for a list of config entries. Unavailable commands are greyed out."""
     menu = QtWidgets.QMenu(parent)
     menu.setToolTipsVisible(True)
-    checks = []  # (action, resolved) re-checked each time the menu opens
+    checks = []  # (action, resolved, checked spec) re-checked each time the menu opens
+    choices = None  # the ticked entries of one menu are one choice: exactly one tick
     for entry in entries:
         if entry is cfg.SEP:
             menu.addSeparator()
@@ -76,14 +91,25 @@ def build_menu(parent, entries, available):
             action.triggered.connect(lambda _=False, r=resolved, e=entry: run(r, e["label"]))
             if entry.get("note"):
                 action.setToolTip(entry["note"])
-            checks.append((action, resolved))
+            if entry.get("checked"):
+                action.setCheckable(True)
+                if choices is None:
+                    # Exclusive: clicking the ticked entry again keeps its tick (without
+                    # the group Qt unticked it until the menu was opened again).
+                    choices = QtGui.QActionGroup(menu)
+                    choices.setExclusive(True)
+                choices.addAction(action)
+                action.setChecked(is_checked(entry["checked"]))
+            checks.append((action, resolved, entry.get("checked")))
         else:
             action.setEnabled(False)
             action.setToolTip(entry.get("note") or "Not available in SciForge yet")
 
     def refresh():
-        for action, resolved in checks:
+        for action, resolved, checked in checks:
             action.setEnabled(is_active(resolved))
+            if checked:
+                action.setChecked(is_checked(checked))
 
     menu.aboutToShow.connect(refresh)
     return menu
