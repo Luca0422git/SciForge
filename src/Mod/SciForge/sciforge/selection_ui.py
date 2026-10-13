@@ -466,11 +466,13 @@ def _in_edit():
 
 def _grabbed(view):
     """A Coin dragger (an arrow handle) holds the mouse, or one of SciForge's own handles
-    was just pressed: the drag is theirs, not a box."""
+    was pressed and is being dragged (Move's triad, the Insert Mesh manipulator, Scale's
+    arrows, Revolve's angle handle...: handles3d.dragging), or was just used: the drag is
+    theirs, not a box, and a long press on it is not Select Other."""
     try:
         from . import handles3d
 
-        if handles3d.just_used():
+        if handles3d.dragging() or handles3d.just_used():
             return True
     except Exception:
         pass

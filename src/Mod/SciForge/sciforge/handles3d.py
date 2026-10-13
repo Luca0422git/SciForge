@@ -13,6 +13,7 @@ its dragger callbacks run Python without its lock. FreeCAD's own mouse callbacks
 (view.addEventCallback, safe) only record where the mouse is; a Qt timer applies it.
 Nothing here keeps a FreeCAD-owned Coin node: every node is made and owned here.
 """
+
 import math
 import time
 
@@ -32,6 +33,27 @@ JUST_USED_S = 0.6
 
 def touch():
     USED["time"] = time.time()
+
+
+# The release watchers alive: one per handle whose drag is under way (made at the press by
+# watch_release, removed at the release). Handles that take the mouse through FreeCAD's
+# view callbacks (these handles, Move's triad, Revolve's angle handle, the primitives'
+# handles, the curve picker's path handle) all start one, so this is the one place that
+# knows "a handle owns this drag": the box selection (selection_ui) must not take it.
+WATCHES = set()
+
+
+def dragging():
+    """True while a handle's drag is under way (pressed on the handle, not released yet).
+    A watcher left behind by a lost release does not count once the button is up."""
+    try:
+        if not WATCHES:
+            return False
+        if not drag_guard.left_held():
+            return False
+        return any(watch.handle is not None for watch in list(WATCHES))
+    except Exception:
+        return False
 
 
 def just_used(seconds=JUST_USED_S):
@@ -88,6 +110,7 @@ class ReleaseWatch:
 
         self.filter = _Filter()
         QtWidgets.QApplication.instance().installEventFilter(self.filter)
+        WATCHES.add(self)
 
     def released(self):
         handle = self.handle
@@ -101,6 +124,7 @@ class ReleaseWatch:
     def remove(self):
         from .compat import QtWidgets
 
+        WATCHES.discard(self)
         self.handle = None
         if self.filter is not None:
             try:
@@ -117,6 +141,7 @@ def watch_release(handle):
     old = getattr(handle, "_release_watch", None)
     if old is not None:
         old.remove()
+    touch()  # a handle took this press: it is not a pick, nor the start of a box
     try:
         handle._release_watch = ReleaseWatch(handle)
     except Exception as exc:

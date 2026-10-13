@@ -2545,6 +2545,25 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   are unconfirmed (Luca's Fusion checks 3-6 in `plan.md`); Ctrl pressed without moving
   the mouse takes effect at the next move; FreeCAD's own line steps stay two undo steps.
 
+## Merge notes 2026-10-13 night (insert + selection onto main)
+
+- `sf/insert` and `sf/selection` merged after components and versions. Conflicts: browser
+  (components' per-component folders + insert's mesh bodies and Canvases folder: canvases
+  now live per component), timeline kinds (`component` + `insert_mesh`), the app menu (one
+  data-driven File menu, `ribbon_config.FILE_MENU`, now holds the versions entries too),
+  `shell.py` hooks (both).
+- **Bug the merge exposed:** the box selection decided "is this press on a handle?" from
+  value boxes only. Handles that take the mouse through FreeCAD's view callbacks (Move's
+  triad, which Insert Mesh reuses, Scale's arrows, Revolve's angle handle, the primitives'
+  handles, Construct's arrows) have none, so the first move started a box and the handle
+  never moved (`insert_mesh` "Z Distance grew with the drag" 0.0). Fix: every such handle
+  calls `handles3d.watch_release` at its press; that now registers the drag
+  (`handles3d.dragging()`, true until the release, never once the button is up) and
+  `selection_ui._grabbed` honours it, for the box and for Select Other's long press.
+  **Rule:** a new mouse filter on the 3D view must ask `handles3d.dragging()` /
+  `just_used()` and be tested against `bodies_move`, `insert_mesh`, `shell_draft_scale`,
+  `revolve_basic`, `primitives_box` and `inspect_construct_planes`.
+
 ## HANDOFF 2026-10-13 evening: session paused by Luca; the next session (Opus) continues here
 
 Luca's words: "I would rather put everything on pause and have Opus take over in a controlled
