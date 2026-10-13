@@ -1990,6 +1990,29 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   the gain. The branch is the repository's default branch, so its caches are visible to all
   later runs. Also confirmed: no interference between the C++ patches and their Python
   fallbacks (run #3's Linux build passed the trim, pattern and leave-sketch scenarios).
+- Luca's evening report (after the .7z of build run #4: 22:16 UTC, 277 golden PASS on the
+  build, artifact SciForge-Windows-portable-sciforge-20261012-9e775773):
+  - R4 sketch right-click showed the part menu: two right-click filters on the 3D view (part
+    and sketch); Qt asks the one installed last first, and coming back from another program
+    re-installed the part filter in front. `marking_menu._open_for_state` decides at the
+    click; `_install` puts an open sketch's filter back in front. Scenario
+    `sketch_menu_switch` (fails on the old code exactly as Luca saw).
+  - "Invalid constraint index: 19 / 23" boxes stayed over the part: `close_editor` cleared
+    its reference before `finish`, and a value that could not be set (here: the dimension had
+    been undone while its box was open) left the box open and forgotten. Now close_editor
+    always closes (only Enter in the box keeps it open with the reason), the box follows its
+    dimension by identity, stray boxes are removed when a sketch opens or closes. Scenario
+    `sketch_dim_box_closes`.
+  - Arrows stuck on the cursor after release: four causes reproduced with real input (FreeCAD
+    selection keeps a release over a part; the recompute progress bar filters releases out;
+    a double-click's held-back press; a re-clicked stuck Coin dragger keeps the viewer's
+    grab and FreeCAD crashed later). `sciforge/drag_guard.py`: every handle's poll ends a drag
+    when Qt says the left button is up (Coin draggers get a release through the viewer's own
+    SoHandleEventAction, applied to their sub-graph, never during a recompute) and gives the
+    grab back before removal. Scenario `drag_release_lost` (M1, M2c, M4, M8, H2b, H3, P2, E4,
+    E7; without the fix 29+ checks fail and E7 crashes FreeCAD); 16 drag regressions pass.
+  - In progress: R1-R3, R5-R8 (branches sf/extrude-feel, sf/sketch-areas, sf/extrude-bodies;
+    investigations in the session scratchpad, plans in r1-r7/r8-investigation.json).
 
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
