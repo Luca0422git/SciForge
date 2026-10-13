@@ -1,7 +1,11 @@
 # SciForge quick update (Windows).
 #
-# Replaces the SciForge module inside an existing SciForge portable build with the
-# version from this download, so you do not have to wait for a full rebuild.
+# Replaces the SciForge module inside an existing SciForge with the version from this
+# download, so you do not have to wait for a full rebuild. It works on every layout:
+# the installed SciForge (C:\Program Files\SciForge, found through the registry key the
+# installer writes), the portable build unzipped anywhere (bin\SciForge.exe), and a build
+# or FreeCAD from before the branding pass (bin\FreeCAD.exe): the folder only needs
+# 'bin' and 'Mod' inside.
 # A copy of your old version is kept in <SciForge>\SciForge-backups\<date> (outside Mod,
 # because FreeCAD loads every folder inside Mod).
 #
@@ -40,6 +44,36 @@ function Pick-Folder {
         Write-Host "Drag your SciForge folder (the one with 'bin' and 'Mod' inside) here, then press Enter:"
         return (Read-Host).Trim().Trim('"')
     }
+}
+
+function Find-Installed {
+    # The SciForge installer writes HKLM (all users) or HKCU (current user)
+    # \SOFTWARE\SciForge<version> with the install folder as its default value
+    # (package/WindowsInstaller/include/declarations.nsh, APP_REGKEY). Returns the folders
+    # that still exist. A FreeCAD installation uses SOFTWARE\FreeCAD<version>: not matched.
+    $found = @()
+    foreach ($hive in @("HKLM:\SOFTWARE", "HKCU:\SOFTWARE")) {
+        try {
+            $keys = @(Get-ChildItem -Path $hive -ErrorAction SilentlyContinue |
+                Where-Object { $_.PSChildName -match '^SciForge\d*$' })
+            foreach ($key in $keys) {
+                $dir = (Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue).'(default)'
+                if ($dir -and (Test-Path (Join-Path $dir "bin")) -and (Test-Path (Join-Path $dir "Mod")) -and
+                    ($found -notcontains $dir)) {
+                    $found += $dir
+                }
+            }
+        } catch { }
+    }
+    return $found
+}
+
+function Program-Name($folder) {
+    # The program inside: SciForge.exe since the branding pass, FreeCAD.exe before it.
+    foreach ($name in @("SciForge.exe", "FreeCAD.exe", "freecad.exe")) {
+        if (Test-Path (Join-Path (Join-Path $folder "bin") $name)) { return $name }
+    }
+    return ""
 }
 
 function Is-Admin {
@@ -113,9 +147,10 @@ function Remove-Leftovers($newRoot, $installed) {
 }
 
 $accessHelp = ("Windows did not allow SciForge's files to be changed. Try this: (1) close SciForge " +
-    "(also check Task Manager for 'FreeCAD'), (2) close every File Explorer window showing the " +
-    "SciForge folder, (3) right-click install_update.cmd > 'Run as administrator'. " +
-    "If SciForge is under 'C:\Program Files', moving it to e.g. C:\SciForge avoids this for good.")
+    "(also check Task Manager for 'SciForge' or 'FreeCAD'), (2) close every File Explorer window " +
+    "showing the SciForge folder, (3) right-click install_update.cmd > 'Run as administrator'. " +
+    "An installed SciForge (C:\Program Files\SciForge) always needs the administrator step; " +
+    "the portable build in a normal folder such as C:\SciForge does not.")
 
 try {
     Write-Host "[SciForge] quick update, PowerShell $($PSVersionTable.PSVersion)"
@@ -125,6 +160,18 @@ try {
             "(right-click the .zip > Extract All), then run install_update.cmd from the unzipped folder.")
     }
 
+    if ($Target -eq "") {
+        # An installed SciForge is found by itself; the picker is for the portable build.
+        $installed = @(Find-Installed)
+        if ($installed.Count -eq 1) {
+            Write-Host "[SciForge] found the installed SciForge in $($installed[0])"
+            $answer = Read-Host "Update it? (Enter = yes, n = pick another folder)"
+            if ($answer -notmatch '^[nN]') { $Target = $installed[0] }
+        } elseif ($installed.Count -gt 1) {
+            Write-Host "[SciForge] several SciForge installations found; pick the one to update:"
+            $installed | ForEach-Object { Write-Host "    $_" }
+        }
+    }
     if ($Target -eq "") { $Target = Pick-Folder }
     if ($Target -eq "") { Finish $false "No folder picked; nothing changed." }
     # Accept the Mod folder, the bin folder or Mod\SciForge too, and go up to the SciForge folder.
@@ -143,6 +190,12 @@ try {
         Finish $false "No 'bin' folder in $Target. Pick the SciForge folder itself (it contains 'bin' and 'Mod')."
     }
     if (-not (Test-Path $mod)) { Finish $false "No 'Mod' folder in $Target." }
+    $program = Program-Name $Target
+    if ($program -eq "") {
+        Finish $false ("No SciForge.exe or FreeCAD.exe in $Target\bin. Pick the SciForge folder " +
+            "(installed: C:\Program Files\SciForge; portable: the unzipped folder).")
+    }
+    Write-Host "[SciForge] program: bin\$program"
 
     $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
         try { $_.Path -and $_.Path.StartsWith($Target, [System.StringComparison]::OrdinalIgnoreCase) } catch { $false }

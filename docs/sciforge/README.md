@@ -13,24 +13,59 @@ You never need to compile anything yourself. GitHub builds it:
 3. Wait. A full build takes a few hours (the C++ part of FreeCAD is large). Quick checks run
    first (about 10 minutes, including the test models on FreeCAD for Windows); when one fails,
    the run stops there instead of compiling for hours.
-4. When the run is finished, open it and scroll to **Artifacts**. Download
-   `SciForge-Windows-portable-...`. GitHub wraps it in a .zip; inside is a `.7z` file.
+4. When the run is finished, open it and scroll to **Artifacts**. Two downloads:
+   - `SciForge-Windows-installer-...`: GitHub wraps it in a .zip; inside is
+     `SciForge_..._installer.exe`. Run it: it installs to `C:\Program Files\SciForge`, adds a
+     Start menu entry (and a desktop icon if you tick it) and an uninstaller in Windows'
+     "Installed apps". A FreeCAD on the same PC stays as it is (see "Compatibility" below).
+   - `SciForge-Windows-portable-...`: a `.7z` inside. Unpack it (7-Zip) anywhere, for example
+     `C:\SciForge`, and run `bin\SciForge.exe`. Nothing is installed or registered.
    The build is uploaded before its tests run, so it is there even when a test failed (the
    run then has a red cross). Then ask Claude what failed before relying on it: the same
    test models already passed on FreeCAD for Windows before compiling, so a failure here is
    usually in the compiled part, which a quick update cannot fix.
-5. Unpack the `.7z` (7-Zip) anywhere, for example `C:\SciForge`. Run `bin\FreeCAD.exe`.
-   (The program is still called FreeCAD inside until the branding pass is done.)
-6. Pick **SciForge** in the workbench drop-down at the top.
-
-The portable build does not install anything and does not touch an installed FreeCAD.
-Until the branding pass, it does share FreeCAD 1.1's settings folder.
+5. SciForge opens in its own interface (the SciForge workbench is the start workbench). The
+   Start page is still FreeCAD's for now.
 
 About cost: the repository is public (since 2026-10-10), and GitHub's standard build machines are
 free for public repositories, so builds cost nothing. A full build still takes a few hours, so it
 is started by hand (or by a `sciforge-v*` tag) rather than on every change. The automatic test
 run (**SciForge tests**) takes about 40 minutes (6 machines side by side, one of them Windows) and
 runs on every push.
+
+Linux: the same run uploads `SciForge-Linux-...` with an `.AppImage`: make it executable and
+run it (`./SciForge_....AppImage`; `--appimage-extract` unpacks it when FUSE is missing).
+
+## Compatibility: SciForge next to FreeCAD
+
+SciForge is a separate program since the branding pass (2026-10-13, `core-patches.md` #8 to
+#13). On one PC, SciForge and FreeCAD do not see each other:
+
+| | SciForge | FreeCAD 1.1 |
+|---|---|---|
+| Program | `SciForge.exe`, `SciForgeCmd.exe` (Linux: `sciforge`, `sciforgecmd`) | `FreeCAD.exe` |
+| Install folder (installer) | `C:\Program Files\SciForge` | `C:\Program Files\FreeCAD 1.1` |
+| Settings, add-ons, macros | `%APPDATA%\SciForge` (Linux: `~/.config/SciForge`, `~/.local/share/SciForge`) | `%APPDATA%\FreeCAD` |
+| Registry / uninstall entry | `SciForge` keys only | `FreeCAD` keys only |
+| `.FCStd` double-click | Only if ticked in the installer (off by default) | Unchanged |
+| Window title, About, splash | SciForge, with FreeCAD credited | FreeCAD |
+
+What this means in practice:
+
+- **A fresh settings folder.** The first start of a SciForge build is like a first start:
+  FreeCAD's settings, add-ons and macros are not copied (and not touched). SciForge sets its own
+  theme and keys, so there is little to carry over; copy `%APPDATA%\FreeCAD\Macro` by hand if
+  you need your macros.
+- **Designs are shared.** `.FCStd` files open in both; a design saved by SciForge opens in
+  FreeCAD 1.1 (SciForge's features are FreeCAD features). File > Open in either program.
+- **The quick update works on both layouts** (`quick-update.md`): the installed SciForge is found
+  by itself; a portable build or an older FreeCAD-named folder is picked in the dialog.
+- **Fusion files** (`.f3d`) cannot be opened; export STEP (solids) or 3MF/STL (meshes) from
+  Fusion. The Fusion-to-SciForge keys and mouse are in `cheat-sheet.md`.
+- **Uninstalling** SciForge (Windows "Installed apps") removes the program folder and, only if
+  you tick it, `%APPDATA%\SciForge`; FreeCAD's files and settings are never removed.
+- The window title says `SciForge 1.1.4`: 1.1.4 is the FreeCAD core inside; SciForge's own
+  build number is in SciForge > Diagnostics.
 
 ## Getting updates without rebuilding (most of the time)
 

@@ -29,6 +29,7 @@
 #endif  // HAVE_CONFIG_H
 
 #include <Build/Version.h>  // For FCCopyrightYear
+#include "SciForgeBranding.h"  // SCIFORGE: the fork's name (patch #8)
 
 #include <cstdio>
 #include <ostream>
@@ -46,11 +47,8 @@
 using App::Application;
 using Base::Console;
 
-const auto sBanner = fmt::format(
-    "(C) 2001-{} FreeCAD contributors\n"
-    "FreeCAD is free and open-source software licensed under the terms of LGPL2+ license.\n\n",
-    FCCopyrightYear
-);
+// SCIFORGE: the banner credits FreeCAD and names the fork (SciForgeBranding.h, patch #8).
+const auto sBanner = fmt::format(SCIFORGE_BANNER_FORMAT, FCCopyrightYear);
 
 int main(int argc, char** argv)
 {
@@ -67,8 +65,10 @@ int main(int argc, char** argv)
 #endif
 
     // Name and Version of the Application
-    App::Application::Config()["ExeName"] = "FreeCAD";
-    App::Application::Config()["ExeVendor"] = "FreeCAD";
+    // SCIFORGE: the fork's identity (SciForgeBranding.h, patch #8): "ExeName" also names the
+    // settings folder, shared with the SciForge GUI program and separate from FreeCAD's.
+    App::Application::Config()["ExeName"] = SCIFORGE_EXE_NAME;
+    App::Application::Config()["ExeVendor"] = SCIFORGE_VENDOR;
     App::Application::Config()["AppDataSkipVendor"] = "true";
 
     // set the banner (for logging and console)

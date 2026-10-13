@@ -47,6 +47,7 @@
 #include <Base/PyObjectBase.h>
 #include <Base/Sequencer.h>
 #include <App/Application.h>
+#include "SciForgeBranding.h"  // SCIFORGE: the fork's name (patch #8)
 
 #if defined(FC_OS_WIN32)
 
@@ -80,8 +81,10 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID /*lpReser
 PyMOD_INIT_FUNC(FreeCAD)
 {
     // Init phase ===========================================================
-    App::Application::Config()["ExeName"] = "FreeCAD";
-    App::Application::Config()["ExeVendor"] = "FreeCAD";
+    // SCIFORGE: "import FreeCAD" from an outside Python uses SciForge's settings folder too
+    // (SciForgeBranding.h, patch #8). The Python module keeps its name, FreeCAD.
+    App::Application::Config()["ExeName"] = SCIFORGE_EXE_NAME;
+    App::Application::Config()["ExeVendor"] = SCIFORGE_VENDOR;
     App::Application::Config()["AppDataSkipVendor"] = "true";
 
     QByteArray path;

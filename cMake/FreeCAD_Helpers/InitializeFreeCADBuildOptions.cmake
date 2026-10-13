@@ -102,6 +102,12 @@ macro(InitializeFreeCADBuildOptions)
     option(BUILD_FEM "Build the FreeCAD FEM module" ON)
     # SCIFORGE: SciForge's own module (docs/sciforge/core-patches.md #3).
     option(BUILD_SCIFORGE "Build the SciForge module (Fusion-style interface layer)" ON)
+    # SCIFORGE: the fork's identity for the build system: the program names (src/Main), the
+    # Windows version resource and the Linux desktop entry (src/XDGData, src/Gui). The C++
+    # side keeps the same names in src/Main/SciForgeBranding.h (core-patches.md #8, #9).
+    set(SCIFORGE_APP_NAME "SciForge")
+    set(SCIFORGE_DESKTOP_ID "org.sciforge.SciForge")
+    set(SCIFORGE_URL "https://github.com/Luca0422git/SciForge")
     option(BUILD_SANDBOX "Build the FreeCAD Sandbox module which is only for testing purposes" OFF)
     option(BUILD_TEMPLATE "Build the FreeCAD template module which is only for testing purposes" OFF)
     option(BUILD_ADDONMGR "Build the FreeCAD addon manager module" ON)

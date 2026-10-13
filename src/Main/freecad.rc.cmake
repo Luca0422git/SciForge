@@ -9,7 +9,8 @@
 //
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDI_ICON1               ICON    DISCARDABLE     "icon.ico"
+// SCIFORGE: SciForge's own icon and version strings (docs/sciforge/core-patches.md #9)
+IDI_ICON1               ICON    DISCARDABLE     "${SCIFORGE_WIN_ICON}"
 
 // File info for the FreeCAD.exe
 //
@@ -20,12 +21,12 @@ BEGIN
     BEGIN
         BLOCK "040904b0" // 409 stands for US English
         BEGIN
-            VALUE "CompanyName", "${PROJECT_NAME} Team"
-            VALUE "FileDescription", "${PROJECT_NAME} main executable"
-            VALUE "InternalName", "FreeCAD.exe"
-            VALUE "LegalCopyright", "Copyright (C) 2022"
-            VALUE "OriginalFilename", "FreeCAD.exe"
-            VALUE "ProductName", "${PROJECT_NAME}"
+            VALUE "CompanyName", "${SCIFORGE_APP_NAME} contributors"
+            VALUE "FileDescription", "${SCIFORGE_APP_NAME} main executable (based on ${PROJECT_NAME})"
+            VALUE "InternalName", "${SCIFORGE_APP_NAME}.exe"
+            VALUE "LegalCopyright", "(C) SciForge contributors; based on FreeCAD, (C) FreeCAD contributors (LGPL-2.1-or-later)"
+            VALUE "OriginalFilename", "${SCIFORGE_APP_NAME}.exe"
+            VALUE "ProductName", "${SCIFORGE_APP_NAME}"
             VALUE "ProductVersion", "${PACKAGE_VERSION}${PACKAGE_VERSION_SUFFIX}"
         END
     END

@@ -19,22 +19,26 @@ Configuration and variables of FreeCAD installer
 !define APP_SERIES_NAME "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}"
 !define APP_SERIES_KEY "${APP_VERSION_MAJOR}${APP_VERSION_MINOR}${APP_VERSION_PATCH}${APP_VERSION_EMERGENCY}"
 !define APP_SERIES_KEY2 "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}${APP_EMERGENCY_DOT}${APP_VERSION_EMERGENCY}"
+# SCIFORGE: SciForge's installer (docs/sciforge/core-patches.md #13). APP_NAME is read from
+# the program itself ("ExeName" = SciForge, version.nsh), so every key below is SciForge's
+# own: SOFTWARE\SciForge114, Uninstall\SciForge114, the SciForge.Document class and the
+# settings folder %APPDATA%\SciForge. A FreeCAD on the same machine is never touched.
 !define APP_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\${APP_NAME}.exe"
-!define APP_DIR "${APP_NAME} ${APP_SERIES_NAME}"
+!define APP_DIR "${APP_NAME}" # SCIFORGE: "Program Files\SciForge" (FreeCAD: "FreeCAD 1.1")
 # Fixme: FC should use different preferences folder for every release
 !define APP_DIR_USERDATA ${APP_NAME}
 #!define APP_DIR_USERDATA "${APP_NAME}${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}"
-!define APP_SHORTCUT_INFO "${APP_NAME} - Your Own 3D Parametric Modeler"
+!define APP_SHORTCUT_INFO "${APP_NAME} - Parametric CAD with the Fusion workflow" # SCIFORGE
 !define APP_INFO "Install/Uninstall ${APP_NAME}"
-!define APP_WEBPAGE "https://www.freecad.org/"
-!define APP_WEBPAGE_INFO "${APP_NAME} Website"
-!define APP_WIKI "https://wiki.freecad.org/Main_Page"
-!define APP_WIKI_INFO "${APP_NAME} Wiki"
-!define APP_COPYRIGHT "${APP_NAME} is Copyright © 2001-${COPYRIGHT_YEAR} by the ${APP_NAME} Team"
+!define APP_WEBPAGE "https://github.com/Luca0422git/SciForge" # SCIFORGE
+!define APP_WEBPAGE_INFO "${APP_NAME} on GitHub" # SCIFORGE
+!define APP_WIKI "https://github.com/Luca0422git/SciForge/issues" # SCIFORGE
+!define APP_WIKI_INFO "Report a ${APP_NAME} problem" # SCIFORGE
+!define APP_COPYRIGHT "${APP_NAME} © 2026 ${APP_NAME} contributors, based on FreeCAD © 2001-${COPYRIGHT_YEAR} by the FreeCAD Team" # SCIFORGE
 
 !define APP_RUN "bin\${APP_NAME}.exe"
 !define BIN_FREECAD "${APP_NAME}.exe"
-!define BIN_FREECADCMD "${APP_NAME}cmd.exe"
+!define BIN_FREECADCMD "${APP_NAME}Cmd.exe" # SCIFORGE: SciForgeCmd.exe keeps its case
 
 !define APP_REGKEY "SOFTWARE\${APP_NAME}${APP_SERIES_KEY}" # like "FreeCAD0180"
 !define APP_REGKEY_SETUP "${APP_REGKEY}\Setup"
@@ -58,9 +62,10 @@ Configuration and variables of FreeCAD installer
 
 !define SETUP_EXE ${ExeFile}
 
-!define SETUP_ICON "icons\FreeCAD.ico"
-!define SETUP_HEADERIMAGE "graphics\header.bmp"
-!define SETUP_WIZARDIMAGE "graphics\banner.bmp"
+# SCIFORGE: own icon and pictures, made by tools/sciforge/make_app_icons.py
+!define SETUP_ICON "icons\SciForge.ico"
+!define SETUP_HEADERIMAGE "graphics\sciforge-header.bmp"
+!define SETUP_WIZARDIMAGE "graphics\sciforge-banner.bmp"
 !define SETUP_UNINSTALLER "Uninstall-${APP_NAME}.exe"
 !define SETUP_UNINSTALLER_KEY "${APP_NAME}${APP_SERIES_KEY}"
 

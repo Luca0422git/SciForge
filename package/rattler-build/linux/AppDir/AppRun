@@ -25,10 +25,17 @@ export GIT_SSL_CAINFO=$HERE/usr/ssl/cacert.pem
 
 # Support for launching other applications (from /usr/bin)
 # https://github.com/FreeCAD/FreeCAD-AppImage/issues/30
+# SCIFORGE: the programs are sciforge and sciforgecmd; "freecad" and "freecadcmd" still
+# work as names (tools/sciforge/run_tests.sh uses them for the official FreeCAD AppImage too)
+# (docs/sciforge/core-patches.md #12).
+case "${1:-}" in
+    freecad) [ -e "$HERE/usr/bin/freecad" ] || set -- sciforge "${@:2}" ;;
+    freecadcmd) [ -e "$HERE/usr/bin/freecadcmd" ] || set -- sciforgecmd "${@:2}" ;;
+esac
 if [ ! -z "$1" ] && [ -e "$HERE/usr/bin/$1" ] ; then
     MAIN="$HERE/usr/bin/$1" ; shift
 else
-    MAIN="$HERE/usr/bin/freecad"
+    MAIN="$HERE/usr/bin/sciforge"
 fi
 
 "${MAIN}" "$@"

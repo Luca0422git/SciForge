@@ -11,7 +11,8 @@
 #                               [--shard K/N]       (every N-th scenario, from the K-th)
 #
 # --freecad  folder from tools/sciforge/get_freecad.sh (default .sciforge-cache/freecad),
-#            or a SciForge install prefix containing bin/FreeCADCmd
+#            an unpacked SciForge AppImage, or a SciForge install prefix containing
+#            bin/SciForgeCmd (bin/FreeCADCmd for a build before the branding pass)
 # --out      where reports and the screenshot go (default .sciforge-cache/test-output)
 # --only     base = everything but the scenarios (unit, golden, smoke, journey)
 # --shard    splits the scenarios over N runs (CI runs them side by side): 1/4 runs the
@@ -52,13 +53,20 @@ FAILED=()
 # Locate FreeCAD: an unpacked AppImage (stock FreeCAD + SciForge as a user add-on)
 # or a SciForge install where the module is already built in.
 if [ -x "${FREECAD_DIR}/squashfs-root/AppRun" ]; then
-    FC_CMD=("${FREECAD_DIR}/squashfs-root/AppRun" freecadcmd)
-    FC_GUI=("${FREECAD_DIR}/squashfs-root/AppRun" freecad)
+    # A SciForge AppImage has sciforgecmd / sciforge (the branding pass), FreeCAD's has
+    # freecadcmd / freecad.
+    if [ -x "${FREECAD_DIR}/squashfs-root/usr/bin/sciforgecmd" ]; then
+        FC_CMD=("${FREECAD_DIR}/squashfs-root/AppRun" sciforgecmd)
+        FC_GUI=("${FREECAD_DIR}/squashfs-root/AppRun" sciforge)
+    else
+        FC_CMD=("${FREECAD_DIR}/squashfs-root/AppRun" freecadcmd)
+        FC_GUI=("${FREECAD_DIR}/squashfs-root/AppRun" freecad)
+    fi
     # A SciForge AppImage already has the module built in; stock FreeCAD needs the add-on link.
     if [ -d "${FREECAD_DIR}/squashfs-root/usr/Mod/SciForge" ]; then ADDON=0; else ADDON=1; fi
-elif [ -x "${FREECAD_DIR}/bin/FreeCADCmd" ] || [ -x "${FREECAD_DIR}/bin/freecadcmd" ]; then
-    FC_CMD=("$(ls "${FREECAD_DIR}"/bin/{FreeCADCmd,freecadcmd} 2>/dev/null | head -1)")
-    FC_GUI=("$(ls "${FREECAD_DIR}"/bin/{FreeCAD,freecad} 2>/dev/null | head -1)")
+elif ls "${FREECAD_DIR}"/bin/{SciForgeCmd,sciforgecmd,FreeCADCmd,freecadcmd} >/dev/null 2>&1; then
+    FC_CMD=("$(ls "${FREECAD_DIR}"/bin/{SciForgeCmd,sciforgecmd,FreeCADCmd,freecadcmd} 2>/dev/null | head -1)")
+    FC_GUI=("$(ls "${FREECAD_DIR}"/bin/{SciForge,sciforge,FreeCAD,freecad} 2>/dev/null | head -1)")
     ADDON=0
 else
     FC_CMD=()

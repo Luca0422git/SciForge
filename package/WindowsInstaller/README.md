@@ -1,3 +1,17 @@
+# SciForge note
+
+SCIFORGE: this folder builds the **SciForge** installer (docs/sciforge/core-patches.md #13).
+The scripts take the program's name from the program itself (`Settings.nsh` runs
+`SciForgeCmd.exe`, which reports `ExeName` = SciForge), so the install folder
+(`Program Files\SciForge`), the registry keys (`SOFTWARE\SciForge114`, the uninstall entry),
+the `SciForge.Document` class and the settings folder (`%APPDATA%\SciForge`) are SciForge's own:
+a FreeCAD installed on the same machine is not touched. Differences from FreeCAD's installer:
+the .FCStd file association is off by default, the Explorer thumbnail DLL is not shipped (it
+registers system-wide), the installer is English only, and the icon and pictures are SciForge's
+(`icons/SciForge.ico`, `graphics/sciforge-*.bmp`, made by `tools/sciforge/make_app_icons.py`).
+CI builds it in `.github/workflows/sciforge-build.yml` through
+`package/rattler-build/windows/create_bundle.sh`. The instructions below are FreeCAD's.
+
 # Creating a Windows installer for FreeCAD
 
 These are instructions for building an NSIS-based installer for FreeCAD. They were designed for FreeCAD 0.21 and later,

@@ -31,7 +31,7 @@ Section -InstallData
   # create desktop icon
   ${if} $CreateDesktopIcon == "true"
    SetOutPath "$INSTDIR\bin"
-   CreateShortCut "$DESKTOP\${APP_NAME} ${APP_SERIES_NAME}.lnk" "$INSTDIR\${APP_RUN}" "" "$INSTDIR\${APP_RUN}" "" "" "" "${APP_SHORTCUT_INFO}"
+   CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_RUN}" "" "$INSTDIR\${APP_RUN}" "" "" "" "${APP_SHORTCUT_INFO}" # SCIFORGE: "SciForge.lnk"
   ${endif}
 
   # Uninstaller information
@@ -46,9 +46,9 @@ Section -InstallData
   WriteRegStr SHCTX ${APP_UNINST_KEY} "DisplayVersion" "${APP_VERSION}"
   WriteRegStr SHCTX ${APP_UNINST_KEY} "DisplayIcon" "$INSTDIR\${APP_RUN}"
   WriteRegStr SHCTX ${APP_UNINST_KEY} "URLUpdateInfo" "${APP_WEBPAGE}"
-  WriteRegStr SHCTX ${APP_UNINST_KEY} "URLInfoAbout" "https://www.freecad.org/"
-  WriteRegStr SHCTX ${APP_UNINST_KEY} "Publisher" "${APP_NAME} Team"
-  WriteRegStr SHCTX ${APP_UNINST_KEY} "HelpLink" "https://forum.freecad.org/"
+  WriteRegStr SHCTX ${APP_UNINST_KEY} "URLInfoAbout" "${APP_WEBPAGE}" # SCIFORGE
+  WriteRegStr SHCTX ${APP_UNINST_KEY} "Publisher" "${APP_NAME} contributors" # SCIFORGE
+  WriteRegStr SHCTX ${APP_UNINST_KEY} "HelpLink" "${APP_WIKI}" # SCIFORGE
   WriteRegDWORD SHCTX ${APP_UNINST_KEY} "NoModify" 0x00000001
   WriteRegDWORD SHCTX ${APP_UNINST_KEY} "NoRepair" 0x00000001
   WriteRegStr SHCTX ${APP_UNINST_KEY} "StartMenu" "$SMPROGRAMS\$StartmenuFolder"
@@ -88,13 +88,7 @@ Section -Configure
    # .FCStd
    WriteRegStr SHCTX "Software\Classes\${APP_EXT}" "" "${APP_REGNAME_DOC}"
    WriteRegStr SHCTX "Software\Classes\${APP_EXT}" "Content Type" "${APP_MIME_TYPE}"
-   # if the user is admin, also install the DLL toe preview .FCStd files
-   ${if} $MultiUser.Privileges == "Admin"
-    # see https://nsis.sourceforge.io/Docs/AppendixB.html#library_install for a description of InstallLib
-    !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED ${FILES_THUMBS}\FCStdThumbnail.dll $SYSDIR\FCStdThumbnail.dll $SYSDIR
-   ${endif}
-   # in any case remove the FCStdThumbnail.dll
-   RMDir /r "$INSTDIR\thumbnail"
+   # SCIFORGE: no thumbnail DLL in System32 (it would replace FreeCAD's), see install.nsh
 
    # Eventually refresh shell icons
    ${RefreshShellIcons}

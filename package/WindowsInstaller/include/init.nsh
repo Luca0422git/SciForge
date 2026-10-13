@@ -91,7 +91,9 @@ Section "!${APP_NAME}" SecCore
  SectionIn RO
 SectionEnd
 
-Section "$(SecFileAssocTitle)" SecFileAssoc
+# SCIFORGE: off by default (/o), so a FreeCAD on the same machine keeps opening .FCStd
+# files unless the user ticks it (docs/sciforge/core-patches.md #13).
+Section /o "$(SecFileAssocTitle)" SecFileAssoc
  StrCpy $CreateFileAssociations "true"
 SectionEnd
 

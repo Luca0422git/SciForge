@@ -24,11 +24,22 @@ def report():
         build = "%s %s" % (build_info.COMMIT, build_info.DATE)
     except Exception:
         build = "unknown"
+    # Which program this is (SciForge.exe since the branding pass, FreeCAD.exe before it)
+    # and where its settings live: a SciForge must say SciForge and %APPDATA%\SciForge, a
+    # quick update on FreeCAD says FreeCAD and FreeCAD's folder.
+    try:
+        program = App.ConfigGet("ExeName")
+        home = App.getHomePath()
+        settings = App.getUserAppDataDir()
+    except Exception:
+        program = home = settings = "unknown"
     lines = [
         "SciForge %s (build %s)" % (__version__, build.strip()),
         "FreeCAD %s" % fc_version,
         "Python %s" % sys.version.split()[0],
         "Qt %s" % qt,
+        "Program: %s in %s" % (program, home),
+        "Settings folder: %s" % settings,
         "",
     ]
     if registry.MISSING:

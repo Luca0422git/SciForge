@@ -34,6 +34,7 @@
 #endif  // HAVE_CONFIG_H
 
 #include <Build/Version.h>  // For FCCopyrightYear
+#include "SciForgeBranding.h"  // SCIFORGE: the fork's name, icons and splash (patch #8)
 
 #include <cstdio>
 #include <map>
@@ -54,11 +55,8 @@
 
 void PrintInitHelp();
 
-const auto sBanner = fmt::format(
-    "(C) 2001-{} FreeCAD contributors\n"
-    "FreeCAD is free and open-source software licensed under the terms of LGPL2+ license.\n\n",
-    FCCopyrightYear
-);
+// SCIFORGE: the banner credits FreeCAD and names the fork (SciForgeBranding.h, patch #8).
+const auto sBanner = fmt::format(SCIFORGE_BANNER_FORMAT, FCCopyrightYear);
 
 #if defined(_MSC_VER)
 void InitMiniDumpWriter(const std::string&);
@@ -188,26 +186,28 @@ int main(int argc, char** argv)
 #endif
 
     // Name and Version of the Application
-    App::Application::Config()["ExeName"] = "FreeCAD";
-    App::Application::Config()["ExeVendor"] = "FreeCAD";
+    // SCIFORGE: the fork's identity comes from SciForgeBranding.h. "ExeName" also names the
+    // settings folder, so SciForge and FreeCAD live side by side (patch #8).
+    App::Application::Config()["ExeName"] = SCIFORGE_EXE_NAME;
+    App::Application::Config()["ExeVendor"] = SCIFORGE_VENDOR;
     App::Application::Config()["AppDataSkipVendor"] = "true";
-    App::Application::Config()["MaintainerUrl"] = "https://freecad.org";
+    App::Application::Config()["MaintainerUrl"] = SCIFORGE_URL;
 
     // set the banner (for logging and console)
     App::Application::Config()["CopyrightInfo"] = sBanner;
-    App::Application::Config()["AppIcon"] = "freecad";
-    App::Application::Config()["SplashScreen"] = "freecadsplash";
-    App::Application::Config()["AboutImage"] = App::Application::isDevelopmentVersion()
-        ? "freecadaboutdev"
-        : "freecadabout";
-    App::Application::Config()["StartWorkbench"] = "PartDesignWorkbench";
+    App::Application::Config()["AppIcon"] = SCIFORGE_APP_ICON;
+    App::Application::Config()["SplashScreen"] = SCIFORGE_SPLASH;
+    App::Application::Config()["AboutImage"] = SCIFORGE_ABOUT_IMAGE;
+    App::Application::Config()["StartWorkbench"] = SCIFORGE_START_WORKBENCH;
     // App::Application::Config()["HiddenDockWindow"] = "Property editor";
     App::Application::Config()["SplashAlignment"] = "Bottom|Left";
-    App::Application::Config()["SplashTextColor"] = "#418FDE";
+    App::Application::Config()["SplashTextColor"] = SCIFORGE_SPLASH_TEXT_COLOR;
     App::Application::Config()["SplashWarningColor"] = "#CA333B";
-    App::Application::Config()["SplashInfoColor"] = "#000000";
-    App::Application::Config()["SplashInfoPosition"] = "6,75";
-    App::Application::Config()["DesktopFileName"] = "org.freecad.FreeCAD";
+    App::Application::Config()["SplashInfoColor"] = SCIFORGE_SPLASH_INFO_COLOR;
+    App::Application::Config()["SplashInfoPosition"] = SCIFORGE_SPLASH_INFO_POSITION;
+    // The wordmark is part of the splash picture; only the version number is painted on it.
+    App::Application::Config()["SplashInfoExeName"] = "";
+    App::Application::Config()["DesktopFileName"] = SCIFORGE_DESKTOP_ID;
 
     try {
         // Init phase ===========================================================

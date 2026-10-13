@@ -67,6 +67,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   around and doing whatever you think is right." The sketch right-click menu had no OK /
   Cancel and nothing told a line to end. Each imitation names its source in the parity doc
   (Autodesk help/course, forum answer) or is marked a guess.
+- **2026-10-13: SciForge is its own program (branding pass, branch `sf/app`).** The
+  compiled build is called SciForge (`SciForge.exe`, `%APPDATA%\SciForge`, own installer and
+  registry keys, own icon, splash and About), so it installs next to FreeCAD without sharing
+  anything. The identity is set at compile time in `src/Main` (not through FreeCAD's
+  `branding.xml`: a missing file would silently make it FreeCAD again and share FreeCAD's
+  settings). The installer never touches `.FCStd` associations by default and never ships
+  FreeCAD's system-wide thumbnail DLL. Original artwork only (an anvil with a spark).
 
 ## Status by phase (outline section 10)
 
@@ -91,7 +98,9 @@ done, what was learned, what is next. Newest session goes at the top of the log.
       build) but its tests failed: the install rules listed 35 of 116 SciForge modules. Fixed
       (glob + `tools/sciforge/check_install.sh` on every push); a new run is needed.
 - [ ] First CI build downloaded and launched by Luca on Windows
-- [ ] Branding pass: app name, icons, user-data folder, installer (side by side with FreeCAD)
+- [x] Branding pass (2026-10-13, `sf/app`, core patches #8-#13): app name, icons, settings
+      folder, installer, Linux desktop entry. **Not yet proven by a full build** (see the
+      session log for the list the next Windows build must tick)
 - [ ] Parity capture: Luca records Fusion workflows; behavior specs written + signed off
 - [ ] Spike 9.1: Press/Pull feasibility report (OCC offset / local ops), with benchmark
 - [ ] Spike 9.2: Fillet robustness benchmark + feasibility report
@@ -1270,6 +1279,65 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 ## Session log
 
+### 2026-10-13: Branding pass, "making it an app" (branch `sf/app`)
+- Goal (outline 3.2, 7.17; plan item 10): a real SciForge installer and portable build that
+  live next to FreeCAD. Everything is on `sf/app`, not pushed, not merged; no full build run.
+- **Identity (C++, core patches #8, #9).** New `src/Main/SciForgeBranding.h` holds the names;
+  `MainGui.cpp`, `MainCmd.cpp`, `MainPy.cpp` set `ExeName`/`ExeVendor` = SciForge (that is
+  what names the settings folder: `%APPDATA%\SciForge`, `~/.config/SciForge`), the icon,
+  splash and About picture names, `StartWorkbench` = SciForgeWorkbench, the desktop id, and
+  a banner whose first line (shown in Help > About) credits FreeCAD. `src/Main/CMakeLists.txt`
+  builds `SciForge` / `SciForgeCmd` (`SET_BIN_DIR`); the Windows resources carry SciForge's
+  icon and strings. FreeCAD's `branding.xml` mechanism was not used on purpose (a missing
+  file silently turns the build back into "FreeCAD" sharing FreeCAD's settings).
+- **Pictures (#10).** `tools/sciforge/make_app_icons.py` (Pillow, DejaVu fonts) draws an
+  original mark, an anvil with a spark on a blue rounded square, once as geometry and writes
+  the SVG, PNGs 16-256, `sciforge.ico` (7 sizes), the splash (568x368 and 2x, wordmark baked
+  in, a "Version" caption where FreeCAD paints the number: `SplashInfoPosition` "190,189"
+  puts it at x+235, y-7), the About banner, the NSIS header/banner BMPs, and the workbench
+  icon (same mark). All compiled into `src/Gui/Icons/resource.qrc`.
+- **Linux (#11).** `src/XDGData/org.sciforge.SciForge.{desktop,metainfo.xml.in,xml}` installed
+  instead of FreeCAD's; hicolor icons under `org.sciforge.SciForge`.
+- **Packaging (#12, #13).** rattler-build scripts copy/name `SciForge*.exe`, `sciforge`,
+  `sciforgecmd`; bundle names `SciForge_<build>-...`; AppRun defaults to sciforge and still
+  accepts `freecad`/`freecadcmd`. The NSIS installer (`package/WindowsInstaller`) reads
+  `APP_NAME` from `SciForgeCmd.exe`, installs to `Program Files\SciForge`, own registry keys
+  (`SOFTWARE\SciForge114`, own uninstall entry, `SciForge.Document`), `.FCStd` association
+  **off by default**, no thumbnail DLL (it registers in System32 and would replace FreeCAD's),
+  English only (the 24 other language files name FreeCAD literally), SciForge's icon and
+  pictures, GitHub links. `sciforge-build.yml`: `MAKE_INSTALLER` on, new artifact
+  `SciForge-Windows-installer-<build>`; BUILD_TAG is `<date>-<sha>` or the tag name.
+- **Tooling.** `run_tests.sh` and `windows_golden.sh` accept the new and the old program
+  names; `install_update.ps1` finds an installed SciForge through its registry key and
+  offers it (Enter), otherwise the picker; accepts `bin\SciForge.exe` or `bin\FreeCAD.exe`
+  folders; Diagnostics now prints the program, its folder and the settings folder.
+- **Docs.** `docs/sciforge/cheat-sheet.md` (Fusion keys and mouse to SciForge),
+  compatibility notes in `docs/sciforge/README.md`, `quick-update.md` for both layouts,
+  core-patches rows #8-#13, a SciForge note in `package/WindowsInstaller/README.md`.
+- **Checked here:** 396 unit tests OK (8 new in `test_branding_files.py`: names agree between
+  C++ and CMake, every picture exists with the right size and is a Qt resource, the ico has
+  its sizes, the installer's icon/BMPs exist with NSIS's sizes, packaging scripts and the
+  workflow name the new programs); `check_install.sh` OK (806 files); Diagnostics on the real
+  FreeCAD AppImage; a scratch CMake project configured and installed the changed pieces (the
+  rc files resolve every variable, the XDG files and icons install under SciForge's id);
+  bash -n on every shell script; the workflow YAML parses. The images were looked at.
+- **Not checkable here, the next full Windows build must prove:** (1) `SciForgeBranding.h`
+  compiles in the three mains (fmt format string as a macro, `SCIFORGE_BANNER_FORMAT`);
+  (2) `bin\SciForge.exe` / `SciForgeCmd.exe` exist in the bundle and `SciForgeCmd.exe
+  --safe-mode --version` runs (create_bundle's smoke test); (3) the NSIS step: `makensis`
+  finds `SciForgeCmd.exe`, builds `SciForge_<build>-Windows-x86_64-py311-installer.exe`, and
+  `!if 0 ... !endif` around the languages compiles; (4) the installer on Luca's PC: installs
+  to `C:\Program Files\SciForge`, Start menu "SciForge", "Installed apps" entry, uninstaller;
+  FreeCAD still starts and still owns `.FCStd` afterwards; (5) the first start: window title
+  "SciForge 1.1.4", the anvil icon in the taskbar, the splash with the version next to
+  "Version", Help > About with the banner and FreeCAD credits, SciForge's ribbon from the
+  start (`StartWorkbench`), a fresh `%APPDATA%\SciForge`; (6) the quick update onto the
+  installed SciForge (registry detection, administrator prompt); (7) Linux: the AppImage
+  runs (`AppRun` default), `run_tests.sh --freecad <unpacked>` picks `sciforgecmd`, the
+  desktop icon shows. Known leftovers: the Start page is FreeCAD's (texts and examples);
+  FreeCAD's document icon is kept for `.FCStd` files; the Linux thumbnailer entries still
+  point at FreeCAD's names (unused by the AppImage); the 16 px icon is a simplified anvil.
+
 ### 2026-10-09: Session 1
 - Forked FreeCAD 1.1.4 (latest stable) into the repo with full history, pushed in stages.
 - Added outline and prototype verbatim; removed FreeCAD-org automation workflows.
@@ -2292,5 +2360,7 @@ done, what was learned, what is next. Newest session goes at the top of the log.
    the fix gives Luca the download.
 4. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
 5. Spike 9.2 (Fillets): 100+ case benchmark from real part workflows, success-rate metric.
-6. Branding pass (app name, icons, user-data folder, installer) so CI can ship an installer.
+6. Branding pass: done on `sf/app` (2026-10-13), to be merged and then proven by a full
+   Windows build (the first one that produces the installer); its checklist is in the
+   session log.
 7. Grow golden models toward 100 (gear, bottle loft+shell, sweep pipe, snap-fit, hinge, threads).

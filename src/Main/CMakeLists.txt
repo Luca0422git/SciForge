@@ -1,15 +1,19 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
+# SCIFORGE: the programs are called SciForge and SciForgeCmd (SCIFORGE_APP_NAME from
+# InitializeFreeCADBuildOptions.cmake) and carry SciForge's icon and version strings; the
+# CMake targets keep FreeCAD's names (docs/sciforge/core-patches.md #9).
+set(SCIFORGE_WIN_ICON "sciforge.ico")
 configure_file(freecad.rc.cmake ${CMAKE_CURRENT_BINARY_DIR}/freecad.rc)
 configure_file(freecadCmd.rc.cmake ${CMAKE_CURRENT_BINARY_DIR}/freecadCmd.rc)
-file(COPY icon.ico DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${SCIFORGE_WIN_ICON} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 ######################## FreeCADMain ########################
 if(BUILD_GUI)
 
     SET(FreeCAD_SRCS
         ${CMAKE_CURRENT_BINARY_DIR}/freecad.rc
-        icon.ico
+        ${SCIFORGE_WIN_ICON}
         MainGui.cpp
     )
 
@@ -31,7 +35,7 @@ if(BUILD_GUI)
         target_compile_warn_error(FreeCADMain)
     endif()
 
-    SET_BIN_DIR(FreeCADMain FreeCAD)
+    SET_BIN_DIR(FreeCADMain ${SCIFORGE_APP_NAME})  # SCIFORGE: SciForge.exe / sciforge (#9)
 
     if(WIN32)
         INSTALL(TARGETS FreeCADMain
@@ -53,7 +57,7 @@ endif(BUILD_GUI)
 
 SET(FreeCADMainCmd_SRCS
     ${CMAKE_CURRENT_BINARY_DIR}/freecadCmd.rc
-    icon.ico
+    ${SCIFORGE_WIN_ICON}
     MainCmd.cpp
 )
 
@@ -80,7 +84,7 @@ if (FREECAD_WARN_ERROR)
     target_compile_warn_error(FreeCADMainCmd)
 endif()
 
-SET_BIN_DIR(FreeCADMainCmd FreeCADCmd)
+SET_BIN_DIR(FreeCADMainCmd ${SCIFORGE_APP_NAME}Cmd)  # SCIFORGE: SciForgeCmd.exe / sciforgecmd (#9)
 
 if(WIN32)
     INSTALL(TARGETS FreeCADMainCmd

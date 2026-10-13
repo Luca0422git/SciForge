@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SCIFORGE: AppStream data for the fork, under its own id (docs/sciforge/core-patches.md #11). -->
+<component type="desktop-application">
+  <id>org.sciforge.SciForge</id>
+  <project_license>LGPL-2.1-or-later</project_license>
+  <metadata_license>CC0-1.0</metadata_license>
+  <developer_name>SciForge contributors</developer_name>
+  <launchable type="desktop-id">org.sciforge.SciForge.desktop</launchable>
+  <name>SciForge</name>
+  <summary>Parametric 3D CAD with the Fusion workflow, based on FreeCAD</summary>
+  <description>
+    <p>
+      SciForge is a fork of FreeCAD, the open-source parametric 3D modeler, reshaped so that
+      parts are designed the way they are in Autodesk Fusion: a ribbon with Design, Sketch and
+      Modify tools, Press Pull, a timeline of every step that can be edited later, and the same
+      keys and mouse habits. It is meant for 3D printing, mechanisms and robotics hardware.
+    </p>
+    <p>
+      SciForge opens and saves FreeCAD documents (.FCStd) and imports and exports the usual
+      open formats (STEP, STL, 3MF, OBJ, DXF, SVG). It installs next to FreeCAD without
+      touching it: its own program, menu entry and settings folder.
+    </p>
+  </description>
+  <keywords>
+    <keyword>engineering</keyword>
+    <keyword translate="no">cad</keyword>
+    <keyword translate="no">design</keyword>
+    <keyword translate="no">3d</keyword>
+    <keyword translate="no">3d-printing</keyword>
+    <keyword translate="no">parametric-modeler</keyword>
+    <keyword>part</keyword>
+    <keyword translate="no">freecad</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/Luca0422git/SciForge</url>
+  <url type="bugtracker">https://github.com/Luca0422git/SciForge/issues</url>
+  <url type="vcs-browser">https://github.com/Luca0422git/SciForge</url>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>sciforge</binary>
+  </provides>
+  <releases>
+    <release version="@PACKAGE_VERSION@" date="@APPDATA_RELEASE_DATE@"/>
+  </releases>
+</component>

@@ -5,7 +5,7 @@
 #       the official FreeCAD for Windows (downloaded and unpacked into DIR when it is not
 #       there yet) with SciForge added as an add-on, like the quick update on Luca's PC
 #   tools/sciforge/windows_golden.sh --built DIR OUT
-#       a SciForge build unpacked in DIR (SciForge built in)
+#       a SciForge build unpacked in DIR (SciForge built in, bin/SciForgeCmd.exe)
 #
 # Writes OUT/golden-report.json and .md; exit 1 when a model fails.
 #
@@ -38,10 +38,12 @@ if [ "${MODE}" = "--stock" ] && ! ls "${DIR}"/*/bin/freecadcmd.exe >/dev/null 2>
     rm -f "${DIR}/${NAME}"
 fi
 
-# The FreeCAD folder: the one with bin/freecadcmd.exe.
-exe="$(ls "${DIR}"/bin/freecadcmd.exe "${DIR}"/*/bin/freecadcmd.exe 2>/dev/null | head -1 || true)"
+# The program folder: the one with bin/SciForgeCmd.exe (a SciForge build) or
+# bin/freecadcmd.exe (the official FreeCAD, or a SciForge build before the branding pass).
+exe="$(ls "${DIR}"/bin/SciForgeCmd.exe "${DIR}"/*/bin/SciForgeCmd.exe \
+    "${DIR}"/bin/freecadcmd.exe "${DIR}"/*/bin/freecadcmd.exe 2>/dev/null | head -1 || true)"
 if [ -z "${exe}" ]; then
-    echo "[SciForge] no bin/freecadcmd.exe in ${DIR}" >&2
+    echo "[SciForge] no bin/SciForgeCmd.exe or bin/freecadcmd.exe in ${DIR}" >&2
     exit 1
 fi
 echo "[SciForge] FreeCAD: ${exe}"
