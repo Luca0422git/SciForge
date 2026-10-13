@@ -229,6 +229,15 @@ class PathTests(unittest.TestCase):
         single = core.path_slots(self.glyphs()[:1], 5.0, 100.0, fit=True)
         self.assertEqual(single[0][1], 50.0)
 
+    def test_fit_round_a_closed_path_leaves_even_gaps(self):
+        # three letters 5 wide round a 90 mm circle: a slot of 30 mm each, the gap
+        # between the last and the first as wide as the others
+        fit = core.path_slots(self.glyphs(), 15.0, 90.0, fit=True, closed=True)
+        spots = [d for _g, d in fit]
+        for got, want in zip(spots, [15.0, 45.0, 75.0]):
+            self.assertAlmostEqual(got, want)
+        self.assertAlmostEqual(spots[0] + 90.0 - spots[-1], spots[1] - spots[0])
+
     def test_glyph_on_the_path(self):
         g = core.Glyph("A", 0.0, 0.0, 4.0, 0)
         # path going up (+y): the letter's baseline runs up, its top points to -x

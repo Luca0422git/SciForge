@@ -612,7 +612,9 @@ def _plan_path(result, spec, sketch, text, info, make_bold, glyphs, local):
         g.y = 0.0
     width = lines[0][1] - lines[0][0] if lines else 0.0
     length = sampler.length
-    slots = core.path_slots(placed, width, length, spec["h_align"], spec["fit"])
+    slots = core.path_slots(
+        placed, width, length, spec["h_align"], spec["fit"], closed=sampler.closed
+    )
     if not spec["fit"] and width > length + 1e-6:
         result.notes.append(
             "The text is longer than the path (%.1f mm of %.1f mm): it runs past its end."
@@ -648,7 +650,8 @@ class PathSampler:
         self.start_length = 0.0
         first, last = edge.FirstParameter, edge.LastParameter
         p0, p1 = edge.valueAt(first), edge.valueAt(last)
-        if edge.isClosed() or (p1 - p0).Length < 1e-9:
+        self.closed = edge.isClosed() or (p1 - p0).Length < 1e-9
+        if self.closed:
             # closed: start at the lowest point, go clockwise
             lowest = min(
                 (first + (last - first) * i / 360.0 for i in range(361)),

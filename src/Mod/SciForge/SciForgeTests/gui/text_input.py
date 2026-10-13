@@ -72,7 +72,12 @@ def type_field(widget, value, enter=True):
 
 
 def press_button(button):
-    QtTest.QTest.mouseClick(button, QtCore.Qt.LeftButton)
+    """Click a button; a check box on its box (a stretched one's middle is empty space)."""
+    if isinstance(button, QtWidgets.QCheckBox):
+        pos = QtCore.QPoint(min(8, button.width() // 2), button.height() // 2)
+        QtTest.QTest.mouseClick(button, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pos)
+    else:
+        QtTest.QTest.mouseClick(button, QtCore.Qt.LeftButton)
     QtWidgets.QApplication.processEvents()
 
 

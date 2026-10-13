@@ -473,11 +473,12 @@ def normal_angle(angle):
 
 
 # -- text on a path -------------------------------------------------------------------------------
-def path_slots(glyphs, line_width, path_length, align="left", fit=False):
+def path_slots(glyphs, line_width, path_length, align="left", fit=False, closed=False):
     """Where each glyph's middle goes along a path (distance from the path's start, in
     reading direction). Fit to Path spreads the letters over the whole path (their
     size stays); otherwise they keep their spacing and sit at the path's start, middle
-    or end. Returns [(glyph, distance)]."""
+    or end. On a closed path (a circle) Fit leaves the same gap between the last letter
+    and the first as between the others: the ends meet. Returns [(glyph, distance)]."""
     if not glyphs:
         return []
     mids = [g.x + g.advance / 2.0 for g in glyphs]
@@ -487,6 +488,10 @@ def path_slots(glyphs, line_width, path_length, align="left", fit=False):
         first = glyphs[0].advance / 2.0
         last = glyphs[-1].advance / 2.0
         span = mids[-1] - mids[0]
+        if closed:
+            whole = span + first + last  # once round: the letters and the gap that closes
+            k = path_length / whole if whole > 1e-12 else 0.0
+            return [(g, (first + m - mids[0]) * k) for g, m in zip(glyphs, mids)]
         room = max(path_length - first - last, 0.0)
         k = room / span if span > 1e-12 else 0.0
         return [(g, first + (m - mids[0]) * k) for g, m in zip(glyphs, mids)]

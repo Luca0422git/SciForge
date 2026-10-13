@@ -221,7 +221,13 @@ class Wrap:
         du = App.Vector(self.surface.getDN(self.u0, self.v0, 1, 0))
         dv = App.Vector(self.surface.getDN(self.u0, self.v0, 0, 1))
         if du.Length < 1e-12 or dv.Length < 1e-12:
-            raise EmbossError("The profile lands on a pinched point of the face: move it.")
+            if self.kind != "other":
+                raise EmbossError("The profile lands on a pinched point of the face: move it.")
+            # (a ball's pole: a projection needs no parameter directions; any two do)
+            du = self.face_normal.cross(App.Vector(1, 0, 0))
+            if du.Length < 1e-6:
+                du = self.face_normal.cross(App.Vector(0, 1, 0))
+            dv = self.face_normal.cross(du)
         self.e_u = du.normalize()
         self.e_v = dv.normalize()
         natural = self.e_u.cross(self.e_v)
@@ -231,6 +237,7 @@ class Wrap:
         tx = turn.multVec(self.x_axis)
         ty = turn.multVec(self.y_axis)
         self.tx, self.ty = tx, ty
+        self.turn = turn
         self.xa, self.xb = tx.dot(self.e_u), tx.dot(self.e_v)
         self.ya, self.yb = ty.dot(self.e_u), ty.dot(self.e_v)
         self.affine = self.kind in ("plane", "cylinder")
@@ -330,6 +337,43 @@ class Wrap:
             )
         hit = min(hits, key=lambda q: (q - self.anchor).Length)
         return self.surface.parameter(hit)
+
+    def alignment(self):
+        """The Alignment as a placement of the profile in its own plane: turned by the
+        Rotation Angle about the profile's middle, moved by the two distances."""
+        shift = self.x_axis * self.h + self.y_axis * self.v
+        return App.Placement(shift, App.Rotation(self.normal, self.angle), self.origin)
+
+    def flat_matrix(self, lift=0.0):
+        """For a flat face: the profile moved rigidly onto it (the Alignment, then the
+        sketch's normal turned onto the face's, the middle onto the anchor), `lift` mm
+        along the face's normal. The same map as uv() for a plane, but it keeps circles
+        circles (exact faces, exact volumes)."""
+        onto = App.Placement(self.anchor + self.face_normal * lift, self.turn).multiply(
+            App.Placement(-self.origin, App.Rotation())
+        )
+        return onto.multiply(self.alignment()).toMatrix()
+
+    def hit(self, point, faces=None):
+        """Where the line through `point` along the sketch's normal meets the faces (the
+        meeting nearest the anchor), or None."""
+        import Part
+
+        faces = faces if faces is not None else self.targets
+        size = max(f.BoundBox.DiagonalLength for f in faces) if faces else 1.0
+        reach = size * 4.0 + (App.Vector(point) - self.anchor).Length + 1.0
+        line = Part.makeLine(point - self.normal * reach, point + self.normal * reach)
+        best = None
+        for face in faces:
+            try:
+                section = face.section(line)
+            except Exception:
+                continue
+            for v in section.Vertexes:
+                d = (v.Point - self.anchor).Length
+                if best is None or d < best[0]:
+                    best = (d, App.Vector(v.Point))
+        return best[1] if best is not None else None
 
     # -- the handles' frame ------------------------------------------------------------------------
     def frame(self):
@@ -457,17 +501,21 @@ def tool_shape(profile_faces, wrap, depth, effect):
                 "smaller." % (2.0 * math.pi * wrap.surface.Radius)
             )
     _check_on_face(profile_faces, wrap)
+    if wrap.kind == "other":
+        return _projected_tool(profile_faces, wrap, depth, effect)
     # a hair inside the part for Emboss, outside it for Deboss
     into = -1.0 if effect == "emboss" else 1.0
-    if wrap.kind == "plane":
-        side = 1.0 if App.Vector(wrap.surface.Axis).dot(wrap.face_normal) >= 0 else -1.0
-        base = _offset_surface(wrap.surface, into * side * core.EPS)
-    else:
+    base = None
+    if wrap.kind != "plane":
         base = _offset_surface(wrap.surface, into * wrap.side * core.EPS)
     solids = []
     for face in profile_faces:
         try:
-            on = _face_on(face, wrap, base)
+            if wrap.kind == "plane":
+                on = face.copy()
+                on.transformShape(wrap.flat_matrix(into * core.EPS))
+            else:
+                on = _face_on(face, wrap, base)
         except Exception as exc:
             raise EmbossError("A profile could not be laid on the face: %s" % exc)
         try:
@@ -491,6 +539,83 @@ def tool_shape(profile_faces, wrap, depth, effect):
             raise EmbossError("The profile made no solid on this face. Try a smaller depth.")
         solids += found
     return Part.Compound(solids)
+
+
+def _projected_tool(profile_faces, wrap, depth, effect):
+    """A face curved in two directions (a ball, a free-form face) cannot be unrolled: the
+    profile goes straight along the sketch's normal onto it. The tool is what the
+    profile's prism along that normal cuts out of a skin of the faces `depth` thick (a
+    hair into the part for Emboss, out of it for Deboss), so the depth is measured
+    along the face's normal and the walls follow the sketch's direction."""
+    import Part
+
+    normal = App.Vector(wrap.normal)
+    normal.normalize()
+    matrix = wrap.alignment().toMatrix()
+    moved = []
+    for face in profile_faces:
+        copy = face.copy()
+        copy.transformShape(matrix)
+        moved.append(copy)
+    # how far along the normal the faces are under the profile
+    spans = []
+    for face in moved:
+        for edge in face.Edges:
+            first, last = edge.FirstParameter, edge.LastParameter
+            for i in range(9):
+                p = edge.valueAt(first + (last - first) * i / 8.0)
+                hit = wrap.hit(p)
+                if hit is None:
+                    raise EmbossError(
+                        "Part of the profile does not land on the face: move it (Horizontal "
+                        "/ Vertical Distance) or make it smaller."
+                    )
+                spans.append((hit - p).dot(normal))
+    margin = 5.0 * (depth + core.EPS) + 0.2
+    low, high = min(spans) - margin, max(spans) + margin
+    prisms = []
+    for face in moved:
+        start = face.copy()
+        start.translate(normal * low)
+        prisms.append(start.extrude(normal * (high - low)))
+    # the skin: from a hair inside to the depth outside (Emboss), or the other way round
+    into = -core.EPS if effect == "emboss" else core.EPS
+    thick = (depth + core.EPS) if effect == "emboss" else -(depth + core.EPS)
+    skins = []
+    for target in wrap.targets:
+        try:
+            skins.append(_skin(target, into, thick))
+        except Exception as exc:
+            raise EmbossError(
+                "The face cannot be made %s mm thick here: %s. Try a smaller depth."
+                % (_number(depth), exc)
+            )
+    try:
+        tool = Part.Compound(prisms).common(Part.Compound(skins))
+    except Exception as exc:
+        raise EmbossError("The profile cannot be laid onto this face: %s" % exc)
+    found = [x for x in tool.Solids if x.Volume > TOL]
+    if not found:
+        raise EmbossError("The profile made no solid on this face. Try a smaller depth.")
+    return Part.Compound(found)
+
+
+def _skin(face, start_at, thick):
+    """The solid between `face` moved `start_at` along its normal and that moved `thick`
+    further. A face with no edge round it (a whole ball) has nothing to fill between:
+    the two closed skins become solids and one is cut from the other."""
+    import Part
+
+    start = face.makeOffsetShape(start_at, 1e-6)
+    try:
+        return start.makeOffsetShape(thick, 1e-6, False, False, 0, 0, True)
+    except Exception:
+        inner = Part.Shell(start.Faces)
+        outer = Part.Shell(start.makeOffsetShape(thick, 1e-6).Faces)
+        if not (inner.isClosed() and outer.isClosed()):
+            raise
+        a, b = Part.Solid(inner), Part.Solid(outer)
+        return b.cut(a) if abs(b.Volume) > abs(a.Volume) else a.cut(b)
 
 
 def _number(value):
