@@ -418,6 +418,8 @@ class ExtrudePanel(Panel):
         if feature is not None:
             self._refresh_profiles()
             self._make_draggers()
+            # A cut being edited shows in red at once (R7), not only after the first change.
+            self._update_cut_preview()
         else:
             self._start(profiles)
 

@@ -98,6 +98,28 @@ def is_press_pull(obj):
     return getattr(obj, "SciForgeType", "") == "PressPull"
 
 
+def removed_material(obj):
+    """The material a push into the part takes away (body coordinates), or None: what the
+    dialog shows in red. execute() keeps it; a design opened from a file has not run
+    execute() yet (nothing of it is saved), so it is made again from the pushed faces."""
+    proxy = getattr(obj, "Proxy", None)
+    tool = getattr(proxy, "tool", None)
+    if tool is not None or proxy is None:
+        return tool
+    try:
+        distance = obj.Distance.Value
+        link = obj.Faces
+        if distance >= 0 or not link or not link[1]:
+            return None
+        source = link[0]
+        slabs = [core.slab(source.Shape.getElement(name), distance) for name in link[1]]
+        tool = slabs[0] if len(slabs) == 1 else slabs[0].multiFuse(slabs[1:])
+    except Exception:
+        return None
+    proxy.tool = tool  # until the next execute() makes it again
+    return tool
+
+
 def make(body, base, face_names, distance, name="PressPull"):
     """Add a Press Pull to `body` after `base` (normally body.Tip). Returns the feature."""
     obj = body.newObject(TYPE, name)

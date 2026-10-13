@@ -184,6 +184,9 @@ class PressPullPanel(Panel):
             self._show_formula(preview.formula_of(feature, "Distance"))
             self._describe()
             self._make_dragger()
+            # A push into the part shows the material it takes away in red at once (R7),
+            # not only after the first change.
+            self._update_cut_preview()
         else:
             self._start_from_selection()
         self.picker = None
@@ -609,7 +612,7 @@ class PressPullPanel(Panel):
         target = self.target
         if self.mode != "faces" or target is None or preview.failure(target):
             return None
-        tool = getattr(getattr(target, "Proxy", None), "tool", None)
+        tool = presspull.removed_material(target)
         if tool is None or tool.isNull() or not tool.Solids:
             return None
         shape = tool.copy()
