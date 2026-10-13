@@ -1354,10 +1354,18 @@ def has_slide(joint):
 
 
 def driven_part(joint):
-    """The side a drive moves (the free one), with the index of its joint origin."""
+    """The side a drive moves (the free one), with the index of its joint origin. When both
+    sides are held by other joints (a closed loop) the side that is not grounded moves and
+    the solver carries the rest of the loop."""
     side = moving_side(joint)
     if side is None:
-        side = 0
+        p1, p2 = part1(joint), part2(joint)
+        if is_grounded(p1) and is_grounded(p2):
+            raise JointError(
+                "%s and %s are both grounded: unground one to drive %s."
+                % (p1.Label, p2.Label, joint.Label)
+            )
+        side = 1 if is_grounded(p1) else 0
     return (part1(joint) if side == 0 else part2(joint)), side
 
 
@@ -1852,17 +1860,109 @@ def remove_joints_of(part):
     return names
 
 
+def _rerooted(ref):
+    """`ref` pointed at the part that now holds its body (the body went into or out of a
+    component), or None when it is still right (or broken: tidy's business)."""
+    try:
+        part, subs = ref[0], list(ref[1])
+        if part is None or not subs:
+            return None
+        doc = part.Document
+        owner = part
+        for name in subs[0].split(".")[:-1]:
+            obj = doc.getObject(name)
+            if obj is None:
+                return None
+            if obj.isDerivedFrom("PartDesign::Feature"):
+                continue
+            owner = obj
+        new_part = part_of(owner)
+        if new_part is None:
+            return None
+        prefix = _path(new_part, owner) if owner is not new_part else ""
+        new_subs = [prefix + s.split(".")[-1] for s in subs]
+        if new_part is part and new_subs == subs:
+            return None
+        return [new_part, new_subs]
+    except Exception:
+        return None
+
+
+def reroot(doc):
+    """After bodies moved into or out of components (Create Components from Bodies, a drag
+    in the browser): the joints, grounds and rigid groups follow them to the part that now
+    moves them. A joint whose two sides end up in one component is switched off (Fusion
+    joints components, not bodies of one component). Returns the joints changed."""
+    changed = []
+    for obj in doc.Objects:
+        if not (is_joint(obj) or is_helper(obj)):
+            continue
+        for prop in ("Reference1", "Reference2"):
+            ref = getattr(obj, prop, None)
+            new = _rerooted(ref) if ref else None
+            if new is not None:
+                setattr(obj, prop, new)
+                if obj not in changed:
+                    changed.append(obj)
+        p1, p2 = part1(obj), part2(obj)
+        if obj in changed and p1 is not None and p1 is p2 and not obj.Suppressed:
+            obj.Suppressed = True
+            warn("%s joins two bodies of %s now: it is switched off" % (obj.Label, p1.Label))
+    for g in grounds(doc):
+        target = g.ObjectToGround
+        if target is not None and not is_part(target):
+            new = part_of(target)
+            if new is not None and new is not target:
+                g.ObjectToGround = new
+    for group in rigid_groups(doc):
+        members, seen = [], set()
+        for m in group.Members:
+            m = (part_of(m) or m) if m is not None else None
+            if m is not None and m.Name not in seen:
+                seen.add(m.Name)
+                members.append(m)
+        if [m.Name for m in members] != [m.Name for m in group.Members if m is not None]:
+            group.Members = members
+    if changed:
+        log("joints follow their bodies: %s" % ", ".join(j.Label for j in changed))
+    return changed
+
+
 class _DeleteWatch:
     """Removes a part's joints while the part itself is being deleted (same undo step as
     the delete, whoever deletes it: the browser, the timeline, a component's Delete, a
-    script). Not while FreeCAD undoes or redoes: the joints come and go with the step."""
+    script), and points joints at the component a jointed body was moved into. Not while
+    FreeCAD undoes or redoes: the joints come and go with the step."""
+
+    def __init__(self):
+        self.closing = set()  # documents being closed: their objects are torn down
+
+    def slotCreatedDocument(self, doc):
+        self.closing.discard(doc.Name)
+
+    def slotDeletedDocument(self, doc):
+        self.closing.add(doc.Name)
+
+    def slotChangedObject(self, obj, prop):
+        try:
+            if prop != "Group" or obj.TypeId != "App::Part":
+                return
+            doc = obj.Document
+            if doc is None or App.isRestoring() or getattr(doc, "Transacting", False):
+                return
+            if doc.Name in self.closing:
+                return
+            if assembly(doc) is not None:
+                reroot(doc)
+        except Exception as exc:
+            warn("joints: %s" % exc)
 
     def slotDeletedObject(self, obj):
         try:
             doc = obj.Document
             if doc is None or App.isRestoring() or getattr(doc, "Transacting", False):
                 return
-            if assembly(doc) is None:
+            if doc.Name in self.closing or assembly(doc) is None:
                 return
             if is_part(obj) or obj.TypeId in ("PartDesign::Body", "App::Part"):
                 remove_joints_of(obj)

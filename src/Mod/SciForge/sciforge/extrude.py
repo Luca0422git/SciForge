@@ -53,7 +53,6 @@ drives (SciForgeRole "ExtrudeFollower", never a timeline step of its own):
 A Join that touches no body at all makes a new body (Fusion). Followers link the lead
 ("Source"), so edits, formulas and reopened files flow through it.
 """
-
 import json
 import math
 
@@ -888,15 +887,25 @@ def _freeze_frame(binder, body, container, container_placement):
 
 
 def _frozen_placement(binder, support, container_placement, shift):
-    """The binder placement for a non-relative copy: frame * start shift (* the source's
-    own placement when FreeCAD copies a single shape, as it then drops that placement)."""
+    """The binder placement for a non-relative copy: frame * start shift * where the copied
+    shapes sit in the profile's container. FreeCAD copies several shapes in their object's
+    parent's coordinates, a single one with its own placement stripped."""
+    import Part
+
     frame = getattr(binder, FRAME)
-    local_shift = container_placement.Rotation.inverted().multVec(shift)
-    place = App.Placement(local_shift, App.Rotation())
-    shapes = sum(max(1, len(subs)) for _, subs in support)
+    obj, subs = support[0]
+    shapes = sum(max(1, len(s)) for _, s in support)
+    own = obj.getGlobalPlacement().multiply(obj.Placement.inverse())  # obj's parent, global
     if shapes == 1:
-        place = place.multiply(support[0][0].Placement)
-    return frame.multiply(place)
+        # FreeCAD strips the copied shape's own placement (a sketch's, a face's): put it back
+        try:
+            strip = Part.getShape(obj, subs[0] if subs else "", needSubElement=True).Placement
+        except Exception:
+            strip = obj.Placement
+        own = own.multiply(strip)
+    local = container_placement.inverse().multiply(own)  # copy -> container coordinates
+    local_shift = container_placement.Rotation.inverted().multVec(shift)
+    return frame.multiply(App.Placement(local_shift, App.Rotation()).multiply(local))
 
 
 def _binder(body, feature, sources, offset, existing=None, role="ExtrudeProfile"):

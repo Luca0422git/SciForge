@@ -10,7 +10,6 @@ Physical Material):
   FreeCAD's own callbacks: the work runs a moment later from a Qt timer.
 - BodyPick: what a click in the 3D view (or the browser) means for a body tool.
 """
-
 import FreeCAD as App
 import FreeCADGui as Gui
 

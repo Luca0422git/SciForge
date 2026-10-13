@@ -341,6 +341,7 @@ class Animator:
         self.doc = joint.Document
         self.on_done = on_done
         self.loop = loop
+        self.error = ""
         self.start_places = joints.placements(self.doc)
         self.angle0, self.slide0 = joints.value(joint)
         self.span = core.default_span(joints.part_size(joints.part1(joint)))
@@ -351,7 +352,14 @@ class Animator:
         self.running = False
 
     def start(self):
+        """False when the joint cannot move (rigid, or both sides grounded: `error` says)."""
+        self.error = ""
         if joints.fusion_type(self.joint) == "rigid":
+            return False
+        try:
+            joints.driven_part(self.joint)
+        except Exception as exc:
+            self.error = str(exc)
             return False
         self.running = True
         self.started = time.perf_counter()
@@ -421,6 +429,8 @@ def animate(joint, loop=True):
         return None
     animator = Animator(joint, on_done=stop_animation, loop=loop)
     if not animator.start():
+        if animator.error:
+            commands.tell(animator.error)
         return None
     _STANDALONE["animator"] = animator
     try:
@@ -950,6 +960,8 @@ class JointPanel(_JointsPanel):
             return
         self.animator = Animator(self.joint, on_done=self._animation_done, loop=loop)
         if not self.animator.start():
+            if self.animator.error:
+                self.message.setText("⚠ " + self.animator.error)
             self.animator = None
 
     def _animation_done(self):
@@ -1436,9 +1448,9 @@ class RigidGroupPanel(_JointsPanel):
     def apply(self):
         if len(self.members) < 2:
             if self.group is not None and not self.editing:
-                self.doc.removeObject(self.group.Name)
                 self.group = None
                 self.target = None
+                self.restart()  # the group, its links and a ground it added all go
             raise NeedsPick("Click two or more components (in the view or the browser).")
         if self.group is None:
             self.group = joints.create_rigid_group(self.doc, self.members, self.include.isChecked())

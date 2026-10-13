@@ -8,7 +8,6 @@ the 3D view, F2 renames, Delete deletes, right click opens Fusion's menu for
 that kind of row. Structure: browser_core.py; deleting goes through
 timeline_ops.py (one undo step, later steps kept working where possible).
 """
-
 import FreeCAD as App
 import FreeCADGui as Gui
 
