@@ -2444,6 +2444,66 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   are unconfirmed (Luca's Fusion checks 3-6 in `plan.md`); Ctrl pressed without moving
   the mouse takes effect at the next move; FreeCAD's own line steps stay two undo steps.
 
+## HANDOFF 2026-10-13 evening: session paused by Luca; the next session (Opus) continues here
+
+Luca's words: "I would rather put everything on pause and have Opus take over in a controlled
+manner than run out of Fable usage." He also said today: "give me a full fledged product",
+"if the tests keep the updates from failing, bring back the tests", and "I don't need a
+notification every time something passes, just get it done" (report once, when something is
+merged and pushed).
+
+**State of the main branch `claude/inspiring-cerf-ragp6j` (pushed, 4b25131f68):** today's
+merges in order: orbit, sketch OK/Cancel + line ending, extrude loose ends, arrows on top,
+sketch-feel, the CI #102/#104 test fixes, `sf/app` (branding: core patches #8-#13, the
+installer; compiled only by the full build), `sf/components`, `sf/versions` (+ follow-ups:
+four scenarios accept the version prompt after Ctrl+S; Save dialog bug). CI "SciForge tests"
+#105 and #106 green; #107 (components) and #108 (versions) were still running at the pause:
+**check them first** (`actions_list list_workflow_runs sciforge-tests.yml`, branch filter);
+a red one is fixed at the root, the touched area's scenarios run locally, then pushed.
+
+**The full build** (`sciforge-build.yml`, workflow_dispatch, both platforms, started about
+20:20 UTC on merge 1733932942, about 3 h): read its conclusion and artifacts
+(`SciForge-Windows-installer-<build>`, `SciForge-Windows-portable-<build>`, the Linux
+AppImage). What it must prove is listed in the 2026-10-13 branding session log (compile of
+`SciForgeBranding.h`, `bin\SciForge.exe`, the NSIS step, side-by-side install, the quick
+update onto the installed SciForge). Red: fix core patches #8-#13, push, re-trigger with
+`actions_run_trigger run_workflow`, report once.
+
+**Finished but NOT merged, local to the paused container (lost with it unless pushed):**
+- `sf/insert` (d9c2657d99, 43 files): Insert Mesh / STEP / SVG / DXF / Canvas + Calibrate,
+  Convert Mesh, Export, 3D Print, Export Everything, the File menu; 9 scenarios green on its
+  own tree (`insert_*`, `export_*`, `insert_reopen`), unit 430. Merging it onto main
+  conflicts in `MEMORY.md`, `browser_core.py`, `browser_ui.py`, `ribbon_ui.py`,
+  `timeline_core.py` (components and versions landed meanwhile): keep both sides (browser
+  folders: Canvases + components; ribbon app menu: File menu + Save/Version entries; timeline
+  kinds: insert_mesh/convert_mesh/insert_step + component). Then run its 9 scenarios +
+  `components_basic`, `versions_save`, `timeline_browser_qa2`, smoke/journey, push.
+- `sf/selection` (8cf6657a1c, 1bd47ced7b): window/crossing/freeform/paint box select, Select
+  Other (long press), Selection Filters / Priority / Select Through, Esc clears; 5 scenarios
+  (`selection_*`) + regressions green on its tree. Expect conflicts in `ribbon_config.py`
+  (SELECT group rewritten; `item(toggle=...)`), `ribbon_ui.py`, `theme.py` (keep_and_set
+  lists: duplicate labels, AutoSaver, long-press menu), `shell.py`, `MEMORY.md`, `plan.md`.
+  Then run `selection_*`, `extrude_presspull_qa`, `fillet_qa_more`, `marking_menu_command`,
+  `components_basic`, smoke/journey, push.
+- `sf/joints` (agent told to stop and commit "WIP joints: ..." at the pause; may be partial):
+  Joint (J) two-click picker, 7 types, As-Built, Ground, Rigid Group, limits, on FreeCAD's
+  Assembly workbench; the component contract is in `docs/sciforge/parity/components.md`.
+  Read its WIP commit message and parity doc first; finish, test, merge.
+If these branches are gone (new container), rebuild them from the reports summarised in the
+session logs below and in `docs/sciforge/plan.md`; the parity docs name every behaviour.
+
+**Not started (wave 2, task list in this order):** sketch Text + Emboss (outline 7.5/7.6);
+direct modeling with history capture off (7.13, 7.3); Surface basics (7.9); the remaining
+Modify tools: Replace Face, Split Face, Silhouette Split, Align, Offset Face, plus the
+plan's item 8 small gaps; Drawings on TechDraw (7.16). Same method: one agent per area in an
+isolated worktree, Fusion behaviour researched first with sources, real-click scenarios,
+I merge, run the touched area locally, push once, report once.
+
+**Process rules in force:** research Fusion before building; the scenarios of the touched
+area run locally before every push (CI is the full run); one report per merged push, no
+per-step chatter; the quick update comes from a green "SciForge tests" run; a full build
+only for a release or a real C++ change.
+
 ## Next steps (in order)
 
 0. **The current plan is `docs/sciforge/plan.md`** (2026-10-12, after the research report
