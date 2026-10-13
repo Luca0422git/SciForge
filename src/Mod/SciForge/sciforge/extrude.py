@@ -1083,7 +1083,10 @@ def hide_sketches(profiles):
     for obj, _ in profiles:
         if is_sketch(obj):
             try:
-                obj.ViewObject.Visibility = False
+                # Only a visible one: setting it again is a change FreeCAD records, and an
+                # edit OK'd without a change then left an undo step that did nothing.
+                if obj.ViewObject.Visibility:
+                    obj.ViewObject.Visibility = False
             except Exception:
                 pass
 

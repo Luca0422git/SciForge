@@ -711,6 +711,7 @@ class ExtrudePanel(Panel):
                     0, lambda: self._region_clicked(sketch, sub)
                 ),
                 occluder=self._occluder,
+                clicks_through=True,  # the sketch stays in view: its arrows stay grabbable
             )
         except Exception as exc:
             warn("profile shading unavailable: %s" % exc)

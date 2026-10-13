@@ -120,12 +120,15 @@ def handle_at(view, position, radius=3):
 
 class ProfilePicker:
     """A press on a drag handle (an arrow in front of a region) drags the handle: it is no
-    pick of the region behind it. While the regions are offered, the sketches' own lines
-    and faces let clicks through: the shaded regions here take the clicks, and an arrow
-    behind a sketch (a cut going down into the part, with the sketch kept in view until OK)
-    stays grabbable, as Fusion's arrows always are."""
+    pick of the region behind it.
 
-    def __init__(self, view, sketches, on_pick, occluder=None):
+    clicks_through=True (Extrude): while the regions are offered, the sketches' own lines
+    and faces let clicks through. The shaded regions here take the clicks, and an arrow
+    behind a sketch (a cut going down into the part, with the sketch kept in view until OK)
+    stays grabbable, as Fusion's arrows always are. Off for the other dialogs: Sweep and
+    Loft pick sketch lines as paths and rails, so FreeCAD must still find them."""
+
+    def __init__(self, view, sketches, on_pick, occluder=None, clicks_through=False):
         from pivy import coin
 
         self.coin = coin
@@ -156,7 +159,7 @@ class ProfilePicker:
                 continue
             for sub, face in found:
                 self.regions.append((sketch, sub, face, self._add_face(face, self.root)))
-            if found:
+            if found and clicks_through:
                 self._let_clicks_through(sketch)
         self.hovered = None
         view.getSceneGraph().addChild(self.root)
