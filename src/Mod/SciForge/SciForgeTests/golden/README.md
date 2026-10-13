@@ -89,6 +89,13 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `expect_bodies` | `bodies` {step id: {`volume`, `solids`}}, `used_up` [step ids], `followers` {step id: n}, `steps` {step id: times listed in the timeline} | check several bodies at this point |
 | `reopen_check` | `bodies` (as above) | save, open the file as a second design, check the bodies there |
 | `expect_move_refused` | `target`, `before` or `after`, `reason` | dragging a step before / after another in the timeline is refused (a multi-body extrude moves with its hidden steps; only a move before a body it changes exists is refused) |
+| `history_off` / `history_on` | (none) | the design's menu: Do Not Capture Design History (every body one frozen step) / Capture Design History (`golden/direct_ops.py`, `sciforge/direct.py`) |
+| `replace_face` | `id`, `faces` (selector), `of` (step: its body; default the current one), `tangent_chain`, `target` (a pick: XY/XZ/YZ, `{"face": sel, "of": id}`) | Replace Face (measured: that body) |
+| `split_face` | `id`, `faces`, `of`, `tool` (a pick: plane, face, `{"body": id}`), `extend`, `split_type` (surface/vector/closest), `direction` (a pick: X/Y/Z, a face, an edge) | Split Face |
+| `silhouette_split` | `id`, `body`, `direction` (a pick), `operation` (faces/body/shelled) | Silhouette Split (measured: the body and the new ones) |
+| `align_bodies` | `id`, `from`, `to` (picks: `{"face" / "edge" / "vertex": sel, "of": id}`, planes, axes), `flip`, `turns` (0..3 Angle clicks) | Align with Objects: Bodies (measured: the moved body) |
+| `modify_edit` | `target` (one of the four above), `set` {option: value or pick} | double-click it in the timeline and change it |
+| `remove_bodies` | `steps` | Remove (a timeline step); measured from then on: the bodies still in the design |
 
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).

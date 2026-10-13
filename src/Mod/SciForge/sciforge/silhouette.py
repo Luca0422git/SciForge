@@ -10,9 +10,11 @@ Options (dict, see DEFAULTS):
                        from that direction; it stays one body
               "body"   Split Solid Body: the body is split in two at the outline, which must
                        lie in one plane (Fusion's rule)
-              "shelled" Split Shelled Body: a shelled (hollow) body split in two along the
-                       outline (a flat outline: its plane; else the outline swept along the
-                       view direction)
+              "shelled" Split Shelled Body: meant for a shelled (thin-walled) body, split
+                       in two along the outline: a flat outline by its plane, else by the
+                       outline swept along the view direction. Not refused on a solid body
+                       (a shelled cup is one shell like any solid: there is no telling them
+                       apart reliably)
 
 The outline is OpenCASCADE's silhouette ("outline" reflect lines, kept on the body's own
 surface). What is built: a "Silhouette Split" step (SciForgeType "SilhouetteSplit",
@@ -82,8 +84,8 @@ def outline(shape, direction):
     edges = [e for e in lines.Edges if e.Length > 1e-6]
     if not edges:
         raise SilhouetteError(
-            "The body has no outline from that direction to split along (flat faces seen "
-            "edge-on only). Pick another direction, or use Split Face."
+            "From that direction the body's outline runs only along edges it already has: "
+            "nothing to split along. Pick another direction, or use Split Face."
         )
     return edges
 
@@ -137,24 +139,11 @@ def _parting_surface(edges, direction, around):
     return Part.makeCompound(swept)
 
 
-def is_shelled(shape):
-    """A hollow body: a solid with more than one shell (Shell's inside wall)."""
-    try:
-        return any(len(s.Shells) > 1 for s in shape.Solids)
-    except Exception:
-        return False
-
-
 def compute(shape, direction, operation):
     """(the body's own solid, [other pieces]) for the operation, design coordinates."""
     edges = outline(shape, direction)
     if operation == "faces":
         return _faces_split(shape, edges), []
-    if operation == "shelled" and not is_shelled(shape):
-        raise SilhouetteError(
-            "Split Shelled Body needs a shelled (hollow) body: use Shell first, or Split "
-            "Solid Body."
-        )
     plane = _plane_of(edges)
     if plane is not None:
         tool = _big_plane(plane, shape)

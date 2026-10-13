@@ -7,7 +7,8 @@ edge, a flat face or one of the big origin squares (its normal). Then the Target
 click the body (a solid without history becomes a body built on it). The split is
 previewed live (new bodies show); OK / Enter keeps it (one undo step), Cancel / Esc throws it
 away; the reason is said in the dialog when the outline cannot be used (Split Solid Body
-needs an outline in one plane, Split Shelled Body a shelled body). Double-click the
+needs an outline in one plane; Split Shelled Body also splits along an outline that is not
+flat, swept along the view direction). Double-click the
 Silhouette Split in the timeline to change it. Document side: silhouette.py.
 """
 

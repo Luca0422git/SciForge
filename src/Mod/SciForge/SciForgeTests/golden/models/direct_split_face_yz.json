@@ -1,0 +1,63 @@
+{
+  "id": "direct_split_face_yz",
+  "title": "Split Face: a box's top split by the YZ origin plane (one more face, same solid)",
+  "tags": [
+    "direct",
+    "modify",
+    "split-face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "split_face",
+      "id": "f1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "tool": "YZ"
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 7,
+    "solids": 1,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "The box -20..20 x -15..15 x 10, its top in two: 6 + 1 faces; A = 2*1200 + 2*400 + 2*300."
+  }
+}

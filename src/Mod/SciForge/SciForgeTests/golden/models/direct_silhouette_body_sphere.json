@@ -1,0 +1,43 @@
+{
+  "id": "direct_silhouette_body_sphere",
+  "title": "Silhouette Split, Split Solid Body: a ball split into two halves at its outline",
+  "tags": [
+    "direct",
+    "modify",
+    "silhouette-split"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "sphere",
+      "plane": "XY",
+      "x": 0,
+      "y": 0,
+      "diameter": 20
+    },
+    {
+      "op": "silhouette_split",
+      "id": "l1",
+      "body": "b1",
+      "direction": "Z",
+      "operation": "body"
+    }
+  ],
+  "expect": {
+    "volume": 4188.790204786391,
+    "area": 1884.9555921538758,
+    "faces": 4,
+    "solids": 2,
+    "bbox": [
+      -10,
+      -10,
+      -10,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "Two half balls (measured over both bodies): V = 4/3 pi r^3, A = 4 pi r^2 + 2 pi r^2 (the two flat discs), r = 10."
+  }
+}

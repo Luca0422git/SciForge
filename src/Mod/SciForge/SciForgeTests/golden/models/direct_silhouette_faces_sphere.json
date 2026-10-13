@@ -1,0 +1,42 @@
+{
+  "id": "direct_silhouette_faces_sphere",
+  "title": "Silhouette Split, Split Faces Only: a ball seen from above, split at its equator",
+  "tags": [
+    "direct",
+    "modify",
+    "silhouette-split"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "sphere",
+      "plane": "XY",
+      "x": 0,
+      "y": 0,
+      "diameter": 20
+    },
+    {
+      "op": "silhouette_split",
+      "id": "l1",
+      "body": "b1",
+      "direction": "Z"
+    }
+  ],
+  "expect": {
+    "volume": 4188.790204786391,
+    "area": 1256.6370614359173,
+    "faces": 2,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      -10,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "r = 10: V = 4/3 pi r^3, A = 4 pi r^2; the outline seen along Z is the equator: the round face in two."
+  }
+}

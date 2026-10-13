@@ -1334,3 +1334,88 @@ def validate(model):  # noqa: F811  (adds the multi-body extrude checks)
     _validate_before_extrude_bodies(model)
     _check_extrude_bodies(model)
     return model
+
+
+# -- Direct modeling and the Modify tools (golden/direct_ops.py; sciforge/direct.py,
+# replace_face.py, split_face.py, silhouette.py, align.py, remove.py) -------------------------
+STEP_KEYS["history_off"] = (set(), {"comment"})
+STEP_KEYS["history_on"] = (set(), {"comment"})
+STEP_KEYS["replace_face"] = ({"id", "faces", "target"}, {"of", "tangent_chain", "comment"})
+STEP_KEYS["split_face"] = (
+    {"id", "faces", "tool"},
+    {"of", "extend", "split_type", "direction", "comment"},
+)
+STEP_KEYS["silhouette_split"] = ({"id", "body", "direction"}, {"operation", "comment"})
+STEP_KEYS["align_bodies"] = ({"id", "from", "to"}, {"flip", "turns", "comment"})
+STEP_KEYS["modify_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["remove_bodies"] = ({"steps"}, {"comment"})
+SPLIT_FACE_TYPES = ("surface", "vector", "closest")
+SILHOUETTE_OPERATIONS = ("faces", "body", "shelled")
+MODIFY_STEPS = ("replace_face", "split_face", "silhouette_split", "align_bodies")
+_PICK_KEYS = ("face", "edge", "vertex", "body")
+
+
+def _check_pick(here, name, spec, seen):
+    """A pick: an origin plane / axis name, {"face" | "edge" | "vertex": selector, "of": id}
+    or {"body": id}."""
+    if isinstance(spec, str):
+        if spec not in PLANES + AXES:
+            _fail(here, "'%s' must be XY/XZ/YZ, X/Y/Z or a face, edge, vertex or body" % name)
+        return
+    if not isinstance(spec, dict) or len(set(spec) & set(_PICK_KEYS)) != 1:
+        _fail(here, "'%s' must name exactly one of %s (or a plane / axis)" % (name, _PICK_KEYS))
+    for key in ("of", "body"):
+        if key in spec and spec[key] not in seen:
+            _fail(here, "'%s' names unknown step %r" % (name, spec[key]))
+
+
+def _check_direct_steps(model):
+    seen = {}
+    for i, step in enumerate(model.get("steps", [])):
+        here = "%s.steps[%d] (%s)" % (model.get("id", "?"), i, step.get("op"))
+        op = step.get("op")
+        if op in ("replace_face", "split_face") and "of" in step and step["of"] not in seen:
+            _fail(here, "'of' names unknown step %r" % step["of"])
+        if op == "replace_face":
+            _check_pick(here, "target", step["target"], seen)
+        if op == "split_face":
+            _check_pick(here, "tool", step["tool"], seen)
+            kind = step.get("split_type", "surface")
+            if kind not in SPLIT_FACE_TYPES:
+                _fail(here, "'split_type' must be one of %s" % (SPLIT_FACE_TYPES,))
+            if kind == "vector" and "direction" not in step:
+                _fail(here, "Along Vector needs a 'direction'")
+            if "direction" in step:
+                _check_pick(here, "direction", step["direction"], seen)
+        if op == "silhouette_split":
+            if step["body"] not in seen:
+                _fail(here, "'body' names unknown step %r" % step["body"])
+            _check_pick(here, "direction", step["direction"], seen)
+            if step.get("operation", "faces") not in SILHOUETTE_OPERATIONS:
+                _fail(here, "'operation' must be one of %s" % (SILHOUETTE_OPERATIONS,))
+        if op == "align_bodies":
+            _check_pick(here, "from", step["from"], seen)
+            _check_pick(here, "to", step["to"], seen)
+            if "turns" in step and step["turns"] not in (0, 1, 2, 3):
+                _fail(here, "'turns' must be 0..3 (quarter turns)")
+        if op == "modify_edit":
+            if seen.get(step["target"]) not in MODIFY_STEPS:
+                _fail(here, "modify_edit must name one of the %s steps" % (MODIFY_STEPS,))
+            for key in ("target", "tool", "direction", "from", "to"):
+                if key in step["set"]:
+                    _check_pick(here, key, step["set"][key], seen)
+        if op == "remove_bodies" and (
+            not step["steps"] or any(s not in seen for s in step["steps"])
+        ):
+            _fail(here, "'steps' must name earlier steps")
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_direct = validate
+
+
+def validate(model):  # noqa: F811  (adds the direct-modeling / Modify checks)
+    _validate_before_direct(model)
+    _check_direct_steps(model)
+    return model

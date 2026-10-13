@@ -1,0 +1,148 @@
+{
+  "id": "direct_replace_face_edit_down",
+  "title": "Replace Face edited: the target changed to a lower body's top, the box comes down",
+  "tags": [
+    "direct",
+    "modify",
+    "replace-face",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            70,
+            30
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 15,
+      "operation": "new_body"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            80,
+            0,
+            100,
+            30
+          ],
+          "name": "s3r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e3",
+      "profile": "s3",
+      "distance": 6,
+      "operation": "new_body"
+    },
+    {
+      "op": "replace_face",
+      "id": "r1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "of": "e1",
+      "target": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        },
+        "of": "e2"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 18000,
+        "source": "analytic",
+        "note": "up to 15"
+      }
+    },
+    {
+      "op": "modify_edit",
+      "target": "r1",
+      "set": {
+        "target": {
+          "face": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          },
+          "of": "e3"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7200,
+    "area": 3240,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      6
+    ],
+    "source": "analytic",
+    "note": "The box 40x30 becomes 6 high: V = 40*30*6, A = 2*1200 + 2*240 + 2*180."
+  }
+}

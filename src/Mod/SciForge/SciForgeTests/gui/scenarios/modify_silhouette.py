@@ -12,8 +12,9 @@ Part: a ball, SOLID > CREATE > Sphere on the XY square, centre at the origin, di
      step. Undo / Redo.
   C  Double-click Silhouette Split 1: Operation Split Solid Body: two bodies (the halves,
      2000 pi / 3 each), previewed; OK. Undo: one ball again; Redo.
-  D  Edit again: Split Shelled Body on a solid ball: the reason is said in the dialog, OK
-     keeps it open; Cancel: still the two halves.
+  D  Edit again: Split Shelled Body: the ball's outline is flat, so the same two halves;
+     View Direction cleared and the ball's round face clicked: refused in the dialog, OK
+     keeps it open; Cancel: still the two halves from Split Solid Body.
   E  Save, close, open: two halves, the step still edits.
 """
 
@@ -28,6 +29,7 @@ from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import timeline_input as t
+from SciForgeTests.gui import widget_input as wi
 
 V = App.Vector
 BALL = 4000 * math.pi / 3
@@ -278,9 +280,27 @@ def d_shelled():
         d.choose("operation", "Split Shelled Body")
 
 
+def d_shelled_split():
+    p = d.panel()
+    h.check(
+        "Split Shelled Body: two halves too",
+        p is not None and "2 bodies" in p.note.text(),
+        p and (p.note.text(), d.message()),
+    )
+    wi.click(p.fields["direction"].clear)
+
+
+def d_click_round():
+    p = d.panel()
+    h.check(
+        "the View Direction box waits", p is not None and p.active == "direction", p and p.active
+    )
+    h.click(V(5, -5, 50**0.5))
+
+
 def d_refused():
     msg = d.message()
-    h.check("the reason is said", "shelled" in msg.lower(), msg)
+    h.check("the reason is said", "view direction" in msg, msg)
 
 
 def d_ok():
@@ -393,6 +413,8 @@ h.run(
             c_redone,
             d_edit,
             d_shelled,
+            d_shelled_split,
+            d_click_round,
             d_refused,
             d_ok,
             d_still_open,
