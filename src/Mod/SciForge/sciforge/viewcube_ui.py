@@ -110,6 +110,16 @@ def after_turn(view, target, then):
 
     def finish():
         try:
+            # FreeCAD's animation moves the camera in steps relative to where it is, and
+            # can still be running here (Home on a view already at Home: the turn is done
+            # at once, the move to the model's centre is not). Stopped first, so it does
+            # not slide the view after `then` placed it.
+            view.stopAnimating()
+            if not viewcube.same_orientation(orientation_of(view), target, 1e-9):
+                set_orientation_now(view, target)
+        except Exception:
+            pass  # the view was closed meanwhile: `then` says so
+        try:
             then()
         except Exception as exc:
             warn("ViewCube: %s" % exc)
@@ -222,7 +232,9 @@ class ViewCube(QtWidgets.QWidget):
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
         self.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
-        self.setStyleSheet("background: transparent;")
+        # The cube only: a style sheet without a selector would also reach its right-click
+        # menu (a child) and paint that see-through.
+        self.setStyleSheet("#%s { background: transparent; }" % NAME)
         self.setMouseTracking(True)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
         self.setCursor(QtCore.Qt.ArrowCursor)
@@ -266,6 +278,11 @@ class ViewCube(QtWidgets.QWidget):
         self.q = q
         self.parts = viewcube.layout(q, CX, CY, SIZE)
         self.face = viewcube.face_on(q)
+        if self.face is None:
+            # An arrow click is still turning the view to a face: the arrows stay, so a
+            # quick second click adds up (and does not fall through to the model).
+            aim = self._turning_to(q)
+            self.face = viewcube.face_on(aim) if aim is not None else None
         self.buttons = [
             c
             for c in viewcube.controls(CX, CY, SIZE, HOME_AT)
@@ -274,6 +291,18 @@ class ViewCube(QtWidgets.QWidget):
         if self.hover is not None and self.hover not in self.targets():
             self.hover = None
         self.update()
+
+    def _turning_to(self, q):
+        """Where the last arrow click is still taking the view, or None."""
+        last = getattr(self, "target", None)
+        if last is None:
+            return None
+        aim, when = last
+        if time.time() - when > _animation_seconds() + 0.2:
+            return None
+        if viewcube.same_orientation(q, aim, 1e-6):
+            return None
+        return aim
 
     def targets(self):
         """Everything clickable now: cube parts and buttons, {id: widget pixel to aim at}."""
@@ -534,13 +563,8 @@ class ViewCube(QtWidgets.QWidget):
         """An arrow click: turn from the current view, or from where the previous arrow
         click is still taking it (quick clicks add up, like FreeCAD's cube)."""
         current = orientation_of(self.view)
-        base = current
-        if self.target is not None:
-            aim, when = self.target
-            moving = not viewcube.same_orientation(current, aim, 1e-6)
-            if moving and time.time() - when < _animation_seconds() + 0.2:
-                base = aim
-        new = change(base)
+        aim = self._turning_to(current)
+        new = change(aim if aim is not None else current)
         self.target = (new, time.time())
         self.view.setCameraOrientation(tuple(new))
 

@@ -310,8 +310,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-Linux-*' --dir built
-          image=$(find built -name '*.AppImage' | head -1)
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-Linux-*' --dir built || true
+          image=$(find built -name '*.AppImage' 2>/dev/null | head -1)
+          if [ -z "$image" ]; then
+            echo "::error::No Linux AppImage in this run: the Linux build did not finish (see its own log), so the scenarios cannot run."
+            exit 1
+          fi
           chmod +x "$image"
           mkdir -p .sciforge-cache/sciforge
           (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)

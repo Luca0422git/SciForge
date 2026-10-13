@@ -94,7 +94,40 @@ def home_default_done():
     ok, detail = fitted()
     h.check("Home fits the whole model on screen", ok, detail)
     h.shot("1-default-home")
+    # Already at Home, the view moved sideways and zoomed, then the house with FreeCAD's
+    # animation on (as on Luca's PC): FreeCAD's turn is done at once there, its move to the
+    # model is not, and must not slide the view after Home fitted it.
+    vc.animations(True)
+    turn = h.view().getCameraOrientation()
+    shift = turn.multVec(App.Vector(40, 0, 0)) + turn.multVec(App.Vector(0, 20, 0))  # a pan
+    camera = h.view().getCameraNode()
+    x, y, z = camera.position.getValue().getValue()
+    camera.position.setValue(x + shift.x, y + shift.y, z + shift.z)
+    h.view().zoomIn()
+    st["moved"] = centre_offset()
+    vc.click("home")
+
+
+def centre_offset():
+    """How far the block's middle is from the view's middle, as a share of the view's width."""
+    gl = h.gl_widget()
+    p = h.screen_point(h.body().Shape.BoundBox.Center)
+    return round(
+        max(abs(p.x() - gl.width() / 2.0), abs(p.y() - gl.height() / 2.0)) / gl.width(), 3
+    )
+
+
+def home_again_done():
+    ok, detail = fitted()
+    off = centre_offset()
+    h.check("the view had been moved away from the model's middle", st["moved"] > 0.1, st["moved"])
+    h.check("Home again (animation on): the whole model fitted", ok, detail)
+    h.check("... and in the middle (no slide after the fit)", off < 0.03, (off, st["moved"]))
+    vc.animations(False)
     vc.click("top-front")
+
+
+home_default_done.wait_ms = 1600
 
 
 def set_fit():
@@ -233,6 +266,7 @@ h.run(
         default_home,
         zoomed,
         home_default_done,
+        home_again_done,
         set_fit,
         set_fit_done,
         go_fit,

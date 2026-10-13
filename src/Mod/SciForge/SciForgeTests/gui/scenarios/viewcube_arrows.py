@@ -7,11 +7,15 @@ A block 40 x 30 x 10, isometric view: no arrows. Click FRONT: the six arrows app
 Up triangle: TOP (+Y up). Down: FRONT. Right: RIGHT. Left: FRONT. Left: LEFT. Right: FRONT.
 Clockwise arrow: still looking at FRONT, the model's top now points right (up on screen
 is -X). Counter-clockwise: FRONT upright again; once more: +X up; clockwise: FRONT.
-With FreeCAD's animation on, two quick clicks on the right triangle add up: BACK. The
-arrow under the mouse lights up blue."""
+With FreeCAD's animation on, two quick clicks on the right triangle add up: BACK; two
+clicks 150 ms apart (the view still turning) add up too: FRONT. The arrow under the mouse
+lights up blue."""
+from PySide import QtCore
+
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import viewcube_input as vc
 
+st = {}
 ARROWS = ("turn-up", "turn-down", "turn-left", "turn-right", "roll-cw", "roll-ccw")
 
 
@@ -81,6 +85,33 @@ def quick_done():
 quick_done.wait_ms = 1800
 
 
+def spaced_clicks():
+    """Two clicks on the right triangle 150 ms apart (a normal double-click): the second
+    one comes while the view is still turning."""
+    vc.animations(True)
+    vc.click("turn-right")
+
+    def second():
+        st["arrow_there"] = "turn-right" in vc.cube().targets()
+        st["second"] = vc.click("turn-right")
+
+    QtCore.QTimer.singleShot(150, second)
+
+
+spaced_clicks.wait_ms = 1800
+
+
+def spaced_done():
+    h.check("150 ms later the arrow is still there to click", st.get("arrow_there"), st)
+    h.check("the second click went to the arrow", st.get("second"), st)
+    h.check(
+        "two clicks 150 ms apart add up: from BACK to FRONT",
+        vc.looks_along((0, 1, 0)) and vc.z_up(),
+        vc.describe(),
+    )
+    vc.animations(False)
+
+
 def rolled_shot():
     h.shot("2-rolled")
 
@@ -99,5 +130,5 @@ h.run(
     + step("roll-ccw", "FRONT upright", (0, 1, 0), (0, 0, 1))
     + step("roll-ccw", "FRONT turned counter-clockwise", (0, 1, 0), (1, 0, 0))
     + step("roll-cw", "FRONT upright again", (0, 1, 0), (0, 0, 1))
-    + [quick_clicks, quick_done],
+    + [quick_clicks, quick_done, spaced_clicks, spaced_done],
 )
