@@ -539,7 +539,7 @@ def snapshot(doc, deps=True):
 
 # -- multi-body steps (an extrude that acts on several bodies) ----------------------------
 # Such an extrude is one timeline step (the "lead") plus hidden follower steps in the other
-# bodies (extrude.py, SciForgeRole ExtrudeFollower, linked to the lead by "Source"). A
+# bodies (extrude_bodies.py, SciForgeRole ExtrudeFollower, linked to the lead by "Source"). A
 # follower is never a step of its own, but it can be a body's Tip.
 FOLLOWER_ROLES = ("ExtrudeFollower",)
 

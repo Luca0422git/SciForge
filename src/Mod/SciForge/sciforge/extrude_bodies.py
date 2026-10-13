@@ -49,6 +49,10 @@ from .extrude import (
 
 WARNING = "SciForgeWarning"  # timeline_ops.WARNING: the timeline shows it in yellow
 VOLUME_TOL = 1e-6  # mm^3: less overlap than this is "only touching"
+# Automatic Cut: at least this share of the extrusion's first 0.01 mm must lie in a body. A
+# tapered column next to a face profile flares over its edge by a sliver (0.002 %), which
+# turned an extrude of that face outwards into a Cut.
+START_SHARE = 0.01
 
 
 def _alive(obj):
@@ -59,7 +63,7 @@ def is_follower(obj):
     return getattr(obj, ROLE, "") == FOLLOWER_ROLE
 
 
-def _is_merge(obj):
+def is_merge(obj):
     """The follower of a Join: a Combine that merges the other bodies into the lead's."""
     return is_follower(obj) and getattr(obj, "SciForgeType", "") == "Combine"
 
@@ -107,7 +111,7 @@ def acted_on(feature):
         body = owner_body(obj)
         if body is not None and body not in found:
             found.append(body)
-        if _is_merge(obj):
+        if is_merge(obj):
             for tool in getattr(obj, "Tools", []) or []:
                 tool_body = owner_body(tool)
                 if tool_body is not None and tool_body not in found:
@@ -167,7 +171,7 @@ def before_shape(body, lead=None):
                 return Part.Shape()
         else:
             for follower in followers_of(lead):
-                if owner_body(follower) is body and not _is_merge(follower):
+                if owner_body(follower) is body and not is_merge(follower):
                     step = follower.BaseFeature
                     break
     if step is None:
@@ -177,7 +181,7 @@ def before_shape(body, lead=None):
 
 def _merged_by(lead, body):
     for follower in followers_of(lead):
-        if _is_merge(follower) and any(
+        if is_merge(follower) and any(
             owner_body(t) is body for t in (getattr(follower, "Tools", []) or [])
         ):
             return True
@@ -207,7 +211,9 @@ def candidate_bodies(doc, lead=None):
 
 
 def _overlaps(shape, tool, contact=False, volume=VOLUME_TOL):
-    """True when `tool` shares volume with `shape` (with contact: or only touches it)."""
+    """True when `tool` shares volume with `shape` (with contact: or shares a piece of a
+    face with it, as a profile on a body's face extruded outwards does; touching along an
+    edge or at a corner does not count)."""
     try:
         box = tool.BoundBox
         box.enlarge(1e-4)
@@ -215,9 +221,28 @@ def _overlaps(shape, tool, contact=False, volume=VOLUME_TOL):
             return False
         if shape.common(tool).Volume > volume:
             return True
-        return bool(contact) and shape.distToShape(tool)[0] < 1e-6
+        return bool(contact) and _face_contact(shape, tool)
     except Exception:
         return False
+
+
+def _face_contact(shape, tool, tol=1e-6):
+    """True when a face of `tool` lies on a face of `shape` over some area: a profile on a
+    body's top extruded upwards, a disc filling a round hole (its side on the hole's wall)."""
+    if shape.distToShape(tool)[0] > tol:
+        return False
+    for a in tool.Faces:
+        box = a.BoundBox
+        box.enlarge(1e-4)
+        for b in shape.Faces:
+            if not box.intersect(b.BoundBox) or b.distToShape(a)[0] > tol:
+                continue
+            try:
+                if a.common(b).Area > tol:
+                    return True
+            except Exception:
+                continue
+    return False
 
 
 def tool_prism(profiles, options, reach=()):
@@ -278,27 +303,49 @@ def touched_bodies(profiles, options, lead=None, contact=None):
     profile on a face, extruded outwards). Each body is taken as it was before `lead` (the
     extrude being previewed or edited). None when it cannot be told here (an extrusion up
     to a whole body)."""
-    profiles = normalize(profiles)
-    if not profiles:
-        return []
     options = options_with_defaults(options)
     if contact is None:
         contact = options["operation"] == "join"
+    found = in_the_way(profiles, options, lead)
+    if found is None:
+        return None
+    return found[1] if contact else found[0]
+
+
+def in_the_way(profiles, options, lead=None):
+    """([bodies the extrusion passes through], [bodies it passes through or only touches]),
+    oldest first, each body as it was before `lead`; None when it cannot be told here. One
+    extrusion solid for both lists (the dialog needs both: Cut lists the first, Join and
+    the automatic operation the second)."""
+    profiles = normalize(profiles)
+    if not profiles:
+        return [], []
+    options = options_with_defaults(options)
     doc = profiles[0][0].Document
     candidates = candidate_bodies(doc, lead)
     if not candidates:
-        return []
+        return [], []
     try:
         prism = tool_prism(profiles, options, [shape for _body, shape in candidates])
     except Exception:
         return None
-    return [body for body, shape in candidates if _overlaps(shape, prism, contact)]
+    # A sliver (a tapered neighbour flaring over the profile's edge) does not count.
+    enough = max(VOLUME_TOL, prism.Volume * 1e-6)
+    through, touching = [], []
+    for body, shape in candidates:
+        if _overlaps(shape, prism, volume=enough):
+            through.append(body)
+            touching.append(body)
+        elif _overlaps(shape, prism, contact=True):
+            touching.append(body)
+    return through, touching
 
 
 def starts_in_material(profiles, options, lead=None):
     """Fusion's automatic Cut: True when the first 0.01 mm of the extrusion lies inside a
     body (any body it can act on, not only the profile's own; one point of the profile was
-    tested before, so a profile across a gap between two bodies stayed a Join)."""
+    tested before, so a profile across a gap between two bodies stayed a Join). At least 1 %
+    of that slice must be inside (START_SHARE)."""
     try:
         profiles = normalize(profiles)
         options = options_with_defaults(options)
@@ -318,7 +365,7 @@ def starts_in_material(profiles, options, lead=None):
             pieces.append(face.extrude(normal * (0.01 * sign)))
         for _body, shape in candidates:
             for piece in pieces:
-                if _overlaps(shape, piece, volume=max(1e-9, piece.Volume * 1e-6)):
+                if _overlaps(shape, piece, volume=max(1e-9, piece.Volume * START_SHARE)):
                     return True
     except Exception:
         return False
@@ -535,7 +582,7 @@ def merge_tip(lead):
     if body is None or body.Tip is not lead:
         return
     for follower in followers_of(lead):
-        if _is_merge(follower) and owner_body(follower) is body:
+        if is_merge(follower) and owner_body(follower) is body:
             body.Tip = follower
             _show_only_tip(body)
             return
@@ -574,7 +621,7 @@ def sync_followers(lead, participants, options, old=None):
         op,
         home.Name,
         [b.Name for b in others],
-        [(o.Name, owner_body(o).Name, "merge" if _is_merge(o) else "cut") for o in have],
+        [(o.Name, owner_body(o).Name, "merge" if is_merge(o) else "cut") for o in have],
     )
     for name in plan["remove"]:
         remove_follower(doc.getObject(name))
@@ -630,7 +677,7 @@ def preview_cuts(lead):
     if not cut:
         return found
     for obj in [lead] + followers_of(lead):
-        if _is_merge(obj):
+        if is_merge(obj):
             continue
         body = owner_body(obj)
         try:

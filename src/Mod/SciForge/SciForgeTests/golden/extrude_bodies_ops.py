@@ -22,6 +22,9 @@ Bodies are named by a step that made them (its body): "e1" is the body of extrud
   {"op": "reopen_check", "bodies": {...as above...}}
       Saves the design, opens the file as a second design, recomputes it and checks the
       bodies there (the follower steps come back from the file).
+
+  {"op": "expect_move_refused", "target": "f1", "before": "x1", "reason": "several bodies"}
+      Dragging a step before another in the timeline is refused with that reason.
 """
 
 import os
@@ -145,7 +148,25 @@ def op_reopen_check(self, step):
             pass
 
 
+def op_expect_move_refused(self, step):
+    """Dragging `target` before `before` in the timeline must be refused with the reason
+    (a multi-body extrude's order against its other bodies' steps is fixed for now)."""
+    from sciforge import timeline_ops
+
+    name = self.objects[step["target"]].Name
+    names = timeline_ops.timeline(self.doc).names()
+    slot = names.index(self.objects[step["before"]].Name)
+    try:
+        timeline_ops.move(self.doc, name, slot)
+    except timeline_ops.TimelineError as exc:
+        if step.get("reason", "") not in str(exc):
+            raise BuildError("expect_move_refused: refused for another reason: %s" % exc)
+        return
+    raise BuildError("expect_move_refused: %s was moved" % step["target"])
+
+
 Builder._extrude_bodies = _extrude_bodies
+Builder.op_expect_move_refused = op_expect_move_refused
 Builder.op_use_body = op_use_body
 Builder.op_expect_bodies = op_expect_bodies
 Builder.op_reopen_check = op_reopen_check

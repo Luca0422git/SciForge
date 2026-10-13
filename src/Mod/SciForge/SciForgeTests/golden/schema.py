@@ -1292,6 +1292,7 @@ STEP_KEYS["extrude"][1].add("bodies")
 STEP_KEYS["use_body"] = ({"step"}, {"comment"})
 STEP_KEYS["expect_bodies"] = (set(), {"bodies", "used_up", "followers", "steps", "comment"})
 STEP_KEYS["reopen_check"] = ({"bodies"}, {"comment"})
+STEP_KEYS["expect_move_refused"] = ({"target", "before"}, {"reason", "comment"})
 _BODY_EXPECT_KEYS = {"volume", "solids", "valid"}
 
 
@@ -1307,6 +1308,10 @@ def _check_extrude_bodies(model):
                     _fail(here, "'bodies' is \"auto\" or a list of earlier step ids")
         if op == "use_body" and step["step"] not in seen:
             _fail(here, "'step' names unknown step %r" % step["step"])
+        if op == "expect_move_refused" and (
+            step["target"] not in seen or step["before"] not in seen
+        ):
+            _fail(here, "'target' and 'before' must name earlier steps")
         if op in ("expect_bodies", "reopen_check"):
             for step_id, want in step.get("bodies", {}).items():
                 if step_id not in seen:

@@ -20,6 +20,8 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, drag_guard, extrude, log, preview, profile_pick, ui_icon_path, warn
+from . import bodies, extrude_bodies
+from . import extrude_bodies_core as bodies_core
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel
 
@@ -285,6 +287,53 @@ def restore_view_providers(doc):
                 ViewProviderExtrude(obj.ViewObject)
 
 
+class FollowerViewProvider:
+    """View provider of a multi-body extrude's hidden step in another body
+    (extrude_bodies.py): it is never in the timeline or the browser, and a double-click
+    that reaches it anyway edits the extrude it follows. Saved in files as
+    "sciforge.extrude_ui.FollowerViewProvider": keep the name."""
+
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+
+    def getIcon(self):
+        return ui_icon_path("extrude")
+
+    def setEdit(self, vobj, mode=0):
+        if mode != 0:
+            return None
+        self._edit(vobj.Object)
+        return True
+
+    def unsetEdit(self, vobj, mode=0):
+        return None
+
+    def doubleClicked(self, vobj):
+        self._edit(vobj.Object)
+        return True
+
+    @staticmethod
+    def _edit(obj):
+        try:
+            lead = extrude_bodies.lead_of(obj)
+            if lead is not None:
+                QtCore.QTimer.singleShot(0, lambda: edit(lead))
+        except Exception as exc:
+            warn("could not edit the extrude of %s: %s" % (obj.Label, exc))
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
 # -- what is selected before the command starts ---------------------------------------------
 def _used_profiles(body):
     """Names of sketches already used by an extrude (kept for older callers)."""
@@ -393,9 +442,11 @@ class ExtrudePanel(Panel):
         self.picker = None
         self.observer = None
         self._quiet = False
+        self._init_bodies()
         if feature is not None:
             try:
                 self.profiles, read = extrude.read(feature)
+                self._read_bodies(read)
                 self.options.update(read)
                 # A whole-sketch profile shows as its areas, each one can be dropped.
                 self.profiles = extrude.expand_whole(self.profiles)
@@ -407,6 +458,7 @@ class ExtrudePanel(Panel):
         if feature is not None:
             self._refresh_profiles()
             self._make_draggers()
+            self._update_bodies_row(compute=True)  # the bodies it was saved with
         else:
             self._start(profiles)
 
@@ -472,6 +524,7 @@ class ExtrudePanel(Panel):
         form.addRow(self.taper2_label, self.taper2.widget)
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
         form.addRow("Operation", self.operation)
+        self._build_bodies_row(form)
         self.info = QtWidgets.QLabel("")  # what the dialog waits for (not a problem)
         self.info.setWordWrap(True)
         self.info.setStyleSheet("color: #8cc4ff;")
@@ -561,6 +614,7 @@ class ExtrudePanel(Panel):
         # own extrude feature builds).
         for field in (self.taper, self.taper2):
             field.widget.setEnabled(True)
+        self._update_bodies_row()
 
     def _collect(self):
         self.options["start"] = self.start.currentData()
@@ -631,6 +685,7 @@ class ExtrudePanel(Panel):
         """Make this selection box the one that takes clicks in the 3D view."""
         self.active = name
         self._show_active()
+        self._update_bodies_row()  # its hint says what a click on a body does
 
     def _show_active(self):
         for name, field in self.fields.items():
@@ -640,6 +695,8 @@ class ExtrudePanel(Panel):
         if name == "profiles":
             self.profiles = []
             self._profiles_changed()
+        elif name == "bodies":
+            self._clear_bodies()
         else:
             self.options[name] = None
             self.fields[name].set_text("")
@@ -710,6 +767,7 @@ class ExtrudePanel(Panel):
         return extrude._to_global(base.Shape, base)
 
     def _unwatch(self):
+        self._pause_body_sync(False)
         if self.observer is not None:
             Gui.Selection.removeObserver(self.observer)
             self.observer = None
@@ -744,6 +802,9 @@ class ExtrudePanel(Panel):
             warn("extrude pick: %s" % exc)
 
     def _picked(self, obj, short, region_clicked):
+        if self.active == "bodies":
+            self._body_picked(obj)
+            return
         if self.active == "profiles":
             if extrude.is_sketch(obj):
                 if short.startswith("InternalFace") and not region_clicked:
@@ -806,6 +867,8 @@ class ExtrudePanel(Panel):
     def _base_face(self, obj, short):
         """(feature, "FaceN") as it was before this extrude: a face clicked on the preview
         is looked up on the part before the extrude. None if only the extrude has it."""
+        if extrude_bodies.is_follower(obj):
+            return self._follower_face(obj, short)
         base = self._base_feature()
         body = extrude.owner_body(obj)
         ours = self.target is not None and (obj is self.target or extrude.is_helper(obj))
@@ -1003,26 +1066,20 @@ class ExtrudePanel(Panel):
         self._changed()
 
     def _auto_operation(self):
-        """Fusion: extruding into material becomes a cut, out of it a join (or a new body
-        when there is no solid yet)."""
+        """Fusion: extruding into material (of any body) becomes a cut; touching a body, a
+        join; touching none, a new body."""
         if self.user_picked_operation or not self.profiles:
             return
-        base = self._base_feature()
-        base_shape = base.Shape if base is not None and not base.Shape.isNull() else None
-        options = extrude.options_with_defaults(self.options)
         try:
-            distance = extrude._sign1(self.profiles, options)  # the side it goes to
+            options = extrude.options_with_defaults(self.options)
         except Exception:
-            distance = 1.0 if options["distance"] >= 0 else -1.0
-        into = options["direction"] != "symmetric" and extrude.goes_into_material(
-            base_shape, self.profiles, distance, options
+            return
+        into = extrude_bodies.starts_in_material(self.profiles, options, lead=self.target)
+        way = self._in_the_way()
+        touches = bool(way[1]) if way is not None else self._base_has_solid()
+        wanted = bodies_core.auto_operation(
+            into, touches, symmetric=options["direction"] == "symmetric"
         )
-        if into:
-            wanted = "cut"
-        elif base_shape is not None and base_shape.Solids:
-            wanted = "join"
-        else:
-            wanted = "new_body"
         if wanted != self.options["operation"]:
             self.options["operation"] = wanted
             self._quiet = True
@@ -1073,7 +1130,9 @@ class ExtrudePanel(Panel):
         self.waiting = ""
         try:
             before = self.target
+            self.options["bodies"] = self._bodies_for_build()
             self.target = extrude.build(self.profiles, self.options, feature=self.target)
+            self._bodies_built()
             self.error = ""
             if before is None or self.target is not before:
                 self._geometry_changed = True
@@ -1103,6 +1162,7 @@ class ExtrudePanel(Panel):
         return self.target
 
     def show_status(self):
+        self._update_bodies_row()
         waiting = getattr(self, "waiting", "")
         self.info.setText(waiting)
         if self.formula_error:
@@ -1114,8 +1174,227 @@ class ExtrudePanel(Panel):
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or self._followers_failure()
+        text = text or self._bodies_problem
         self.message.setText("⚠ " + text if text else "")
+
+    # -- several bodies: the "Bodies to Cut" row (R8) ------------------------------------------
+    # Fusion's Extrude acts on every body in its way and lists them in the dialog; a click on
+    # a body (with the row active) leaves it out or takes it back. The document side is
+    # extrude_bodies.py, the wording and rules extrude_bodies_core.py.
+    def _init_bodies(self):
+        self.excluded = set()  # names of bodies in the way that the user clicked away
+        self._stored_bodies = None  # editing: the names the extrude was saved with
+        self._way = None  # (bodies it cuts through, bodies it touches): names, or None
+        self._way_key = None
+        self._sync_paused = False
+        self._bodies_problem = ""  # e.g. a cut that goes through no body (OK refused)
+
+    def _read_bodies(self, read):
+        stored = read.pop("bodies", None)
+        if stored is not None:
+            self._stored_bodies = [b.Name for b in stored]
+
+    def _build_bodies_row(self, form):
+        self.fields["bodies"] = SelectionField(self, "bodies", "No bodies")
+        self.fields["bodies"].button.setToolTip(
+            "The bodies this extrude changes. Click here, then click a body in the view to "
+            "leave it out or take it back."
+        )
+        self.bodies_label = QtWidgets.QLabel(bodies_core.row_label("cut"))
+        form.addRow(self.bodies_label, self.fields["bodies"].widget)
+        self.bodies_names = QtWidgets.QLabel("")  # which bodies, by name
+        self.bodies_names.setWordWrap(True)
+        form.addRow(self.bodies_names)
+
+    def _way_signature(self):
+        keys = (
+            "start",
+            "start_offset",
+            "direction",
+            "extent",
+            "distance",
+            "extent2",
+            "distance2",
+            "taper",
+            "taper2",
+            "measurement",
+            "flip",
+        )
+        picked = [self.options.get(k) for k in ("start_object", "extent_object", "extent_object2")]
+        refs = tuple((ref[0].Name, ref[1]) if ref else None for ref in picked)
+        return (
+            tuple(extrude.key(p) for p in self.profiles),
+            tuple(repr(self.options.get(k)) for k in keys),
+            refs,
+            self.target.Name if self.target is not None else None,
+        )
+
+    def _in_the_way(self):
+        """(names it cuts through, names it touches) for the extrusion as it is set now
+        (cached until the profiles or the values change); None when it cannot be told."""
+        if not self.profiles:
+            return ([], [])
+        try:
+            key = self._way_signature()
+            if key == self._way_key:
+                return self._way
+            options = extrude.options_with_defaults(self.options)
+            found = extrude_bodies.in_the_way(self.profiles, options, lead=self.target)
+        except Exception as exc:
+            warn("extrude bodies: %s" % exc)
+            key, found = None, None
+        self._way = None if found is None else tuple([b.Name for b in f] for f in found)
+        self._way_key = key
+        if self._way is not None and self._stored_bodies is not None:
+            # Editing: start from the saved list (bodies clicked away stay away).
+            touched = self._way[1] if self.options["operation"] == "join" else self._way[0]
+            self.excluded = bodies_core.excluded_for_edit(touched, self._stored_bodies)
+            self._stored_bodies = None
+        return self._way
+
+    def _touched_names(self):
+        way = self._in_the_way()
+        if way is None:
+            return None
+        return way[1] if self.options.get("operation") == "join" else way[0]
+
+    def _participant_names(self):
+        touched = self._touched_names()
+        if touched is None:
+            return None
+        return bodies_core.participants(touched, self.excluded)
+
+    def _base_has_solid(self):
+        base = self._base_feature()
+        return base is not None and not base.Shape.isNull() and bool(base.Shape.Solids)
+
+    def _bodies_for_build(self):
+        """options["bodies"] for extrude.build: the bodies in the way minus those clicked
+        away; None when it cannot be told (the profile's body only, as before)."""
+        self._bodies_problem = ""
+        operation = self.options.get("operation")
+        if operation not in ("join", "cut", "intersect"):
+            return None
+        touched = self._touched_names()
+        if touched is None:
+            return None
+        if not touched and operation in ("cut", "intersect"):
+            # Nothing in the way: the preview stays a cut of the profile's own body (it
+            # removes nothing), the operation stays as picked (the next change, a Flip,
+            # may reach a body), and the dialog says why OK is refused.
+            self._bodies_problem = extrude_bodies.nothing_touched({"operation": operation})
+            return None
+        names = bodies_core.participants(touched, self.excluded)
+        if touched and not names:
+            raise extrude.ExtrudeError(
+                "%s is empty. Click it, then click a body to take it back."
+                % bodies_core.row_label(operation)
+            )
+        found = [self.doc.getObject(n) for n in names]
+        return [b for b in found if b is not None]
+
+    def _bodies_built(self):
+        """After a build: a Join that merges bodies keeps them shown while the dialog is open
+        (the used-up body would vanish from under the next click)."""
+        merging = any(extrude_bodies.is_merge(f) for f in extrude_bodies.followers_of(self.target))
+        self._pause_body_sync(merging)
+
+    def _pause_body_sync(self, on):
+        try:
+            if on and not self._sync_paused:
+                bodies.pause(self.doc)
+                self._sync_paused = True
+            elif not on and self._sync_paused:
+                bodies.resume(self.doc)
+                self._sync_paused = False
+        except Exception as exc:
+            warn("extrude bodies: %s" % exc)
+
+    def _update_bodies_row(self, compute=False):
+        """The row shows the bodies the extrude acts on: "2 bodies" and their names."""
+        if not hasattr(self, "bodies_names"):
+            return
+        try:
+            self._show_bodies_row(compute)
+        except Exception as exc:
+            warn("extrude bodies row: %s" % exc)
+
+    def _show_bodies_row(self, compute):
+        if compute:
+            self._in_the_way()
+        operation = self.operation.currentData()
+        label = bodies_core.row_label(operation)
+        show = bool(label) and bool(self.profiles)
+        for widget in (self.bodies_label, self.fields["bodies"].widget, self.bodies_names):
+            widget.setVisible(show)
+        if not show:
+            if self.active == "bodies":
+                self.activate("profiles")
+            return
+        self.bodies_label.setText(label)
+        names = self._participant_names() if self._way is not None else None
+        if names is None:
+            body = self._source_body()
+            names = [body.Name] if body is not None else []
+        labels = []
+        for name in names:
+            obj = self.doc.getObject(name)
+            labels.append(obj.Label if obj is not None else name)
+        self.fields["bodies"].set_text(bodies_core.count_text(len(labels)))
+        text = bodies_core.names_text(labels)
+        if not labels:
+            text = (
+                "Touches no body: a new body is made."
+                if operation == "join"
+                else "The extrusion goes through no body."
+            )
+        if self.active == "bodies":
+            text += "\nClick a body to leave it out or take it back."
+        self.bodies_names.setText(text)
+
+    def _body_picked(self, obj):
+        """A click on a body with the row active: leave it out, or take it back."""
+        body = bodies.body_of(obj)
+        solid = bodies.is_body(obj) or "BaseFeature" in obj.PropertiesList
+        if body is None or not solid:  # a sketch or a plane is no body
+            self.message.setText("Click a body to leave it out or take it back.")
+            return
+        touched = self._touched_names() or []
+        excluded, what = bodies_core.toggle(touched, self.excluded, body.Name)
+        if what == "not_in_way":
+            self.message.setText(
+                "%s is not in the extrusion's way, so the extrude cannot change it." % body.Label
+            )
+            return
+        self.excluded = excluded
+        self.message.setText("")
+        log("extrude: %s %s" % (body.Label, "left out" if what == "dropped" else "taken back"))
+        self._changed()
+
+    def _clear_bodies(self):
+        """The row's x: every body left out (the dialog then asks for one)."""
+        self.excluded = set(self._touched_names() or [])
+        self._changed()
+
+    def _followers_failure(self):
+        try:
+            kind, reason = extrude_bodies.follower_problem(self.target)
+        except Exception:
+            return ""
+        return reason if kind == "error" else ""
+
+    def _follower_face(self, obj, short):
+        """A face clicked on the preview of another body: the same face before the extrude
+        changed that body (None if only the extrude made it)."""
+        if extrude_bodies.is_merge(obj):
+            return None
+        base = obj.BaseFeature
+        face = profile_pick.global_face(obj, short)
+        if face is None or base is None:
+            return None
+        name = profile_pick.face_name_in(base, face)
+        return (base, name) if name else None
 
     # -- handles in the 3D view -----------------------------------------------------------------
     def _remove_draggers(self):
@@ -1261,7 +1540,8 @@ class ExtrudePanel(Panel):
             self.message.setText("⚠ " + self.error)
             return False
         preview.recompute(self.doc)
-        text = _plain(preview.failure(self.target))
+        text = _plain(preview.failure(self.target)) or self._followers_failure()
+        text = text or self._bodies_problem
         if text:
             self.message.setText("⚠ " + text)
             return False
