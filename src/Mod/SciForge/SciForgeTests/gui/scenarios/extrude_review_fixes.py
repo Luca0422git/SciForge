@@ -3,8 +3,9 @@
 (start at 0, the value box next to the arrow, the red cut, Q in a sketch). Real input.
 
 Box 40 x 30 x 10, a 10 x 10 square sketched on its top face.
-R3  E with nothing selected, click inside the square: its arrow and value box show (still
-    at 0). Click the square again: it is dropped, and the arrows and the box go with it.
+R3  E with nothing selected takes the square (the only area of the sketch just finished):
+    its arrows and value box show at 0. Click the square: it is dropped, and the arrows and
+    the box go with it.
 R2  Click the square again, type -5: a cut, in red. Click the box, type 0, Enter: Extrude
     stays open and says why, the preview is gone and so is its red.
 R4  Start: Offset with the distance still at 0: the two arrows sit on one spot; their two
@@ -111,13 +112,8 @@ def e_nothing_selected():
 
 def click_square():
     p = xpanel()
-    h.check("E opens Extrude with no profile yet", p is not None and not p.profiles, p and p.profiles)
-    h.click(SQUARE)
-
-
-def square_picked():
-    p = xpanel()
-    h.check("the square is picked", p is not None and len(p.profiles) == 1, p and p.profiles)
+    # The square is the only area of the sketch just finished: E takes it by itself.
+    h.check("E takes the new sketch's only area", p is not None and len(p.profiles) == 1, p and p.profiles)
     h.check("its arrows show at 0", p is not None and bool(p.draggers), p and sorted(p.draggers))
     h.check("its value box shows", len(a.value_boxes()) == 1, len(a.value_boxes()))
     h.click(SQUARE)
@@ -125,7 +121,7 @@ def square_picked():
 
 def square_dropped():
     p = xpanel()
-    h.check("clicking it again drops it", p is not None and not p.profiles, p and p.profiles)
+    h.check("clicking it drops it", p is not None and not p.profiles, p and p.profiles)
     h.check("the arrows went with it", p is not None and not p.draggers, p and sorted(p.draggers))
     h.check("so did the value box", not a.value_boxes(), len(a.value_boxes()))
     h.shot("R3-dropped")
@@ -327,7 +323,6 @@ h.run(
         draw_square,
         e_nothing_selected,
         click_square,
-        square_picked,
         square_dropped,
         cut_5,
         cut_shown,

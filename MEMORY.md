@@ -2046,7 +2046,15 @@ done, what was learned, what is next. Newest session goes at the top of the log.
     arrows and value box; at 0 the offset / side-two value boxes sat on the distance box
     (`arrow_box_core.spot(other_side=True)`); the click that leaves a value box was taken as a
     pick (a face added as a profile): `taskui.box_click_taken()` makes the dialogs ignore it.
-    Scenario `extrude_review_fixes`.
+    Scenario `extrude_review_fixes`: on the old code its red-at-0, boxes-overlap and Q-in-
+    sketch checks fail (Esc hid the sketch; one Undo took the Press Pull and the sketch); the
+    "click leaving the box" check passed on the old code too (not reproduced: a precaution).
+  - Dimension box: Undo / Redo with the box open closes it without setting anything (Undo puts
+    the curve lists back whole, so the box's dimension could be another one; the wrong write
+    itself was not reproduced, the box staying open after Undo was); a value typed in the box
+    and then any command (not only Finish Sketch) is set before the sketch closes, and the
+    sketch is recomputed with it (old code: left "Touched", the old size shown).
+    `sketch_dim_box_closes` D and E.
   - ViewCube: Home at the Home direction after a pan, with animation on, ended off-centre
     (FreeCAD's move animation kept sliding after the fit: `stopAnimating` first); two arrow
     clicks 150 ms apart: the arrows vanished while turning and the second click hit the model;

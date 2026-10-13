@@ -18,8 +18,9 @@ C  Dimension the line again, type 30 (no Enter), Finish Sketch from the ribbon: 
 D  Three lines 10, 15, 20 with their dimensions. Delete the middle line (its dimension
    goes, the 20 line takes its numbers), double-click the 20 dimension, type 30, Undo: the
    box closes and no length changes (it used to set the 15 line to 30: review finding).
-E  Double-click the 10 dimension, type 25 (no Enter), Extrude on the ribbon: 25 is set
-   before the sketch closes, and the finished sketch shows it (not left to recompute).
+E  Double-click the 10 dimension, type 25 (no Enter), Section Analysis on the ribbon (any
+   command closes the sketch first): 25 is set before the sketch closes, and the finished
+   sketch shows it (not left to recompute).
 """
 import math
 
@@ -323,7 +324,9 @@ def e_type():
 
         QtTest.QTest.keyClicks(QtWidgets.QApplication.focusWidget(), "25")
         QtWidgets.QApplication.processEvents()
-    h.ribbon("Extrude")
+    # A command that is not a sketch tool: it closes the sketch first (as Extrude, Fillet...
+    # do from the SOLID tab). Section Analysis is on the sketch's own ribbon.
+    h.ribbon("Section Analysis")
 
 
 def e_done():
@@ -334,7 +337,7 @@ def e_done():
     h.check("E: the sketch is up to date (not left to recompute)", "Touched" not in sk.State, sk.State)
     h.check("E: no box left on the view", not boxes_on_view(), boxes_on_view())
     if Gui.Control.activeDialog():
-        h.task_button("Cancel")
+        h.press(QtCore.Qt.Key_Escape)
 
 
 h.run(
