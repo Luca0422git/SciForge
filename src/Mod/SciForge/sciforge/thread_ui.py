@@ -22,7 +22,7 @@ from . import thread
 from . import thread_core as core
 from . import thread_tables as tables
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, DistanceField, Panel
+from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
 
 DIRECTION_LABELS = [("Right hand", "right"), ("Left hand", "left")]
 MIN_LENGTH = 0.1  # mm: the length arrow stops here
@@ -127,6 +127,7 @@ class ThreadPanel(Panel):
         self.active = "faces"
         self.draggers = {}
         self.dragger = None
+        self.value_boxes = ValueBoxes(self, default="length")  # the box next to the arrow
         self.observer = None
         self.gate = None
         self._build_form()
@@ -699,8 +700,20 @@ class ThreadPanel(Panel):
             )
             common.on_top(arrow.root)
             self.dragger = self.draggers["length"] = arrow
+            self.value_boxes.attach(
+                arrow, "length", lambda: self.length.widget.text(), self._box_typed
+            )
         except Exception as exc:
             warn("thread handle unavailable: %s" % exc)
+
+    def _box_typed(self, text):
+        """A length typed in the box next to the arrow: as if typed in the Length field."""
+        if self._closed:
+            return
+        for formula in self.formula_inputs:
+            if formula.key == "length":
+                formula.take(text)
+                return
 
     def _room(self):
         """How long the thread can be: the face's length less the offset (None if unknown)."""
@@ -797,6 +810,7 @@ class ThreadPanel(Panel):
         self.undo_guard.remove()
         self.enter.remove()
         self._remove_draggers()
+        self.value_boxes.discard()
         super().cleanup()
 
 

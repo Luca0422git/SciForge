@@ -187,6 +187,12 @@ class ValueField:
         except Exception as exc:
             warn("%s value: %s" % (self.key, exc))
 
+    def take_text(self, text):
+        """`text` typed for this box somewhere else (the value box next to the arrow in the
+        3D view): taken exactly as if typed here and Enter pressed."""
+        self.raw = text
+        self._finished()
+
     def _finished(self):
         """Enter, Tab or a click elsewhere: settle what was typed."""
         raw, self.raw = self.raw, None

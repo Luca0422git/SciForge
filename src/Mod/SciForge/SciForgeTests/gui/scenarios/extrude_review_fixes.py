@@ -119,7 +119,7 @@ def click_square():
     # The square is the only area of the sketch just finished: E takes it by itself.
     h.check("E takes the new sketch's only area", p is not None and len(p.profiles) == 1, p and p.profiles)
     h.check("its arrows show at 0", p is not None and bool(p.draggers), p and sorted(p.draggers))
-    h.check("its value box shows", len(a.value_boxes()) == 1, len(a.value_boxes()))
+    h.check("its value box shows", len(a.value_boxes(arrows_only=True)) == 1, len(a.value_boxes(arrows_only=True)))
     h.click(SQUARE)
 
 
@@ -127,7 +127,7 @@ def square_dropped():
     p = xpanel()
     h.check("clicking it drops it", p is not None and not p.profiles, p and p.profiles)
     h.check("the arrows went with it", p is not None and not p.draggers, p and sorted(p.draggers))
-    h.check("so did the value box", not a.value_boxes(), len(a.value_boxes()))
+    h.check("so did the value box", not a.value_boxes(arrows_only=True), len(a.value_boxes(arrows_only=True)))
     h.shot("R3-dropped")
     h.click(SQUARE)
 
@@ -145,7 +145,7 @@ def cut_shown():
     h.check("into the part: Cut", op == "Cut", op)
     h.check("the cut shows in red", len(a.cut_nodes()) == 1, len(a.cut_nodes()))
     h.check("cut preview: box less 10 x 10 x 5", near(h.solid_volume(), BOX - 500.0), h.solid_volume())
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if h.check("the value box is there", len(boxes) == 1, len(boxes)):
         a.type_in_box(boxes[0], "0", enter=True)
 
@@ -172,7 +172,7 @@ def offset_boxes():
         p is not None and {"offset", "distance"} <= set(p.draggers),
         p and sorted(p.draggers),
     )
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     h.check("two value boxes", len(boxes) == 2, len(boxes))
     if len(boxes) == 2:
         h.check(
@@ -193,7 +193,7 @@ def two_sides_boxes():
         p is not None and {"distance", "distance2"} <= set(p.draggers),
         p and sorted(p.draggers),
     )
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     h.check("two value boxes", len(boxes) == 2, len(boxes))
     if len(boxes) == 2:
         h.check(
@@ -224,7 +224,7 @@ def side_two_into_box():
 def type_8():
     p = xpanel()
     h.check("one profile before", p is not None and len(p.profiles) == 1, p and p.profiles)
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if h.check("the value box is there", len(boxes) == 1, len(boxes)):
         a.type_in_box(boxes[0], "8", enter=False)
         h.check("the box has the keyboard", boxes[0].hasFocus(), a.focus_name())
@@ -244,7 +244,7 @@ def click_was_not_a_pick():
     )
     h.check("and no complaint about it", p is not None and "belongs" not in p.message.text(), p and p.message.text())
     h.shot("R5-left-box")
-    boxes = a.value_boxes()
+    boxes = a.value_boxes(arrows_only=True)
     if h.check("the value box is there", len(boxes) == 1, len(boxes)):
         a.type_in_box(boxes[0], "6", enter=False)
     h.click(SQUARE)  # this time on the picked area itself

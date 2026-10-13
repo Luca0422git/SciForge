@@ -1,0 +1,269 @@
+{
+  "id": "extrude_multi_move",
+  "title": "A multi-body cut dragged after a later step of the other body, and back",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body",
+    "timeline"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            40,
+            15
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 5,
+      "flip": true,
+      "operation": "cut",
+      "bodies": "auto"
+    },
+    {
+      "op": "use_body",
+      "step": "e2"
+    },
+    {
+      "op": "sketch",
+      "id": "s4",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            36,
+            8,
+            42,
+            12
+          ]
+        }
+      ],
+      "offset": 10,
+      "comment": "a fill in Body2, 3 deep from z 10: partly inside the cut's footprint"
+    },
+    {
+      "op": "extrude",
+      "id": "e3",
+      "profile": "s4",
+      "distance": 3,
+      "flip": true,
+      "operation": "join"
+    },
+    {
+      "op": "expect_bodies",
+      "comment": "the fill after the cut puts 4 x 4 x 3 back into the cut",
+      "bodies": {
+        "e1": {
+          "volume": 3500,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 3548,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "x1": 1
+      },
+      "steps": {
+        "x1": 1
+      }
+    },
+    {
+      "op": "move",
+      "target": "x1",
+      "after": "e3",
+      "comment": "the cut dragged after the fill: its hidden step in Body2 follows"
+    },
+    {
+      "op": "expect_bodies",
+      "comment": "now the fill comes first (adds nothing: all solid there), then the cut",
+      "bodies": {
+        "e1": {
+          "volume": 3500,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 3500,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "x1": 1
+      },
+      "steps": {
+        "x1": 1
+      }
+    },
+    {
+      "op": "roll",
+      "after": "e3"
+    },
+    {
+      "op": "expect_bodies",
+      "comment": "the marker before the cut: both bodies whole again, the fill inside Body2",
+      "bodies": {
+        "e1": {
+          "volume": 4000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 4000,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "roll",
+      "end": true
+    },
+    {
+      "op": "suppress",
+      "target": "x1"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 4000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 4000,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "unsuppress",
+      "target": "x1"
+    },
+    {
+      "op": "move",
+      "target": "x1",
+      "before": "e3",
+      "comment": "dragged back before the fill"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 3500,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 3548,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "x1": 1
+      },
+      "steps": {
+        "x1": 1
+      }
+    },
+    {
+      "op": "expect_move_refused",
+      "target": "e2",
+      "reason": "does not exist yet",
+      "comment": "Body2's box dragged after the cut: the cut would come before Body2 exists",
+      "after": "x1"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 3500,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 3548,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 7048,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Both boxes cut 10 x 10 x 5 (3500 each). The fill 36..42 x 8..12 x 3 deep from z 10 adds material only where the cut removed it (x 36..40): 4 * 4 * 3 = 48, so Body2 = 3548 when the fill comes after the cut and 3500 when the cut is dragged after the fill. The refused move (Body2's box after the cut) changes nothing."
+  }
+}

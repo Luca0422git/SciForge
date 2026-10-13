@@ -101,6 +101,66 @@ class Spot(unittest.TestCase):
         corner = self.check_clear((700, 15), (620, 15), (780, 15), 6, view=view)
         self.assertGreater(corner[0], 780)
 
+    def test_box_keeps_off_another_handle(self):
+        # Two arrows from one corner (a pattern's two directions): the second arrow's box
+        # must not cover the first arrow either.
+        first = ((560, 388), (760, 388), 8)  # level, to the right, from the corner
+        anchor, tail, tip = (600, 380), (600, 455), (600, 305)  # upright, from the corner
+        plain = core.spot(anchor, tail, tip, 8, BOX, VIEW)
+        self.assertLess(core.clearance(first[0], first[1], rect(plain)), 8)  # it would
+        corner = core.spot(anchor, tail, tip, 8, BOX, VIEW, avoid=[first])
+        self.assertGreaterEqual(core.clearance(first[0], first[1], rect(corner)), 8)
+        self.assertGreaterEqual(core.clearance(tail, tip, rect(corner)), 8)
+        self.assertTrue(inside(corner), corner)
+
+    def test_two_boxes_on_one_spot_with_a_third_handle_next_to_them(self):
+        # Extrude with Start: Offset, both at 0 (the numbers of a real run): the distance
+        # arrow and the shorter offset arrow stand on one spot, the taper's curved handle
+        # sits to their right. "Past the offset arrow's tip" is on the distance arrow's
+        # head, the right side is over the taper, so the boxes must not both go left.
+        distance = ((715.0, 372.0), (715.0, 222.0), 15.0)
+        offset = ((715.0, 350.0), (715.0, 245.0), 11.0)
+        taper = ((808.0, 299.0), (838.0, 299.0), 13.0)
+        first = core.spot(
+            (715, 297), distance[0], distance[1], 15.0, BOX, VIEW, avoid=[taper, offset]
+        )
+        self.assertGreaterEqual(core.clearance(taper[0], taper[1], rect(first)), 13.0)
+        second = core.spot(
+            (715, 297),
+            offset[0],
+            offset[1],
+            11.0,
+            BOX,
+            VIEW,
+            past_tip=True,
+            avoid=[distance, taper],
+            avoid_rects=[rect(first)],
+        )
+        self.assertGreaterEqual(core.rect_gap(rect(second), rect(first)), 1.0, (first, second))
+        for seg in (distance, offset, taper):
+            self.assertGreaterEqual(core.clearance(seg[0], seg[1], rect(second)), seg[2])
+        self.assertTrue(inside(second), second)
+
+    def test_rect_gap(self):
+        self.assertEqual(core.rect_gap((0, 0, 10, 10), (20, 0, 10, 10)), 10.0)
+        self.assertEqual(core.rect_gap((0, 0, 10, 10), (5, 5, 10, 10)), -5.0)
+        self.assertEqual(core.rect_gap((0, 0, 10, 10), (10, 10, 10, 10)), 0.0)
+
+    def test_handle_size_follows_the_screen_scale(self):
+        # 0.7 mm per pixel (a 400 mm part after Fit): about 75 px for the whole arrow.
+        size = core.handle_size(0.7)
+        self.assertAlmostEqual(size, 0.7 * core.ARROW_PIXELS)
+        self.assertGreaterEqual(2 * core.REACH * size / 0.7, 50.0)
+        # A 40 x 30 x 10 box (0.07 mm per pixel): the same on the screen.
+        self.assertAlmostEqual(core.handle_size(0.07), 0.07 * core.ARROW_PIXELS)
+
+    def test_handle_size_stays_on_a_tiny_part_and_off_a_short_edge(self):
+        # A 4 mm part: the arrow stays about 1 mm long instead of flying off the part.
+        self.assertEqual(core.handle_size(0.006), core.MIN_SIZE)
+        # A short picked edge (12 mm): the whole arrow is at most about half of it.
+        size = core.handle_size(0.7, hi=12.0 / 6.0)
+        self.assertLessEqual(2 * core.REACH * size, 6.0 + 1e-9)
+
     def test_clearance(self):
         self.assertEqual(core.clearance((0, 0), (100, 0), (40, -5, 10, 10)), 0.0)  # crosses
         self.assertEqual(core.clearance((0, 0), (100, 100), (40, 40, 10, 10)), 0.0)  # inside

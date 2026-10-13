@@ -177,12 +177,13 @@ def step_times(doc):
     return times
 
 
-def place_in(body, lead, times=None):
+def place_in(body, lead, times=None, at_marker=True, skip=()):
     """The step of `body` the extrude `lead` acts after: the last one that comes before the
     extrude in the timeline (an older extrude being edited changes each body as it was at
     that point, like Fusion rolls back to the step it edits), never past the body's Tip
-    (where the marker stands). None: the body has no solid step before the extrude (it was
-    made later)."""
+    (where the marker stands) unless `at_marker` is False (a timeline move sets the Tips
+    afterwards). `skip`: steps left out of the search (the follower being placed again).
+    None: the body has no solid step before the extrude (it was made later)."""
     if times is None:
         times = step_times(lead.Document)
     at = times.get(lead.Name)
@@ -191,11 +192,13 @@ def place_in(body, lead, times=None):
     for obj in bodies.solid_steps(body):
         if obj is lead:
             break
+        if any(obj is s for s in skip):
+            continue
         t = times.get(obj.Name)
         if t is not None and at is not None and t >= at:
             break
         found = obj  # a step before the extrude (or a helper that goes with the one before)
-        if obj is tip:
+        if at_marker and obj is tip:
             break
     return found
 

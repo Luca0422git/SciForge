@@ -22,6 +22,22 @@ REACH = 1.5
 HEAD = 0.25
 GAP = 6.0  # pixels between the arrow (its heads included) and the box
 EDGE = 2.0  # pixels kept free at the view's border
+# A drag arrow's size on the screen: Fusion's arrows look the same size whatever the part
+# is, about this many pixels for one arrow size (the whole arrow is 2 * REACH sizes long:
+# about 75 px). Extrude's arrows come out near this after Fit.
+ARROW_PIXELS = 25.0
+MIN_SIZE = 0.35  # mm: the whole arrow is at least about 1 mm long
+
+
+def handle_size(mm_per_pixel, pixels=ARROW_PIXELS, lo=MIN_SIZE, hi=None):
+    """The size (mm) of a drag arrow that shows `pixels` pixels per size on a screen where
+    one pixel is `mm_per_pixel` mm, kept between `lo` and `hi` (mm). `hi` stops the arrow
+    from dwarfing a short picked edge (about half its length for the whole arrow: pass its
+    length / (4 * REACH)); `lo` keeps it visible on a tiny part."""
+    size = max(float(mm_per_pixel), 0.0) * float(pixels)
+    if hi is not None:
+        size = min(size, max(float(hi), 1e-6))
+    return max(size, float(lo))
 
 
 def _segment_point(a, b, p):
@@ -53,6 +69,16 @@ def _segments_cross(p1, p2, q1, q2):
     return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
 
 
+def rect_gap(a, b):
+    """Distance between two rectangles (left, top, width, height): 0 when they touch, less
+    than 0 (minus how deep) when they overlap."""
+    dx = max(a[0] - (b[0] + b[2]), b[0] - (a[0] + a[2]))
+    dy = max(a[1] - (b[1] + b[3]), b[1] - (a[1] + a[3]))
+    if dx < 0 and dy < 0:
+        return max(dx, dy)  # overlapping: the smaller overlap, as a negative number
+    return math.hypot(max(dx, 0.0), max(dy, 0.0))
+
+
 def clearance(tail, tip, rect):
     """Distance between the segment tail-tip and the rectangle (left, top, width, height):
     0 when they touch or overlap."""
@@ -69,7 +95,19 @@ def clearance(tail, tip, rect):
     )
 
 
-def spot(anchor, tail, tip, radius, box, view, gap=GAP, other_side=False, past_tip=False):
+def spot(
+    anchor,
+    tail,
+    tip,
+    radius,
+    box,
+    view,
+    gap=GAP,
+    other_side=False,
+    past_tip=False,
+    avoid=(),
+    avoid_rects=(),
+):
     """Top-left corner (x, y) of a box of size `box` (w, h) beside an arrow on the screen.
 
     anchor     the arrow's middle (where the extrusion ends), in view pixels
@@ -80,9 +118,14 @@ def spot(anchor, tail, tip, radius, box, view, gap=GAP, other_side=False, past_t
                for a second arrow that can sit on the first one (both at 0), so the two
                boxes do not cover each other
     past_tip   the box starts past the arrow's tip (a third arrow on the same spot)
+    avoid      the dialog's other handles, [(tail, tip, radius)] in pixels: the box covers
+               none of them either (a pattern's two arrows meet at a corner)
+    avoid_rects the dialog's other boxes, [(left, top, width, height)]: never covered
     The box keeps `gap` pixels plus `radius` away from the arrow's line, never covers a
-    head, and stays inside the view (only when nothing fits does it go where it covers the
-    arrow least)."""
+    head (its own or another handle's) or another box, and stays inside the view. When
+    every spot beside the arrow is taken (two arrows on one spot with a third handle next
+    to them), the same directions are tried further out; only when nothing fits at all
+    does it go where it covers the least."""
     ax, ay = float(anchor[0]), float(anchor[1])
     tail = (float(tail[0]), float(tail[1]))
     tip = (float(tip[0]), float(tip[1]))
@@ -98,22 +141,31 @@ def spot(anchor, tail, tip, radius, box, view, gap=GAP, other_side=False, past_t
     sides = sorted([(-dy, dx), (dy, -dx)], key=lambda n: -(n[0] - 0.5 * n[1]))
     if other_side:
         sides.reverse()
-    centres = []
+    # (direction, where it starts, how far the box's centre goes along it)
+    ways = []
     for nx, ny in sides:
         reach = radius + gap + (abs(nx) * width + abs(ny) * height) / 2.0
-        centres.append((ax + nx * reach, ay + ny * reach))
+        ways.append(((nx, ny), (ax, ay), reach))
     along = radius + gap + (abs(dx) * width + abs(dy) * height) / 2.0
-    centres.append((tip[0] + dx * along, tip[1] + dy * along))
-    centres.append((tail[0] - dx * along, tail[1] - dy * along))
+    ways.append(((dx, dy), tip, along))
+    ways.append(((-dx, -dy), tail, along))
     if past_tip:
-        centres = centres[2:] + centres[:2]
+        ways = ways[2:] + ways[:2]
+    step = 0.6 * max(width, height)  # further out when the spots beside the arrow are taken
     best = None
-    for cx, cy in centres:
-        left = max(EDGE, min(cx - width / 2.0, view_w - width - EDGE))
-        top = max(EDGE, min(cy - height / 2.0, view_h - height - EDGE))
-        clear = clearance(tail, tip, (left, top, width, height))
-        if clear >= radius + 1.0:
-            return int(round(left)), int(round(top))
-        if best is None or clear > best[0]:
-            best = (clear, left, top)
+    for k in range(4):
+        for (nx, ny), (ox, oy), reach in ways:
+            cx, cy = ox + nx * (reach + k * step), oy + ny * (reach + k * step)
+            left = max(EDGE, min(cx - width / 2.0, view_w - width - EDGE))
+            top = max(EDGE, min(cy - height / 2.0, view_h - height - EDGE))
+            rect = (left, top, width, height)
+            clear = clearance(tail, tip, rect) - radius
+            for other_tail, other_tip, other_radius in avoid:
+                clear = min(clear, clearance(other_tail, other_tip, rect) - float(other_radius))
+            for other in avoid_rects:
+                clear = min(clear, rect_gap(rect, other))
+            if clear >= 1.0:
+                return int(round(left)), int(round(top))
+            if k == 0 and (best is None or clear > best[0]):
+                best = (clear, left, top)
     return int(round(best[1])), int(round(best[2]))

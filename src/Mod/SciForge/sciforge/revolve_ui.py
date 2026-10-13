@@ -28,7 +28,7 @@ import FreeCADGui as Gui
 from . import commands, drag_guard, extrude, handles3d, log, preview, profile_pick, revolve
 from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
-from .taskui import DistanceField, Panel
+from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
 
 TYPE_LABELS = [("Angle", "angle"), ("To", "to"), ("Full", "full")]
 DIRECTION_LABELS = [
@@ -139,98 +139,12 @@ class SelectionField:
         self.button.setText(text or self.empty)
 
 
-class TypeOverView:
-    """Fusion: with a command open, a number typed while the mouse is over the 3D view goes
-    into the command's value (its box next to the handle) and Enter finishes. FreeCAD
-    took those digits as its view keys (0 isometric, 1 front, 2 top ...): the view jumped
-    and the number was lost, so Enter then made the old angle. Digits, a minus sign and a
-    decimal point typed while the 3D view has the keyboard now go into the dialog's value
-    field (`panel.typing_field()`), replacing its text like Fusion's box; the next keys
-    follow there, and Enter there is OK. remove() when the dialog closes."""
-
-    KEYS = set("0123456789-.,")
-
-    def __init__(self, panel):
-        self.panel = panel
-        guard = self
-
-        class KeyFilter(QtCore.QObject):
-            def eventFilter(self, obj, event):
-                return guard._filter(event)
-
-        self.filter = KeyFilter()
-        QtWidgets.QApplication.instance().installEventFilter(self.filter)
-
-    @staticmethod
-    def _on_view(widget):
-        while widget is not None:
-            name = widget.metaObject().className()
-            if name in ("Gui::View3DInventorViewer", "QOpenGLWidget", "Gui::View3DInventor"):
-                return True
-            if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox)):
-                return False
-            widget = widget.parentWidget()
-        return False
-
-    def _filter(self, event):
-        from .compat import QtGui
-
-        try:
-            kind = event.type()
-            if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
-                return False
-            if self.panel is None or getattr(self.panel, "_closed", True):
-                return False
-            if not isinstance(event, QtGui.QKeyEvent):
-                return False
-            mods = event.modifiers()
-            if mods & (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier | QtCore.Qt.MetaModifier):
-                return False
-            text = event.text()
-            if not text or text not in self.KEYS:
-                return False
-            if not self._on_view(QtWidgets.QApplication.focusWidget()):
-                return False
-            field = self.panel.typing_field()
-            if field is None:
-                return False
-            event.accept()  # ShortcutOverride accepted: FreeCAD's view key does not fire
-            if kind == QtCore.QEvent.KeyPress and not event.isAutoRepeat():
-                key, typed = event.key(), text
-                QtCore.QTimer.singleShot(0, lambda: self._type(field, key, typed))
-            return True
-        except Exception:
-            return False
-
-    def _type(self, field, key, text):
-        from .compat import QtGui
-
-        try:
-            if self.panel is None or getattr(self.panel, "_closed", True):
-                return
-            edit = field.widget.findChild(QtWidgets.QLineEdit)
-            if edit is None:
-                return
-            field.widget.setFocus()
-            edit.selectAll()
-            # Sent as a key press, so the field reacts as to a person's typing.
-            press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier, text)
-            QtWidgets.QApplication.sendEvent(edit, press)
-            release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, key, QtCore.Qt.NoModifier, text)
-            QtWidgets.QApplication.sendEvent(edit, release)
-        except Exception as exc:
-            warn("revolve typing: %s" % exc)
-
-    def remove(self):
-        try:
-            QtWidgets.QApplication.instance().removeEventFilter(self.filter)
-        except Exception:
-            pass
-        self.panel = None
+# Digits typed over the 3D view: taskui.TypeOverView (every dialog has it now; found here
+# first by the revolve QA). They go into the value box of the angle handle used last.
 
 
 # -- the angle handle ----------------------------------------------------------------------------
-class AngleHandle:
+class AngleHandle(BoxCarrier):
     """Fusion's revolve manipulator: a blue ball with an arrow next to the part that
     travels round the axis, and a thin arc showing the angle swept. It sits `radius` from
     the axis at `center`, at angle 0 along `zero`; positive angles turn right-handed about
@@ -353,6 +267,21 @@ class AngleHandle:
 
     def angle(self):
         return self._value
+
+    def box_geometry(self):
+        """The ball (0.3 sizes) and the arrow along the circle (to 1.325 sizes the way the
+        angle grows): the box sits beside them, along the circle."""
+        p = self.point_at(self._value)
+        along = self._tangent(self._value) * self.pointing
+        return (
+            p + along * (0.5 * self.size),
+            p - along * (0.3 * self.size),
+            p + along * (1.325 * self.size),
+            0.3 * self.size,
+        )
+
+    def box_active(self):
+        return bool(self._drag or self._hover)
 
     def set_angle(self, degrees):
         """Show the handle at this angle (typed in the dialog)."""
@@ -496,6 +425,7 @@ class AngleHandle:
                 self._pending = None
                 if self.on_release:
                     self.on_release(self._value)
+            self.follow_box()
         except Exception as exc:
             warn("revolve drag: %s" % exc)
 
@@ -518,6 +448,7 @@ class AngleHandle:
             self.view.getSceneGraph().removeChild(self.holder)
         except Exception:
             pass
+        self.drop_box()
 
 
 _GRAB = {"time": 0.0}  # when a handle last took a press
@@ -1069,7 +1000,9 @@ class RevolvePanel(Panel):
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
         self.enter = preview.EnterFinishes(self)
-        self.typing = TypeOverView(self)
+        # The value box next to each angle handle; a number typed over the view goes to the
+        # handle used last, else to the angle's.
+        self.value_boxes = ValueBoxes(self, default="angle")
         self.target = feature
         self.editing = feature is not None
         self.body = commands.find_body() if feature is None else revolve.owner_body(feature)
@@ -2223,6 +2156,7 @@ class RevolvePanel(Panel):
                 on_drag=self._dragged,
                 on_release=self._released,
             )
+            self._attach_box("angle")
             if "angle2" in wanted:
                 sign = self._side_sign()
                 self.handles["angle2"] = AngleHandle(
@@ -2237,8 +2171,29 @@ class RevolvePanel(Panel):
                     on_drag=self._dragged2,
                     on_release=self._dragged2,
                 )
+                self._attach_box("angle2")
         except Exception as exc:
             warn("revolve handles unavailable: %s" % exc)
+
+    def _attach_box(self, key):
+        """The value box next to the handle `key`: the angle field's text, and a value or
+        formula typed in it goes to that field."""
+        field = self.angle2 if key == "angle2" else self.angle
+        return self.value_boxes.attach(
+            self.handles.get(key),
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+        )
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        self._last_handle = key
+        for formula in self.formula_inputs:
+            if formula.key == key:
+                formula.take(text)
+                return
 
     # -- OK / Cancel ----------------------------------------------------------------------------------
     def finish(self):
@@ -2330,12 +2285,14 @@ class RevolvePanel(Panel):
 
     def cleanup(self):
         self._unwatch()
-        for guard in (self.escape, self.undo_guard, self.enter, self.typing):
+        for guard in (self.escape, self.undo_guard, self.enter):
             try:
                 guard.remove()
             except Exception:
                 pass
+        self._remove_typing()
         self._remove_handles()
+        self.value_boxes.discard()
         self._hide_shown()
         super().cleanup()
 

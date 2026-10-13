@@ -27,7 +27,7 @@ from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_
 from . import bodies, extrude_bodies, ui_icon_path, warn
 from . import extrude_bodies_core as bodies_core
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, ArrowValueBox, DistanceField, Panel
+from .taskui import ArrowDragger, BoxCarrier, DistanceField, Panel, ValueBoxes
 
 ZERO_HINT = "Drag the arrow or type a distance."
 
@@ -108,12 +108,13 @@ class SelectionField:
         self.button.setText(text or self.empty)
 
 
-class AngleDragger:
+class AngleDragger(BoxCarrier):
     """Fusion's taper handle: a short curved blue arrow at the end of the extrusion that
     turns about the profile's edge (`pivot`, axis `axis`). At angle 0 it sits `radius`
     along `zero` (the extrusion direction); positive angles turn it to axis x zero, the
     outward side. Watched with a Qt timer like taskui.ArrowDragger (Coin's dragger
-    callbacks run Python without its lock and crashed FreeCAD)."""
+    callbacks run Python without its lock and crashed FreeCAD). It can carry a value box
+    (taskui.BoxCarrier): the box sits beside the curved band, clear of its heads."""
 
     POLL_MS = 30
 
@@ -125,6 +126,7 @@ class AngleDragger:
         self.axis = App.Vector(axis).normalize()
         self.zero = App.Vector(zero).normalize()
         self.radius = radius
+        self.width = width
         self.root = coin.SoSeparator()
         place = coin.SoTransform()
         place.translation.setValue(pivot.x, pivot.y, pivot.z)
@@ -202,15 +204,32 @@ class AngleDragger:
         sep.addChild(faces)
         return sep
 
+    def point_at(self, degrees):
+        """Where the band's middle is at `degrees` (3D)."""
+        out = self.zero.cross(self.axis) * -1.0  # local +Y: the outward side
+        a = math.radians(degrees)
+        return self.pivot + (self.zero * math.cos(a) + out * math.sin(a)) * self.radius
+
     def screen_points(self, degrees):
         """(where the handle is now, where it is at `degrees`) in 3D, for tests and hints."""
-        out = self.zero.cross(self.axis) * -1.0  # local +Y: the outward side
+        return self.point_at(self.angle()), self.point_at(degrees)
 
-        def at(angle):
-            a = math.radians(angle)
-            return self.pivot + (self.zero * math.cos(a) + out * math.sin(a)) * self.radius
+    def box_geometry(self):
+        """The curved band as the box sees it: its middle, the tips of its two heads (the
+        band is short, so the chord between them is where it lies) and the heads'
+        half-width. The box goes beside the band, along the extrusion."""
+        radius = max(self.radius, 1e-6)
+        span = min(0.3, 1.6 * self.width / radius) + 1.2 * self.width / radius  # radians
+        now = self.angle()
+        reach = math.degrees(span)
+        anchor = self.point_at(now)
+        return anchor, self.point_at(now - reach), self.point_at(now + reach), 0.75 * self.width
 
-        return at(self.angle()), at(degrees)
+    def box_active(self):
+        try:
+            return bool(self.dragger.isActive.getValue())
+        except Exception:
+            return False
 
     def angle(self):
         q = self.dragger.rotation.getValue().getValue()  # (x, y, z, w) about local z
@@ -239,6 +258,7 @@ class AngleDragger:
             if self._was_active and not active and self.on_release:
                 self.on_release(value)
             self._was_active = active
+            self.follow_box()
         except Exception as exc:
             warn("taper drag: %s" % exc)
 
@@ -252,6 +272,7 @@ class AngleDragger:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        self.drop_box()
 
 
 class ViewProviderExtrude:
@@ -432,6 +453,10 @@ class ExtrudePanel(Panel):
     auto_pick = True  # take the single area of a sketch just finished, like Fusion
 
     def __init__(self, doc, feature=None, profiles=None, sketch=None):
+        # Editing: the profile's sketch shows while the dialog is open (Fusion), shown here
+        # before the dialog's undo step opens and hidden again after it closed (_close), so
+        # the step holds only the edit and Undo after OK never shows or hides the sketch.
+        self._shown_sketches = _show_profile_sketches(feature) if feature is not None else []
         super().__init__(doc, "Extrude" if feature is None else "Edit Extrude")
         ExtrudePanel.last = self
         # The sketch that was open when E was pressed: its areas are the profiles, also
@@ -464,8 +489,11 @@ class ExtrudePanel(Panel):
         self.picker = None
         self.observer = None
         self._quiet = False
-        self.value_boxes = {}  # the value box next to each arrow ({"distance": box, ...})
+        # The value box next to each handle (distance, side two, offset, taper); a number
+        # typed over the view goes to the handle used last, else to the distance.
+        self.value_boxes = ValueBoxes(self, default="distance")
         self.cut_view = None  # the red cut preview (cut_preview.CutPreview)
+        self.bodies_view = None  # the listed bodies in blue while the row is active
         self._init_bodies()
         if feature is not None:
             try:
@@ -1521,6 +1549,7 @@ class ExtrudePanel(Panel):
         for widget in (self.bodies_label, self.fields["bodies"].widget, self.bodies_names):
             widget.setVisible(show)
         if not show:
+            self._highlight_bodies([])
             if self.active == "bodies":
                 self.activate("profiles")
             return
@@ -1529,6 +1558,7 @@ class ExtrudePanel(Panel):
         if names is None:
             body = self._source_body()
             names = [body.Name] if body is not None else []
+        self._highlight_bodies(names if self.active == "bodies" else [])
         labels = []
         for name in names:
             obj = self.doc.getObject(name)
@@ -1547,6 +1577,41 @@ class ExtrudePanel(Panel):
         if self.active == "bodies":
             text += "\nClick a body to leave it out or take it back."
         self.bodies_names.setText(text)
+
+    def _highlight_bodies(self, names):
+        """While the row takes the clicks, the bodies it lists show as see-through blue
+        copies (as they were before this extrude), so the person sees which bodies the
+        extrude changes; a body clicked away loses its blue. A picture only
+        (cut_preview.BodyHighlight): clicks go through it, and it goes with the dialog."""
+        if self._closed:
+            return
+        try:
+            if not names:
+                if self.bodies_view is not None:
+                    self.bodies_view.clear()
+                return
+            shapes = []
+            for name in names:
+                body = self.doc.getObject(name)
+                if body is None:
+                    continue
+                try:
+                    shape = extrude_bodies.before_shape(body, self.target)
+                except Exception:
+                    shape = None
+                if shape is None or shape.isNull() or not shape.Solids:
+                    shape = bodies.global_shape(body)
+                shapes.append(shape)
+            if self.bodies_view is None:
+                self.bodies_view = cut_preview.BodyHighlight(self._view())
+            self.bodies_view.show(shapes)
+        except Exception as exc:
+            warn("bodies highlight: %s" % exc)
+
+    def _remove_bodies_highlight(self):
+        view, self.bodies_view = self.bodies_view, None
+        if view is not None:
+            view.clear()
 
     def _used_up_labels(self):
         """Labels of the bodies the cut takes completely (they go when OK is pressed)."""
@@ -1669,8 +1734,8 @@ class ExtrudePanel(Panel):
                     size * 0.7,
                     on_drag=self._offset_dragged,
                     on_release=self._offset_released,
-                    value_box=self._value_box("offset"),
                 )
+                self._attach_box("offset")
             if options["extent"] == "distance":
                 self.dragger = self.draggers["distance"] = ArrowDragger(
                     start,
@@ -1679,8 +1744,8 @@ class ExtrudePanel(Panel):
                     size,
                     on_drag=self._dragged,
                     on_release=self._dragged,
-                    value_box=self._value_box("distance"),
                 )
+                self._attach_box("distance")
             if options["direction"] == "two_sides" and options["extent2"] == "distance":
                 self.draggers["distance2"] = ArrowDragger(
                     start,
@@ -1689,40 +1754,49 @@ class ExtrudePanel(Panel):
                     size,
                     on_drag=self._dragged2,
                     on_release=self._dragged2,
-                    value_box=self._value_box("distance2"),
                 )
+                self._attach_box("distance2")
             self._make_taper_handle(faces, start, normal, size)
         except Exception as exc:
             warn("extrude handles unavailable: %s" % exc)
 
-    # -- the value boxes next to the arrows ---------------------------------------------------
+    # -- the value boxes next to the handles --------------------------------------------------
+    BOX_FIELDS = {
+        "distance": "distance",
+        "distance2": "distance2",
+        "offset": "start_offset",
+        "taper": "taper",
+    }
+
+    def _attach_box(self, key):
+        """Give the handle `key` its value box: it shows the matching dialog field's text and
+        takes a value or formula typed in it. The boxes are made once and kept by the dialog
+        (self.value_boxes): the handles are rebuilt often, and what is being typed must
+        survive that."""
+        handle = self.draggers.get(key)
+        field = getattr(self, self.BOX_FIELDS[key])
+        return self.value_boxes.attach(
+            handle,
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+            # At 0 the distance arrow sits on the offset arrow, and side two's on side
+            # one's: their boxes start elsewhere (side two's on the other side, the
+            # offset's past its tip), so none covers another.
+            other_side=key == "distance2",
+            past_tip=key == "offset",
+        )
+
     def _value_box(self, key):
-        """The box that shows (and takes) the value of the arrow `key`. Made once and kept by
-        the dialog: the arrows are rebuilt often, and what is being typed must survive that."""
-        box = self.value_boxes.get(key)
-        if box is not None and taskui._alive(box):
-            return box
-        field = {
-            "distance": self.distance,
-            "distance2": self.distance2,
-            "offset": self.start_offset,
-        }[key]
-        try:
-            box = ArrowValueBox(
-                lambda: field.widget.text(),
-                lambda text: self._box_typed(key, text),
-                cancel=self.escape.press,
-                # At 0 the distance arrow sits on the offset arrow, and side two's on side
-                # one's: their boxes start elsewhere (side two's on the other side, the
-                # offset's past its tip), so none covers another.
-                other_side=key == "distance2",
-                past_tip=key == "offset",
-            )
-        except Exception as exc:
-            warn("value box unavailable: %s" % exc)
-            return None
-        self.value_boxes[key] = box
-        return box
+        """The value box of the handle `key` (made if needed), or None."""
+        field = getattr(self, self.BOX_FIELDS[key])
+        return self.value_boxes.box(
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(key, text),
+            other_side=key == "distance2",
+            past_tip=key == "offset",
+        )
 
     def _box_typed(self, key, text):
         """A value typed in the box next to an arrow: taken like the same text typed in the
@@ -1742,12 +1816,7 @@ class ExtrudePanel(Panel):
         self.start_offset.take(value)
 
     def _discard_value_boxes(self):
-        for box in self.value_boxes.values():
-            try:
-                box.discard()
-            except Exception:
-                pass
-        self.value_boxes = {}
+        self.value_boxes.discard()
 
     # -- the red cut preview -------------------------------------------------------------------
     def _update_cut_preview(self):
@@ -1825,6 +1894,7 @@ class ExtrudePanel(Panel):
             on_release=self._taper_dragged,
         )
         self.draggers["taper"].sign = sign
+        self._attach_box("taper")  # the angle, next to the curved handle
 
     # -- OK / Cancel ----------------------------------------------------------------------------
     def accept(self):
@@ -1868,8 +1938,10 @@ class ExtrudePanel(Panel):
             return False
         feature = self.target
         # Fusion hides the profile's sketch once the extrude is made (inside this step:
-        # Undo shows it again).
-        extrude.hide_sketches(self.profiles)
+        # Undo shows it again). A sketch shown for the edit is hidden again after the step
+        # (_close), not in it.
+        shown = [obj.Name for obj in self._shown_sketches]
+        extrude.hide_sketches([p for p in self.profiles if p[0].Name not in shown])
         self.cleanup()
         preview.end_transaction(self.doc)
         self._close()
@@ -1890,6 +1962,11 @@ class ExtrudePanel(Panel):
         self._close()
         return True
 
+    def _close(self):
+        _hide_again(self._shown_sketches)  # after the undo step: never part of it
+        self._shown_sketches = []
+        super()._close()
+
     def cleanup(self):
         self._unwatch()
         self.escape.remove()
@@ -1899,9 +1976,40 @@ class ExtrudePanel(Panel):
         self._discard_value_boxes()
         try:
             self._remove_cut_preview()
+            self._remove_bodies_highlight()
         except Exception as exc:
             warn("cut preview: %s" % exc)
         super().cleanup()
+
+
+def _show_profile_sketches(feature):
+    """Show the hidden sketches an existing extrude is made from, for the time it is edited
+    (Fusion shows the profile while you edit). Returns the sketches shown here, to hide
+    again afterwards. Called with no undo step open: FreeCAD then records no change."""
+    shown = []
+    try:
+        profiles, _options = extrude.read(feature)
+    except Exception as exc:
+        warn("could not read the profiles of %s: %s" % (feature.Label, exc))
+        return shown
+    for obj, _sub in profiles:
+        try:
+            if extrude.is_sketch(obj) and obj.ViewObject is not None:
+                if not obj.ViewObject.Visibility and not any(o is obj for o in shown):
+                    obj.ViewObject.Visibility = True
+                    shown.append(obj)
+        except Exception:
+            pass
+    return shown
+
+
+def _hide_again(sketches):
+    for obj in sketches:
+        try:
+            if obj.Document.getObject(obj.Name) is not None and obj.ViewObject is not None:
+                obj.ViewObject.Visibility = False
+        except Exception:
+            pass
 
 
 # FreeCAD's failure texts that talk about FreeCAD, said the way a Fusion user needs them.

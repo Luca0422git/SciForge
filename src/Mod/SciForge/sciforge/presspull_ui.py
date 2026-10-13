@@ -21,7 +21,7 @@ import FreeCADGui as Gui
 from . import commands, cut_preview, log, preview, presspull, presspull_core as core, taskui
 from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, ArrowValueBox, DistanceField, Panel
+from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
 
 
 class ViewProviderPressPull:
@@ -145,7 +145,7 @@ class PressPullPanel(Panel):
         self.observer = None
         self.error = ""
         self.editing = feature is not None
-        self.value_box = None  # the box next to the arrow (taskui.ArrowValueBox)
+        self.value_boxes = ValueBoxes(self, default="distance")  # the box next to the arrow
         self.cut_view = None  # the red preview of the material taken away
 
         from .extrude_ui import SelectionField
@@ -491,35 +491,27 @@ class PressPullPanel(Panel):
                 size,
                 on_drag=self._dragged,
                 on_release=self._dragged,
-                value_box=self._value_box(),
             )
+            self._value_box()
         except Exception as exc:
             warn("press pull arrow unavailable: %s" % exc)
 
     def _value_box(self):
         """The box next to the arrow: shows the distance and takes one typed in it. Kept by
         the dialog (the arrow is rebuilt when faces are added)."""
-        box = self.value_box
-        if box is not None and taskui._alive(box):
-            return box
-        try:
-            self.value_box = ArrowValueBox(
-                lambda: self.field.widget.text(),
-                lambda text: self.formula_input.take(text),
-                cancel=self.escape.press,
-            )
-        except Exception as exc:
-            warn("value box unavailable: %s" % exc)
-            self.value_box = None
-        return self.value_box
+        return self.value_boxes.attach(
+            self.dragger,
+            "distance",
+            lambda: self.field.widget.text(),
+            lambda text: self.formula_input.take(text),
+        )
+
+    @property
+    def value_box(self):
+        return self.value_boxes.boxes.get("distance")
 
     def _discard_value_box(self):
-        box, self.value_box = self.value_box, None
-        if box is not None:
-            try:
-                box.discard()
-            except Exception:
-                pass
+        self.value_boxes.discard()
 
     def _watch_selection(self):
         panel = self

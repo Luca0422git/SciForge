@@ -20,16 +20,43 @@ from PySide6 import QtTest
 from SciForgeTests.gui import harness as h
 
 BOX_NAME = "SciForgeArrowValue"
+TURNING_KEYS = ("taper", "angle", "angle2")  # the boxes of curved (angle) handles
 
 
-def value_boxes(visible_only=True):
-    """The value boxes over the 3D view."""
+def value_boxes(visible_only=True, arrows_only=False):
+    """The value boxes over the 3D view. arrows_only: without the boxes of the turning
+    handles (the Extrude taper's), so the arrows' boxes can be counted on their own."""
     try:
         widget = h.gl_widget()
     except Exception:
         return []
     found = [w for w in widget.findChildren(QtWidgets.QLineEdit) if w.objectName() == BOX_NAME]
-    return [w for w in found if w.isVisible()] if visible_only else found
+    if visible_only:
+        found = [w for w in found if w.isVisible()]
+    if arrows_only:
+        turning = []
+        try:
+            from sciforge import taskui
+
+            registry = getattr(taskui.current(), "value_boxes", None)
+            boxes = getattr(registry, "boxes", {})
+            turning = [b for k, b in boxes.items() if k in TURNING_KEYS]
+        except Exception:
+            pass
+        found = [w for w in found if not any(w is b for b in turning)]
+    return found
+
+
+def value_box(key, panel=None):
+    """The value box of the handle `key` of the open dialog (or `panel`), shown or not;
+    None when the dialog has none."""
+    try:
+        from sciforge import taskui
+
+        panel = panel if panel is not None else taskui.current()
+        return panel.value_boxes.boxes.get(key)
+    except Exception:
+        return None
 
 
 def head_point(dragger, reach=0.9):
