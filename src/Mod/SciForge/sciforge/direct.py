@@ -643,12 +643,54 @@ def bake(doc):
         return []
     s = session(doc)
     base_id = s.base_id if s is not None and not is_direct(doc) else None
-    made = freeze(doc, targets, base_id, _fresh(doc))
+    fresh = _fresh(doc)
+    made = freeze(doc, targets, base_id, fresh)
     if s is not None and not is_direct(doc):
         for body, _tip in targets:
             if bodies.alive(body):
                 s.members.add(body.Name)
+        _sketches_into_base(doc, fresh)
     return made
+
+
+def _inside_base(body, names=None):
+    """Sketches and construction planes made inside a base feature belong to it (Fusion:
+    only the base feature shows in the timeline, its sketches in the browser). ``names``:
+    only those (the ones a session made); None: all of the body's."""
+    for obj in body.Group:
+        if "BaseFeature" in obj.PropertiesList:
+            continue  # solid steps (the base itself shows)
+        if names is not None and obj.Name not in names:
+            continue
+        try:
+            if obj.TypeId == "App::Origin" or getattr(obj, "Role", None):
+                continue
+            if getattr(obj, "SciForgeTimeline", True) is not False:
+                bodies.hide_from_timeline(obj)
+        except Exception:
+            pass
+
+
+def _sketches_into_base(doc, names):
+    """Sketches and planes made inside a base feature that no recorded step uses (they made
+    what the base feature holds now) leave the timeline, like _inside_base."""
+    for name in names or ():
+        obj = doc.getObject(name)
+        if obj is None or "BaseFeature" in obj.PropertiesList:
+            continue
+        try:
+            if obj.TypeId not in ("Sketcher::SketchObject",) and not obj.TypeId.endswith(
+                ("Plane", "Line", "Point")
+            ):
+                continue
+            if getattr(obj, "Role", None) or getattr(obj, "SciForgeTimeline", True) is False:
+                continue
+            users = [u for u in obj.InList if not bodies.is_body(u)]
+            if any("BaseFeature" in u.PropertiesList for u in users):
+                continue  # a recorded step uses it: it stays a step too
+            bodies.hide_from_timeline(obj)
+        except Exception:
+            pass
 
 
 def takes_commit(doc):
@@ -828,6 +870,7 @@ def history_on(doc):
             base = base_of(body)
             if base is not None:
                 _mark_base(base, base_id)
+                _inside_base(body)  # what was made without history is in the base feature
         settings(doc, create=True).CaptureHistory = True
         doc.recompute()
     except Exception:
