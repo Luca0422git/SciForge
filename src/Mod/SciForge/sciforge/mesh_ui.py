@@ -343,8 +343,22 @@ class MeshPanel(insert_ui._InsertPanel):
         if not self._preview_on():
             lines.append("Tick Preview to see the result here, or press OK.")
         elif not failed and self.step.StepInfo:
-            lines.append("After: " + self.step.StepInfo)
+            lines.append("After: " + self.step.StepInfo + self.result_health())
         self.say("\n".join(lines))
+
+    def result_health(self):
+        """', closed' or what is wrong with the result (Repair says it itself; pieces are
+        bodies of their own)."""
+        if self.step_kind == "MeshRepair" or self.step is None or mesh.pieces_of(self.step):
+            return ""
+        try:
+            info = mesh.analyze(self.step.Mesh)
+        except Exception:
+            return ""
+        problems = core.analysis_lines(info)
+        if problems:
+            return "; " + ", ".join(problems)
+        return ", closed" if info.get("closed") else "; not closed"
 
     def show_status(self):
         self.report()
@@ -757,6 +771,8 @@ class SeparatePanel(MeshPanel):
 
     def changed(self):
         self._rows_for_type()
+        if not self._quiet and self.active != self.first_waiting():
+            self.set_active(self.first_waiting())  # Select Face Groups: the box waits for clicks
         super().changed()
 
     def first_waiting(self):

@@ -137,6 +137,14 @@ def topology(mesh):
     return [(p.x, p.y, p.z) for p in points], [tuple(f) for f in facets]
 
 
+def signed_volume(mesh):
+    """The volume the faces enclose, negative when they point inward. (FreeCAD's
+    Mesh.Volume is always positive: it cannot tell an inside-out body.)"""
+    if mesh.CountFacets == 0:
+        return 0.0
+    return core.signed_volume(*topology(mesh))
+
+
 def from_topology(points, facets):
     import FreeCAD as App
     import Mesh
@@ -177,7 +185,9 @@ def analyze(mesh, self_intersections=False):
         and info["non_manifold"] == 0
         and info["flipped"] == 0
     )
-    info["volume"] = mesh.Volume if info["closed"] else None
+    info["volume"] = core.signed_volume(points, facets) if info["closed"] else None
+    # closed but the faces point in: a slicer may print it as a hole
+    info["inside_out"] = bool(info["closed"] and info["volume"] < 0)
     return info
 
 
@@ -221,7 +231,8 @@ def browser_note(obj):
         if cached is not None and cached[0] == stamp:
             return cached[1]
         note = None
-        if not mesh.isSolid() or mesh.hasNonManifolds() or mesh.countNonUniformOrientedFacets():
+        solid = mesh.isSolid()
+        if not solid or mesh.hasNonManifolds() or mesh.countNonUniformOrientedFacets():
             import MeshPart
 
             parts = []
@@ -238,6 +249,11 @@ def browser_note(obj):
                 "Not closed (%s): right-click > Repair, or MESH > Repair."
                 % (", ".join(parts) or "open edges"),
             )
+        elif signed_volume(mesh) < 0:
+            note = (
+                "warning",
+                "Inside out (all the faces point inward): MESH > Reverse Normal, or Repair.",
+            )
         if len(_HEALTH) > 500:
             _HEALTH.clear()
         _HEALTH[key] = (stamp, note)
@@ -253,7 +269,7 @@ def _orient_outward(mesh):
     except Exception:
         pass
     try:
-        if mesh.isSolid() and mesh.Volume < 0:
+        if mesh.isSolid() and signed_volume(mesh) < 0:
             mesh.flipNormals()
     except Exception:
         pass
@@ -528,17 +544,19 @@ def shell_mesh(mesh, thickness):
     work = mesh.copy()
     _orient_outward(work)
     points, facets = topology(work)
-    inner = from_topology(core.offset_points(points, facets, -thickness), facets)
+    inner_points = core.offset_points(points, facets, -thickness)
+    inner = from_topology(inner_points, facets)
     if inner.hasSelfIntersections():
         raise MeshError(
             "A %.2f mm wall is too thick for this body: its inside wall would cross itself. "
             "Try a thinner wall." % thickness
         )
+    inside = core.signed_volume(inner_points, facets)
+    if inside <= 0 or inside >= core.signed_volume(points, facets):
+        raise MeshError("A %.2f mm wall is too thick for this body." % thickness)
     inner.flipNormals()
     result = work.copy()
     result.addMesh(inner)
-    if result.Volume <= 0 or abs(inner.Volume) >= work.Volume:
-        raise MeshError("A %.2f mm wall is too thick for this body." % thickness)
     return result
 
 

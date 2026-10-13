@@ -378,7 +378,7 @@ def signed_volume(points, facets):
 def analysis_lines(info):
     """What Repair's analysis says, one line per problem found (empty: nothing found).
     `info`: {"holes", "open_edges", "flipped", "non_manifold", "self_intersections",
-    "shells", "degenerate", "duplicated"}."""
+    "shells", "degenerate", "duplicated", "inside_out"}."""
     lines = []
 
     def say(key, one, many):
@@ -399,6 +399,8 @@ def analysis_lines(info):
     shells = int(info.get("shells") or 0)
     if shells > 1:
         lines.append("%d separate shells" % shells)
+    if info.get("inside_out"):
+        lines.append("inside out (the faces point inward)")
     return lines
 
 

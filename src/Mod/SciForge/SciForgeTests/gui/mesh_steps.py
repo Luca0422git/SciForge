@@ -119,8 +119,11 @@ def insert_file(path):
 
     def ok():
         p = i.panel()
-        h.check("Insert Mesh dialog for %s" % os.path.basename(path),
-                p is not None and p.title == "Insert Mesh", p)
+        h.check(
+            "Insert Mesh dialog for %s" % os.path.basename(path),
+            p is not None and p.title == "Insert Mesh",
+            p,
+        )
         h.task_button("OK")
         i.no_file()
 
@@ -136,7 +139,9 @@ def doc():
 
 def mesh_objects():
     d = doc()
-    return [o for o in d.Objects if o.TypeId in ("Mesh::Feature", "Mesh::FeaturePython")] if d else []
+    return (
+        [o for o in d.Objects if o.TypeId in ("Mesh::Feature", "Mesh::FeaturePython")] if d else []
+    )
 
 
 def bodies():
@@ -178,6 +183,13 @@ def volume(obj):
     from sciforge import mesh
 
     return mesh.global_mesh(obj).Volume
+
+
+def signed_volume(obj):
+    """Negative for a body whose faces point inward (Mesh.Volume is always positive)."""
+    from sciforge import mesh
+
+    return mesh.signed_volume(mesh.global_mesh(obj))
 
 
 def closed(obj):
