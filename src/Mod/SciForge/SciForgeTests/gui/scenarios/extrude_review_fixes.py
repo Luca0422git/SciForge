@@ -26,7 +26,9 @@ from SciForgeTests.gui import harness as h
 
 V = App.Vector
 BOX = 12000.0
-SQUARE = V(15, 15, 10)  # inside the square on the top face
+# Inside the square on the top face, left of its middle: at distance 0 the arrow stands on the
+# middle (a click there grabs the arrow), and the value box sits to its right.
+SQUARE = V(11.5, 18, 10)
 BESIDE = V(33, 24, 10)  # the top face, away from the square
 s = {}
 
