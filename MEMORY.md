@@ -104,6 +104,14 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 - [x] Timeline: reorder by drag, suppress, groups (7.3); QA pass done (branch
       `sf/timeline_browser-qa`, 4 QA scenarios, spec `docs/sciforge/parity/timeline-browser.md`)
 - [ ] Sketcher parity (7.5): inference, glyphs, Fusion dimension tool feel (needs captures)
+- [x] Luca's Extrude / sketch requests of 2026-10-12 (R1-R8), 2026-10-13, **not yet checked by
+      Luca**: R1 pick one closed sketch area (in the open sketch and after Finish Sketch), R2
+      live preview while dragging, R3 the distance in a box next to the arrow (typeable), R4
+      sketch right-click menu (also after switching programs), R5 Extrude starts at 0, R6 the
+      sketch stays shown until OK, R7 cuts preview in red, R8 one Extrude through several
+      bodies with a "Bodies to Cut" row. Plus: dimension boxes never stay behind, arrows no
+      longer stick to the cursor (`drag_guard.py`). Specs: parity/extrude-presspull.md,
+      sketch.md.
 - [x] Sketch inference in Python (plan C1-C4, branch `worktree-agent-a27127a70299bdc90`,
       `sketch_infer.py` + `sketch_infer_core.py`): Ctrl = no snaps / no automatic
       constraints (all drawing tools); in Line (L) dashed alignment guides from the last 3
@@ -2090,9 +2098,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
    - other features than sweep / loft / Press Pull may lose picked edges / faces after
      save, reopen and edit (the "remember element" fix was made for those three);
    - the gaps listed at the end of each `docs/sciforge/parity/*.md`.
-2. Luca installs the newest green quick update and redoes his session; ask for the copyable
-   SciForge > Diagnostics text whenever something misbehaves, and the Fusion right-click menu
-   screenshot (slot order).
+2. Luca installs the newest green quick update (2026-10-13: R1-R8 and the review fixes) and
+   checks the Fusion guesses listed in the morning summary (value box place, red colour, Join
+   through several bodies, New Body beside a part, which areas a whole sketch gives); ask for
+   the copyable SciForge > Diagnostics text whenever something misbehaves, and the Fusion
+   right-click menu screenshot (slot order). The next Windows build shows whether the compile
+   cache works (`ccache --show-stats` in its log: "cacheable calls" > 0, and faster).
 3. Full Windows build: patches #4, #6, #7 compile (run #2/#3, `plate_hole_grid` PASS). Run #3's
    .7z was held back by the Shell Both tag bug (fixed 2026-10-12): a Windows-only build of
    the fix gives Luca the download.
