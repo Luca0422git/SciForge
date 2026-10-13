@@ -18,13 +18,17 @@ An item's command is:
 SEP = None  # separator line inside a menu
 
 
-def item(label, command, icon=None, key="", note="", checked=None):
+def item(label, command, icon=None, key="", note="", checked=None, toggle=None):
     """One menu entry. key = Fusion's shortcut, shown at the right of the menu.
     checked = "module:function" in the sciforge package that says whether the entry is the
-    current choice (a tick in the menu, e.g. the orbit mode)."""
+    current choice (a tick in the menu, e.g. the orbit mode; the ticked entries of one menu
+    are one exclusive choice). toggle = the same, for an entry that is on or off by itself
+    (a selection filter): its tick does not untick the others."""
     entry = {"label": label, "command": command, "icon": icon, "key": key, "note": note}
     if checked:
         entry["checked"] = checked
+    if toggle:
+        entry["toggle"] = toggle
     return entry
 
 
@@ -247,15 +251,146 @@ ASSEMBLE = group(
     ],
 )
 
+# Fusion's SELECT menu (parity/selection.md): the select tool, the three box modes with
+# their 1 / 2 / 3 keys, the filters (each on or off), the priorities (one at a time; the
+# active one clicked again clears it), Select Other (also a long press on the model).
 SELECT = group(
     "select",
     "SELECT",
-    ["Window Selection"],
+    ["Select"],
     [
-        item("Window Selection", "Std_BoxSelection", "select"),
-        item("Freeform Selection", None, "select"),
-        item("Paint Selection", None, "select"),
+        item(
+            "Select",
+            "SciForge_Select",
+            "select",
+            note="Click to select; drag a box (left to right: fully inside, right to left: "
+            "touched); hold the button on the model for Select Other",
+        ),
         SEP,
+        item(
+            "Window Selection",
+            "SciForge_SelectWindow",
+            "select_window",
+            "1",
+            note="A box: left to right takes what is fully inside, right to left what it touches",
+            checked="selection_ui:is_window",
+        ),
+        item(
+            "Freeform Selection",
+            "SciForge_SelectFreeform",
+            "select_freeform",
+            "2",
+            note="A free shape drawn around things; the direction works like the box",
+            checked="selection_ui:is_freeform",
+        ),
+        item(
+            "Paint Selection",
+            "SciForge_SelectPaint",
+            "select_paint",
+            "3",
+            note="Drag over things: everything the pointer passes is selected",
+            checked="selection_ui:is_paint",
+        ),
+        SEP,
+        sub(
+            "Selection Filters",
+            [
+                item(
+                    "Select Through",
+                    "SciForge_SelectThrough",
+                    "select_through",
+                    note="A box also takes what is hidden behind other faces",
+                    toggle="selection_ui:is_select_through",
+                ),
+                SEP,
+                item(
+                    "Bodies",
+                    "SciForge_SelectFilterBodies",
+                    "select_body",
+                    toggle="selection_ui:bodies_on",
+                ),
+                item(
+                    "Body Faces",
+                    "SciForge_SelectFilterFaces",
+                    "select_face",
+                    toggle="selection_ui:faces_on",
+                ),
+                item(
+                    "Body Edges",
+                    "SciForge_SelectFilterEdges",
+                    "select_edge",
+                    toggle="selection_ui:edges_on",
+                ),
+                item(
+                    "Body Vertices",
+                    "SciForge_SelectFilterVertices",
+                    "select_vertex",
+                    toggle="selection_ui:vertices_on",
+                ),
+                item(
+                    "Sketch Curves",
+                    "SciForge_SelectFilterSketchCurves",
+                    "select_sketch",
+                    toggle="selection_ui:sketch_curves_on",
+                ),
+                item(
+                    "Sketch Points",
+                    "SciForge_SelectFilterSketchPoints",
+                    "select_sketch",
+                    toggle="selection_ui:sketch_points_on",
+                ),
+                item(
+                    "Work Geometry",
+                    "SciForge_SelectFilterWorkGeometry",
+                    "select_work",
+                    toggle="selection_ui:work_geometry_on",
+                ),
+                item(
+                    "Components", None, "new_component", note="Components are not in SciForge yet"
+                ),
+            ],
+            "select_filter",
+        ),
+        sub(
+            "Selection Priority",
+            [
+                item(
+                    "Select Body Priority",
+                    "SciForge_SelectPriorityBody",
+                    "select_body",
+                    note="Only whole bodies; the active priority clicked again clears the filter",
+                    toggle="selection_ui:is_body_priority",
+                ),
+                item(
+                    "Select Face Priority",
+                    "SciForge_SelectPriorityFace",
+                    "select_face",
+                    note="Only faces of bodies",
+                    toggle="selection_ui:is_face_priority",
+                ),
+                item(
+                    "Select Edge Priority",
+                    "SciForge_SelectPriorityEdge",
+                    "select_edge",
+                    note="Only edges of bodies",
+                    toggle="selection_ui:is_edge_priority",
+                ),
+                item(
+                    "Select Component Priority",
+                    None,
+                    "new_component",
+                    note="Components are not in SciForge yet",
+                ),
+            ],
+            "select_priority",
+        ),
+        SEP,
+        item(
+            "Select Other",
+            "SciForge_SelectOther",
+            "select_other",
+            note="Everything under the pointer, front to back (or hold the left button there)",
+        ),
         item("Select All", "Std_SelectAll", "select"),
     ],
 )

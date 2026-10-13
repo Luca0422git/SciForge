@@ -2488,6 +2488,40 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   were removed; the stale ones' uncommitted edits are kept as patches in the session's
   scratchpad (`old-worktrees/*.diff`), not in the repo. 3 GB freed.
 
+### 2026-10-13: Selection like Fusion (branch `sf/selection`)
+- Research first (`docs/sciforge/parity/selection.md`, every row with its source): window /
+  crossing by drag direction, freeform, paint, keys 1 / 2 / 3, Ctrl toggles and Shift adds,
+  Select Other on a one-second press (front to back, hover shows), Selection Filters (also
+  inside commands), Body / Face / Edge priority presets (the active one again clears),
+  Select Through. Built in `selection_core.py` (rules + box maths, 23 unit tests) and
+  `selection_ui.py` (a Qt filter on the 3D view's drawing area; SciForge's own box widget;
+  `SelectOtherMenu`; `FilterGate` combined with every dialog's gate by wrapping
+  `Gui.Selection.addSelectionGate` / `removeSelectionGate` while SciForge is on; commands
+  `SciForge_Select*`; the SELECT ribbon menu, with `item(toggle=...)` entries whose tick
+  flips on its own). FreeCAD's own long-press Clarify Selection is off while SciForge is
+  on (`theme.VIEWER_SETTINGS`). Five scenarios, 172 checks: `selection_box`,
+  `selection_dialogs`, `selection_filters`, `selection_other`, `selection_sketch`.
+- Facts: FreeCAD selects on the left button's **release**, so a box only swallows the
+  release and the press still reaches handles; a `SoRayPickAction` made from Python finds
+  things only right after FreeCAD's own pick and nothing the next time (two afternoons of
+  probes: `getObjectsInfo` for Select Other, the handles' own screen extents
+  (`taskui.BoxCarrier` value boxes, `handle_pixels`) to tell a handle press from a box);
+  FreeCAD's 1 / 2 / 3 view keys take a key as a shortcut before the view sees it (a
+  ShortcutOverride on the view hands them to the selection modes); a dialog may rebuild
+  its arrow while a drag runs, so "is a Coin dragger grabbing" at the first move is not a
+  dependable test (`extrude_presspull_qa` P3 turned into a box until the press-time test);
+  with Select Through on, a crossing box inside the top face also takes the bottom face
+  behind it (its outline contains the box), so Select Through starts off.
+- Two more traps, both fixed: Qt hands a mouse event Quarter ignored on to the viewer
+  widget, where the same filter saw it again (the filter acts on the drawing area's events
+  only); under xvfb X sends a stray move with no button while the left button is held
+  (a move without the button no longer ends a box while `QApplication.mouseButtons()`
+  says it is down; `selection_box` F failed one run in three before).
+- Regression runs on the final tree, all green: `extrude_presspull_qa`, `fillet_qa_more`,
+  `marking_menu_command`, `orbit_feel`, `viewer_settings_restart`, `bodies_delete`,
+  `extrude_feel`, `extrude_presspull_qa3`, `handles_on_top`, `primitives_qa_keys`,
+  `sketch_end_line`, and `--only base` (unit, golden, smoke, journey).
+
 ### 2026-10-12: Sketch inference feasibility + prototype (branch `worktree-agent-a27127a70299bdc90`)
 - Question (plan C1): can Fusion-like inference be done in Python on FreeCAD's own sketch
   tools? **Yes.** Probes in real FreeCAD 1.1.4: a filter that replaces a mouse event by a

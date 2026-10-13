@@ -104,9 +104,10 @@ Route: a **SciForge "inference layer" in Python** on top of FreeCAD's tools:
 
 ## Next: the rest, in order (for multi-part robotics and 3D printing)
 
-1. **Selection like Fusion** [medium]: drag left-to-right selects what is fully inside,
-   right-to-left what it touches; click and hold for "Select Other" (FreeCAD's Clarify
-   Selection under it); selection filters.
+1. **Selection like Fusion** [medium] — done 2026-10-13 (`parity/selection.md`): window /
+   crossing / freeform / paint boxes, Select Other on a long press, selection filters and
+   priorities, Select Through, Shift / Ctrl / Esc. Left: the guesses listed in the parity
+   doc (box colours, Select Through's default), components and Component Drag.
 2. **Components** [large]: many components in one design, one active component that gets
    new work, New Component, the browser's component tree. Done 2026-10-13 (branch
    `sf/components`, `parity/components.md`): the model (`App::Part` = component, the root

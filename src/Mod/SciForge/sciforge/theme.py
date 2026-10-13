@@ -171,6 +171,9 @@ VIEWER_SETTINGS = [
     (_VIEW_PARAMS, "Bool", "ShowRotationCenter", False),
     (_VIEW_PARAMS, "Bool", "ZoomAtCursor", True),
     (_VIEW_PARAMS, "Bool", "ShowNaviCube", False),
+    # FreeCAD's own long-press "Clarify Selection" menu is off: SciForge shows Fusion's
+    # Select Other list on a long press instead (selection_ui.py).
+    (_VIEW_PARAMS, "Bool", "EnableLongPressClarifySelection", False),
     (_NAVICUBE_PARAMS, "Unsigned", "BaseColor", (0xF0F0F0 << 8) | 0xE6),
     (_NAVICUBE_PARAMS, "Unsigned", "EmphaseColor", _rgba("#4a4f57")),
     (_NAVICUBE_PARAMS, "Unsigned", "HiliteColor", _rgba("#6fb7f0")),
