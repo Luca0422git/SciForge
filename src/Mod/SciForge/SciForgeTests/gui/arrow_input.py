@@ -6,7 +6,9 @@ harness.drag() sends every mouse move at once inside one step, so a check after 
 sees the end of the drag. HeldDrag moves the mouse like a hand does: the button goes down
 on the arrow, the mouse moves on a little every few milliseconds while the program keeps
 running between the moves, and a look is taken after each move (what the dialog, the
-value box and the part show while the button is still down). Not a scenario itself.
+value box and the part show while the button is still down). Like a real mouse, the
+press goes to whatever is on top at that pixel (a value box over the arrow's head takes
+it, and then the arrow is not dragged). Not a scenario itself.
 """
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -35,6 +37,27 @@ def head_point(dragger, reach=0.9):
     return dragger.origin + dragger.direction * (distance + side * reach * dragger.size)
 
 
+def arrow_point(dragger, reach):
+    """A 3D point on the arrow, `reach` arrow sizes from its middle along its direction (the
+    bar ends at 1, the cone of the head runs from 1 to 1.5; negative: the other head)."""
+    return dragger.origin + dragger.direction * (dragger.distance() + reach * dragger.size)
+
+
+def on_top(pos):
+    """The widget a click at widget pixel `pos` of the 3D view reaches (QApplication.widgetAt,
+    as the window system decides), the 3D view itself when nothing covers it there."""
+    gl = h.gl_widget()
+    top = QtWidgets.QApplication.widgetAt(gl.mapToGlobal(pos))
+    return top if top is not None else gl
+
+
+def top_name(pos):
+    widget = on_top(pos)
+    if widget is h.gl_widget():
+        return "3D view"
+    return widget.objectName() or widget.metaObject().className()
+
+
 class HeldDrag:
     """Press on `start` (widget pixel), move to `end` in `moves` steps `every_ms` apart with
     the left button held, call sample(index) after each move, keep the button down for
@@ -47,17 +70,31 @@ class HeldDrag:
         self.done = False
         self.index = 0
         self.error = None
+        self.widget = None  # the widget the press went to
+        self.pressed_on = None  # its name ("3D view" when nothing covered the arrow)
 
     @property
     def total_ms(self):
         return self.moves * self.every_ms + self.hold_ms + 200
 
     def run(self):
-        widget = h.gl_widget()
         h.move(self.start)
-        QtTest.QTest.mousePress(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, self.start)
+        # The press goes to the widget on top there, and that widget keeps the mouse until
+        # the release (Qt's implicit grab), as with a real mouse.
+        self.widget = on_top(self.start)
+        self.pressed_on = top_name(self.start)
+        QtTest.QTest.mousePress(
+            self.widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, self._local(self.start)
+        )
         QtWidgets.QApplication.processEvents()
         QtCore.QTimer.singleShot(self.every_ms, self._next)
+
+    def _local(self, pos):
+        """A pixel of the 3D view in the coordinates of the widget that got the press."""
+        gl = h.gl_widget()
+        if self.widget is gl:
+            return QtCore.QPoint(int(pos.x()), int(pos.y()))
+        return self.widget.mapFromGlobal(gl.mapToGlobal(QtCore.QPoint(int(pos.x()), int(pos.y()))))
 
     def _pos(self, i):
         t = float(i) / self.moves
@@ -69,12 +106,13 @@ class HeldDrag:
     def _next(self):
         try:
             self.index += 1
-            widget = h.gl_widget()
+            widget = self.widget
             pos = self._pos(self.index)
+            local = QtCore.QPointF(self._local(pos))
             event = QtGui.QMouseEvent(
                 QtCore.QEvent.MouseMove,
-                pos,
-                QtCore.QPointF(widget.mapToGlobal(pos.toPoint())),
+                local,
+                QtCore.QPointF(widget.mapToGlobal(local.toPoint())),
                 QtCore.Qt.NoButton,
                 QtCore.Qt.LeftButton,
                 QtCore.Qt.NoModifier,
@@ -94,9 +132,8 @@ class HeldDrag:
         try:
             if self.sample:
                 self.sample(-1)  # held still, button still down
-            widget = h.gl_widget()
             QtTest.QTest.mouseRelease(
-                widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, self.end
+                self.widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, self._local(self.end)
             )
             QtWidgets.QApplication.processEvents()
         except Exception as exc:
