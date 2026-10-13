@@ -131,6 +131,10 @@ class Watch:
         try:
             if bodies.kind(obj) in ("Combine", "SplitBody", "MoveCopy") or bodies.is_body(obj):
                 self._later(obj.Document, orphans=True)
+            elif _leads_followers(obj):
+                # A multi-body extrude deleted by FreeCAD's own Delete: its hidden steps in
+                # the other bodies go a moment later (SciForge's Delete takes them at once).
+                self._later(obj.Document, orphans=True)
         except Exception:
             pass
 
@@ -166,6 +170,17 @@ class Watch:
             sync(doc)
         except Exception as exc:
             warn("body tools: %s" % exc)
+
+
+def _leads_followers(obj):
+    try:
+        from . import extrude_bodies
+
+        if getattr(obj.Document, "Transacting", False):
+            return False  # an undo / redo takes the followers along itself
+        return bool(extrude_bodies.followers_of(obj))
+    except Exception:
+        return False
 
 
 def freeze_for(obj):

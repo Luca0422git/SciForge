@@ -166,6 +166,8 @@ class Builder:
             options["extent_object2"] = self._extrude_ref(step, step["to2"])
         if "start_from" in step:
             options["start_object"] = self._extrude_ref(step, step["start_from"])
+        if "bodies" in step:  # the dialog's "Bodies to Cut" row (golden/extrude_bodies_ops.py)
+            options["bodies"] = self._extrude_bodies(step)
         if "face" in step:  # Fusion: pick a flat face of the part as the profile
             tip = self.body.Tip
             names = selectors.select(tip.Shape, step["face"], "faces")
@@ -634,3 +636,4 @@ from . import blend_ops  # noqa: E402,F401  (registers op_blend_insert, op_blend
 from . import inspect_ops  # noqa: E402,F401  (registers op_construct*, op_*_expect)
 from . import primitive_ops  # noqa: E402,F401  (registers Box/Cylinder/Sphere/Torus/Coil/Pipe)
 from . import sweep_loft_ops  # noqa: E402,F401  (registers the sweep / loft / rib / web steps)
+from . import extrude_bodies_ops  # noqa: E402,F401  (extrudes through several bodies)

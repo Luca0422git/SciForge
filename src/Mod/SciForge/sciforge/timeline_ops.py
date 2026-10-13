@@ -511,6 +511,9 @@ def snapshot(doc, deps=True):
         # A suppressed step is off, not broken: FreeCAD's complaints about it (its face
         # went with what was suppressed) are not shown, like Fusion.
         kind, reason = ("", "") if off else problem(obj)
+        if not off and not kind:
+            # A multi-body extrude is one step: a problem in another body shows on it.
+            kind, reason = _follower_problem(obj)
         features.append(
             {
                 "name": obj.Name,
@@ -529,9 +532,102 @@ def snapshot(doc, deps=True):
         )
     tips = {}
     for body in bodies(doc):
-        tip = getattr(body, "Tip", None)
+        tip = _step_at_or_before(body, getattr(body, "Tip", None))
         tips[body.Name] = tip.Name if tip is not None else None
     return features, tips
+
+
+# -- multi-body steps (an extrude that acts on several bodies) ----------------------------
+# Such an extrude is one timeline step (the "lead") plus hidden follower steps in the other
+# bodies (extrude.py, SciForgeRole ExtrudeFollower, linked to the lead by "Source"). A
+# follower is never a step of its own, but it can be a body's Tip.
+FOLLOWER_ROLES = ("ExtrudeFollower",)
+
+
+def is_follower(obj):
+    return getattr(obj, ROLE, "") in FOLLOWER_ROLES
+
+
+def followers(doc, names):
+    """Names of the follower steps of the steps ``names`` (they go with them)."""
+    names = set(names)
+    found = []
+    for obj in doc.Objects:
+        if not is_follower(obj):
+            continue
+        lead = getattr(obj, "Source", None)
+        if lead is not None and lead.Name in names:
+            found.append(obj.Name)
+    return found
+
+
+def _follower_problem(obj):
+    try:
+        from . import extrude, extrude_bodies
+
+        if extrude.is_extrude(obj):
+            return extrude_bodies.follower_problem(obj)
+    except Exception:
+        pass
+    return "", ""
+
+
+def _step_at_or_before(body, tip):
+    """The body's Tip as the timeline knows it: a follower step is no step of its own, so the
+    last real solid step at or before it (timeline_core reads an unknown Tip as "no
+    information" and would show the body's rolled-back steps as done)."""
+    if tip is None or not is_helper(tip):
+        return tip
+    group = list(body.Group)
+    try:
+        at = group.index(tip)
+    except ValueError:
+        return tip
+    for obj in reversed(group[:at]):
+        if _is_solid_step(obj) and _is_step(obj):
+            return obj
+    return None
+
+
+def raise_follower_tips(doc, tips):
+    """``tips`` ({body: tip name or None}) with every follower of an active lead included:
+    the marker after a multi-body extrude must keep its cuts in the other bodies too, but
+    timeline_core names only real steps as Tips (a follower's body would roll back to the
+    step before the follower). Followers of a rolled-back or suppressed lead stay out."""
+    tips = dict(tips)
+
+    def tip_of(body):
+        if body.Name in tips:
+            return doc.getObject(tips[body.Name]) if tips[body.Name] else None
+        return getattr(body, "Tip", None)
+
+    def index(body, obj):
+        try:
+            return list(body.Group).index(obj)
+        except ValueError:
+            return -1
+
+    for _round in range(10):  # chains (a follower body that leads another extrude)
+        changed = False
+        for obj in doc.Objects:
+            if not is_follower(obj) or is_suppressed(obj):
+                continue
+            lead = getattr(obj, "Source", None)
+            if lead is None or is_suppressed(lead):
+                continue
+            lead_body, own = body_of(lead), body_of(obj)
+            if lead_body is None or own is None:
+                continue
+            lead_tip = tip_of(lead_body)
+            if lead_tip is None or index(lead_body, lead) > index(lead_body, lead_tip):
+                continue  # the lead is rolled back
+            current = tip_of(own)
+            if current is None or index(own, current) < index(own, obj):
+                tips[own.Name] = obj.Name
+                changed = True
+        if not changed:
+            break
+    return tips
 
 
 def timeline(doc, deps=True):
@@ -569,6 +665,7 @@ def _transaction(doc, title):
 
 
 def _set_tips(doc, tips):
+    tips = raise_follower_tips(doc, tips)
     for body_name, tip_name in tips.items():
         body = doc.getObject(body_name)
         if body is None:
@@ -830,6 +927,7 @@ def suppress(doc, names):
     _transaction(doc, "Suppress %s" % title)
     try:
         group = set(names) | dependents(doc, names)
+        group |= set(followers(doc, group))  # a multi-body extrude goes off in every body
         with quiet():
             for n in group:
                 _set_suppressed(doc.getObject(n), True)
@@ -841,6 +939,7 @@ def suppress(doc, names):
             if not newly:
                 break
             more = newly | dependents(doc, newly)
+            more |= set(followers(doc, more))
             with quiet():
                 for n in more - group:
                     _set_suppressed(doc.getObject(n), True)
@@ -926,10 +1025,12 @@ def delete(doc, names):
     names = [n for n in names if doc.getObject(n) is not None]
     if not names:
         return False
+    title = ", ".join(_label(doc, n) for n in names[:3])
+    # A multi-body extrude's hidden steps in the other bodies go with it.
+    names = names + [n for n in followers(doc, names) if n not in names]
     gone = set(names)
     tl = timeline(doc)
     at_end = tl.at_end
-    title = ", ".join(_label(doc, n) for n in names[:3])
     remember_references(doc)  # the steps after the gap keep their edges (settle)
     _transaction(doc, "Delete %s" % title)
     try:
@@ -996,8 +1097,19 @@ def delete_bodies(doc, names):
     for body in targets:
         gone.add(body.Name)
         gone.update(o.Name for o in body.Group)
+    # Steps an extrude in a deleted body drove in other bodies go with it.
+    stray = [n for n in followers(doc, gone) if n not in gone]
     _transaction(doc, "Delete %s" % ", ".join(b.Label for b in targets[:3]))
     try:
+        for name in stray:
+            obj = doc.getObject(name)
+            body = body_of(obj) if obj is not None else None
+            if body is not None and obj in body.Group:
+                body.removeObject(obj)
+            if obj is not None:
+                doc.removeObject(name)
+            if body is not None:
+                _show_only_tip(body, body.Tip)
         for obj, _body in steps(doc):
             if obj.Name in gone or not _attached_to(obj, gone):
                 continue
@@ -1094,6 +1206,12 @@ def move(doc, name, slot):
         if p.reason:
             raise TimelineError(p.reason)
         return False
+    crossed = _crosses_followers(doc, tl, p)
+    if crossed is not None:
+        raise TimelineError(
+            "%s changes several bodies; it cannot move past steps of those bodies yet."
+            % crossed
+        )
     geometry = _rebase_geometry(doc, tl, p)
     broken_before = _errors(doc)
     moving = tl.find(name)
@@ -1135,6 +1253,31 @@ def move(doc, name, slot):
         raise
     doc.commitTransaction()
     return True
+
+
+def _crosses_followers(doc, tl, p):
+    """The title of a multi-body extrude whose order against the steps of its other bodies
+    the move would change, or None. Its hidden follower steps sit at a fixed place in those
+    bodies' histories, so such a move would leave the timeline and the bodies disagreeing
+    (version 1: refused, like Fusion refuses moves that break a step)."""
+    old, new = list(tl.names()), list(p.order)
+    for obj in doc.Objects:
+        if not is_follower(obj):
+            continue
+        lead = getattr(obj, "Source", None)
+        own = body_of(obj)
+        if lead is None or own is None or lead.Name not in old or lead.Name not in new:
+            continue
+        others = [i.name for i in tl.items if i.body == own.Name and i.name != lead.Name]
+
+        def before(order):
+            at = order.index(lead.Name)
+            return {n for n in others if n in order and order.index(n) < at}
+
+        if before(old) != before(new):
+            item = tl.find(lead.Name)
+            return item.display if item is not None else lead.Label
+    return None
 
 
 REBASE_PROPS = ("Base", "Faces")  # fillet/chamfer/draft/shell edges; Press Pull faces

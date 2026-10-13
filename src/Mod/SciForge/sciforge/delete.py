@@ -275,9 +275,11 @@ def _relink_to_base(doc, step, gone):
 def delete_steps(doc, steps):
     """Delete steps (no transaction of its own). Later steps of the body are re-linked
     around each one by PartDesign; the body's Tip moves back if it was deleted."""
-    from . import move, split
+    from . import extrude_bodies, move, split
 
     steps = [s for s in steps if bodies.alive(s)]
+    for step in list(steps):  # a multi-body extrude's steps in the other bodies go with it
+        steps += [f for f in extrude_bodies.followers_of(step) if f not in steps]
     gone = {s.Name for s in steps}
     extra = extra_steps(steps)
     for body in extra:
@@ -320,8 +322,14 @@ def delete_bodies(doc, targets):
                     piece.Split = None  # the pieces keep their shape (the source is gone)
     _keep_attached(doc, gone)
     _freeze_users(doc, gone)
-    from . import move
+    from . import extrude_bodies, move
 
+    # An extrude in a deleted body no longer changes the other bodies.
+    for body in targets:
+        for step in list(body.Group):
+            for follower in extrude_bodies.followers_of(step):
+                if follower.Name not in gone:
+                    extrude_bodies.remove_follower(follower)
     for body in targets:
         base = body.BaseFeature
         bodies.remove_body(body)
@@ -415,10 +423,11 @@ def run(doc, found, title="Delete"):
 
 # -- orphans (a step deleted from the timeline or the browser) -----------------------------------------
 def orphans(doc):
-    """Bodies left behind by a deleted Split Body or copy step."""
-    from . import move, split
+    """Bodies left behind by a deleted Split Body or copy step, and the hidden steps a deleted
+    multi-body extrude drove in other bodies ((None, step))."""
+    from . import extrude_bodies, move, split
 
-    found = []
+    found = [(None, step) for step in extrude_bodies.orphan_followers(doc)]
     for piece in split.orphan_pieces(doc):
         body = split.piece_body(piece)
         if body is not None:
@@ -432,10 +441,15 @@ def orphans(doc):
 
 
 def remove_orphans(doc):
+    from . import extrude_bodies
+
     for body, piece in orphans(doc):
         if body is not None:
             bodies.remove_body(body)
         if piece is not None and bodies.alive(piece):
+            if extrude_bodies.is_follower(piece):
+                bodies.remove_step(piece)  # out of its body's history, the Tip shown again
+                continue
             try:
                 doc.removeObject(piece.Name)
             except Exception:

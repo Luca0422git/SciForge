@@ -1285,3 +1285,47 @@ def validate(model):  # noqa: F811  (adds the body_material checks)
     _validate_before_body_material(model)
     _check_body_material(model)
     return model
+
+
+# -- Extrude through several bodies (golden/extrude_bodies_ops.py; sciforge/extrude.py) ----------
+STEP_KEYS["extrude"][1].add("bodies")
+STEP_KEYS["use_body"] = ({"step"}, {"comment"})
+STEP_KEYS["expect_bodies"] = (set(), {"bodies", "used_up", "followers", "steps", "comment"})
+STEP_KEYS["reopen_check"] = ({"bodies"}, {"comment"})
+_BODY_EXPECT_KEYS = {"volume", "solids", "valid"}
+
+
+def _check_extrude_bodies(model):
+    seen = {}
+    for i, step in enumerate(model.get("steps", [])):
+        here = "%s.steps[%d] (%s)" % (model.get("id", "?"), i, step.get("op"))
+        op = step.get("op")
+        if op == "extrude" and "bodies" in step:
+            spec = step["bodies"]
+            if spec != "auto":
+                if not isinstance(spec, list) or any(s not in seen for s in spec):
+                    _fail(here, "'bodies' is \"auto\" or a list of earlier step ids")
+        if op == "use_body" and step["step"] not in seen:
+            _fail(here, "'step' names unknown step %r" % step["step"])
+        if op in ("expect_bodies", "reopen_check"):
+            for step_id, want in step.get("bodies", {}).items():
+                if step_id not in seen:
+                    _fail(here, "'bodies' names unknown step %r" % step_id)
+                if not isinstance(want, dict) or not want or set(want) - _BODY_EXPECT_KEYS:
+                    _fail(here, "each body expects some of %s" % sorted(_BODY_EXPECT_KEYS))
+            if any(s not in seen for s in step.get("used_up", [])):
+                _fail(here, "'used_up' names unknown steps")
+            for key in ("followers", "steps"):
+                if any(s not in seen for s in step.get(key, {})):
+                    _fail(here, "'%s' names unknown steps" % key)
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_extrude_bodies = validate
+
+
+def validate(model):  # noqa: F811  (adds the multi-body extrude checks)
+    _validate_before_extrude_bodies(model)
+    _check_extrude_bodies(model)
+    return model

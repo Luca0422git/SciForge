@@ -1,0 +1,123 @@
+{
+  "id": "extrude_multi_cut_excluded",
+  "title": "Cut across both bodies with Body2 taken out of the bodies to cut",
+  "tags": [
+    "extrude",
+    "bodies",
+    "multi_body"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            40,
+            15
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "distance": 5,
+      "flip": true,
+      "operation": "cut",
+      "bodies": [
+        "e1"
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 3500,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 4000,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "x1": 0
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 7500,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Only Body1 is cut (4000 - 500); Body2 stays 4000."
+  }
+}
