@@ -321,8 +321,9 @@ def step_cut_click():
 
 def step_cut_ok():
     panel = state["panel"]
-    check("Clicking inside the circle picks it", panel.target is not None)
-    if panel.target is None:
+    # The dialog starts at 0 (Fusion): the circle is picked, the distance is typed.
+    check("Clicking inside the circle picks it", len(panel.profiles) == 1, panel.profiles)
+    if not panel.profiles:
         return
     panel.distance.widget.setProperty("rawValue", -5.0)
     QtWidgets.QApplication.processEvents()
@@ -349,8 +350,10 @@ def step_face_click():
 
 def step_face_extrude_ok():
     panel = state["panel"]
-    check("E then clicking a side face starts the extrude", panel.target is not None)
-    if panel.target is None:
+    check(
+        "E then clicking a side face starts the extrude", len(panel.profiles) == 1, panel.profiles
+    )
+    if not panel.profiles:
         return
     panel.distance.widget.setProperty("rawValue", 3.0)
     QtWidgets.QApplication.processEvents()
