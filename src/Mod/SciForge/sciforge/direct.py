@@ -452,13 +452,12 @@ def freeze(doc, targets, base_id=None, fresh=None):
         gone.update(names)
     if not plans:
         return []
+    # A body used up by a step that goes (a Combine's tool, a body with its own Remove) would
+    # come back once that step is baked away: it goes too (it is no longer in the design).
     users = bodies.consumers(doc)
-    planned = {p[0].Name for p in plans}
-    doomed = [
-        doc.getObject(name)
-        for name, step in users.items()
-        if step.Name in gone and name not in planned
-    ]
+    doomed_names = {name for name, step in users.items() if step.Name in gone}
+    plans = [p for p in plans if p[0].Name not in doomed_names]
+    doomed = [doc.getObject(name) for name in sorted(doomed_names)]
     replaced = []  # bases of bodies that were other features (copies, split pieces...)
     made = []
     for body, tip, shape, names in plans:

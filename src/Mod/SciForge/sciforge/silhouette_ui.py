@@ -168,7 +168,7 @@ class SilhouettePanel(BodyPanel):
 
     def remove_handles(self):
         if self.squares is not None:
-            self.squares.hide()
+            self.squares.close()
 
     def before_close(self, ok):
         self._ok = ok

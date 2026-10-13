@@ -10,6 +10,7 @@ import time
 from . import bodies, direct, warn
 
 OVERLAY_CLICK_S = 0.8
+SAME_PRESS_S = 0.1  # a mouse press this close to the square's click is that click
 
 
 def body_of_pick(panel, obj):
@@ -63,13 +64,28 @@ def face_on_base(obj, short, step):
 
 class PlaneSquares:
     """The three big origin squares (like Create Sketch) while a box waits for a plane; a
-    click on one calls ``take((plane, ""))`` a moment later."""
+    click on one calls ``take((plane, ""))`` a moment later. The click on a square is also
+    seen by FreeCAD as a click on the part behind it: took_click() tells the dialog to let
+    that one pick go (only that one: a new mouse press is a new pick, however quick)."""
 
     def __init__(self, panel, take):
         self.panel = panel
         self.take = take
         self.picker = None
         self.clicked_at = 0.0
+        self.pressed_at = 0.0
+        self._mouse_cb = None
+        try:
+            self._mouse_cb = panel.view.addEventCallback("SoMouseButtonEvent", self._mouse)
+        except Exception:
+            self._mouse_cb = None  # took_click() then goes by the time alone
+
+    def _mouse(self, info):
+        try:
+            if info.get("State") == "DOWN":
+                self.pressed_at = time.time()
+        except Exception:
+            pass
 
     def show(self, body):
         if self.picker is not None or body is None:
@@ -89,6 +105,16 @@ class PlaneSquares:
                 pass
             self.picker = None
 
+    def close(self):
+        """The dialog closes: the squares go and the mouse is no longer watched."""
+        self.hide()
+        if self._mouse_cb is not None:
+            try:
+                self.panel.view.removeEventCallback("SoMouseButtonEvent", self._mouse_cb)
+            except Exception:
+                pass
+            self._mouse_cb = None
+
     def _clicked(self, plane):
         self.clicked_at = time.time()
         from .compat import QtCore
@@ -96,8 +122,10 @@ class PlaneSquares:
         QtCore.QTimer.singleShot(0, lambda: self.take((plane, "")))
 
     def took_click(self):
-        """True right after a square was clicked (that click is not a pick on the part)."""
-        return time.time() - self.clicked_at < OVERLAY_CLICK_S
+        """True for the pick made by the click on a square (not for a later click)."""
+        if time.time() - self.clicked_at >= OVERLAY_CLICK_S:
+            return False
+        return self.pressed_at - self.clicked_at < SAME_PRESS_S
 
 
 def ref_text(ref):

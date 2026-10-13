@@ -135,6 +135,7 @@ class RemovePanel(BodyPanel):
         self.picked_objects = []
         self.steps = []
         self._hidden = []  # bodies the preview hid (shown again on Cancel)
+        self._shown_back = []  # bodies the edited step removed, shown by the preview
         if feature is not None:
             self.steps = remove.steps_of(feature.RemoveId, doc) or [feature]
             self.picked_objects = [bodies.body_of(s) for s in self.steps]
@@ -171,6 +172,7 @@ class RemovePanel(BodyPanel):
         self.changed()
 
     def apply(self):
+        before = [bodies.body_of(s) for s in self.steps if bodies.alive(s)]
         for step in self.steps:
             if bodies.alive(step):
                 bodies.remove_step(step)
@@ -181,6 +183,13 @@ class RemovePanel(BodyPanel):
                 bodies.set_shown(body, True)
                 bodies.show_tip(body)
                 self._hidden.remove(body)
+        for body in before:  # removed by the step being edited, not any more: shown
+            if body is not None and body not in found and bodies.alive(body):
+                if not bodies.is_shown(body):
+                    bodies.set_shown(body, True)
+                    bodies.show_tip(body)
+                    if body not in self._shown_back:
+                        self._shown_back.append(body)
         if not found:
             raise remove.RemoveError("Click the bodies (or components in the browser) to remove.")
         remove_id = getattr(self.feature_, "RemoveId", None) if self.feature_ else None
@@ -207,6 +216,9 @@ class RemovePanel(BodyPanel):
             if bodies.alive(body):
                 bodies.set_shown(body, True)
                 bodies.show_tip(body)
+        for body in self._shown_back:  # Cancel: the edited step removes them again
+            if bodies.alive(body) and remove.removed(body) is not None:
+                bodies.set_shown(body, False)
 
     def after_close(self, ok):
         super().after_close(ok)

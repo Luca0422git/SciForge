@@ -33,6 +33,8 @@ TYPE = "PartDesign::FeaturePython"
 SCIFORGE_TYPE = "SplitFace"
 PLANE_TYPES = ("App::Plane", "PartDesign::Plane", "Part::DatumPlane")
 LINE_TYPES = ("App::Line", "PartDesign::Line", "Part::DatumLine")
+# Round faces whose axis is a direction (a ball's axis is arbitrary: no direction).
+ROUND_SURFACES = ("Cylinder", "Cone", "Toroid", "SurfaceOfRevolution")
 SPLIT_TYPES = ("surface", "vector", "closest")
 SPLIT_TYPE_LABELS = {
     "surface": "Split with Surface",
@@ -82,6 +84,14 @@ def _global(obj, element):
     return out
 
 
+def _design_shape(obj):
+    """The solid of a body (or a plain solid) in design coordinates: a body's own Shape
+    leaves out the placement of the component it is in."""
+    if bodies.is_body(obj):
+        return _global(obj, obj.Shape)
+    return bodies.global_shape(obj)
+
+
 def _sketch_normal(sketch):
     return sketch.getGlobalPlacement().Rotation.multVec(App.Vector(0, 0, 1))
 
@@ -100,8 +110,7 @@ def tool_curves(tool):
     if sub.startswith("Face"):
         return [_global(obj, e) for e in obj.Shape.getElement(sub).Edges]
     if bodies.is_body(obj):
-        shape = bodies.global_shape(obj)
-        return list(shape.Edges)
+        return list(_design_shape(obj).Edges)
     raise SplitFaceError(
         "Along Vector and Closest Point project curves: pick a sketch, a sketch curve, an "
         "edge or a face (its edges)."
@@ -140,7 +149,7 @@ def tool_surface(tool, extend, around):
             raise SplitFaceError("The sketch has no curves to split with.")
         return Part.makeCompound(swept)
     if bodies.is_body(obj) or (not sub and obj.isDerivedFrom("Part::Feature")):
-        shape = bodies.global_shape(obj)
+        shape = _design_shape(obj)
         if shape.isNull():
             raise SplitFaceError("%s has no faces to split with." % obj.Label)
         return Part.makeCompound(shape.Faces)
@@ -202,8 +211,9 @@ def direction_of(ref):
         if type(surface).__name__ == "Plane":
             u0, u1, v0, v1 = element.ParameterRange
             return element.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
-        if hasattr(surface, "Axis"):
-            return App.Vector(surface.Axis).normalize()
+        if type(surface).__name__ in ROUND_SURFACES:
+            axis = getattr(surface, "Axis", None) or getattr(surface, "Direction", None)
+            return App.Vector(axis).normalize() if axis is not None else None
     return None
 
 
