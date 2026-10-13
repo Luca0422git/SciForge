@@ -541,6 +541,8 @@ class PressPullPanel(Panel):
             if not picks:
                 return
             Gui.Selection.clearSelection()
+            if taskui.box_click_taken():
+                return  # the click that left the arrow's value box: not a pick
             if self.body is None:
                 self.body, self.tip = _body_and_tip()
             if self.picker is not None and self.picker.clicked_region_recently():
@@ -761,11 +763,12 @@ class PressPullCommand:
                 return
             doc = App.ActiveDocument
             profiles = extrude_ui.sketch_areas_profiles(sketch, picked)
-            if profiles:
-                # Opened right after this command returns, in an undo step of its own: FreeCAD
-                # keeps the step of leaving the sketch open until then, and a dialog opened
-                # inside it would undo that too on Cancel (the sketch hidden). As E does.
-                QtCore.QTimer.singleShot(0, lambda: _extrude_areas(doc, sketch, profiles))
+            if sketch is not None:
+                # Q left a sketch: the dialog opens right after this command returns, in an
+                # undo step of its own. FreeCAD keeps the step of leaving the sketch open
+                # until then, and a dialog opened inside it would undo that too on Cancel
+                # (the sketch hidden) and share one Undo with it after OK. As E does.
+                QtCore.QTimer.singleShot(0, lambda: _open_after_sketch(doc, sketch, profiles))
                 return
             Gui.Control.showDialog(PressPullPanel(doc))
             log("press pull started")
@@ -773,7 +776,9 @@ class PressPullCommand:
             warn("Press Pull failed to start: %s" % exc)
 
 
-def _extrude_areas(doc, sketch, profiles):
+def _open_after_sketch(doc, sketch, profiles):
+    """Q pressed in a sketch: Extrude of the areas picked in it (Press Pull on sketch
+    profiles is an Extrude), else Press Pull."""
     try:
         from . import extrude_ui
 
@@ -781,8 +786,12 @@ def _extrude_areas(doc, sketch, profiles):
             return
         if Gui.Control.activeDialog() and not commands.finish_open_dialog():
             return
-        Gui.Control.showDialog(extrude_ui.ExtrudePanel(doc, profiles=profiles, sketch=sketch))
-        log("press pull on %d picked sketch area(s): extrude started" % len(profiles))
+        if profiles:
+            Gui.Control.showDialog(extrude_ui.ExtrudePanel(doc, profiles=profiles, sketch=sketch))
+            log("press pull on %d picked sketch area(s): extrude started" % len(profiles))
+        else:
+            Gui.Control.showDialog(PressPullPanel(doc))
+            log("press pull started")
     except Exception as exc:
         warn("Press Pull failed to start: %s" % exc)
 

@@ -53,6 +53,18 @@ class Spot(unittest.TestCase):
         self.check_clear((600, 400), (560, 440), (640, 360), 12)
         self.check_clear((600, 400), (640, 440), (560, 360), 12)
 
+    def test_two_arrows_on_one_spot_keep_their_boxes_apart(self):
+        # At distance 0 the distance arrow sits on the start offset's arrow (and Two Sides'
+        # side two on side one): the second box starts on the other side (review finding).
+        for tail, tip in (((700, 460), (700, 340)), ((620, 400), (780, 400))):
+            first = core.spot((700, 400), tail, tip, 10, BOX, VIEW)
+            second = core.spot((700, 400), tail, tip, 10, BOX, VIEW, other_side=True)
+            gap = core._rect_point(rect(first), (second[0], second[1]))
+            overlap_x = min(first[0] + BOX[0], second[0] + BOX[0]) - max(first[0], second[0])
+            overlap_y = min(first[1] + BOX[1], second[1] + BOX[1]) - max(first[1], second[1])
+            self.assertFalse(overlap_x > 0 and overlap_y > 0, (first, second, gap))
+            self.assertGreaterEqual(core.clearance(tail, tip, rect(second)), 10)
+
     def test_arrow_pointing_at_the_viewer(self):
         # Seen end on, the arrow is a disc around its middle: the box goes right of it.
         corner = self.check_clear((700, 400), (700, 400), (700, 400), 15)

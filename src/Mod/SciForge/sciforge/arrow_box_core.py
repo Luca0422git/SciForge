@@ -69,13 +69,16 @@ def clearance(tail, tip, rect):
     )
 
 
-def spot(anchor, tail, tip, radius, box, view, gap=GAP):
+def spot(anchor, tail, tip, radius, box, view, gap=GAP, other_side=False):
     """Top-left corner (x, y) of a box of size `box` (w, h) beside an arrow on the screen.
 
     anchor     the arrow's middle (where the extrusion ends), in view pixels
     tail, tip  the arrow's two ends (the tips of its heads)
     radius     how far the heads reach sideways from the arrow's line, in pixels
     view       the size (w, h) of the 3D view the box sits in
+    other_side the box starts on the arrow's other side (left, or below a level arrow):
+               for a second arrow that can sit on the first one (both at 0), so the two
+               boxes do not cover each other
     The box keeps `gap` pixels plus `radius` away from the arrow's line, never covers a
     head, and stays inside the view (only when nothing fits does it go where it covers the
     arrow least)."""
@@ -92,6 +95,8 @@ def spot(anchor, tail, tip, radius, box, view, gap=GAP):
         dx, dy = dx / length, dy / length
     # The two sides of the arrow: its right first, or above it when it lies level.
     sides = sorted([(-dy, dx), (dy, -dx)], key=lambda n: -(n[0] - 0.5 * n[1]))
+    if other_side:
+        sides.reverse()
     centres = []
     for nx, ny in sides:
         reach = radius + gap + (abs(nx) * width + abs(ny) * height) / 2.0

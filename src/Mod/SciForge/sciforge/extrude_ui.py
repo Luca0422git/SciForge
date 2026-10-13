@@ -826,6 +826,8 @@ class ExtrudePanel(Panel):
             if not picks:
                 return
             Gui.Selection.clearSelection()
+            if taskui.box_click_taken():
+                return  # the click that left an arrow's value box: not a pick
             recent = self.picker is not None and self.picker.clicked_region_recently()
             for obj, short in picks:
                 self._picked(obj, short, recent)
@@ -988,11 +990,14 @@ class ExtrudePanel(Panel):
     def _profiles_changed(self):
         self._refresh_profiles()
         if not self.profiles:
-            if self.target is not None and not self.editing:
-                extrude.remove(self.target)
-                self.target = None
+            if not self.editing:
+                if self.target is not None:
+                    extrude.remove(self.target)
+                    self.target = None
+                    self.schedule()
+                # The arrows (and their value boxes) go with the last profile, also before
+                # any distance was given (no preview yet at 0).
                 self._remove_draggers()
-                self.schedule()
             self.message.setText("" if not self.editing else "Pick at least one profile.")
             self.error = "Pick at least one profile." if self.editing else ""
             self.waiting = ""
@@ -1704,6 +1709,9 @@ class ExtrudePanel(Panel):
                 lambda: field.widget.text(),
                 lambda text: self._box_typed(key, text),
                 cancel=self.escape.press,
+                # At 0 the distance arrow sits on the offset arrow, and side two's on side
+                # one's: their boxes go to the other side, so neither covers the other.
+                other_side=key in ("offset", "distance2"),
             )
         except Exception as exc:
             warn("value box unavailable: %s" % exc)
@@ -1828,7 +1836,13 @@ class ExtrudePanel(Panel):
             self.dirty = False
             self._apply()
         if not self.editing and self._zero_sides():
-            # Fusion makes nothing of a 0 distance: the dialog stays open and says why.
+            # Fusion makes nothing of a 0 distance: the dialog stays open and says why. A
+            # preview the 0 just took away goes from the view too (its red cut included).
+            try:
+                preview.recompute(self.doc)
+                self._update_cut_preview()
+            except Exception as exc:
+                warn("extrude preview: %s" % exc)
             self.info.setText(ZERO_HINT)
             self.message.setText("⚠ " + self._zero_message())
             return False

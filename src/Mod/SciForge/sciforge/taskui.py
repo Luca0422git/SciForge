@@ -226,6 +226,16 @@ def view_widget():
     return None
 
 
+BOX_TAKEN = {"time": 0.0}  # when a click elsewhere last took a value typed in an arrow's box
+
+
+def box_click_taken(seconds=0.5):
+    """True just after a click outside an arrow's value box took what was typed in it. That
+    click only leaves the box (Fusion): the value can move the arrow away from under the
+    mouse, and the click must not count as a pick of what is under it then."""
+    return time.time() - BOX_TAKEN["time"] < seconds
+
+
 def _alive(widget):
     """False once Qt deleted the widget (its 3D view closed with the document)."""
     try:
@@ -245,6 +255,8 @@ class ArrowValueBox(QtWidgets.QLineEdit):
     text():        what to show (the dialog field's text)
     commit(text):  the user typed `text` here and pressed Enter
     cancel():      Esc was pressed in the box (the dialog cancels, like Esc elsewhere)
+    other_side:    the box starts on the arrow's other side (a second arrow that can sit on
+                   the first one: the start offset's, side two's)
     The dialog owns the box (the arrows are rebuilt often; typing must survive that);
     discard() it when the dialog closes."""
 
@@ -254,8 +266,9 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         " selection-background-color: #3fa9f5; selection-color: #ffffff; }"
     )
 
-    def __init__(self, text, commit, parent=None, cancel=None):
+    def __init__(self, text, commit, parent=None, cancel=None, other_side=False):
         super().__init__(parent if parent is not None else view_widget())
+        self.other_side = other_side  # starts on the arrow's other side (arrow_box_core.spot)
         self.setObjectName("SciForgeArrowValue")
         self.setStyleSheet(self.STYLE)
         self.setFocusPolicy(QtCore.Qt.ClickFocus)  # never by Tab, never by itself
@@ -329,7 +342,9 @@ class ArrowValueBox(QtWidgets.QLineEdit):
                 edge = pixel(point + side * (arrow_box_core.HEAD * size))
                 radius = ((edge[0] - ax) ** 2 + (edge[1] - ay) ** 2) ** 0.5
         box = (self.width(), self.height())
-        left, top = arrow_box_core.spot((ax, ay), tail, tip, radius, box, (parent.width(), height))
+        left, top = arrow_box_core.spot(
+            (ax, ay), tail, tip, radius, box, (parent.width(), height), other_side=self.other_side
+        )
         if self.pos() != QtCore.QPoint(left, top):
             self.move(left, top)
         if not self.isVisible():
@@ -398,6 +413,8 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         super().focusOutEvent(event)
         # Clicking elsewhere (OK, the 3D view) keeps what was typed, like the dialog field.
         try:
+            if self.edited and event.reason() == QtCore.Qt.MouseFocusReason:
+                BOX_TAKEN["time"] = time.time()
             self._take()
             self.refresh()
         except Exception as exc:
