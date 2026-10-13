@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The shapes SciForge's own sketch tools add to a sketch, with their constraints, and
 the curve operations of Trim, Extend and Break (FreeCAD and Part, no Qt: the GUI tools
-in sketch_draw_tools.py and sketch_modify_ui.py call these, so do the golden builder
-and headless tests).
+in sketch_draw_tools.py, sketch_modify_tools.py and sketch_constrain_tools.py call
+these, and they run headless too).
 
 Every builder adds its curves and the constraints that keep the shape what it is, and
 returns a dict: "ids" (new geometry indices) and named "anchors" ((geo, pos) of the

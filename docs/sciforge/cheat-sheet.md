@@ -31,7 +31,7 @@ Sketch keys (the SKETCH tab is open):
 | `R` | 2-point rectangle | |
 | `C` | Centre-diameter circle | Type the diameter |
 | `D` | Sketch Dimension | Click a curve (or two), place, type, `Enter`; double-click a dimension to change it |
-| `T` | Trim | |
+| `T` | Trim | Click the piece (it lights up red), or press and drag across several pieces |
 | `O` | Offset | |
 | `X` | Construction on / off | With nothing selected: new curves become construction |
 | `P` | Project | |

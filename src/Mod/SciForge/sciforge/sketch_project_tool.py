@@ -110,7 +110,7 @@ class ProjectToSurface(draw.DrawTool):
         else:
             geo = self._sketch_curve(press_snap)
             if geo is not None:
-                if sketch_project.sketch_edge_name(self.sketch, geo) is None:
+                if self.sketch.getConstruction(geo):
                     self.say(
                         "Project to Surface: a construction curve cannot be projected "
                         "(make it a normal curve first)."
@@ -177,8 +177,16 @@ class ProjectToSurface(draw.DrawTool):
         if not self.curves:
             self.say("Project to Surface: click the curves to project.")
             return
+        try:
+            if "Touched" in self.sketch.State:
+                self.sketch.recompute()  # its shape names the curves (sketch_edge_name)
+        except Exception as exc:
+            warn("Project to Surface: %s" % exc)
         faces = _grouped(self.faces)
         curves = _grouped(self._shape_names(self.curves))
+        if not curves:
+            self.say("Project to Surface: the picked curves are not in the sketch's shape.")
+            return
         direction = None
         if self.kind == sketch_project.TYPES[1]:
             direction = sketch_project.sketch_normal_towards(self.sketch, faces)

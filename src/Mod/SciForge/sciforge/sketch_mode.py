@@ -827,7 +827,7 @@ class SketchSession:
             QtCore.QTimer.singleShot(0, self._close_editor_after_undo)
         if kind in ("undo", "redo") and self.tool is not None:
             tool = self.tool
-            QtCore.QTimer.singleShot(0, lambda: tool.active and tool.undone())
+            QtCore.QTimer.singleShot(0, lambda: _tool_undone(tool))
 
     def _close_editor_after_undo(self):
         """Undo and Redo put the sketch's curves and dimensions back as whole lists, so the
@@ -1101,18 +1101,19 @@ class SketchSession:
             % (len(self.sketch.Geometry) - before)
         )
 
-    def _drop_spline(self):
+    def _drop_spline(self, cancelled=True):
         """Fusion's Esc on a spline being drawn cancels that spline: the undo step that
-        holds its points so far (open_spline_step) is dropped. Also run after Enter / OK:
-        FreeCAD opens a fresh step for the next spline, which would hold whatever the
-        user changes next."""
+        holds its points so far (open_spline_step) is dropped. Also run after Enter / OK
+        (cancelled=False): FreeCAD opens a fresh step for the next spline, which would
+        hold whatever the user changes next."""
         try:
             active = App.getActiveTransaction()
             name = active[0] if isinstance(active, (tuple, list)) else active
             if name == SPLINE_STEP:
                 App.closeActiveTransaction(True)
                 self.sketch.solve()
-                log("spline: the spline being drawn was cancelled")
+                if cancelled:
+                    log("spline: the spline being drawn was cancelled")
         except Exception as exc:
             warn("spline: %s" % exc)
 
@@ -1161,7 +1162,7 @@ class SketchSession:
         except Exception as exc:
             warn("sketch OK: %s" % exc)
         if spline:
-            self._drop_spline()  # the empty step FreeCAD opened for a next spline
+            self._drop_spline(cancelled=False)  # the empty step opened for a next spline
         log("sketch: tool finished")
 
     def escape(self):
@@ -1591,6 +1592,15 @@ _REDRAWS = (
     QtCore.QEvent.MouseButtonRelease,
     QtCore.QEvent.Leave,
 )
+
+
+def _tool_undone(tool):
+    """Undo / redo while SciForge's own tool runs (from a timer)."""
+    try:
+        if tool.active:
+            tool.undone()
+    except Exception as exc:
+        warn("sketch tool after undo: %s" % exc)
 
 
 def _open_marking(pos):

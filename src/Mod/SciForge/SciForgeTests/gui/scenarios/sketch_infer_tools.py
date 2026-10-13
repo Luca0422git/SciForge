@@ -15,9 +15,10 @@ A  Centre point arc: the centre on a vertical guide, the start on a horizontal o
    the end gets no guide (it lies on the circle at the pointer's angle).
 P  Inscribed polygon: the centre level with a hovered point, a corner straight below
    another.
-S  Slot: the first centre on the end of a slanted line, the second at about 87
-   degrees to it: the right-angle mark shows, the slot's side is exactly perpendicular
-   to that line (Perpendicular constraint on the slot's side line).
+S  Slot (SciForge's own centre-to-centre slot, sketch_draw_tools.py): the first centre
+   on the end of a slanted line, the second at about 87 degrees to it: the right-angle
+   mark shows, the slot is exactly perpendicular to that line (Perpendicular constraint
+   on the slot's construction centre line).
 T  Speed: about 2 ms of SciForge's own work per mouse move on a 400-curve sketch.
 """
 
@@ -531,15 +532,28 @@ def p_check():
 
 
 # == S: slot ============================================================================
+def slot_tool():
+    from sciforge import sketch_draw
+
+    return sketch_draw.current_tool()
+
+
 def s_menu():
     esc()
     si.menu_item("CREATE", "Center to Center Slot")
 
 
 def s_first():
+    t = slot_tool()
+    h.check(
+        "S: SciForge's slot tool runs (Fusion's width box)",
+        t is not None and t.title == "Center to Center Slot",
+        t and t.title,
+    )
     s["s_before"] = len(s["sk"].Geometry)
     s["s_cons"] = len(s["sk"].Constraints)
-    si.click(g(V(55.3, -33.2, 0)))  # the end of the slanted line C
+    approach(V(55.3, -33.2, 0), V(1.0, 0.6, 0))
+    h.click(g(V(55.3, -33.2, 0)))  # the end of the slanted line C
 
 
 def s_near():
@@ -550,14 +564,20 @@ def s_near():
     turned = V(n.x * math.cos(r) - n.y * math.sin(r), n.x * math.sin(r) + n.y * math.cos(r), 0)
     s["s_raw"] = V(55.3, -33.2, 0) + turned * 25.0
     approach(s["s_raw"], V(1.0, 0.6, 0))
-    state = infer_state()
+    t = slot_tool()
+    state = t.state() if t is not None else {}
     last = state.get("last")
-    marks = state.get("overlay", {}).get("marks", [])
-    h.check("S: the slot tool is known to the guides", state.get("kind") == "slot")
+    result = last.result if last is not None else None
+    marks = state.get("preview", {}).get("marks", [])
+    h.check(
+        "S: the first centre sits on the end of line C",
+        bool(state.get("snaps")) and state["snaps"][0].key is not None,
+        state.get("snaps"),
+    )
     h.check(
         "S: the slot's centre line at 87 degrees is made perpendicular",
-        last is not None and last.kind == "perp",
-        last,
+        result is not None and result.kind == "perp",
+        result and result.kind,
     )
     h.check(
         "S: the right-angle mark shows at the corner", len(marks) == 1 and len(marks[0]) == 3, marks
@@ -575,28 +595,36 @@ def s_width():
     n = V(-u.y, u.x, 0)
     point = V(55.3, -33.2, 0) + n * 12.0 + u * 6.0
     approach(point, V(0.5, 0.5, 0))
-    state = infer_state()
-    h.check(
-        "S: the width click gets no guide",
-        state.get("step") is None and not guides(),
-        state.get("step"),
-    )
+    t = slot_tool()
+    drawn = t.state().get("preview", {}) if t is not None else {}
+    h.check("S: the width click gets no guide", not drawn.get("guides"), drawn.get("guides"))
     h.click(g(point))
 
 
 def s_check():
     sk = s["sk"]
     new = new_geometry(s["s_before"])
-    lines = [i for i in new if sk.Geometry[i].TypeId == "Part::GeomLineSegment"]
+    lines = [
+        i
+        for i in new
+        if sk.Geometry[i].TypeId == "Part::GeomLineSegment" and not sk.getConstruction(i)
+    ]
+    centre = [
+        i for i in new if sk.Geometry[i].TypeId == "Part::GeomLineSegment" and sk.getConstruction(i)
+    ]
     arcs = [i for i in new if sk.Geometry[i].TypeId == "Part::GeomArcOfCircle"]
-    h.check("S: the slot (2 arcs, 2 lines) was added", len(lines) == 2 and len(arcs) == 2, new)
-    if len(lines) != 2:
+    h.check(
+        "S: the slot (2 arcs, 2 lines, a construction centre line) was added",
+        len(lines) == 2 and len(arcs) == 2 and len(centre) == 1,
+        new,
+    )
+    if len(lines) != 2 or len(centre) != 1:
         return
     added = cons()[s["s_cons"] :]
-    perp = [c for c in added if c[0] == "Perpendicular" and c[3] == s["ref"]["C"]]
+    perp = [c for c in added if c[0] == "Perpendicular" and s["ref"]["C"] in (c[1], c[3])]
     h.check(
-        "S: Perpendicular between a slot side and the slanted line",
-        len(perp) == 1 and perp[0][1] in lines,
+        "S: Perpendicular between the slot's centre line and the slanted line",
+        len(perp) == 1 and centre[0] in (perp[0][1], perp[0][3]),
         added,
     )
     side = sk.Geometry[lines[0]]
@@ -604,11 +632,7 @@ def s_check():
     a = side.EndPoint - side.StartPoint
     b = other.EndPoint - other.StartPoint
     deg = math.degrees(math.acos(max(-1.0, min(1.0, a.dot(b) / (a.Length * b.Length)))))
-    h.check("S: exactly 90 degrees", abs(deg - 90.0) < 1e-5, deg)
-    # the slot's sides and arcs are where the pixel put them (a quarter of a degree
-    # off) and the solver turns them exact after the move; the slanted line, free and
-    # joined to the slot, is held still meanwhile (without that it drifted by 2 microns;
-    # what is left is the solver's own precision, a few nanometres)
+    h.check("S: the sides exactly at 90 degrees", abs(deg - 90.0) < 1e-5, deg)
     h.check(
         "S: the slanted line did not move (within 10 nanometres)",
         si.vnear(other.EndPoint, V(55.3, -33.2, 0), 1e-5)
@@ -619,7 +643,7 @@ def s_check():
         "S: the sketch solves cleanly",
         not sk.ConflictingConstraints and not sk.RedundantConstraints,
     )
-    s["s_lines"] = lines
+    s["s_lines"] = lines + centre
 
 
 def s_undo():
@@ -632,14 +656,12 @@ s_undo.wait_ms = 1200
 
 
 def s_undone():
+    # SciForge's slot and the constraints it adds are one undo step (Fusion)
     left = [c for c in cons() if c[0] == "Perpendicular" and c[1] in s["s_lines"]]
     h.check(
-        "S: one Ctrl+Z takes the Perpendicular back",
-        not left,
-        (left, App.ActiveDocument.UndoNames[:4]),
-    )
-    h.check(
-        "S: ...and keeps the slot", len(s["sk"].Geometry) == s["s_count"], len(s["sk"].Geometry)
+        "S: one Ctrl+Z takes the slot back with its Perpendicular",
+        not left and len(s["sk"].Geometry) == s["s_before"],
+        (left, len(s["sk"].Geometry), s["s_before"], App.ActiveDocument.UndoNames[:4]),
     )
 
 

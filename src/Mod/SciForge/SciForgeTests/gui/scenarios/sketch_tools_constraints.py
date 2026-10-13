@@ -8,7 +8,7 @@ Collinear: two lines end up on one line (FreeCAD: a line-line Tangent).
 Concentric: a circle and an arc share their centre (Coincident centres).
 Midpoint: a point goes to the middle of a line (Symmetric), another to the middle of an
 arc (on the arc, on the bisector of its ends).
-Curvature: a spline and the line it starts from: tangent join plus the spline's second
+Curvature: a spline and the line it starts from: tangent join plus the spline's third
 pole on the line, so the curvature at the join is 0 (exact G2). A spline and an arc: only
 tangent (FreeCAD's solver has no curvature constraint), and the hint says so.
 """

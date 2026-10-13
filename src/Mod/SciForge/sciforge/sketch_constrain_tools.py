@@ -12,8 +12,8 @@ FreeCAD's forms (checked in FreeCAD 1.1.4, docs/sciforge/parity/sketch.md):
   and a construction line from the centre through it that the arc's ends are symmetric
   about.
 - Curvature (G2): FreeCAD's solver has no curvature constraint. A spline and a line: a
-  tangent join plus the spline's second pole on the line (curvature 0 at the join, exact
-  G2); a spline and an arc, circle or another spline: tangent only (G1), said in a note.
+  tangent join plus the spline's third pole on the line too (curvature 0 at the join,
+  exact G2); a spline and an arc, circle or another spline: tangent only (G1), said in a note.
 """
 
 from . import log, warn
@@ -302,7 +302,7 @@ class Curvature(PickConstraint):
             return False
         kind = self.kind_of(item)
         if not picks:
-            return kind in SPLINE or kind in LINE_OR_ARC or kind in SPLINE
+            return kind in SPLINE or kind in LINE_OR_ARC
         first = self.kind_of(picks[0])
         if first in SPLINE:
             return kind in LINE_OR_ARC or kind in SPLINE

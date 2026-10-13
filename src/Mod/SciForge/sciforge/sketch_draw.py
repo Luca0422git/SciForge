@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """SciForge's own sketch drawing handler: the base of the Fusion tools FreeCAD's Sketcher
-does not have (Midpoint Line, 2-Point / 2-Tangent / 3-Tangent Circle, Tangent Arc, Edge
-Polygon, the slots, the conic; sketch_draw_tools.py) and of Trim / Extend / Break and the
-pick-two constraints (sketch_modify_ui.py).
+does not have (Midpoint Line, 3-Point Rectangle, 2-Point / 2-Tangent / 3-Tangent Circle,
+Tangent Arc, Edge Polygon, the slots, the conic; sketch_draw_tools.py), of Trim / Extend /
+Break (sketch_modify_tools.py), the pick-two constraints (sketch_constrain_tools.py) and
+Project to Surface (sketch_project_tool.py).
 
 How a tool runs (the way FreeCAD's own tools feel, and Fusion's):
 
@@ -659,7 +660,7 @@ class Hint(QtWidgets.QLabel):
     def _back(self):
         try:
             self._show(self.prompt, False)
-        except RuntimeError:
+        except Exception:
             pass
 
     def _show(self, text, warning):
@@ -1382,7 +1383,10 @@ def run(tool_class, *args):
     selection = selected_elements(sketch)
     try:
         if session.tool_running():
+            spline = session._spline_tool()
             Gui.runCommand("Sketcher_StopOperation")
+            if spline:
+                session._drop_spline()  # a half-drawn spline goes, as with Esc
     except Exception as exc:
         warn("%s: %s" % (tool_class.title, exc))
     tool = tool_class(session, *args)
