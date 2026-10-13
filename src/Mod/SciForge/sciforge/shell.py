@@ -12,6 +12,7 @@ same window and just adds a SKETCH tab. So:
 Everything changed while on (theme, toolbars, menu bar, shortcuts, docks) is
 put back when it turns off.
 """
+
 from . import config, log, warn
 from .compat import QtCore, QtWidgets
 
@@ -147,6 +148,7 @@ def enable():
     _safely(lambda: __import__("sciforge.viewcube_ui").viewcube_ui.enable())
     _safely(lambda: __import__("sciforge.marking_menu").marking_menu.enable())
     _safely(lambda: __import__("sciforge.orbit_ui").orbit_ui.enable())
+    _safely(lambda: __import__("sciforge.selection_ui").selection_ui.enable())
     _safely(_sketch_mode_on)
     log("interface on")
 
@@ -163,6 +165,7 @@ def disable():
         timeline_ui.hide()
         return
     for step in (
+        lambda: __import__("sciforge.selection_ui").selection_ui.disable(),
         lambda: __import__("sciforge.orbit_ui").orbit_ui.disable(),
         lambda: __import__("sciforge.marking_menu").marking_menu.disable(),
         shortcuts.restore,

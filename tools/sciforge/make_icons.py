@@ -14,6 +14,7 @@ traced from or derived from another product's artwork.
 
 Every icon is drawn on a 48x48 canvas. Edit a recipe below and re-run.
 """
+
 import math
 import os
 import sys
@@ -902,6 +903,133 @@ def _():
     return rect(
         6, 6, 32, 28, "none", 0, 'stroke="%s" stroke-width="2" stroke-dasharray="4 3"' % GREEN
     ) + poly([(28, 22), (28, 44), (33, 39), (37, 46), (40, 44), (36, 37), (43, 37)], WHITE)
+
+
+def _cursor(x=28, y=22):
+    """The select arrow (shared by the selection icons)."""
+    return poly(
+        [
+            (x, y),
+            (x, y + 22),
+            (x + 5, y + 17),
+            (x + 9, y + 24),
+            (x + 12, y + 22),
+            (x + 8, y + 15),
+            (x + 15, y + 15),
+        ],
+        WHITE,
+    )
+
+
+@icon("select_window")
+def _():
+    # Window selection: a solid box, the small part fully inside it is the one taken.
+    return (
+        rect(5, 7, 30, 26, "none", 0, 'stroke="%s" stroke-width="2"' % DBLUE[0])
+        + block(0, 0, 0, 9, 9, 8, BLUE, 20, 26, 0.8)
+        + _cursor(30, 26)
+    )
+
+
+@icon("select_freeform")
+def _():
+    # Freeform (lasso) selection: a loose loop drawn around the part.
+    return (
+        path("M8 14 C 4 26, 14 38, 26 34 C 36 31, 40 20, 34 12 C 28 5, 12 4, 8 14 Z", DBLUE[0], 2)
+        + block(0, 0, 0, 8, 8, 7, BLUE, 21, 24, 0.75)
+        + _cursor(30, 26)
+    )
+
+
+@icon("select_paint")
+def _():
+    # Paint selection: a brush stroke across the part.
+    return (
+        block(0, 0, 0, 16, 16, 12, GREY, 22, 32)
+        + path("M6 30 C 14 18, 24 30, 40 14", DBLUE[0], 5)
+        + _cursor(28, 24)
+    )
+
+
+@icon("select_through")
+def _():
+    # Select Through: the front face see-through, the hidden edges dashed.
+    return (
+        block(0, 0, 0, 18, 18, 14, GREY, 24, 32)
+        + line(24, 46, 24, 24, DBLUE[0], 1.8, 'stroke-dasharray="3 2"')
+        + line(24, 24, 8, 15, DBLUE[0], 1.8, 'stroke-dasharray="3 2"')
+        + line(24, 24, 40, 15, DBLUE[0], 1.8, 'stroke-dasharray="3 2"')
+    )
+
+
+@icon("select_filter")
+def _():
+    # Selection filters: a funnel.
+    return path("M8 8 H40 L28 24 V40 L20 36 V24 Z", STROKE, 2.2, DBLUE[1])
+
+
+@icon("select_priority")
+def _():
+    # Selection priority: three kinds stacked, the first one lit.
+    return (
+        rect(10, 8, 28, 8, DBLUE[1], 2)
+        + rect(10, 20, 28, 8, "#5c6675", 2)
+        + rect(10, 32, 28, 8, "#5c6675", 2)
+    )
+
+
+@icon("select_other")
+def _():
+    # Select Other: a short list beside the pointer.
+    return (
+        rect(6, 10, 22, 28, "#454f61", 2, 'stroke="%s" stroke-width="1.5"' % STROKE)
+        + rect(9, 14, 16, 5, DBLUE[1], 1)
+        + rect(9, 22, 16, 5, "#7d8593", 1)
+        + rect(9, 30, 16, 5, "#7d8593", 1)
+        + _cursor(28, 20)
+    )
+
+
+@icon("select_body")
+def _():
+    return block(0, 0, 0, 18, 18, 14, BLUE, 24, 32)
+
+
+@icon("select_face")
+def _():
+    return block(0, 0, 0, 18, 18, 14, GREY, 24, 32) + poly(
+        [
+            iso(0, 0, 14, 24, 32),
+            iso(18, 0, 14, 24, 32),
+            iso(18, 18, 14, 24, 32),
+            iso(0, 18, 14, 24, 32),
+        ],
+        BLUE[1],
+    )
+
+
+@icon("select_edge")
+def _():
+    a, b = iso(18, 0, 14, 24, 32), iso(18, 18, 14, 24, 32)
+    return block(0, 0, 0, 18, 18, 14, GREY, 24, 32) + line(a[0], a[1], b[0], b[1], DBLUE[0], 3.2)
+
+
+@icon("select_vertex")
+def _():
+    x, y = iso(18, 18, 14, 24, 32)
+    return block(0, 0, 0, 18, 18, 14, GREY, 24, 32) + circle(x, y, 4, DBLUE[0], WHITE, 1.5)
+
+
+@icon("select_sketch")
+def _():
+    return line(8, 36, 24, 12) + line(24, 12, 40, 36) + pt(8, 36) + pt(24, 12) + pt(40, 36)
+
+
+@icon("select_work")
+def _():
+    return poly(
+        [(10, 34), (22, 10), (40, 10), (28, 34)], "none", 'stroke="%s" stroke-width="2"' % STROKE
+    ) + line(6, 40, 42, 40, DBLUE[0], 2)
 
 
 # ---- sketch ---------------------------------------------------------------------------

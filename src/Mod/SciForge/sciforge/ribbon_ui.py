@@ -2,6 +2,7 @@
 """The Fusion-style ribbon: quick-access bar, workspace button, tabs, groups with
 large icons and a drop-down menu under each group name. Layout comes from
 ribbon_config.py; this module only turns that data into Qt widgets."""
+
 import FreeCADGui as Gui
 
 from . import log, registry, ribbon_config as cfg, ui_icon, warn
@@ -100,7 +101,12 @@ def build_menu(parent, entries, available):
                     choices.setExclusive(True)
                 choices.addAction(action)
                 action.setChecked(is_checked(entry["checked"]))
-            checks.append((action, resolved, entry.get("checked")))
+            elif entry.get("toggle"):
+                # On or off by itself (a selection filter): the command flips it and the
+                # tick is read back from the module when the menu opens again.
+                action.setCheckable(True)
+                action.setChecked(is_checked(entry["toggle"]))
+            checks.append((action, resolved, entry.get("checked") or entry.get("toggle")))
         else:
             action.setEnabled(False)
             action.setToolTip(entry.get("note") or "Not available in SciForge yet")
