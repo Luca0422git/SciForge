@@ -22,8 +22,10 @@ To be folded into `MEMORY.md` at the merge (the joints session did not edit it).
   get back the placement FreeCAD strips.
 - Tests (real FreeCAD 1.1.4, real clicks): `joints_basic` 85, `joints_types` 229,
   `joints_asbuilt_group` 133, `joints_drive` 107, `joints_components` 46 checks, all PASS;
-  unit 416 OK (28 new in `test_joints_core.py`). Regressions PASS: bodies_move, bodies_qa,
-  bodies_qa_2, timeline_browser_qa2, extrude_multibody, extrude_presspull_qa.
+  unit 416 OK (28 new in `test_joints_core.py`). Regressions PASS (final code): bodies_move
+  85, bodies_qa 312, bodies_qa_2 234, timeline_browser_qa2 245, extrude_multibody 125,
+  extrude_multibody_move 48, extrude_multibody_edit 136, extrude_presspull_qa 133; golden
+  294 pass + the known xfail `plate_hole_grid`.
 - Spec, contract and gaps: `docs/sciforge/parity/joints.md` (merge notes for the Components
   work at the end of "The component contract").
 - Facts learned:
