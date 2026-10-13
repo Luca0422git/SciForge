@@ -16,6 +16,7 @@ third Revolve.
 Hand-derived volumes: cylinder r10 h20 = 2000 pi; an angle a of it = 2000 pi a / 360;
 groove = pi (10^2 - 7^2) 4 = 204 pi.
 """
+
 import math
 
 import FreeCAD as App
@@ -107,7 +108,7 @@ def dialog_open():
         and [p.direction.itemText(i) for i in range(p.direction.count())]
         == ["One Side", "Two Sides", "Symmetric"]
         and [p.operation.itemText(i) for i in range(p.operation.count())]
-        == ["Join", "Cut", "Intersect", "New Body"],
+        == ["Join", "Cut", "Intersect", "New Body", "New Component"],
     )
     h.fit()
     h.shot("1-waiting-for-axis")

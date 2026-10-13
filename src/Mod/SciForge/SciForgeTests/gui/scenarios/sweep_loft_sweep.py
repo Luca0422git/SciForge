@@ -14,6 +14,7 @@ too. Click Sweep 1 in the timeline, Delete key: both sketches show again.
 Hand-derived volumes: path length L = 20 + 10 pi / 2 + 20, tube = pi 2^2 L; a share d of
 the path sweeps d of that (the profile sits at the path's start).
 """
+
 import math
 
 import FreeCAD as App
@@ -116,7 +117,7 @@ def dialog_open():
         and [p.orientation.itemText(i) for i in range(p.orientation.count())]
         == ["Perpendicular", "Parallel"]
         and [p.operation.itemText(i) for i in range(p.operation.count())]
-        == ["Join", "Cut", "Intersect", "New Body"],
+        == ["Join", "Cut", "Intersect", "New Body", "New Component"],
     )
     h.check("Chain Selection on by default", p.chain.isChecked())
     h.check(
