@@ -2070,6 +2070,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
   All now reaches every body it cuts (golden `extrude_multi_cut_all_far`: red up to 310 mm, was
   92.6, checked with a FreeCAD probe), and the offset's value box starts past its arrow's tip
   (three boxes at 0 never cover each other; unit test).
+- Lesson: after a merge run `run_tests.sh --only base` (unit + golden + smoke + journey), not
+  `--only golden`: the journey's "Extruding into the part picks Cut" checked right after setting
+  the distance, and R8 decides the automatic operation with the preview (60 ms later). Caught
+  by CI run #93; the journey now waits for the preview.
 - Old scenarios that relied on the automatic 10 mm or on a preview right after E were updated
   (extrude_multibody*, sketch_areas*). Unit 330, golden 294 + 1 xfail.
 
