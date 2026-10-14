@@ -464,6 +464,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "decals",
             "joints",  # new joints show at once
             "joint_origins",
+            "contacts",
+            "motion_studies",
             "drawings",
         }
         # Component rows and their Bodies / Sketches folders start open (keys are made per
@@ -910,6 +912,11 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "canvas",
         "decal",
         "drawing",
+        "joint",
+        "rigid_group",
+        "motion_link",
+        "contact_set",
+        "motion_study",
     )
     OBJECT_KINDS = (
         "body",
@@ -924,6 +931,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "rigid_group",
         "joint_origin",
         "drawing",
+        "motion_link",
+        "contact_set",
+        "motion_study",
     )
 
     def rename(self, item):
@@ -987,12 +997,17 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "rigid_group",
             "joint_origin",
             "decal",
+            "motion_link",
         )
         steps = [n["object"] for n in nodes if n["kind"] in step_kinds]
         body_names = [n["object"] for n in nodes if n["kind"] == "body"]
         part_names = [n["object"] for n in nodes if n["kind"] == "component"]
         views = [n["object"] for n in nodes if n["kind"] == "saved_view"]
-        plain = [n["object"] for n in nodes if n["kind"] in ("mesh_body", "canvas")]
+        plain = [
+            n["object"]
+            for n in nodes
+            if n["kind"] in ("mesh_body", "canvas", "contact_set", "motion_study")
+        ]
         drawings = [n["object"] for n in nodes if n["kind"] == "drawing"]
         Gui.Selection.clearSelection()
         if steps:
@@ -1162,6 +1177,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Edit Joint": lambda: _edit_object(obj),
             "Edit Rigid Group": lambda: _edit_object(obj),
             "Edit Joint Origin": lambda: _edit_object(obj),
+            "Edit Motion Link": lambda: _edit_object(obj),
+            "Edit Contact Set": lambda: _edit_object(obj),
+            "Edit Motion Study": lambda: _edit_object(obj),
             "Edit Joint Limits": lambda: _joint_action("edit_joint_limits", obj),
             "Drive Joints": lambda: _joint_action("drive", obj),
             "Animate Joint": lambda: _joint_action("animate", obj),

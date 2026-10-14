@@ -5,7 +5,7 @@ Plate = 0..40 x 0..30 x 10, Block = 50..70 x 0..10 x 20 (Extrude New Body). Ever
 click the block's top, click the plate's top (the block lands upside down on the plate), the
 Motion tab, the Type; the new motion plays once and comes back; the round's own settings; the
 Animate button plays the motion while the test watches where the two joint origins go; OK
-(one "<Type> 1" in the timeline and the browser); Ctrl+Z (the joint, the ground and the move
+(one "<Type> 1" in the timeline and the browser); Ctrl+Z (the joint and the move
 all go in one step).
 
   R0 Rigid: no motion (no Animate button, no axis); FreeCAD's Fixed joint.
@@ -129,7 +129,7 @@ def round_steps(tag, label, kind, freecad_type, setup=(), motion=None, after_ok=
             [x.Label for x in j.joint_list()],
         )
         j.block_box("%s: undo put the block back" % tag, j.HOME)
-        h.check("%s: undo removed the ground" % tag, not jm().is_grounded(j.plate()))
+        h.check("%s: nothing grounded (none is needed)" % tag, not jm().is_grounded(j.plate()))
         helpers = [o.Name for o in App.ActiveDocument.Objects if jm().is_helper(o)]
         h.check("%s: no hidden helper left" % tag, not helpers, helpers)
 

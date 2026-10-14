@@ -24,7 +24,7 @@ import math
 
 import FreeCAD as App
 
-from . import bodies, joints_core as core, log, warn
+from . import bodies, joints_core as core, log, motion_core, warn
 
 ASSEMBLY_NAME = "SciForgeAssembly"
 ASSEMBLY_LABEL = "Assembly"
@@ -176,15 +176,17 @@ def is_assembly_piece(obj):
 
 # -- parts (what a joint moves) --------------------------------------------------------------------
 def is_part(obj):
-    """A top-level thing a joint can move: a root body, a root component, a root solid."""
+    """A thing a joint can move: a component (an App::Part, nested ones too: Fusion moves a
+    nested component on its own), a body at the root, a solid at the root. A body inside a
+    component moves with its component."""
     try:
         if obj is None or is_assembly_piece(obj):
             return False
+        if obj.TypeId == "App::Part":
+            return True
         if obj.getParentGeoFeatureGroup() is not None:
             return False
         if obj.TypeId == "PartDesign::Body":
-            return True
-        if obj.TypeId == "App::Part":
             return True
         if getattr(obj, TYPE_PROP, "") or getattr(obj, "SciForgeRole", ""):
             return False  # a SciForge step outside the bodies (a copy's Move...), not a part
@@ -199,9 +201,61 @@ def parts(doc):
     return [o for o in doc.Objects if is_part(o)]
 
 
+def container_of(part):
+    """The component a part sits in (a nested component's parent), or None at the root."""
+    try:
+        return part.getParentGeoFeatureGroup()
+    except Exception:
+        return None
+
+
+def parent_global(part):
+    """Where the frame a part's own Placement is written in stands (identity at the root)."""
+    container = container_of(part)
+    if container is None:
+        return App.Placement()
+    try:
+        return container.getGlobalPlacement()
+    except Exception:
+        return App.Placement()
+
+
+def global_placement(part):
+    """A part's placement in design coordinates (a nested component's includes its
+    parents')."""
+    return parent_global(part) * part.Placement
+
+
+def set_global_placement(part, plc):
+    """Put a part at a placement given in design coordinates."""
+    local = parent_global(part).inverse() * plc
+    if not part.Placement.isSame(local, 1e-12):
+        part.Placement = local
+
+
+def ancestors(part):
+    """The components a part sits in, nearest first."""
+    out = []
+    current = container_of(part)
+    guard = 0
+    while current is not None and guard < 30:
+        guard += 1
+        out.append(current)
+        current = container_of(current)
+    return out
+
+
+def top_movers(targets):
+    """The targets that do not sit inside another target (those move with their parent:
+    moving them too would move them twice)."""
+    names = {t.Name for t in targets}
+    return [t for t in targets if not any(a.Name in names for a in ancestors(t))]
+
+
 def part_of(obj):
-    """The part (see is_part) that `obj` belongs to: itself, its body, its component, the
-    top-level component of a nested one; None for things outside any part."""
+    """The part (see is_part) that `obj` belongs to: itself, its body, the component it is
+    in (the nearest one: a nested component is a part of its own); None for things outside
+    any part."""
     seen = 0
     current = obj
     while current is not None and seen < 20:
@@ -358,8 +412,16 @@ def any_element_ref(part):
     candidates = [part]
     try:
         if part.TypeId == "App::Part":
-            candidates = [o for o in part.OutListRecursive if o.TypeId == "PartDesign::Body"] + [
-                o for o in part.OutListRecursive if o.isDerivedFrom("Part::Feature")
+            inside = list(part.OutListRecursive)
+            # its own bodies first: a body of a nested component moves with that one, and a
+            # reference through it would drag this component's place along
+            own = [o for o in inside if part_of(o) is part]
+            rest = [o for o in inside if o not in own]
+            candidates = [
+                o
+                for group in (own, rest)
+                for o in [x for x in group if x.TypeId == "PartDesign::Body"]
+                + [x for x in group if x.isDerivedFrom("Part::Feature")]
             ]
     except Exception:
         pass
@@ -566,8 +628,162 @@ def nearest_snap(candidates, point):
 
 def snap_record(pick, snap):
     """What a joint stores about one side: enough to find the place again on new geometry
-    (the element, the snap kind, the shape element the snap sits on)."""
+    (the element, the snap kind, the shape element the snap sits on; for the Between Two
+    Faces and Two Edge Intersection modes, the faces / edges as well)."""
+    if snap.get("record"):
+        return dict(snap["record"])
     return {"kind": snap["kind"], "element": pick.element, "at": snap.get("at", "")}
+
+
+# -- position modes: Between Two Faces, Two Edge Intersection -------------------------------------
+def _plane_of(shape, element):
+    face = shape.getElement(element) if element.startswith("Face") else None
+    if face is None or face.Surface.TypeId != "Part::GeomPlane":
+        raise JointError("Between Two Faces needs flat faces: pick a flat face.")
+    centre = face.CenterOfMass
+    u, v = face.Surface.parameter(centre)
+    return centre, face.normalAt(u, v)
+
+
+def _line_of(shape, element, toward=None):
+    """(point, direction) of an edge's line; an arc gives its tangent at the end nearer
+    `toward` (Fusion's Two Edge Intersection is often used on rounded corners)."""
+    edge = shape.getElement(element) if element.startswith("Edge") else None
+    if edge is None:
+        raise JointError("Two Edge Intersection needs two edges: pick an edge.")
+    kind = edge.Curve.TypeId
+    if kind == "Part::GeomLine" or kind == "Part::GeomLineSegment":
+        a = edge.valueAt(edge.FirstParameter)
+        b = edge.valueAt(edge.LastParameter)
+        return a, b - a
+    if kind in ("Part::GeomCircle", "Part::GeomEllipse", "Part::GeomBSplineCurve"):
+        ends = (edge.FirstParameter, edge.LastParameter)
+        if toward is not None:
+            ends = sorted(ends, key=lambda t: (edge.valueAt(t) - toward).Length)
+        t = ends[0]
+        return edge.valueAt(t), edge.tangentAt(t)
+    raise JointError("Two Edge Intersection takes straight edges or arcs.")
+
+
+def _edge_centre(shape, element):
+    edge = shape.getElement(element)
+    return edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+
+
+def _shared_face_normal(shape, e1, e2):
+    """The outward normal of a flat face both edges bound, or None."""
+    try:
+        a, b = shape.getElement(e1), shape.getElement(e2)
+        for face in shape.Faces:
+            if face.Surface.TypeId != "Part::GeomPlane":
+                continue
+            names = [x for x in face.Edges]
+            if any(x.isSame(a) for x in names) and any(x.isSame(b) for x in names):
+                u, v = face.Surface.parameter(face.CenterOfMass)
+                return face.normalAt(u, v)
+    except Exception:
+        pass
+    return None
+
+
+def _chosen_snap(shape, element, kind, at):
+    snaps = _shape_snaps(shape, element) if element else []
+    for s in snaps:
+        if s["kind"] == kind and s["at"] == at:
+            return s
+    return snaps[0] if snaps else None
+
+
+def mode_frame(shape, record):
+    """(point, z, x hint) in the shape's coordinates of a Between Two Faces or Two Edge
+    Intersection position, from the elements stored in its record."""
+    mode = record.get("kind")
+    if mode == "twofaces":
+        faces = record.get("faces") or []
+        if len(faces) != 2:
+            raise JointError("Between Two Faces needs two faces.")
+        p1, n1 = _plane_of(shape, faces[0])
+        p2, n2 = _plane_of(shape, faces[1])
+        point, normal = core.midplane(_tuple(p1), _tuple(n1), _tuple(p2), _tuple(n2))
+        snap = _chosen_snap(shape, record.get("element", ""), record.get("snap"), record.get("at"))
+        where = _tuple(snap["point"]) if snap is not None else point
+        on_plane = core.project_to_plane(where, point, normal)
+        hint = snap["hint"] if snap is not None else None
+        return App.Vector(*on_plane), App.Vector(*normal), hint
+    if mode == "twoedges":
+        edges = record.get("edges") or []
+        if len(edges) != 2:
+            raise JointError("Two Edge Intersection needs two edges.")
+        c1, c2 = _edge_centre(shape, edges[0]), _edge_centre(shape, edges[1])
+        a1, d1 = _line_of(shape, edges[0], toward=c2)
+        a2, d2 = _line_of(shape, edges[1], toward=c1)
+        point, _gap = core.line_intersection(_tuple(a1), _tuple(d1), _tuple(a2), _tuple(d2))
+        z = d1.cross(d2)
+        if z.Length < 1e-9:
+            raise JointError("The two edges are parallel: they never meet. Pick two edges that do.")
+        face_normal = _shared_face_normal(shape, edges[0], edges[1])
+        if face_normal is not None and z.dot(face_normal) < 0:
+            z = z * -1
+        return App.Vector(*point), z, d1
+    return None
+
+
+def mode_snap(mode, picks, snap_pick=None, snap=None):
+    """The joint origin of a Between Two Faces position (two face picks, then a snap on
+    the same body: the snap is brought onto the plane between the faces) or of a Two Edge
+    Intersection (two edge picks), as a snap dict the dialogs use like a simple snap."""
+    if len(picks) != 2 or any(p is None for p in picks):
+        raise JointError("Pick two %s." % ("faces" if mode == "twofaces" else "edges"))
+    first, second = picks
+    if first.obj is not second.obj:
+        raise JointError("Pick both on one body (%s)." % first.obj.Label)
+    if first.element == second.element:
+        raise JointError("Pick two different %s." % ("faces" if mode == "twofaces" else "edges"))
+    if mode == "twofaces":
+        if snap_pick is None or snap is None:
+            raise JointError("Pick a snap point: the joint origin goes there, between the faces.")
+        if snap_pick.obj is not first.obj:
+            raise JointError(
+                "Pick the snap point on %s, where the two faces are." % first.obj.Label
+            )
+        record = {
+            "kind": "twofaces",
+            "faces": [first.element, second.element],
+            "element": snap_pick.element,
+            "snap": snap.get("kind"),
+            "at": snap.get("at", ""),
+        }
+    else:
+        record = {"kind": "twoedges", "edges": [first.element, second.element], "element": ""}
+    shape, to_local = geometry(first.obj)
+    point, z, hint = mode_frame(shape, record)
+    local = to_local * from_frame(_frame_from(point, z, hint))
+    plc = global_of(first.ref) * local
+    return {
+        "kind": mode,
+        "at": record.get("at", ""),
+        "point": App.Vector(plc.Base),
+        "frame": plc,
+        "oriented": True,
+        "record": record,
+        "pick": first,
+    }
+
+
+def mode_candidates(face_picks, pick):
+    """The snap points of `pick` brought onto the plane between two faces (the hover of a
+    Between Two Faces snap): [] when the faces give no plane."""
+    try:
+        first, second = face_picks
+        if pick.obj is not first.obj:
+            return []
+        out = []
+        for c in snap_candidates(pick):
+            snap = mode_snap("twofaces", face_picks, pick, c)
+            out.append(dict(snap, kind=c["kind"], at=c.get("at", "")))
+        return out
+    except Exception:
+        return []
 
 
 def as_built_record(plc):
@@ -592,6 +808,15 @@ def local_placement(ref, record):
         shape, to_local = geometry(obj)
     except Exception:
         return App.Placement()
+    if kind in ("twofaces", "twoedges"):
+        try:
+            point, z, hint = mode_frame(shape, record)
+        except Exception as exc:
+            warn("joint origin: %s" % exc)
+            return App.Placement()
+        if record.get("x"):
+            hint = to_local.inverse().Rotation.multVec(App.Vector(*record["x"]))
+        return to_local * from_frame(_frame_from(point, z, hint))
     element = record.get("element") or element_name(ref[1][0])
     snaps = _shape_snaps(shape, element)
     chosen = None
@@ -972,12 +1197,29 @@ def sync_helper(joint):
 
 
 # -- grounding -------------------------------------------------------------------------------------
+AUTO_GROUND_ROLE = "AutoGround"
+
+
+def _is_ground_object(o):
+    try:
+        return o.TypeId == "App::FeaturePython" and "ObjectToGround" in o.PropertiesList
+    except Exception:
+        return False
+
+
+def is_auto_ground(o):
+    """SciForge's hidden helper that holds a free group of jointed parts only while the
+    solver runs (FreeCAD's solver needs a fixed part; Fusion's joints need none)."""
+    return _is_ground_object(o) and getattr(o, PROPS["role"], "") == AUTO_GROUND_ROLE
+
+
 def grounds(doc):
-    return [
-        o
-        for o in doc.Objects
-        if o.TypeId == "App::FeaturePython" and "ObjectToGround" in o.PropertiesList
-    ]
+    """The grounds a person made (Ground on a component's menu)."""
+    return [o for o in doc.Objects if _is_ground_object(o) and not is_auto_ground(o)]
+
+
+def auto_grounds(doc):
+    return sorted((o for o in doc.Objects if is_auto_ground(o)), key=lambda o: o.ID)
 
 
 def ground_of(part):
@@ -1094,24 +1336,16 @@ def moving_side(joint):
     return None
 
 
-def ensure_ground(joint):
-    """FreeCAD's solver drops joints not chained to a grounded part: when neither component
-    is, component 2 is grounded (Fusion needs no ground: spec, Known gaps). Returns the
-    grounded part or None."""
-    p1, p2 = part1(joint), part2(joint)
-    if p1 is None or p2 is None:
-        return None
-    if connected(p1, excluding=joint) or connected(p2, excluding=joint):
-        return None
-    ground(p2)
-    return p2
-
-
 def move_part(part, transform, joint=None):
     """Apply a global transform (App.Placement) to a part and whatever hangs on it."""
     targets = [part] + (downstream(part, joint) if joint is not None else [])
-    for target in targets:
-        target.Placement = transform * target.Placement
+    move_parts(targets, transform)
+
+
+def move_parts(targets, transform):
+    """Apply a global transform to parts (a part inside another one moves with it)."""
+    for target in top_movers(targets):
+        set_global_placement(target, transform * global_placement(target))
 
 
 def mates(joint):
@@ -1142,6 +1376,7 @@ def align(joint, first=False):
     new, so the component keeps its heading (no spin about the joint axis) and that heading
     becomes the joint's X. Returns the solver's result code (0 = fine)."""
     refresh_placements(joint)
+    store_angle(joint, None)  # the joint starts counting again from where it is put
     side = moving_side(joint)
     if side is not None:
         jcs1 = to_frame(jcs_global(joint, 0))
@@ -1149,7 +1384,7 @@ def align(joint, first=False):
         if side == 0:
             T = core.mate_transform(jcs1, jcs2)
             if first:
-                T = core.keep_heading(T, jcs2[0], core.axis_of(jcs2[1], 2))
+                T = core.keep_heading(T, jcs2[0], core.axis_of(_plain(jcs2, joint)[1], 2))
             move_part(part1(joint), from_frame(T), joint)
             if first:
                 # joint origin 1's own X: the one that makes the stored frames coincide
@@ -1160,7 +1395,7 @@ def align(joint, first=False):
             # component 2 is the free one: it comes to joint origin 1 instead
             T = core.mate_transform(jcs2, jcs1)
             if first:
-                T = core.keep_heading(T, jcs1[0], core.axis_of(jcs1[1], 2))
+                T = core.keep_heading(T, jcs1[0], core.axis_of(_plain(jcs1, joint)[1], 2))
             move_part(part2(joint), from_frame(T), joint)
             if first:
                 set_heading(joint, 1, core.axis_of(_plain(jcs1, joint)[1], 0))
@@ -1225,41 +1460,296 @@ def satisfied(joint, tol=1e-4):
     return True
 
 
-def broken_joints(doc):
-    """The active joints (and helpers) the current placements do not satisfy, among those
-    the solver works on (chained to a grounded part)."""
-    asm = assembly(doc)
-    if asm is None:
-        return []
-    found = []
+def active_links(doc):
+    """The joints and helpers the solver works on (not suppressed, both sides there)."""
+    out = []
     for obj in doc.Objects:
         if not (is_joint(obj) or is_helper(obj)) or getattr(obj, "Suppressed", False):
             continue
         p1, p2 = part1(obj), part2(obj)
-        if p1 is None or p2 is None:
-            continue
-        try:
-            if not (asm.isPartConnected(p1) or asm.isPartConnected(p2)):
-                continue
-        except Exception:
-            pass
+        if p1 is not None and p2 is not None and p1 is not p2:
+            out.append(obj)
+    return out
+
+
+def broken_joints(doc):
+    """The active joints (and helpers) the current placements do not satisfy."""
+    found = []
+    for obj in active_links(doc):
         if not satisfied(obj):
             parent = getattr(obj, PROPS["parent"], None) if is_helper(obj) else None
             found.append(parent if parent is not None else obj)
     return found
 
 
-def solve(doc):
+def clusters(doc, excluding=None):
+    """The groups of parts that active joints chain together: [[part, ...]], each with the
+    joints / helpers inside it, oldest first: [(parts, links)]."""
+    skipped = {o.Name for o in _with_helpers(excluding)}
+    links = sorted((j for j in active_links(doc) if j.Name not in skipped), key=lambda o: o.ID)
+    owner = {}
+
+    def find(name):
+        while owner.get(name, name) != name:
+            name = owner[name]
+        return name
+
+    objects = {}
+    for j in links:
+        a, b = part1(j), part2(j)
+        objects[a.Name], objects[b.Name] = a, b
+        ra, rb = find(a.Name), find(b.Name)
+        if ra != rb:
+            owner[ra] = rb
+    groups = {}
+    for name, obj in objects.items():
+        groups.setdefault(find(name), ([], []))[0].append(obj)
+    for j in links:
+        groups[find(part1(j).Name)][1].append(j)
+    return [g for g in groups.values()]
+
+
+def free_anchors(doc, keep=None):
+    """For every group of jointed parts that no ground holds, the part that stays put while
+    the solver runs: `keep` when it is in the group (the part being dragged around it), else
+    component 2 of the group's oldest joint (what the first joint put component 1 onto)."""
+    held = {g.ObjectToGround.Name for g in grounds(doc) if g.ObjectToGround is not None}
+    anchors = []
+    for members, links in clusters(doc):
+        names = {m.Name for m in members}
+        if names & held:
+            continue
+        if keep is not None and keep.Name in names:
+            anchors.append(keep)
+        elif links:
+            anchors.append(part2(links[0]))
+    return anchors
+
+
+def anchor_of(part):
+    """The part a free group of jointed parts is held by (see free_anchors), or None when
+    the part is grounded, held by a ground through joints, or not jointed at all."""
+    doc = part.Document
+    held = {g.ObjectToGround.Name for g in grounds(doc) if g.ObjectToGround is not None}
+    for members, links in clusters(doc):
+        names = {m.Name for m in members}
+        if part.Name in names:
+            if names & held or not links:
+                return None
+            return part2(links[0])
+    return None
+
+
+def takes_part_in_assembly(part):
+    """A root body or solid is moved by hand only when it stands in for a component in the
+    assembly (jointed, grounded, in a rigid group or a contact set): Fusion drags
+    components, never bodies, and a drag on a plain body draws a selection box."""
+    if part is None:
+        return False
+    if part.TypeId == "App::Part":
+        return True
+    doc = part.Document
+    if is_grounded(part):
+        return True
+    for j in active_links(doc):
+        if part1(j) is part or part2(j) is part:
+            return True
+    for group in rigid_groups(doc) + contact_sets(doc):
+        if any(m is part for m in group.Members):
+            return True
+    return False
+
+
+def _graph(doc):
+    """{part name: [(other part, link)]} over the active joints and rigid-group links (a
+    Pin-Slot's slot helper rides with its joint)."""
+    graph = {}
+    for link in active_links(doc):
+        if getattr(link, PROPS["role"], "") == HELPER_ROLE:
+            continue
+        a, b = part1(link), part2(link)
+        graph.setdefault(a.Name, []).append((b, link))
+        graph.setdefault(b.Name, []).append((a, link))
+    return graph
+
+
+def _chain_to(graph, start, goals):
+    """The shortest chain of links from `start` to one of `goals` (names): [(link, from,
+    to)], or None."""
+    if start.Name in goals:
+        return []
+    queue = [start]
+    back = {start.Name: None}
+    while queue:
+        current = queue.pop(0)
+        for other, link in graph.get(current.Name, []):
+            if other.Name in back:
+                continue
+            back[other.Name] = (current, link, other)
+            if other.Name in goals:
+                chain = []
+                step = back[other.Name]
+                while step is not None:
+                    chain.append((step[1], step[0], step[2]))
+                    step = back[step[0].Name]
+                return list(reversed(chain))
+            queue.append(other)
+    return None
+
+
+def _reach(graph, start, cut=None, stop=()):
+    """The parts reachable from `start` without crossing link `cut` nor going past parts
+    named in `stop`."""
+    seen = {start.Name: start}
+    queue = [start]
+    while queue:
+        current = queue.pop()
+        if current.Name in stop and current is not start:
+            continue
+        for other, link in graph.get(current.Name, []):
+            if cut is not None and link is cut:
+                continue
+            if other.Name not in seen:
+                seen[other.Name] = other
+                queue.append(other)
+    return list(seen.values())
+
+
+def drag_plan(part):
+    """What a canvas drag of `part` moves (Fusion's Component Drag), as a dict:
+
+    - {"kind": "held", "why": text}: it cannot move (grounded, or held to a ground by
+      rigid joints only);
+    - {"kind": "free", "movers": [parts]}: nothing holds it (no joint), or it is the part a
+      free group of jointed parts hangs on: it moves (with the group) in the view plane;
+    - {"kind": "joint", "joint": J, "side": 0 / 1, "movers": [parts], "anchor": part}: it
+      moves along joint J, the first joint with a motion on its way to the ground (or to
+      the part its free group hangs on); `side` is the side of J that moves."""
+    doc = part.Document
+    if is_grounded(part):
+        return {
+            "kind": "held",
+            "why": "%s is grounded: it does not move. Unground it in the browser to drag it."
+            % part.Label,
+        }
+    graph = _graph(doc)
+    held = {g.ObjectToGround.Name for g in grounds(doc) if g.ObjectToGround is not None}
+    group = _reach(graph, part)
+    names = {p.Name for p in group}
+    anchor = None
+    if not names & held:
+        if len(group) == 1:
+            return {"kind": "free", "movers": [part]}
+        anchor = anchor_of(part)
+        if anchor is None or anchor is part:
+            return {"kind": "free", "movers": group}
+        goals = {anchor.Name}
+    else:
+        goals = names & held
+    chain = _chain_to(graph, part, goals)
+    if chain is None:
+        return {"kind": "free", "movers": [part]}
+    for link, near, far in chain:
+        if link.JointType == "Fixed" or fusion_type(link) == "rigid":
+            continue
+        movers = [p for p in _reach(graph, near, cut=link, stop=goals) if p.Name not in goals]
+        if any(p.Name in held for p in movers):
+            movers = [near]
+        side = 0 if part1(link) is near else 1
+        return {"kind": "joint", "joint": link, "side": side, "movers": movers, "anchor": anchor}
+    if anchor is not None:
+        return {"kind": "free", "movers": group}
+    return {
+        "kind": "held",
+        "why": "%s is held by rigid joints to a grounded component: it does not move." % part.Label,
+    }
+
+
+def _hold_free_groups(doc, keep=None):
+    """Point SciForge's hidden auto grounds at the anchors of the free groups (made when
+    there are not enough of them yet). Returns the auto grounds in use."""
+    anchors = free_anchors(doc, keep)
+    pool = auto_grounds(doc)
+    while len(pool) < len(anchors):
+        group = joint_group(doc, create=True)
+        obj = group.newObject("App::FeaturePython", "AutoGround")
+        obj.Label = "Free group anchor"
+        _joint_module().GroundedJoint(obj, None)
+        bodies.add_prop(obj, "App::PropertyString", PROPS["role"], "SciForge")
+        setattr(obj, PROPS["role"], AUTO_GROUND_ROLE)
+        bodies.hide_from_timeline(obj)
+        pool.append(obj)
+    for index, obj in enumerate(pool):
+        target = anchors[index] if index < len(anchors) else None
+        if obj.ObjectToGround is not target:
+            obj.ObjectToGround = target
+    return pool
+
+
+def _release_free_groups(pool):
+    for obj in pool:
+        try:
+            if obj.ObjectToGround is not None:
+                obj.ObjectToGround = None
+        except Exception:
+            pass
+
+
+def _depth(part):
+    return len(ancestors(part))
+
+
+def _nested_solver_parts(doc):
+    """Parts the solver moves that sit inside a component: FreeCAD's solver takes every
+    part's Placement as a place in one frame, so for the solve these hold their place in
+    design coordinates (and get their own back after)."""
+    found = {}
+    for j in active_links(doc):
+        for p in (part1(j), part2(j)):
+            if p is not None and container_of(p) is not None:
+                found[p.Name] = p
+    for g in doc.Objects:
+        if _is_ground_object(g):
+            target = getattr(g, "ObjectToGround", None)
+            if target is not None and container_of(target) is not None:
+                found[target.Name] = target
+    return sorted(found.values(), key=_depth)
+
+
+def _run_solver(asm, doc):
+    nested = _nested_solver_parts(doc)
+    saved = {p.Name: App.Placement(p.Placement) for p in nested}
+    places = {p.Name: global_placement(p) for p in nested}  # before any of them changes
+    for p in nested:
+        p.Placement = places[p.Name]  # the solver reads it as a place in design coordinates
+    try:
+        return int(asm.solve())
+    finally:
+        solved = {p.Name: App.Placement(p.Placement) for p in nested}
+        for p in nested:
+            p.Placement = saved[p.Name]
+        for p in nested:  # parents first: their own place is final when a child is set
+            set_global_placement(p, solved[p.Name])
+
+
+def solve(doc, keep=None):
     """Run FreeCAD's solver; 0 when it worked (see solve_message): -2 when it said it did
-    but the joints are not all satisfied."""
+    but the joints are not all satisfied. A group of jointed parts that nothing grounds is
+    held by one of its parts for the solve (`keep`, or its oldest joint's component 2)."""
     asm = assembly(doc)
     if asm is None:
         return 0
+    pool = []
     try:
-        code = int(asm.solve())
+        pool = _hold_free_groups(doc, keep)
+        code = _run_solver(asm, doc)
     except Exception as exc:
         warn("joints: solve failed: %s" % exc)
         return -1
+    finally:
+        _release_free_groups(pool)
+    if code == -6:
+        return 0  # nothing jointed and nothing grounded: nothing to solve
     if code == 0:
         broken = broken_joints(doc)
         _LAST_BROKEN[:] = sorted({b.Label for b in broken})
@@ -1267,6 +1757,14 @@ def solve(doc):
             log("joints the solver could not satisfy: %s" % ", ".join(_LAST_BROKEN))
             return -2
     return code
+
+
+def needs_solve(doc):
+    """True when an active joint is not satisfied (geometry changed under it, an undo...)."""
+    try:
+        return assembly(doc) is not None and bool(broken_joints(doc))
+    except Exception:
+        return False
 
 
 SOLVE_MESSAGES = {
@@ -1296,11 +1794,41 @@ def slide_axis(joint):
     return "z"
 
 
+ANGLE_PROP = "SciForgeAngle"  # the angle a joint was last driven to, whole turns included
+
+
+def stored_angle(joint):
+    try:
+        text = getattr(joint, ANGLE_PROP, "") if ANGLE_PROP in joint.PropertiesList else ""
+        return float(text) if text not in ("", None) else None
+    except Exception:
+        return None
+
+
+def store_angle(joint, angle):
+    """Remember the angle (with its whole turns: a joint turned 360 degrees looks the same
+    as at 0, but a gear linked to it is one turn further on)."""
+    try:
+        if angle is None and ANGLE_PROP not in joint.PropertiesList:
+            return
+        bodies.add_prop(joint, "App::PropertyString", ANGLE_PROP, "SciForge")
+        text = "" if angle is None else repr(round(float(angle), 9))
+        if getattr(joint, ANGLE_PROP) != text:
+            setattr(joint, ANGLE_PROP, text)
+    except Exception as exc:
+        warn("joint %s: %s" % (getattr(joint, "Label", "?"), exc))
+
+
 def value(joint):
-    """(angle in degrees, slide in mm) of the joint now."""
-    return core.joint_value(
+    """(angle in degrees, slide in mm) of the joint now; the angle counts whole turns from
+    where it was last driven (a pinion turned once reads 360, not 0)."""
+    angle, slide = core.joint_value(
         to_frame(jcs_global(joint, 0)), to_frame(jcs_global(joint, 1)), slide_axis(joint)
     )
+    known = stored_angle(joint)
+    if known is not None:
+        angle = motion_core.unwrap(angle, known)
+    return angle, slide
 
 
 def limits(joint):
@@ -1369,10 +1897,8 @@ def driven_part(joint):
     return (part1(joint) if side == 0 else part2(joint)), side
 
 
-def drive(joint, angle=None, slide=None, do_solve=True):
-    """Put the joint at an angle and / or slide (clamped to its limits) by moving the free
-    component and whatever hangs on it, then solve so the rest of the chain follows.
-    Returns (angle, slide) actually set."""
+def clamp_values(joint, angle=None, slide=None):
+    """(angle, slide) kept inside the joint's limits; None for a motion it does not have."""
     lim = limits(joint)
     if angle is not None:
         angle = core.clamp(angle, lim["angle"]["min"], lim["angle"]["max"])
@@ -1382,17 +1908,266 @@ def drive(joint, angle=None, slide=None, do_solve=True):
         slide = core.clamp(slide, lim["slide"]["min"], lim["slide"]["max"])
         if not has_slide(joint):
             slide = None
+    return angle, slide
+
+
+def drive(joint, angle=None, slide=None, do_solve=True, links=True, keep=None):
+    """Put the joint at an angle and / or slide (clamped to its limits) by moving the free
+    component and whatever hangs on it, then solve so the rest of the chain follows. The
+    joints a motion link ties to it follow (`links`). Returns (angle, slide) actually set."""
+    angle, slide = clamp_values(joint, angle, slide)
     part, side = driven_part(joint)
+    place_joint(joint, angle, slide, side, part)
+    if links:
+        follow_links(joint)
+    if do_solve:
+        solve(joint.Document, keep=keep)
+    return value(joint)
+
+
+def drive_until_contact(joint, angle=None, slide=None):
+    """drive(), but with contact sets on the parts stop where they touch: the joint goes
+    the part of the way it can. Returns (angle, slide, blocked pair or None)."""
+    doc = joint.Document
+    part, _side = driven_part(joint)
+    movers = [part] + downstream(part, joint)
+    pairs = free_pairs(contact_pairs(doc, movers))
+    if not pairs:
+        got = drive(joint, angle, slide)
+        return got[0], got[1], None
+    start = placements(doc)
+    a0, s0 = value(joint)
+    angle, slide = clamp_values(joint, angle, slide)
+
+    def put(fraction):
+        apply_placements(doc, start)
+        drive(
+            joint,
+            None if angle is None else a0 + (angle - a0) * fraction,
+            None if slide is None else s0 + (slide - s0) * fraction,
+            do_solve=False,
+        )
+
+    put(1.0)
+    hit = blocked(doc, pairs)
+    if hit is not None:
+
+        def stuck(fraction):
+            put(fraction)
+            return blocked(doc, pairs) is not None
+
+        put(motion_core.last_free(stuck))
+    solve(doc)
+    got = value(joint)
+    return got[0], got[1], hit
+
+
+def place_joint(joint, angle=None, slide=None, side=0, part=None, movers=None):
+    """Move one side of a joint so it reads `angle` / `slide` (already within limits):
+    side 0 moves component 1 (and what hangs on it), side 1 component 2; `movers` (a list
+    of parts) replaces what hangs on the moving side."""
+    if angle is None and slide is None:
+        return
     jcs1 = to_frame(jcs_global(joint, 0))
     jcs2 = to_frame(jcs_global(joint, 1))
     T = core.drive_transform(jcs1, jcs2, angle, slide, slide_axis(joint))
     if side == 1:
         # component 2 moves instead: the same relative motion, the other way round
         T = core.inverse(T)
-    move_part(part, from_frame(T), joint)
-    if do_solve:
-        solve(joint.Document)
-    return value(joint)
+    if movers is not None:
+        move_parts(movers, from_frame(T))
+    else:
+        if part is None:
+            part = part1(joint) if side == 0 else part2(joint)
+        move_part(part, from_frame(T), joint)
+    if angle is not None:
+        store_angle(joint, angle)
+
+
+# -- motion links ----------------------------------------------------------------------------------
+LINK_PROP = "SciForgeLink"  # JSON: value1, value2, reverse, motion1, motion2, offset
+
+
+class MotionLinkProxy:
+    """Fusion's Motion Link: two joints whose motions are tied (a gear and a rack). Saved
+    as "sciforge.joints.MotionLinkProxy": keep the name."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.setup(obj)
+
+    def setup(self, obj):
+        bodies.add_prop(obj, "App::PropertyLink", "Joint1", "Motion Link", hidden=False)
+        bodies.add_prop(obj, "App::PropertyLink", "Joint2", "Motion Link", hidden=False)
+        bodies.add_prop(obj, "App::PropertyString", LINK_PROP, "SciForge")
+        if not obj.hasExtension("App::SuppressibleExtensionPython"):
+            obj.addExtension("App::SuppressibleExtensionPython")
+
+    def onDocumentRestored(self, obj):
+        self.setup(obj)
+
+    def execute(self, obj):
+        pass
+
+    def onChanged(self, obj, prop):
+        pass
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+
+def is_motion_link(obj):
+    try:
+        return getattr(obj, TYPE_PROP, "") == "MotionLink"
+    except Exception:
+        return False
+
+
+def motion_links(doc):
+    return sorted((o for o in doc.Objects if is_motion_link(o)), key=lambda o: o.ID)
+
+
+def motions_of(joint):
+    """The motions a joint offers a link: "angle" (degrees) and / or "slide" (mm)."""
+    out = []
+    if has_angle(joint):
+        out.append("angle")
+    if has_slide(joint):
+        out.append("slide")
+    return out
+
+
+def default_motion(joint):
+    kind = fusion_type(joint)
+    if kind in ("slider",):
+        return "slide"
+    motions = motions_of(joint)
+    return motions[0] if motions else ""
+
+
+def link_data(link):
+    data = {
+        "value1": 360.0,
+        "value2": 360.0,
+        "reverse": False,
+        "motion1": "",
+        "motion2": "",
+        "offset": 0.0,
+    }
+    data.update(_json(link, LINK_PROP))
+    return data
+
+
+def joint_motion_value(joint, motion):
+    angle, slide = value(joint)
+    return angle if motion == "angle" else slide
+
+
+def _check_link(joint1, joint2, motion1, motion2):
+    if joint1 is None or joint2 is None:
+        raise JointError("Pick two joints to link.")
+    if joint1 is joint2:
+        raise JointError("Pick two different joints.")
+    for joint, motion in ((joint1, motion1), (joint2, motion2)):
+        if fusion_type(joint) == "rigid":
+            raise JointError("%s is rigid: it has no motion to link." % joint.Label)
+        if motion not in motions_of(joint):
+            verb = "turn" if motion == "angle" else "slide"
+            raise JointError("%s cannot %s." % (joint.Label, verb))
+
+
+def set_motion_link(link, joint1, joint2, value1, value2, reverse=False, motion1="", motion2=""):
+    """(Re)define a motion link; both joints keep where they are now."""
+    motion1 = motion1 or default_motion(joint1)
+    motion2 = motion2 or default_motion(joint2)
+    _check_link(joint1, joint2, motion1, motion2)
+    ratio = motion_core.link_ratio(value1, value2, reverse)
+    offset = motion_core.link_offset(
+        ratio, joint_motion_value(joint1, motion1), joint_motion_value(joint2, motion2)
+    )
+    link.Joint1 = joint1
+    link.Joint2 = joint2
+    _set_json(
+        link,
+        LINK_PROP,
+        {
+            "value1": float(value1),
+            "value2": float(value2),
+            "reverse": bool(reverse),
+            "motion1": motion1,
+            "motion2": motion2,
+            "offset": offset,
+        },
+    )
+    return link
+
+
+def create_motion_link(doc, joint1, joint2, value1, value2, reverse=False, motion1="", motion2=""):
+    _check_link(
+        joint1,
+        joint2,
+        motion1 or (default_motion(joint1) if joint1 is not None else ""),
+        motion2 or (default_motion(joint2) if joint2 is not None else ""),
+    )
+    joint_group(doc, create=True)
+    link = doc.addObject("App::FeaturePython", "MotionLink")
+    link.Label = "Motion Link %d" % core.label_number(
+        [o.Label for o in motion_links(doc)], "Motion Link"
+    )
+    MotionLinkProxy(link)
+    bodies.mark(link, "MotionLink")
+    set_motion_link(link, joint1, joint2, value1, value2, reverse, motion1, motion2)
+    return link
+
+
+def links_of(joint):
+    """The active motion links that tie `joint` to another one."""
+    out = []
+    for link in motion_links(joint.Document):
+        if getattr(link, "Suppressed", False):
+            continue
+        if link.Joint1 is joint or link.Joint2 is joint:
+            if link.Joint1 is not None and link.Joint2 is not None:
+                out.append(link)
+    return out
+
+
+def follow_links(joint, seen=None):
+    """The joints tied to `joint` by motion links go where their links say (and theirs in
+    turn); nothing is solved here."""
+    seen = set(seen or ()) | {joint.Name}
+    for link in links_of(joint):
+        data = link_data(link)
+        ratio = motion_core.link_ratio(data["value1"], data["value2"], data["reverse"])
+        if link.Joint1 is joint:
+            other, motion = link.Joint2, data["motion2"] or default_motion(link.Joint2)
+            mine = data["motion1"] or default_motion(joint)
+            target = motion_core.linked_value(
+                joint_motion_value(joint, mine), ratio, data["offset"]
+            )
+        else:
+            other, motion = link.Joint1, data["motion1"] or default_motion(link.Joint1)
+            mine = data["motion2"] or default_motion(joint)
+            target = motion_core.unlinked_value(
+                joint_motion_value(joint, mine), ratio, data["offset"]
+            )
+        if other is None or other.Name in seen or target is None:
+            continue
+        seen.add(other.Name)
+        try:
+            angle, slide = (target, None) if motion == "angle" else (None, target)
+            angle, slide = clamp_values(other, angle, slide)
+            part, side = driven_part(other)
+            if part is None:
+                continue
+            place_joint(other, angle, slide, side, part)
+            seen |= follow_links(other, seen)
+        except JointError as exc:
+            log("motion link %s: %s" % (link.Label, exc))
+    return seen
 
 
 def keep_in_limits(joint):
@@ -1447,17 +2222,309 @@ def part_size(part):
 
 
 # -- placements of every part (capture / revert) ---------------------------------------------------
+# -- contact sets ----------------------------------------------------------------------------------
+CONTACT_PROP = "SciForgeContact"  # on the hidden assembly: "off" / "sets" / "all"
+CONTACT_MODES = ("off", "sets", "all")
+
+
+class ContactSetProxy:
+    """Fusion's Contact Set: components that stop where they touch while contact sets are
+    on. Saved as "sciforge.joints.ContactSetProxy": keep the name."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.setup(obj)
+
+    def setup(self, obj):
+        bodies.add_prop(obj, "App::PropertyLinkList", "Members", "Contact Set", hidden=False)
+        if not obj.hasExtension("App::SuppressibleExtensionPython"):
+            obj.addExtension("App::SuppressibleExtensionPython")
+
+    def onDocumentRestored(self, obj):
+        self.setup(obj)
+
+    def execute(self, obj):
+        pass
+
+    def onChanged(self, obj, prop):
+        pass
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+
+def is_contact_set(obj):
+    try:
+        return getattr(obj, TYPE_PROP, "") == "ContactSet"
+    except Exception:
+        return False
+
+
+def contact_sets(doc):
+    return sorted((o for o in doc.Objects if is_contact_set(o)), key=lambda o: o.ID)
+
+
+def contact_mode(doc):
+    asm = assembly(doc)
+    mode = getattr(asm, CONTACT_PROP, "off") if asm is not None else "off"
+    return mode if mode in CONTACT_MODES else "off"
+
+
+def set_contact_mode(doc, mode):
+    """Fusion's Disable Contact / Enable Contact Sets / Enable All Contact."""
+    if mode not in CONTACT_MODES:
+        raise JointError("Unknown contact mode %r." % (mode,))
+    asm = assembly(doc, create=True)
+    bodies.add_prop(asm, "App::PropertyString", CONTACT_PROP, "SciForge")
+    if getattr(asm, CONTACT_PROP) != mode:
+        setattr(asm, CONTACT_PROP, mode)
+
+
+def create_contact_set(doc, members):
+    members = [m for m in members if is_part(m)]
+    if len(members) < 2:
+        raise JointError("Pick two or more components for a contact set.")
+    joint_group(doc, create=True)
+    obj = doc.addObject("App::FeaturePython", "ContactSet")
+    obj.Label = "Contact Set %d" % core.label_number(
+        [o.Label for o in contact_sets(doc)], "Contact Set"
+    )
+    ContactSetProxy(obj)
+    bodies.mark(obj, "ContactSet")
+    bodies.hide_from_timeline(obj)  # Fusion keeps them in the browser's Contacts folder
+    obj.Members = members
+    return obj
+
+
+def contact_pairs(doc, moving):
+    """The pairs of parts whose touching stops a move of `moving` (parts): every moving
+    part with every still one of a shared active contact set, or with every still part
+    when all contact is on; nothing while contact is off."""
+    mode = contact_mode(doc)
+    if mode == "off":
+        return []
+    names = {p.Name for p in moving}
+    pairs = []
+    if mode == "all":
+        still = [p for p in parts(doc) if p.Name not in names]
+        for a in moving:
+            for b in still:
+                if not _related(a, b):
+                    pairs.append((a, b))
+        return pairs
+    for group in contact_sets(doc):
+        if getattr(group, "Suppressed", False):
+            continue
+        members = [m for m in group.Members if m is not None]
+        for a in members:
+            if a.Name not in names:
+                continue
+            for b in members:
+                if b.Name not in names and not _related(a, b):
+                    pairs.append((a, b))
+    return pairs
+
+
+def _related(a, b):
+    """One part sits inside the other (a nested component): they never collide."""
+    return any(x is b for x in ancestors(a)) or any(x is a for x in ancestors(b))
+
+
+def part_shape(part):
+    """A part's solids in design coordinates (a component: all its bodies)."""
+    import Part
+
+    if part.TypeId == "App::Part":
+        shapes = []
+        for obj in part.OutListRecursive:
+            try:
+                if obj.TypeId == "PartDesign::Body" or (
+                    obj.isDerivedFrom("Part::Feature")
+                    and obj.getParentGeoFeatureGroup() is not None
+                    and obj.getParentGeoFeatureGroup().TypeId == "App::Part"
+                    and not obj.TypeId.startswith("Sketcher")
+                ):
+                    shape = bodies.global_shape(obj)
+                    if not shape.isNull() and shape.Solids:
+                        shapes.append(shape)
+            except Exception:
+                continue
+        return Part.makeCompound(shapes) if shapes else Part.Shape()
+    return bodies.global_shape(part)
+
+
+def _volume(shape):
+    try:
+        return sum(s.Volume for s in shape.Solids)
+    except Exception:
+        return 0.0
+
+
+def overlapping(a, b, tol=1e-3):
+    """True when two parts' solids run into each other (touching is allowed): a quick test
+    of their boxes, then of the solids' distance, then of their common volume."""
+    sa, sb = part_shape(a), part_shape(b)
+    if sa.isNull() or sb.isNull():
+        return False
+    ba, bb = sa.BoundBox, sb.BoundBox
+    box_a = (ba.XMin, ba.YMin, ba.ZMin, ba.XMax, ba.YMax, ba.ZMax)
+    box_b = (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)
+    if not motion_core.boxes_meet(box_a, box_b, tol):
+        return False
+    try:
+        if sa.distToShape(sb)[0] > tol:
+            return False
+    except Exception:
+        pass
+    try:
+        common = sa.common(sb)
+    except Exception:
+        return False
+    smallest = min(_volume(sa), _volume(sb))
+    return _volume(common) > max(1e-6, 1e-5 * smallest)
+
+
+def free_pairs(pairs):
+    """The pairs that do not run into each other now: parts that already overlap when a
+    move starts (built that way) must not stop every move."""
+    return [(a, b) for a, b in pairs if not overlapping(a, b)]
+
+
+def blocked(doc, pairs):
+    """The first pair of `pairs` that runs into each other now, or None."""
+    for a, b in pairs:
+        if overlapping(a, b):
+            return (a, b)
+    return None
+
+
+# -- motion studies --------------------------------------------------------------------------------
+STUDY_PROP = "SciForgeStudy"  # JSON: joints, keys, steps, mode, speed
+
+
+class MotionStudyProxy:
+    """Fusion's Motion Study: joint values set at steps 0..100, played back. Saved as
+    "sciforge.joints.MotionStudyProxy": keep the name."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        bodies.add_prop(obj, "App::PropertyString", STUDY_PROP, "SciForge")
+
+    def onDocumentRestored(self, obj):
+        bodies.add_prop(obj, "App::PropertyString", STUDY_PROP, "SciForge")
+
+    def execute(self, obj):
+        pass
+
+    def onChanged(self, obj, prop):
+        pass
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+
+def is_motion_study(obj):
+    try:
+        return getattr(obj, TYPE_PROP, "") == "MotionStudy"
+    except Exception:
+        return False
+
+
+def motion_studies(doc):
+    return sorted((o for o in doc.Objects if is_motion_study(o)), key=lambda o: o.ID)
+
+
+def study_data(study):
+    data = {
+        "joints": [],
+        "keys": {},
+        "steps": motion_core.STUDY_STEPS,
+        "mode": "once",
+        "speed": 1.0,
+    }
+    if study is not None:
+        data.update(_json(study, STUDY_PROP))
+    return data
+
+
+def create_motion_study(doc, data):
+    obj = doc.addObject("App::FeaturePython", "MotionStudy")
+    obj.Label = "Motion Study %d" % core.label_number(
+        [o.Label for o in motion_studies(doc)], "Motion Study"
+    )
+    MotionStudyProxy(obj)
+    bodies.mark(obj, "MotionStudy")
+    bodies.hide_from_timeline(obj)  # Fusion lists motion studies at the top of the browser
+    set_motion_study(obj, data)
+    return obj
+
+
+def set_motion_study(study, data):
+    clean = study_data(None)
+    clean.update(data or {})
+    clean["joints"] = [n for n in clean["joints"] if study.Document.getObject(n) is not None]
+    clean["keys"] = {
+        n: [[float(s), float(v)] for s, v in clean["keys"].get(n, [])] for n in clean["joints"]
+    }
+    _set_json(study, STUDY_PROP, clean)
+
+
+def study_pose(doc, data, step):
+    """Put every joint of a study at its value for `step` (the links follow), then solve.
+    Returns the solver's code."""
+    for name in data.get("joints", []):
+        joint = doc.getObject(name)
+        if joint is None or not is_joint(joint) or getattr(joint, "Suppressed", False):
+            continue
+        target = motion_core.study_value(data.get("keys", {}).get(name, []), step)
+        if target is None:
+            continue
+        motion = default_motion(joint)
+        try:
+            if motion == "angle":
+                drive(joint, angle=target, do_solve=False)
+            elif motion == "slide":
+                drive(joint, slide=target, do_solve=False)
+        except JointError as exc:
+            log("motion study: %s" % exc)
+    return solve(doc)
+
+
+ANGLES_KEY = "SciForge:angles"  # in a placements record: the joints' counted angles
+
+
 def placements(doc):
-    return {p.Name: _plc_list(p.Placement) for p in parts(doc)}
+    """Where every part stands (its own Placement), plus the angles the joints count."""
+    out = {p.Name: _plc_list(p.Placement) for p in parts(doc)}
+    angles = {}
+    for joint in joints(doc):
+        known = stored_angle(joint)
+        if known is not None:
+            angles[joint.Name] = known
+    if angles:
+        out[ANGLES_KEY] = angles
+    return out
 
 
 def apply_placements(doc, stored):
-    for name, values in (stored or {}).items():
+    stored = stored or {}
+    for name, values in stored.items():
+        if name == ANGLES_KEY:
+            continue
         obj = doc.getObject(name)
         if obj is not None and is_part(obj):
             plc = _plc_from_list(values)
             if not obj.Placement.isSame(plc, 1e-7):
                 obj.Placement = plc
+    angles = stored.get(ANGLES_KEY, {})
+    for joint in joints(doc):
+        store_angle(joint, angles.get(joint.Name))
 
 
 def save_baseline(doc):
@@ -1482,11 +2549,31 @@ def positions(doc):
 
 
 def last_positions(doc):
-    """The newest captured position's placements, else the baseline."""
+    """The newest captured position's placements over the baseline (a part the capture
+    did not know yet, a component dragged for the first time, keeps its baseline place)."""
+    stored = dict(baseline(doc))
     found = positions(doc)
     if found:
-        return _json(found[-1], PROPS["placements"])
-    return baseline(doc)
+        stored.update(_json(found[-1], PROPS["placements"]))
+    return stored
+
+
+def remember_places(doc, moving):
+    """Before a part moves for the first time (a drag), its place goes into the baseline,
+    so Capture Position / Revert know where it came from. Makes the hidden assembly."""
+    asm = assembly(doc, create=True)
+    known = last_positions(doc)
+    base = baseline(doc)
+    changed = False
+    for part in moving:
+        if part.Name not in known:
+            base[part.Name] = _plc_list(part.Placement)
+            changed = True
+    if changed or not base:
+        if not base:
+            base = placements(doc)
+        bodies.add_prop(asm, "App::PropertyString", PROPS["baseline"], "SciForge")
+        _set_json(asm, PROPS["baseline"], base)
 
 
 def positions_dirty(doc, tol=1e-6):
@@ -1495,6 +2582,8 @@ def positions_dirty(doc, tol=1e-6):
     if not stored:
         return False
     for name, values in stored.items():
+        if name == ANGLES_KEY:
+            continue
         obj = doc.getObject(name)
         if obj is None or not is_part(obj):
             continue
@@ -1619,7 +2708,7 @@ def rebuild_rigid_group(group):
     if len(members) < 2:
         return
     anchor = members[0]
-    frame = App.Placement(anchor.Placement)
+    frame = global_placement(anchor)
     for member in members[1:]:
         helper = _new_joint_object(doc, "rigid", "Helper", MEMBER_ROLE, label=group.Label + " link")
         _set_json(helper, PROPS["offset"], dict(default_offset(), mate=False))  # as they stand
@@ -1631,8 +2720,6 @@ def rebuild_rigid_group(group):
         helper.Reference2 = any_element_ref(anchor)
         refresh_placements(helper)
         helper.Suppressed = bool(getattr(group, "Suppressed", False))
-    if not any(connected(m) for m in members):
-        ground(anchor)
     solve(doc)
 
 
@@ -1644,7 +2731,6 @@ def create_as_built_joint(doc, fusion_type, part_a, part_b, origin_pick=None, or
     _check_as_built(fusion_type, part_a, part_b, origin_pick, origin_snap)
     joint = _new_joint_object(doc, fusion_type, "AsBuiltJoint")
     set_as_built(joint, fusion_type, part_a, part_b, origin_pick, origin_snap)
-    ensure_ground(joint)
     return joint
 
 
@@ -1663,6 +2749,11 @@ def _snap_frame(pick, snap):
     """The global frame of a stored snap (kind + the element it sits on) on today's geometry."""
     if snap.get("frame") is not None:
         return App.Placement(snap["frame"])
+    record = snap.get("record") or {}
+    if record.get("kind") in ("twofaces", "twoedges"):
+        shape, to_local = geometry(pick.obj)
+        point, z, hint = mode_frame(shape, record)
+        return global_of(pick.ref) * to_local * from_frame(_frame_from(point, z, hint))
     candidates = snap_candidates(pick)
     for c in candidates:
         if c["kind"] == snap.get("kind") and c.get("at", "") == snap.get("at", ""):
@@ -1689,7 +2780,7 @@ def set_as_built(joint, fusion_type, part_a, part_b, origin_pick=None, origin_sn
     if origin_pick is not None and origin_snap is not None:
         frame = _snap_frame(origin_pick, origin_snap)
     else:
-        frame = App.Placement(part_b.Placement)
+        frame = global_placement(part_b)
     refs = []
     for index, part in ((0, part_a), (1, part_b)):
         key = PROPS["snap1" if index == 0 else "snap2"]
@@ -1826,6 +2917,17 @@ def _references(joint, target):
     return False
 
 
+def links_of_joints(doc, gone):
+    """The motion links that tie one of the joints in `gone` (they go with it)."""
+    names = {o.Name for o in gone}
+    out = []
+    for link in motion_links(doc):
+        for j in (getattr(link, "Joint1", None), getattr(link, "Joint2", None)):
+            if j is not None and j.Name in names and link not in out:
+                out.append(link)
+    return out
+
+
 def remove_joints_of(part):
     """Fusion deletes a component's joints with it: the joints, Pin-Slot helpers and
     rigid-group links on `part` (a part, or a body or component inside one), and its
@@ -1846,6 +2948,14 @@ def remove_joints_of(part):
         if len(left) < 2 and any(m is part for m in group.Members):
             doomed.append(group)
             doomed.extend(h for h in helpers_of(group) if h not in doomed)
+    doomed.extend(links_of_joints(doc, doomed))
+    for group in contact_sets(doc):
+        if any(m is part for m in group.Members):
+            left = [m for m in group.Members if m is not None and m is not part]
+            if len(left) < 2:
+                doomed.append(group)
+            else:
+                group.Members = left
     names = []
     for obj in doomed:
         try:
@@ -1914,7 +3024,7 @@ def reroot(doc):
             new = part_of(target)
             if new is not None and new is not target:
                 g.ObjectToGround = new
-    for group in rigid_groups(doc):
+    for group in rigid_groups(doc) + contact_sets(doc):
         members, seen = [], set()
         for m in group.Members:
             m = (part_of(m) or m) if m is not None else None
@@ -1972,6 +3082,9 @@ class _DeleteWatch:
                 for helper in helpers_of(obj):
                     if doc.getObject(helper.Name) is not None:
                         doc.removeObject(helper.Name)
+                for link in links_of_joints(doc, [obj]):  # a motion link needs both joints
+                    if doc.getObject(link.Name) is not None:
+                        doc.removeObject(link.Name)
         except Exception as exc:
             warn("joints: %s" % exc)
 
@@ -1999,6 +3112,8 @@ def tidy(doc):
             elif is_joint(obj) or is_helper(obj):
                 if _dead_ref(obj.Reference1) or _dead_ref(obj.Reference2):
                     removed.append(obj.Name)
+            elif is_auto_ground(obj):
+                continue  # SciForge's own holder: pointed at nothing between solves
             elif "ObjectToGround" in obj.PropertiesList and obj.ObjectToGround is None:
                 removed.append(obj.Name)
             elif is_rigid_group(obj):
@@ -2008,6 +3123,15 @@ def tidy(doc):
                 elif len(members) != len(obj.Members):
                     obj.Members = members
                     rebuild_rigid_group(obj)
+            elif is_motion_link(obj):
+                if obj.Joint1 is None or obj.Joint2 is None:
+                    removed.append(obj.Name)
+            elif is_contact_set(obj):
+                members = [m for m in obj.Members if m is not None]
+                if len(members) < 2:
+                    removed.append(obj.Name)
+                elif len(members) != len(obj.Members):
+                    obj.Members = members
         except Exception as exc:
             warn("joints tidy: %s" % exc)
     for name in removed:

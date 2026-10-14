@@ -190,6 +190,10 @@ VIEWER_SETTINGS = [
     # grey went into the exported PDF as well.
     (_TECHDRAW_COLORS, "Unsigned", "PageColor", _rgba("#ffffff")),
     (_TECHDRAW_COLORS, "Unsigned", "FaceColor", _rgba("#ffffff")),
+    # Joints (joints.py): SciForge solves the assembly itself (nested components, free
+    # groups of jointed parts held while solving). FreeCAD's own solve on every recompute
+    # knows neither and would move a nested component to the wrong place.
+    ("User parameter:BaseApp/Preferences/Mod/Assembly", "Bool", "SolveOnRecompute", False),
 ]
 
 _saved_qss = None

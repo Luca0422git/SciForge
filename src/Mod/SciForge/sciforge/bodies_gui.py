@@ -24,6 +24,9 @@ ICONS = {
     "DeleteFace": "delete",
     "RigidGroup": "rigid_group",  # joints_ui.py reuses this view provider for its steps
     "Position": "position",
+    "MotionLink": "motion_link",  # joints_motion_ui.py: Motion Link, Contact Set, Motion Study
+    "ContactSet": "contact_set",
+    "MotionStudy": "motion_study",
     "Remove": "remove",
     "Align": "align",
     "ReplaceFace": "replace_face",

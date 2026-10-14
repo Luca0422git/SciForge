@@ -296,7 +296,7 @@ def c_done():
         "Revolute 1" in (t.children("Joints") or []),
         t.children("Joints"),
     )
-    h.check("the plate was grounded for it", jm().is_grounded(j.plate()))
+    h.check("nothing was grounded for it (none is needed)", not jm().is_grounded(j.plate()))
     j.block_box("block where it was built", j.HOME)
 
 

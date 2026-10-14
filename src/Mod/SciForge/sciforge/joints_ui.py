@@ -21,8 +21,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies_gui, commands, hole_common, joints, joints_core as core, log, preview, warn
-from . import ui_icon_path
+from . import bodies_gui, commands, hole_common, joints, joints_core as core, joints_drag, log
+from . import preview, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtGui, QtWidgets
 from .taskui import DistanceField
@@ -46,6 +46,8 @@ HOVER_MS = 30
 ANIMATION_MS = 40
 ANIMATION_SECONDS = 1.8
 AXIS_KEYS = {"Rotate": "rotate", "Slide": "slide", "Normal": "rotate"}
+# steps drawn with bodies_gui.StepViewProvider (icon, double-click edits)
+STEP_TYPES = ("Position", "MotionLink", "ContactSet", "MotionStudy")
 
 
 class NeedsPick(joints.JointError):
@@ -86,6 +88,8 @@ def _label(pick, snap=None):
             "vertex": "corner",
             "midpoint": "midpoint",
             "circle": "circle centre",
+            "twofaces": "between two faces",
+            "twoedges": "edge intersection",
         }.get(snap["kind"], snap["kind"])
     return text
 
@@ -124,6 +128,7 @@ class SnapHover:
         self.pick = None
         self.candidates = []
         self.hot = None
+        self.source = None  # the open dialog's own snap points for a pick (position modes)
         self.root = coin.SoAnnotation()
         style = coin.SoPickStyle()
         style.style = coin.SoPickStyle.UNPICKABLE
@@ -168,7 +173,9 @@ class SnapHover:
             if key != self.key:
                 self.key = key
                 self.pick = pick
-                self.candidates = joints.snap_candidates(pick)
+                self.candidates = (
+                    self.source(pick) if self.source is not None else joints.snap_candidates(pick)
+                )
             if not self.candidates:
                 self.clear(keep_key=True)
                 return
@@ -222,7 +229,8 @@ class SnapHover:
             and self.pick.element == pick.element
         ):
             return self.hot
-        return joints.nearest_snap(joints.snap_candidates(pick), point)
+        found = self.source(pick) if self.source is not None else joints.snap_candidates(pick)
+        return joints.nearest_snap(found, point)
 
     # -- drawing -----------------------------------------------------------------------------------
     def _size(self):
@@ -571,13 +579,79 @@ class _JointsPanel(BodyPanel):
         """A click: a part's element (Pick) or a whole object (browser row)."""
 
     def snap_for(self, pick, point):
-        if self.hover is not None:
+        slot = self.slot_of(self.active) if self.active else None
+        if self.hover is not None and (slot is None or slot.mode != "twofaces"):
             return self.hover.snap_for(pick, point)
+        if slot is not None and slot.mode == "twofaces":
+            if self.hover is not None and self.hover.source is not None:
+                hot = self.hover.snap_for(pick, point)
+                if hot is not None and hot.get("record"):
+                    return hot
+            return joints.nearest_snap(slot.candidates(pick), point)
         return joints.nearest_snap(joints.snap_candidates(pick), point)
 
     def activated(self, name):
         if self.hover is not None:
+            slot = self.slot_of(name)
+            source = slot.candidates if slot is not None and slot.mode == "twofaces" else None
+            if source is not self.hover.source:
+                self.hover.source = source
+                self.hover.clear()
             self.hover.set_enabled(name in self.hover_boxes)
+
+    def slot_of(self, box):
+        """The PositionSlot a selection box belongs to, or None."""
+        for slot in getattr(self, "slots", {}).values():
+            if slot.owns(box):
+                return slot
+        return None
+
+    def take_position(self, name, box, pick, point):
+        """A click for position slot `name` in box `box`: (pick, snap) once the position is
+        complete, else None (the next box waits, or a refusal says why)."""
+        slot = self.slots[name]
+        if box != name:
+            why = slot.take(box, pick)
+            if why:
+                self.refuse(why)
+                return None
+            self.took()
+            following = slot.next_box(box)
+            if following is not None:
+                self.activate(following)
+                return None
+            try:
+                return slot.picks[0], slot.snap()
+            except joints.JointError as exc:
+                slot.clear(box)
+                self.refuse(str(exc))
+                return None
+        snap = self.snap_for(pick, point)
+        if snap is None:
+            self.info.setText("No snap point there; try a face, an edge or a corner.")
+            return None
+        if slot.mode == "twofaces":
+            if not slot.ready():
+                self.refuse("Pick the two faces first (Plane 1 and Plane 2).")
+                self.activate(slot.first_box() if slot.picks[0] is None else name + "_b")
+                return None
+            if pick.obj is not slot.picks[0].obj:
+                self.refuse(
+                    "Pick the snap point on %s, where the two faces are." % slot.picks[0].obj.Label
+                )
+                return None
+            try:
+                snap = slot.snap(pick, snap)
+            except joints.JointError as exc:
+                self.refuse(str(exc))
+                return None
+        return pick, snap
+
+    def slot_mode_changed(self, slot):
+        """A slot's Mode changed: its picks go and its first box waits."""
+        self.cleared(slot.name)
+        self.activate(slot.first_box())
+        self.changed()
 
     # -- markers -----------------------------------------------------------------------------------
     def show_marker(self, frame):
@@ -722,6 +796,158 @@ class _Limits:
 
 
 # -- Joint (J) -------------------------------------------------------------------------------------
+class PositionSlot:
+    """One joint origin's place in a joint dialog: Fusion's Mode (Simple: a snap point;
+    Between Two Faces: two flat faces, then a snap point brought onto the plane between
+    them; Two Edge Intersection: two edges, where they meet when extended) with its
+    selection boxes. `name` is the snap box ("comp1", "snap"...); the faces / edges go in
+    `name`_a and `name`_b."""
+
+    CAPTIONS = {
+        "twofaces": ("Plane 1", "Plane 2"),
+        "twoedges": ("Edge 1", "Edge 2"),
+        "simple": ("", ""),
+    }
+
+    def __init__(self, panel, layout, name, caption, empty="Select snap", heading=None):
+        self.panel = panel
+        self.name = name
+        self.mode = "simple"
+        self.picks = [None, None]
+        if heading:
+            label = QtWidgets.QLabel(heading)
+            font = label.font()
+            font.setBold(True)
+            label.setFont(font)
+            layout.addRow(label)
+        pairs = [(core.MODE_TITLES[m], m) for m in core.MODES]
+        self.combo, self.combo_caption = panel.form_combo(
+            layout, "Mode", pairs, "simple", self._mode_changed
+        )
+        self.combo.setObjectName("SciForgeJointMode_%s" % name)
+        panel.form_box(layout, name + "_a", "Plane 1", "Select")
+        panel.form_box(layout, name + "_b", "Plane 2", "Select")
+        panel.form_box(layout, name, caption, empty)
+        self.show()
+
+    @property
+    def boxes(self):
+        if self.mode == "twofaces":
+            return [self.name + "_a", self.name + "_b", self.name]
+        if self.mode == "twoedges":
+            return [self.name + "_a", self.name + "_b"]
+        return [self.name]
+
+    def owns(self, box):
+        return box in (self.name, self.name + "_a", self.name + "_b")
+
+    def first_box(self):
+        return self.boxes[0]
+
+    def next_box(self, box):
+        boxes = self.boxes
+        if box in boxes and boxes.index(box) + 1 < len(boxes):
+            return boxes[boxes.index(box) + 1]
+        return None
+
+    def show(self):
+        panel = self.panel
+        a, b = self.CAPTIONS[self.mode]
+        for suffix, text in (("_a", a), ("_b", b)):
+            key = self.name + suffix
+            shown = self.mode != "simple"
+            panel.fields[key].widget.setVisible(shown)
+            panel.captions[key].setVisible(shown)
+            panel.captions[key].setText(text)
+        shown = self.mode != "twoedges"
+        panel.fields[self.name].widget.setVisible(shown)
+        panel.captions[self.name].setVisible(shown)
+
+    def set_mode(self, mode, quiet=False):
+        self.mode = mode if mode in core.MODES else "simple"
+        hole_common.set_combo(self.combo, self.mode)
+        self.picks = [None, None]
+        for suffix in ("_a", "_b"):
+            self.panel.fields[self.name + suffix].set_text("")
+        self.show()
+
+    def _mode_changed(self):
+        mode = self.combo.currentData()
+        if mode == self.mode:
+            return
+        self.set_mode(mode)
+        self.panel.slot_mode_changed(self)
+
+    def take(self, box, pick):
+        """A face / edge click for box `name`_a or `name`_b: '' when taken, else why not."""
+        index = 0 if box.endswith("_a") else 1
+        if self.mode == "twofaces":
+            face = None
+            try:
+                if pick.element.startswith("Face"):
+                    face = pick.obj.Shape.getElement(pick.element)
+            except Exception:
+                face = None
+            if face is None or face.Surface.TypeId != "Part::GeomPlane":
+                return "Between Two Faces needs a flat face: click one."
+        elif not pick.element.startswith("Edge"):
+            return "Two Edge Intersection needs an edge: click one."
+        other = self.picks[1 - index]
+        if other is not None:
+            if other.obj is not pick.obj:
+                return "Pick both on %s." % other.obj.Label
+            if other.element == pick.element:
+                return "Pick a different %s." % ("face" if self.mode == "twofaces" else "edge")
+        self.picks[index] = pick
+        self.panel.fields[box].set_text(_label(pick))
+        return ""
+
+    def clear(self, box):
+        if box.endswith("_a"):
+            self.picks[0] = None
+        elif box.endswith("_b"):
+            self.picks[1] = None
+        if self.panel.fields.get(box) is not None and box != self.name:
+            self.panel.fields[box].set_text("")
+
+    def ready(self):
+        return all(p is not None for p in self.picks)
+
+    def part(self):
+        for p in self.picks:
+            if p is not None:
+                return p.part
+        return None
+
+    def candidates(self, pick):
+        """The hover's snap points for the snap box of a Between Two Faces position."""
+        if self.mode == "twofaces" and self.ready():
+            return joints.mode_candidates(self.picks, pick)
+        return joints.snap_candidates(pick)
+
+    def snap(self, pick=None, snap=None):
+        """The joint origin of a Between Two Faces / Two Edge Intersection position."""
+        if self.mode == "twoedges":
+            return joints.mode_snap("twoedges", self.picks)
+        if snap is not None and snap.get("record"):
+            return snap
+        return joints.mode_snap("twofaces", self.picks, pick, snap)
+
+    def read(self, joint_ref, record):
+        """Show a stored position (editing): its mode and faces / edges."""
+        mode = record.get("kind")
+        if mode not in ("twofaces", "twoedges"):
+            self.set_mode("simple")
+            return
+        self.set_mode(mode)
+        obj = joints.shape_owner(joint_ref) or joint_ref[0]
+        names = record.get("faces" if mode == "twofaces" else "edges") or []
+        for index, element in enumerate(names[:2]):
+            pick = joints.Pick(joint_ref[0], obj, element)
+            self.picks[index] = pick
+            self.panel.fields[self.name + ("_a", "_b")[index]].set_text(_label(pick))
+
+
 class JointPanel(_JointsPanel):
     """Fusion's Joint dialog. Component 1 moves onto component 2."""
 
@@ -745,7 +971,7 @@ class JointPanel(_JointsPanel):
         self.target = feature
         if feature is not None:
             self._read(feature)
-            self.activate("comp1")
+            self.activate(self.slots["comp1"].first_box())
             if show_motion:
                 self.tabs.setCurrentIndex(1)
         else:
@@ -765,14 +991,13 @@ class JointPanel(_JointsPanel):
         self.tabs.addTab(motion, "Motion")
         self.layout.addRow(self.tabs)
         pos = QtWidgets.QFormLayout(position)
-        self.form_box(pos, "comp1", "Component 1", "Select snap")
-        self.form_box(pos, "comp2", "Component 2", "Select snap")
-        self.mode, _ = self.form_combo(pos, "Mode", [(m, m) for m in MODES], "Simple", lambda: None)
-        model = self.mode.model()
-        for i in (1, 2):  # not built yet: shown greyed, like an unavailable Fusion option
-            item = model.item(i)
-            if item is not None:
-                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEnabled)
+        # Fusion: each component has its own Mode (Simple / Between Two Faces / Two Edge
+        # Intersection) and snap
+        self.slots = {
+            "comp1": PositionSlot(self, pos, "comp1", "Snap", heading="Component 1"),
+            "comp2": PositionSlot(self, pos, "comp2", "Snap", heading="Component 2"),
+        }
+        self.mode = self.slots["comp1"].combo  # the first Mode box (older tests look here)
         self.offset_fields = {}
         for key, label in (("x", "Offset X"), ("y", "Offset Y"), ("z", "Offset Z")):
             field, _ = self.form_field(pos, label, 0.0, "mm", lambda v, k=key: self._offset(k, v))
@@ -846,21 +1071,36 @@ class JointPanel(_JointsPanel):
                 ref = joint.Reference1 if index == 0 else joint.Reference2
                 if ref:
                     obj = joints.shape_owner(ref) or ref[0]
-                    pick = joints.Pick(ref[0], obj, joints.element_name(ref[1][0]))
-                    self.picks[name] = pick
                     record = joints._json(joint, joints.PROPS["snap1" if index == 0 else "snap2"])
+                    element = record.get("element") or joints.element_name(ref[1][0])
+                    pick = joints.Pick(ref[0], obj, element)
+                    self.picks[name] = pick
                     self.snaps[name] = {"kind": record.get("kind"), "at": record.get("at", "")}
-                    self.fields[name].set_text(_label(pick, self.snaps[name]))
+                    if record.get("kind") in ("twofaces", "twoedges"):
+                        self.snaps[name]["record"] = dict(record)
+                        self.snaps[name]["oriented"] = True
+                    self.slots[name].read(ref, record)
+                    self.fields[name].set_text(
+                        _label(pick, self.snaps[name]) if record.get("kind") != "twoedges" else ""
+                    )
         finally:
             self._quiet = False
 
     # -- picks -------------------------------------------------------------------------------------
+    def _side(self, box):
+        """The component side ("comp1" / "comp2") a selection box fills."""
+        return "comp2" if (box or "").startswith("comp2") else "comp1"
+
+    def _side_part(self, side):
+        pick = self.picks[side]
+        if pick is not None:
+            return pick.part
+        return self.slots[side].part()
+
     def allow_pick(self, pick):
-        if self.active == "comp2" and self.picks["comp1"] is not None:
-            return pick.part is not self.picks["comp1"].part
-        if self.active == "comp1" and self.picks["comp2"] is not None:
-            return pick.part is not self.picks["comp2"].part
-        return True
+        side = self._side(self.active)
+        other = self._side_part("comp2" if side == "comp1" else "comp1")
+        return other is None or pick.part is not other
 
     def allow_click(self, pick):
         return pick.part is not None  # the same component again is refused with a message
@@ -876,17 +1116,58 @@ class JointPanel(_JointsPanel):
         if not pick.element and not pick.is_datum():
             self.info.setText("Click a face, edge or corner of the component (a snap point).")
             return
-        name = self.active if self.active in ("comp1", "comp2") else "comp1"
+        box = self.active if self.active and self.slot_of(self.active) else "comp1"
+        name = self._side(box)
         other = "comp2" if name == "comp1" else "comp1"
-        if self.picks[other] is not None and self.picks[other].part is pick.part:
+        other_part = self._side_part(other)
+        if other_part is not None and other_part is pick.part:
             self.refuse(
                 "Both picks are on %s. Pick a point on another component." % pick.part.Label
             )
+            return
+        slot = self.slots[name]
+        if box != name:  # a face / edge of Between Two Faces / Two Edge Intersection
+            why = slot.take(box, pick)
+            if why:
+                self.refuse(why)
+                return
+            self.took()
+            following = slot.next_box(box)
+            if following is not None:
+                self.activate(following)
+                return
+            # Two Edge Intersection: both edges picked, the joint origin is where they meet
+            try:
+                snap = slot.snap()
+            except joints.JointError as exc:
+                slot.clear(box)
+                self.refuse(str(exc))
+                return
+            self._took_side(name, slot.picks[0], snap)
             return
         snap = self.snap_for(pick, point)
         if snap is None:
             self.info.setText("No snap point there; try a face, an edge or a corner.")
             return
+        if slot.mode == "twofaces":
+            if not slot.ready():
+                self.refuse("Pick the two faces first (Plane 1 and Plane 2).")
+                self.activate(slot.first_box() if slot.picks[0] is None else name + "_b")
+                return
+            if pick.obj is not slot.picks[0].obj:
+                self.refuse(
+                    "Pick the snap point on %s, where the two faces are." % slot.picks[0].obj.Label
+                )
+                return
+            try:
+                snap = slot.snap(pick, snap)
+            except joints.JointError as exc:
+                self.refuse(str(exc))
+                return
+        self._took_side(name, pick, snap)
+
+    def _took_side(self, name, pick, snap):
+        """One component's joint origin is known: show it, then wait for the other."""
         self.picks[name] = pick
         self.snaps[name] = snap
         self.fields[name].set_text(_label(pick, snap))
@@ -895,7 +1176,7 @@ class JointPanel(_JointsPanel):
             self.clear_markers()
             self.show_marker(snap["frame"])
             if self.picks["comp2"] is None:
-                self.activate("comp2")
+                self.activate(self.slots["comp2"].first_box())
         else:
             self.clear_markers()
         if self.joint is not None:
@@ -903,14 +1184,17 @@ class JointPanel(_JointsPanel):
         self.changed()
 
     def cleared(self, name):
-        self.picks[name] = None
-        self.snaps[name] = None
-        self.fields[name].set_text("")
+        side = self._side(name)
+        slot = self.slots[side]
+        if name != side:
+            slot.clear(name)
+        self.picks[side] = None
+        self.snaps[side] = None
+        self.fields[side].set_text("")
         self.clear_markers()
         self.stop_animation()
         if self.joint is not None and self.first:
-            # the joint being made goes with its picks; the component comes back, and the
-            # ground the joint added goes
+            # the joint being made goes with its picks; the component comes back
             self.joint = None
             self.target = None
             self._announce = ""
@@ -982,13 +1266,31 @@ class JointPanel(_JointsPanel):
             pass
 
     # -- the preview -------------------------------------------------------------------------------
+    def _waiting(self, name):
+        which = (
+            "the first component (the one that will move)"
+            if name == "comp1"
+            else "the second component"
+        )
+        slot = self.slots[name]
+        if slot.mode == "twofaces":
+            if not slot.ready():
+                return (
+                    "Click two flat faces of %s (Plane 1, Plane 2): the joint origin goes "
+                    "halfway between them." % which
+                )
+            return "Click a snap point: it is brought onto the plane between the two faces."
+        if slot.mode == "twoedges":
+            return "Click two edges of %s: the joint origin goes where they meet." % which
+        return "Click a snap point on %s." % which
+
     def apply(self):
         pick1, pick2 = self.picks["comp1"], self.picks["comp2"]
         kind = self.type_box.currentData()
         if pick1 is None:
-            raise NeedsPick("Click a snap point on the first component (the one that will move).")
+            raise NeedsPick(self._waiting("comp1"))
         if pick2 is None:
-            raise NeedsPick("Click a snap point on the second component.")
+            raise NeedsPick(self._waiting("comp2"))
         offset = {k: f.value() for k, f in self.offset_fields.items()}
         offset["angle"] = self.angle.value()
         offset["flip"] = self.flip.isChecked()
@@ -1003,13 +1305,7 @@ class JointPanel(_JointsPanel):
             )
             self.target = self.joint
             made = True
-            grounded = joints.ensure_ground(self.joint)
-            self._announce = (
-                "%s is grounded so the joint has something to hold on to (Unground it in the "
-                "browser if it must move)." % grounded.Label
-                if grounded is not None
-                else ""
-            )
+            self._announce = ""
         else:
             if self._rejoin:
                 self._rejoin = False
@@ -1112,7 +1408,11 @@ class AsBuiltPanel(_JointsPanel):
         self.target = feature
         if feature is not None:
             self._read(feature)
-            self.activate("position" if joints.fusion_type(feature) != "rigid" else "components")
+            self.activate(
+                self.slots["position"].first_box()
+                if joints.fusion_type(feature) != "rigid"
+                else "components"
+            )
         else:
             self.activate("components")
             self.start_from_selection()
@@ -1123,15 +1423,22 @@ class AsBuiltPanel(_JointsPanel):
     def build_form(self):
         self.form_box(self.layout, "components", "Components", "Select")
         self.type_box, _ = self.form_combo(self.layout, "Type", TYPES, "rigid", self._type_changed)
-        self.form_box(self.layout, "position", "Position", "Select snap")
+        self.slots = {"position": PositionSlot(self, self.layout, "position", "Position")}
         self.angle_limits = _Limits(self, self.layout, "deg", self.changed)
         self.slide_limits = _Limits(self, self.layout, "mm", self.changed)
         self._show_rows("rigid")
 
     def _show_rows(self, kind):
         shown = kind != "rigid"
-        self.fields["position"].widget.setVisible(shown)
-        self.captions["position"].setVisible(shown)
+        slot = self.slots["position"]
+        slot.combo.setVisible(shown)
+        slot.combo_caption.setVisible(shown)
+        if shown:
+            slot.show()
+        else:
+            for key in ("position", "position_a", "position_b"):
+                self.fields[key].widget.setVisible(False)
+                self.captions[key].setVisible(False)
         self.angle_limits.set_visible(kind in core.ANGLE_LIMITS)
         self.slide_limits.set_visible(kind in core.LENGTH_LIMITS)
 
@@ -1151,9 +1458,17 @@ class AsBuiltPanel(_JointsPanel):
                 if record.get("kind") not in ("asbuilt", None):
                     ref = joint.Reference1 if index == 0 else joint.Reference2
                     obj = joints.shape_owner(ref) or ref[0]
-                    self.position_pick = joints.Pick(ref[0], obj, record.get("element", ""))
+                    element = record.get("element") or joints.element_name(ref[1][0])
+                    self.position_pick = joints.Pick(ref[0], obj, element)
                     self.position_snap = {"kind": record.get("kind"), "at": record.get("at", "")}
-                    self.fields["position"].set_text(_label(self.position_pick, self.position_snap))
+                    if record.get("kind") in ("twofaces", "twoedges"):
+                        self.position_snap["record"] = dict(record)
+                        self.position_snap["oriented"] = True
+                    self.slots["position"].read(ref, record)
+                    if record.get("kind") != "twoedges":
+                        self.fields["position"].set_text(
+                            _label(self.position_pick, self.position_snap)
+                        )
         finally:
             self._quiet = False
 
@@ -1161,7 +1476,7 @@ class AsBuiltPanel(_JointsPanel):
         return self.active == "components" and joints.part_of(obj) is not None
 
     def allow_pick(self, pick):
-        if self.active == "position":
+        if self.slot_of(self.active) is not None:
             return pick.part in self.parts if self.parts else True
         return True
 
@@ -1173,15 +1488,18 @@ class AsBuiltPanel(_JointsPanel):
         part = pick.part if pick is not None else joints.part_of(root)
         if part is None:
             return
-        if self.active == "position" and pick is not None and (pick.element or pick.is_datum()):
+        slot_box = self.active if self.slot_of(self.active) is not None else None
+        if slot_box and pick is not None and (pick.element or pick.is_datum()):
             if self.parts and part not in self.parts:
                 self.refuse("Pick the position on one of the two components.")
                 return
-            snap = self.snap_for(pick, point)
-            if snap is None:
+            taken = self.take_position("position", slot_box, pick, point)
+            if taken is None:
                 return
+            pick, snap = taken
             self.position_pick, self.position_snap = pick, snap
-            self.fields["position"].set_text(_label(pick, snap))
+            if self.slots["position"].mode != "twoedges":
+                self.fields["position"].set_text(_label(pick, snap))
             self.clear_markers()
             self.show_marker(snap["frame"])
             self.took()
@@ -1199,7 +1517,7 @@ class AsBuiltPanel(_JointsPanel):
         self.took()
         self._remake = True
         if len(self.parts) == 2 and self.type_box.currentData() != "rigid":
-            self.activate("position")
+            self.activate(self.slots["position"].first_box())
         self.changed()
 
     def cleared(self, name):
@@ -1207,6 +1525,8 @@ class AsBuiltPanel(_JointsPanel):
             self.parts = []
             self.fields["components"].set_text("")
         else:
+            if name != "position":
+                self.slots["position"].clear(name)
             self.position_pick = self.position_snap = None
             self.fields["position"].set_text("")
             self.clear_markers()
@@ -1220,7 +1540,7 @@ class AsBuiltPanel(_JointsPanel):
         self._show_rows(kind)
         self._remake = True
         if kind != "rigid" and len(self.parts) == 2 and self.position_pick is None:
-            self.activate("position")
+            self.activate(self.slots["position"].first_box())
         self.changed()
 
     def apply(self):
@@ -1238,7 +1558,6 @@ class AsBuiltPanel(_JointsPanel):
         elif self._remake:
             # the same joint, redefined (Edit keeps it in its place in the timeline)
             joints.set_as_built(self.joint, kind, self.parts[0], self.parts[1], *position)
-            joints.ensure_ground(self.joint)
         self._remake = False
         angle = self.angle_limits.values() if kind in core.ANGLE_LIMITS else None
         slide = self.slide_limits.values() if kind in core.LENGTH_LIMITS else None
@@ -1292,7 +1611,7 @@ class JointOriginPanel(_JointsPanel):
         self._recompute()
 
     def build_form(self):
-        self.form_box(self.layout, "snap", "Snap", "Select snap")
+        self.slots = {"snap": PositionSlot(self, self.layout, "snap", "Snap")}
         self.offset_fields = {}
         for key, label in (("x", "Offset X"), ("y", "Offset Y"), ("z", "Offset Z")):
             field, _ = self.form_field(self.layout, label, 0.0, "mm", lambda v: self.changed())
@@ -1314,10 +1633,17 @@ class JointOriginPanel(_JointsPanel):
             on = joints.joint_origin_owner(origin)
             if on is not None:
                 part = joints.part_of(on) or on
-                self.pick = joints.Pick(part, on, getattr(origin, "SciForgeElement", ""))
+                element = getattr(origin, "SciForgeElement", "")
+                self.pick = joints.Pick(part, on, element)
                 record = joints._json(origin, joints.PROPS["snap1"])
                 self.snap = {"kind": record.get("kind"), "at": record.get("at", "")}
-                self.fields["snap"].set_text(_label(self.pick, self.snap))
+                if record.get("kind") in ("twofaces", "twoedges"):
+                    self.snap["record"] = dict(record)
+                    self.snap["oriented"] = True
+                ref = joints.reference(part, on, element or (record.get("edges") or [""])[0])
+                self.slots["snap"].read(ref, record)
+                if record.get("kind") != "twoedges":
+                    self.fields["snap"].set_text(_label(self.pick, self.snap))
         finally:
             self._quiet = False
 
@@ -1328,15 +1654,20 @@ class JointOriginPanel(_JointsPanel):
         pick = joints.resolve_selection(root, sub, point)
         if pick is None or not pick.element:
             return
-        snap = self.snap_for(pick, point)
-        if snap is None:
+        box = self.active if self.slot_of(self.active) else "snap"
+        taken = self.take_position("snap", box, pick, point)
+        if taken is None:
             return
-        self.pick, self.snap = pick, snap
-        self.fields["snap"].set_text(_label(pick, snap))
+        self.pick, self.snap = taken
+        if self.slots["snap"].mode != "twoedges":
+            self.fields["snap"].set_text(_label(self.pick, self.snap))
         self.message.setText("")
+        self.took()
         self.changed()
 
     def cleared(self, name):
+        if name != "snap":
+            self.slots["snap"].clear(name)
         self.pick = self.snap = None
         self.fields["snap"].set_text("")
         if self.origin is not None and not self.editing:
@@ -1349,6 +1680,14 @@ class JointOriginPanel(_JointsPanel):
 
     def apply(self):
         if self.pick is None:
+            mode = self.slots["snap"].mode
+            if mode == "twofaces":
+                raise NeedsPick(
+                    "Click two flat faces (Plane 1, Plane 2), then a snap point: the joint "
+                    "origin goes between the faces."
+                )
+            if mode == "twoedges":
+                raise NeedsPick("Click two edges: the joint origin goes where they meet.")
             raise NeedsPick("Click a snap point on a component: the joint origin goes there.")
         offset = {k: f.value() for k, f in self.offset_fields.items()}
         offset["angle"] = self.angle.value()
@@ -1490,6 +1829,7 @@ class DrivePanel(_JointsPanel):
         self.joint = None
         self._start = {}
         self._in_slider = False
+        self.contact = None
         super().__init__(doc, "Drive Joints", False)
         DrivePanel.last = self
         self.activate("joint")
@@ -1611,8 +1951,8 @@ class DrivePanel(_JointsPanel):
             return
         self._quiet = True
         try:
-            self.angle_slider.setValue(int(round(self.angle.value() * 10)))
-            self.slide_slider.setValue(int(round(self.slide.value() * 100)))
+            self._fit_slider(self.angle_slider, self.angle.value(), 10)
+            self._fit_slider(self.slide_slider, self.slide.value(), 100)
         finally:
             self._quiet = False
         self.changed()
@@ -1658,17 +1998,40 @@ class DrivePanel(_JointsPanel):
         kind = joints.fusion_type(self.joint)
         angle = self.angle.value() if kind in core.HAS_ANGLE else None
         slide = self.slide.value() if kind in core.HAS_DISTANCE else None
-        got_angle, got_slide = joints.drive(self.joint, angle=angle, slide=slide)
+        # with contact sets on, the parts stop where they touch (Fusion)
+        got_angle, got_slide, hit = joints.drive_until_contact(self.joint, angle=angle, slide=slide)
+        self.contact = hit
         self._quiet = True
         try:
             if angle is not None and abs(got_angle - angle) > 1e-6:
-                self.angle.set_value(got_angle)  # clamped to a limit
-                self.angle_slider.setValue(int(round(got_angle * 10)))
+                self.angle.set_value(round(got_angle, 6))  # clamped to a limit or a contact
+                self._fit_slider(self.angle_slider, got_angle, 10)
             if slide is not None and abs(got_slide - slide) > 1e-6:
-                self.slide.set_value(got_slide)
-                self.slide_slider.setValue(int(round(got_slide * 100)))
+                self.slide.set_value(round(got_slide, 6))
+                self._fit_slider(self.slide_slider, got_slide, 100)
+            if angle is not None:
+                self._fit_slider(self.angle_slider, angle if hit is None else got_angle, 10)
+            if slide is not None:
+                self._fit_slider(self.slide_slider, slide if hit is None else got_slide, 100)
         finally:
             self._quiet = False
+        if hit is not None:
+            self.note.setText(
+                "%s and %s touch: the motion stops there (contact sets are on)."
+                % (hit[0].Label, hit[1].Label)
+            )
+        else:
+            self.note.setText("")
+
+    def _fit_slider(self, slider, value, scale):
+        """The slider shows `value`, its range widened when the value goes past it (a joint
+        turned more than half a turn)."""
+        raw = int(round(value * scale))
+        if raw > slider.maximum():
+            slider.setMaximum(raw)
+        if raw < slider.minimum():
+            slider.setMinimum(raw)
+        slider.setValue(raw)
 
     def can_finish(self):
         return "" if self.joint is not None else "Pick a joint to drive."
@@ -1743,6 +2106,92 @@ def revert_position(doc):
         return False
     doc.commitTransaction()
     return True
+
+
+PROMPT_NAME = "SciForgeCapturePrompt"
+
+
+def needs_capture(doc):
+    """True when components were moved (dragged, driven) since the last captured position
+    in a design that keeps its history: Fusion asks to capture or revert first."""
+    try:
+        if doc is None or joints.assembly(doc) is None or not joints.positions_dirty(doc):
+            return False
+        from . import direct
+
+        return bool(direct.captures_history(doc))
+    except Exception:
+        return False
+
+
+def position_prompt(doc, then):
+    """Fusion's prompt before a command that depends on where components stand (Joint,
+    As-built Joint, Joint Origin, Rigid Group): some components moved; Capture Position
+    records where they stand (a Position step), Revert puts them back; Cancel starts
+    nothing. `then()` runs after Capture or Revert. Without moved components it runs at
+    once. Returns the message box (tests click it), or None."""
+    if not needs_capture(doc):
+        then()
+        return None
+    box = QtWidgets.QMessageBox(Gui.getMainWindow())
+    box.setObjectName(PROMPT_NAME)
+    box.setWindowTitle("Components moved")
+    box.setIcon(QtWidgets.QMessageBox.Question)
+    box.setText(
+        "Some components were moved since the last captured position.\n\n"
+        "Capture Position keeps them where they are (a Position step in the timeline); "
+        "Revert puts them back where they were."
+    )
+    capture = box.addButton("Capture Position", QtWidgets.QMessageBox.AcceptRole)
+    revert = box.addButton("Revert", QtWidgets.QMessageBox.DestructiveRole)
+    box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
+    box.setDefaultButton(capture)
+    box.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
+
+    def answered(button):
+        try:
+            if button is capture:
+                if capture_position(doc) is not None:
+                    QtCore.QTimer.singleShot(0, _safe(then))
+            elif button is revert:
+                if revert_position(doc):
+                    QtCore.QTimer.singleShot(0, _safe(then))
+        except Exception as exc:
+            warn("Capture Position: %s" % exc)
+        finally:
+            _PROMPT["box"] = None
+            box.hide()
+            box.deleteLater()
+            try:  # the keys (Esc...) go to the window again, as before the question
+                main = Gui.getMainWindow()
+                main.activateWindow()
+                main.raise_()
+            except Exception:
+                pass
+
+    box.buttonClicked.connect(answered)
+    _PROMPT["box"] = box
+    box.setModal(True)
+    box.show()
+    return box
+
+
+_PROMPT = {"box": None}
+
+
+def prompt():
+    """The Capture Position prompt on screen (tests), or None."""
+    return _PROMPT["box"]
+
+
+def _safe(fn):
+    def run():
+        try:
+            fn()
+        except Exception as exc:
+            warn("%s" % exc)
+
+    return run
 
 
 def _refresh_browser():
@@ -1844,7 +2293,7 @@ def attach_views(doc):
             elif "ObjectToGround" in obj.PropertiesList:
                 GroundView(vobj)
                 vobj.Visibility = False
-            elif joints.is_rigid_group(obj) or getattr(obj, joints.TYPE_PROP, "") == "Position":
+            elif joints.is_rigid_group(obj) or getattr(obj, joints.TYPE_PROP, "") in STEP_TYPES:
                 bodies_gui.StepViewProvider(vobj)
         except Exception as exc:
             warn("joint view: %s" % exc)
@@ -1933,6 +2382,16 @@ class Watch:
                 if joints.joint_origin_owner(origin) is None:
                     continue
                 joints.place_joint_origin(origin)
+            # a geometry change moved a joint origin (an edited face, a moved body): the
+            # parts follow their joints, as in Fusion (FreeCAD's own solve on recompute is
+            # off: see theme.VIEWER_SETTINGS)
+            if (
+                joints.assembly(doc) is not None
+                and not getattr(doc, "Transacting", False)
+                and joints_drag.active() is None
+                and joints.needs_solve(doc)
+            ):
+                joints.solve(doc)
         except Exception as exc:
             warn("joints watch: %s" % exc)
 
@@ -1983,7 +2442,9 @@ class JointCommand(_Command):
         if App.ActiveDocument is not None and len(joints.parts(App.ActiveDocument)) < 2:
             commands.tell("A joint needs two bodies or components in the design.")
             return
-        _start(JointPanel)
+        if not commands.finish_open_dialog():
+            return
+        position_prompt(App.ActiveDocument, lambda: _start(JointPanel))
 
 
 class AsBuiltJointCommand(JointCommand):
@@ -1998,7 +2459,9 @@ class AsBuiltJointCommand(JointCommand):
         if App.ActiveDocument is not None and len(joints.parts(App.ActiveDocument)) < 2:
             commands.tell("An as-built joint needs two bodies or components in the design.")
             return
-        _start(AsBuiltPanel)
+        if not commands.finish_open_dialog():
+            return
+        position_prompt(App.ActiveDocument, lambda: _start(AsBuiltPanel))
 
 
 class JointOriginCommand(_Command):
@@ -2013,7 +2476,9 @@ class JointOriginCommand(_Command):
         return App.ActiveDocument is not None and bool(joints.parts(App.ActiveDocument))
 
     def run(self):
-        _start(JointOriginPanel)
+        if App.ActiveDocument is None or not commands.finish_open_dialog():
+            return
+        position_prompt(App.ActiveDocument, lambda: _start(JointOriginPanel))
 
 
 class RigidGroupCommand(JointCommand):
@@ -2025,7 +2490,9 @@ class RigidGroupCommand(JointCommand):
         if App.ActiveDocument is not None and len(joints.parts(App.ActiveDocument)) < 2:
             commands.tell("A rigid group needs two bodies or components in the design.")
             return
-        _start(RigidGroupPanel)
+        if not commands.finish_open_dialog():
+            return
+        position_prompt(App.ActiveDocument, lambda: _start(RigidGroupPanel))
 
 
 class DriveJointsCommand(_Command):

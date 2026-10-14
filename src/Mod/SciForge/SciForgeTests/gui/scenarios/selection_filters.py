@@ -78,8 +78,11 @@ def a_read_menu():
         "Select All",
     ):
         h.check("A the SELECT menu has %r" % want, want in texts, texts)
-    checked = [t for t, _e, c in result["entries"] if c]
+    # Component Drag (joints_drag) is a tick of its own, on by default, not a mode
+    checked = [t for t, _e, c in result["entries"] if c and t != "Component Drag"]
     h.check("A Window Selection is the ticked mode", checked == ["Window Selection"], checked)
+    drag = [c for t, _e, c in result["entries"] if t == "Component Drag"]
+    h.check("A Component Drag is ticked (on by default)", drag == [True], drag)
 
 
 # -- B -------------------------------------------------------------------------------------------

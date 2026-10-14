@@ -1208,6 +1208,7 @@ class _Press:
         self.painted = set()
         self.cleared = False  # paint: the selection was replaced at the first stroke
         self.in_dialog = _in_dialog()
+        self.dragging = None  # joints_drag: the press moves a component (Component Drag)
 
 
 def _distance(a, b):
@@ -1275,6 +1276,8 @@ class _ViewFilter(QtCore.QObject):
     def _drop(self):
         press, self.press = self.press, None
         self.timer.stop()
+        if press is not None and press.dragging is not None:
+            _safely(press.dragging.finish)  # a component drag keeps where it got to
         if press is not None and press.boxing and press.mode != "paint":
             try:
                 band_of(press.gl).stop()
@@ -1329,13 +1332,17 @@ class _ViewFilter(QtCore.QObject):
             except Exception:
                 held = False
             if held:
-                return press.boxing or press.listed  # a made-up move: nothing changes
+                # a made-up move: nothing changes
+                return press.boxing or press.listed or press.dragging is not None
             self._drop()
             return False
         if press.listed:
             return True  # the list is open: the move is not a drag
         pos = QtCore.QPointF(event.position())
         if press.cancelled:
+            return True
+        if press.dragging is not None:
+            press.dragging.follow(pos)  # Component Drag (joints_drag)
             return True
         if not press.boxing:
             if press.on_handle:
@@ -1348,6 +1355,13 @@ class _ViewFilter(QtCore.QObject):
             if view is None or _in_edit() or _grabbed(view):
                 self.press = None
                 return False
+            # Fusion's Component Drag: a plain drag that starts on a component moves it
+            # (outside commands; Shift / Ctrl still draw a box). joints_drag.py does it.
+            drag = self._component_drag(obj, view, press)
+            if drag is not None:
+                press.dragging = drag
+                drag.follow(pos)
+                return True
             press.boxing = True
             if press.mode != "paint":
                 band_of(obj).start(press.pos)
@@ -1357,6 +1371,17 @@ class _ViewFilter(QtCore.QObject):
             crossing = core.box_mode(press.pos.x(), pos.x()) == "crossing"
             band_of(obj).follow(pos, crossing, press.mode == "freeform")
         return True
+
+    def _component_drag(self, gl, view, press):
+        if press.in_dialog or press.mode == "paint" or press.modifiers & (SHIFT | CTRL):
+            return None
+        try:
+            from . import joints_drag
+
+            return joints_drag.start(gl, view, press.pos)
+        except Exception as exc:
+            warn("selection: %s" % exc)
+            return None
 
     def _hover(self, gl, event):
         """With the Body priority, the whole body lights up under the mouse (FreeCAD's own
@@ -1429,6 +1454,9 @@ class _ViewFilter(QtCore.QObject):
             return False
         if press.on_handle:
             return False
+        if press.dragging is not None:
+            _safely(press.dragging.finish)  # Component Drag: kept, one undo step
+            return True  # FreeCAD must not select on this release
         if press.cancelled or press.listed:
             return True  # FreeCAD must not select on this release
         if press.boxing:
@@ -1548,6 +1576,10 @@ class _ViewFilter(QtCore.QObject):
             if event.isAutoRepeat():
                 return False
             press = self.press
+            if press is not None and press.dragging is not None and not press.cancelled:
+                press.cancelled = True
+                _safely(press.dragging.cancel)  # Component Drag: everything goes back
+                return True
             if press is not None and press.boxing:
                 press.cancelled = True
                 if press.mode != "paint":

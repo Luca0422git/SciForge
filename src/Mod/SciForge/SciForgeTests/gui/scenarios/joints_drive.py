@@ -17,8 +17,8 @@ upright axis through (20, 15)).
   D6 Right-click > Animate Joint: it swings, never past 45; Esc: it stands at 45 again.
   D7 Timeline right-click > Suppress Features: the joint is off; Unsuppress: on again, nothing
      jumped.
-  D8 Save, close, reopen: the joint, the captured position, the ground and the limit are all
-     there; Drive Joints still works (10, OK), Ctrl+Z.
+  D8 Save, close, reopen: the joint, the captured position and the limit are all (no ground:
+     none is needed); Drive Joints still works (10, OK), Ctrl+Z.
   D9 Delete the block (its row's menu): its joint goes with it, one undo step; Ctrl+Z brings
      both back and the solver is happy.
 """
@@ -352,7 +352,7 @@ def d8_reopened():
         "Revolute 1" in (t.children("Joints") or []),
         t.children("Joints"),
     )
-    h.check("the plate is still grounded", jm().is_grounded(j.plate()))
+    h.check("still nothing grounded (none is needed)", not jm().grounds(doc()))
     h.check("the limit is kept", jm().limits(jt)["angle"]["max"] == 45)
     angle_is("still at 45", 45)
     h.check("the solver is happy", jm().solve(doc()) == 0)
