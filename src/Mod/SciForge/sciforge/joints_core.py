@@ -420,3 +420,75 @@ def label_number(labels, base):
 def default_span(size):
     """How far the animated preview slides for a part of this size (mm)."""
     return max(1.0, 0.25 * float(size))
+
+
+# -- position modes (Fusion's Joint / Joint Origin Mode) -------------------------------------------
+MODES = ("simple", "twofaces", "twoedges")
+MODE_TITLES = {
+    "simple": "Simple",
+    "twofaces": "Between Two Faces",
+    "twoedges": "Two Edge Intersection",
+}
+
+
+def project_to_plane(point, plane_point, normal):
+    """The point moved along the plane's normal onto the plane."""
+    n = unit(normal)
+    return vsub(point, vscale(n, dot(vsub(point, plane_point), n)))
+
+
+def midplane(p1, n1, p2, n2, c1=None, c2=None):
+    """Fusion's Between Two Faces: the plane halfway between two flat faces, as (point,
+    normal). Each face is a point on it and its normal (c1 / c2: the faces' centres, to
+    choose the bisecting plane that has them on opposite sides when the faces meet at an
+    angle). The normal follows face 1's. Two faces in one plane have nothing between them."""
+    n1, n2 = unit(n1), unit(n2)
+    c1 = p1 if c1 is None else c1
+    c2 = p2 if c2 is None else c2
+    if norm(cross(n1, n2)) < 1e-9:  # parallel
+        gap = dot(vsub(p2, p1), n1)
+        if abs(gap) < 1e-9:
+            raise JointError(
+                "The two faces lie in one plane: there is nothing between them. Pick two "
+                "faces that face each other (or meet at an angle)."
+            )
+        return vadd(p1, vscale(n1, 0.5 * gap)), n1
+    # the planes meet along a line; both bisecting planes go through it: a point on both
+    d1, d2 = dot(n1, p1), dot(n2, p2)
+    k = dot(n1, n2)
+    det = 1.0 - k * k
+    a = (d1 - k * d2) / det
+    b = (d2 - k * d1) / det
+    on_line = vadd(vscale(n1, a), vscale(n2, b))
+    best = None
+    for candidate in (vsub(n1, n2), vadd(n1, n2)):
+        if norm(candidate) < 1e-9:
+            continue
+        n = unit(candidate)
+        score = dot(vsub(c1, on_line), n) * dot(vsub(c2, on_line), n)
+        if best is None or score < best[0]:  # negative: the centres on opposite sides
+            best = (score, n)
+    n = best[1]
+    if dot(n, n1) < 0:
+        n = vscale(n, -1.0)
+    return on_line, n
+
+
+def line_intersection(p1, d1, p2, d2, tol=1e-6):
+    """Fusion's Two Edge Intersection: where two lines (an edge's point and direction each)
+    meet when extended, as (point, gap): the middle of their closest points and how far
+    apart those are (0 when they really cross). Parallel lines never meet."""
+    u, v = unit(d1), unit(d2)
+    w0 = vsub(p1, p2)
+    b = dot(u, v)
+    denom = 1.0 - b * b
+    if denom < 1e-9:
+        raise JointError("The two edges are parallel: they never meet. Pick two edges that do.")
+    d = dot(u, w0)
+    e = dot(v, w0)
+    s = (b * e - d) / denom
+    t = (e - b * d) / denom
+    q1 = vadd(p1, vscale(u, s))
+    q2 = vadd(p2, vscale(v, t))
+    gap = distance(q1, q2)
+    return vscale(vadd(q1, q2), 0.5), (0.0 if gap < tol else gap)
