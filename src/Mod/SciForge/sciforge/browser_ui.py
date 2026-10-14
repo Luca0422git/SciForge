@@ -403,6 +403,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "settings",
             "construction",
             "canvases",
+            "decals",
             "joints",  # new joints show at once
             "joint_origins",
         }
@@ -473,7 +474,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             return True
         if key in self._collapsed:
             return False
-        return key.startswith(("component:", "bodies:", "sketches:"))
+        return key.startswith(("component:", "bodies:", "sketches:", "decals:"))
 
     def tree(self):
         doc = App.ActiveDocument
@@ -768,7 +769,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             elif node["kind"] == "document" and self._doc is not None:
                 self.activate_component(None)
             elif (
-                node["kind"] in ("sketch", "construction", "analysis", "mesh_body", "canvas")
+                node["kind"]
+                in ("sketch", "construction", "analysis", "mesh_body", "canvas", "decal")
                 and obj is not None
             ):
                 _later(_edit_object, obj)  # Fusion: double-click a section to edit it
@@ -839,6 +841,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "document",
         "mesh_body",
         "canvas",
+        "decal",
     )
     OBJECT_KINDS = (
         "body",
@@ -848,6 +851,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "analysis",
         "mesh_body",
         "canvas",
+        "decal",
         "joint",
         "rigid_group",
         "joint_origin",
@@ -906,7 +910,15 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         doc = self._doc
         if doc is None or not commands.finish_open_dialog():
             return
-        step_kinds = ("sketch", "construction", "analysis", "joint", "rigid_group", "joint_origin")
+        step_kinds = (
+            "sketch",
+            "construction",
+            "analysis",
+            "joint",
+            "rigid_group",
+            "joint_origin",
+            "decal",
+        )
         steps = [n["object"] for n in nodes if n["kind"] in step_kinds]
         body_names = [n["object"] for n in nodes if n["kind"] == "body"]
         part_names = [n["object"] for n in nodes if n["kind"] == "component"]
@@ -1072,6 +1084,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Convert Mesh": lambda: self._run_with(obj, "SciForge_ConvertMesh"),
             "Repair": lambda: self._run_with(obj, "SciForge_MeshRepair"),
             "Edit Canvas": lambda: _edit_object(obj),
+            "Edit Decal": lambda: _edit_object(obj),
             "Calibrate": lambda: self._run_with(obj, "SciForge_CalibrateCanvas"),
             "Ground": lambda: _joint_action("toggle_ground", obj),
             "Edit Joint": lambda: _edit_object(obj),

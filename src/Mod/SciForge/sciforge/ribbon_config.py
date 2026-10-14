@@ -228,7 +228,7 @@ INSERT = group(
     "INSERT",
     ["Insert Component", "Canvas", "Insert Mesh"],
     [
-        item("Decal", None, "decal"),
+        item("Decal", "SciForge_Decal", "decal", note="A picture on a face, flat or curved."),
         item("Canvas", "SciForge_InsertCanvas", "canvas", note="A reference image on a plane."),
         item("Insert SVG", "SciForge_InsertSVG", "insert_svg", note="SVG curves into a sketch."),
         item("Insert DXF", "SciForge_InsertDXF", "insert_dxf", note="DXF curves into a sketch."),
