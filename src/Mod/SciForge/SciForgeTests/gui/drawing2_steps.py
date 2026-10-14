@@ -197,3 +197,114 @@ def process():
 
 def wait(ms):
     QtTest.QTest.qWait(ms)
+
+
+def _near_circle(c, r):
+    def test(info):
+        return (
+            abs(info["center"][0] - c[0]) < 1e-3
+            and abs(info["center"][1] - c[1]) < 1e-3
+            and abs(info["radius"] - r) < 1e-3
+        )
+
+    return test
+
+
+def furnish():
+    """By script, with the same functions the commands use (for the scenarios whose
+    subject is what follows: design edits, save and reopen): on the base view a
+    diameter dimension of hole 1 toleranced H7 shown as limits, an ordinate dimension
+    from the sharp corner to hole 1, a leader on hole 1, a feature control frame on
+    hole 2, datum A on the bottom edge, a surface texture on the top edge, automated
+    centre marks on the holes, an edge extension at the rounded corner, the arc length
+    of the rounded corner, a Slice section through hole 1 (placed right) and an offset
+    section through both holes (placed below). Returns {name: object name}."""
+    from sciforge import drawing, drawing_annot
+
+    page = d.page()
+    view = base()
+    doc = page.Document
+    made = {}
+    elems = drawing_annot.elements(view)
+
+    def edge(kind, test):
+        for name, info in elems:
+            if info["kind"] == kind and test(info):
+                return name
+        return None
+
+    def level(y):
+        return lambda i: abs(i["p1"][1] - y) < 1e-6 and abs(i["p2"][1] - y) < 1e-6
+
+    hole1 = edge("circle", _near_circle(HOLE1, HOLE_R))
+    hole2 = edge("circle", _near_circle(HOLE2, HOLE_R))
+    bottom = edge("line", level(-25.0))
+    top = edge("line", level(25.0))
+    right = edge("line", lambda i: abs(i["p1"][0] - 40) < 1e-6 and abs(i["p2"][0] - 40) < 1e-6)
+    arc = edge("arc", lambda i: abs(i["radius"] - ARC_R) < 1e-3)
+    corner = drawing_annot.vertex_at(view, (-40.0, -25.0))
+    base_pos = drawing.view_position(view)
+
+    def off(u, v):
+        p = at(u, v)
+        return [p[0] - base_pos[0], p[1] - base_pos[1]]
+
+    def anchor(name, point):
+        return drawing_annot.make_anchor(view, name, point)
+
+    doc.openTransaction("Set up")
+    dim = drawing.add_dimension(view, [hole1], "Diameter", at(-50.0, 18.0))
+    doc.recompute()
+    drawing_annot.set_dimension_settings(
+        dim, {"tolerance": "Fit", "fit": "H7/g6", "fit_display": "Limits"}
+    )
+    made["dim"] = dim.Name
+    origin = anchor(corner, (-40.0, -25.0))
+    drawing_annot.add_ordinate(view, origin, origin, "x", at(-40.0, 34.0))
+    made["ordinate"] = drawing_annot.add_ordinate(
+        view, origin, anchor(hole1, hole_top(HOLE1)), "x", at(-20.0, 34.0)
+    ).Name
+    annotations_made = (
+        ("leader", {"anchor": anchor(hole1, (-23.0, -14.0)), "off": off(-60.0, -38.0)}),
+        ("fcf", {"anchor": anchor(hole2, (25.0, 10.0)), "off": off(50.0, 38.0)}),
+        ("datum", {"anchor": anchor(bottom, (10.0, -25.0)), "off": off(10.0, -36.0)}),
+        ("texture", {"anchor": anchor(top, (-25.0, 25.0)), "off": off(-25.0, 25.0)}),
+        ("arc", {"anchor": anchor(arc, ARC_MID), "off": off(48.0, 32.0)}),
+    )
+    extra = {
+        "leader": {"lines": ["2 HOLES"]},
+        "fcf": {
+            "fcf": {
+                "row1": {
+                    "char": "position",
+                    "dia": True,
+                    "tol": "0.05",
+                    "mod": "M",
+                    "datums": [["A", ""], ["B", ""]],
+                }
+            }
+        },
+        "datum": {"letter": "A"},
+        "texture": {"texture": {"kind": "removal", "value": "Ra 3.2"}},
+        "arc": {},
+    }
+    for kind, data in annotations_made:
+        data = dict(data, kind=kind, **extra[kind])
+        made[kind] = drawing_annot.add_annotation(page, data, view).Name
+    drawing.set_auto_marks(view, {"holes": True})
+    drawing.add_edge_extension(view, top, right)
+    x, y = base_pos
+    made["slice"] = drawing.add_section(
+        view, (-20.0, 35.0), (-20.0, -35.0), (10.0, 0.0), (x + 85.0, y), depth=("Slice", 0.0)
+    ).Name
+    made["offset"] = drawing.add_section(
+        view,
+        (-48.0, -10.0),
+        (0.0, -10.0),
+        (0.0, -60.0),
+        (x, y - 75.0),
+        points=[(-48.0, -10.0), (0.0, -10.0), (0.0, 10.0), (48.0, 10.0)],
+    ).Name
+    doc.recompute()
+    doc.commitTransaction()
+    return made

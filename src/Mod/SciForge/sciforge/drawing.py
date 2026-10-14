@@ -238,6 +238,38 @@ def axes_of(view):
 
 
 def centre_of(view):
+    """The model point at the middle of a view (its own coordinates' origin).
+
+    TechDraw centres a view on the exact bounding box of its parts seen along the view
+    (a copy without the 3D view's mesh); its getGeometricCenter() measures the meshed
+    parts instead, which is off by the mesh's sag on curved faces (0.02 mm on an R8
+    fillet): marks and cuts made from it missed TechDraw's lines by that much."""
+    try:
+        import Part
+
+        from . import bodies
+
+        shapes = []
+        for src in getattr(view, "Source", []):
+            if not alive(src):
+                continue
+            try:
+                shape = bodies.global_shape(src)
+            except Exception:
+                shape = src.Shape.copy()
+            if not shape.isNull():
+                shapes.append(shape)
+        if shapes:
+            x, y, d = axes_of(view)
+            matrix = App.Matrix(
+                x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, d[0], d[1], d[2], 0, 0, 0, 0, 1
+            )
+            local = Part.makeCompound(shapes).transformed(matrix, True)
+            box = local.optimalBoundingBox(False, False)
+            c = box.Center
+            return core.to_model((x, y, d), (d[0] * c.z, d[1] * c.z, d[2] * c.z), c.x, c.y)
+    except Exception as exc:
+        log("view centre of %s: %s" % (getattr(view, "Label", "?"), exc))
     try:
         c = view.getGeometricCenter()
         return (c.x, c.y, c.z)
@@ -1718,7 +1750,7 @@ def _extension_cosmetics(view, item):
             tags.append(
                 view.makeCosmeticLine(V(near[0], near[1], 0), V(point[0], point[1], 0), 1, 0.13)
             )
-    vertex = view.makeCosmeticVertex(V(point[0], -point[1], 0))
+    vertex = view.makeCosmeticVertex(V(point[0], point[1], 0))
     return {
         "a": a,
         "b": b,
