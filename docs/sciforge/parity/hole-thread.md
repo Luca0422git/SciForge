@@ -8,6 +8,30 @@ dialog and command), `sciforge/hole.py` (the geometry rules, no GUI; on top of F
 (ISO metric and Unified sizes, the same rows as FreeCAD's Hole). Status: **first pass, not yet
 signed off**.
 
+## Wave 4: Taper Tapped, clearance by fastener, threads in their class, holes on curved faces (branch `sf/modeling-2`, 2026-10-14)
+
+Sources: **Autodesk**: the Fusion API reference (ClearanceHoleFits: close, normal, loose;
+ClearanceHoleDataQuery: "the same functionality as the hole command dialog" to find the
+clearance standards, fastener types and sizes) and the Fusion help on the Hole command (Hole
+Tap Type Simple, Clearance, Tapped, Taper Tapped), read through search excerpts; the standards
+themselves for the numbers (ISO 273, ASME B18.2.8, ASME B1.20.1, ISO 7-1, ISO 965-1, ASME
+B1.1, DIN 974-1, ISO 4762 / 4017 / 10642, ASME B18.3 / B18.2.1). **Forum**: "Hole command keep
+fastener size" (the fastener is chosen per hole type). **Guess**: rows marked so.
+
+| Fusion (source) | SciForge |
+|---|---|
+| Hole Tap Type **Taper Tapped**: Thread Type (taper pipe threads), Size; the hole tapers with the thread (Autodesk; standards) | Same (`hole_tables.py`): NPT 1/16 to 3 (ASME B1.20.1) and BSPT Rc 1/16 to 3 (ISO 7-1). The hole starts at the thread's minor diameter at the opening (NPT 1/8-27: 8.737 mm) and narrows 1 in 16 on the diameter (FreeCAD's tapered Hole, 1.79 degrees a side); the diameter follows the size and cannot be typed; the pipe thread is cosmetic (dashed) |
+| **Clearance**: Standard, Fastener Type, Size, Fit Close / Normal / Loose (Autodesk API) | Same: ISO (ISO 273 fine / medium / coarse) and ANSI (ASME B18.2.8). The fastener types follow the hole type: Counterbore offers socket head and hex head screws, Countersink countersunk screws. The fastener fills in the counterbore or countersink (DIN 974-1 counterbores for ISO 4762 socket heads, room for a socket wrench on hex heads, ISO 10642's 90 degree and ASME's 82 degree countersinks at the head's diameter, so the head sits flush; Guess for the inch counterbores); they can still be typed over. M6 Normal: 6.6 mm |
+| Tapped, Modeled: the thread's **Class** (6H, 6g, 2B...) (Autodesk) | The modeled thread now cuts the class's tolerance zone instead of the basic profile: ISO 965-1 (fundamental deviation and tolerances of the pitch, major and minor diameters; the middle of the zone) and ASME B1.1 (allowance and tolerances). A tapped hole's drill and major diameter move with the class (FreeCAD's Hole thread clearance) |
+| A hole on a curved face goes in square to the face (Autodesk); it stays there when the face changes (Guess: Fusion's holes are parametric) | A hidden helper ("Hole On Face") remembers where on the cylinder, cone, sphere or torus the hole was placed (the face's u and v) and puts the hole's sketch back on the face's new place and normal at every recompute (golden `hole_curved_follows`) |
+
+Tests: scenario `modeling2_holes` (Taper Tapped NPT with its taper measured on the model,
+clearance M6 Normal 6.6 measured, counterbore by fastener, edit from the timeline, undo / redo,
+save / reopen, BSPT, Esc); goldens `hole_taper_npt`, `hole_taper_bspt_through`,
+`hole_clearance_socket_cbore`, `hole_clearance_countersunk`, `hole_curved_follows`,
+`thread_shaft_modeled_6e` (and the modeled thread goldens updated to their class); unit tests
+`test_hole_tables.py`.
+
 ## Hole: what the user does (and what SciForge does)
 
 | Fusion | SciForge |
@@ -47,11 +71,9 @@ signed off**.
 
 | Fusion option | Why not yet |
 |---|---|
-| Hole Tap Type **Taper Tapped** (NPT) | Not offered yet. FreeCAD's Hole has NPT sizes and a taper; the dialog does not use them yet |
-| Clearance hole **fastener type** (socket head, hex...) | Clearance sizes follow the thread size (ISO 273 / ASME B18.2.8), not a fastener catalogue |
-| Thread **Class** in modeled geometry | The class is recorded; the modeled thread uses the basic profile (no tolerance offsets) |
+| A **modeled** taper pipe thread | Taper Tapped holes get a cosmetic thread only (a modeled tapered thread would need a conical helix sweep; not built) |
+| Fastener types beyond socket head, hex head and countersunk screws (button heads, washers) | Not in the tables yet |
 | Cosmetic thread texture | Drawn as dashed lines (helix, and a circle at a tapped hole's mouth) |
-| A hole on a curved face following the face | The hole keeps its place in the body if the curved face moves later (its sketch cannot be attached to a curved face) |
 | Depth to the tip instead of the shoulder | FreeCAD measures to the shoulder; Fusion's default to be confirmed with Luca |
 
 ## Tests
