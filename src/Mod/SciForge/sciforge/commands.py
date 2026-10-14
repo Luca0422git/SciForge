@@ -41,6 +41,13 @@ def find_body():
             candidates.append(sel.Object)
     candidates = [b for b in candidates if components.container_of(b) is component]
     candidates += components.bodies_in(doc, component)
+    try:  # a used-up body (hidden: Combined into another, Tessellated) takes no new work
+        from . import bodies
+
+        used_up = bodies.consumed(doc)
+        candidates = [b for b in candidates if b.Name not in used_up]
+    except Exception:
+        pass
     if not candidates:
         return None
     components.activate_body(candidates[0])

@@ -145,6 +145,20 @@ def b_done():
         )
     solid = m.doc().getObject(state["solid"])
     h.check("the solid is converted (hidden)", solid is not None and not m.shown(solid))
+    from sciforge import bodies, commands
+
+    active = bodies.active_body()
+    h.check(
+        "the hidden solid is not the active body",
+        active is None or active.Name != state["solid"],
+        active and active.Name,
+    )
+    found = commands.find_body()
+    h.check(
+        "new work would not go into it",
+        found is None or found.Name != state["solid"],
+        found and found.Name,
+    )
     h.check(
         "the browser lists one body",
         m.browser_labels().count(state["solid_label"]) == 1,

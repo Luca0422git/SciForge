@@ -3,8 +3,8 @@
 Repair (and Make Closed Mesh), Remesh, Reduce, Smooth, Shell, Plane Cut, Separate, Combine,
 Reverse Normal, Erase and Fill, Delete Faces, Generate Face Groups, Tessellate, Create Mesh
 Section Sketch. Insert Mesh and Convert Mesh are in `parity/insert-export.md`. Copied behaviour
-only, never Fusion's assets, wording or code. Status: **built and tested with real clicks (9
-scenarios, 513 checks), not yet signed off by Luca.**
+only, never Fusion's assets, wording or code. Status: **built and tested with real clicks (8
+scenarios, 510 checks), not yet signed off by Luca.**
 
 Every row says where its behaviour comes from:
 
@@ -47,7 +47,7 @@ Every row says where its behaviour comes from:
 | `mesh_ui.py` | Repair / Make Closed Mesh, Remesh, Reduce, Smooth, Shell, Reverse Normal, Separate, Combine, Generate Face Groups, Tessellate dialogs and commands |
 | `mesh_cut_ui.py` | Plane Cut and Create Mesh Section Sketch (origin squares, the plane's arrow and turn handles, Distance / X Angle / Y Angle) |
 | `mesh_pick_ui.py` | Erase and Fill and Delete Faces (the Faces box, Brush Size, marks on the picked faces) |
-| shared files | `timeline_core.py` (step kinds and icons), `timeline_ops.py` (step names, rename, pieces go with their step), `browser_core.py` / `browser_ui.py` (mesh steps in Bodies, the warning, right-click Repair, rename and delete of a mesh body's history), `insert.py` (a mesh step is a mesh body), `export.py` / `export_ui.py` (3D Print, Export, Export Everything take mesh bodies), `ribbon_config.py`, `tools/sciforge/make_icons.py` (14 icons) |
+| shared files | `timeline_core.py` (step kinds and icons), `timeline_ops.py` (step names, rename, pieces go with their step), `browser_core.py` / `browser_ui.py` (mesh steps in Bodies, the warning, right-click Repair, rename and delete of a mesh body's history), `insert.py` (a mesh step is a mesh body), `export.py` / `export_ui.py` (3D Print, Export, Export Everything take mesh bodies), `bodies.py` / `commands.py` (a body used up by a mesh step, a Tessellated solid, is no longer the active body nor picked for new work), `ribbon_config.py`, `tools/sciforge/make_icons.py` (14 icons) |
 
 The ribbon: CREATE Insert Mesh, Tessellate, Create Mesh Section Sketch; PREPARE Generate Face
 Groups, Repair; MODIFY Remesh, Reduce, Plane Cut, Shell, Smooth, Combine, Separate, Reverse
@@ -136,7 +136,7 @@ values; a step that cannot be done says why in the dialog and OK waits.
 | Fusion | SciForge | Source |
 |---|---|---|
 | Tessellate a solid: Refinement Low / Medium / High / Custom, a changed value turns it Custom, the triangle count | same (the presets of SciForge's 3D Print); Custom with Surface Deviation, Normal Deviation, Maximum Edge Length; the count shown; one face group per face of the solid | Autodesk |
-| The solid is converted on OK | the solid is used up (hidden, not listed); the mesh body takes its name; Ctrl+Z brings the solid back | Autodesk (blog) |
+| The solid is converted on OK | the solid is used up (hidden, not listed, no longer the active body: a new sketch goes into a body that is shown, made if needed); the mesh body takes its name; Ctrl+Z brings the solid back | Autodesk (blog) |
 | Aspect Ratio, Create Quads | not built (FreeCAD's mesher has no aspect setting; FreeCAD meshes are triangles) | gap |
 | Create Mesh Section Sketch: the body, a plane, the section moved | same: the origin squares, Distance arrow; the section drawn over the part as you move it and counted; OK makes a sketch "Mesh Section name" on that plane with the section's lines, fixed (green) | Autodesk |
 | Fusion's section is a special curve; Fit Curves to Mesh Section draws over it | SciForge's sketch holds plain fixed line segments (simplified within 0.02 % of the size), which a closed section can be extruded from straight away; no Fit Curves | gap |

@@ -18,8 +18,10 @@ why it cannot be done. The browser flags a mesh body that is not closed or is in
 Code: `src/Mod/SciForge/sciforge/mesh_core.py` (pure, `SciForgeTests/unit/test_mesh_core.py`,
 50 tests), `mesh.py`, `mesh_ui.py`, `mesh_cut_ui.py`, `mesh_pick_ui.py`; shared files touched:
 `timeline_core.py`, `timeline_ops.py`, `browser_core.py`, `browser_ui.py`, `insert.py`,
-`export.py`, `export_ui.py`, `ribbon_config.py` (MESH groups only), `tools/sciforge/
-make_icons.py` (14 icons). No FreeCAD core change.
+`export.py`, `export_ui.py`, `bodies.py` (`leave_used_up` clears the active body when a
+mesh step used it up; `clear_active_body`), `commands.py` (`find_body` skips used-up bodies),
+`ribbon_config.py` (MESH groups only), `tools/sciforge/make_icons.py` (14 icons). No FreeCAD
+core change.
 
 Scenarios (`SciForgeTests/gui/scenarios/`): `mesh_repair`, `mesh_plane_cut`,
 `mesh_reduce_remesh`, `mesh_separate_combine`, `mesh_tessellate_groups`, `mesh_edit_reopen`,
@@ -89,9 +91,12 @@ delete's own undo step (skipped while undoing / restoring).
   closed meshes in scenarios (an open one warns "not watertight").
 - In the sandbox, a command naming the FreeCAD folder by a path ending in `/fc` is refused:
   use the `appimage` symlink path. Probes: `appimage/squashfs-root/AppRun freecadcmd script.py`.
-- `insert_mesh` fails "Z Distance grew with the drag" on this branch **and on its base
-  (b279617ca0)**: not caused by the MESH work (the Insert Mesh manipulator's Z arrow does not
-  move when dragged; cause not looked into).
+- Failing on this branch **and the same way on its base (b279617ca0)**, so not caused by the
+  MESH work (causes not looked into): `insert_mesh` ("Z Distance grew with the drag": the
+  Insert Mesh manipulator's arrow does not move), `ribbon_sweep` (the INSERT entries open
+  their file dialogs: "No pop-up from solid > Insert Mesh" ...), `bodies_combine` (the target
+  body is not taken from the click), `bodies_qa` (the Move manipulator's drag and turn do not
+  move the body).
 
 ## Gaps (see the parity doc for the full table)
 

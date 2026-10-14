@@ -543,5 +543,23 @@ def leave_used_up(doc, users=None):
     while active is not None and active.Name in users and active.Name not in seen:
         seen.add(active.Name)
         active = body_of(users[active.Name])
-    if active is not None and active is not active_body(doc):
+    if active is None:
+        # used up by a step that is no body's (MESH > Tessellate made a mesh body of it):
+        # no body is active, so new work goes into a body that is shown
+        clear_active_body(doc)
+    elif active is not active_body(doc):
         set_active_body(active)
+
+
+def clear_active_body(doc):
+    """No active body in `doc` (GUI only)."""
+    if not App.GuiUp or doc is None:
+        return False
+    try:
+        import FreeCADGui as Gui
+
+        gdoc = Gui.getDocument(doc.Name)
+        gdoc.ActiveView.setActiveObject("pdbody", None)
+        return True
+    except Exception:
+        return False

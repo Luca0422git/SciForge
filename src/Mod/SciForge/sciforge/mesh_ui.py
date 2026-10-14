@@ -413,14 +413,16 @@ class MeshPanel(insert_ui._InsertPanel):
         except Exception as exc:
             warn("%s: %s" % (self.title, exc))
         result = super().reject()
+        try:
+            # first: the body the step used up is free again and would be shown, even when
+            # it was hidden before the dialog (a converted mesh)
+            bodies.sync_consumed(self.doc)
+        except Exception:
+            pass
         for name, was in self._shown_before.items():
             obj = self.doc.getObject(name)
             if obj is not None:
                 bodies.set_shown(obj, was)
-        try:
-            bodies.sync_consumed(self.doc)
-        except Exception:
-            pass
         _refresh_browser()
         return result
 
