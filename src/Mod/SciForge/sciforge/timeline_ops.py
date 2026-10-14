@@ -1343,6 +1343,8 @@ def _helpers_of(doc, names, gone):
         for o in obj.OutList:
             if not is_helper(o) or o.Name in gone or o in found:
                 continue
+            if is_follower(o):
+                continue  # the step it builds on in another body: it goes with its own lead
             users = [u for u in o.InList if u.TypeId not in NOT_STEPS and u.Name not in gone]
             if not users:
                 found.append(o)

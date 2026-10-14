@@ -7,6 +7,42 @@ choices marked **(assumed)** below need his confirmation. Implemented in
 (Mirror's command), `pattern.py` (the document side, no GUI) and `pattern_core.py` (where the
 copies go, pure Python). Status: **first pass, not yet signed off**.
 
+## Behaviour spec: Compute Option, Start Point, extrudes over several bodies (modify-2, 2026-10-14)
+
+Sources (A = Autodesk help, blog or API reference; F = Autodesk Community forum; G = guess,
+to be checked against Fusion):
+
+1. Autodesk blog, "Understanding Compute Options for Mirror and Pattern in Autodesk Fusion"
+   (https://www.autodesk.com/products/fusion-360/blog/autodesk-fusion-mirror-and-pattern-compute-options/).
+2. Fusion API, `PatternComputeOptions` (OptimizedPatternCompute, IdenticalPatternCompute,
+   AdjustPatternCompute) (https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/PatternComputeOptions.htm).
+3. Autodesk Community, "Trying to understand Pattern Compute Option: Optimized, Identical &
+   Adjust" (Jeff Strater: Adjust "recomputes each instance almost as if it were a separate
+   feature")
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/trying-to-understand-pattern-compute-option-optimized-identical/td-p/6516163).
+4. Autodesk help, "Create a pattern on a path"
+   (https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/GUID-EF6AC718-E891-42FE-A2B5-C289D320FEDF.htm);
+   Fusion API `PathPatternFeatureInput.startPoint` (0 to 1 along the path), `isFlipDirection`,
+   `isOrientationAlongPath`
+   (https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/PathPatternFeatureInput.htm).
+5. Autodesk Community, "Pattern on path - start point value"
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/pattern-on-path-start-point-value/m-p/10867017).
+
+| # | Fusion | SciForge | Source |
+|---|---|---|---|
+| C1 | Compute Option (Features): Optimized (the default), Identical, Adjust, at the bottom of the dialog | Same three, Optimized chosen; each has a tooltip saying what it does | A (1, 2) |
+| C2 | Optimized: identical copies, fastest (the feature's faces copied) | The copies are FreeCAD's pattern of the feature (its tool moved): identical copies | A (1) |
+| C3 | Identical: identical copies of the feature's result | Same as Optimized (the same result; there is nothing slower to choose in FreeCAD) | A (1), G (same result) |
+| C4 | Adjust: every copy computed again where it lands, e.g. an extrude To Object ends on the object at every copy | An extrude (SciForge's Extrude, FreeCAD's Pad / Pocket) is run again for every copy: its profile moved to the copy, the same extent (Distance, To Object, All, Through All); the object it goes to stays where it is. The copies are then joined or cut like the original | A (1), F (3) |
+| C5 | Adjust on a feature that has nothing to adjust | Holes, revolves, fillets and other features: their copies stay identical (no message) | G |
+| C6 | A copy that cannot be computed where it lands | The pattern step says which copy and why ("Copy 2 of Extrude 2: ..."); the dialog shows it and OK waits | G |
+| C7 | Compute Option shown for Pattern Type Features only | Same (hidden for Faces and Bodies) | G |
+| P1 | Pattern on Path: Start Point, where along the path the pattern starts (0 = the path's start, 1 = its end) | A Start Point field (0 to 1, 3 decimals). The Distance is counted from that point along the path; every copy is moved by the step from the start point to its own point (Orientation Path Direction also turns it by the change of the path's direction there) | A (4), F (5) |
+| P2 | Start Point before it is set | It shows where SciForge starts: the point of the path nearest to the objects (0 when they sit at the path's start). Typing a value fixes it | G |
+| P3 | Copies running off an open path | The dialog says so (also when the Start Point pushes them off the end); OK waits | A (4) |
+| P4 | Distance Type Extent / Spacing, Orientation Identical / Path Direction, Suppression on Pattern on Path | Already there (Distribution Extent / Spacing, Orientation, Suppression dots) | A (4) |
+| M1 | A pattern of an extrude that cut several bodies | Fusion repeats the extrude's change in every body it changed: the pattern step lives in the extrude's own body and gets a hidden step in every other body the extrude changed (like the extrude's own hidden steps); undo, the timeline's Delete, suppress and the history marker treat them as one step | G (follows from Fusion's one-feature-many-bodies extrude) |
+
 ## What gets built
 
 | Pattern Type | Built as |
@@ -29,17 +65,18 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 |---|---|
 | CREATE > Pattern > Rectangular / Circular / Pattern on Path, CREATE > Mirror; nothing selected: the dialog waits | Same. A hint says what to click; the model does not change until there is something to pattern |
 | Started with features selected (timeline) / faces / a body | Taken at once, Pattern Type set to match; the next box (Direction, Axis, Path, Mirror Plane) is the active one |
-| Pattern Type Faces / Bodies / Features / Components | Faces, Bodies, Features. Components greyed (SciForge has no components) |
+| Pattern Type Faces / Bodies / Features / Components | Faces, Bodies, Features. Components greyed with the reason (the components area builds it) |
 | Objects: click features in the timeline (Features) | Same; a click on a face in the view takes the feature that made it; a sketch is refused with the reason |
 | Selection boxes: blue while they take the clicks, click one to make it active, x clears | Same |
 | Direction: an edge, an axis, a flat face (its normal) | Same; the origin X / Y / Z axes are drawn while a direction or axis box waits and can be clicked where the part does not hide them |
 | Direction 2 offered at right angles | **(assumed)** After Direction 1 SciForge offers the origin axis (or an edge of the part) at right angles in the floor plane, Quantity 1 |
 | Quantity, Distance, Distribution Extent / Spacing, Direction Type One Direction / Symmetric, per direction | Same. Extent: the distance from the original to the last copy; Spacing: the gap. A negative distance goes the other way. **Symmetric (assumed):** the quantity counts each side, the original shared (Quantity 3 gives 5 in a row), the distance is measured on each side |
 | Circular: Axis (an axis, an edge, a round face's axis), Type Full / Angle / Symmetric, Quantity, Total Angle | Same. Angle: Quantity copies from the original to Total Angle (360 = Full). **Symmetric (assumed):** Quantity and Total Angle per side. Switching to Angle starts at 180 deg, Symmetric at 90 |
-| Pattern on Path: Path (an edge or sketch curve), Distance, Quantity, Distribution, Direction Type, Orientation Identical / Path Direction | Same. The copies start at the point of the path nearest to the objects; closed paths go round; Path Direction turns the copies with the path (about the path's plane). Running off an open path's end is said in the dialog |
+| Pattern on Path: Path (an edge or sketch curve), Start Point, Distance, Quantity, Distribution, Direction Type, Orientation Identical / Path Direction | Same. The copies start at the Start Point (until one is typed: the point of the path nearest to the objects); closed paths go round; Path Direction turns the copies with the path (about the path's plane). Running off an open path's end is said in the dialog. A sketch's browser row as the path takes all its curves (chained) |
 | Mirror: Objects, Mirror Plane (origin plane, flat face, construction plane), Operation for bodies | Same. The origin planes are the big squares of Create Sketch; a square in front of the part takes the click, the part takes it where it is in front |
 | Values take parameters and formulas | Same for the distances, the angle and the quantities; a symmetric pattern's gaps are expressions of its spacing, so the copies follow a parameter change. A quantity that follows a parameter is rounded to a whole number; a pattern with one is built by SciForge's `PatternFeature` (FreeCAD's features cannot change their number of copies from a parameter); the arrows of the Quantity box make it a plain number again. A pattern of bodies takes a plain number (each copy is a body) |
 | Live preview of the copies | Same (FreeCAD's feature, recomputed 60 ms after a change) |
+| Compute Option Optimized / Identical / Adjust (Features) | Same: see C1-C7 above (Adjust runs an extrude again at every copy) |
 | Blue arrows to drag the distances; a handle for the angle | One blue arrow per direction (Rectangular), one along the path (Path), a curved one for Total Angle (Circular, Angle/Symmetric, dragged round up to a full turn). Drawn on top of the part |
 | Errors shown in the dialog, OK waits | Same; nothing is printed to the Report view while the dialog is open. **SciForge limit:** at most 2500 instances in one pattern (50 x 50 holes take about 20 s to build here); more is refused with the count, so a typo cannot freeze SciForge. A quantity is taken when the field is left (typing 1000 does not build 1, 10 and 100 copies on the way) |
 | OK / Enter, Cancel / Esc, one undo step, Ctrl+Z in the dialog cancels it | Same |
@@ -57,11 +94,12 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 
 | Fusion option | Why not yet |
 |---|---|
-| Compute Option Optimized / Adjust | Copies are identical (FreeCAD repeats the feature's tool). Shown greyed |
-| Pattern Type Components | Not built yet (components exist since 2026-10-13) |
+| Adjust for features other than extrudes (a hole reaching a slanted face, a revolve To Object) | Their copies stay identical: only extrudes are run again at every copy (`pattern_adjust.py`) |
+| Optimized faster than Identical | Both are FreeCAD's pattern of the feature's tool: the same result at the same speed |
+| Pattern Type Components | Not built yet: it belongs to the components area (components-2) |
 | Faces: copies "heal" into different surroundings | The closed faces are copied as they are (a hole copied into a thicker area stays as deep as the original). Faces that do not close up with one face around each opening (a fillet's face) are refused with the reason |
 | A pattern of bodies whose references lie in another body with a moved placement | The references are read in the copied body's coordinates |
-| Pattern on Path: an explicit start point | The copies start at the point of the path nearest to the objects |
+| Pattern on Path: Start Point dragged along the path in the view | Typed in its field only (no handle on the path yet) |
 | Timeline icon of Pattern on Path | Named "Pattern on Path", shown with the Rectangular Pattern's icon (there is no icon of its own yet) |
 | Patterning a pattern step alone | Repeats the step's copies, not the original it copies (as Fusion's pattern feature stands for its copies); pick the original step too for whole rows |
 
@@ -92,6 +130,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
   `pattern_quantity_parameter`, `pattern_rect_features_any_order`,
   `pattern_edit_keeps_later_fillet`.
 - Unit tests: `SciForgeTests/unit/test_pattern_core.py`.
+- modify-2 (2026-10-14): scenarios `modify2_pattern_adjust.py` (a wedge, a hole cut up To Object its slope, three copies: Optimized leaves them blind under the slope, Adjust takes each up to the slope where it lands, each copy measured; edit, Cancel, undo, save/reopen), `modify2_pattern_path.py` (an L path, Start Point 0.25 moves the copy, Start Point 1 refused, edit), `modify2_bodies.py` (the pattern of a cut through two bodies cuts both, undo, edit, save/reopen, timeline Delete). Golden models `modify2_pattern_adjust_to_slope`, `modify2_pattern_identical_to_slope`, `modify2_pattern_path_start_point`, `modify2_pattern_path_auto_start`, `modify2_pattern_multibody_cut`.
 
 ## Lessons for other dialogs
 

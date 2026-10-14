@@ -289,8 +289,26 @@ def build(shape, names, options, tags=None):
             result = outer.cut(inner)
         except Exception:
             raise ShellError("The hollow part could not be made with these walls.")
-    _check(solid, result, inside, outside, bool(faces))
+    try:
+        _check(solid, result, inside, outside, bool(faces))
+    except ShellError:
+        if join == 2 and faces and _rounded_works(shape, names, opts):
+            # OpenCASCADE's sharp (intersection) walls give up on some parts where rounded
+            # ones work (a narrow slot open at the side): say so instead of "too thick".
+            raise ShellError(
+                "Sharp corners cannot be made with these walls here (FreeCAD's geometry kernel "
+                "gives up). Choose Shell Type Rounded, or try another thickness."
+            )
+        raise
     return result
+
+
+def _rounded_works(shape, names, opts):
+    try:
+        build(shape, names, dict(opts, shell_type="rounded"))
+        return True
+    except Exception:
+        return False
 
 
 def _check(solid, result, inside, outside, opened):

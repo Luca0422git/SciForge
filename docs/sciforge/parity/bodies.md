@@ -30,6 +30,28 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Physical Material | the body's FreeCAD `ShapeMaterial` (FreeCAD's material library), on every step of the body |
 | Appearance | stored in the design (a hidden JSON property of the body), so it is saved and undone with Ctrl+Z; put on every step's view after each recompute and undo |
 
+## Behaviour spec: Move Object Faces (modify-2, 2026-10-14)
+
+Sources (A = Autodesk help; F = Autodesk Community forum; G = guess, to be checked against
+Fusion):
+
+1. Autodesk help, "Move/Copy" (`SLD-MOVE-COPY-GEOMETRY`): Move Object Bodies / Components /
+   Faces / Sketch Objects (https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/SLD-MOVE-COPY-GEOMETRY.htm).
+2. Autodesk blog, "Timeline edits in Fusion" and "QUICK TIP: Edit Imported Geometry with Direct
+   Editing" (moving faces of a body as a direct edit that is a timeline step)
+   (https://www.autodesk.com/products/fusion-360/blog/timeline-edits-in-fusion/,
+   https://www.autodesk.com/products/fusion-360/blog/quick-tip-edit-imported-geometry-direct-editing/).
+3. Autodesk Community, "Edit Feature in Timeline does not work for Move"
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/edit-feature-in-timeline-does-not-work-for-move/m-p/7706360).
+
+| # | Fusion | SciForge | Source |
+|---|---|---|---|
+| F1 | Move Object Faces: pick faces of a body, move them with the manipulator or typed values; the faces next to them stretch along, the body stays one solid | Same: Move Object Bodies / Faces; with Faces, click faces of one body (again: drop it); Free Move, Translate, Rotate, Point to Point and Point to Position work as for bodies; the manipulator starts at the middle of the picked faces | A (1, 2) |
+| F2 | Changing Move Object clears the selection | Same | G |
+| F3 | Create Copy is for bodies (and components) | Hidden for Faces | G |
+| F4 | A Move of faces is a "Move" step in the timeline, double-click edits it | Same: a Move step in the faces' body (`move_face.py`): a feature closed by the faces (a boss, a hole) is moved whole; a flat face is replaced onto its moved plane (Replace Face's code); a face moved within its own plane changes nothing | A (1), F (3) |
+| F5 | A move that cannot be made (the part would come apart) | The dialog says why, OK waits | G |
+
 ## What the user does (and what SciForge does)
 
 ### Combine (MODIFY > Combine)
@@ -58,7 +80,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion | SciForge |
 |---|---|
-| Move Object Bodies / Components / Faces / Sketch Objects | Bodies (M in an open sketch moves sketch curves: the sketch's own Move/Copy) |
+| Move Object Bodies / Components / Faces / Sketch Objects | Bodies and Faces (F1-F5 above; M in an open sketch moves sketch curves: the sketch's own Move/Copy) |
 | Move Type Free Move: manipulator with arrows and rotation handles; X/Y/Z Distance, X/Y/Z Angle | same: three arrows (X red, Y green, Z blue) and three curved turn handles at the middle of the bodies, drawn on top of the part; turns are about X, then Y, then Z through that middle **(assumed order)** |
 | Translate: X/Y/Z Distance, arrows | same |
 | Rotate: Axis, Angle | same; the axis: an origin axis (drawn as long lines while the box waits), a straight edge, a round edge or face (its axis); a blue handle turns round it |
@@ -93,8 +115,9 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Fusion behaviour | Why not (yet) |
 |---|---|
 | Combine "New Component" | Not built yet (components exist since 2026-10-13; New Body is offered); belongs to the Combine dialog's owner |
-| Split Body with several tools at once | one tool: a plane, a face, a body or a sketch curve |
-| Move: Set Pivot, Move Object Components / Faces | not built yet (Faces: Press Pull moves faces); Free Move turns about the middle of the bodies |
+| Split Body with several tools at once | one tool: a plane, a face, a body or a sketch curve (several tools belong to the components area, components-2) |
+| Move: Set Pivot, Move Object Components | not built yet (Components belongs to the components area); Free Move turns about the middle of the bodies or of the picked faces |
+| Move Object Faces of several bodies at once | the faces of one body per Move (the dialog says so when a face of another body is clicked) |
 | The timeline's and the browser's own Delete re-route dependants like SciForge's Delete | they belong to the timeline/browser module; they delete the bodies a Split Body or a copy made (bodies_gui.Watch), and flag what breaks |
 | Rolling the timeline marker back before a Create Copy hides the copy | the copy's step sits outside the bodies, so the marker does not hide it |
 | Physical material shown in the browser | the browser module shows no material; the Physical Material dialog lists them ("In This Design") with each body's mass |
