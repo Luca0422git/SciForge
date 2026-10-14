@@ -24,6 +24,7 @@ then FreeCAD gets a copy of the press and the drag goes on as before (pan, orbit
 zoom with Ctrl only), so FreeCAD never sees a "quick middle click" to re-centre on. A press
 that ends without a move is a click: nothing, Fit (double) or the pivot (Shift).
 """
+
 import math
 
 import FreeCAD as App
@@ -424,9 +425,22 @@ def _picked_point(gl, pos):
     return App.Vector(info["x"], info["y"], info["z"])
 
 
+def _fusion_mouse():
+    """Fusion's Pan, Zoom, Orbit layout chosen (Preferences); another preset (SolidWorks) is
+    FreeCAD's own navigation style, which handles the middle button itself."""
+    try:
+        from . import preferences_ui
+
+        return preferences_ui.fusion_mouse()
+    except Exception:
+        return True
+
+
 def _plan(modifiers):
     """What a middle press with these modifiers means, or None for FreeCAD's own handling
     (Ctrl + middle is FreeCAD's zoom drag already)."""
+    if not _fusion_mouse():
+        return None
     held = modifiers & MODIFIERS
     if held == QtCore.Qt.NoModifier:
         return "pan"

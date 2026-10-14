@@ -146,10 +146,21 @@ SOLID_MODIFY = group(
         SEP,
         item("Physical Material", ("SciForge_PhysicalMaterial", "Std_SetMaterial"), "material"),
         item("Appearance", ("SciForge_Appearance", "Std_SetAppearance"), "appearance", "A"),
-        item("Manage Materials", "Material_Edit", "material"),
+        item(
+            "Manage Materials",
+            ("SciForge_ManageMaterials", "Material_Edit"),
+            "material",
+            note="The material libraries: Physical and Appearance, favourites, your own.",
+        ),
         SEP,
         item("Change Parameters", "SciForge_ChangeParameters", "parameters"),
-        item("Compute All", "Std_Refresh", "compute", "Ctrl+B"),
+        item(
+            "Compute All",
+            ("SciForge_ComputeAll", "Std_Refresh"),
+            "compute",
+            "Ctrl+B",
+            note="Every parameter and step computed again; the steps that fail are listed.",
+        ),
     ],
 )
 
@@ -571,7 +582,13 @@ UTIL_ADDINS = group(
     "ADD-INS",
     ["Scripts and Add-Ins"],
     [
-        item("Scripts and Add-Ins", "Std_DlgMacroExecute", "parameters"),
+        item(
+            "Scripts and Add-Ins",
+            ("SciForge_ScriptsAddIns", "Std_DlgMacroExecute"),
+            "parameters",
+            "Shift+S",
+            note="Run, create and edit scripts and add-ins; Run on Startup.",
+        ),
         item("Add-on Manager", "Std_AddonMgr", "new_component"),
     ],
 )
@@ -580,7 +597,12 @@ UTIL_UTILITY = group(
     "UTILITY",
     ["Preferences"],
     [
-        item("Preferences", "Std_DlgPreferences", "tl_settings"),
+        item(
+            "Preferences",
+            ("SciForge_Preferences", "Std_DlgPreferences"),
+            "tl_settings",
+            note="Navigation, units of new designs, design history, materials, graphics.",
+        ),
         item(
             "Project and Recovery Settings",
             "SciForge_FilesSettings",

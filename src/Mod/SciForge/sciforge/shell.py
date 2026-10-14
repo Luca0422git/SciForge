@@ -76,6 +76,9 @@ def on_workbench(name):
             sketch_mode.give_back_left_over()
             shortcuts.give_back_left_over()
             versions_ui.give_back_left_over()
+            _safely(
+                lambda: __import__("sciforge.preferences_ui").preferences_ui.give_back_left_over()
+            )
     except Exception as exc:
         warn("workbench change to %s: %s" % (name, exc))
 
@@ -97,6 +100,9 @@ def startup():
             sketch_mode.give_back_left_over()
             shortcuts.give_back_left_over()
             versions_ui.give_back_left_over()
+            _safely(
+                lambda: __import__("sciforge.preferences_ui").preferences_ui.give_back_left_over()
+            )
     except Exception as exc:
         warn("startup check: %s" % exc)
 
@@ -155,6 +161,8 @@ def enable():
     _safely(lambda: __import__("sciforge.text_ui").text_ui.enable())  # sketch text
     # Versions on save, recovery copies, the start-up "Recover unsaved work?" check.
     _safely(lambda: __import__("sciforge.versions_ui").versions_ui.enable())
+    # Preferences: the mouse preset, the zoom direction, new designs without history.
+    _safely(lambda: __import__("sciforge.preferences_ui").preferences_ui.enable())
     log("interface on")
 
 
@@ -171,6 +179,7 @@ def disable():
         timeline_ui.hide()
         return
     for step in (
+        lambda: __import__("sciforge.preferences_ui").preferences_ui.disable(),
         lambda: __import__("sciforge.versions_ui").versions_ui.disable(),
         lambda: __import__("sciforge.selection_ui").selection_ui.disable(),
         lambda: __import__("sciforge.orbit_ui").orbit_ui.disable(),
