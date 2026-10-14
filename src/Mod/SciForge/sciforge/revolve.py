@@ -31,6 +31,11 @@ Options (dict, see DEFAULTS):
   expressions {"angle": formula, "angle2": formula}: values typed as a parameter or a
              formula ("turn", "turn / 2 + 10"); they become expressions on the feature, so
              the revolve follows the parameter (Fusion takes formulas in every value field)
+  bodies     Fusion's Objects To Cut: the bodies a Join, Cut or Intersect acts on (a list,
+             "auto" = every body the revolve passes through, None = an existing revolve
+             keeps its list; a new one acts on the profile's body only). One step: the
+             revolve is the lead in one of them, hidden follower steps change the others
+             (extrude_bodies.py, the same machinery as Extrude's)
 
 A positive angle turns right-handed about the axis direction, which is FreeCAD's own
 direction for that reference (an origin axis points along +X/+Y/+Z, a line from its
@@ -65,6 +70,7 @@ DEFAULTS = {
     "angle": 360.0,
     "angle2": 90.0,
     "to": None,
+    "bodies": None,
 }
 
 META = "SciForgeRevolve"
@@ -1303,8 +1309,9 @@ def _source_body(profiles):
     return body
 
 
-def _structure(feature, profiles, options):
-    """(target body or None for 'make a new one', feature type, source body)."""
+def _structure(feature, profiles, options, participants=None):
+    """(target body or None for 'make a new one', feature type, source body).
+    `participants`: the bodies the revolve acts on (None: the profile's body)."""
     src = _source_body(profiles)
     meta = load_meta(feature) if feature is not None else {}
     created = None
@@ -1326,6 +1333,10 @@ def _structure(feature, profiles, options):
             target = src
         else:
             target = None
+    elif participants:
+        from .extrude_bodies import lead_body
+
+        target = lead_body(src, participants)
     else:
         target = src
     return target, feature_type(options["operation"]), src
@@ -1335,17 +1346,42 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
     """Create the revolve, or rebuild `feature` with new profiles/axis/options.
     Returns the feature (a different object when its kind had to change). hide=False
     keeps the profile sketches visible (the dialog hides them on OK, like Fusion)."""
+    from .extrude_bodies import (
+        _show_only_tip,
+        ends_body,
+        merge_tip,
+        nothing_touched,
+        participants_of,
+        sync_followers,
+    )
+
     profiles = check_profiles(profiles)
     options = options_with_defaults(options)
     check_options(options)
     check_axis(profiles, axis)
-    if options["operation"] == "join" and joins_nothing(profiles, axis, options, feature):
+    doc = profiles[0][0].Document
+    participants = participants_of(
+        feature, doc, options, lambda: tool_shape(profiles, axis, options)
+    )
+    if participants is not None and not participants:
+        if options["operation"] != "join":
+            raise RevolveError(nothing_touched(options, "revolve"))
+        options = dict(options, operation="new_body")  # a Join touching nothing
+        participants = None
+    elif (
+        participants is None
+        and options["operation"] == "join"
+        and joins_nothing(profiles, axis, options, feature)
+    ):
         options = dict(options, operation="new_body")  # Fusion: a new body, never a lump
-    target, type_id, src = _structure(feature, profiles, options)
+    target, type_id, src = _structure(feature, profiles, options, participants)
     if feature is not None:
         same = feature.TypeId == type_id and (type_id != FP_TYPE or is_intersect(feature))
         if owner_body(feature) is target and same:
             _update(feature, target, profiles, axis, options, hide)
+            sync_followers(feature, participants, options)
+            if participants is not None:
+                _show_only_tip(target)
             return feature
         moving = target is None or owner_body(feature) is not target
         blocking = [o for o in _users(feature) if not is_helper(o)]
@@ -1362,8 +1398,23 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
     elif old_meta.get("created_body") == target.Name:
         created = target
     before = feature if (feature is not None and owner_body(feature) is target) else None
-    was_tip = before is not None and target.Tip is before
-    new = _insert(target, type_id, name, before)
+    was_tip = before is not None and ends_body(target, before)
+    after = None
+    if feature is not None and before is None and created is None:
+        # The revolve moves to another body (its sketch's body was left out of Objects To
+        # Cut, or taken back): at its own place in time there, as Extrude's lead does.
+        from .extrude_bodies import insert_point, place_in
+
+        after = place_in(target, feature)
+        if after is target.Tip:
+            after = None
+    if after is not None:
+        new = doc.addObject(type_id, name)
+        target.insertObject(new, insert_point(target, after, feature), True)
+    else:
+        new = _insert(target, type_id, name, before)
+    if feature is not None:
+        extrude._keep_timeline_place(new, feature)
     if type_id == FP_TYPE:
         RevolveFeature(new)
         _attach_view_provider(new)
@@ -1373,6 +1424,8 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
     except Exception:
         _remove(new, keep_body=created is None or before is not None)
         raise
+    # The other bodies' steps follow the new lead (before the old one goes, with its links).
+    sync_followers(new, participants, options, old=feature)
     if feature is not None:
         label = feature.Label
         old_body = owner_body(feature)
@@ -1389,8 +1442,13 @@ def build(profiles, axis, options, name="Revolve", feature=None, hide=True):
         new.Label = label
         if old_body is not None and old_body is not target:
             _show_tip(old_body)
-    if before is None or was_tip:
+    if (before is None and after is None) or was_tip:
         target.Tip = new
+    elif after is not None:
+        _show_only_tip(target)
+    merge_tip(new)
+    if participants is not None:
+        _show_only_tip(target)  # a removed merge or old step left the body's end hidden
     return new
 
 
@@ -1402,6 +1460,8 @@ def _users(feature):
     for obj in feature.InList:
         if obj.TypeId in ("PartDesign::Body", "App::Part") or obj.Name in own:
             continue
+        if getattr(obj, "SciForgeRole", "") == extrude.FOLLOWER_ROLE:
+            continue  # its steps in other bodies move over with sync_followers
         if isinstance(getattr(obj, "Proxy", None), FaceLink):
             found.append(obj)
             continue
@@ -1734,10 +1794,14 @@ def _delete(obj):
 
 def _remove(feature, keep_body=True):
     """Delete a revolve with its helpers (and the body it created, when asked)."""
+    from .extrude_bodies import followers_of, remove_follower
+
     meta = load_meta(feature)
     doc = feature.Document
     body = owner_body(feature)
     helpers = [doc.getObject(n) for n in meta.get("helpers", [])]
+    for follower in followers_of(feature):  # its steps in other bodies go too
+        remove_follower(follower)
     _delete(feature)
     for helper in helpers:
         if helper is not None:
@@ -1933,4 +1997,7 @@ def read(feature):
                 if helper.Target is not None:
                     options["to"] = (helper.Target, helper.TargetSub)
     options["expressions"] = formulas_of(feature)
+    from .extrude_bodies import stored_bodies
+
+    options["bodies"] = stored_bodies(feature)
     return profiles_of(feature), axis_of(feature), options

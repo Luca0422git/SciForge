@@ -1,0 +1,136 @@
+{
+  "id": "sf_sweep_join_two_bodies",
+  "title": "Sweep Join touching two bodies merges them in one step",
+  "tags": [
+    "sweep",
+    "bodies",
+    "join"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            -15,
+            40,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            -15,
+            90,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketches belong to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "YZ",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            10,
+            5,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            20,
+            10,
+            70,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s3",
+      "path": "p1",
+      "operation": "join",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 26500,
+          "solids": 1
+        }
+      },
+      "used_up": [
+        "e2"
+      ],
+      "followers": {
+        "w1": 1
+      },
+      "steps": {
+        "w1": 1
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 26500,
+    "solids": 1,
+    "bbox": [
+      0,
+      -15,
+      0,
+      90,
+      15,
+      15
+    ],
+    "source": "analytic",
+    "note": "a 10 x 5 bar swept 50 mm along x (20..70) on top of both plates touches each face to face: one Join merges both plates and the bar, 12000 + 12000 + 2500; the second plate's body is used up"
+  }
+}

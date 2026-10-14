@@ -1,0 +1,76 @@
+{
+  "id": "sf_sweep_distance_parameter",
+  "title": "Sweep Distance typed as a parameter (share); share changes 0.5 -> 0.25 later",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "share",
+      "value": 0.5,
+      "unit": ""
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "expressions": {
+        "distance": "share"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "share",
+      "value": 0.25
+    }
+  ],
+  "expect": {
+    "volume": 94.24777960769379,
+    "area": 119.38052083641213,
+    "faces": 3,
+    "bbox": [
+      -2,
+      -2,
+      0,
+      2,
+      2,
+      7.5
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Distance follows share: 0.25 of the 30 mm path = 7.5 mm (it was 15 while share was 0.5). Cylinder r2 h7.5."
+  }
+}

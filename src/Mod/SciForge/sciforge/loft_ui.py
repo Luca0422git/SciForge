@@ -17,8 +17,8 @@ which then stays open.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, curve_pick, curves, extrude, log, loft, loft_ends_core, preview
-from . import profile_pick, ui_icon_path, warn
+from . import bodies_row_ui, commands, curve_pick, curves, extrude, log, loft, loft_ends_core
+from . import preview, profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .hole_common import SelectionField
 from .taskui import DistanceField, Panel
@@ -105,18 +105,25 @@ class LoftPanel(Panel):
         self.observer = None
         self._quiet = False
         self._shown = []
+        stored = None
         if feature is not None:
             try:
                 self.profiles, self.rails, self.centerline, read = loft.read(feature)
+                stored = read.pop("bodies", None)
                 self.options.update(read)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
             self._show_sketches()
+        self.options["bodies"] = None  # the Objects To Cut row says it at each build
         self._build_form()
+        if feature is not None:
+            self.bodies_row.read(stored, feature)
         self._show_options()
         self._watch()
         if feature is not None:
             self._refresh_picks()
+            self._test_bodies()  # the row starts from the bodies it was saved with
+            self._show_bodies_row()
         else:
             self._start()
 
@@ -226,6 +233,11 @@ class LoftPanel(Panel):
         self.operation = curve_pick.combo(OPERATION_LABELS, self.options["operation"])
         self.operation.setObjectName("SciForgeLoft_operation")
         form.addRow("Operation", self.operation)
+        # Fusion's Objects To Cut: the bodies a Join / Cut / Intersect acts on
+        self.fields["bodies"] = SelectionField(self, "bodies", "No bodies")
+        self.fields["bodies"].button.setObjectName("SciForgeLoft_bodies")
+        self.fields["bodies"].clear.setObjectName("SciForgeLoft_clear_bodies")
+        self.bodies_row = bodies_row_ui.BodiesRow(self, form, self.fields["bodies"], "loft")
         self.finish_layout()
         lines = self.message.fontMetrics().lineSpacing()
         self.message.setMinimumHeight(lines * 3 + 4)
@@ -348,8 +360,29 @@ class LoftPanel(Panel):
         self.active = name
         for key, field in self.fields.items():
             field.set_active(key == name)
+        self._show_bodies_row()
+
+    def _test_bodies(self):
+        """The Objects To Cut row: which bodies the loft's solid is in."""
+        if self.options.get("operation") in ("join", "cut", "intersect"):
+            self.bodies_row.update(
+                lambda: loft.tool_shape(self.profiles, self.rails, self.centerline, self.options),
+                self.target,
+            )
+
+    def _show_bodies_row(self):
+        if getattr(self, "bodies_row", None) is None:
+            return
+        self.bodies_row.show(
+            self.options.get("operation"), self.active == "bodies", len(self.profiles) >= 2
+        )
 
     def clear_field(self, name):
+        if name == "bodies":
+            self.bodies_row.clear_all(self.options.get("operation"))
+            self.activate("bodies")
+            self._changed()
+            return
         if name == "profiles":
             self.profiles = []
         elif name == "rails":
@@ -405,7 +438,8 @@ class LoftPanel(Panel):
                     0, lambda: self._region_clicked(sketch, sub)
                 ),
                 occluder=self._occluder,
-                skip=lambda position: curve_pick.line_under_mouse(self.doc, position),
+                skip=lambda position: self.active == "bodies"
+                or curve_pick.line_under_mouse(self.doc, position),
             )
         except Exception as exc:
             warn("loft: profile shading unavailable: %s" % exc)
@@ -445,6 +479,12 @@ class LoftPanel(Panel):
                 return
             Gui.Selection.clearSelection()
             if self.picker is not None and self.picker.clicked_region_recently():
+                return
+            if self.active == "bodies":
+                said = self.bodies_row.picked(picks[-1][0], self.options.get("operation"))
+                self.message.setText(said)
+                if not said:
+                    self._changed()
                 return
             for obj, short in picks:
                 self._picked(obj, short)
@@ -679,19 +719,25 @@ class LoftPanel(Panel):
         if self._waiting_for():
             return
         try:
+            operation = self.options["operation"]
+            self._test_bodies()
+            options = dict(self.options, bodies=self.bodies_row.for_build(operation))
             self.target = loft.build(
                 self.profiles,
                 self.rails,
                 self.centerline,
-                self.options,
+                options,
                 feature=self.target,
                 hide=False,
             )
             self.error = self._misses()
-        except (loft.LoftError, curves.CurveError) as exc:
+        except (loft.LoftError, curves.CurveError, ValueError) as exc:
             self.error = str(exc)
         except Exception as exc:
             self.error = "This loft cannot be built: %s" % exc
+        self.bodies_row.built(self.target)
+        self.bodies_row.show_cut(self.options["operation"], bool(self.error))
+        self._show_bodies_row()
         if self.error and self.target is not None:
             try:
                 actual = loft.read(self.target)[3]["operation"]
@@ -708,6 +754,10 @@ class LoftPanel(Panel):
         loft would just leave the part as it was); the reason, or ''."""
         if self.options["operation"] not in ("cut", "intersect"):
             return ""
+        if self.bodies_row.touched(self.options["operation"]):
+            return ""  # it goes through bodies (Objects To Cut lists them)
+        if self.bodies_row.problem:
+            return self.bodies_row.problem
         base = self._base_feature()
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             return "There is no part to %s yet." % self.options["operation"]
@@ -812,6 +862,7 @@ class LoftPanel(Panel):
     def cleanup(self):
         self._closed = True
         self._unwatch()
+        self.bodies_row.cleanup()
         for guard in (self.escape, self.undo_guard, self.enter):
             try:
                 guard.remove()

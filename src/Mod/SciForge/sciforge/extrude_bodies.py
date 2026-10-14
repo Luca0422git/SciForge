@@ -345,6 +345,37 @@ def place_in(body, lead, times=None, at_marker=True, skip=()):
     return found
 
 
+def insert_point(body, after, lead, times=None):
+    """The object of `body` that a step moving there right after its solid step `after`
+    (from place_in) goes in behind: past the sketches and planes that come before `lead` in
+    the timeline too. The timeline keeps each body's own order, so a step put in ahead of an
+    older sketch of that body would jump ahead of that sketch (and of the steps of other
+    bodies made in between) in the timeline."""
+    if after is None or lead is None:
+        return after
+    if times is None:
+        times = step_times(lead.Document)
+    at = times.get(lead.Name)
+    if at is None:
+        return after
+    group = list(body.Group)
+    try:
+        start = group.index(after)
+    except ValueError:
+        return after
+    point = after
+    for obj in group[start + 1 :]:
+        if obj is lead or "BaseFeature" in obj.PropertiesList:
+            break  # never past a solid step (place_in chose the last one before the lead)
+        t = times.get(obj.Name)
+        if t is None:
+            continue  # a helper: it goes with the step after it
+        if t >= at:
+            break
+        point = obj
+    return point
+
+
 def before_shape(body, lead=None, times=None):
     """`body`'s solid (design coordinates) as it was before the extrude `lead` changed it:
     the step before the lead or before its follower in that body, else the body at the
@@ -1034,6 +1065,17 @@ def merge_tip(lead):
             body.Tip = follower
             _show_only_tip(body)
             return
+
+
+def ends_body(body, step):
+    """True when `step` is its body's end: the Tip, or followed only by its own Join's merge
+    (an edited step rebuilt as another kind must become the end again)."""
+    tip = getattr(body, "Tip", None) if body is not None else None
+    if tip is None or step is None:
+        return False
+    if tip is step:
+        return True
+    return is_merge(tip) and tip in followers_of(step)
 
 
 def _save_bodies(lead, participants):

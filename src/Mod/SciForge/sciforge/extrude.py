@@ -1873,14 +1873,14 @@ def build(profiles, options, name="Extrude", feature=None, hide=True):
         # The extrude moves to another body (its sketch's body was left out, or taken
         # back): it goes in at its own place in time there, not after that body's later
         # steps (the timeline would show it jump to the end, its cut would come too late).
-        from .extrude_bodies import place_in
+        from .extrude_bodies import insert_point, place_in
 
         after = place_in(target, feature)
         if after is target.Tip:
             after = None
     if after is not None:
         new = feature.Document.addObject(type_id, name)
-        target.insertObject(new, after, True)
+        target.insertObject(new, insert_point(target, after, feature), True)
     else:
         new = _insert(target, type_id, name, before)
     if feature is not None:

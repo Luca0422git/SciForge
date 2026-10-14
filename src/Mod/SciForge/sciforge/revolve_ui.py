@@ -26,8 +26,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, drag_guard, extrude, handles3d, log, preview, profile_pick, revolve
-from . import ui_icon_path, warn
+from . import bodies_row_ui, commands, drag_guard, extrude, handles3d, log, preview
+from . import profile_pick, revolve, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
 
@@ -1029,22 +1029,29 @@ class RevolvePanel(Panel):
         self._normal = None
         self.observer = None
         self._quiet = False
+        stored = None
         if feature is not None:
             try:
                 self.profiles, self.axis, read = revolve.read(feature)
+                stored = read.pop("bodies", None)
                 self.options.update(read)
                 self.profiles = extrude.expand_whole(self.profiles)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
+        self.options["bodies"] = None  # the Objects To Cut row says it at each build
         self._shown = []
         if feature is not None:
             self._show_sketches()
         self._build_form()
+        if feature is not None:
+            self.bodies_row.read(stored, feature)
         self._show_options()
         self._watch()
         if feature is not None:
             self._refresh_picks()
             self._make_handles()
+            self._test_bodies()  # the row starts from the bodies it was saved with
+            self._show_bodies_row()
         else:
             self._start()
 
@@ -1116,6 +1123,9 @@ class RevolvePanel(Panel):
         self.operation = _combo(OPERATION_LABELS, self.options["operation"])
         self.operation.setObjectName("SciForgeRevolve_operation")
         form.addRow("Operation", self.operation)
+        # Fusion's Objects To Cut: the bodies a Join / Cut / Intersect acts on
+        self.fields["bodies"] = SelectionField(self, "bodies", "No bodies")
+        self.bodies_row = bodies_row_ui.BodiesRow(self, form, self.fields["bodies"], "revolve")
         self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
         self.formulas.setWordWrap(True)
         self.formulas.setStyleSheet("color: #b8c7d9;")
@@ -1245,6 +1255,23 @@ class RevolvePanel(Panel):
         """Make this selection box the one that waits for clicks in the 3D view."""
         self.active = name
         self._show_active()
+        self._show_bodies_row()
+
+    def _test_bodies(self):
+        """The Objects To Cut row: which bodies the revolve's solid is in."""
+        if self.options.get("operation") in ("join", "cut", "intersect"):
+            self.bodies_row.update(
+                lambda: revolve.tool_shape(self.profiles, self.axis, self.options), self.target
+            )
+
+    def _show_bodies_row(self):
+        if getattr(self, "bodies_row", None) is None:
+            return
+        self.bodies_row.show(
+            self.options.get("operation"),
+            self.active == "bodies",
+            bool(self.profiles) and self.axis is not None,
+        )
 
     def _show_active(self):
         if self.active == "to" and self.type.currentData() != "to":
@@ -1261,6 +1288,11 @@ class RevolvePanel(Panel):
         return not self._closed and self.active == "to" and self.type.currentData() == "to"
 
     def clear_field(self, name):
+        if name == "bodies":
+            self.bodies_row.clear_all(self.options.get("operation"))
+            self.activate("bodies")
+            self._changed()
+            return
         if name == "profiles":
             self.profiles = []
         elif name == "to":
@@ -1339,7 +1371,9 @@ class RevolvePanel(Panel):
                 view,
                 revolve.overlay_lines(self.body, sketches, self._axis_length(sketches)),
                 self._axis_clicked,
-                blocked=lambda position: self._picking_to() or self._handle_at(position),
+                blocked=lambda position: self._picking_to()
+                or self.active == "bodies"
+                or self._handle_at(position),
                 competing=self._something_else_at,
             )
         except Exception as exc:
@@ -1353,7 +1387,7 @@ class RevolvePanel(Panel):
                 ),
                 occluder=self._occluder,
                 on_line=self._line_under_mouse,
-                paused=self._picking_to,
+                paused=lambda: self._picking_to() or self.active == "bodies",
             )
         except Exception as exc:
             warn("profile shading unavailable: %s" % exc)
@@ -1469,6 +1503,12 @@ class RevolvePanel(Panel):
                 return  # the click grabbed a handle (the part under it is not a pick)
             if self.to_planes is not None and self.to_planes.clicked_recently():
                 return  # the click went to an origin square (the object to revolve to)
+            if self.active == "bodies":
+                said = self.bodies_row.picked(picks[-1][0], self.options.get("operation"))
+                self.message.setText(said)
+                if not said:
+                    self._changed()
+                return
             if self._picking_to():
                 obj, short = picks[-1]
                 self._to_picked(obj, short)
@@ -2042,16 +2082,22 @@ class RevolvePanel(Panel):
             return
         try:
             before = self.target
+            operation = self.options["operation"]
+            self._test_bodies()
+            options = dict(self.options, bodies=self.bodies_row.for_build(operation))
             self.target = revolve.build(
-                self.profiles, self.axis, self.options, feature=self.target, hide=False
+                self.profiles, self.axis, options, feature=self.target, hide=False
             )
             self.error = ""
             if before is None or self.target is not before:
                 self._geometry_changed = True
-        except revolve.RevolveError as exc:
+        except (revolve.RevolveError, ValueError) as exc:
             self.error = str(exc)
         except Exception as exc:
             self.error = "This revolve cannot be built: %s" % exc
+        self.bodies_row.built(self.target)
+        self.bodies_row.show_cut(self.options["operation"], bool(self.error))
+        self._show_bodies_row()
         if self.error and self.target is not None:
             actual = self._feature_operation()
             if actual != self.options["operation"]:
@@ -2082,6 +2128,7 @@ class RevolvePanel(Panel):
             self.message.setText("⚠ " + self.error)
             return
         text = _plain(preview.failure(self.target)) or revolve.problem(self.target)
+        text = text or extrude_bodies_problem(self.target) or self.bodies_row.problem
         self.message.setText("⚠ " + text if text else "")
 
     # -- handles --------------------------------------------------------------------------------------
@@ -2289,6 +2336,7 @@ class RevolvePanel(Panel):
 
     def cleanup(self):
         self._unwatch()
+        self.bodies_row.cleanup()
         for guard in (self.escape, self.undo_guard, self.enter):
             try:
                 guard.remove()
@@ -2299,6 +2347,17 @@ class RevolvePanel(Panel):
         self.value_boxes.discard()
         self._hide_shown()
         super().cleanup()
+
+
+def extrude_bodies_problem(lead):
+    """The first problem of a revolve's steps in other bodies (Objects To Cut), or ''."""
+    try:
+        from . import extrude_bodies
+
+        kind, reason = extrude_bodies.follower_problem(lead) if lead is not None else ("", "")
+        return reason if kind == "error" else ""
+    except Exception:
+        return ""
 
 
 TO_WAIT = (

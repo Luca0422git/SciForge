@@ -1,0 +1,145 @@
+{
+  "id": "sf_loft_cut_two_bodies",
+  "title": "Loft Cut through two bodies in one step",
+  "tags": [
+    "loft",
+    "bodies",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            -15,
+            40,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            -15,
+            90,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketches belong to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": -5,
+      "geometry": [
+        {
+          "rect": [
+            30,
+            -5,
+            60,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s4",
+      "plane": "XY",
+      "offset": 15,
+      "geometry": [
+        {
+          "rect": [
+            30,
+            -5,
+            60,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s3"
+        },
+        {
+          "profile": "s4"
+        }
+      ],
+      "operation": "cut",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 11000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 11000,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "l1": 1
+      },
+      "steps": {
+        "l1": 1
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 22000,
+    "solids": 2,
+    "bbox": [
+      0,
+      -15,
+      0,
+      90,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "a loft between two equal 30 x 10 rectangles (z -5 and 15) is a block over x 30..60: it cuts 10 x 10 x 10 out of each plate (x 30..40, 50..60)"
+  }
+}

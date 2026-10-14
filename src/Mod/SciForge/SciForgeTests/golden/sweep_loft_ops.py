@@ -176,6 +176,14 @@ def op_sf_sweep(self, step):
         names = selectors.select(tip.Shape, step["surface"]["faces"], "faces")
         rail = [(tip, n) for n in names]
     options = {k: step[k] for k in SWEEP_KEYS if k in step}
+    if "bodies" in step:  # Objects To Cut: "auto" or step ids (as for Extrude)
+        options["bodies"] = self._extrude_bodies(step)
+    if "expressions" in step:  # {field: formula}: a parameter typed in that field
+        options["expressions"] = dict(step["expressions"])
+        filled = sweep.options_with_defaults(dict(options, operation="join"))
+        worked_out = sweep.evaluate_formulas(self.doc, filled)
+        for key in options["expressions"]:
+            options[key] = worked_out[key]  # the values the formulas give now
     if options.get("operation", "auto") == "auto":
         tip = self.body.Tip
         base = None
@@ -253,6 +261,8 @@ def op_sf_loft(self, step):
         rails += curves_of(self, spec, where)
     line = curves_of(self, step["centerline"], where) if "centerline" in step else []
     options = {k: step[k] for k in LOFT_KEYS if k in step}
+    if "bodies" in step:  # Objects To Cut: "auto" or step ids (as for Extrude)
+        options["bodies"] = self._extrude_bodies(step)
     if "centerline" in step:
         options.setdefault("guide", "centerline")
     if options.get("operation", "auto") == "auto":

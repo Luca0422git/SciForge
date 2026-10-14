@@ -53,8 +53,16 @@ DEFAULTS = {
     "end_condition": "free",
     "end_weight": 1.0,
     "end_angle": 0.0,
+    "bodies": None,  # Objects To Cut: a list, "auto", None (as for Extrude and Revolve)
 }
 END_KEYS = tuple(k for k in DEFAULTS if k.startswith(("start_", "end_")))
+
+
+def _stored_bodies(feature):
+    from .extrude_bodies import stored_bodies
+
+    return stored_bodies(feature)
+
 
 META = "SciForgeLoft"
 FP_TYPE = "PartDesign::FeaturePython"
@@ -714,7 +722,7 @@ def _source_body(profiles):
     raise LoftError("The profiles must belong to a body. Use Create Sketch first.")
 
 
-def _target(feature, profiles, options):
+def _target(feature, profiles, options, participants=None):
     src = _source_body(profiles)
     meta = load_meta(feature) if feature is not None else {}
     created = None
@@ -735,6 +743,10 @@ def _target(feature, profiles, options):
         if feature is None and not _has_solid(src):
             return src, src
         return None, src
+    if participants:
+        from .extrude_bodies import lead_body
+
+        return lead_body(src, participants), src  # Objects To Cut: one of them leads
     return src, src
 
 
@@ -753,21 +765,39 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
     options = options_with_defaults(options)
     rail_refs = curves.normalize(rail_refs) if options["guide"] == "rails" else []
     centerline_refs = curves.normalize(centerline_refs) if options["guide"] == "centerline" else []
+    from .extrude_bodies import (
+        _show_only_tip,
+        ends_body,
+        merge_tip,
+        nothing_touched,
+        participants_of,
+        sync_followers,
+    )
+
     tool = tool_shape(profiles, rail_refs, centerline_refs, options)  # fails early (reason)
-    if options["operation"] == "join":
+    participants = participants_of(feature, profiles[0][0].Document, options, lambda: tool)
+    if participants is not None and not participants:
+        if options["operation"] != "join":
+            raise LoftError(nothing_touched(options, "loft"))
+        options = dict(options, operation="new_body")  # a Join touching nothing
+        participants = None
+    elif participants is None and options["operation"] == "join":
         # Fusion: a Join that does not touch the part makes a new body (never a lump).
         from .sweep import apart, base_global
 
         base = base_global(_source_body(profiles), feature)
         if base is not None and apart(base, tool):
             options = dict(options, operation="new_body")
-    target, src = _target(feature, profiles, options)
+    target, src = _target(feature, profiles, options, participants)
     native = native_type(profiles, rail_refs, centerline_refs, options, target) if target else None
     type_id = native or FP_TYPE
     if feature is not None:
         same = feature.TypeId == type_id and (type_id != FP_TYPE or is_own(feature))
         if owner_body(feature) is target and same:
             _update(feature, profiles, rail_refs, centerline_refs, options, hide)
+            sync_followers(feature, participants, options)
+            if participants is not None:
+                _show_only_tip(target)
             return feature
         # Rebuilt in its own body, later steps are moved onto the new step (relink_users
         # below); only a move to another body cannot take them along.
@@ -785,8 +815,10 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
     elif old_meta.get("created_body") == target.Name:
         created = target
     before = feature if (feature is not None and owner_body(feature) is target) else None
-    was_tip = before is not None and target.Tip is before
-    new = _insert(target, type_id, name, before)
+    was_tip = before is not None and ends_body(target, before)
+    from .sweep import _insert_lead, _set_tip
+
+    new, after = _insert_lead(target, type_id, name, before, feature, created)
     if type_id == FP_TYPE:
         LoftFeature(new)
         _attach_view_provider(new)
@@ -796,6 +828,8 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
     except Exception:
         _remove(new, keep_body=created is None or before is not None)
         raise
+    # The other bodies' steps follow the new lead (before the old one goes, with its links).
+    sync_followers(new, participants, options, old=feature)
     if before is not None and curves.computed(new):
         curves.relink_users(feature, new)
     if feature is not None:
@@ -805,8 +839,10 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
         new.Label = label
         if old_body is not None and old_body is not target:
             extrude.show_tip(old_body)
-    if before is None or was_tip:
-        target.Tip = new
+    _set_tip(target, new, before, after, was_tip)
+    merge_tip(new)
+    if participants is not None:
+        _show_only_tip(target)  # a removed merge or old step left the body's end hidden
     return new
 
 
@@ -890,10 +926,14 @@ def _delete(obj):
 
 
 def _remove(feature, keep_body=True):
+    from .extrude_bodies import followers_of, remove_follower
+
     meta = load_meta(feature)
     doc = feature.Document
     body = owner_body(feature)
     was_tip = body is not None and body.Tip is feature
+    for follower in followers_of(feature):  # its steps in other bodies go too
+        remove_follower(follower)
     _delete(feature)
     if not keep_body and body is not None and meta.get("created_body") == body.Name:
         rest = [o for o in body.Group if o.TypeId != "App::Origin"]
@@ -947,6 +987,7 @@ def read(feature):
             options["operation"] = meta["operation"]
         if not profiles:
             profiles = _links(feature.Profiles)
+        options["bodies"] = _stored_bodies(feature)
         return (
             profiles,
             _links(feature.Rails),
@@ -977,4 +1018,5 @@ def read(feature):
                 profiles += [(obj, s) for s in subs]
             else:
                 profiles.append((obj, ""))
+    options["bodies"] = _stored_bodies(feature)
     return profiles, [], [], options_with_defaults(options)

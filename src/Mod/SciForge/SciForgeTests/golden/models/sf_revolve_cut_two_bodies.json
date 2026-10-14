@@ -1,0 +1,123 @@
+{
+  "id": "sf_revolve_cut_two_bodies",
+  "title": "Revolve Cut through two bodies in one step (Objects To Cut: both)",
+  "tags": [
+    "revolve",
+    "bodies",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            -15,
+            40,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            -15,
+            90,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketches belong to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            10,
+            0,
+            80,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s3",
+      "axis": "X",
+      "type": "full",
+      "operation": "cut",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 10821.902754903827,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 10821.902754903827,
+          "solids": 1
+        }
+      },
+      "followers": {
+        "r1": 1
+      },
+      "steps": {
+        "r1": 1
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 21643.805509807655,
+    "solids": 2,
+    "bbox": [
+      0,
+      -15,
+      0,
+      90,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "a 70 x 5 rectangle on the plates' bottom plane revolved about X makes a rod r 5 along x 10..80; its upper half lies in each plate over 30 mm: each loses pi 25 / 2 * 30. One timeline step, a hidden follower in the second plate"
+  }
+}
