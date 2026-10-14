@@ -92,9 +92,31 @@ rebuilt; the sharp-shell message), `pickpanel.py` (members: other bodies of a st
 
 ## Tests
 
-Scenarios (real input, FreeCAD 1.1.4 under xvfb): see the report table at the end of this
-file. Golden models `golden/models/modify2_*.json` (24, analytic numbers). Unit tests
-`SciForgeTests/unit/test_modify2_schema.py`.
+Scenarios (real input, FreeCAD 1.1.4 under xvfb), all passing on the final tree:
+
+| Scenario | Checks | Paths |
+|---|---|---|
+| `modify2_pattern_adjust` | 51 | a wedge, a hole cut up To Object its slope, 3 copies: Optimized blind (each copy measured), Adjust through, OK, undo / redo, edit + Identical + Cancel, save / reopen |
+| `modify2_pattern_path` | 36 | an L path from the browser, Start Point 0 then 0.25 (the copy moves), 1 refused (OK waits), undo / redo, edit reads 0.25 |
+| `modify2_draft` | 72 | Parting Line with a construction plane, OK refused without the parting tool, One Side, Two Side 5 / 3, undo / redo, edit to Symmetric 4, Esc |
+| `modify2_shell` | 52 | two bodies in one Shell, 2 mm, undo / redo, edit drops Body2, undo, save / reopen / edit / Cancel, timeline Delete |
+| `modify2_scale` | 56 | two bodies 0.5, undo / redo, a sketch from the browser, Non Uniform refused, x2, undo / redo, edit 1.5, timeline Delete puts it back |
+| `modify2_move_face` | 56 | Move Object Faces, the top up 5 mm, undo / redo, edit to -3, the right face 5 mm, Esc |
+| `modify2_presspull_type` | 48 | Modify Existing Feature on Extrude 1's top (no new step), undo / redo, New Offset, Modify Existing on that offset, a side face refused, Esc |
+| `modify2_bodies` | 77 | empty design (Draft / Shell / Scale say what to make), a cut through two bodies patterned (both cut), undo / redo, edit, save / reopen, timeline Delete of the pattern and of the cut, a Shell across a component |
+
+Regression runs on the final tree, all passing: `shell_draft`, `shell_draft_draft`,
+`shell_draft_hollow`, `shell_draft_qa`, `shell_draft_qa_draft`, `shell_draft_qa_mix`,
+`shell_draft_qa_scale`, `shell_draft_qa_shell`, `shell_draft_scale`, the 12 `patterns_*`,
+the 11 `extrude_presspull_*`, `direct_commands`, `direct_step_box`, `direct_base_feature`,
+`direct_components`, `bodies_move`, `bodies_delete`, `components_move`, `extrude_multibody`,
+`extrude_multibody_edit`, `extrude_multibody_move`, `modify_replace_face`, `modify_remove`,
+`timeline_browser`, `timeline_browser_qa`, `timeline_rolled_cut`, `inspect_section`,
+`inspect_construct_use`, and `--only base` (914 unit tests, 363 golden models + the known
+xfail `plate_hole_grid`, smoke, journey).
+
+Golden models `golden/models/modify2_*.json` (24, analytic numbers). Unit tests
+`SciForgeTests/unit/test_modify2_schema.py` (the golden steps' schema).
 
 ## Not built (and why)
 
