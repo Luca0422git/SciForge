@@ -1,0 +1,57 @@
+{
+  "id": "bodies_split_two_planes",
+  "title": "Split Body with two splitting tools at once (YZ and XZ planes): four bodies, one step",
+  "tags": [
+    "bodies",
+    "split"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "e1",
+      "tools": [
+        "YZ",
+        "XZ"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 5200,
+    "faces": 24,
+    "solids": 4,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      10
+    ],
+    "source": "analytic",
+    "note": "four 20x15x10 bodies: A = 4 * 2*(300 + 200 + 150)"
+  }
+}

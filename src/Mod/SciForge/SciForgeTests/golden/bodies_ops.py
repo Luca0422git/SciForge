@@ -6,12 +6,14 @@ delete.py). Registered on builder.Builder when builder.py is imported.
 Bodies are named by a step that made them (its body): "e1" is the body of extrude e1.
 
   {"op": "combine", "id": "c1", "target": "e1", "tools": ["e2"],
-   "operation": "join" | "cut" | "intersect", "new_body": false, "keep_tools": false}
-      Measured: the target body (with new_body: the new body).
+   "operation": "join" | "cut" | "intersect", "new_body": false, "new_component": false,
+   "keep_tools": false}
+      Measured: the target body (with new_body / new_component: the new body).
 
   {"op": "split_body", "id": "s1", "body": "e1",
    "tool": "XY" | "XZ" | "YZ" | {"face": selector, "of": "e2"} | {"body": "e2"} |
            {"sketch": "s3", "edge": 1} (a sketch curve, cut straight through),
+   "tools": [tool, tool, ...] (instead of "tool": several splitting tools, one step),
    "extend": true}
       Measured: every body the split leaves (the split body and the new ones).
 
@@ -33,6 +35,7 @@ Bodies are named by a step that made them (its body): "e1" is the body of extrud
   {"op": "delete_bodies", "steps": ["e2"]}
       Delete (Del) on bodies (picked in the browser); what used them keeps working.
 """
+
 import Part
 
 from . import selectors
@@ -87,6 +90,7 @@ def op_combine(self, step):
         "tools": [_body(self, t) for t in step["tools"]],
         "operation": step.get("operation", "join"),
         "new_body": bool(step.get("new_body", False)),
+        "new_component": bool(step.get("new_component", False)),
         "keep_tools": bool(step.get("keep_tools", False)),
     }
     try:
@@ -127,9 +131,13 @@ def op_split_body(self, step):
     from sciforge import split
 
     body = _body(self, step["body"])
+    if "tools" in step:  # Splitting Tool(s): several at once, one step (components-2)
+        tools = [_split_tool(self, dict(step, tool=spec), body) for spec in step["tools"]]
+    else:
+        tools = [_split_tool(self, step, body)]
     options = {
         "body": body,
-        "tool": _split_tool(self, step, body),
+        "tools": tools,
         "extend": step.get("extend", True),
     }
     try:

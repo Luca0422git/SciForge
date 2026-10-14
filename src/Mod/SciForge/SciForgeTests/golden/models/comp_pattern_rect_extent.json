@@ -1,0 +1,63 @@
+{
+  "id": "comp_pattern_rect_extent",
+  "title": "Rectangular pattern of a component along X: 3 instances over an extent of 100",
+  "tags": [
+    "components",
+    "pattern"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            10
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "components_from_bodies",
+      "id": "k1",
+      "bodies": [
+        "e1"
+      ]
+    },
+    {
+      "op": "component_pattern",
+      "id": "p1",
+      "component": "k1",
+      "kind": "rectangular",
+      "direction": "X",
+      "quantity": 3,
+      "distance": 100
+    }
+  ],
+  "expect": {
+    "volume": 6000,
+    "faces": 18,
+    "solids": 3,
+    "bbox": [
+      0,
+      0,
+      0,
+      120,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "blocks at x 0, 50 and 100 (extent 100 over 3)"
+  }
+}
