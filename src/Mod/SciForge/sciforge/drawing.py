@@ -1213,6 +1213,12 @@ def follow_center_marks(view):
         keep.append({"tags": tags, "c": [bx, by], "r": best[1]})
     if changed:
         _save_marks(view, keep)
+        try:
+            # TechDraw draws a view's cosmetic lines from its last recompute: without one
+            # the sheet kept showing the mark where the hole was
+            view.recompute()
+        except Exception as exc:
+            warn("centre marks of %s: %s" % (view.Label, exc))
     return changed
 
 

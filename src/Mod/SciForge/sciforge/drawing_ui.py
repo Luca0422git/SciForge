@@ -173,9 +173,28 @@ def show_design(doc=None):
         title = sub.windowTitle().replace("[*]", "")
         if title.split(" : ")[0] == doc.Label or title.startswith(doc.Label):
             area.setActiveSubWindow(sub)
+            try:
+                widget.setFocus()  # (the keys go to the design, no longer to the sheet)
+            except RuntimeError:
+                pass
             _later(sync_mode, ms=50)
             return True
     return False
+
+
+def _click_focus_only(gv):
+    """A drawing's tab takes the keyboard only when clicked. When the widget that has the
+    keyboard disappears (a timeline step being rebuilt), Qt hands the keyboard to the next
+    widget that takes it from Tab, and a drawing's tab that took it came to the front
+    (double-clicking a step in the timeline switched to the drawing)."""
+    widget = gv
+    while widget is not None and not isinstance(widget, QtWidgets.QMdiSubWindow):
+        widget = widget.parentWidget()
+    if widget is None:
+        return
+    for child in [widget] + widget.findChildren(QtWidgets.QWidget):
+        if child.focusPolicy() & QtCore.Qt.TabFocus:
+            child.setFocusPolicy(QtCore.Qt.ClickFocus)
 
 
 # ------------------------------------------------------------------ drawing mode
@@ -222,6 +241,11 @@ def sync_mode():
     """Drawing tab active -> DRAWING ribbon; otherwise back to the design's tabs."""
     page = active_page()
     gv = page_widget() if page is not None else None
+    if gv is not None:
+        try:
+            _click_focus_only(gv)
+        except RuntimeError:
+            pass
     if STATE["input"] is not None:
         if gv is not None:
             STATE["input"].attach(gv, page)
