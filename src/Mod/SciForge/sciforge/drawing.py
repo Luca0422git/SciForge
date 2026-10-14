@@ -50,8 +50,8 @@ SYMBOL = "TechDraw::DrawViewSymbol"
 VIEW_TYPES = (ITEM, PART_VIEW, SECTION, DETAIL, BROKEN)
 LINE_DASHDOT = 4  # TechDraw line styles: 1 continuous, 2 dash, 3 dot, 4 dash-dot
 CENTER_EXTENSION = 3.0  # mm on the paper a centre mark reaches past its circle
-HATCH_FILE = "FCPAT.pat"
-HATCH_NAME = "ANSI31"
+HATCH_FILE = "FCPAT.pat"  # TechDraw's own patterns
+HATCH_NAME = "Diagonal4"  # 45 degree lines, like ANSI31
 
 
 class DrawingError(ValueError):
@@ -674,6 +674,9 @@ def set_scale(view, scale):
     for target in _family(view):
         target.ScaleType = "Custom"
         target.Scale = scale
+        if target.TypeId == DETAIL:
+            target.Label = detail_caption(target)
+            target.Caption = target.Label
 
 
 def add_projected(parent, kind_name, x, y):
@@ -817,14 +820,15 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None):
     _hatch(section)
     _add_to_page(page, section)
     section.BaseView = parent
-    _mark(section, "SectionView")
+    _mark(section, "CutView")  # (a "Section" type would be an analysis in the browser)
     _add(section, "App::PropertyStringList", "SciForgeLine", [json.dumps([p1, p2, side])])
     px, py = view_position(parent)
     _add(section, "App::PropertyFloatList", "SciForgeOffset", [position[0] - px, position[1] - py])
     _style(section, style_of(parent), tangent_of(parent))
     section.HardHidden = False  # Fusion's section views show no hidden edges by default
     section.SmoothHidden = False
-    section.Label = "Section %s-%s" % (label, label)
+    section.Label = section_caption(label)
+    section.Caption = section.Label  # written under the view, also in the PDF
     return section
 
 
@@ -839,6 +843,16 @@ def _hatch(section):
             section.HatchScale = 1.0
     except Exception as exc:
         warn("section hatch: %s" % exc)
+
+
+def section_caption(label):
+    """What the drawing writes under a section view (Fusion: SECTION A-A)."""
+    return "SECTION %s-%s" % (label, label)
+
+
+def detail_caption(detail):
+    """What the drawing writes under a detail view: its letter and its scale."""
+    return "DETAIL %s (%s)" % (detail.Reference, core.format_scale(scale_of(detail)))
 
 
 def section_line_of(section):
@@ -871,7 +885,8 @@ def add_detail(parent, centre, radius, position, label=None, scale=None):
     detail.BaseView = parent
     _mark(detail, "DetailView")
     _style(detail, style_of(parent), tangent_of(parent))
-    detail.Label = "Detail %s" % label
+    detail.Label = detail_caption(detail)
+    detail.Caption = detail.Label
     return detail
 
 
@@ -889,19 +904,43 @@ def add_break(view, a, b, gap=None):
     horizontal = abs(du) >= abs(dv)
     if (abs(du) if horizontal else abs(dv)) < 1e-3:
         raise DrawingError("Click two different points along the view to break it.")
-    axes = axes_of(view)
-    centre = centre_of(view)
-    # the break's two ends, both on the view's middle line, in the model
-    if horizontal:
-        p = core.to_model(axes, centre, a[0], 0.0)
-        q = core.to_model(axes, centre, b[0], 0.0)
-    else:
-        p = core.to_model(axes, centre, 0.0, a[1])
-        q = core.to_model(axes, centre, 0.0, b[1])
+    # TechDraw's break object: a sketch with two lines across the view at the break's
+    # ends, in the view's own plane (an edge object failed in the GUI: "TopoDS::Edge")
+    import Sketcher  # noqa: F401
     import Part
 
-    marker = doc.addObject("Part::Feature", "BreakLine")
-    marker.Shape = Part.makeLine(V(*p), V(*q))
+    axes = axes_of(view)
+    centre = centre_of(view)
+    half_w, half_h = view_extent(view)
+    s = scale_of(view) or 1.0
+    reach = (max(half_w, half_h) / s) + 5.0
+    xa, ya, da = axes
+    matrix = App.Matrix(
+        xa[0],
+        ya[0],
+        da[0],
+        centre[0],
+        xa[1],
+        ya[1],
+        da[1],
+        centre[1],
+        xa[2],
+        ya[2],
+        da[2],
+        centre[2],
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    )
+    marker = doc.addObject("Sketcher::SketchObject", "DrawingBreak")
+    marker.Placement = App.Placement(matrix)
+    for end in (a, b):
+        if horizontal:
+            p, q = V(end[0], -reach, 0), V(end[0], reach, 0)
+        else:
+            p, q = V(-reach, end[1], 0), V(reach, end[1], 0)
+        marker.addGeometry(Part.LineSegment(p, q))
     marker.Visibility = False
     try:
         if marker.ViewObject is not None:
@@ -921,7 +960,9 @@ def add_break(view, a, b, gap=None):
     x, y = view_position(view)
     broken.X = x
     broken.Y = y
-    _add_to_page(page, broken)
+    # (its name and SciForge's settings before it goes on the page: TechDraw's page view
+    # refused a new name for a broken view it was still computing)
+    broken.Label = "%s (broken)" % view.Label
     _style(broken, style_of(view), tangent_of(view))
     _mark(broken, "BreakView")
     _add(broken, "App::PropertyLink", "SciForgeBrokenOf", view)
@@ -931,7 +972,7 @@ def add_break(view, a, b, gap=None):
         "SciForgeBreakAxis",
         "horizontal" if horizontal else "vertical",
     )
-    broken.Label = "%s (broken)" % view.Label
+    _add_to_page(page, broken)
     _set_shown(view, False)
     return broken
 

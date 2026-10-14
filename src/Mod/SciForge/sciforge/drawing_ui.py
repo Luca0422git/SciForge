@@ -317,6 +317,9 @@ def refresh_drawings(doc_name):
         try:
             apply_view_looks(page)
         except Exception as exc:
+            import traceback
+
+            log("drawing looks failed:\n%s" % traceback.format_exc())
             warn("drawing looks: %s" % exc)
 
 
@@ -324,15 +327,20 @@ def apply_view_looks(page):
     """What a view's style means for TechDraw's drawing of it (GUI only): Shaded fills
     the faces with one light colour (TechDraw has no shaded rendering)."""
     for view in drawing.all_views(page):
-        vo = getattr(view, "ViewObject", None)
-        if vo is None or "FaceColor" not in vo.PropertiesList:
-            continue
-        shaded = drawing.style_of(view).startswith("Shaded")
-        want = 0 if shaded else 100
-        if vo.FaceTransparency != want:
-            vo.FaceTransparency = want
-        if shaded and tuple(round(c, 3) for c in vo.FaceColor[:3]) != SHADED_FACE:
-            vo.FaceColor = SHADED_FACE
+        try:
+            vo = getattr(view, "ViewObject", None)
+            if vo is None or "FaceColor" not in vo.PropertiesList:
+                continue
+            shaded = drawing.style_of(view).startswith("Shaded")
+            want = 0 if shaded else 100
+            if vo.FaceTransparency != want:
+                vo.FaceTransparency = want
+            if shaded and tuple(round(c, 3) for c in vo.FaceColor[:3]) != SHADED_FACE:
+                vo.FaceColor = SHADED_FACE
+        except Exception as exc:
+            # (a view TechDraw could not compute refuses its colours: the view itself
+            # shows the problem; the next update tries again)
+            log("look of %s not set: %s" % (getattr(view, "Label", "?"), exc))
 
 
 # ------------------------------------------------------------------ the mouse on the sheet
@@ -386,6 +394,9 @@ class PageInput(QtCore.QObject):
         try:
             return self._filter(obj, event)
         except Exception as exc:
+            import traceback
+
+            log("drawing input failed:\n%s" % traceback.format_exc())
             warn("drawing input: %s" % exc)
             return False
 
@@ -1285,7 +1296,8 @@ class SectionPanel(DrawingPanel):
         if self.section is None or not text:
             return
         self.section.SectionSymbol = text
-        self.section.Label = "Section %s-%s" % (text, text)
+        self.section.Label = drawing.section_caption(text)
+        self.section.Caption = self.section.Label
         self.schedule()
 
     def _scale(self, text):
@@ -1431,7 +1443,8 @@ class DetailPanel(DrawingPanel):
         if self.detail is None or not text:
             return
         self.detail.Reference = text
-        self.detail.Label = "Detail %s" % text
+        self.detail.Label = drawing.detail_caption(self.detail)
+        self.detail.Caption = self.detail.Label
         self.schedule()
 
     def _scale(self, text):

@@ -212,6 +212,8 @@ def _folders(objects, active_body, component):
             joints.append(node)
         elif sciforge_type == "JointOrigin":
             joint_origins.append(_item("joint_origin:", obj, "joint_origin", "joint_origin"))
+        elif sciforge_type == "DrawingBreak":
+            pass  # a drawing's break lines (drawing.py): part of the drawing, not the design
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
         elif type_id in CONSTRUCTION_TYPES:

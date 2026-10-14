@@ -364,6 +364,7 @@ def drawing_steps(
     style=None,
     contents=None,
     untick=(),
+    orientation=None,
 ):
     """Steps: File > New Drawing, the dialog's choices, OK; then (manual views) a click
     that places the base view at `base_at`, the style and scale typed, OK."""
@@ -415,6 +416,8 @@ def drawing_steps(
             p = panel_of("BaseViewPanel")
             if not h.check("%s: Base View dialog" % prefix, p is not None, panel()):
                 return
+            if orientation:
+                choose(p.orientation, orientation)
             if style:
                 choose(p.style, style)
             if scale:
