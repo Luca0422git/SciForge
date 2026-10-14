@@ -29,7 +29,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 |---|---|
 | CREATE > Pattern > Rectangular / Circular / Pattern on Path, CREATE > Mirror; nothing selected: the dialog waits | Same. A hint says what to click; the model does not change until there is something to pattern |
 | Started with features selected (timeline) / faces / a body | Taken at once, Pattern Type set to match; the next box (Direction, Axis, Path, Mirror Plane) is the active one |
-| Pattern Type Faces / Bodies / Features / Components | Faces, Bodies, Features. Components greyed (SciForge has no components) |
+| Pattern Type Faces / Bodies / Features / Components | All four (Components since components-2, 2026-10-14; **Autodesk**, *Create a rectangular pattern*: "Components duplicates components in an assembly and distributes them according to the pattern settings"). A pattern of components makes instances of the component ("Spoke:2", ":3" ..., `instances.py`): a change to the component shows in every copy. Click the component in the window (the one just below the active component) or its browser row; a body in no component and a copy are refused with the reason; the axes and directions are taken in design coordinates (`component_pattern.py`). Rectangular, Circular and Pattern on Path; Mirror's Components is greyed (not built) |
 | Objects: click features in the timeline (Features) | Same; a click on a face in the view takes the feature that made it; a sketch is refused with the reason |
 | Selection boxes: blue while they take the clicks, click one to make it active, x clears | Same |
 | Direction: an edge, an axis, a flat face (its normal) | Same; the origin X / Y / Z axes are drawn while a direction or axis box waits and can be clicked where the part does not hide them |
@@ -58,7 +58,8 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | Fusion option | Why not yet |
 |---|---|
 | Compute Option Optimized / Adjust | Copies are identical (FreeCAD repeats the feature's tool). Shown greyed |
-| Pattern Type Components | Not built yet (components exist since 2026-10-13) |
+| Mirror of components (Pattern Type Components in Mirror) | Not built: greyed with the reason (the patterns of components are) |
+| Formulas in a pattern of components' quantity | A plain number (each copy is an instance), like a pattern of bodies |
 | Faces: copies "heal" into different surroundings | The closed faces are copied as they are (a hole copied into a thicker area stays as deep as the original). Faces that do not close up with one face around each opening (a fillet's face) are refused with the reason |
 | A pattern of bodies whose references lie in another body with a moved placement | The references are read in the copied body's coordinates |
 | Pattern on Path: an explicit start point | The copies start at the point of the path nearest to the objects |

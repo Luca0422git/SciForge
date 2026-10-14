@@ -10,7 +10,7 @@ every step, the active component's filter), the New Component operation in `extr
 Tests: `SciForgeTests/unit/test_components_core.py` (16 tests), GUI scenarios
 `components_basic.py` (9 paths), `components_extrude.py` (5 paths), `components_move.py`
 (6 paths), all real clicks (helpers in `SciForgeTests/gui/component_steps.py`).
-Status: **built and tested with real clicks, not yet signed off by Luca.**
+Status: **built and tested with real clicks, not yet signed off by Luca.** Part 2 (moving, copying, patterning components; components-2) is described in its own section below.
 
 ## Sources (Fusion's behaviour, researched before building; Autodesk's sites were not
 reachable from the sandbox, so the summaries of their pages found by web search are cited)
@@ -70,7 +70,7 @@ dialog makes one component per body (built so, like the right-click command).
 | New work goes into the active component | `commands.find_body()` returns the active body, else a body inside the active component (made active); `commands.ensure_body()` creates one *inside the active component* when it has none (FreeCAD's Body command uses the `"part"` slot; SciForge moves the body if the slot lagged). Every command that works on "the body" (Create Sketch, Extrude, Hole, patterns ...) therefore works in the active component without knowing about components. |
 | A file opens with the root active | FreeCAD stores no active objects: a reopened file has none, so the root is active. |
 | Bodies are numbered per component (Body1 in every component) | `components.new_body_in(doc, container)`; FreeCAD's "allow duplicate labels" preference is switched on while SciForge is on (kept and given back like the viewer settings, `theme.VIEWER_SETTINGS`), else FreeCAD renamed the second Body1 to Body1001 and the component made from body "Body" to "Body001". |
-| Components in the timeline | A component is a timeline step (kind `component`, icon `new_component`, called by the component's name) at its creation, never rolled back (like every step outside a body) and never suppressed. Each step knows its component (`Item.component`, shown in the hover text). |
+| Components in the timeline | A component is a timeline step (kind `component`, icon `new_component`, called by the component's name) at its creation, hidden while the history marker stands before it (components-2) and never suppressed. Each step knows its component (`Item.component`, shown in the hover text). |
 
 API for other features (all in `components.py`): `list_components(doc)`, `container_of(obj)`,
 `component_of(obj)`, `is_inside(obj, component)`, `ancestors(obj)`, `bodies_in(doc,
@@ -111,24 +111,130 @@ callers (dialogs, browser) wrap the rest in their own transaction.
 
 | Fusion | SciForge |
 |---|---|
-| One timeline for the design; a component's creation is a step | Same: the component step at its creation, called by its name; Rename / Delete / Roll Here / Find in Browser work on it; double-click activates it; it is never suppressed (greyed out) and never rolled back (gap below). Create Components from Bodies adds a step per component. |
+| One timeline for the design; a component's creation is a step | Same: the component step at its creation, called by its name; Rename / Delete / Roll Here / Find in Browser work on it; double-click activates it; it is never suppressed (greyed out); with the marker before it the component is hidden and gone from the browser (Part 2 below). Create Components from Bodies adds a step per component. |
 | With a component active the timeline shows that component's features | Same: only the steps of the active component and of the components inside it show (the component's own step included); a grey note at the end counts the hidden ones and says how to see all (activate the design's row). The history marker stands before the first shown step after its slot. Dragging the marker or a step still acts on the whole design, as in Fusion. |
 | Hover a feature: its name | Also "In component: X" for steps inside a component. |
 
+## Part 2: moving, copying and patterning components (components-2, 2026-10-14)
+
+Built in `src/Mod/SciForge/sciforge/`: `component_move.py` (the document side of moving a
+component, its captured Move step, the marker), `component_move_ui.py` (the Move/Copy dialog
+with Move Object Components; Set Pivot is in `move_ui.py`, shared with bodies),
+`instances.py` (linked instances and Paste New), `clipboard_ui.py` (Copy / Paste / Paste New),
+`component_pattern.py` (Pattern Type Components), `component_look.py` (Active Component
+Visibility); Combine New Component (`combine.py`), Split Body with several tools (`split.py`).
+Tests: scenarios `components2_move` (344 checks), `components2_copy` (277),
+`components2_pattern` (278), `components2_bodies` (298), `components2_marker` (208); golden
+models `comp_*`, `bodies_split_two_planes`, `bodies_combine_new_component`; unit tests in
+`test_components_core.py`, `test_timeline_core.py`.
+
+### Sources (Autodesk's sites cannot be opened from the sandbox: search excerpts are quoted)
+
+11. **Autodesk** help, *Move or copy geometry* (SLD-USE-MOVE-COPY): Move Object Bodies /
+    Components / Faces / Sketch Objects; Move Types Free Move, Translate, Rotate, Point to
+    Point, Point to Position; "Click Set Pivot to adjust the pivot point of the manipulator.
+    In the canvas, hover over the geometry you want to snap to, then click to place the pivot
+    point, or enter exact values in the dialog"; "Optional (components only): Check the box
+    next to Capture Position to capture the new position of the component"; "Check Create
+    Copy".
+12. **Forum**, *Rotating Assemblies?* and *How to rotate a rectangle?* (Autodesk staff): Set
+    Pivot is a toggle; pick the pivot, then click the green check to finish; then type the
+    angle.
+13. **Forum**, *Move operation not included in Design History?*, *Capturing position*, *Move
+    Component Workflow*: a component move is not a timeline step unless its position is
+    captured (Capture Position in the dialog or the POSITION panel); the design is then in a
+    "position pending" state; **Autodesk** blog *How To Use Capture or Revert*: Capture stores
+    the position "on the timeline", Revert returns the component to its last location.
+14. **Autodesk** help, *Copy / paste a component* (excerpt): "The new component is linked to
+    the original component as an identical duplicate"; **Forum**, *Duplicating or copying
+    components*: copies named "Comp: 1", "Comp: 2", editing one changes the other; Paste New
+    "pastes independent copies"; **Autodesk** API, *Occurrences.addNewComponentCopy*: "the
+    equivalent of copying and using the Paste New command ... a new component that has its
+    own definition (sketches, features, etc.)".
+15. **Forum** (*Can someone help me copy and paste new for a component?*): after the paste
+    Fusion invokes Move with the new component selected.
+16. **Forum** (*Break link between copied and pasted components*): "a move on a component
+    applies only to that component instance".
+17. **Autodesk** help, *Create a rectangular pattern*: Object Type "Components duplicates
+    components in an assembly and distributes them according to the pattern settings".
+18. **Autodesk** knowledge, *Changing the opacity of a body does not work in Fusion*: the
+    preference "Active component visibility" (General > Design) dims the other components;
+    **Forum** (*Turn Off See Through / Transparent Components*): other components "are dimmed
+    to better show the active component".
+19. **Autodesk** help, *Combine reference*: New Component "creates a new component with the
+    results".
+20. No source shows a "New Body" command that makes an empty body: bodies come from features
+    (Operation New Body), components from New Component (Autodesk blog *Getting Started:
+    Start with an empty design*, forum *What can bodies do that components cannot?*). Not
+    built (brief item 6 asked "if Fusion has it").
+
+Guesses (for Luca's Fusion check): Capture Position starts unticked; Paste goes into the
+active component (the right-clicked component from the browser menu); Paste New is named
+"Name (1)"; Esc in the Move after a paste keeps the paste where it was pasted; Move with
+Create Copy of a component makes a linked instance; the dimmed transparency (75 %).
+
+### What the user does (and what SciForge does)
+
+| Fusion | SciForge |
+|---|---|
+| M, Move Object Components: click a component (in the canvas or its browser row) | Same. Move Object switches the dialog to the components one (the move type and values are kept); a component selected before M opens it directly. A click in the canvas picks the component just below the active component on the way to what was clicked (`components_core.component_to_pick`); clicking it again drops it |
+| The component moves with everything in it | Same: its Placement changes (a nested component's relative to its parent); its bodies are not changed |
+| Free Move / Translate / Rotate / Point to Point / Point to Position; the manipulator; typed values | Same as for bodies (the manipulator sits at the middle of the components); axes and points are taken where they were before the move |
+| Set Pivot, then Done (the check) | Same (`parity/bodies.md` Move/Copy); the scenario sets the pivot on a corner and turns the component 90° about it |
+| Capture Position (components only) | Ticked: OK records the move as a **Move** step in the timeline (`ComponentMove`, one per component, one undo step). Double-click it to edit it (the dialog opens on it, Capture on); Suppress, Delete or the marker before it put the component back where it stood before it (`component_move.apply_history`). Not ticked: the component just stands there ("position pending"): with joints, joints' Capture Position / Revert are offered (the joints work owns them); a captured move also becomes where Revert returns to |
+| A grounded component does not move | Refused with the reason in the dialog ("Bracket is grounded, so it cannot move. Unground it first") |
+| Create Copy | The component stays; a linked instance ("Name:2") is moved instead |
+| Ctrl+C / Ctrl+V on a component (also the browser's Copy / Paste) | A linked instance "Name:2" in the active component (or in the component whose row was right-clicked; never inside itself). The browser then names the original "Name:1". It is no timeline step. Move/Copy opens on it; Esc leaves it on the original |
+| Editing one occurrence changes all | The instance's bodies are copies of the original's (`InstanceCopy`): every change to the original (an extrude made longer, a fillet, a new body in it) shows in every instance. Activating an instance (its ring) activates the original, with a note; renaming one renames the component (all occurrences) |
+| Paste New | An independent component "Name (1)" with copies of every feature (its steps join the timeline, the component step first); Move opens on it |
+| Ctrl+C / Ctrl+V on a body | Move/Copy opens on the body with Create Copy ticked (a copy body) |
+| Pattern Type Components | Rectangular, Circular and Pattern on Path (`parity/patterns.md`): one pattern step; its copies are instances "Name:2" ... placed by the pattern, following edits of the component; Quantity, Distance, Angle, Suppression; edited from the timeline; deleting the step (or undo) takes the copies with it; the marker before it hides them |
+| Combine New Component | `parity/bodies.md` Combine |
+| Split Body with several tools | `parity/bodies.md` Split Body |
+| An active component shows the rest dimmed (Active Component Visibility, on) | Same: while a component is active, every body and component outside it is drawn see-through (still pickable); the design's ring shows everything normally. Preferences > General > Design > *Active component visibility* switches it off. A look only (a Coin material over the dimmed objects, `component_look.py`): nothing is saved, no undo step |
+| The marker before a component's step hides the component | Same: hidden in the window and gone from the browser while the marker stands before its step (unless steps inside it come before the marker: a component made from an existing body stays, else the body would vanish); back when the marker passes it; kept in the file |
+| A step made while the timeline is rolled back goes in at the marker | Now also a new component, a captured Move and a pattern of components (`timeline_ops.place_root_step`); steps outside the bodies stand by their own creation order (`timeline_core.merge`) |
+| Body Move/Copy with Create Copy, Split Body pieces, pattern-of-bodies copies of a body inside a moved component | The new body's first step now sits in that component (FreeCAD warned "Link(s) ... go out of the allowed scope") and takes its shape in the body's own coordinates (the copy landed moved twice) |
+
+### How it is built on FreeCAD
+
+| Fusion | SciForge / FreeCAD |
+|---|---|
+| A component occurrence's position | The `App::Part`'s Placement |
+| A captured component move | `App::FeaturePython` "Move" (SciForgeType `ComponentMove`): Component, Movement (design coordinates), Before (the component's own placement before it), MoveId; it computes nothing; `apply_history` replays the moves that count at the marker from the first one's Before. The timeline treats it, a component step and a pattern of components as steps outside the bodies that roll back (`timeline_core`, "rolls") |
+| An instance (Copy/Paste, Create Copy, a pattern's copy) | An `App::Part` with `SciForgeInstanceOf` (the source component), labelled "Source:n", hidden from the timeline, holding one copy body per body of the source (nested components' bodies flattened). Each copy body's first step is an `InstanceCopy` (`Part::FeaturePython` inside the instance part: FreeCAD's link scope) that copies the source body's solid: in the source component's frame (the instance's own Placement places it), or moved by its pattern's `Moves` entry. `instances.sync` adds / removes copy bodies when the source's bodies change and keeps the labels (after recomputes, never during undo / redo or a file load). An `App::Link` was not used: everything else in SciForge (joints, export, measure, drawings, interference) works on bodies inside components |
+| A pattern of components | `App::FeaturePython` (SciForgeType Rectangular/CircularPattern / PatternOnPath, "SciForgeRolls") with Source, the references and choices of a pattern of bodies, and `Moves` (each copy's movement, design coordinates); each reference is read in the frame of its body or component (`component_pattern.frame_of`) |
+| Paste New | `doc.copyObject(part, True)` |
+| Active Component Visibility | an `SoMaterial` with only its transparency set and the override flag on, at the top of each dimmed object's scene node (a body or a whole component), removed again when it is no longer dimmed |
+
+
 ## Known gaps (honest list)
 
-- Rolling the marker before a component's step does not hide the component (steps outside
-  bodies are never rolled back in SciForge; the marker rule is the one of the timeline doc).
-- Fusion ghosts (dims) everything outside the active component in the 3D view (preference
-  "Active Component Visibility"); SciForge shows all bodies normally.
-- Fusion shows the activate radio button, by Autodesk's wording, "to the right of a component
-  node"; whether it is drawn for every row or on hover only is unconfirmed.
-- Sheet Metal components, External components (a component as its own file), Insert / Derive,
-  copy / paste of components, Opacity Control, Selectable, component colour cycling and
-  Properties are not built.
+- Ghosting, the marker and instances are built (components-2); what is still missing:
+- A component made from bodies that existed before it (Create Components from Bodies) stays
+  shown when the marker stands before its step (Fusion puts the body back at the root): hiding
+  it would hide the body.
+- Sheet Metal components, External components (a component as its own file), Opacity Control,
+  Selectable, component colour cycling and Properties are not built.
 - A sketch that sits outside every body cannot exist in FreeCAD's PartDesign, so "a sketch at
   the root while the body goes to a component" (Fusion's Create Components from Bodies) is
   approximated: the body's sketches move with the body.
 - The New Component dialog's Parent is a drop-down, not Fusion's click-in-the-browser box.
-- A component's Placement (moving a whole component) is not exposed yet; joints will need it.
-- Patterns / Mirror of components (Fusion's "Pattern Type: Components") are not built.
+- Instances: nested components of the copied component are flattened into the instance (its
+  bodies are there, the nested component rows are not); editing happens through the
+  original (activating an instance activates the original; a sketch put directly on an
+  instance's face goes into the instance's copy body only, Fusion would edit the component);
+  deleting the original leaves its instances frozen as they were (Fusion keeps the component
+  while an occurrence remains); a body deleted from an instance comes back at the next sync.
+- A pattern's copies cannot be moved on their own (refused with the reason); Mirror of
+  components is not built (greyed in Mirror's Pattern Type).
+- A component move that is not captured, in a design without joints, cannot be reverted
+  (joints' Capture Position / Revert need the joints' assembly); Fusion asks to capture or
+  revert before the next feature (not built: the pending position simply stays). Rolling the
+  marker over a captured move recomputes the component's position from its captured moves, so
+  a pending (uncaptured) move of that component made after them is dropped.
+- Joints on instances work like on any component, but a joint between two occurrences of one
+  component is not special-cased.
+- Selection filters / priority Components (SELECT menu) and Component Drag in the canvas belong
+  to the selection and joints-2 work.
+- No "New Body" command (Fusion has none: bodies come from features).

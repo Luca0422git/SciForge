@@ -1034,7 +1034,13 @@ def f_edit_split_tool():
     p = s.panel()
     if h.check("Split edit after reopening", p is not None and p.editing, p):
         h.check("reads the XZ plane", p.options["tool"] is not None, p.options)
-    s.click_box("tool")
+        # Splitting Tool(s) takes several tools (Fusion): to replace the XZ plane, clear the
+        # box with its x first (a click on another plane would add it)
+        from SciForgeTests.gui import widget_input as w
+
+        w.click(p.fields["tool"].clear)
+    else:
+        s.click_box("tool")
 
 
 def f_edit_split_yz():
