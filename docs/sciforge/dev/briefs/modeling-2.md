@@ -1,0 +1,11 @@
+You are building one feature area of SciForge, a FreeCAD 1.1.4 fork that must behave exactly like Autodesk Fusion. The owner, Luca, is a beginner who only tests; he wants the finished product, so build the whole area, not a slice. Wave 4 closes the gaps listed at the end of the parity docs (`docs/sciforge/dev/remaining-gaps.md` is the survey).
+
+## Your area: Modeling, part 2 (sketch chamfer, holes, extents, multi-body revolve / sweep / loft), branch `sf/modeling-2`
+
+Read the parity docs `sketch.md`, `hole-thread.md`, `extrude-presspull.md`, `revolve.md`, `sweep-loft-rib.md` to the end. Build:
+1. **Sketch Chamfer and Fillet**: Fusion's sketch chamfer types (Equal distance, Distance and angle, Two distances) with typed values in value boxes and the dimensions it creates; the sketch fillet radius typed and dimensioned (check). A typed **line angle** is measured as Fusion does (research: from the previous line or the X axis? copy Fusion), and the angle value box/guide shows it the same way.
+2. **Holes**: Taper Tapped (NPT / BSPT tables), Clearance holes chosen by fastener standard / type / size / fit (Close / Normal / Loose; ISO 273 and ASME tables in a Qt-free core), the modeled thread respecting the class, a hole on a curved face (normal to the face at the point) if FreeCAD's Hole allows it.
+3. **Extrude To Object**: Fusion's To Object options To Adjacent Faces / Through Body (extend the face), and Offset; Start: Object follows later changes.
+4. **Multi-body Revolve, Sweep and Loft**: Fusion's Objects To Cut / participant bodies for Join, Cut and Intersect, ported from Extrude's participants (`extrude_bodies.py`: followers / lead body, red overlay); revolve/sweep/loft that touch several bodies cut or join each of them in one step.
+5. Sweep distances take formulas (parameters), like every other field.
+Scenarios `modeling2_*.py` (8+ paths: a sketch chamfer distance+angle with its dimensions, a line angle typed, an NPT hole (taper measured), an M6 normal-fit clearance hole (Ø6.6 measured), extrude To Object To Adjacent Faces, a revolve cutting two bodies, a sweep joining two bodies, edit from the timeline, undo/redo, save/reopen). Golden models for the new options. Unit tests for the Qt-free tables. Update the parity docs you touch.
