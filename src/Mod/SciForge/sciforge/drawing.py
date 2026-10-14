@@ -7,8 +7,9 @@ drawings as separate files linked to the design; see docs/sciforge/parity/drawin
 
     page                    DrawPage  + SciForge's settings (standard, units, sheet...)
       Sheet                 DrawSVGTemplate: SciForge's own title block (drawing_core)
-      base view             DrawProjGroup whose anchor item is the base view; projected
-                            views are items of that group (TechDraw keeps them lined up)
+      base view             DrawViewPart (SciForgeType BaseView)
+      projected views       DrawViewPart made from a parent view (SciForgeParent, Kind);
+                            kept lined up with the parent by keep_aligned()
       section / detail      DrawViewSection / DrawViewDetail with BaseView = their parent
       broken view           DrawBrokenView standing in for the view it breaks
       dimensions            DrawViewDimension (References2D = the picked view edges)
@@ -63,6 +64,12 @@ def _add(obj, kind, name, value=None):
         obj.addProperty(kind, name, "SciForge", "", 0)
     if value is not None:
         setattr(obj, name, value)
+
+
+def _mark(obj, sciforge_type):
+    """SciForge's name for the object; drawing objects are never timeline steps."""
+    _add(obj, "App::PropertyString", "SciForgeType", sciforge_type)
+    _add(obj, "App::PropertyBool", "SciForgeTimeline", False)
 
 
 def _get(obj, name, default=""):
@@ -231,7 +238,7 @@ def has_geometry(view):
 
 
 def all_views(page):
-    """Every view on a drawing (group items included), in page order."""
+    """Every view on a drawing, in page order."""
     found = []
     for obj in getattr(page, "Views", []):
         if obj.TypeId == GROUP:
@@ -246,21 +253,37 @@ def annotations(page):
     return [o for o in getattr(page, "Views", []) if not is_view(o) and o.TypeId != GROUP]
 
 
-def base_groups(page):
-    return [o for o in getattr(page, "Views", []) if o.TypeId == GROUP]
+def base_views(page):
+    """The drawing's base views (Fusion: the first view placed of the design)."""
+    return [v for v in all_views(page) if kind(v) == "BaseView"]
+
+
+def parent_of(view):
+    """The view a projected, section or detail view was made from."""
+    parent = _get(view, "SciForgeParent", None)
+    if alive(parent):
+        return parent
+    parent = _get(view, "BaseView", None)
+    return parent if alive(parent) else None
+
+
+def children_of(view):
+    """Projected views made from `view` (they follow its style, scale and moves)."""
+    found = []
+    for user in getattr(view, "InList", []):
+        if is_view(user) and _get(user, "SciForgeParent", None) is view:
+            found.append(user)
+    return sorted(found, key=lambda o: o.ID)
 
 
 def base_view_of(obj):
-    """The base view (anchor item) a view hangs off."""
+    """The base view a view hangs off."""
     seen = set()
     while obj is not None and obj.Name not in seen:
         seen.add(obj.Name)
-        if obj.TypeId == ITEM:
-            group = group_of(obj)
-            return group.Anchor if group is not None else obj
-        if obj.TypeId == GROUP:
-            return obj.Anchor
-        obj = _get(obj, "BaseView", None)
+        if kind(obj) == "BaseView":
+            return obj
+        obj = parent_of(obj)
     return None
 
 
@@ -408,7 +431,7 @@ def create_drawing(
     page.Template = template
     page.ProjectionType = core.projection_of(standard)
     page.KeepUpdated = True
-    _add(page, "App::PropertyString", "SciForgeType", TYPE)
+    _mark(page, TYPE)
     _add(page, "App::PropertyString", "SciForgeStandard", standard)
     _add(page, "App::PropertyString", "SciForgeUnits", units)
     _add(page, "App::PropertyString", "SciForgeSheet", sheet)
@@ -476,9 +499,9 @@ def auto_title_values(page):
     standard = standard_of(page)
     sources = [s for s in _get(page, "SciForgeSources", []) or [] if alive(s)]
     scale = ""
-    groups = base_groups(page)
-    if groups:
-        scale = core.format_scale(scale_of(groups[0]))
+    bases = base_views(page)
+    if bases:
+        scale = core.format_scale(scale_of(bases[0]))
     return {
         "Title": doc.Label,
         "PartNumber": doc.Label,
@@ -573,79 +596,166 @@ def orientation_axes(name):
 
 
 def add_base_view(page, sources, x, y, orientation="Front", style=None, scale=None, tangent=None):
-    """The first view of a drawing (Fusion's Base View): a TechDraw projection group whose
-    anchor is the base view, so projected views stay lined up with it."""
+    """The first view of a drawing (Fusion's Base View)."""
     doc = page.Document
     style = style or "Visible and Hidden Edges"
     tangent = tangent or "Full Length"
     if scale is None:
         scale = automatic_scale(page, sources, orientation)
     direction, xdir = orientation_axes(orientation)
-    group = doc.addObject(GROUP, "BaseView")
-    page.addView(group)
-    group.Source = list(sources)
-    group.ProjectionType = page.ProjectionType
-    group.ScaleType = "Custom"
-    group.Scale = scale
-    group.AutoDistribute = False
-    group.X = x
-    group.Y = y
-    anchor = group.addProjection("Front")
-    anchor.Direction = V(*direction)
-    anchor.XDirection = V(*xdir)
-    _style(anchor, style, tangent)
-    _add(group, "App::PropertyString", "SciForgeType", "BaseView")
-    _add(anchor, "App::PropertyString", "SciForgeType", "BaseView")
-    _add(group, "App::PropertyString", "SciForgeOrientation", orientation)
-    group.Label = "Base View"
-    anchor.Label = "Base View (%s)" % orientation
-    return group
+    view = doc.addObject(PART_VIEW, "BaseView")
+    view.Source = list(sources)
+    view.Direction = V(*direction)
+    view.XDirection = V(*xdir)
+    view.ScaleType = "Custom"
+    view.Scale = scale
+    view.X = x
+    view.Y = y
+    _style(view, style, tangent)
+    _mark(view, "BaseView")
+    _add(view, "App::PropertyString", "SciForgeOrientation", orientation)
+    view.Label = "Base View"
+    page.addView(view)
+    return view
 
 
-def set_base_orientation(group, orientation):
+def set_base_orientation(view, orientation):
+    """A base view's orientation; its projected views turn with it."""
     direction, xdir = orientation_axes(orientation)
-    anchor = group.Anchor
-    anchor.Direction = V(*direction)
-    anchor.XDirection = V(*xdir)
-    _add(group, "App::PropertyString", "SciForgeOrientation", orientation)
-    anchor.Label = "Base View (%s)" % orientation
+    view.Direction = V(*direction)
+    view.XDirection = V(*xdir)
+    _add(view, "App::PropertyString", "SciForgeOrientation", orientation)
+    _turn_children(view)
 
 
-def orientation_of(group):
-    return _get(group, "SciForgeOrientation", "") or "Front"
+def _turn_children(view):
+    for child in children_of(view):
+        child_kind = _get(child, "SciForgeKind", "")
+        if not child_kind:
+            continue
+        direction, xdir = core.projected_axes(axes_of(view), child_kind)
+        child.Direction = V(*direction)
+        child.XDirection = V(*xdir)
+        _turn_children(child)
+
+
+def orientation_of(view):
+    return _get(view, "SciForgeOrientation", "") or "Front"
+
+
+def _family(view):
+    """A view and the projected views made from it, at any depth."""
+    found = [view]
+    for child in children_of(view):
+        found += _family(child)
+    return found
 
 
 def set_view_style(view, style, tangent=None):
-    """Style of a view; a base view passes it on to its projected views (Fusion:
-    projected views inherit their parent's properties)."""
+    """Style of a view; its projected views follow (Fusion: projected views inherit their
+    parent's properties)."""
     tangent = tangent or tangent_of(view)
-    targets = [view]
-    if view.TypeId == ITEM and group_of(view) is not None and group_of(view).Anchor is view:
-        targets = [v for v in group_of(view).Views]
-    for target in targets:
+    for target in _family(view):
         _style(target, style, tangent)
 
 
 def set_scale(view, scale):
-    """Scale of a base view (its group) or of a section / detail view."""
-    target = group_of(view) if view.TypeId == ITEM else view
-    target.ScaleType = "Custom"
-    target.Scale = scale
+    """Scale of a view; its projected views follow."""
+    for target in _family(view):
+        target.ScaleType = "Custom"
+        target.Scale = scale
 
 
-def add_projected(group, kind, dx, dy):
-    """A projected view of the base view's group at offset (dx, dy) from the group."""
-    existing = [v for v in group.Views if _get(v, "Type", "") == kind]
+def add_projected(parent, kind_name, x, y):
+    """A projected view of `parent` (Fusion's Projected View) at page point (x, y)."""
+    page = page_of(parent)
+    doc = parent.Document
+    existing = [v for v in children_of(parent) if _get(v, "SciForgeKind", "") == kind_name]
     if existing:
-        raise DrawingError("There is already a %s view here." % _kind_label(kind))
-    item = group.addProjection(kind)
-    anchor = group.Anchor
-    _style(item, style_of(anchor), tangent_of(anchor))
-    item.X = dx
-    item.Y = dy
-    _add(item, "App::PropertyString", "SciForgeType", "ProjectedView")
-    item.Label = "%s View" % _kind_label(kind)
-    return item
+        raise DrawingError("There is already a %s view of that view." % _kind_label(kind_name))
+    direction, xdir = core.projected_axes(axes_of(parent), kind_name)
+    view = doc.addObject(PART_VIEW, "ProjectedView")
+    view.Source = list(parent.Source)
+    view.Direction = V(*direction)
+    view.XDirection = V(*xdir)
+    view.ScaleType = "Custom"
+    view.Scale = scale_of(parent)
+    view.X = x
+    view.Y = y
+    _style(view, style_of(parent), tangent_of(parent))
+    _mark(view, "ProjectedView")
+    _add(view, "App::PropertyLink", "SciForgeParent", parent)
+    _add(view, "App::PropertyString", "SciForgeKind", kind_name)
+    px, py = view_position(parent)
+    _add(view, "App::PropertyFloatList", "SciForgeOffset", [x - px, y - py])
+    view.Label = "%s View" % _kind_label(kind_name)
+    page.addView(view)
+    return view
+
+
+def _axis_of(view):
+    """The page direction a view may slide along from its parent (None: free)."""
+    child_kind = _get(view, "SciForgeKind", "")
+    if child_kind in ("Right", "Left"):
+        return (1.0, 0.0)
+    if child_kind in ("Top", "Bottom"):
+        return (0.0, 1.0)
+    if view.TypeId == SECTION:
+        line = section_line_of(view)
+        parent = parent_of(view)
+        if line is not None and parent is not None:
+            info = core.section_line(line[0], line[1], line[2], "Third angle")
+            if info is not None:
+                return info["n"]
+    return None
+
+
+_LAST = {}  # (document, view) -> last page position seen by keep_aligned
+
+
+def keep_aligned(page):
+    """Projected and section views stay lined up with their parent (Fusion): the parent
+    moved -> they move with it; one of them moved -> it slides along its axis only."""
+    changed = False
+    doc_name = page.Document.Name
+    views = all_views(page)
+    for view in views:
+        parent = _get(view, "SciForgeParent", None) if view.TypeId != DETAIL else None
+        if view.TypeId == SECTION:
+            parent = _get(view, "BaseView", None)
+        if not alive(parent):
+            continue
+        axis = _axis_of(view)
+        if axis is None and view.TypeId == SECTION:
+            continue
+        px, py = view_position(parent)
+        cx, cy = view_position(view)
+        offset = list(_get(view, "SciForgeOffset", []) or [])
+        if len(offset) != 2:
+            offset = [cx - px, cy - py]
+        last_p = _LAST.get((doc_name, parent.Name))
+        last_c = _LAST.get((doc_name, view.Name))
+        parent_moved = last_p is not None and (
+            abs(last_p[0] - px) > 1e-7 or abs(last_p[1] - py) > 1e-7
+        )
+        child_moved = last_c is not None and (
+            abs(last_c[0] - cx) > 1e-7 or abs(last_c[1] - cy) > 1e-7
+        )
+        if child_moved and not parent_moved:
+            offset = [cx - px, cy - py]
+        if axis is not None:
+            along = offset[0] * axis[0] + offset[1] * axis[1]
+            offset = [axis[0] * along, axis[1] * along]
+        if list(_get(view, "SciForgeOffset", []) or []) != offset:
+            _add(view, "App::PropertyFloatList", "SciForgeOffset", offset)
+        tx, ty = px + offset[0], py + offset[1]
+        if abs(tx - cx) > 1e-7 or abs(ty - cy) > 1e-7:
+            view.X = tx
+            view.Y = ty
+            changed = True
+    for view in all_views(page):
+        _LAST[(doc_name, view.Name)] = view_position(view)
+    return changed
 
 
 def _kind_label(kind):
@@ -697,8 +807,10 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None):
     _hatch(section)
     page.addView(section)
     section.BaseView = parent
-    _add(section, "App::PropertyString", "SciForgeType", "SectionView")
+    _mark(section, "SectionView")
     _add(section, "App::PropertyStringList", "SciForgeLine", [json.dumps([p1, p2, side])])
+    px, py = view_position(parent)
+    _add(section, "App::PropertyFloatList", "SciForgeOffset", [position[0] - px, position[1] - py])
     _style(section, style_of(parent), tangent_of(parent))
     section.HardHidden = False  # Fusion's section views show no hidden edges by default
     section.SmoothHidden = False
@@ -747,7 +859,7 @@ def add_detail(parent, centre, radius, position, label=None, scale=None):
     detail.Y = position[1]
     page.addView(detail)
     detail.BaseView = parent
-    _add(detail, "App::PropertyString", "SciForgeType", "DetailView")
+    _mark(detail, "DetailView")
     _style(detail, style_of(parent), tangent_of(parent))
     detail.Label = "Detail %s" % label
     return detail
@@ -786,7 +898,7 @@ def add_break(view, a, b, gap=None):
             marker.ViewObject.Visibility = False
     except Exception:
         pass
-    _add(marker, "App::PropertyString", "SciForgeType", "DrawingBreak")
+    _mark(marker, "DrawingBreak")
     broken = doc.addObject(BROKEN, "BrokenView")
     broken.Source = list(view.Source)
     broken.Breaks = [marker]
@@ -801,7 +913,7 @@ def add_break(view, a, b, gap=None):
     broken.Y = y
     page.addView(broken)
     _style(broken, style_of(view), tangent_of(view))
-    _add(broken, "App::PropertyString", "SciForgeType", "BreakView")
+    _mark(broken, "BreakView")
     _add(broken, "App::PropertyLink", "SciForgeBrokenOf", view)
     _add(
         broken,
@@ -902,7 +1014,7 @@ def add_dimension(view, refs, dim_type, position):
     dim.ShowUnits = False
     page.addView(dim)
     place_dimension(dim, position)
-    _add(dim, "App::PropertyString", "SciForgeType", "Dimension")
+    _mark(dim, "Dimension")
     return dim
 
 
@@ -1082,7 +1194,7 @@ def add_text(page, lines, position, size=3.5, width=None):
     note.X = position[0]
     note.Y = position[1]
     page.addView(note)
-    _add(note, "App::PropertyString", "SciForgeType", "DrawingText")
+    _mark(note, "DrawingText")
     note.Label = "Text"
     return note
 
@@ -1102,7 +1214,7 @@ def add_balloon(view, origin, position, text):
     balloon.BubbleShape = "Circular"
     balloon.EndType = "Filled arrow"
     page.addView(balloon)
-    _add(balloon, "App::PropertyString", "SciForgeType", "Balloon")
+    _mark(balloon, "Balloon")
     return balloon
 
 
@@ -1144,7 +1256,7 @@ def add_parts_list(page, view, top_left, balloons=True):
     if not rows:
         raise DrawingError("The view shows no components.")
     table = doc.addObject(SYMBOL, "PartsList")
-    _add(table, "App::PropertyString", "SciForgeType", "PartsList")
+    _mark(table, "PartsList")
     _add(table, "App::PropertyLink", "SciForgeView", view)
     _add(table, "App::PropertyFloatList", "SciForgeCorner", [top_left[0], top_left[1]])
     table.Label = "Parts List"
@@ -1359,30 +1471,23 @@ def dependents(obj):
                 todo.append(user)
             elif user.TypeId == SYMBOL and kind(user) == "PartsList":
                 todo.append(user)
+            elif is_view(user) and _get(user, "SciForgeParent", None) is current:
+                todo.append(user)
         if current.TypeId == GROUP:
             todo += list(current.Views)
     return found
 
 
 def delete_objects(doc, objects):
-    """Delete drawing objects and what depends on them; a deleted base view takes its
-    whole group (Fusion: the projected views are made from it)."""
-    targets = []
+    """Delete drawing objects and what depends on them (Fusion: a view takes its
+    dimensions, balloons and the views made from it along). Returns the deleted names."""
+    names = []
     for obj in objects:
         if not alive(obj):
             continue
-        if obj.TypeId == ITEM:
-            group = group_of(obj)
-            if group is not None and group.Anchor is obj:
-                obj = group
-        if obj.TypeId == GROUP:
-            targets += dependents(obj)
-        else:
-            targets += dependents(obj)
-    names = []
-    for obj in targets:
-        if obj.Name not in names:
-            names.append(obj.Name)
+        for target in dependents(obj):
+            if target.Name not in names:
+                names.append(target.Name)
     # a broken view's original comes back; its break line goes
     for name in list(names):
         obj = doc.getObject(name)
@@ -1393,41 +1498,21 @@ def delete_objects(doc, objects):
             for marker in obj.Breaks:
                 if marker.Name not in names:
                     names.append(marker.Name)
-    order = []
-    for name in names:
-        obj = doc.getObject(name)
-        if obj is None:
-            continue
-        order.append(obj)
-    # items first, then groups; annotations before views
-    rank = {DIMENSION: 0, BALLOON: 0, SYMBOL: 0, ANNOTATION: 0, ITEM: 2, GROUP: 3}
-    order.sort(key=lambda o: rank.get(o.TypeId, 1))
+    rank = {DIMENSION: 0, BALLOON: 0, SYMBOL: 0, ANNOTATION: 0}
+    order = [doc.getObject(n) for n in names if doc.getObject(n) is not None]
+    order.sort(key=lambda o: (rank.get(o.TypeId, 1), -o.ID))
     removed = []
     for obj in order:
         if not alive(obj):
             continue
         try:
-            if obj.TypeId == ITEM:
-                group = group_of(obj)
-                if group is not None and group.Anchor is not obj:
-                    group.removeProjection(obj.Type)
-                    removed.append(obj.Name)
-                    continue
-                if group is not None and group.Name in names:
-                    continue  # goes with its group
             page = page_of(obj)
-            if page is not None and obj.TypeId != GROUP and obj in list(page.Views):
+            name = obj.Name
+            if page is not None and obj in list(page.Views):
                 try:
                     page.removeView(obj)
                 except Exception:
                     pass
-            name = obj.Name
-            if obj.TypeId == GROUP:
-                for item in list(obj.Views):
-                    if alive(item):
-                        item_name = item.Name
-                        doc.removeObject(item_name)
-                        removed.append(item_name)
             doc.removeObject(name)
             removed.append(name)
         except Exception as exc:

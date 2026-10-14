@@ -402,6 +402,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "canvases",
             "joints",  # new joints show at once
             "joint_origins",
+            "drawings",
         }
         # Component rows and their Bodies / Sketches folders start open (keys are made per
         # component); this remembers the ones the user closed.

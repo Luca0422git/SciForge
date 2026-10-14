@@ -513,6 +513,31 @@ def projected_offset(kind, dx, dy):
     return dx, dy
 
 
+# The side of the paper each orthographic view is seen from, in its parent's paper axes.
+_LOOK = {"Right": (1.0, 0.0), "Top": (0.0, 1.0), "Left": (-1.0, 0.0), "Bottom": (0.0, -1.0)}
+_ISO = {
+    "FrontTopRight": (1.0, 1.0),
+    "FrontTopLeft": (-1.0, 1.0),
+    "FrontBottomRight": (1.0, -1.0),
+    "FrontBottomLeft": (-1.0, -1.0),
+}
+
+
+def projected_axes(parent_axes, kind):
+    """TechDraw Direction and XDirection of a projected view of the kind `kind` (Right,
+    Top, Left, Bottom or an isometric corner) made from a parent view with axes (X, Y, D)."""
+    x, y, d = parent_axes
+    if kind in _LOOK:
+        look = _LOOK[kind]
+        line = {"t": (-look[1], look[0]), "look": look}
+        direction, xdir, _normal = section_axes(parent_axes, line)
+        return direction, xdir
+    sx, sy = _ISO.get(kind, (1.0, 1.0))
+    direction = v_unit(v_add(v_add(v_mul(x, sx), v_mul(y, sy)), d))
+    xdir = v_unit(v_add(v_mul(x, 1.0), v_mul(d, -sx)))
+    return direction, xdir
+
+
 def outside(dx, dy, half_w, half_h, margin=2.0):
     """The mouse is out of the parent view's box (Fusion shows no projection over it)."""
     return abs(dx) > half_w + margin or abs(dy) > half_h + margin

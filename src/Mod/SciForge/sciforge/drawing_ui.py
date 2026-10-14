@@ -55,6 +55,27 @@ def _area():
 
 def active_page():
     """The drawing whose tab is the active one, or None."""
+    area = _area()
+    sub = area.activeSubWindow() if area is not None else None
+    return page_of_window(sub)
+
+
+def page_of_window(sub):
+    """The drawing shown in an MDI sub-window (TechDraw names the tab after the page)."""
+    try:
+        if sub is None or sub.widget() is None:
+            return None
+        if sub.widget().metaObject().className() != PAGE_VIEW:
+            return None
+        title = sub.windowTitle().replace("[*]", "").strip()
+    except RuntimeError:
+        return None
+    docs = [App.ActiveDocument] if App.ActiveDocument is not None else []
+    docs += [d for d in App.listDocuments().values() if d not in docs]
+    for doc in docs:
+        for page in drawing.drawings(doc):
+            if page.Label == title:
+                return page
     try:
         view = Gui.activeView()
         if view is not None and hasattr(view, "getPage"):
@@ -129,6 +150,7 @@ def open_drawing(page):
     load_techdraw()
     try:
         page.ViewObject.show()
+        log("drawing %s shown (active: %s)" % (page.Label, getattr(active_page(), "Label", None)))
     except Exception as exc:
         warn("could not open %s: %s" % (page.Label, exc))
         return
@@ -187,7 +209,9 @@ def disable():
     _set_mode(False)
 
 
-def _window_changed(*_args):
+def _window_changed(sub=None):
+    if sub is None:
+        return  # the keyboard went to a panel outside the tabs: the tab stays active
     _later(sync_mode, ms=0)
 
 
@@ -246,7 +270,11 @@ def _set_mode(on):
 
 class _Observer:
     """After the design was recomputed, keep each drawing's title block, parts list and
-    centre marks in step (never inside the recompute itself)."""
+    centre marks in step; after a view moved, keep projected views lined up with their
+    parent (never inside the recompute or the change itself)."""
+
+    def __init__(self):
+        self.pending = set()
 
     def slotRecomputedDocument(self, doc):
         try:
@@ -254,6 +282,26 @@ class _Observer:
                 _later(refresh_drawings, doc.Name, ms=30)
         except Exception:
             pass
+
+    def slotChangedObject(self, obj, prop):
+        try:
+            if prop not in ("X", "Y") or not drawing.is_view(obj):
+                return
+            name = obj.Document.Name
+            if name in self.pending:
+                return
+            self.pending.add(name)
+            _later(self._align, name, ms=20)
+        except Exception:
+            pass
+
+    def _align(self, doc_name):
+        self.pending.discard(doc_name)
+        doc = App.listDocuments().get(doc_name)
+        if doc is None or getattr(doc, "Transacting", False):
+            return
+        for page in drawing.drawings(doc):
+            drawing.keep_aligned(page)
 
 
 def refresh_drawings(doc_name):
@@ -263,6 +311,7 @@ def refresh_drawings(doc_name):
     for page in drawing.drawings(doc):
         try:
             drawing.refresh(page)
+            drawing.keep_aligned(page)
         except Exception as exc:
             warn("drawing %s: %s" % (page.Label, exc))
         try:
@@ -748,9 +797,9 @@ def _start(panel_class, *args):
     return None
 
 
-def _base_anchor(page):
-    groups = drawing.base_groups(page)
-    return groups[0].Anchor if len(groups) == 1 else None
+def _single_base(page):
+    bases = drawing.base_views(page)
+    return bases[0] if len(bases) == 1 else None
 
 
 # ------------------------------------------------------------------ New Drawing
@@ -905,10 +954,10 @@ def automatic_views(page):
         cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
         bx = cx - sx * (block_w / 2.0 - w * scale / 2.0)
         by = cy - sx * (block_h / 2.0 - h * scale / 2.0)
-        group = drawing.add_base_view(page, sources, bx, by, "Front", scale=scale)
+        base = drawing.add_base_view(page, sources, bx, by, "Front", scale=scale)
         for vx, vy in ((0.0, dy), (dx, 0.0), (dx, dy)):
             kind = core.projected_kind(vx, vy, projection)
-            drawing.add_projected(group, kind, vx, vy)
+            drawing.add_projected(base, kind, bx + vx, by + vy)
         doc.recompute()
         taskui._end_transaction(doc)
     except Exception as exc:
@@ -916,7 +965,7 @@ def automatic_views(page):
         warn("automatic views: %s" % exc)
         return None
     _later(refresh_drawings, doc.Name, ms=100)
-    return group
+    return base
 
 
 # ------------------------------------------------------------------ Base View
@@ -927,27 +976,26 @@ class BaseViewPanel(DrawingPanel):
     title = "Base View"
     icon = "dw_base_view"
 
-    def __init__(self, page, group=None):
-        super().__init__(page, "Base View" if group is None else "Edit View")
-        self.editing = group is not None
+    def __init__(self, page, view=None):
+        super().__init__(page, "Base View" if view is None else "Edit View")
+        self.editing = view is not None
         sources = [s for s in getattr(page, "SciForgeSources", []) if drawing.alive(s)]
         if not sources:
             sources = drawing.design_bodies(page.Document)
         if not sources:
             raise drawing.DrawingError("The design has no solid bodies to draw.")
         self.placed = self.editing
-        if group is None:
+        if view is None:
             x0, y0, x1, y1 = core.drawing_area(drawing.standard_of(page), drawing.sheet_of(page))
-            group = drawing.add_base_view(page, sources, (x0 + x1) / 2.0, (y0 + y1) / 2.0)
-        self.group = group
-        anchor = group.Anchor
-        self.orientation = _combo(core.ORIENTATION_NAMES, drawing.orientation_of(group))
+            view = drawing.add_base_view(page, sources, (x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        self.view = view
+        self.orientation = _combo(core.ORIENTATION_NAMES, drawing.orientation_of(view))
         self.orientation.setObjectName("SciForgeDrawingOrientation")
-        self.style = _combo(core.STYLES, drawing.style_of(anchor))
+        self.style = _combo(core.STYLES, drawing.style_of(view))
         self.style.setObjectName("SciForgeDrawingStyle")
-        self.scale = _combo(core.scale_choices(), core.format_scale(drawing.scale_of(group)), True)
+        self.scale = _combo(core.scale_choices(), core.format_scale(drawing.scale_of(view)), True)
         self.scale.setObjectName("SciForgeDrawingScale")
-        self.tangent = _combo(core.TANGENT_EDGES, drawing.tangent_of(anchor))
+        self.tangent = _combo(core.TANGENT_EDGES, drawing.tangent_of(view))
         self.layout.addRow("Orientation", self.orientation)
         self.layout.addRow("Style", self.style)
         self.layout.addRow("Scale", self.scale)
@@ -964,19 +1012,14 @@ class BaseViewPanel(DrawingPanel):
         )
         self.doc.recompute()
 
-    def feature(self):
-        return None
-
     def _orientation(self, text):
         if not self._closed:
-            drawing.set_base_orientation(self.group, text)
+            drawing.set_base_orientation(self.view, text)
             self.schedule()
 
     def _style(self, _text=None):
         if not self._closed:
-            drawing.set_view_style(
-                self.group.Anchor, self.style.currentText(), self.tangent.currentText()
-            )
+            drawing.set_view_style(self.view, self.style.currentText(), self.tangent.currentText())
             self.schedule()
 
     def _scale(self, text):
@@ -987,18 +1030,18 @@ class BaseViewPanel(DrawingPanel):
             self.message.setText("Type a scale like 1:2 or 2:1.")
             return
         self.message.setText("")
-        drawing.set_scale(self.group.Anchor, value)
+        drawing.set_scale(self.view, value)
         self.schedule()
 
     def on_move(self, point, event):
         if not self.placed and not self._closed:
-            self.group.X = point[0]
-            self.group.Y = point[1]
+            self.view.X = point[0]
+            self.view.Y = point[1]
 
     def on_press(self, point, event):
         if not self.placed:
-            self.group.X = point[0]
-            self.group.Y = point[1]
+            self.view.X = point[0]
+            self.view.Y = point[1]
             self.placed = True
             self.say("Change the options, then OK.")
         return True
@@ -1006,38 +1049,39 @@ class BaseViewPanel(DrawingPanel):
 
 # ------------------------------------------------------------------ Projected View
 class ProjectedPanel(DrawingPanel):
-    """Fusion's Projected View: move round the parent view and click to place a view in
-    that direction; several in a row; Enter, Esc or OK ends."""
+    """Fusion's Projected View: click the parent view, move round it and click to place a
+    view in that direction; several in a row; Enter, Esc or OK ends."""
 
     title = "Projected View"
     icon = "dw_projected_view"
 
     def __init__(self, page):
         super().__init__(page, "Projected View")
-        self.group = None
+        self.parent = None
         self.preview = None
         self.placed = []
-        anchor = _base_anchor(page)
-        if not drawing.base_groups(page):
+        if not drawing.base_views(page):
             raise drawing.DrawingError("Place a base view first (CREATE > Base View).")
         self.finish_layout()
-        if anchor is not None:
-            self._use(drawing.group_of(anchor))
+        preselected = [v for v in _selected_views(page) if v.TypeId == drawing.PART_VIEW]
+        start = preselected[0] if len(preselected) == 1 else _single_base(page)
+        if start is not None:
+            self._use(start)
         else:
-            self.say("Click the base view to project from.")
+            self.say("Click the view to project from.")
 
-    def _use(self, group):
-        self.group = group
-        self.say("Move round the base view and click to place a view; Enter or Esc when done.")
+    def _use(self, view):
+        self.parent = view
+        self.say("Move round the view and click to place a projected view; Enter or Esc when done.")
 
     def on_press(self, point, event):
-        if self.group is None:
-            view = view_at(self.page, point, (drawing.ITEM,))
-            group = drawing.group_of(view) if view is not None else None
-            if group is None or group.Anchor is not view:
-                self.message.setText("Click the base view (projected views are made from it).")
+        if self.parent is None:
+            view = view_at(self.page, point, (drawing.PART_VIEW,))
+            if view is None:
+                self.message.setText("Click a base or projected view.")
                 return True
-            self._use(group)
+            self.message.setText("")
+            self._use(view)
             return True
         if self.preview is not None:
             self.placed.append(self.preview)
@@ -1046,38 +1090,45 @@ class ProjectedPanel(DrawingPanel):
         return True
 
     def on_move(self, point, event):
-        if self.group is None or self._closed:
+        if self.parent is None or self._closed:
             return
-        gx, gy = drawing.view_position(self.group.Anchor)
-        half_w, half_h = drawing.view_extent(self.group.Anchor)
-        dx, dy = point[0] - gx, point[1] - gy
+        px, py = drawing.view_position(self.parent)
+        half_w, half_h = drawing.view_extent(self.parent)
+        dx, dy = point[0] - px, point[1] - py
         if not core.outside(dx, dy, half_w, half_h):
             self._drop_preview()
             return
         kind = core.projected_kind(dx, dy, self.page.ProjectionType)
-        taken = {v.Type for v in self.group.Views if v is not self.preview}
+        taken = {
+            getattr(v, "SciForgeKind", "")
+            for v in drawing.children_of(self.parent)
+            if v is not self.preview
+        }
         if kind in taken:
             self._drop_preview()
             return
         ox, oy = core.projected_offset(kind, dx, dy)
-        if self.preview is not None and self.preview.Type != kind:
+        if self.preview is not None and getattr(self.preview, "SciForgeKind", "") != kind:
             self._drop_preview()
         if self.preview is None:
             try:
-                self.preview = drawing.add_projected(self.group, kind, ox, oy)
+                self.preview = drawing.add_projected(self.parent, kind, px + ox, py + oy)
             except drawing.DrawingError:
                 return
             self.schedule()
         else:
-            self.preview.X = ox
-            self.preview.Y = oy
+            self.preview.X = px + ox
+            self.preview.Y = py + oy
+            self.preview.SciForgeOffset = [ox, oy]
 
     def _drop_preview(self):
         if self.preview is not None and drawing.alive(self.preview):
+            name = self.preview.Name
             try:
-                self.group.removeProjection(self.preview.Type)
-            except Exception as exc:
-                warn("projected view preview: %s" % exc)
+                self.page.removeView(self.preview)
+            except Exception:
+                pass
+            self.doc.removeObject(name)
             self.schedule()
         self.preview = None
 
@@ -1820,11 +1871,11 @@ class TablePanel(DrawingPanel):
         super().__init__(page, "Parts List")
         if drawing.parts_list_of(page) is not None:
             raise drawing.DrawingError("This drawing already has a parts list.")
-        if not drawing.base_groups(page):
+        if not drawing.base_views(page):
             raise drawing.DrawingError(
                 "Place a base view first: the parts list lists what it shows."
             )
-        self.view = _base_anchor(page)
+        self.view = _single_base(page)
         self.table = None
         self.layout_size = None
         self.finish_layout()
@@ -1982,11 +2033,8 @@ def edit_view(view):
     if page is None:
         return None
     try:
-        if view.TypeId == drawing.ITEM:
-            group = drawing.group_of(view)
-            if group is not None and group.Anchor is view:
-                return BaseViewPanel(page, group).show()
-            return EditViewPanel(page, view).show()
+        if drawing.kind(view) == "BaseView":
+            return BaseViewPanel(page, view).show()
         if view.TypeId == drawing.SECTION:
             return SectionPanel(page, view).show()
         if view.TypeId == drawing.DETAIL:

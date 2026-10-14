@@ -168,6 +168,22 @@ class ProjectedViewTests(unittest.TestCase):
         self.assertEqual(core.projected_offset("Top", 3, -50), (0.0, -50))
         self.assertEqual(core.projected_offset("FrontTopRight", 40, 30), (40, 30))
 
+    def test_projected_axes_match_techdraw(self):
+        front = core.view_axes((0, -1, 0), (1, 0, 0))
+        r3 = 1 / math.sqrt(3)
+        r2 = 1 / math.sqrt(2)
+        cases = {
+            "Top": ((0, 0, 1), (1, 0, 0)),
+            "Bottom": ((0, 0, -1), (1, 0, 0)),
+            "Right": ((1, 0, 0), (0, 1, 0)),
+            "Left": ((-1, 0, 0), (0, -1, 0)),
+            "FrontTopRight": ((r3, -r3, r3), (r2, r2, 0)),
+        }
+        for kind, (direction, xdir) in cases.items():
+            got = core.projected_axes(front, kind)
+            self.assertTrue(vclose(got[0], direction), (kind, got))
+            self.assertTrue(vclose(got[1], xdir), (kind, got))
+
     def test_outside_the_parent(self):
         self.assertFalse(core.outside(10, 10, 30, 20))
         self.assertTrue(core.outside(40, 0, 30, 20))
