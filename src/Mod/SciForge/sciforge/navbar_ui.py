@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""The small navigation bar floating at the bottom centre of the 3D view."""
+"""The small navigation bar floating at the bottom centre of the 3D view: Orbit, Look At,
+Pan, Zoom, Fit, Display Settings, Grid and Snaps, Viewports (ribbon_config.NAV_BAR; the
+commands in orbit_ui, navigate_ui, display_ui, grid_ui, viewports_ui)."""
+
 import FreeCADGui as Gui
 
 from . import registry, ribbon_config as cfg, ui_icon, warn
@@ -60,6 +63,11 @@ class NavBar(QtWidgets.QWidget):
         return False
 
 
+def bar():
+    """The navigation bar widget (None before SciForge's interface was first shown)."""
+    return _bar
+
+
 def show():
     global _bar
     try:
@@ -73,8 +81,25 @@ def show():
         _bar.place()
     except Exception as exc:
         warn("navigation bar: %s" % exc)
+    # what the bar's menus set: display settings, the layout grid (remembered choices)
+    for name in ("display_ui", "grid_ui"):
+        try:
+            __import__("sciforge." + name, fromlist=["enable"]).enable()
+        except Exception as exc:
+            warn("navigation bar: %s" % exc)
 
 
 def hide():
     if _bar is not None:
         _bar.hide()
+    for name in ("navigate_ui", "viewports_ui", "display_ui", "grid_ui"):
+        try:
+            module = __import__("sciforge." + name, fromlist=["disable"])
+            if name == "navigate_ui":
+                module.stop()
+            elif name == "viewports_ui":
+                module.set_layout("Single View", quiet=True)
+            else:
+                module.disable()
+        except Exception as exc:
+            warn("navigation bar: %s" % exc)

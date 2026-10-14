@@ -546,6 +546,15 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
             selection_ui.reset()
         except Exception as exc:
             print("[SciForge] selection reset failed: %s" % exc, flush=True)
+        # ... nor its visual style, camera, environment, layout grid or increments
+        # (the navigation bar's choices are remembered too)
+        try:
+            from sciforge import display_ui, grid_ui
+
+            display_ui.reset()
+            grid_ui.reset()
+        except Exception as exc:
+            print("[SciForge] display settings reset failed: %s" % exc, flush=True)
         _tap = _ConsoleTap()
         new_errors()  # start-up messages are not the scenario's
 

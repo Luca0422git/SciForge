@@ -173,6 +173,8 @@ SHORTCUTS = {
     "Std_New": "Ctrl+N",
     "Std_Open": "Ctrl+O",
     "Std_Delete": "Del",
+    "SciForge_ComponentColors": "Shift+N",  # Fusion: Display Component Colors
+    "SciForge_ViewportsToggle": "Shift+1",  # Fusion: Shift+! switches Multiple Views
 }
 
 # When SciForge has its own Fusion-style version of a command, the key runs that

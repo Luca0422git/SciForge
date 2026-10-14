@@ -24,7 +24,7 @@ import weakref
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import drag_guard, log, warn
+from . import drag_guard, increments, log, warn
 from .compat import QtCore, QtGui, QtWidgets
 
 _OPEN = {"dialog": None}
@@ -1064,7 +1064,8 @@ class ArrowDragger(BoxCarrier):
         try:
             # a release FreeCAD never passed on ends the drag here (drag_guard)
             active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
-            value = self.distance()
+            # Incremental Move (navigation bar): the value goes in steps of the increment
+            value = increments.linear(self.distance())
             if abs(value - self._last) > 1e-9:
                 self._last = value
                 if self.on_drag:

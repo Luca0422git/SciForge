@@ -20,7 +20,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import drag_guard, warn
+from . import drag_guard, increments, warn
 from .compat import QtCore
 from .taskui import BoxCarrier
 
@@ -312,10 +312,22 @@ class _Handle(BoxCarrier):
         self.drop_box()
 
 
+def _stepped_angle(callback):
+    def stepped(value, *rest):
+        return callback(increments.angular(value), *rest)
+
+    return stepped
+
+
 def angle_handle(*args, **kwargs):
     """revolve_ui.AngleHandle (the blue ball turning about a line) whose drag also ends on a
     release FreeCAD's selection kept (see ReleaseWatch)."""
     from .revolve_ui import AngleHandle
+
+    # Incremental Move (navigation bar): the dialog gets the angle in steps of the increment
+    for key in ("on_drag", "on_release"):
+        if kwargs.get(key) is not None:
+            kwargs[key] = _stepped_angle(kwargs[key])
 
     class WatchedAngleHandle(AngleHandle):
         def _button(self, info):
@@ -473,7 +485,8 @@ class LinearHandle(_Handle):
             dy = float(position[1]) - self._last_pos[1]
             value = self._value + (dx * tx + dy * ty) / length2 * self.size
         else:
-            value = t - self._offset
+            # Incremental Move (navigation bar): the arrow goes in steps of the increment
+            value = increments.linear(t - self._offset)
         self._last_pos = (float(position[0]), float(position[1]))
         if self.step > 0:
             value = round(value / self.step) * self.step
