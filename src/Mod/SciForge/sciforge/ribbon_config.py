@@ -732,7 +732,7 @@ SKETCH_MODIFY = group(
     ["Fillet", "Trim", "Offset", "Extend"],
     [
         item("Fillet", "Sketcher_CreateFillet", "sk_fillet"),
-        item("Chamfer", "Sketcher_CreateChamfer", "sk_chamfer"),
+        item("Chamfer", ("SciForge_SketchChamfer", "Sketcher_CreateChamfer"), "sk_chamfer"),
         item("Offset", "SciForge_SketchOffset", "sk_offset", "O"),
         item("Trim", ("SciForge_SketchTrim", "Sketcher_Trimming"), "sk_trim", "T"),
         item("Extend", ("SciForge_SketchExtend", "Sketcher_Extend"), "sk_extend"),
