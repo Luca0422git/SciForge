@@ -25,7 +25,7 @@ def find_body():
     if doc is None:
         return None
     body = active_body()
-    if body is not None:
+    if body is not None and not _is_surface_body(body):
         components.sync_part_slot(body)  # the active body's component is the active one
         return body
     component = components.active_component(doc)
@@ -48,10 +48,23 @@ def find_body():
         candidates = [b for b in candidates if b.Name not in used_up]
     except Exception:
         pass
+    # A surface body never takes new sketches and solid features (Fusion has no such
+    # thing: a solid extrude never joins a surface): they go to another body, or a new one.
+    candidates = [b for b in candidates if not _is_surface_body(b)]
     if not candidates:
         return None
     components.activate_body(candidates[0])
     return candidates[0]
+
+
+def _is_surface_body(body):
+    """True for a body whose result is a surface (the SURFACE tools' bodies, surface.py)."""
+    try:
+        from . import surface
+
+        return surface.is_surface_body(body)
+    except Exception:
+        return False
 
 
 _TOLD = {"msg": None}  # the newest tell() message (an older one is not shown again)

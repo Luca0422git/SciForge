@@ -41,6 +41,29 @@
 #include "TopoShapeFacePy.h"
 
 
+// SCIFORGE: the orders are documented as 0 -> C0, 1 -> G1, 2 -> G2, but a plain cast of 2
+// gave GeomAbs_C1 (GeomAbs_Shape runs C0, G1, C1, G2, ...), which BRepFill_Filling ignores:
+// a "curvature" patch came out flat. 3 is accepted as G2 too, so a script can tell that
+// this fix is there (SciForge's Patch does; docs/sciforge/core-patches.md #14).
+static bool fillingOrder(int order, GeomAbs_Shape& cont)
+{
+    switch (order) {
+        case 0:
+            cont = GeomAbs_C0;
+            return true;
+        case 1:
+            cont = GeomAbs_G1;
+            return true;
+        case 2:
+        case 3:
+            cont = GeomAbs_G2;
+            return true;
+        default:
+            return false;
+    }
+}
+
+
 using namespace Part;
 /*!
  * \brief BRepOffsetAPI_MakeFillingPy::PyMake
@@ -299,7 +322,8 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
                 return nullptr;
             }
 
-            if (order < 0 || order > 2) {
+            GeomAbs_Shape cont {};
+            if (!fillingOrder(order, cont)) {  // SCIFORGE: core patch #14 (fillingOrder)
                 PyErr_SetString(
                     PyExc_ReferenceError,
                     "Order must be in the [0, 2] with 0 -> C0, 1 -> G1, 2 -> G2"
@@ -307,7 +331,7 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
                 return nullptr;
             }
 
-            getBRepOffsetAPI_MakeFillingPtr()->Add(face, static_cast<GeomAbs_Shape>(order));
+            getBRepOffsetAPI_MakeFillingPtr()->Add(face, cont);
             Py_Return;
         }
         catch (const Standard_Failure& e) {
@@ -341,7 +365,8 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
                 return nullptr;
             }
 
-            if (order < 0 || order > 2) {
+            GeomAbs_Shape cont {};
+            if (!fillingOrder(order, cont)) {  // SCIFORGE: core patch #14 (fillingOrder)
                 PyErr_SetString(
                     PyExc_ReferenceError,
                     "Order must be in the [0, 2] with 0 -> C0, 1 -> G1, 2 -> G2"
@@ -350,7 +375,7 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
             }
 
             getBRepOffsetAPI_MakeFillingPtr()
-                ->Add(edge, static_cast<GeomAbs_Shape>(order), Base::asBoolean(isbound));
+                ->Add(edge, cont, Base::asBoolean(isbound));
             Py_Return;
         }
         catch (const Standard_Failure& e) {
@@ -392,7 +417,8 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
                 return nullptr;
             }
 
-            if (order < 0 || order > 2) {
+            GeomAbs_Shape cont {};
+            if (!fillingOrder(order, cont)) {  // SCIFORGE: core patch #14 (fillingOrder)
                 PyErr_SetString(
                     PyExc_ReferenceError,
                     "Order must be in the [0, 2] with 0 -> C0, 1 -> G1, 2 -> G2"
@@ -401,7 +427,7 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
             }
 
             getBRepOffsetAPI_MakeFillingPtr()
-                ->Add(edge, face, static_cast<GeomAbs_Shape>(order), Base::asBoolean(isbound));
+                ->Add(edge, face, cont, Base::asBoolean(isbound));
             Py_Return;
         }
         catch (const Standard_Failure& e) {
@@ -434,7 +460,8 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
                 return nullptr;
             }
 
-            if (order < 0 || order > 2) {
+            GeomAbs_Shape cont {};
+            if (!fillingOrder(order, cont)) {  // SCIFORGE: core patch #14 (fillingOrder)
                 PyErr_SetString(
                     PyExc_ReferenceError,
                     "Order must be in the [0, 2] with 0 -> C0, 1 -> G1, 2 -> G2"
@@ -442,7 +469,7 @@ PyObject* BRepOffsetAPI_MakeFillingPy::add(PyObject* args, PyObject* kwds)
                 return nullptr;
             }
 
-            getBRepOffsetAPI_MakeFillingPtr()->Add(u, v, face, static_cast<GeomAbs_Shape>(order));
+            getBRepOffsetAPI_MakeFillingPtr()->Add(u, v, face, cont);
             Py_Return;
         }
         catch (const Standard_Failure& e) {

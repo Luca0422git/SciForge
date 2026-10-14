@@ -200,6 +200,12 @@ KIND_BY_SCIFORGE_TYPE = {
     "SilhouetteSplit": "silhouette_split",
 }
 
+# The SURFACE tools' steps (names and icons live in surface_core.py, also pure Python).
+from . import surface_core as _surface_core  # noqa: E402
+
+KINDS.update(_surface_core.TIMELINE_KINDS)
+KIND_BY_SCIFORGE_TYPE.update(_surface_core.TIMELINE_BY_TYPE)
+
 # Steps that are not a solid: they never carry the history marker (FreeCAD's Tip).
 NON_SOLID_KINDS = {
     "sketch",

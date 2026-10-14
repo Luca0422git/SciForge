@@ -1,0 +1,138 @@
+{
+  "id": "surface_patch_trim_untrim",
+  "title": "Patch a square, Trim a hole with a sketch circle, Untrim the hole (Internal)",
+  "tags": [
+    "surface",
+    "patch",
+    "trim",
+    "untrim"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              30
+            ],
+            [
+              0,
+              30
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "circle": [
+            15,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 900,
+        "faces": 1,
+        "source": "analytic",
+        "note": "30 x 30"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "t1",
+      "kind": "trim",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            10
+          ]
+        }
+      ],
+      "remove": [
+        {
+          "step": "p1",
+          "at": [
+            15,
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 821.4601836602552,
+        "faces": 1,
+        "source": "analytic",
+        "note": "the disc of radius 5 removed: 900 - 25 pi"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "u1",
+      "kind": "untrim",
+      "refs": [
+        {
+          "step": "t1",
+          "faces": {
+            "all": true,
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "loop_type": "internal"
+      }
+    }
+  ],
+  "expect": {
+    "area": 900,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      30,
+      30,
+      0
+    ],
+    "source": "analytic",
+    "note": "Untrim Internal Edges closes the hole again: 30 x 30 = 900"
+  }
+}

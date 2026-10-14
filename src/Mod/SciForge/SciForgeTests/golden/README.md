@@ -98,6 +98,9 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `modify_edit` | `target` (one of the four above), `set` {option: value or pick} | double-click it in the timeline and change it |
 | `remove_bodies` | `steps` | Remove (a timeline step); measured from then on: the bodies still in the design |
 
+| `sf_surface` | `id`, `kind` (extrude/revolve/sweep/loft/patch/ruled/offset/boundary_fill/thicken/trim/untrim/extend/stitch/unstitch/reverse_normal), `refs` / `refs2` / `refs3` (the dialog's boxes in order: `{"sketch", "at": [x, y]}` a sketch curve, chained; `{"sketch"}` all its curves; `{"plane"}`; `{"axis"}`; `{"step"}` that step's body; `{"step", "faces" / "edges": selector}`), `options` (the dialog's fields, `surface_core.KINDS`), `remove` [{`step`, `at`: [x, y, z]}] (Trim's pieces), `cells` [[x, y, z]] (Boundary Fill), `bodies` (Reverse Normal), `target` (a Join / Cut body) | the SURFACE tab's tools (`golden/surface_ops.py`, `sciforge/surface.py`: the dialogs' code). A surface result is measured by its area and faces (no volume) |
+| `sf_surface_edit` | `target`, `set` {options} | double-click a surface step in the timeline and change its fields |
+
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).
   Sketch (x, y) map to (X, Y), (X, Z) and (Y, Z).

@@ -1,0 +1,121 @@
+{
+  "id": "surface_thicken_corner",
+  "title": "Thicken an L of walls: sharp, rounded, then symmetric rounded",
+  "tags": [
+    "surface",
+    "thicken"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "th",
+      "kind": "thicken",
+      "refs": [
+        {
+          "step": "w1",
+          "faces": {
+            "all": true,
+            "count": 2
+          }
+        }
+      ],
+      "options": {
+        "thickness": -2
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1040,
+        "solids": 1,
+        "bbox": [
+          0,
+          -2,
+          0,
+          32,
+          20,
+          10
+        ],
+        "source": "analytic",
+        "note": "2 thick outside the L, sharp corner: 10 (30 2 + 20 2 + 2 2)"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "th",
+      "set": {
+        "thicken_type": "rounded"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1031.4159265358978,
+        "solids": 1,
+        "source": "analytic",
+        "note": "the corner a quarter circle of radius 2: 10 (100 + pi 4 / 4)"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "th",
+      "set": {
+        "direction": "symmetric"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 997.8539816339744,
+    "solids": 1,
+    "bbox": [
+      0,
+      -1,
+      0,
+      31,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "1 each side, rounded outside corner of radius 1: 10 (60 + 40 - 1 + pi / 4)"
+  }
+}

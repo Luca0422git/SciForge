@@ -14,6 +14,7 @@ Conventions (documented for model authors in golden/README.md):
   * Every feature gets Refine = True, because Fusion never leaves the extra
     seam faces FreeCAD keeps by default (face counts are compared exactly).
 """
+
 import math
 
 import FreeCAD as App
@@ -639,3 +640,4 @@ from . import sweep_loft_ops  # noqa: E402,F401  (registers the sweep / loft / r
 from . import extrude_bodies_ops  # noqa: E402,F401  (extrudes through several bodies)
 from . import emboss_ops  # noqa: E402,F401  (registers op_emboss)
 from . import direct_ops  # noqa: E402,F401  (history on/off and the Modify tools)
+from . import surface_ops  # noqa: E402,F401  (registers op_sf_surface, op_sf_surface_edit)

@@ -1417,10 +1417,96 @@ def _check_direct_steps(model):
             seen[step["id"]] = op
 
 
+# -- SURFACE tab (golden/surface_ops.py: the same code as the SURFACE dialogs) -------------------
+STEP_KEYS["sf_surface"] = (
+    {"id", "kind"},
+    {"refs", "refs2", "refs3", "options", "remove", "cells", "bodies", "target", "comment"},
+)
+STEP_KEYS["sf_surface_edit"] = ({"target", "set"}, {"comment"})
+SURFACE_KINDS = (
+    "extrude",
+    "revolve",
+    "sweep",
+    "loft",
+    "patch",
+    "ruled",
+    "offset",
+    "boundary_fill",
+    "thicken",
+    "trim",
+    "untrim",
+    "extend",
+    "stitch",
+    "unstitch",
+    "reverse_normal",
+)
+_SURFACE_REF_KEYS = ("sketch", "plane", "axis", "step")
+
+
+def _check_surface_ref(here, spec, seen):
+    if not isinstance(spec, dict) or len(set(spec) & set(_SURFACE_REF_KEYS)) != 1:
+        _fail(here, "a reference is one of %s" % (_SURFACE_REF_KEYS,))
+    if "faces" in spec and "edges" in spec:
+        _fail(here, "a reference picks faces or edges, not both")
+    if ("faces" in spec or "edges" in spec) and "step" not in spec:
+        _fail(here, "faces / edges are picked on a 'step'")
+    if "sketch" in spec and seen.get(spec["sketch"]) not in CURVE_SKETCHES:
+        _fail(here, "'sketch' must name an earlier sketch step")
+    if "step" in spec and spec["step"] not in seen:
+        _fail(here, "'step' must name an earlier step")
+    if "plane" in spec and spec["plane"] not in PLANES:
+        _fail(here, "'plane' must be one of %s" % (PLANES,))
+    if "axis" in spec and spec["axis"] not in AXES:
+        _fail(here, "'axis' must be one of %s" % (AXES,))
+    if "at" in spec and (not isinstance(spec["at"], list) or len(spec["at"]) != 2):
+        _fail(here, "'at' is a sketch point [x, y]")
+
+
+def _check_surface_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_surface":
+            if step["kind"] not in SURFACE_KINDS:
+                _fail(here, "'kind' must be one of %s" % (SURFACE_KINDS,))
+            for key in ("refs", "refs2", "refs3"):
+                for spec in step.get(key, []):
+                    _check_surface_ref("%s.%s" % (here, key), spec, seen)
+            for item in step.get("remove", []):
+                if item.get("step") not in seen or len(item.get("at", [])) != 3:
+                    _fail(here, "each 'remove' is {step: an earlier step, at: [x, y, z]}")
+            for point in step.get("cells", []):
+                if not isinstance(point, list) or len(point) != 3:
+                    _fail(here, "each cell is a point [x, y, z] inside it")
+            for name in step.get("bodies", []) + ([step["target"]] if "target" in step else []):
+                if name not in seen:
+                    _fail(here, "%r is not an earlier step" % name)
+            if not isinstance(step.get("options", {}), dict):
+                _fail(here, "'options' is an object")
+        if op == "sf_surface_edit":
+            if seen.get(step["target"]) != "sf_surface":
+                _fail(here, "'target' must name an earlier sf_surface step")
+            if not isinstance(step["set"], dict) or not step["set"]:
+                _fail(here, "'set' is a non-empty object")
+        if "id" in step:
+            seen[step["id"]] = op
+
+
 _validate_before_direct = validate
 
 
 def validate(model):  # noqa: F811  (adds the direct-modeling / Modify checks)
     _validate_before_direct(model)
     _check_direct_steps(model)
+    return model
+
+
+_validate_before_surface = validate
+
+
+def validate(model):  # noqa: F811  (adds the SURFACE checks)
+    _validate_before_surface(model)
+    _check_surface_steps(model)
     return model

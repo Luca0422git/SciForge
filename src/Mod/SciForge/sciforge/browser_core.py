@@ -169,10 +169,12 @@ def _folders(objects, active_body, component):
         sciforge_type = obj.get("sciforge_type") or ""
         if type_id in BODY_TYPES:
             grounded = bool(obj.get("grounded"))
+            # A surface body (surface.py) has its own icon, like Fusion's browser.
+            icon = "ground" if grounded else ("surface_body" if obj.get("surface") else "box")
             node = _item(
                 "body:",
                 obj,
-                "ground" if grounded else "box",
+                icon,
                 "body",
                 active=obj["name"] == active_body,
                 grounded=grounded,
@@ -314,6 +316,7 @@ def signature(tree):
         tree["active"],
         tree["status"],
         tree["tip"],
+        tree.get("icon"),
         tuple(signature(c) for c in tree["children"]),
     )
 
