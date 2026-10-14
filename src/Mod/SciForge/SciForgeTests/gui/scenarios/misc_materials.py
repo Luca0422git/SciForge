@@ -21,7 +21,7 @@ import os
 
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore, QtWidgets
+from PySide import QtCore
 from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h

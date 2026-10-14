@@ -4,8 +4,9 @@
 A body: a 40 x 30 sketch extruded by the user parameter depth (10 mm), then a fillet on an edge
 that does not exist (Edge99): red in the timeline.
 
-P1 MODIFY > Compute All: the summary window: "Compute All: N steps ...: 1 could not be computed.", the Fillet
-   listed with the reason; nothing in the Report view (failures show in the timeline).
+P1 MODIFY > Compute All: the summary window ("Compute All: N steps ...: 1 could not be
+   computed."), the Fillet listed with the reason; nothing in the Report view (failures show
+   in the timeline).
 P2 Find in Timeline: the Fillet is selected in the timeline.
 P3 The fillet given a real edge and depth set to 20 without recomputing: Ctrl+B computes
    everything again: the body is 40 x 30 x 20 (less the fillet), no window (a note says all
