@@ -4261,6 +4261,11 @@ hidden on straight sections) and `sf/modeling-2` (20a19b9874: sketch Chamfer typ
 and fastener clearance holes, threads by class, holes on curved faces, Extrude To Object
 extend + offset, Revolve / Sweep / Loft Objects To Cut, Sweep formulas). **Wave 4 is merged.**
 
+**Builders (wave 5, launched ~10:05 UTC 2026-10-14):** `sf/sketch-2`, `sf/exchange-2`,
+`sf/surface-2`, `sf/polish-2`, `sf/mesh-inspect-2` (briefs in `docs/sciforge/dev/briefs/`).
+Not in wave 5 (risky, deferred): floating dialogs and document tabs at the top (every scenario
+uses the docked task panel).
+
 **Merge trap (2026-10-14):** when two branches append blocks that end with the same lines
 (the golden `schema.py` `validate` wrappers), git's conflict hunk leaves the shared tail
 outside the markers, after the second block: "keep both" then robs the first block of its

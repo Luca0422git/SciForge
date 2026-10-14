@@ -1,0 +1,10 @@
+You are building one feature area of SciForge, a FreeCAD 1.1.4 fork that must behave exactly like Autodesk Fusion. The owner, Luca, is a beginner who only tests; he wants the finished product, so build the whole area, not a slice. Wave 5 closes more of the gaps in `docs/sciforge/dev/remaining-gaps.md` (read it).
+
+## Your area: Sketch, part 2, branch `sf/sketch-2`
+
+Read `docs/sciforge/parity/sketch.md`, `selection.md` and `text-emboss.md` to the end. Build:
+1. **Chain selection in a sketch**: Fusion's double-click on a sketch curve selects the connected chain; drag across curves in a sketch window/crossing select (check what exists in `selection_ui.py` / `sketch_mode.py`).
+2. **Project / Include and Project To Surface**: projected curves live in the sketch (as Fusion's purple linked curves), are listed with the sketch in the browser and follow the source when it changes; Project To Surface's curves become a step in the timeline (today they sit outside the sketch).
+3. **3D Sketch**: Fusion's "3D Sketch" setting in the sketch palette: lines and splines whose points can leave the sketch plane (a triad on a point moves it in 3D). Research Fusion first; build it on SciForge's own sketch handler or as a separate 3D-curve feature if FreeCAD's 2D Sketcher cannot hold it, and say which.
+4. **Sketch fillet and chamfer between a line and an arc** (modeling-2 built chamfer types for two lines), the text frame resized by dragging its corner, box selection of planes and axes in the canvas, and the **Sketch Palette** options Fusion has that SciForge lacks (Look At, Slice, Show Profile / Points / Dimensions / Constraints / Projected Geometries, Construction toggle; check each).
+Scenarios `sketch2_*.py` (8+ paths: double-click a rectangle's edge selects the four, project an edge then change the body → the projected curve follows, project to a cylinder's face, a 3D sketch line to a point off the plane then a sweep along it, a chamfer between a line and an arc, the text frame dragged larger, Slice on, undo/redo, save/reopen). Unit tests for the Qt-free parts. Update the parity docs you touch.
