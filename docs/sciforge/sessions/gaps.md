@@ -91,6 +91,17 @@ To be copied into MEMORY.md by whoever merges (this branch does not edit MEMORY.
 - Tests of other areas updated for the new behaviour: `smoke_gui.py` (empty start, "Sketch 1"
   in the browser), `timeline_browser*.py`, `sketch_input.browser_double_click` (finds a row
   by FreeCAD's label too), `revolve_qa.py` P2 and `timeline_browser_qa4.py` P24 (a piece away
-  from the part is a New Body), `sweep_loft_loft_guides.py` (wait), several op-list checks
-  ("New Component"), golden builder (`reopen`, `age`, roll `start`, picks installed) and
+  from the part is a New Body), `extrude_presspull_qa7.py` (an extrusion up to a whole body
+  joins that body too, as in `gaps_extrude_taper_to` X2), `revolve_qa_more.py` P15/P16 (the
+  ring apart from the part is a New Body: every body is counted), `shell_draft_qa_shell.py` P4
+  (after a drag too far the last good preview is any wall that fits, not only the thin one),
+  `sweep_loft_loft_guides.py` (wait), several op-list checks ("New Component"), golden builder (`reopen`, `age`, roll `start`, picks installed) and
   runner (closes a reopened document).
+
+## Tests seen failing that this branch did not cause
+
+- `bodies_combine` fails the same way on the branch's base commit (A: "Body1 is the target":
+  the bodies' labels / order since the components merge).
+- `sweep_loft_web` sometimes keeps the previous preview after a click (a second curve, Extend
+  Curves, Flip) and then fails a run of checks; it passed and failed on the same commits,
+  also where the changed code never runs (checked with a log line). Suggested as its own task.
