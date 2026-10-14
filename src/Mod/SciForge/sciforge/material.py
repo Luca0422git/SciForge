@@ -96,6 +96,7 @@ def user_entries():
                     "label": full.Name,
                     "freecad": full.Name,
                     "look": _look_of_parent(getattr(full, "Parent", "")),
+                    "base": _base_of_parent(getattr(full, "Parent", ""))[0],
                     "group": "My Materials",
                     "uuid": uuid,
                 }
@@ -109,11 +110,16 @@ _DELETED = set()  # user materials deleted this session (FreeCAD keeps them in i
 
 
 def _look_of_parent(uuid):
+    return _base_of_parent(uuid)[1]
+
+
+def _base_of_parent(uuid):
+    """(library key, look key) of the library material a user's material was made from."""
     for row in LIBRARY:
         mat = library_material(row[2])
         if mat is not None and uuid and mat.UUID == uuid:
-            return row[3]
-    return "plastic_grey"
+            return row[0], row[3]
+    return DEFAULT_KEY, "plastic_grey"
 
 
 def material_of(row):
@@ -131,8 +137,9 @@ def material_of(row):
 def taken_names():
     names = set()
     try:
-        for _uuid, mat in _manager().Materials.items():
-            names.add(mat.Name.lower())
+        for uuid, mat in _manager().Materials.items():
+            if uuid not in _DELETED:  # a deleted one's name can be used again
+                names.add(mat.Name.lower())
     except Exception:
         pass
     names.update(row[1].lower() for row in LIBRARY)
@@ -342,3 +349,57 @@ def assign(body, key):
             except Exception:
                 pass
     appearance.set_material_look(body, appearance.find(row["look"]))
+    _remember_user_material(body, row)
+
+
+USER_PROP = "SciForgeUserMaterial"
+
+
+def _remember_user_material(body, row):
+    """A material of the user's own is only in that computer's User library: the body keeps
+    its name, density and base in the design, so it can be made again where it is missing."""
+    import json
+
+    if row.get("uuid"):
+        rho = density_of(row["key"])
+        text = json.dumps(
+            {"name": row["label"], "density": rho * 1e6 if rho else None, "base": row.get("base")}
+        )
+        bodies.add_prop(body, "App::PropertyString", USER_PROP, "Base", "", True)
+        if getattr(body, USER_PROP) != text:
+            setattr(body, USER_PROP, text)
+    elif USER_PROP in body.PropertiesList and getattr(body, USER_PROP):
+        setattr(body, USER_PROP, "")
+
+
+def restore_user_materials(doc):
+    """A design opened where its bodies' own materials are not in the User library (another
+    computer): they are made again from what the bodies keep, and given back. Returns the
+    bodies fixed."""
+    import json
+
+    fixed = []
+    for body in bodies.list_bodies(doc):
+        text = getattr(body, USER_PROP, "") if USER_PROP in body.PropertiesList else ""
+        if not text:
+            continue
+        try:
+            data = json.loads(text)
+        except ValueError:
+            continue
+        name = data.get("name")
+        if not name or bodies.material_name(body) == name:
+            continue
+        key = None
+        for row in user_entries():
+            if row["label"] == name:
+                key = row["key"]
+        try:
+            if key is None and data.get("density"):
+                key = create_user_material(name, data.get("base") or DEFAULT_KEY, data["density"])
+            if key is not None:
+                assign(body, key)
+                fixed.append(body)
+        except Exception:
+            continue  # it keeps FreeCAD's Default (counted as the default material)
+    return fixed

@@ -173,7 +173,10 @@ class ViewProviderDecal:
         return ui_icon_path("decal")
 
     def doubleClicked(self, vobj):
-        edit_decal(vobj.Object)
+        try:
+            edit_decal(vobj.Object)
+        except Exception as exc:
+            warn("Edit Decal: %s" % exc)
         return True
 
     def dumps(self):
@@ -227,15 +230,19 @@ class _FacePick:
     def _selection_changed(self):
         if self.done:
             return
-        target = selected_face()
-        if target is None:
-            if Gui.Selection.getSelectionEx():
-                Gui.Selection.clearSelection()
-                commands.tell("Click a face of a body (flat or curved).")
+        try:
+            target = selected_face()
+            if target is None:
+                if Gui.Selection.getSelectionEx():
+                    Gui.Selection.clearSelection()
+                    commands.tell("Click a face of a body (flat or curved).")
+                return
+            self.done = True
+            self.remove()
+            Gui.Selection.clearSelection()
+        except Exception as exc:
+            warn("Decal: face pick: %s" % exc)
             return
-        self.done = True
-        self.remove()
-        Gui.Selection.clearSelection()
         self.panel.guarded(self.on_pick, *target)
 
     def remove(self):
@@ -640,7 +647,7 @@ class DecalCommand:
     def GetResources(self):
         return {
             "MenuText": "Decal",
-            "ToolTip": "A picture on a face of a body, flat or curved (labels, logos, " "markings)",
+            "ToolTip": "A picture on a face of a body, flat or curved (labels, logos, markings)",
             "Pixmap": ui_icon_path("decal"),
         }
 

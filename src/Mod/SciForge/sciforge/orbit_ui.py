@@ -24,7 +24,6 @@ then FreeCAD gets a copy of the press and the drag goes on as before (pan, orbit
 zoom with Ctrl only), so FreeCAD never sees a "quick middle click" to re-centre on. A press
 that ends without a move is a click: nothing, Fit (double) or the pivot (Shift).
 """
-
 import math
 
 import FreeCAD as App

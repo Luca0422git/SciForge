@@ -514,3 +514,55 @@ class ManageMaterialsCommand:
 
 
 COMMANDS = {"SciForge_ManageMaterials": ManageMaterialsCommand}
+
+
+# -- a design opened where its own materials are missing ------------------------------------------
+class _Watch:
+    """Bodies made of the user's own materials keep them in the design; opened on a computer
+    whose User library lacks them, they are made again (material.restore_user_materials)."""
+
+    def slotCreatedDocument(self, doc):
+        try:
+            name = doc.Name
+            QtCore.QTimer.singleShot(900, lambda: _restore(name))
+        except Exception:
+            pass
+
+
+def _restore(name):
+    try:
+        if name not in App.listDocuments():
+            return
+        doc = App.getDocument(name)
+        if getattr(doc, "Restoring", False):
+            QtCore.QTimer.singleShot(300, lambda: _restore(name))
+            return
+        if not any(getattr(b, material.USER_PROP, "") for b in bodies.list_bodies(doc)):
+            return
+        gdoc = Gui.getDocument(name)
+        was = bool(gdoc.Modified) if gdoc is not None else False
+        fixed = material.restore_user_materials(doc)
+        if fixed:
+            if gdoc is not None and not was:
+                gdoc.Modified = False  # the design is as it was saved
+            log(
+                "materials of %s made again in this computer's library"
+                % ", ".join(b.Label for b in fixed)
+            )
+    except Exception as exc:
+        warn("materials: %s" % exc)
+
+
+_WATCH = {"observer": None}
+
+
+def install_watch():
+    if _WATCH["observer"] is None and App.GuiUp:
+        _WATCH["observer"] = _Watch()
+        App.addDocumentObserver(_WATCH["observer"])
+
+
+try:
+    install_watch()
+except Exception as _exc:  # pragma: no cover - only without a GUI
+    warn("materials watch not installed: %s" % _exc)

@@ -15,6 +15,10 @@ P5 New Material called "Steel" or with density 0: refused with the reason.
 P6 Delete My PETG: gone from the list; the body keeps it.
 P7 Appearance tab: New Appearance "Signal Blue" #2050c0: in My Appearances; assigned to the
    body: its look; the search "blue" lists only blue entries.
+P8 The body keeps its own material in the design (name, density). A design from another
+   computer (its body made of "Lost Nylon", 1.14 g/cm³, which this one never had): opened,
+   the material is made again in My Materials and the body is Lost Nylon (13.68 g), its look
+   still Signal Blue, the design not changed by it. Deleted My PETG: the name can be used again.
 """
 
 import os
@@ -333,8 +337,62 @@ def p7_check():
     h.shot("7-appearance")
 
 
+# -- P8 ----------------------------------------------------------------------------------------
+def p8_save():
+    import json
+    import tempfile
+
+    from sciforge import material
+
+    b = body()
+    text = getattr(b, material.USER_PROP, "") if material.USER_PROP in b.PropertiesList else ""
+    data = json.loads(text) if text else {}
+    h.check(
+        "P8 the body keeps its own material in the design",
+        data.get("name") == "My PETG" and m.near(data.get("density") or 0, 1.27, 1e-6),
+        data,
+    )
+    # As saved on another computer: its body made of a material this one never had.
+    data.update({"name": "Lost Nylon", "density": 1.14})
+    setattr(b, material.USER_PROP, json.dumps(data))
+    s["path"] = os.path.join(tempfile.mkdtemp(prefix="sciforge-materials-"), "Nylon.FCStd")
+    App.ActiveDocument.saveAs(s["path"])
+    m.close_all()
+    App.openDocument(s["path"])
+
+
+p8_save.wait_ms = 2500
+
+
+def p8_reopened():
+    from sciforge import appearance, material
+
+    b = App.ActiveDocument.getObject(s["body"])
+    label, _rho = material.effective(b)
+    h.check("P8 opened: the body is Lost Nylon", label == "Lost Nylon", label)
+    mine = [r["label"] for r in material.user_entries()]
+    h.check("P8 made again in My Materials", "Lost Nylon" in mine, mine)
+    grams = material.mass(b) * 1000.0
+    h.check("P8 13.68 g", m.near(grams, 13.68, 0.01), grams)
+    look = appearance.get(b).get("body") or {}
+    h.check("P8 its look is still Signal Blue", look.get("label") == "Signal Blue", look)
+    h.check(
+        "P8 the design is not changed by it",
+        not Gui.getDocument(App.ActiveDocument.Name).Modified,
+    )
+    try:
+        key = material.create_user_material("My PETG", "pla", 1.27)
+        h.check("P8 a deleted material's name can be used again", bool(key))
+        material.delete_user_material(key)
+    except material.MaterialError as exc:
+        h.check("P8 a deleted material's name can be used again", False, str(exc))
+
+
 def cleanup():
-    from sciforge import materials_ui
+    from sciforge import material, materials_ui
+
+    for row in material.user_entries():
+        material.delete_user_material(row["key"])
 
     d = browser()
     if d is not None:
@@ -363,6 +421,8 @@ h.run(
         p6_check,
         p7_appearance,
         p7_check,
+        p8_save,
+        p8_reopened,
         cleanup,
     ],
 )

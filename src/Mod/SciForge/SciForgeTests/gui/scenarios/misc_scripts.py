@@ -7,7 +7,7 @@ Broken.FCMacro (divides by zero); an empty add-ins folder.
 P1 UTILITIES > Scripts and Add-Ins: one list, AddBox and Broken (Script), the folders shown.
 P2 AddBox selected, Run: the design gets the box; Ctrl+Z takes it away in one step.
 P3 Broken, double-click (Run): the dialog says it stopped with a ZeroDivisionError; the design
-   is unchanged; SciForge goes on.
+   is unchanged; SciForge goes on. A script ending with sys.exit() ran: its box stays.
 P4 Create > Add-In "Greeter": listed as an Add-In (its folder and Greeter.py with run / stop);
    Run: Running, the button says Stop; Stop: stopped.
 P5 Run on Startup ticked for AddBox: kept; at the next start (simulated) the box is made;
@@ -179,6 +179,21 @@ def p3_check():
     )
     h.check("P3 the design is unchanged", script_bodies() == [])
     h.check("P3 the window is still there", dialog() is not None)
+    # A script that ends with sys.exit(): a normal end, its changes stay (one undo step).
+    from sciforge import scripts_ui
+
+    path = os.path.join(s["scripts"], "Quits.FCMacro")
+    with open(path, "w") as handle:
+        handle.write(ADD_BOX + "import sys\nsys.exit()\n")
+    try:
+        ok, text = scripts_ui.run_script({"kind": "script", "name": "Quits", "path": path})
+    finally:
+        os.remove(path)
+    h.check("P3 a script ending with sys.exit() ran", ok and "Quits ran" in text, text)
+    h.check("P3 and its box stays", len(script_bodies()) == 1, script_bodies())
+    App.ActiveDocument.undo()
+    App.ActiveDocument.recompute()
+    h.check("P3 one undo takes it away", script_bodies() == [], script_bodies())
 
 
 # -- P4 ----------------------------------------------------------------------------------------

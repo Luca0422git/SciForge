@@ -102,16 +102,21 @@ def run_script(entry):
             code = compile(handle.read(), entry["path"], "exec")
         exec(code, namespace)
     except BaseException as exc:  # a script may call sys.exit(): never the program's end
+        if isinstance(exc, SystemExit) and not exc.code:
+            return _ran(entry, doc, opened)  # sys.exit() / exit(0): a normal end
         if opened and doc is not None and _alive_doc(doc):
             try:
                 doc.abortTransaction()
             except Exception:
                 pass
-        if isinstance(exc, SystemExit) and not exc.code:
-            return True, "%s ran." % entry["name"]
         text = core.short_error(traceback.format_exc())
         _note("script %s stopped" % entry["name"], text)
         return False, "%s stopped with an error: %s" % (entry["name"], text)
+    return _ran(entry, doc, opened)
+
+
+def _ran(entry, doc, opened):
+    """The script ended normally: its changes are one undo step."""
     if opened and _alive_doc(doc):
         try:
             doc.commitTransaction()

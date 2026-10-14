@@ -145,20 +145,45 @@ def _viewer_settings():
     return [(core.VIEW, "Bool", "InvertZoom", core.invert_zoom(reverse))]
 
 
+# Written again after a new NavigationStyle (theme.VIEWER_SETTINGS sets them after it too).
+_AFTER_STYLE = ("OrbitStyle", "RotationMode", "ShowRotationCenter", "ZoomAtCursor")
+
+
+def _set_navigation(style):
+    """FreeCAD's navigation style for the mouse preset. FreeCAD tells every 3D view about
+    each write, even of the same value, and a view then makes a new navigation style that
+    has lost the orbit settings: written only when it changes, and then the orbit settings
+    written again after it."""
+    group = _group(core.VIEW)
+    if group.GetString("NavigationStyle", "") == style:
+        return False
+    group.SetString("NavigationStyle", style)
+    for name in _AFTER_STYLE:
+        if name in group.GetInts():
+            group.SetInt(name, group.GetInt(name))
+        elif name in group.GetBools():
+            group.SetBool(name, group.GetBool(name))
+    return True
+
+
 def apply_viewer():
     """The mouse preset and the zoom direction on FreeCAD's 3D views (SciForge on only)."""
     if not _state["on"]:
         return
     try:
-        theme.keep_and_set(_viewer_settings(), BACKUP)
-    except Exception as exc:
-        warn("preferences: zoom direction: %s" % exc)
-    try:
         # NavigationStyle is kept with SciForge's own viewer settings (theme.VIEWER_SETTINGS):
         # the user's value comes back when SciForge is off.
-        _group(core.VIEW).SetString("NavigationStyle", core.mouse_style(mouse_preset()))
+        _set_navigation(core.mouse_style(mouse_preset()))
     except Exception as exc:
         warn("preferences: mouse: %s" % exc)
+    try:
+        settings = _viewer_settings()
+        group = _group(core.VIEW)
+        kept = theme._backup_key(core.VIEW, "InvertZoom") in _group(BACKUP).GetStrings()
+        if not kept or any(group.GetBool(n, not v) != v for _p, _k, n, v in settings):
+            theme.keep_and_set(settings, BACKUP)
+    except Exception as exc:
+        warn("preferences: zoom direction: %s" % exc)
 
 
 def _apply(kind):

@@ -629,7 +629,11 @@ def break_derive_link(master):
             return False
         doc = master.Document
         doc.openTransaction("Break Link")
-        derive.break_link(master)
+        try:
+            derive.break_link(master)
+        except Exception:
+            doc.abortTransaction()
+            raise
         doc.commitTransaction()
         commands.tell(
             "%s keeps its objects; they no longer follow %s." % (master.Label, master.SourceName)

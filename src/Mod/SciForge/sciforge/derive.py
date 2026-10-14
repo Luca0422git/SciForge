@@ -138,6 +138,7 @@ def read_doc(doc):
             "local": local,
             "material": _material_of(body),
             "look": getattr(body, "SciForgeAppearance", ""),
+            "user_material": getattr(body, "SciForgeUserMaterial", ""),
         }
     for obj in doc.Objects:
         if obj.TypeId == "Sketcher::SketchObject":
@@ -241,6 +242,7 @@ class _Copy:
         self.copy = None
         self.doc = None
         self.active = None
+        self.folder = None  # a temporary folder made for the copy (removed with it)
 
     def __enter__(self):
         if not self.path or not os.path.isfile(self.path):
@@ -255,7 +257,8 @@ class _Copy:
             import tempfile
 
             # A folder that cannot be written (a read-only share): a temporary folder.
-            self.copy = core.copy_name(tempfile.mkdtemp(prefix="sciforge-derive-"), token)
+            self.folder = tempfile.mkdtemp(prefix="sciforge-derive-")
+            self.copy = core.copy_name(self.folder, token)
             shutil.copyfile(self.path, self.copy)
         try:
             self.doc = App.openDocument(self.copy, True)  # hidden: no tab of its own
@@ -290,6 +293,8 @@ class _Copy:
                 os.remove(self.copy)
         except OSError:
             pass
+        if self.folder:
+            shutil.rmtree(self.folder, ignore_errors=True)
 
 
 def read_source(path):
@@ -462,10 +467,16 @@ def _copy_look(body, data):
             body.ShapeMaterial = data["material"]
         except Exception:
             pass
-    if data.get("look"):
+    for prop, text in (
+        ("SciForgeAppearance", data.get("look")),
+        ("SciForgeUserMaterial", data.get("user_material")),  # material.USER_PROP
+    ):
+        if not text and prop not in body.PropertiesList:
+            continue
         try:
-            bodies.add_prop(body, "App::PropertyString", "SciForgeAppearance", "Base", "", True)
-            body.SciForgeAppearance = data["look"]
+            bodies.add_prop(body, "App::PropertyString", prop, "Base", "", True)
+            if getattr(body, prop) != (text or ""):
+                setattr(body, prop, text or "")
         except Exception:
             pass
 
@@ -846,15 +857,28 @@ def sources_of_file(path):
         return []
     import re
 
+    from xml.sax.saxutils import unescape
+
     found = []
     for match in re.finditer(
         r'<Property name="SourceFile" type="App::PropertyString"[^>]*>\s*<String value="([^"]*)"',
         xml,
     ):
-        found.append(match.group(1))
+        found.append(unescape(match.group(1), {"&quot;": '"', "&apos;": "'"}))
     return found
 
 
 def check(doc_file, source):
-    """Refuse a derive that loops (DeriveError)."""
-    core.check_cycle(doc_file, source, sources_of_file(source))
+    """Refuse a derive that loops (DeriveError): the source, or a design it derives from
+    (at any depth), derives from this design."""
+    feeding, seen, todo = [], set(), [source]
+    while todo and len(seen) < 200:
+        path = todo.pop()
+        norm = os.path.normcase(os.path.normpath(os.path.abspath(path)))
+        if norm in seen:
+            continue
+        seen.add(norm)
+        found = sources_of_file(path)
+        feeding.extend(found)
+        todo.extend(found)
+    core.check_cycle(doc_file, source, feeding)
