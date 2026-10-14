@@ -1337,6 +1337,8 @@ class TimelineWidget(QtWidgets.QWidget):
         profile = ops.profile_sketch(obj)
         if profile is not None:
             add("Edit Profile Sketch", lambda: self.edit_profile(item.name))
+        for text, fn, enabled in _menu_extras(obj):  # a Derive's Update Derive, Break Link
+            add(text, lambda f=fn: f(obj), enabled and len(self._selected) == 1)
         menu.addSeparator()
         many = len(self._selected) > 1
         if many:  # Fusion: Suppress Features works on the whole selection
@@ -1369,6 +1371,20 @@ class TimelineWidget(QtWidgets.QWidget):
             self._busy -= 1
         if chosen in actions:
             _later(actions[chosen])
+
+
+def _menu_extras(obj):
+    """[(text, fn(obj), enabled)] a feature module adds to a step's menu (taskui.MENU_EXTRAS)."""
+    from . import taskui
+
+    found = []
+    for text, fn, enabled in taskui.MENU_EXTRAS.get(ops.type_key(obj), []):
+        try:
+            on = bool(enabled(obj))
+        except Exception:
+            on = False
+        found.append((text, fn, on))
+    return found
 
 
 def _hidden_steps(doc, timeline, active):

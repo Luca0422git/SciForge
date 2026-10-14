@@ -48,6 +48,9 @@ def set_current(dialog):
 # own Python features. Feature modules declare EDITORS = {...}; commands.py collects
 # them. The timeline and the browser open features with edit_object().
 EDITORS = {}
+# Extra entries of the timeline's right-click menu: {type key: [(text, fn(obj), enabled(obj))]}
+# (a Derive's Update Derive / Break Link). Modules declare MENU_EXTRAS = {...}.
+MENU_EXTRAS = {}
 
 
 def dialog_button(role):

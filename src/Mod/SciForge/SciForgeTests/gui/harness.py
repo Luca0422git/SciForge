@@ -576,6 +576,12 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
             grid_ui.reset()
         except Exception as exc:
             print("[SciForge] display settings reset failed: %s" % exc, flush=True)
+        try:  # the mouse preset, zoom direction, units / history of new designs (Preferences)
+            from sciforge import preferences_ui
+
+            preferences_ui.reset_for_tests()
+        except Exception as exc:
+            print("[SciForge] preferences reset failed: %s" % exc, flush=True)
         _tap = _ConsoleTap()
         new_errors()  # start-up messages are not the scenario's
 

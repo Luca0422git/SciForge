@@ -25,7 +25,10 @@ INTENDED = {
     # design (the sweep's) gets the Save dialog first (versions_ui.save_design).
     "Insert Component": "Save",
     "Change Parameters": "Parameters",
-    "Manage Materials": "Materials",
+    "Manage Materials": "Material Browser",
+    "Decal": "Insert Decal",  # the picture's file picker (decal_ui.pick_image)
+    "Derive": "Save",  # Derive takes the saved design: an unsaved one is saved first
+    "Insert Derive": "Save",  # the source is kept relative to this design: saved first
     "3D Print": "3D Print",
 }
 report = []

@@ -51,7 +51,12 @@ SOLID_CREATE = group(
     ["Create Sketch", "Extrude", "Revolve", "Hole", "Rectangular Pattern", "Mirror"],
     [
         item("Create Sketch", "SciForge_NewSketch", "sketch_create"),
-        item("Derive", None, "derive"),
+        item(
+            "Derive",
+            "SciForge_Derive",
+            "derive",
+            note="Bodies, sketches, planes and parameters into another design, linked.",
+        ),
         SEP,
         item(
             "Extrude",
@@ -141,10 +146,21 @@ SOLID_MODIFY = group(
         SEP,
         item("Physical Material", ("SciForge_PhysicalMaterial", "Std_SetMaterial"), "material"),
         item("Appearance", ("SciForge_Appearance", "Std_SetAppearance"), "appearance", "A"),
-        item("Manage Materials", "Material_Edit", "material"),
+        item(
+            "Manage Materials",
+            ("SciForge_ManageMaterials", "Material_Edit"),
+            "material",
+            note="The material libraries: Physical and Appearance, favourites, your own.",
+        ),
         SEP,
         item("Change Parameters", "SciForge_ChangeParameters", "parameters"),
-        item("Compute All", "Std_Refresh", "compute", "Ctrl+B"),
+        item(
+            "Compute All",
+            ("SciForge_ComputeAll", "Std_Refresh"),
+            "compute",
+            "Ctrl+B",
+            note="Every parameter and step computed again; the steps that fail are listed.",
+        ),
     ],
 )
 
@@ -223,7 +239,7 @@ INSERT = group(
     "INSERT",
     ["Insert Component", "Canvas", "Insert Mesh"],
     [
-        item("Decal", None, "decal"),
+        item("Decal", "SciForge_Decal", "decal", note="A picture on a face, flat or curved."),
         item("Canvas", "SciForge_InsertCanvas", "canvas", note="A reference image on a plane."),
         item("Insert SVG", "SciForge_InsertSVG", "insert_svg", note="SVG curves into a sketch."),
         item("Insert DXF", "SciForge_InsertDXF", "insert_dxf", note="DXF curves into a sketch."),
@@ -240,7 +256,12 @@ INSERT = group(
             "insert_component",
             note="Another design's bodies, linked to its file by a relative path",
         ),
-        item("Insert Derive", None, "derive"),
+        item(
+            "Insert Derive",
+            "SciForge_InsertDerive",
+            "derive",
+            note="Bodies, sketches, planes and parameters of a saved design, linked.",
+        ),
         # Fusion brings STEP files in through its Data Panel (upload, then Insert into the
         # design); SciForge has no cloud panel, so the file is picked straight away.
         item(
@@ -578,7 +599,13 @@ UTIL_ADDINS = group(
     "ADD-INS",
     ["Scripts and Add-Ins"],
     [
-        item("Scripts and Add-Ins", "Std_DlgMacroExecute", "parameters"),
+        item(
+            "Scripts and Add-Ins",
+            ("SciForge_ScriptsAddIns", "Std_DlgMacroExecute"),
+            "parameters",
+            "Shift+S",
+            note="Run, create and edit scripts and add-ins; Run on Startup.",
+        ),
         item("Add-on Manager", "Std_AddonMgr", "new_component"),
     ],
 )
@@ -587,7 +614,12 @@ UTIL_UTILITY = group(
     "UTILITY",
     ["Preferences"],
     [
-        item("Preferences", "Std_DlgPreferences", "tl_settings"),
+        item(
+            "Preferences",
+            ("SciForge_Preferences", "Std_DlgPreferences"),
+            "tl_settings",
+            note="Navigation, units of new designs, design history, materials, graphics.",
+        ),
         item(
             "Project and Recovery Settings",
             "SciForge_FilesSettings",
@@ -795,7 +827,7 @@ FILE_MENU = [
     item("Export", ("SciForge_Export", "Std_Export"), "export"),
     item("3D Print", "SciForge_3DPrint", "insert_mesh"),
     item("Export Everything", "SciForge_ExportEverything", "export_all"),
-    item("Capture Image", "Std_ViewScreenShot", "canvas"),
+    item("Capture Image", ("SciForge_CaptureImage", "Std_ViewScreenShot"), "canvas"),
     SEP,
     item("Insert Mesh", "SciForge_InsertMesh", "insert_mesh"),
     item("Insert STEP", "SciForge_InsertSTEP", "insert_step"),

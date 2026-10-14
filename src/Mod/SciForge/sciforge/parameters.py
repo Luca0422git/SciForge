@@ -12,6 +12,7 @@ import FreeCAD as App
 from . import parameters_core as core
 
 GROUP = "Parameters"
+DERIVED_GROUP = "Derived"  # parameters a Derive brought in (derive.py): read-only, linked
 
 # Feature type -> [(property, label)] shown as model parameters.
 FEATURE_PROPS = {
@@ -62,10 +63,45 @@ def container(doc, create=False):
 
 
 def user_names(doc):
+    """Every parameter a formula can name: the user's own and the derived ones."""
+    obj = container(doc)
+    if obj is None:
+        return []
+    return [p for p in obj.PropertiesList if obj.getGroupOfProperty(p) in (GROUP, DERIVED_GROUP)]
+
+
+def own_names(doc):
+    """The user's own parameters (the ones Change Parameters edits)."""
     obj = container(doc)
     if obj is None:
         return []
     return [p for p in obj.PropertiesList if obj.getGroupOfProperty(p) == GROUP]
+
+
+def derived_names(doc):
+    obj = container(doc)
+    if obj is None:
+        return []
+    return [p for p in obj.PropertiesList if obj.getGroupOfProperty(p) == DERIVED_GROUP]
+
+
+def derived_parameters(doc):
+    """[{name, unit, value, comment}] of the parameters a Derive brought in (Fusion shows
+    them greyed: they change in their source design)."""
+    obj = container(doc)
+    rows = []
+    for name in derived_names(doc):
+        value = getattr(obj, name)
+        rows.append(
+            {
+                "name": name,
+                "unit": core.unit_of(obj.getTypeIdOfProperty(name)),
+                "expression": "",
+                "value": value.Value if hasattr(value, "Value") else value,
+                "comment": obj.getDocumentationOfProperty(name),
+            }
+        )
+    return rows
 
 
 def user_parameters(doc):
@@ -75,7 +111,7 @@ def user_parameters(doc):
     if obj is None:
         return rows
     expressions = dict(obj.ExpressionEngine)
-    for name in user_names(doc):
+    for name in own_names(doc):
         value = getattr(obj, name)
         rows.append(
             {
@@ -98,6 +134,11 @@ def add_user(doc, name, unit="mm", text="1", comment=""):
 
 
 def remove_user(doc, name):
+    if name in derived_names(doc):
+        raise core.ParameterError(
+            "'%s' comes from another design (Derive): untick it in the Derive to remove it."
+            % name
+        )
     users = _users_of(doc, name)
     if users:
         raise core.ParameterError(
@@ -119,6 +160,11 @@ def _users_of(doc, name):
 
 def set_user(doc, name, text):
     """A number ('25', '25 mm') or an expression ('width / 2')."""
+    if name in derived_names(doc):
+        raise core.ParameterError(
+            "'%s' comes from another design (Derive): change it there and update the Derive."
+            % name
+        )
     obj = container(doc)
     _set(obj, name, text, user_names(doc))
 

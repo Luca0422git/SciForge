@@ -344,6 +344,7 @@ def _feature_commands():
                 found.update(legacy[name](module))
             found.update(getattr(module, "COMMANDS", {}))
             taskui.EDITORS.update(getattr(module, "EDITORS", {}))
+            taskui.MENU_EXTRAS.update(getattr(module, "MENU_EXTRAS", {}))
         except Exception as exc:
             warn("could not load %s: %s" % (filename, exc))
     return found

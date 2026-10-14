@@ -165,6 +165,7 @@ def _folders(objects, active_body, component):
     (root only), Origin, Bodies, Sketches, Construction, in Fusion's order, each only once
     it has something in it. ``objects``: the rows that belong to this component."""
     bodies, sketches, construction, origin, analysis, canvases = [], [], [], [], [], []
+    decals = []
     joints, joint_origins = [], []
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
@@ -204,6 +205,8 @@ def _folders(objects, active_body, component):
             bodies.append(_item("mesh:", obj, "insert_mesh", "mesh_body"))
         elif type_id in CANVAS_TYPES:
             canvases.append(_item("canvas:", obj, "canvas", "canvas"))
+        elif sciforge_type == "Decal":  # a picture on a face (decal.py), under its component
+            decals.append(_item("decal:", obj, "decal", "decal"))
         elif sciforge_type in JOINT_TYPES:
             kind = JOINT_TYPES[sciforge_type]
             icon = (
@@ -254,6 +257,8 @@ def _folders(objects, active_body, component):
         folders.append(_folder("construction" + suffix, "Construction", construction))
     if canvases:
         folders.append(_folder("canvases" + suffix, "Canvases", canvases))
+    if decals:
+        folders.append(_folder("decals" + suffix, "Decals", decals))
     return folders
 
 
@@ -505,6 +510,16 @@ MENUS = {
         "Delete",
     ],
     "analysis": ["Edit Feature", "-", "Show/Hide", "-", "Rename", "Delete"],
+    "decal": [
+        "Edit Decal",
+        "-",
+        "Show/Hide",
+        "Find in Window",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
 }
 
 
