@@ -36,6 +36,8 @@ SHADED_FACE = (0.82, 0.86, 0.9)
 # Section hatching drawn like the edges. FreeCAD's default hatch colour is green with no
 # opacity (0x00FF0000), so its hatching never showed on the sheet nor in the PDF.
 HATCH_COLOR = (0.13, 0.145, 0.16, 1.0)
+OVERLAY_KEY = 0x5F0E  # QGraphicsItem data key (and value) marking SciForge's preview items
+OVERLAY_COLOR = "#ff8a1c"
 
 
 def _later(fn, *args, ms=0):
@@ -717,6 +719,7 @@ class DrawingPanel(taskui.Panel):
         self.page = page
         self.gv = page_widget()
         self.overlay = []
+        self._scene_ref = None
         self.hint = QtWidgets.QLabel("")
         self.hint.setWordWrap(True)
         self.hint.setObjectName("SciForgeDrawingHint")
@@ -745,13 +748,24 @@ class DrawingPanel(taskui.Panel):
 
     # -- overlay drawn on the sheet (lines and circles while picking) -------------------
     def _scene(self):
+        # One wrapper of the scene for the panel's life: PySide ties the items added through
+        # a wrapper to it, and with a new wrapper per call the overlay's items could no
+        # longer be removed (a placed table's outline stayed on the sheet).
         try:
-            return self.gv.scene() if self.gv is not None else None
+            if self._scene_ref is None and self.gv is not None:
+                self._scene_ref = self.gv.scene()
+            return self._scene_ref
         except RuntimeError:
             return None
 
+    def _keep(self, item):
+        item.setZValue(1e6)
+        item.setData(OVERLAY_KEY, OVERLAY_KEY)
+        self.overlay.append(item)
+        return item
+
     def _pen(self, dashed=False):
-        pen = QtGui.QPen(QtGui.QColor("#ff8a1c"))
+        pen = QtGui.QPen(QtGui.QColor(OVERLAY_COLOR))
         pen.setCosmetic(True)
         pen.setWidth(2)
         if dashed:
@@ -763,44 +777,47 @@ class DrawingPanel(taskui.Panel):
         if scene is None:
             return None
         r = _rez(self.gv, self.page)
-        item = scene.addLine(a[0] * r, -a[1] * r, b[0] * r, -b[1] * r, self._pen(dashed))
-        item.setZValue(1e6)
-        self.overlay.append(item)
-        return item
+        return self._keep(
+            scene.addLine(a[0] * r, -a[1] * r, b[0] * r, -b[1] * r, self._pen(dashed))
+        )
 
     def overlay_circle(self, c, radius):
         scene = self._scene()
         if scene is None:
             return None
         r = _rez(self.gv, self.page)
-        item = scene.addEllipse(
-            (c[0] - radius) * r, -(c[1] + radius) * r, 2 * radius * r, 2 * radius * r, self._pen()
+        return self._keep(
+            scene.addEllipse(
+                (c[0] - radius) * r,
+                -(c[1] + radius) * r,
+                2 * radius * r,
+                2 * radius * r,
+                self._pen(),
+            )
         )
-        item.setZValue(1e6)
-        self.overlay.append(item)
-        return item
 
     def overlay_rect(self, x0, y0, x1, y1):
         scene = self._scene()
         if scene is None:
             return None
         r = _rez(self.gv, self.page)
-        item = scene.addRect(
-            min(x0, x1) * r, -max(y0, y1) * r, abs(x1 - x0) * r, abs(y1 - y0) * r, self._pen()
+        return self._keep(
+            scene.addRect(
+                min(x0, x1) * r, -max(y0, y1) * r, abs(x1 - x0) * r, abs(y1 - y0) * r, self._pen()
+            )
         )
-        item.setZValue(1e6)
-        self.overlay.append(item)
-        return item
 
     def clear_overlay(self):
-        scene = self._scene()
-        for item in self.overlay:
-            try:
-                if scene is not None:
-                    scene.removeItem(item)
-            except RuntimeError:
-                pass
         self.overlay = []
+        scene = self._scene()
+        if scene is None:
+            return
+        try:
+            for item in scene.items():
+                if item.data(OVERLAY_KEY) == OVERLAY_KEY:
+                    scene.removeItem(item)
+        except RuntimeError:
+            pass
 
     def tolerance(self):
         return PICK_PIXELS * mm_per_pixel(self.gv, self.page) if self.gv is not None else 2.0

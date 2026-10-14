@@ -182,6 +182,7 @@ def b_escape():
 def b_nothing():
     h.check("Esc: still one detail", len(details()) == 1, details())
     h.check("dialog closed", d.panel() is None)
+    h.check("no preview left on the sheet", d.previews_left() == 0, d.previews_left())
 
 
 # -- C ------------------------------------------------------------------------------------------

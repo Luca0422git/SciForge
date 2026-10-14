@@ -1399,32 +1399,36 @@ def add_row_balloons(view, rows):
 
 
 def component_anchor(view, body_names):
-    """A page point on the outline of the given bodies as the view shows them (a visible
-    edge's middle), for a balloon's arrow."""
+    """A page point on the outline of the given bodies as the view shows them (the middle
+    of the longest visible edge that is theirs: an edge where two components touch is the
+    nearer one's), for a balloon's arrow."""
     doc = view.Document
-    shapes = []
-    for name in body_names:
-        body = doc.getObject(name)
-        if alive(body):
-            shapes.append(body.Shape)
-    if not shapes:
+    wanted = [doc.getObject(name) for name in body_names]
+    wanted = [b for b in wanted if alive(b)]
+    if not wanted:
         return None
-    axes = axes_of(view)
-    centre = centre_of(view)
-    s = scale_of(view)
-    best = None
+    names = {b.Name for b in wanted}
+    s = scale_of(view) or 1.0
+    candidates = []
     for edge in _visible_edges_local(view):
         mid = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
-        u, v = mid.x / s, mid.y / s
-        hit = _depth_hit(shapes, axes, centre, u, v)
-        if hit is None:
-            continue
-        if best is None or hit < best[0]:
-            best = (hit, (mid.x, mid.y))
-    if best is None:
+        candidates.append((edge.Length, (mid.x, mid.y)))
+    candidates.sort(key=lambda c: -c[0])
+    fallback = None
+    for _length, (mx, my) in candidates:
+        local = (mx / s, my / s)
+        if _sight_hit(view, wanted, local) is None:
+            continue  # not on these bodies at all
+        if fallback is None:
+            fallback = (mx, my)
+        owner = component_at(view, local)
+        if owner is not None and owner.Name in names:
+            x, y = view_position(view)
+            return x + mx, y + my
+    if fallback is None:
         return None
     x, y = view_position(view)
-    return x + best[1][0], y + best[1][1]
+    return x + fallback[0], y + fallback[1]
 
 
 def _visible_edges_local(view):
@@ -1434,55 +1438,50 @@ def _visible_edges_local(view):
         return []
 
 
-def _depth_hit(shapes, axes, centre, u, v):
-    """Distance from a view point's sight line to the nearest of `shapes` (0 = on it)."""
+def _sight_line(view, local_point):
+    """The line through a point of a view along the view's direction, and that direction
+    (towards the viewer)."""
     import Part
 
-    x, y, d = axes
-    p = core.to_model(axes, centre, u, v)
+    axes = axes_of(view)
+    p = core.to_model(axes, centre_of(view), local_point[0], local_point[1])
+    d = axes[2]
     far = 1e4
-    a = V(*core.v_add(p, core.v_mul(d, far)))
-    b = V(*core.v_sub(p, core.v_mul(d, far)))
-    line = Part.makeLine(a, b)
+    line = Part.makeLine(
+        V(*core.v_add(p, core.v_mul(d, far))), V(*core.v_sub(p, core.v_mul(d, far)))
+    )
+    return line, d
+
+
+def _sight_hit(view, bodies, local_point, tolerance=0.05):
+    """(body, depth) of the body nearest to the viewer that the sight line through a view
+    point touches (depth: how far towards the viewer), or None."""
+    line, d = _sight_line(view, local_point)
     best = None
-    for shape in shapes:
+    for body in bodies:
         try:
-            dist = shape.distToShape(line)[0]
+            dist, pairs, _info = body.Shape.distToShape(line)
         except Exception:
             continue
-        if best is None or dist < best:
-            best = dist
-    if best is None or best > 1e-3:
-        return None
+        if dist > tolerance or not pairs:
+            continue
+        points = [p for p, _q in pairs]
+        try:
+            # (where the line runs along a face, distToShape gives any one point of it)
+            points += [v.Point for v in body.Shape.section(line).Vertexes]
+        except Exception:
+            pass
+        depth = max(core.v_dot((p.x, p.y, p.z), d) for p in points)
+        if best is None or depth > best[1] + 1e-6:
+            best = (body, depth)
     return best
 
 
 def component_at(view, local_point, sources=None):
-    """The component (or root body) a picked point of a view belongs to: the nearest
-    body along the sight line through it."""
-    import Part
-
-    doc = view.Document
-    axes = axes_of(view)
-    centre = centre_of(view)
-    p = core.to_model(axes, centre, local_point[0], local_point[1])
-    far = 1e4
-    d = axes[2]
-    line = Part.makeLine(
-        V(*core.v_add(p, core.v_mul(d, far))), V(*core.v_sub(p, core.v_mul(d, far)))
-    )
-    best = None
-    for body in sources or [s for s in view.Source if alive(s)]:
-        try:
-            dist = body.Shape.distToShape(line)[0]
-        except Exception:
-            continue
-        if best is None or dist < best[0]:
-            best = (dist, body)
-    if best is None or best[0] > 0.05:
-        return None
-    del doc
-    return best[1]
+    """The component (or root body) a picked point of a view belongs to: the body nearest
+    to the viewer along the sight line through it (where two touch, the one in front)."""
+    hit = _sight_hit(view, sources or [s for s in view.Source if alive(s)], local_point)
+    return hit[0] if hit is not None else None
 
 
 def item_for_body(page, body):

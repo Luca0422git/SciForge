@@ -196,6 +196,7 @@ def e_escape():
 def e_nothing():
     h.check("Esc: still one section", len(sections()) == 1, sections())
     h.check("dialog closed", d.panel() is None)
+    h.check("no preview left on the sheet", d.previews_left() == 0, d.previews_left())
 
 
 # -- F ------------------------------------------------------------------------------------------

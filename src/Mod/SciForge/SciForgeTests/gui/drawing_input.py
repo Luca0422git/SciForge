@@ -443,6 +443,25 @@ def drawing_steps(
     return steps
 
 
+def previews_left():
+    """Preview items (the orange outlines and lines a command draws while picking) still
+    on the sheet."""
+    from sciforge import drawing_ui
+
+    view = gv()
+    if view is None:
+        return 0
+    count = 0
+    for item in view.scene().items():
+        pen = getattr(item, "pen", None)
+        colour = pen().color().name() if callable(pen) else ""
+        if item.data(drawing_ui.OVERLAY_KEY) == drawing_ui.OVERLAY_KEY:
+            count += 1
+        elif colour == drawing_ui.OVERLAY_COLOR:
+            count += 1
+    return count
+
+
 def drag_page(a, b, steps=12):
     """Press at page point a, move to b, release (a person dragging a view)."""
     view = gv()
