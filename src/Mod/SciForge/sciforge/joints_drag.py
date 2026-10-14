@@ -88,10 +88,35 @@ def _t(v):
 
 
 def _pick_at(view, gl, pos):
-    """(part, grab point) under widget pixel `pos`: a solid of a component or body the
-    assembly knows, else (None, None)."""
+    """(part, grab point) under widget pixel `pos`: the nearest solid of a component or body
+    there (a joint's glyph drawn over it does not hide it), else (None, None)."""
     x, y = _coin_pixel(gl, pos)
-    info = view.getObjectInfo((int(round(x)), int(round(y))))
+    pixel = (int(round(x)), int(round(y)))
+    infos = []
+    try:
+        infos = list(view.getObjectsInfo(pixel) or [])
+    except Exception:
+        infos = []
+    if not infos:
+        try:
+            info = view.getObjectInfo(pixel)
+            infos = [info] if info else []
+        except Exception:
+            infos = []
+    for info in infos:
+        part, grab = _part_of_info(info)
+        if part is not None:
+            return part, grab
+        try:
+            obj = App.getDocument(info["Document"]).getObject(info["Object"])
+        except Exception:
+            obj = None
+        if obj is not None and not joints.is_assembly_piece(obj):
+            break  # something else is in front (a sketch, a plane): not a component drag
+    return None, None
+
+
+def _part_of_info(info):
     if not info or not info.get("Object"):
         return None, None
     doc = App.getDocument(info["Document"]) if info.get("Document") else App.ActiveDocument
