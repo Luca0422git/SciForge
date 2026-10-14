@@ -1719,6 +1719,186 @@ def _():
     return circle(24, 24, 14, "none", "#7d8593", 2.4) + line(14, 34, 34, 14, "#7d8593", 2.4)
 
 
+# ---- drawing workspace (outline 7.16) ---------------------------------------------
+PAPER = "#f4f6f8"
+INK = "#3a4350"
+DASHDOT = 'stroke-dasharray="6 2 1.5 2"'
+
+
+def sheet(x=7, y=8, w=34, h=30):
+    """A drawing sheet: a white page with a thin frame."""
+    return rect(x, y, w, h, PAPER, 1.5) + path(
+        "M%d %d H%d V%d H%d Z" % (x + 2, y + 2, x + w - 2, y + h - 2, x + 2), "#c3cad3", 1.0
+    )
+
+
+@icon("dw_new")
+def _():
+    return (
+        sheet()
+        + path("M12 14 H26 V26 H12 Z", INK, 1.8)
+        + circle(19, 20, 2.6, "none", INK, 1.4)
+        + plus_badge(37, 37, 8)
+    )
+
+
+@icon("dw_base_view")
+def _():
+    return (
+        sheet()
+        + path("M13 15 H33 V29 H13 Z", INK, 2.0)
+        + circle(23, 22, 3.6, "none", INK, 1.6)
+        + rect(28, 31, 11, 5, POINT, 1)
+    )
+
+
+@icon("dw_projected_view")
+def _():
+    return (
+        sheet()
+        + path("M11 13 H22 V22 H11 Z", INK, 1.8)
+        + path("M11 27 H22 V34 H11 Z", "#6f7a88", 1.6)
+        + path("M27 13 H36 V22 H27 Z", "#6f7a88", 1.6)
+        + arrow(23, 17.5, 26, 17.5, POINT, 1.6, 3)
+        + arrow(16.5, 23, 16.5, 26, POINT, 1.6, 3)
+    )
+
+
+@icon("dw_section_view")
+def _():
+    hatch = "".join(
+        line(15 + i * 4, 30, 19 + i * 4, 24, "#6f7a88", 1.0) for i in range(4)
+    )
+    return (
+        sheet()
+        + path("M13 14 H33 V31 H13 Z", INK, 1.8)
+        + hatch
+        + line(23, 10, 23, 36, ORANGE, 1.6, DASHDOT)
+        + arrow(20, 11, 15, 11, ORANGE, 1.6, 3.5)
+        + arrow(26, 11, 31, 11, ORANGE, 1.6, 3.5)
+    )
+
+
+@icon("dw_detail_view")
+def _():
+    return (
+        sheet()
+        + path("M11 30 V16 H27", INK, 1.8)
+        + circle(14, 19, 5.5, "none", ORANGE, 1.4)
+        + circle(31, 28, 8, PAPER, INK, 1.6)
+        + path("M26 34 V24 H37", INK, 2.2)
+    )
+
+
+@icon("dw_break_view")
+def _():
+    return (
+        sheet()
+        + path("M10 18 H19 L21 21 L18 24 L20 27 H10 Z", INK, 1.8)
+        + path("M38 18 H27 L29 21 L26 24 L28 27 H38", INK, 1.8)
+    )
+
+
+@icon("dw_centerline")
+def _():
+    return (
+        sheet()
+        + line(13, 14, 13, 32, INK, 2.0)
+        + line(33, 14, 33, 32, INK, 2.0)
+        + line(23, 11, 23, 35, ORANGE, 1.6, DASHDOT)
+    )
+
+
+@icon("dw_center_mark")
+def _():
+    return (
+        sheet()
+        + circle(23, 23, 8, "none", INK, 2.0)
+        + line(11, 23, 35, 23, ORANGE, 1.5, DASHDOT)
+        + line(23, 11, 23, 35, ORANGE, 1.5, DASHDOT)
+    )
+
+
+@icon("dw_dimension")
+def _():
+    return (
+        sheet()
+        + line(12, 30, 12, 15, "#6f7a88", 1.2)
+        + line(34, 30, 34, 15, "#6f7a88", 1.2)
+        + arrow(22, 19, 12.5, 19, POINT, 1.6, 3.5)
+        + arrow(24, 19, 33.5, 19, POINT, 1.6, 3.5)
+        + path("M12 30 H34", INK, 2.2)
+    )
+
+
+@icon("dw_text")
+def _():
+    return (
+        sheet()
+        + path("M15 32 L22 14 L29 32 M18 26 H26", INK, 2.4)
+        + line(31, 30, 36, 30, "#6f7a88", 1.4)
+    )
+
+
+@icon("dw_symbol")
+def _():
+    return sheet() + path("M13 24 L18 31 L30 13 H36", INK, 2.0)
+
+
+@icon("dw_table")
+def _():
+    rows = "".join(line(10, 17 + i * 5, 36, 17 + i * 5, INK, 1.0) for i in range(4))
+    return (
+        sheet()
+        + path("M10 12 H36 V34 H10 Z", INK, 1.6)
+        + rect(10, 12, 26, 5, "#cfe6ff")
+        + rows
+        + line(16, 12, 16, 34, INK, 1.0)
+        + line(22, 12, 22, 34, INK, 1.0)
+    )
+
+
+@icon("dw_balloon")
+def _():
+    return (
+        sheet()
+        + path("M12 31 H22 V22 H12 Z", "#6f7a88", 1.6)
+        + line(18, 26, 27, 18, INK, 1.4)
+        + circle(31, 15, 5.5, PAPER, INK, 1.8)
+        + line(31, 12.5, 31, 17.5, INK, 1.6)
+    )
+
+
+@icon("dw_export_pdf")
+def _():
+    return (
+        sheet(7, 8, 26, 30)
+        + path("M11 14 H25 V24 H11 Z", INK, 1.6)
+        + rect(24, 28, 18, 10, RED, 2)
+        + arrow(30, 18, 41, 18, WHITE, 2.2, 5)
+    )
+
+
+@icon("dw_export_dxf")
+def _():
+    return (
+        sheet(7, 8, 26, 30)
+        + path("M11 14 H25 V24 H11 Z", INK, 1.6)
+        + rect(24, 28, 18, 10, DBLUE[1], 2)
+        + arrow(30, 18, 41, 18, WHITE, 2.2, 5)
+    )
+
+
+@icon("dw_title_block")
+def _():
+    return (
+        sheet()
+        + path("M21 26 H39 V36 H21 Z", INK, 1.6)
+        + line(21, 31, 39, 31, INK, 1.0)
+        + line(30, 26, 30, 36, INK, 1.0)
+    )
+
+
 # Icons kept exactly as drawn (main() empties the folder first, so they live here too).
 # palette_check: the tick of a ticked check box (theme.py, sketch_palette.py), 14 px.
 RAW = {

@@ -449,7 +449,15 @@ def template_svg(standard, sheet, values=None, title_block=True):
         'version="1.1" width="%smm" height="%smm" viewBox="0 0 %s %s">\n'
         "<!-- SciForge drawing sheet %s %s (original artwork) -->\n"
         '<g id="sciforge-sheet">\n%s\n</g>\n</svg>\n'
-        % (_short(width), _short(height), _short(width), _short(height), standard, sheet, "\n".join(body))
+        % (
+            _short(width),
+            _short(height),
+            _short(width),
+            _short(height),
+            standard,
+            sheet,
+            "\n".join(body),
+        )
     )
 
 
@@ -624,7 +632,9 @@ def _direction(pick):
 
 
 def _is_horizontal(dx, dy):
-    return abs(math.atan2(dy, dx)) % math.pi < _AXIS or abs(abs(math.atan2(dy, dx)) - math.pi) < _AXIS
+    return (
+        abs(math.atan2(dy, dx)) % math.pi < _AXIS or abs(abs(math.atan2(dy, dx)) - math.pi) < _AXIS
+    )
 
 
 def _is_vertical(dx, dy):

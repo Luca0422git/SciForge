@@ -46,6 +46,9 @@ COMPONENT_TYPES = {"App::Part"}
 # images) in a Canvases folder of their own.
 MESH_TYPES = {"Mesh::Feature"}
 CANVAS_TYPES = {"Image::ImagePlane"}
+# A drawing of the design (drawing.py): Fusion keeps drawings as files of their own;
+# SciForge keeps them in the design, listed in a Drawings folder (double-click opens one).
+DRAWING_TYPES = {"TechDraw::DrawPage"}
 ORIGIN_ROLES = ("Origin", "X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane")
 ORIGIN_LABELS = {
     "Origin": "O",
@@ -152,6 +155,7 @@ def _folders(objects, active_body, component):
     it has something in it. ``objects``: the rows that belong to this component."""
     bodies, sketches, construction, origin, analysis, canvases = [], [], [], [], [], []
     joints, joint_origins = [], []
+    drawings = []
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
         # Fusion's design has one origin. FreeCAD gives every body its own: show the active
@@ -188,6 +192,11 @@ def _folders(objects, active_body, component):
             bodies.append(_item("mesh:", obj, "insert_mesh", "mesh_body"))
         elif type_id in CANVAS_TYPES:
             canvases.append(_item("canvas:", obj, "canvas", "canvas"))
+        elif type_id in DRAWING_TYPES:
+            if component is None:
+                node = _item("drawing:", obj, "dw_base_view", "drawing")
+                node["visible"] = None  # no eye: a drawing opens in its own tab
+                drawings.append(node)
         elif sciforge_type in JOINT_TYPES:
             kind = JOINT_TYPES[sciforge_type]
             icon = (
@@ -237,6 +246,8 @@ def _folders(objects, active_body, component):
         folders.append(_folder("construction" + suffix, "Construction", construction))
     if canvases:
         folders.append(_folder("canvases" + suffix, "Canvases", canvases))
+    if drawings:
+        folders.append(_folder("drawings", "Drawings", drawings))
     return folders
 
 
@@ -486,6 +497,7 @@ MENUS = {
         "Delete",
     ],
     "analysis": ["Edit Feature", "-", "Show/Hide", "-", "Rename", "Delete"],
+    "drawing": ["Open Drawing", "-", "Rename", "Delete"],
 }
 
 

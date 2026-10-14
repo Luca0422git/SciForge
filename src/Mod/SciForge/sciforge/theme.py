@@ -181,6 +181,9 @@ VIEWER_SETTINGS = [
     # Bodies names the component after its body. FreeCAD would rename the second "Body1"
     # to "Body1001" unless duplicate labels are allowed (its own tree copes with them).
     ("User parameter:BaseApp/Preferences/Document", "Bool", "DuplicateLabels", True),
+    # Drawings (drawing_ui.py): opening a drawing keeps SciForge's window; FreeCAD would
+    # switch to its TechDraw workbench and turn the SciForge interface off.
+    ("User parameter:BaseApp/Preferences/Mod/TechDraw/General", "Bool", "SwitchToWB", False),
 ]
 
 _saved_qss = None

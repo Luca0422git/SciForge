@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Drawings without FreeCAD: sheets, scales, the title block template, projected and
 section view maths, dimension inference, the parts list and the DXF writer."""
+
 import math
 import os
 import sys
@@ -212,8 +213,12 @@ class SectionTests(unittest.TestCase):
         self.assertTrue(vclose(xdir, (1, 0, 0)))
 
     def test_line_drawn_the_other_way_gives_the_same_view(self):
-        a = core.section_axes(self.FRONT, core.section_line((0, 20), (0, -20), (50, 0), "Third angle"))
-        b = core.section_axes(self.FRONT, core.section_line((0, -20), (0, 20), (50, 0), "Third angle"))
+        a = core.section_axes(
+            self.FRONT, core.section_line((0, 20), (0, -20), (50, 0), "Third angle")
+        )
+        b = core.section_axes(
+            self.FRONT, core.section_line((0, -20), (0, 20), (50, 0), "Third angle")
+        )
         self.assertTrue(vclose(a[0], b[0]))
 
     def test_slanted_line_is_a_right_handed_frame(self):
@@ -301,7 +306,9 @@ class PartsListTests(unittest.TestCase):
                 {"name": "Pin", "material": "Steel"},
             ]
         )
-        self.assertEqual([(r["Item"], r["PartNumber"], r["Qty"]) for r in rows], [(1, "Plate", 1), (2, "Pin", 2)])
+        self.assertEqual(
+            [(r["Item"], r["PartNumber"], r["Qty"]) for r in rows], [(1, "Plate", 1), (2, "Pin", 2)]
+        )
 
     def test_table_layout(self):
         rows = core.parts_rows([{"name": "Plate"}, {"name": "Pin"}])
