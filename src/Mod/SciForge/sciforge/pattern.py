@@ -22,6 +22,7 @@ FreeCAD 1.1.4 stores LinearPattern.Spacings2 = [0.0] by default, which stacks a 
 on the first (core patch #4 fixes the default in C++). SciForge always writes both spacing
 lists itself, so two-direction patterns are right on stock FreeCAD and in old files too.
 """
+
 import json
 import math
 import re
@@ -459,6 +460,10 @@ def check(kind, options):
             raise PatternError("Select one body: each body gets its own pattern.")
         if bodies[0].Tip is None or bodies[0].Shape.isNull():
             raise PatternError("%s has no solid to copy yet." % bodies[0].Label)
+    elif ptype == "components":  # components-2: component_pattern.py
+        from . import component_pattern
+
+        component_pattern.check(kind, options)
     else:
         raise PatternError("Unknown pattern type %r." % ptype)
     core.check_total(total_instances(kind, options))
@@ -511,6 +516,13 @@ def build(kind, options, feature=None, name=None):
     object when the change needs the other kind of feature: FreeCAD's or SciForge's)."""
     options = with_defaults(options)
     check(kind, options)
+    if options["pattern_type"] == "components":  # components-2: instances of a component
+        from . import component_pattern
+
+        return component_pattern.build(kind, options, feature, name)
+    if feature is not None and _is_component_pattern(feature):
+        remove(feature)  # the copies were instances of a component
+        feature = None
     if makes_bodies(kind, options):
         return _build_body_copies(kind, options, feature, name)
     if feature is not None and is_body_pattern(feature):
@@ -894,6 +906,11 @@ def show_tip(body):
 def remove(feature):
     """Take a pattern out again (a dialog's preview that is cancelled or dropped)."""
     if not alive(feature):
+        return
+    if _is_component_pattern(feature):  # components-2: the step and its instances
+        from . import component_pattern
+
+        component_pattern.remove(feature)
         return
     if is_body_pattern(feature):
         _remove_body_copies(feature)
@@ -1754,7 +1771,11 @@ def read(feature):
     if kind is None:
         raise PatternError("%s is not a pattern." % feature.Label)
     meta = load_meta(feature)
-    if is_body_pattern(feature):
+    if _is_component_pattern(feature):  # components-2
+        from . import component_pattern
+
+        options = component_pattern.read(feature)
+    elif is_body_pattern(feature):
         options = read_body_pattern(feature)
     elif feature.TypeId == ENGINE:
         options = read_engine(feature)
@@ -1995,9 +2016,14 @@ def is_body_copy(obj):
 
 
 def feature_body(feature):
-    """The body a pattern works on (for a pattern of bodies: the body it copies)."""
+    """The body a pattern works on (for a pattern of bodies: the body it copies; for a
+    pattern of components: what gives the design's origin axes)."""
     if is_body_pattern(feature):
         return feature.Source
+    if _is_component_pattern(feature):
+        from . import component_move
+
+        return component_move.frame_object(feature.Document)
     return owner_body(feature)
 
 
@@ -2006,7 +2032,18 @@ def base_of(feature):
     if is_body_pattern(feature):
         source = feature.Source
         return source.Tip if source is not None else None
+    if _is_component_pattern(feature):
+        return None
     return getattr(feature, "BaseFeature", None)
+
+
+def _is_component_pattern(obj):
+    try:
+        from . import component_pattern
+
+        return component_pattern.is_component_pattern(obj)
+    except Exception:
+        return False
 
 
 class BodyPatternFeature:
@@ -2090,7 +2127,14 @@ class BodyCopyFeature:
         copies = body_copy_shapes(definition)
         if obj.Index >= len(copies):
             return  # about to be removed by the pattern (fewer copies now)
-        obj.Shape = copies[obj.Index]
+        # design coordinates -> the new body's own (a body in a moved component: components-2)
+        body = _body_of_copy(obj)
+        if body is not None:
+            from . import bodies
+
+            obj.Shape = bodies.to_local(copies[obj.Index], body)
+        else:
+            obj.Shape = copies[obj.Index]
 
     def dumps(self):
         return None
@@ -2250,6 +2294,7 @@ def _new_copy(definition, index, source):
     container = source.getParentGeoFeatureGroup()
     if container is not None and hasattr(container, "addObject"):
         container.addObject(body)
+        container.addObject(copy)  # FreeCAD refuses a body's base outside its component
     count = len([o for o in doc.Objects if o.TypeId == "PartDesign::Body"])
     body.Label = "Body%d" % count
     body.BaseFeature = copy

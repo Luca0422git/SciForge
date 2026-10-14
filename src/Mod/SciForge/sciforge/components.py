@@ -199,6 +199,12 @@ def new_component(doc, label=None, parent=None):
             part.Origin.ViewObject.Visibility = False
     except Exception:
         pass
+    try:  # made while the timeline is rolled back: its step goes in at the marker
+        from . import timeline_ops
+
+        timeline_ops.place_root_step(part)
+    except Exception as exc:
+        warn("component %s: %s" % (label, exc))
     log("component %s created%s" % (label, " in %s" % parent.Label if parent is not None else ""))
     return part
 
@@ -324,6 +330,13 @@ def remove(doc, component, _top=True):
     try:
         for child in components_in(doc, component):
             remove(doc, child, _top=False)
+        try:  # its captured moves (timeline Move steps) go with it
+            from . import component_move
+
+            for step in component_move.steps_of_component(component):
+                doc.removeObject(step.Name)
+        except Exception as exc:
+            warn("could not remove the moves of %s: %s" % (component.Label, exc))
         names = [b.Name for b in bodies_in(doc, component)]
         if names:
             ops.delete_bodies(doc, names, transaction=False)
@@ -464,11 +477,36 @@ def preferred_body(doc, component):
     return found[0] if found else None
 
 
+def editable(component):
+    """The component whose features change when `component` is edited: an instance (a
+    pasted or patterned copy) is edited through its original, as in Fusion where editing
+    one occurrence changes them all."""
+    try:
+        from . import instances
+
+        if instances.is_instance(component):
+            source = instances.source_of(component)
+            if source is not None:
+                return source
+    except Exception:
+        pass
+    return component
+
+
 def activate_body(body):
     """Make a body the active one; its component becomes the active component with it
-    (the active body always lies in the active component)."""
+    (the active body always lies in the active component). A copy body of an instance
+    activates the body it repeats."""
     if not is_body(body):
         return
+    try:
+        from . import instances
+
+        source = instances.source_body(body)
+        if source is not None:
+            body = source
+    except Exception:
+        pass
     doc = body.Document
     _set_slot(doc, "pdbody", body)
     _set_slot(doc, "part", container_of(body))
@@ -502,6 +540,7 @@ def set_active(component, doc=None):
         return
     if component is not None and not is_component(component):
         return
+    component = editable(component)
     body = preferred_body(doc, component)
     _set_slot(doc, "part", component)
     _set_slot(doc, "pdbody", body)

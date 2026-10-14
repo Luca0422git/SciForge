@@ -25,6 +25,7 @@ What is built (one step per body, all sharing a MoveId, so the dialog edits them
 The movement itself is stored as numbers (a placement), like Fusion's Move feature: it does
 not follow the points or axis picked when it was made.
 """
+
 import math
 
 import FreeCAD as App
@@ -222,7 +223,11 @@ class CopyFeature:
             return  # the original was deleted: the copy keeps its shape, as in Fusion
         if source.Shape.isNull() or not source.Shape.Solids:
             raise MoveError("The body it copies has no solid here.")
-        obj.Shape = _moved(bodies.global_shape(source), obj.Movement)
+        shape = _moved(bodies.global_shape(source), obj.Movement)
+        # The new body takes this shape in its own coordinates: a body in a moved
+        # component would otherwise be moved twice (components-2).
+        body = copy_body(obj)
+        obj.Shape = bodies.to_local(shape, body) if body is not None else shape
 
     def dumps(self):
         return None
@@ -356,6 +361,12 @@ def _copy(body, name):
     CopyFeature(obj)
     obj.Source = body.Tip
     new = bodies.new_body(doc, like=body)
+    try:  # in the new body's component: FreeCAD refuses a base outside the body's scope
+        container = new.getParentGeoFeatureGroup()
+        if container is not None and hasattr(container, "addObject"):
+            container.addObject(obj)
+    except Exception:
+        pass
     new.BaseFeature = obj
     bodies.save_meta(new, META, {"copy_of": body.Name})
     for inner in new.Group:

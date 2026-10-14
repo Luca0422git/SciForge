@@ -423,16 +423,33 @@ def is_helper(obj):
 
 def is_component(obj):
     """A component (Fusion): shown in the timeline as a Component step where it was made,
-    never rolled back (steps outside bodies are not), never suppressed."""
+    hidden while the marker stands before it (rolls_back), never suppressed."""
     try:
         return obj.TypeId == "App::Part"
     except Exception:
         return False
 
 
+# Steps outside the bodies that roll back with the history marker (components-2): a
+# component, a captured move of one, a pattern of components (it sets SciForgeRolls).
+ROLLING_TYPES = {"ComponentMove"}
+ROLLS = "SciForgeRolls"
+
+
+def rolls_back(obj):
+    try:
+        if is_component(obj):
+            return True
+        return getattr(obj, "SciForgeType", "") in ROLLING_TYPES or bool(getattr(obj, ROLLS, False))
+    except Exception:
+        return False
+
+
 def _is_step(obj):
     if is_component(obj):
-        return True
+        # an instance (Paste, a pattern's copy) is no step: Fusion keeps occurrences in the
+        # browser; a pattern's copies belong to the pattern's step
+        return not is_helper(obj)
     if obj.TypeId in NOT_STEPS or is_helper(obj):
         return False
     kind = getattr(obj, "SciForgeType", "")
@@ -671,6 +688,8 @@ def snapshot(doc, deps=True):
                 "component_name": container.Name if container is not None else "",
                 # A component step is called by the component's name (Component1, Bracket).
                 "own_label": component,
+                # Outside the bodies, these roll back with the marker (timeline_core.build).
+                "rolls": rolls_back(obj),
             }
         )
     tips = {}
@@ -824,12 +843,15 @@ def _set_tips(doc, tips):
 def show_marker_state(doc):
     """In Fusion a sketch or construction plane after the history marker does not exist
     yet, so it is not drawn. Those that were shown are hidden while the marker is before
-    them and shown again once it passes them."""
-    if not App.GuiUp:
-        return
+    them and shown again once it passes them. The same for a component made after the
+    marker and the copies of a pattern of components; a component's captured moves after
+    the marker are undone (component_move.apply_history)."""
     try:
         tl = timeline(doc, deps=False)
     except Exception:
+        return
+    _follow_root_steps(doc, tl)
+    if not App.GuiUp:
         return
     for item in tl.items:
         if item.solid or item.body is None:
@@ -849,6 +871,127 @@ def show_marker_state(doc):
                     obj.ViewObject.Visibility = True
         except Exception:
             pass
+
+
+ROLLED_SHOWN = "SciForgeRolledShown"  # a component the marker hid was shown before
+
+
+def _follow_root_steps(doc, tl=None):
+    """Components, their captured moves and patterns of components follow the history
+    marker and suppression (Fusion): a component made after the marker is hidden (also in
+    the browser), a pattern's copies go with their step, captured moves after the marker
+    are undone. Never raises."""
+    try:
+        from . import component_move
+
+        component_move.apply_history(doc)
+    except Exception as exc:
+        from . import _remember
+
+        _remember("info", "timeline: component positions: %s" % exc)
+    if not App.GuiUp:
+        return
+    try:
+        tl = tl or timeline(doc, deps=False)
+    except Exception:
+        return
+    for item in tl.items:
+        if item.body is not None:
+            continue
+        obj = doc.getObject(item.name)
+        if obj is None:
+            continue
+        try:
+            if is_component(obj):
+                hide = item.state == "rolled_back" and not _done_inside(doc, tl, obj)
+                hide_by_marker(obj, hide)
+            elif getattr(obj, ROLLS, False):
+                hide = item.state == "rolled_back" or is_suppressed(obj)
+                for part in _pattern_parts(doc, obj):
+                    hide_by_marker(part, hide)
+        except Exception:
+            pass
+
+
+def _done_inside(doc, tl, part):
+    """True when a step inside the component is before the marker (a component made from
+    a body that existed before it stays: hiding it would hide that body too)."""
+    from . import components
+
+    for item in tl.items:
+        if item.body is None or item.state != "done" or not item.component_name:
+            continue
+        holder = doc.getObject(item.component_name)
+        if holder is not None and components.is_inside(holder, part):
+            return True
+    return False
+
+
+def _pattern_parts(doc, step):
+    found = []
+    for obj in doc.Objects:
+        if is_component(obj) and getattr(obj, "SciForgePattern", None) is step:
+            found.append(obj)
+    return found
+
+
+def hide_by_marker(obj, hide):
+    """Hide a component (with all in it) while the marker stands before it, and show it
+    again as it was once the marker passes it."""
+    vobj = getattr(obj, "ViewObject", None)
+    if vobj is None:
+        return
+    if hide:
+        if getattr(obj, ROLLED_HIDDEN, False):
+            return
+        _add_prop(obj, "App::PropertyBool", ROLLED_HIDDEN, "Hidden by the marker")
+        _add_prop(obj, "App::PropertyBool", ROLLED_SHOWN, "Shown before the marker hid it")
+        setattr(obj, ROLLED_SHOWN, bool(vobj.Visibility))
+        setattr(obj, ROLLED_HIDDEN, True)
+        if vobj.Visibility:
+            vobj.Visibility = False
+    elif getattr(obj, ROLLED_HIDDEN, False):
+        setattr(obj, ROLLED_HIDDEN, False)
+        if getattr(obj, ROLLED_SHOWN, True) and not vobj.Visibility:
+            vobj.Visibility = True
+
+
+def hidden_by_marker(obj):
+    """True for a component (or anything in one) the history marker hides."""
+    from . import components
+
+    current = obj
+    for _depth in range(30):
+        if current is None:
+            return False
+        if is_component(current) and getattr(current, ROLLED_HIDDEN, False):
+            return True
+        current = components.container_of(current)
+    return False
+
+
+def place_root_step(obj):
+    """A step outside the bodies made while the timeline is rolled back goes in at the
+    history marker (Fusion adds every new step there), not after the rolled-back steps,
+    where the marker would hide it at once. Only rolling steps (a component, a captured
+    move) need it."""
+    doc = obj.Document
+    try:
+        tl = timeline(doc, deps=False)
+    except Exception:
+        return False
+    item = tl.find(obj.Name)
+    if tl.at_end or item is None or item.index < tl.marker:
+        return False
+    others = [i for i in tl.items if i.name != obj.Name]
+    new_items = others[: tl.marker] + [item] + others[tl.marker :]
+    keys = core._keys_for(new_items, obj.Name)
+    for name, key in keys.items():
+        target = doc.getObject(name)
+        if target is not None:
+            _add_prop(target, "App::PropertyFloat", RANK, "Creation order (moved)")
+            setattr(target, RANK, float(key))
+    return bool(keys)
 
 
 def _show_only_tip(body, tip):
@@ -1106,6 +1249,9 @@ def suppress(doc, names):
                     _set_suppressed(doc.getObject(n), True)
             group |= more
             recompute(doc)
+        if any(rolls_back(doc.getObject(n)) for n in group if doc.getObject(n) is not None):
+            _follow_root_steps(doc)  # a suppressed move of a component puts it back
+            recompute(doc)
         info = json.dumps({"with": sorted(group - set(names)), "links": links})
         for n in names:
             obj = doc.getObject(n)
@@ -1153,6 +1299,9 @@ def unsuppress(doc, names):
                 if "Suppressed" not in obj.PropertiesList:
                     _set_suppressed(obj, False)
         recompute(doc)
+        if any(rolls_back(obj) for obj in objs):
+            _follow_root_steps(doc)  # a move of a component counts again
+            recompute(doc)
         for n in names:
             obj = doc.getObject(n)
             if SUPPRESS_INFO in obj.PropertiesList:
@@ -1207,9 +1356,17 @@ def delete(doc, names):
     gone = set(names)
     tl = timeline(doc)
     at_end = tl.at_end
+    rolling = [doc.getObject(n) for n in names if rolls_back(doc.getObject(n))]
     remember_references(doc)  # the steps after the gap keep their edges (settle)
     _transaction(doc, "Delete %s" % title)
     try:
+        if rolling:
+            from . import component_move, components as parts_of_design
+
+            for obj in rolling:  # a deleted move of a component: as if never made
+                component_move.forget(obj)
+                for part in _pattern_parts(doc, obj):  # a pattern's copies go with it
+                    parts_of_design.remove(doc, part, _top=False)
         for obj, _body in steps(doc):
             if obj.Name in gone or not _attached_to(obj, gone):
                 continue
@@ -1253,6 +1410,8 @@ def delete(doc, names):
             body = doc.getObject(name)
             if body is not None:
                 _show_only_tip(body, body.Tip)
+        if rolling:
+            _follow_root_steps(doc)
         recompute(doc)
     except Exception:
         doc.abortTransaction()

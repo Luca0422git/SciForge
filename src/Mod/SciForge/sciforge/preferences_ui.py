@@ -207,6 +207,10 @@ def _apply(kind):
             panel = versions_ui._state.get("panel")
             if versions_ui._alive(panel):
                 panel.set_folder(versions_ui.project_folder())
+        elif kind == "components":  # Active component visibility (components-2)
+            from . import component_look
+
+            component_look.refresh_all()
     except Exception as exc:
         warn("preferences: %s: %s" % (kind, exc))
 
@@ -257,6 +261,7 @@ def reset_for_tests():
         "default_units",
         "default_material",
         "orientation",
+        "active_component_visibility",
     ):
         opt = core.option(key)
         try:

@@ -205,5 +205,72 @@ class SameNewTests(unittest.TestCase):
         self.assertTrue(core.same_new("new_body", "join"))
 
 
+class InstanceLabelTests(unittest.TestCase):
+    def test_instance_labels(self):
+        self.assertEqual(core.instance_label("Bracket", 2), "Bracket:2")
+        self.assertEqual(core.split_instance_label("Bracket:3"), ("Bracket", 3))
+        self.assertEqual(core.split_instance_label("Bracket"), ("Bracket", None))
+        self.assertEqual(core.split_instance_label("A:B:4"), ("A:B", 4))
+
+    def test_numbers_start_at_two(self):
+        self.assertEqual(core.next_instance_number([]), 2)
+        self.assertEqual(core.next_instance_number([2, 3]), 4)
+        self.assertEqual(core.next_instance_number([3]), 2)
+
+    def test_paste_new_label(self):
+        self.assertEqual(core.paste_new_label("Bracket", ["Bracket"]), "Bracket (1)")
+        self.assertEqual(
+            core.paste_new_label("Bracket (1)", ["Bracket", "Bracket (1)"]), "Bracket (2)"
+        )
+        self.assertEqual(core.paste_new_label("Bracket:2", ["Bracket"]), "Bracket (1)")
+
+
+class PickTests(unittest.TestCase):
+    def test_root_active_picks_the_top_component(self):
+        self.assertEqual(core.component_to_pick(["Comp2", "Comp1"], None), "Comp1")
+
+    def test_active_component_picks_the_one_below_it(self):
+        self.assertEqual(core.component_to_pick(["Comp2", "Comp1"], "Comp1"), "Comp2")
+
+    def test_a_body_of_the_active_component_picks_it(self):
+        self.assertEqual(core.component_to_pick(["Comp1"], "Comp1"), "Comp1")
+
+    def test_outside_the_active_component(self):
+        self.assertEqual(core.component_to_pick(["Comp3"], "Comp1"), "Comp3")
+
+    def test_root_body(self):
+        self.assertIsNone(core.component_to_pick([], None))
+
+
+class PivotTests(unittest.TestCase):
+    IDENTITY = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
+    TURN_Z_90 = ((0, -1, 0), (1, 0, 0), (0, 0, 1))
+
+    def test_no_turn_keeps_the_distances(self):
+        got = core.pivot_shift(self.IDENTITY, (5, 0, 0), (0, 0, 0), (10, 10, 0))
+        self.assertEqual(got, (5, 0, 0))
+
+    def test_turned_move_stays_where_it_is(self):
+        # x -> R(x - p) + p + d must equal R(x - q) + q + d' for every x
+        p, q, d = (1.0, 2.0, 0.0), (4.0, -1.0, 3.0), (5.0, 6.0, 7.0)
+        d2 = core.pivot_shift(self.TURN_Z_90, d, p, q)
+        r = self.TURN_Z_90
+
+        def moved(x, pivot, dist):
+            v = [x[i] - pivot[i] for i in range(3)]
+            rv = [sum(r[a][b] * v[b] for b in range(3)) for a in range(3)]
+            return [rv[i] + pivot[i] + dist[i] for i in range(3)]
+
+        for x in ((0, 0, 0), (3, 4, 5), (-2, 7, 1)):
+            for a, b in zip(moved(x, p, d), moved(x, q, d2)):
+                self.assertAlmostEqual(a, b)
+
+
+class HistoryTests(unittest.TestCase):
+    def test_rolled_back_and_suppressed_moves_do_not_count(self):
+        steps = [("M1", True, False), ("M2", True, True), ("M3", False, False)]
+        self.assertEqual(core.placement_steps_in_effect(steps), ["M1"])
+
+
 if __name__ == "__main__":
     unittest.main()

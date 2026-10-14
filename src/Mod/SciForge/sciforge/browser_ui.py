@@ -108,10 +108,13 @@ def _objects(doc):
     rows = []
     used_up = _used_up_bodies(doc)
     grounded = _grounded_names(doc)
+    marker_hidden = _marker_hidden(doc)
     for obj in doc.Objects:
         if obj.Name in used_up:
             continue
         try:
+            if marker_hidden and _in_hidden(obj, marker_hidden):
+                continue  # a component made after the history marker does not exist yet
             parent = obj.getParentGeoFeatureGroup()
             visible = obj.ViewObject.Visibility if obj.ViewObject is not None else None
             if visible is not None and getattr(obj, "Role", None) in core.ORIGIN_ROLES:
@@ -152,7 +155,65 @@ def _objects(doc):
         except Exception:
             continue
     _timeline_names(doc, rows)
+    _instance_names(doc, rows)
     return rows
+
+
+def _component_rename(obj, text):
+    """Renaming an occurrence renames the component (Fusion: all its occurrences take the
+    new name); the ":n" after the name is the occurrence number, not part of the name."""
+    from . import components_core
+
+    base, number = components_core.split_instance_label(text)
+    try:
+        from . import instances
+
+        if number is not None and (instances.is_instance(obj) or instances.has_instances(obj)):
+            text = base
+        if instances.is_instance(obj):
+            source = instances.source_of(obj)
+            if source is not None:
+                return source, text
+    except Exception:
+        pass
+    return obj, text
+
+
+def _marker_hidden(doc):
+    """Components the history marker hides (made after it): timeline_ops.hide_by_marker."""
+    return {
+        o.Name
+        for o in doc.Objects
+        if o.TypeId == "App::Part" and getattr(o, ops.ROLLED_HIDDEN, False)
+    }
+
+
+def _in_hidden(obj, hidden):
+    if obj.Name in hidden:
+        return True
+    try:
+        return any(c.Name in hidden for c in components.ancestors(obj))
+    except Exception:
+        return False
+
+
+def _instance_names(doc, rows):
+    """Fusion names every occurrence "<component>:<n>": once a component has instances
+    (Paste, a pattern of components) its own row reads "<name>:1"; the instances carry
+    their number in their own name."""
+    try:
+        from . import instances
+    except Exception:
+        return
+    for row in rows:
+        if row["type_id"] != "App::Part":
+            continue
+        obj = doc.getObject(row["name"])
+        try:
+            if obj is not None and not instances.is_instance(obj) and instances.has_instances(obj):
+                row["display"] = "%s:1" % obj.Label
+        except Exception:
+            continue
 
 
 def _history_command(doc):
@@ -316,6 +377,43 @@ def _joint_action(name, obj):
     from . import joints_ui
 
     getattr(joints_ui, name)(obj)
+
+
+def _follow_active(doc):
+    """Fusion's Active Component Visibility: what lies outside the active component is drawn
+    see-through (component_look.py), following the active component as it changes."""
+    try:
+        from . import component_look
+
+        component_look.update(doc)
+    except Exception as exc:
+        _remember("info", "component look: %s" % exc)
+
+
+def _can_paste(doc, new):
+    try:
+        from . import clipboard_ui
+
+        return clipboard_ui.has_components(doc) if new else clipboard_ui.has_anything(doc)
+    except Exception:
+        return False
+
+
+def _clipboard_action(name, node, obj, selected_nodes, tree):
+    """Copy / Paste / Paste New from the right-click menu (clipboard_ui does the work):
+    Copy takes the selected rows; Paste goes into the row's component (the design's row:
+    the root)."""
+    from . import clipboard_ui
+
+    if name == "copy":
+        picked = [tree._object(n) for n in selected_nodes if n["kind"] in ("body", "component")]
+        picked = [o for o in picked if o is not None] or ([obj] if obj is not None else [])
+        clipboard_ui.copy(picked)
+        return
+    into = obj if node["kind"] == "component" else None
+    if node["kind"] == "body" and obj is not None:
+        into = components.container_of(obj)
+    clipboard_ui.paste(into=into, new=name == "paste_new")
 
 
 def _later(fn, *args):
@@ -558,6 +656,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             if self._renaming is not None:
                 return  # do not rebuild under the user's typing
             tree = self.tree()
+            _follow_active(self._doc)
             sig = core.signature(tree)
             if sig != self._sig or force:
                 self._sig = sig
@@ -854,6 +953,12 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         """Make a component (None: the root) the active one: new work goes there."""
         if not commands.finish_open_dialog():  # a command keeps the component it started in
             return
+        source = components.editable(component) if component is not None else None
+        if source is not None and source is not component:
+            commands.tell(
+                "%s is an instance of %s: %s is activated, and what you change shows in "
+                "every instance." % (component.Label, source.Label, source.Label)
+            )
         components.set_active(component, self._doc)
         self._refresh_soon()
 
@@ -959,6 +1064,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                     _rename_mesh_body(self._doc, obj, text)
             else:
                 obj = self._object(node)
+                if obj is not None and node["kind"] == "component":
+                    obj, text = _component_rename(obj, text)
                 if obj is not None and text not in (obj.Label, node["label"]):
                     ops.rename(self._doc, obj.Name, text)
         except Exception as exc:
@@ -1167,6 +1274,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Animate Joint": lambda: _joint_action("animate", obj),
             "Suppress": lambda: self._toggle_suppress(obj),
             "Open Drawing": lambda: _open_drawing(obj),
+            "Copy": lambda: _clipboard_action("copy", node, obj, selected_nodes, self),
+            "Paste": lambda: _clipboard_action("paste", node, obj, selected_nodes, self),
+            "Paste New": lambda: _clipboard_action("paste_new", node, obj, selected_nodes, self),
         }
         isolated = _isolated_names(doc)
         if node["kind"] in ("body", "component") and isolated:
@@ -1200,6 +1310,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 text = "Unsuppress" if node.get("status") == "suppressed" else "Suppress"
             if entry in ("Activate Body", "Activate") and node["active"]:
                 continue
+            if entry in ("Paste", "Paste New") and not _can_paste(doc, entry == "Paste New"):
+                continue  # nothing copied (Paste New: no component copied)
             if entry == "Move to Component":
                 if self._move_menu(menu, node, obj):
                     added = True

@@ -4,6 +4,8 @@
 
 Options (dict, see DEFAULTS):
   body     the body to split
+  tools    the splitting tools (Fusion's Splitting Tool(s): several at once, one step), each
+           (object, sub-element) as below; ``tool`` is the first of them
   tool     the splitting tool, (object, sub-element):
              (origin plane or construction plane, "")   an endless plane
              (feature, "FaceN")                        a face of a body (this one or another)
@@ -22,6 +24,7 @@ by where they were when the split was made, so editing an earlier step keeps eac
 in its own body. Deleting the Split Body step removes the new bodies again (bodies_gui.Watch
 and delete.py), as in Fusion.
 """
+
 import FreeCAD as App
 import Part
 
@@ -33,7 +36,7 @@ SCIFORGE_TYPE = "SplitBody"
 META = "SciForgeSplit"
 PLANE_TYPES = ("App::Plane", "PartDesign::Plane", "Part::DatumPlane")
 
-DEFAULTS = {"body": None, "tool": None, "extend": True}
+DEFAULTS = {"body": None, "tool": None, "tools": None, "extend": True}
 
 
 class SplitError(ValueError):
@@ -47,6 +50,13 @@ class NeedsPick(SplitError):
 def with_defaults(options):
     merged = dict(DEFAULTS)
     merged.update(options or {})
+    tools = merged.get("tools")
+    if tools is None:  # one tool given the old way
+        tools = [merged["tool"]] if merged.get("tool") is not None else []
+    elif merged.get("tool") is not None and (not tools or tools[0] != merged["tool"]):
+        tools = [merged["tool"]] + list(tools[1:])  # "tool" changed: the first tool
+    merged["tools"] = [t for t in tools if t is not None]
+    merged["tool"] = merged["tools"][0] if merged["tools"] else None
     return merged
 
 
@@ -162,11 +172,13 @@ def _global_face(obj, sub):
 
 
 def split_shape(shape, tool):
-    """The solids `shape` falls into when split by `tool` (both in design coordinates)."""
+    """The solids `shape` falls into when split by `tool` (both in design coordinates; a list
+    of tools splits by all of them at once)."""
     import BOPTools.SplitAPI as split_api
 
+    tools = list(tool) if isinstance(tool, (list, tuple)) else [tool]
     try:
-        result = split_api.slice(shape, [tool], "Split")
+        result = split_api.slice(shape, tools, "Split")
     except Exception as exc:
         raise SplitError("The body cannot be split there: %s" % exc)
     return [s for s in result.Solids if s.Volume > 1e-9]
@@ -213,6 +225,8 @@ class SplitFeature:
             return False
 
         add("App::PropertyLinkSubGlobal", "Tool", "The splitting tool")
+        # Fusion's Splitting Tool(s): the tools after the first (components-2)
+        add("App::PropertyLinkSubListGlobal", "MoreTools", "More splitting tools")
         if add("App::PropertyBool", "Extend", "Extend Splitting Tool"):
             obj.Extend = True
         if add("App::PropertyBool", "Refine", "Merge faces that end up in one plane"):
@@ -230,15 +244,14 @@ class SplitFeature:
         base = obj.BaseFeature
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             raise SplitError("There is no solid before this step to split.")
-        link = obj.Tool
-        if not link or link[0] is None:
+        refs = feature_tools(obj)
+        if not refs:
             raise SplitError(
                 "Its splitting tool is gone (deleted?). Edit the Split Body and pick a tool."
             )
-        sub = (list(link[1]) or [""])[0]
         shape = bodies.global_shape(base)
-        tool = tool_shape((link[0], sub), bool(obj.Extend), shape)
-        pieces = split_shape(shape, tool)
+        tools = [tool_shape(ref, bool(obj.Extend), shape) for ref in refs]
+        pieces = split_shape(shape, tools)
         if len(pieces) < 2:
             raise SplitError(
                 "The splitting tool does not cut the body in two. Pick a tool that crosses the "
@@ -283,7 +296,11 @@ class SplitPiece:
         others = split.OtherPieces.Solids if not split.OtherPieces.isNull() else []
         if obj.Index - 1 >= len(others):
             return  # fewer pieces now: keeps its last shape (the dialog says so)
-        obj.Shape = others[obj.Index - 1].copy()
+        # The pieces are in design coordinates; the new body takes its piece in its own (a
+        # body in a moved component would otherwise be moved twice: components-2).
+        body = piece_body(obj)
+        piece = others[obj.Index - 1]
+        obj.Shape = bodies.to_local(piece, body) if body is not None else piece.copy()
 
     def dumps(self):
         return None
@@ -295,20 +312,37 @@ class SplitPiece:
     __setstate__ = loads
 
 
+def feature_tools(obj):
+    """[(object, sub)] of a Split Body step: its Tool, then MoreTools."""
+    refs = []
+    link = obj.Tool
+    if link and link[0] is not None:
+        refs.append((link[0], (list(link[1]) or [""])[0]))
+    for entry in getattr(obj, "MoreTools", []) or []:
+        other, subs = entry[0], entry[1]
+        if other is None:
+            continue
+        if isinstance(subs, str):
+            subs = [subs]
+        refs.append((other, (list(subs) or [""])[0]))
+    return refs
+
+
 # -- reading and building -----------------------------------------------------------------------
 def check(options):
-    body, tool = options["body"], options["tool"]
+    options = with_defaults(options)
+    body, tools = options["body"], options["tools"]
     if body is None:
         raise NeedsPick("Select the body to split.")
-    if tool is None:
+    if not tools:
         raise NeedsPick(
             "Select the splitting tool: a plane, a face, another body or a sketch curve."
         )
     if not bodies.has_solid(body):
         raise SplitError("%s has no solid to split." % body.Label)
-    obj, sub = tool
-    if bodies.is_body(obj) and obj is body:
-        raise SplitError("A body cannot split itself. Pick a plane, a face or another body.")
+    for obj, sub in tools:
+        if bodies.is_body(obj) and obj is body:
+            raise SplitError("A body cannot split itself. Pick a plane, a face or another body.")
 
 
 def tool_link(tool):
@@ -321,11 +355,12 @@ def tool_link(tool):
 
 def preview_pieces(options, feature=None):
     """The pieces the split makes now, in order (design coordinates)."""
+    options = with_defaults(options)
     body = options["body"]
     base = feature.BaseFeature if feature is not None else body.Tip
     shape = bodies.global_shape(base)
-    tool = tool_shape(tool_link(options["tool"]), bool(options["extend"]), shape)
-    pieces = split_shape(shape, tool)
+    tools = [tool_shape(tool_link(t), bool(options["extend"]), shape) for t in options["tools"]]
+    pieces = split_shape(shape, tools)
     if len(pieces) < 2:
         raise SplitError(
             "The splitting tool does not cut the body in two. Pick a tool that crosses the "
@@ -349,10 +384,14 @@ def build(options, feature=None, name="SplitBody"):
         feature = bodies.insert_after_tip(body, TYPE, name)
         SplitFeature(feature)
         _attach_view_provider(feature)
-    link = tool_link(options["tool"])
+    links = [tool_link(t) for t in options["tools"]]
+    link = links[0]
     current = feature.Tool
     if not current or current[0] is not link[0] or (list(current[1]) or [""])[0] != link[1]:
         feature.Tool = (link[0], [link[1]])
+    more = [(obj, sub) for obj, sub in links[1:]]
+    if feature_tools(feature)[1:] != more:
+        feature.MoreTools = [(obj, [sub]) for obj, sub in more]
     if bool(feature.Extend) != bool(options["extend"]):
         feature.Extend = bool(options["extend"])
     # Remembered in design coordinates: the pieces are matched in the same frame.
@@ -391,6 +430,12 @@ def _sync_bodies(feature, count):
         piece.Index = index
         bodies.save_meta(piece, META, {"source": source.Name})
         body = bodies.new_body(doc, like=source)
+        try:  # in the new body's component: FreeCAD refuses a base outside the body's scope
+            container = body.getParentGeoFeatureGroup()
+            if container is not None and hasattr(container, "addObject"):
+                container.addObject(piece)
+        except Exception:
+            pass
         body.BaseFeature = piece
         for obj in body.Group:
             if obj.TypeId == "PartDesign::FeatureBase":
@@ -437,19 +482,15 @@ def remove(feature):
 
 
 def read(feature):
-    link = feature.Tool
-    tool = None
-    if link and link[0] is not None:
-        obj, sub = link[0], (list(link[1]) or [""])[0]
-        source = bodies.body_of(feature)
+    source = bodies.body_of(feature)
+    tools = []
+    for obj, sub in feature_tools(feature):
         other = bodies.body_of(obj)
         if not sub and other is not None and other is not source and obj is other.Tip:
-            tool = (other, "")  # a whole body was picked
+            tools.append((other, ""))  # a whole body was picked
         else:
-            tool = (obj, sub)
-    return with_defaults(
-        {"body": bodies.body_of(feature), "tool": tool, "extend": bool(feature.Extend)}
-    )
+            tools.append((obj, sub))
+    return with_defaults({"body": source, "tools": tools, "extend": bool(feature.Extend)})
 
 
 def orphan_pieces(doc):

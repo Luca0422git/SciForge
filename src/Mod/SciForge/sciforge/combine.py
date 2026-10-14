@@ -7,6 +7,8 @@ Options (dict, see DEFAULTS):
   tools       the bodies that change it
   operation   join | cut | intersect
   new_body    the result goes into a new body; the target is then used up like the tools
+  new_component  Fusion's New Component: the new body goes into a new component (made in
+              the active component); implies new_body
   keep_tools  the tool bodies stay in the design (else they are used up: hidden while the
               Combine is part of the design, back when it is deleted, suppressed, undone or
               rolled back)
@@ -21,6 +23,7 @@ steps added to a kept tool body later do not change an earlier Combine (as in Fu
 FreeCAD's own PartDesign::Boolean was not used: it adopts the tool bodies as its children
 (they then move with the target body and drop out of the design's body list).
 """
+
 import FreeCAD as App
 
 from . import bodies
@@ -36,6 +39,7 @@ DEFAULTS = {
     "tools": [],
     "operation": "join",
     "new_body": False,
+    "new_component": False,
     "keep_tools": False,
 }
 
@@ -52,6 +56,8 @@ def with_defaults(options):
     merged = dict(DEFAULTS)
     merged.update(options or {})
     merged["tools"] = list(merged.get("tools") or [])
+    if merged.get("new_component"):
+        merged["new_body"] = True  # the result is a new body inside the new component
     return merged
 
 
@@ -247,6 +253,7 @@ def read(feature):
             "tools": tool_bodies(feature),
             "operation": feature.Operation.lower(),
             "new_body": bool(feature.NewBody),
+            "new_component": created_component(feature) is not None,
             "keep_tools": bool(feature.KeepTools),
             "frozen": frozen_count(feature),
             "frozen_target": has_frozen_target(feature),
@@ -311,6 +318,8 @@ def _structure_ok(feature, options):
         return False
     if bool(feature.NewBody) != bool(options["new_body"]):
         return False
+    if (created_component(feature) is not None) != bool(options.get("new_component")):
+        return False  # New Component switched: the result moves in or out of a component
     return target_body(feature) is options["target"]
 
 
@@ -360,7 +369,21 @@ def _set(obj, prop, value):
 def _create(options, name):
     target = options["target"]
     doc = target.Document
-    if options["new_body"]:
+    made_part = None
+    if options.get("new_component"):
+        from . import components
+
+        body = components.body_for_new(target, component=True)
+        made_body = body
+        made_part = components.container_of(body)
+        try:
+            body.ShapeMaterial = target.ShapeMaterial
+            from . import appearance
+
+            appearance.copy_body_appearance(target, body)
+        except Exception:
+            pass
+    elif options["new_body"]:
         body = bodies.new_body(doc, like=target)
         made_body = body
         try:  # the result is made of what the target was made of, and looks like it
@@ -376,7 +399,10 @@ def _create(options, name):
     obj = bodies.insert_after_tip(body, TYPE, name)
     CombineFeature(obj)
     if made_body is not None:
-        bodies.save_meta(obj, META, {"created_body": made_body.Name})
+        meta = {"created_body": made_body.Name}
+        if made_part is not None:
+            meta["created_component"] = made_part.Name
+        bodies.save_meta(obj, META, meta)
     _attach_view_provider(obj)
     return obj
 
@@ -402,12 +428,28 @@ def created_body(feature):
     return None
 
 
+def created_component(feature):
+    """The component a New Component Combine made (None otherwise)."""
+    meta = bodies.load_meta(feature, META)
+    name = meta.get("created_component")
+    part = feature.Document.getObject(name) if name else None
+    body = created_body(feature)
+    if part is not None and body is not None and body in list(part.Group):
+        return part
+    return None
+
+
 def remove(feature):
     """Take a Combine out again (a cancelled preview, or a rebuild with a new structure)."""
     if not bodies.alive(feature):
         return
+    part = created_component(feature)
     made = created_body(feature)
     if made is not None:
         bodies.remove_body(made)
+        if part is not None:
+            from . import components
+
+            components.drop_if_empty(part)
         return
     bodies.remove_step(feature)

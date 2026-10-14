@@ -21,6 +21,7 @@ manipulator is drawn over the part and grabbed even where the part is in front o
 watched with a Qt timer (FreeCAD's own mouse callbacks only record the mouse). The document
 side is move.py.
 """
+
 import math
 import time
 
@@ -39,6 +40,11 @@ MOVE_TYPES = [
     ("Point to Point", "point_to_point"),
     ("Point to Position", "point_to_position"),
 ]
+# Fusion's Move Object: bodies here, components in component_move_ui.ComponentMovePanel
+# (the dialog switches between the two when the choice changes).
+MOVE_OBJECTS = [("Bodies", "bodies"), ("Components", "components")]
+# The values that stay when Move Object changes (Fusion keeps the move type and values).
+CARRIED = ("move_type",) + move.NUMBERS
 AXES = (App.Vector(1, 0, 0), App.Vector(0, 1, 0), App.Vector(0, 0, 1))
 COLORS = ((0.90, 0.30, 0.30), (0.35, 0.80, 0.35), (0.30, 0.55, 1.0))
 HOVER = (1.0, 0.85, 0.35)
@@ -379,20 +385,25 @@ class MovePanel(BodyPanel):
     title = "Move/Copy"
     icon = "move"
     needs_pick = (move.NeedsPick,)
+    object_type = "bodies"  # Fusion's Move Object
 
-    def __init__(self, doc, feature=None):
+    def __init__(self, doc, feature=None, carry=None, picks=None):
         self.options = move.with_defaults({})
         self.steps = []
         if feature is not None:
             try:
-                self.options, self.steps = move.read(feature)
+                self.options, self.steps = self.read_feature(feature)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
+        if carry:
+            self.options.update(carry)  # the move type and values kept from Move Object
         self.triad = None
         self.turn_handle = None
         self.axis_picker = None
         self._overlay_time = 0.0
         self._drag_start = None
+        self.setting_pivot = False  # Set Pivot: the manipulator moves, the objects stay
+        self._pivot_drag_start = None
         super().__init__(doc, "Move" if feature is None else "Edit Move", feature is not None)
         self.target = self.steps[0] if self.steps else None
         self._show_options()
@@ -401,20 +412,35 @@ class MovePanel(BodyPanel):
             self._make_handles()
         else:
             self.activate("objects")
-            self.start_from_selection()
+            if picks:
+                self.take_picks(picks)  # Paste: the pasted objects are picked
+            else:
+                self.start_from_selection()
             self.dirty = True
             self._timer.stop()
             self._recompute()
 
+    def read_feature(self, feature):
+        return move.read(feature)
+
+    def take_picks(self, objects):
+        for obj in objects:
+            try:
+                self.picked(obj, "", None)
+            except Exception as exc:
+                warn("%s pick: %s" % (self.title, exc))
+
     # -- form ----------------------------------------------------------------------------------------
     def build_form(self):
         self.move_object, _ = self.combo(
-            "Move Object", [("Bodies", "bodies")], "bodies", lambda: None
+            "Move Object", MOVE_OBJECTS, self.object_type, self._object_changed
         )
+        self.move_object.setEnabled(not self.editing)  # a step keeps what it moves
         self.selection_box("objects", "Objects")
         self.move_type, _ = self.combo(
             "Move Type", MOVE_TYPES, self.options["move_type"], self._type_changed
         )
+        self._pivot_form()
         self.distance_fields = []
         self.distance_captions = []
         for key, label in (("dx", "X Distance"), ("dy", "Y Distance"), ("dz", "Z Distance")):
@@ -477,6 +503,11 @@ class MovePanel(BodyPanel):
 
     def _update_visibility(self):
         kind = self.options["move_type"]
+        self.show_row(self.pivot_row, self.pivot_caption, kind == "free")
+        pivoting = kind == "free" and self.setting_pivot
+        self.pivot_done.setVisible(pivoting)
+        for field, caption in zip(self.pivot_fields, self.pivot_captions):
+            self.show_row(field.widget, caption, pivoting)
         for field, caption in zip(self.distance_fields, self.distance_captions):
             self.show_row(field.widget, caption, kind in ("free", "translate"))
         for field, caption in zip(self.angle_fields, self.angle_captions):
@@ -516,16 +547,164 @@ class MovePanel(BodyPanel):
 
     def _type_changed(self):
         self.options["move_type"] = self.move_type.currentData()
+        if self.options["move_type"] != "free":
+            self._finish_pivot()
         self._update_visibility()
         # With no body picked yet the Objects box keeps the clicks: the first click must pick
         # the body to move, not be taken as an axis or a point (then nothing could move).
-        if not self.options["bodies"] or not self._next_box():
+        if not self._moving() or not self._next_box():
             if self.active not in self._boxes():
                 self.activate("objects")
         else:
             self.activate(self._next_box())
         self._make_handles()
         self.changed()
+
+    def _object_changed(self):
+        """Move Object changed (Bodies / Components): Fusion clears the selection and keeps
+        the move type and values; SciForge opens the dialog of the other kind with them."""
+        wanted = self.move_object.currentData()
+        if wanted == self.object_type or self._closed:
+            return
+        carry = {key: self.options[key] for key in CARRIED}
+        name = self.doc.Name
+        QtCore.QTimer.singleShot(0, lambda: switch_object_type(self, name, wanted, carry))
+
+    # -- Set Pivot ---------------------------------------------------------------------------------
+    def _pivot_form(self):
+        """Fusion's Set Pivot (Free Move): press it, then click a point of the model or drag
+        the manipulator's arrows (the objects stay put), or type where the pivot goes;
+        Done (the check) keeps it: turns are about it from then on."""
+        self.pivot_row = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(self.pivot_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.set_pivot = QtWidgets.QPushButton("Set Pivot")
+        self.set_pivot.setCheckable(True)
+        self.set_pivot.setToolTip(
+            "Move the manipulator without moving the objects: click a corner, an edge or a "
+            "round edge's centre, or drag the arrows; then Done"
+        )
+        self.set_pivot.toggled.connect(lambda on: self._guarded(lambda: self._pivot_toggled(on)))
+        self.pivot_done = QtWidgets.QPushButton("✓ Done")
+        self.pivot_done.setToolTip("Keep this pivot")
+        self.pivot_done.clicked.connect(lambda *_: self._guarded(self._finish_pivot))
+        row.addWidget(self.set_pivot)
+        row.addWidget(self.pivot_done)
+        row.addStretch(1)
+        self.pivot_caption = QtWidgets.QLabel("Pivot")
+        self.layout.addRow(self.pivot_caption, self.pivot_row)
+        self.pivot_fields = []
+        self.pivot_captions = []
+        for index, label in enumerate(("Pivot X", "Pivot Y", "Pivot Z")):
+            field = DistanceField(0.0, on_change=lambda v, i=index: self._pivot_typed(i, v))
+            caption = QtWidgets.QLabel(label)
+            self.layout.addRow(caption, field.widget)
+            self.pivot_fields.append(field)
+            self.pivot_captions.append(caption)
+
+    def _pivot_toggled(self, on):
+        if self._quiet:
+            return
+        if on:
+            self._start_pivot()
+        else:
+            self._finish_pivot()
+
+    def _start_pivot(self):
+        if not self._moving() or self.options["move_type"] != "free":
+            self._quiet = True
+            self.set_pivot.setChecked(False)
+            self._quiet = False
+            self.message.setText("Pick what to move first, then set the pivot.")
+            return
+        self.setting_pivot = True
+        self.message.setText("")
+        self.info.setText(
+            "Set Pivot: click a point of the model (a corner, an edge, a round edge's centre) "
+            "or drag the arrows, then Done."
+        )
+        self._show_pivot_values()
+        self._update_visibility()
+        self._make_handles()
+
+    def _finish_pivot(self):
+        if not self.setting_pivot:
+            return
+        self.setting_pivot = False
+        self._pivot_drag_start = None
+        self._quiet = True
+        try:
+            self.set_pivot.setChecked(False)
+        finally:
+            self._quiet = False
+        self.info.setText("")
+        self._update_visibility()
+        self._make_handles()
+
+    def _moving(self):
+        """What the dialog moves (bodies here; components in the components dialog)."""
+        return self.options["bodies"]
+
+    def _show_pivot_values(self):
+        center = self._triad_center()
+        self._quiet = True
+        try:
+            for field, value in zip(self.pivot_fields, (center.x, center.y, center.z)):
+                field.set_value(round(value, 9) + 0.0)
+        finally:
+            self._quiet = False
+
+    def _pivot_typed(self, index, value):
+        if self._quiet or self._closed or not self.setting_pivot:
+            return
+        target = self._triad_center()
+        coords = [target.x, target.y, target.z]
+        coords[index] = float(value)
+        self._guarded(lambda: self._set_pivot_at(App.Vector(*coords)))
+
+    def _set_pivot_at(self, point):
+        """Put the manipulator at `point` (design coordinates, where it is shown) without
+        moving anything: the pivot becomes the point it was before the move, and the
+        distances change so the result stays the same (components_core.pivot_shift)."""
+        from . import components_core
+
+        place = move.transform(self.options)
+        old = self._pivot()
+        new = place.inverse().multVec(App.Vector(point))
+        matrix = place.Rotation.toMatrix()
+        rows = (
+            (matrix.A11, matrix.A12, matrix.A13),
+            (matrix.A21, matrix.A22, matrix.A23),
+            (matrix.A31, matrix.A32, matrix.A33),
+        )
+        distances = (self.options["dx"], self.options["dy"], self.options["dz"])
+        shifted = components_core.pivot_shift(rows, distances, tuple(old), tuple(new))
+        self.options["pivot"] = [round(c, 9) + 0.0 for c in new]
+        self._pivot_user = True
+        self._quiet = True
+        try:
+            for field, key, value in zip(self.distance_fields, ("dx", "dy", "dz"), shifted):
+                self.options[key] = round(value, 9) + 0.0
+                field.set_value(self.options[key])
+        finally:
+            self._quiet = False
+        if self.triad is not None:
+            self.triad.set_center(self._triad_center())
+        self._show_pivot_values()
+        self.changed()
+
+    def _pivot_picked(self, obj, short, point):
+        """A click while setting the pivot: the corner, edge middle or centre under it."""
+        found = _snap(obj, short, point)
+        if found is None:
+            found = move.point_of(obj, short)
+        if found is None and point is not None:
+            found = App.Vector(point)
+        if found is None:
+            self.message.setText("Click a corner, an edge or a face for the pivot.")
+            return
+        self.message.setText("")
+        self._set_pivot_at(found)
 
     def _next_box(self):
         """The box the move type still waits for once bodies are picked, or None."""
@@ -555,6 +734,7 @@ class MovePanel(BodyPanel):
 
     def cleared(self, name):
         if name == "objects":
+            self._finish_pivot()
             self.options["bodies"] = []
         elif name == "axis":
             self.options["axis_point"] = self.options["axis_dir"] = None
@@ -571,6 +751,9 @@ class MovePanel(BodyPanel):
     # -- clicks ----------------------------------------------------------------------------------------
     def picked(self, obj, short, point):
         if self._handles_busy() or time.time() - self._overlay_time < OVERLAY_CLICK_S:
+            return
+        if self.setting_pivot:
+            self._pivot_picked(obj, short, point)
             return
         if self.active == "objects":
             body = bodies.body_of(obj)
@@ -664,9 +847,13 @@ class MovePanel(BodyPanel):
         self._make_handles()
         self.changed()
 
+    def _axis_frame(self):
+        """Whose origin axes are drawn while the Axis box waits."""
+        return (self.options["bodies"] or [None])[0] or bodies.find_body(self.doc)
+
     def _update_axis_picker(self):
         wants = self.active == "axis" and not self._closed
-        body = (self.options["bodies"] or [None])[0] or bodies.find_body(self.doc)
+        body = self._axis_frame()
         if wants and self.axis_picker is None and body is not None:
             try:
                 from .pattern_ui import AxisPicker
@@ -717,6 +904,8 @@ class MovePanel(BodyPanel):
         return max(8.0, 0.45 * max(box.XLength, box.YLength, box.ZLength))
 
     def _new_pivot(self):
+        if getattr(self, "_pivot_user", False) and self.options["pivot"] is not None:
+            return  # a pivot set with Set Pivot stays
         shapes = self._unmoved()
         if not shapes:
             return
@@ -738,7 +927,7 @@ class MovePanel(BodyPanel):
 
     def _make_handles(self):
         self.remove_handles(keep_picker=True)
-        if self._closed or not self.options["bodies"]:
+        if self._closed or not self._moving():
             return
         kind = self.options["move_type"]
         try:
@@ -747,7 +936,7 @@ class MovePanel(BodyPanel):
                     self.view,
                     self._triad_center(),
                     self._size(),
-                    turns=kind == "free",
+                    turns=kind == "free" and not self.setting_pivot,
                     on_drag=self._dragged,
                     on_release=self._released,
                 )
@@ -796,6 +985,13 @@ class MovePanel(BodyPanel):
         if self._closed:
             return
         self.busy()
+        if self.setting_pivot:
+            if kind != "move":
+                return
+            if self._pivot_drag_start is None:
+                self._pivot_drag_start = App.Vector(self._triad_center())
+            self._set_pivot_at(self._pivot_drag_start + AXES[index] * value)
+            return
         keys = ("dx", "dy", "dz") if kind == "move" else ("rx", "ry", "rz")
         if self._drag_start is None:
             self._drag_start = dict(
@@ -819,6 +1015,7 @@ class MovePanel(BodyPanel):
 
     def _released(self):
         self._drag_start = None
+        self._pivot_drag_start = None
         self.busy()
         self.changed()
 
@@ -864,6 +1061,14 @@ class MovePanel(BodyPanel):
 
     def preview_steps(self):
         return [s for s in self.steps if bodies.alive(s)]
+
+    def show_status(self):
+        super().show_status()
+        if self.setting_pivot and not self.waiting:
+            self.info.setText(
+                "Set Pivot: click a point of the model (a corner, an edge, a round edge's "
+                "centre) or drag the arrows, then Done."
+            )
 
     def can_finish(self):
         if not self.options["bodies"]:
@@ -953,9 +1158,53 @@ class MoveCommand:
             if _in_sketch():
                 Gui.runCommand("SciForge_SketchMove")  # M in a sketch moves sketch curves
                 return
-            _start(MovePanel)
+            _start(panel_for_selection())
         except Exception as exc:
             warn("Move/Copy could not start: %s" % exc)
+
+
+def panel_for_selection():
+    """Fusion's Move takes what is selected: a component selected first (a browser row)
+    opens it with Move Object Components."""
+    try:
+        from . import components
+        from .bodies_panel import preselection
+
+        if any(components.is_component(obj) and not short for obj, short, _p in preselection()):
+            from .component_move_ui import ComponentMovePanel
+
+            return ComponentMovePanel
+    except Exception as exc:
+        warn("Move/Copy: %s" % exc)
+    return MovePanel
+
+
+def switch_object_type(panel, doc_name, wanted, carry):
+    """Move Object changed: this dialog closes (nothing done yet is kept) and the dialog
+    for the other kind of object opens with the move type and values."""
+    try:
+        if panel._closed:
+            return
+        panel.reject()
+    except Exception as exc:
+        warn("Move: %s" % exc)
+        return
+
+    def reopen():
+        try:
+            if doc_name not in App.listDocuments():
+                return
+            from .bodies_panel import _open
+
+            if wanted == "components":
+                from .component_move_ui import ComponentMovePanel as panel_class
+            else:
+                panel_class = MovePanel
+            _open(panel_class, App.getDocument(doc_name), carry=carry)
+        except Exception as exc:
+            warn("Move could not switch to %s: %s" % (wanted, exc))
+
+    QtCore.QTimer.singleShot(0, reopen)
 
 
 def _in_sketch():

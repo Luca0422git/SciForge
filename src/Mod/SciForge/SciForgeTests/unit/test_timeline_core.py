@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The design timeline's logic (sciforge/timeline_core.py). Runs without FreeCAD."""
+
 import os
 import sys
 import unittest
@@ -468,6 +469,49 @@ class GroupTests(unittest.TestCase):
         plan = core.plan_move(tl, "Fillet", 2)  # between Pad and Sketch001
         self.assertTrue(plan.ok, plan.reason)
         self.assertEqual(core.groups_after_move(tl, plan), {"Fillet": "g1"})
+
+
+class ComponentStepTests(unittest.TestCase):
+    """Steps outside the bodies: a component, a captured move of one (components-2)."""
+
+    def rows(self):
+        return one_body() + [
+            feat("Comp", "App::Part", 2.5, body=None, rolls=True, own_label=True),
+            feat("Move", "SciForge::ComponentMove", 6, body=None, rolls=True),
+            feat("Joint", "SciForge::Joint", 7, body=None),
+        ]
+
+    def test_component_move_is_a_move_step(self):
+        self.assertEqual(core.classify("SciForge::ComponentMove"), "component_move")
+        self.assertEqual(core.title_base("SciForge::ComponentMove", "component_move"), "Move")
+        self.assertFalse(core.is_solid("component_move"))
+
+    def test_root_steps_stand_by_their_key(self):
+        rows = self.rows()
+        rows.insert(0, feat("Later", "App::Part", 4.5, body=None, rolls=True))
+        tl = core.build(rows, {"Body": "Fillet"})
+        names = tl.names()
+        self.assertLess(names.index("Comp"), names.index("Sketch001"))
+        self.assertLess(names.index("Pad001"), names.index("Later"))
+        self.assertLess(names.index("Later"), names.index("Fillet"))
+
+    def test_rolling_back_rolls_components_and_their_moves(self):
+        tl = core.build(self.rows(), {"Body": "Pad"})  # marker after Pad
+        state = {i.name: i.state for i in tl.items}
+        self.assertEqual(state["Comp"], "done")  # made before the marker
+        self.assertEqual(state["Move"], "rolled_back")
+        self.assertEqual(state["Joint"], "done")  # other root steps never roll back
+
+    def test_at_the_end_everything_is_done(self):
+        tl = core.build(self.rows(), {"Body": "Fillet"})
+        self.assertTrue(all(i.state == "done" for i in tl.items))
+
+    def test_marker_before_a_component_step_at_the_end(self):
+        rows = self.rows()
+        tl = core.build(rows, {"Body": "Fillet"}, marker_before="Move")
+        state = {i.name: i.state for i in tl.items}
+        self.assertEqual(state["Move"], "rolled_back")
+        self.assertEqual(state["Fillet"], "done")
 
 
 if __name__ == "__main__":

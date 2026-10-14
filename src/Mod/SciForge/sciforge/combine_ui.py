@@ -10,6 +10,7 @@ through, so they can be clicked again. OK / Enter keeps it (one undo step), Canc
 throws it away. Double-click the Combine in the timeline to change it. The document side
 is combine.py.
 """
+
 import FreeCAD as App
 
 from . import bodies, bodies_gui, combine, ui_icon_path, warn
@@ -61,6 +62,14 @@ class CombinePanel(BodyPanel):
             self._typed,
             "Put the result in a new body (the target body is used up like the tools)",
         )
+        self.new_component, _ = self.check_box(
+            "New Component",
+            self.options.get("new_component", False),
+            self._typed,
+            "Put the result in a new component (a new body inside it; the target body is used "
+            "up like the tools)",
+        )
+        self.new_body.setEnabled(not self.options.get("new_component"))
         self.keep_tools, _ = self.check_box(
             "Keep Tools",
             self.options["keep_tools"],
@@ -70,7 +79,10 @@ class CombinePanel(BodyPanel):
 
     def _typed(self):
         self.options["operation"] = self.operation.currentData()
-        self.options["new_body"] = self.new_body.isChecked()
+        self.options["new_component"] = self.new_component.isChecked()
+        # New Component puts the result in a new body too (inside the new component)
+        self.options["new_body"] = self.new_body.isChecked() or self.options["new_component"]
+        self.new_body.setEnabled(not self.options["new_component"])
         self.options["keep_tools"] = self.keep_tools.isChecked()
         self.changed()
 
