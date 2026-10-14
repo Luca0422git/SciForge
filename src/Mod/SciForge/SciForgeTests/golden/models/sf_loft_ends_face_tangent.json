@@ -1,0 +1,76 @@
+{
+  "id": "sf_loft_ends_face_tangent",
+  "title": "Loft from a block's top face (Tangent G1) to a square 20 above: it carries the walls on",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "end-conditions",
+    "face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -10,
+            -10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            -5,
+            5,
+            5
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "face": {
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          }
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "start_condition": "tangent"
+    }
+  ],
+  "expect": {
+    "volume": 9471.42857142857,
+    "solids": 1,
+    "valid": true,
+    "source": "analytic",
+    "note": "The block's walls are upright, so the loft leaves the top face straight up (derivative 20) and ends free (no bend at the square): z = 20 v, L = 20 - 10 (1.5 v^2 - 0.5 v^3); 4000 + 20 integral L^2 dv."
+  }
+}

@@ -192,6 +192,9 @@ def rails_box():
     h.check("clicked rail 1", h.click_edge(V(8, 0, 22)))
 
 
+rails_box.wait_ms = 2500  # fitting sections to the rail takes a moment (under load > 1 s)
+
+
 def one_rail():
     p = panel()
     h.check("one rail picked", len(p.rails) == 1, p.rails)

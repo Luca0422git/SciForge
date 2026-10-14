@@ -10,7 +10,8 @@ builder.py is imported.
       clockwise from a0 to a1 (degrees); a polyline stays open.
 
   {"op": "sf_sweep", "id": "w1", "profile": "s1" | "regions": [[x, y]] | "face": selector,
-   "path": <curves>, "rail": <curves>, "type": "single" | "rail", "distance": 1,
+   "path": <curves>, "rail": <curves>, "type": "single" | "rail" | "surface",
+   "surface": {"faces": selector} (Path + Guide Surface), "distance": 1,
    "distance2": 1, "taper": 0, "twist": 0, "orientation": "perpendicular" | "parallel",
    "scaling": "scale" | "stretch" | "none", "operation": "auto" | join | cut | intersect |
    new_body}
@@ -170,6 +171,10 @@ def op_sf_sweep(self, step):
     profiles = profiles_of(self, step, where)
     path = curves_of(self, step["path"], where)
     rail = curves_of(self, step["rail"], where) if "rail" in step else []
+    if "surface" in step:  # Path + Guide Surface: faces of the part
+        tip = self._tip()
+        names = selectors.select(tip.Shape, step["surface"]["faces"], "faces")
+        rail = [(tip, n) for n in names]
     options = {k: step[k] for k in SWEEP_KEYS if k in step}
     if options.get("operation", "auto") == "auto":
         tip = self.body.Tip
@@ -228,7 +233,14 @@ def _loft_profile(builder, spec, where):
     return profiles_of(builder, spec, where)[0]
 
 
-LOFT_KEYS = ("guide", "closed", "operation")
+LOFT_KEYS = ("guide", "closed", "operation") + (
+    "start_condition",
+    "start_weight",
+    "start_angle",
+    "end_condition",
+    "end_weight",
+    "end_angle",
+)  # Fusion's end conditions of the first / last profile (sciforge/loft_ends.py)
 
 
 def op_sf_loft(self, step):
@@ -293,6 +305,28 @@ def op_sf_rib_edit(self, step):
     return _edit(self, step, "sf_rib", rib, (rib.RibError, curves.CurveError))
 
 
+def op_expect_radius(self, step):
+    """The step's body stays within `max` (and beyond `min`) of the Z axis: a profile swept
+    along a curve on a cylinder with Path + Guide Surface keeps hugging it."""
+    from sciforge import bodies
+
+    obj = self.objects.get(step["step"])
+    body = bodies.body_of(obj) if obj is not None else None
+    if body is None:
+        raise BuildError("expect_radius: %r is not in a body" % step["step"])
+    points = []
+    for face in body.Shape.Faces:
+        points += [v.Point for v in face.Vertexes]
+        points += face.tessellate(0.1)[0]
+    radii = [(p.x * p.x + p.y * p.y) ** 0.5 for p in points]
+    if max(radii) > step["max"] or min(radii) < step.get("min", 0.0):
+        raise BuildError(
+            "expect_radius: %s reaches %.4f .. %.4f from the Z axis, expected %s .. %s"
+            % (body.Label, min(radii), max(radii), step.get("min", 0.0), step["max"])
+        )
+
+
+Builder.op_expect_radius = op_expect_radius
 Builder.op_sf_curves = op_sf_curves
 Builder.op_sf_sweep = op_sf_sweep
 Builder.op_sf_sweep_edit = op_sf_sweep_edit

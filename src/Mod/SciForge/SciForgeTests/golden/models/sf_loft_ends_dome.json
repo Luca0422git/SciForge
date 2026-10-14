@@ -1,0 +1,68 @@
+{
+  "id": "sf_loft_ends_dome",
+  "title": "Loft square 20 to a point 10 up: Direction at the square, Point Tangent at the point (a dome)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "end-conditions",
+    "point"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -10,
+            -10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "point": [
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "point": {
+            "sketch": "p1",
+            "at": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "start_condition": "direction",
+      "end_condition": "point_tangent"
+    }
+  ],
+  "expect": {
+    "volume": 2037.3362877788854,
+    "solids": 1,
+    "valid": true,
+    "source": "analytic",
+    "note": "Each side line: from a square corner Q straight up (derivative 10 = 1 x 10), to the point arriving flat with derivative -(10 / (10 sqrt 2)) (Q - centre) (the corner's reach is 10 sqrt 2). The square at v has side 20 s(v), s = h00 - h11 / sqrt 2, at height z = 10 (v + v^2 - v^3) (Hermite h00 = 2v^3 - 3v^2 + 1, h11 = v^3 - v^2); V = integral 400 s^2 z' dv = 12800/7 + 3100 sqrt(2)/21."
+  }
+}

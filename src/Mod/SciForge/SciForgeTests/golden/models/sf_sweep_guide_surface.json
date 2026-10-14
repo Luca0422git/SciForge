@@ -1,0 +1,116 @@
+{
+  "id": "sf_sweep_guide_surface",
+  "title": "Sweep Path + Guide Surface: a thin 6 x 1 strip along the slanted ellipse edge of a cut cylinder, the cylinder's side as the guide surface: the strip keeps hugging the cylinder",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "guide-surface"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 60
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              -30,
+              15
+            ],
+            [
+              30,
+              45
+            ],
+            [
+              30,
+              70
+            ],
+            [
+              -30,
+              70
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "distance": 60,
+      "direction": "symmetric",
+      "operation": "cut",
+      "comment": "the top cut along z = 30 + x / 2: its edge on the cylinder is an ellipse"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            19.5,
+            37,
+            20.5,
+            43
+          ]
+        }
+      ],
+      "comment": "the profile: 1 across the cylinder's side, 6 along it, where the ellipse passes (20, 0, 40)"
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s3",
+      "path": {
+        "edge": {
+          "type": "ellipse",
+          "count": 1
+        }
+      },
+      "type": "surface",
+      "surface": {
+        "faces": {
+          "type": "cylinder",
+          "count": 1
+        }
+      },
+      "operation": "new_body"
+    },
+    {
+      "op": "expect_radius",
+      "step": "w1",
+      "max": 20.6,
+      "min": 19.45,
+      "comment": "the strip stays on the cylinder's side (Single Path, Perpendicular, turns it out to 17.3 .. 22.7)"
+    }
+  ],
+  "expect": {
+    "volume": 799.1000665878644,
+    "solids": 1,
+    "rel_tol": 0.001,
+    "source": "analytic",
+    "note": "The profile stays square to the path with its centre on it, so V = area x path length (Pappus): 6 x the ellipse's perimeter, semi-axes 20 sqrt(1.25) and 20: 6 x 133.1833. The guide surface only turns the profile in its own plane (it does not change the volume); OpenCASCADE's pipe gives 0.06 % less."
+  }
+}

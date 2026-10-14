@@ -12,7 +12,13 @@ Rails and the centerline are curve references (sketch or part edges, see curves.
 Options (dict, see DEFAULTS):
   guide      rails | centerline    Fusion's Guide Type
   closed     the last profile lofts back to the first (a ring of profiles)
-  operation  join | cut | intersect | new_body
+  operation  join | cut | intersect | new_body | new_component
+  start_condition, end_condition    how the loft leaves the first / meets the last profile:
+             free (Fusion's Connected / Sharp) | direction (a sketch profile) | tangent |
+             curvature (a face of a body) | point_tangent (a point: a dome); see
+             loft_ends.py. Not with rails, a centerline or Closed.
+  start_weight, end_weight          Takeoff / Tangency Weight (default 1)
+  start_angle, end_angle            Takeoff Angle in degrees (Direction, default 0)
 
 Fusion's Tangent Edges Merge is not built: the loft keeps one side face per profile curve
 (Fusion's "Keep"). Merging them means one smooth B-spline side, and OpenCASCADE's volume of
@@ -32,11 +38,23 @@ import json
 
 import FreeCAD as App
 
-from . import curves, extrude
+from . import curves, extrude, loft_ends
 
 GUIDES = ("rails", "centerline")
 OPERATIONS = ("join", "cut", "intersect", "new_body", "new_component")
-DEFAULTS = {"operation": "join", "guide": "rails", "closed": False, "chain": True}
+DEFAULTS = {
+    "operation": "join",
+    "guide": "rails",
+    "closed": False,
+    "chain": True,
+    "start_condition": "free",
+    "start_weight": 1.0,
+    "start_angle": 0.0,
+    "end_condition": "free",
+    "end_weight": 1.0,
+    "end_angle": 0.0,
+}
+END_KEYS = tuple(k for k in DEFAULTS if k.startswith(("start_", "end_")))
 
 META = "SciForgeLoft"
 FP_TYPE = "PartDesign::FeaturePython"
@@ -62,6 +80,14 @@ def options_with_defaults(options):
         raise LoftError("unknown operation %r" % merged["operation"])
     for name in ("closed", "chain"):
         merged[name] = bool(merged[name])
+    for end in ("start", "end"):
+        if merged[end + "_condition"] not in loft_ends.core.CONDITIONS:
+            raise LoftError("unknown end condition %r" % merged[end + "_condition"])
+        for name in ("_weight", "_angle"):
+            try:
+                merged[end + name] = float(merged[end + name])
+            except (TypeError, ValueError):
+                raise LoftError("the %s %s must be a number" % (end, name[1:]))
     return merged
 
 
@@ -196,7 +222,9 @@ def _solid(shape):
         solid = shape.Solids[0]
     else:
         try:
-            solid = Part.Solid(Part.Shell(shape.Faces))
+            # makeShell / makeSolid: FreeCAD 1.1's Part.Solid() constructor lets its error
+            # pass every except clause.
+            solid = Part.makeSolid(Part.makeShell(shape.Faces))
         except Exception:
             raise LoftError("The loft does not close into a solid. Check the profiles.")
     if solid.Volume < 0:
@@ -355,6 +383,16 @@ def tool_shape(profiles, rail_refs, centerline_refs, options):
     options = options_with_defaults(options)
     sections = sections_of(profiles)
     guide = options["guide"]
+    ends = loft_ends.active(options)
+    if ends and (
+        options["closed"]
+        or (guide == "centerline" and curves.normalize(centerline_refs))
+        or (guide == "rails" and curves.normalize(rail_refs))
+    ):
+        raise LoftError(
+            "End conditions work on an open loft without rails or a centerline. Set them to "
+            "Connected, or take the rails / centerline / Closed away."
+        )
     if guide == "centerline" and curves.normalize(centerline_refs):
         if options["closed"]:
             raise LoftError("A closed loft cannot follow a centerline. Clear Closed or the line.")
@@ -372,6 +410,13 @@ def tool_shape(profiles, rail_refs, centerline_refs, options):
     if options["closed"] and len(sections) < 3:
         raise LoftError("A closed loft needs at least three profiles.")
     count = len(sections[[s.point is None for s in sections].index(True)].wires)
+    if ends:
+        try:
+            loft_ends.check(sections, options)
+            solids = [loft_ends.thru(sections, k, options) for k in range(count)]
+        except loft_ends.EndError as exc:
+            raise LoftError(str(exc))
+        return _holes(solids)
     solids = [_thru([_ends(s, k) for s in sections], options["closed"]) for k in range(count)]
     return _holes(solids)
 
@@ -482,6 +527,12 @@ class LoftFeature:
         add("App::PropertyBool", "Closed", "Loft the last profile back to the first")
         if add("App::PropertyBool", "Refine", "Merge coplanar faces, like Fusion"):
             obj.Refine = True
+        for end, what in (("Start", "leaves the first"), ("End", "meets the last")):
+            if add("App::PropertyEnumeration", end + "Condition", "How the loft %s profile" % what):
+                setattr(obj, end + "Condition", list(loft_ends.core.CONDITIONS))
+            if add("App::PropertyFloat", end + "Weight", "Takeoff / Tangency Weight"):
+                setattr(obj, end + "Weight", 1.0)
+            add("App::PropertyAngle", end + "Angle", "Takeoff Angle (Direction)")
         if "SciForgeType" not in obj.PropertiesList:
             obj.addProperty("App::PropertyString", "SciForgeType", "Base", "", 4)
             obj.SciForgeType = "Loft"
@@ -577,11 +628,18 @@ def ordered_profiles(obj):
 
 
 def fp_options(obj):
-    return {
+    options = {
         "guide": obj.GuideType.lower(),
         "operation": obj.Operation.lower(),
         "closed": bool(obj.Closed),
     }
+    for end in ("start", "end"):
+        cap = end.capitalize()
+        if hasattr(obj, cap + "Condition"):
+            options[end + "_condition"] = getattr(obj, cap + "Condition")
+            options[end + "_weight"] = float(getattr(obj, cap + "Weight"))
+            options[end + "_angle"] = float(getattr(obj, cap + "Angle").Value)
+    return options
 
 
 def _attach_view_provider(obj):
@@ -620,6 +678,8 @@ def native_type(profiles, rail_refs, centerline_refs, options, body):
         return None
     if options["operation"] not in ("join", "cut", "new_body", "new_component"):
         return None
+    if loft_ends.active(options):
+        return None  # FreeCAD's Loft has no end conditions
     if options["guide"] == "rails" and curves.normalize(rail_refs):
         return None
     if options["guide"] == "centerline" and curves.normalize(centerline_refs):
@@ -693,15 +753,13 @@ def build(profiles, rail_refs, centerline_refs, options, name="Loft", feature=No
     options = options_with_defaults(options)
     rail_refs = curves.normalize(rail_refs) if options["guide"] == "rails" else []
     centerline_refs = curves.normalize(centerline_refs) if options["guide"] == "centerline" else []
-    tool_shape(profiles, rail_refs, centerline_refs, options)  # fails early with the reason
+    tool = tool_shape(profiles, rail_refs, centerline_refs, options)  # fails early (reason)
     if options["operation"] == "join":
         # Fusion: a Join that does not touch the part makes a new body (never a lump).
-        from .sweep import base_global
+        from .sweep import apart, base_global
 
         base = base_global(_source_body(profiles), feature)
-        if base is not None and (
-            auto_operation(base, profiles, rail_refs, centerline_refs, options) == "new_body"
-        ):
+        if base is not None and apart(base, tool):
             options = dict(options, operation="new_body")
     target, src = _target(feature, profiles, options)
     native = native_type(profiles, rail_refs, centerline_refs, options, target) if target else None
@@ -779,6 +837,14 @@ def _update(feature, profiles, rail_refs, centerline_refs, options, hide=True):
         if feature.Closed != options["closed"]:
             feature.Closed = options["closed"]
         feature.Refine = True
+        for end in ("start", "end"):
+            cap = end.capitalize()
+            if getattr(feature, cap + "Condition") != options[end + "_condition"]:
+                setattr(feature, cap + "Condition", options[end + "_condition"])
+            if abs(getattr(feature, cap + "Weight") - options[end + "_weight"]) > 1e-12:
+                setattr(feature, cap + "Weight", options[end + "_weight"])
+            if abs(getattr(feature, cap + "Angle").Value - options[end + "_angle"]) > 1e-12:
+                setattr(feature, cap + "Angle", options[end + "_angle"])
     meta = load_meta(feature)
     meta.update(
         {
@@ -792,6 +858,7 @@ def _update(feature, profiles, rail_refs, centerline_refs, options, hide=True):
             "centerline": _refs_json(centerline_refs),
         }
     )
+    meta.update({k: options[k] for k in END_KEYS})
     _save_meta(feature, meta)
     if hide:
         hide_sketches(profiles, rail_refs, centerline_refs)

@@ -1065,6 +1065,7 @@ STEP_KEYS["sf_sweep"] = (
         "regions",
         "face",
         "rail",
+        "surface",
         "type",
         "distance",
         "distance2",
@@ -1077,6 +1078,7 @@ STEP_KEYS["sf_sweep"] = (
     },
 )
 STEP_KEYS["sf_sweep_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["expect_radius"] = ({"step", "max"}, {"min", "comment"})
 SWEEP_SET = {
     "type",
     "distance",
@@ -1088,7 +1090,7 @@ SWEEP_SET = {
     "operation",
 }
 SWEEP_CHOICES = {
-    "type": ("single", "rail"),
+    "type": ("single", "rail", "surface"),
     "orientation": ("perpendicular", "parallel"),
     "scaling": ("scale", "stretch", "none"),
     "operation": ("auto", "join", "cut", "intersect", "new_body"),
@@ -1150,6 +1152,10 @@ def _check_sweep_loft_steps(model):
             if step.get("type") == "rail" and "rail" not in step:
                 _fail(here, "type 'rail' needs a 'rail'")
             _check_sweep_options(here, step)
+            if ("surface" in step) != (step.get("type") == "surface"):
+                _fail(here, "type 'surface' goes with a 'surface': {'faces': selector}")
+            if "surface" in step and set(step["surface"]) != {"faces"}:
+                _fail(here, "'surface' is {'faces': selector}")
         if op == "sf_sweep_edit":
             if seen.get(step["target"]) != "sf_sweep":
                 _fail(here, "'target' must name an earlier sf_sweep step")
@@ -1182,12 +1188,20 @@ def _check_sweep_loft_steps(model):
             seen[step["id"]] = op
 
 
+LOFT_END_KEYS = {
+    "start_condition",
+    "start_weight",
+    "start_angle",
+    "end_condition",
+    "end_weight",
+    "end_angle",
+}
 STEP_KEYS["sf_loft"] = (
     {"id", "profiles"},
-    {"rails", "centerline", "guide", "closed", "operation", "comment"},
+    {"rails", "centerline", "guide", "closed", "operation", "comment"} | LOFT_END_KEYS,
 )
 STEP_KEYS["sf_loft_edit"] = ({"target", "set"}, {"comment"})
-LOFT_SET = {"guide", "closed", "operation"}
+LOFT_SET = {"guide", "closed", "operation"} | LOFT_END_KEYS
 STEP_KEYS["sf_rib"] = (
     {"id", "curves"},
     {
@@ -1206,6 +1220,9 @@ STEP_KEYS["sf_rib_edit"] = ({"target", "set"}, {"comment"})
 RIB_SET = {"thickness", "thickness_side", "flip_side", "depth_type", "depth", "flip", "extend"}
 
 
+LOFT_CONDITIONS = ("free", "direction", "tangent", "curvature", "point_tangent")
+
+
 def _check_loft_options(here, options):
     if options.get("guide", "rails") not in ("rails", "centerline"):
         _fail(here, "'guide' must be rails or centerline")
@@ -1213,6 +1230,13 @@ def _check_loft_options(here, options):
         _fail(here, "'operation' must be one of %s" % (SWEEP_CHOICES["operation"],))
     if "closed" in options and not isinstance(options["closed"], bool):
         _fail(here, "'closed' is true or false")
+    for end in ("start", "end"):
+        condition = options.get(end + "_condition", "free")
+        if condition not in LOFT_CONDITIONS:
+            _fail(here, "'%s_condition' must be one of %s" % (end, LOFT_CONDITIONS))
+        for name in ("_weight", "_angle"):
+            if end + name in options:
+                _check_number(here, options[end + name], positive=name == "_weight")
 
 
 def _check_loft_step(here, step, seen):

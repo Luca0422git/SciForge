@@ -1,0 +1,78 @@
+{
+  "id": "sf_loft_ends_direction_weight",
+  "title": "Loft square 20 to square 10 with Direction, the last profile's Takeoff Weight 2 (edited)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "end-conditions",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -10,
+            -10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            -5,
+            5,
+            5
+          ]
+        }
+      ],
+      "offset": 20
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "start_condition": "direction",
+      "end_condition": "direction"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 4742.857142857143,
+        "source": "analytic",
+        "note": "weight 1"
+      }
+    },
+    {
+      "op": "sf_loft_edit",
+      "target": "l1",
+      "set": {
+        "end_weight": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4180.952380952381,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Derivatives 20 at the start, 40 at the end: z = 20 v^3 - 20 v^2 + 20 v, L = 20 - 10 (3 v^2 - 2 v^3); V = integral L^2 z' dv = 87800 / 21."
+  }
+}

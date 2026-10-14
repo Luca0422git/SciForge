@@ -1,0 +1,63 @@
+{
+  "id": "sf_loft_ends_direction",
+  "title": "Loft square 20 to square 10, 20 up, Direction on both profiles (weight 1, angle 0)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "end-conditions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -10,
+            -10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            -5,
+            5,
+            5
+          ]
+        }
+      ],
+      "offset": 20
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "start_condition": "direction",
+      "end_condition": "direction"
+    }
+  ],
+  "expect": {
+    "volume": 4742.857142857143,
+    "solids": 1,
+    "valid": true,
+    "source": "analytic",
+    "note": "Each side line is a cubic leaving and meeting the profiles square to them with a derivative of 1 x 20 (weight x distance): the height is then z = 20 v and the square's side L = 20 - 10 (3 v^2 - 2 v^3); V = 20 integral L^2 dv = 20 (400 - 200 + 100 * 13/35). The same loft with Connected ends: 4666.67 (straight sides)."
+  }
+}
