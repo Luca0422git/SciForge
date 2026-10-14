@@ -15,9 +15,10 @@ The full behaviour spec with sources is at the top of `docs/sciforge/parity/fill
    edge), **Variable** (start / end radius, radius points with position 0..1 and radius: a
    click on the picked edge adds one there, Add Point puts one in the widest gap, ✕ removes;
    each point has its arrow and value box; measured 1 / 3 / 1.5 at start / point / end).
-3. **Tangent Chain** can be turned off: OpenCASCADE always rounds the whole chain, so the
-   material taken off along the unpicked chain edges is put back (cut square to the picked
-   edge where they meet). Exact (a slot's straight edge alone removes 20 r² (1 − π/4)).
+3. **Tangent Chain** can be turned off, for each set (Fusion's API has it per edge set):
+   OpenCASCADE always rounds the whole chain, so the material taken off along the unpicked
+   chain edges is put back (cut square to the picked edge where they meet). Exact (a slot's
+   straight edge alone removes 20 r² (1 − π/4)).
 4. **Rule Fillet** (Type drop-down): All Edges / Between Faces/Features, two boxes of faces
    or timeline features, Rounds / Fillets; the edges are found again at every compute, so a
    hole drawn later in the picked extrude's sketch gets its rims rounded.
@@ -34,7 +35,9 @@ The full behaviour spec with sources is at the top of `docs/sciforge/parity/fill
    step; later steps stay on their edges (`blend.References` now also tracks SciForge's
    step's `Picks`). Each set's size is a property (`Size1`, `SizeB1`, `Angle1`...) so formulas
    drive it; the parameters table lists the ones in use.
-8. Maths in `sciforge/fillet_core.py` (no FreeCAD): chord ↔ radius, the variable law and how
+8. **Press Pull** (Q) on a round of SciForge's step edits the size of the set that made it
+   (Constant, Chord Length, Rule); a variable round or a full round is pushed like any face.
+9. Maths in `sciforge/fillet_core.py` (no FreeCAD): chord ↔ radius, the variable law and how
    a chain is cut at its points, rounds / fillets, Distance and Angle as two distances,
    full round radius, the settings (JSON on the step). 23 unit tests.
 
@@ -85,6 +88,8 @@ The full behaviour spec with sources is at the top of `docs/sciforge/parity/fill
 - `timeline_core.KIND_BY_SCIFORGE_TYPE` and `bodies_gui.ICONS`: `FilletSets` / `ChamferSets`.
 - `parameters.SCIFORGE_PROPS`: the set sizes of SciForge's fillet / chamfer step.
 - `blend.References`: also SciForge's step (`Picks`).
+- `presspull_core.owning_fillet(body, face, sciforge=False)` (the dialog passes True) and
+  `presspull_ui._start_blend_edit(blend, face)`: Press Pull on a round of SciForge's step.
 - Golden: `golden/fillet2_ops.py` (ops `fillet_sets`, `rule_fillet`, `full_round`,
   `blend_radius_expect`), `schema.py` (a new `validate` wrapper at the end: mind the merge
   trap in MEMORY's handoff), `builder.py` (one import line).

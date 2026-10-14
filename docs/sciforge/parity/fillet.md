@@ -30,7 +30,7 @@ excerpts), Forum = Autodesk Community or a third-party tutorial, Guess = not doc
 | 10 | A point's position is typed, not dragged along the edge | Forum (2017 Community thread) | Same: the position box; each point's radius has its arrow and value box |
 | 11 | A variable set rounds one edge (with its tangent chain) | Autodesk (API: one edge or a set of tangent edges) / Forum | Built: a set with more edges is refused with the reason; the positions run along the edge and its tangent chain; a chain that closes on itself has no start: refused with the reason |
 | 12 | The radius between the points | Guess | OpenCASCADE's smooth law through the radii at the points and at the ends of the edges between them (it can bulge a little past a point between two far points) |
-| 13 | **Tangent Chain** checkbox, on by default: tangent edges are picked with the edge; off: only the picked edges are filleted | Autodesk (Tangent chain reference) / Forum | Built (see "Tangent Chain off" below for how) |
+| 13 | **Tangent Chain** checkbox, on by default: tangent edges are picked with the edge; off: only the picked edges are filleted. A setting of each selection set | Autodesk (Tangent chain reference; API: isTangentChain per edge set) / Forum | Built: the box shows the current set's (see "Tangent Chain off" below for how) |
 | 14 | How a round with Tangent Chain off ends where the tangent edge begins | Guess | Cut square to the edge at that corner (a flat end) |
 | 15 | **Rule Fillet**, Rule **All Edges** (every edge of the faces / features of the selection) or **Between Faces/Features** (only the edges where two selections meet); faces or features are picked, not edges | Autodesk (Create a fillet; API RuleFilletFeatureInput) | Built: two boxes for Between; a timeline click picks a feature |
 | 16 | Rule Fillet's **Rounds / Fillets**: rounds on outside edges, fillets on inside edges, or both | Autodesk (Create a fillet) | Built: two check boxes; nothing left by the rule is explained |
@@ -211,12 +211,15 @@ FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
   Distance and Angle with Flip, measured; greyed corner types; edit each row; Cancel),
   `fillet2_chain.py` (Tangent Chain on / off on a slot, Variable on a closed chain refused,
   Variable with Tangent Chain off, G2 / Setback greyed), `fillet2_component.py` (two sets on
-  a body inside a component made by Extrude > New Component).
+  a body inside a component made by Extrude > New Component), `fillet2_edit_later.py` (a
+  plain fillet with a chamfer after it edited to two sets: the step changes kind in place,
+  the chamfer keeps its edge, one undo step; Press Pull on set 2's round edits its radius).
 - Part 2 golden models (`golden/fillet2_ops.py`: ops `fillet_sets`, `rule_fillet`,
   `full_round`, `blend_radius_expect`): `fillet2_two_sets` (saved and reopened),
   `fillet2_chord_90_120`, `fillet2_variable_points` (radius read off the part at 3 places),
-  `fillet2_tangent_chain_off`, `fillet2_rule_all_edges`, `fillet2_rule_between_follows_edit`
-  (the boss is made wider after the rule fillet), `fillet2_full_round_rib`,
+  `fillet2_tangent_chain_off`, `fillet2_sets_tangent_chain_each`, `fillet2_rule_all_edges`,
+  `fillet2_rule_between_follows_edit` (the boss is made wider after the rule fillet),
+  `fillet2_full_round_rib`,
   `fillet2_chamfer_sets_angle_flip`; all analytic.
 - Part 2 unit tests: `SciForgeTests/unit/test_fillet_core.py` (chord to radius, the variable
   law and how a chain is cut at its points, rounds / fillets, Distance and Angle as two
