@@ -89,6 +89,14 @@ def _get(obj, name, default=""):
         return default
 
 
+def same(a, b):
+    """The same document object (compared by name: FreeCAD may hand out new wrappers)."""
+    try:
+        return a is not None and b is not None and a.Name == b.Name and a.Document == b.Document
+    except Exception:
+        return False
+
+
 def alive(obj):
     try:
         return obj is not None and bool(obj.isAttachedToDocument())
@@ -281,7 +289,7 @@ def children_of(view):
     """Projected views made from `view` (they follow its style, scale and moves)."""
     found = []
     for user in getattr(view, "InList", []):
-        if is_view(user) and _get(user, "SciForgeParent", None) is view:
+        if is_view(user) and same(_get(user, "SciForgeParent", None), view):
             found.append(user)
     return sorted(found, key=lambda o: o.ID)
 
@@ -1562,7 +1570,7 @@ def dependents(obj):
                 todo.append(user)
             elif user.TypeId == SYMBOL and kind(user) == "PartsList":
                 todo.append(user)
-            elif is_view(user) and _get(user, "SciForgeParent", None) is current:
+            elif is_view(user) and same(_get(user, "SciForgeParent", None), current):
                 todo.append(user)
         if current.TypeId == GROUP:
             todo += list(current.Views)

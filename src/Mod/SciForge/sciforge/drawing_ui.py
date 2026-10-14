@@ -225,7 +225,7 @@ def sync_mode():
         else:
             STATE["input"].detach()
     current = taskui.current()
-    if isinstance(current, DrawingPanel) and (page is None or current.page is not page):
+    if isinstance(current, DrawingPanel) and (page is None or not drawing.same(current.page, page)):
         current.finish()  # another tab: the drawing command ends, like Fusion's
     _set_mode(page is not None)
 
@@ -455,7 +455,7 @@ def default_double_click(page, point):
         _later(edit_view, view)
         return True
     if in_title_block(page, point):
-        _later(TitleBlockPanel.open, page)
+        _later(TitleBlockPanel.start, page)
         return True
     return False
 
@@ -528,9 +528,10 @@ def _vertexes_of(view):
     return found
 
 
-def pick_at(page, point, tolerance, want_vertex=True, kinds=None):
+def pick_at(page, point, tolerance, want_vertex=True, kinds=None, curve=None):
     """(view, element name, local point) of the edge or vertex nearest a page point, or
-    (view, None, local point) on a view's empty area, or (None, None, None)."""
+    (view, None, local point) on a view's empty area, or (None, None, None). `curve`
+    "circle" or "line" only looks at such edges (a centre mark takes circles only)."""
     import Part
 
     view = view_at(page, point, kinds)
@@ -551,6 +552,7 @@ def pick_at(page, point, tolerance, want_vertex=True, kinds=None):
     best = None
     hidden_shown = bool(getattr(view, "HardHidden", False))
     visible = _visible_signatures(view) if not hidden_shown else None
+    near = []
     for name, edge in _edges_of(view):
         try:
             d = edge.distToShape(probe)[0]
@@ -558,11 +560,25 @@ def pick_at(page, point, tolerance, want_vertex=True, kinds=None):
             continue
         if d > tol:
             continue
+        if curve is not None and not _is_curve(edge, curve):
+            continue
+        near.append((round(d, 4), name, visible is None or _signature(edge, s) in visible))
         if visible is not None and _signature(edge, s) not in visible:
             continue
         if best is None or d < best[0] - 1e-9:
             best = (d, name)
+    if best is None and near:
+        log("pick at %s: only hidden edges near %s" % (local, near))
     return view, (best[1] if best else None), local
+
+
+def _is_curve(edge, curve):
+    name = edge.Curve.__class__.__name__
+    if curve == "circle":
+        return name == "Circle"
+    if curve == "line":
+        return name in ("Line", "LineSegment")
+    return True
 
 
 def _signature(edge, scale):
@@ -935,7 +951,7 @@ def _body_caption(body):
 
 
 def start_base_view(page):
-    if active_page() is not page:
+    if not drawing.same(active_page(), page):
         open_drawing(page)
     if not commands.finish_open_dialog():
         return None
@@ -1113,7 +1129,7 @@ class ProjectedPanel(DrawingPanel):
         taken = {
             getattr(v, "SciForgeKind", "")
             for v in drawing.children_of(self.parent)
-            if v is not self.preview
+            if not drawing.same(v, self.preview)
         }
         if kind in taken:
             self._drop_preview()
@@ -1339,7 +1355,11 @@ def _selected_views(page):
     try:
         for sel in Gui.Selection.getSelectionEx():
             obj = sel.Object
-            if drawing.is_view(obj) and drawing.page_of(obj) is page and obj not in found:
+            if (
+                drawing.is_view(obj)
+                and drawing.same(drawing.page_of(obj), page)
+                and obj.Name not in [f.Name for f in found]
+            ):
                 found.append(obj)
     except Exception:
         pass
@@ -1554,7 +1574,9 @@ class CenterMarkPanel(DrawingPanel):
         self.say("Click circles or arcs on the views; Enter or Esc when done.")
 
     def on_press(self, point, event):
-        view, name, _local = pick_at(self.page, point, self.tolerance(), want_vertex=False)
+        view, name, _local = pick_at(
+            self.page, point, self.tolerance(), want_vertex=False, curve="circle"
+        )
         info = drawing.edge_info(view, name) if view is not None and name else None
         if info is None or info["kind"] not in ("circle", "arc"):
             self.message.setText("Click on a circle or an arc.")
@@ -1568,6 +1590,7 @@ class CenterMarkPanel(DrawingPanel):
             return True
         drawing.add_center_mark(view, name)
         self.made.append(view.Name)
+        view.requestPaint()
         self.say(
             "%d centre mark%s. Click more, or Enter / Esc."
             % (len(self.made), "" if len(self.made) == 1 else "s")
@@ -1593,7 +1616,9 @@ class CenterlinePanel(DrawingPanel):
         self.say("Click the first of two edges that run side by side.")
 
     def on_press(self, point, event):
-        view, name, _local = pick_at(self.page, point, self.tolerance(), want_vertex=False)
+        view, name, _local = pick_at(
+            self.page, point, self.tolerance(), want_vertex=False, curve="line"
+        )
         info = drawing.edge_info(view, name) if view is not None and name else None
         if info is None or info["kind"] != "line":
             self.message.setText("Click a straight edge.")
@@ -1653,14 +1678,14 @@ class DimensionPanel(DrawingPanel):
         view, name, local = pick_at(self.page, point, self.tolerance())
         if (
             name is not None
-            and (not self.picks or self.picks[0][0] is view)
+            and (not self.picks or drawing.same(self.picks[0][0], view))
             and len(self.picks) < 2
         ):
             info = drawing.edge_info(view, name)
             if info is not None:
                 self._pick(view, name, info, point)
                 return True
-        if name is not None and self.picks and self.picks[0][0] is not view:
+        if name is not None and self.picks and not drawing.same(self.picks[0][0], view):
             self.message.setText("A dimension measures within one view: pick from the same view.")
             return True
         if self.dim is not None:
@@ -2088,7 +2113,7 @@ class TitleBlockPanel(DrawingPanel):
         self.schedule()
 
     @classmethod
-    def open(cls, page):
+    def start(cls, page):
         if not commands.finish_open_dialog():
             return None
         try:
@@ -2107,11 +2132,20 @@ def delete_selected():
         commands.tell("Finish the open command first (OK or Cancel), then delete.")
         return False
     targets = []
-    for sel in Gui.Selection.getSelectionEx():
+    for sel in Gui.Selection.getSelectionEx("", 0):
         obj = sel.Object
-        if drawing.page_of(obj) is page and obj is not page and obj not in targets:
-            targets.append(obj)
+        owner = drawing.page_of(obj)
+        if owner is not None and owner.Name == page.Name and obj.Name != page.Name:
+            if obj.Name not in [t.Name for t in targets]:
+                targets.append(obj)
     if not targets:
+        log(
+            "delete: nothing of %s in the selection %s"
+            % (
+                page.Name,
+                [(x.ObjectName, x.SubElementNames) for x in Gui.Selection.getSelectionEx("", 0)],
+            )
+        )
         commands.tell("Select views, dimensions, text or balloons on the sheet, then Delete.")
         return False
     doc = page.Document
@@ -2448,7 +2482,7 @@ class TitleBlockCommand(_Base):
     def run(self):
         page = _need_page()
         if page is not None:
-            TitleBlockPanel.open(page)
+            TitleBlockPanel.start(page)
 
 
 class DeleteCommand(_Base):
