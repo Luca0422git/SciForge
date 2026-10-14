@@ -344,6 +344,10 @@ def extrude_curves(edges, normal, options, to_object=None):
         base.translate(shift)
         taper_one = float(o["taper"])
         taper_two = float(o["taper2"]) if o["direction"] == "two_sides" else taper_one
+        if start < -1e-9 and end > 1e-9 and abs(taper_one) < 1e-9 and abs(taper_two) < 1e-9:
+            base.translate(n * start)  # both ways, straight: one face per curve, as Fusion
+            faces.extend(base.extrude(n * (end - start)).Faces)
+            continue
         if end > 1e-9:
             faces.extend(_extrude_piece(base, n, end, taper_one, flat).Faces)
         if start < -1e-9:

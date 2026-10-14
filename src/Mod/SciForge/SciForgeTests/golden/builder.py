@@ -637,3 +637,4 @@ from . import inspect_ops  # noqa: E402,F401  (registers op_construct*, op_*_exp
 from . import primitive_ops  # noqa: E402,F401  (registers Box/Cylinder/Sphere/Torus/Coil/Pipe)
 from . import sweep_loft_ops  # noqa: E402,F401  (registers the sweep / loft / rib / web steps)
 from . import extrude_bodies_ops  # noqa: E402,F401  (extrudes through several bodies)
+from . import surface_ops  # noqa: E402,F401  (registers op_sf_surface, op_sf_surface_edit)

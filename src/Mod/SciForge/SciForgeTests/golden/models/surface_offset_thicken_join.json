@@ -1,0 +1,105 @@
+{
+  "id": "surface_offset_thicken_join",
+  "title": "Offset a box's top face 5, thicken the offset back down onto the box (Join)",
+  "tags": [
+    "surface",
+    "offset",
+    "thicken"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_surface",
+      "id": "o1",
+      "kind": "offset",
+      "refs": [
+        {
+          "step": "e1",
+          "faces": {
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "distance": 5
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 1200,
+        "faces": 1,
+        "solids": 0,
+        "bbox": [
+          0,
+          0,
+          15,
+          40,
+          30,
+          15
+        ],
+        "source": "analytic",
+        "note": "the 40 x 30 top face moved up 5"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "th",
+      "kind": "thicken",
+      "refs": [
+        {
+          "step": "o1",
+          "faces": {
+            "all": true,
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "thickness": -5,
+        "operation": "join"
+      },
+      "target": "e1"
+    }
+  ],
+  "expect": {
+    "volume": 18000,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "the 5 thick slab fills the gap: 40 x 30 x 15"
+  }
+}

@@ -618,7 +618,8 @@ def trim_cutter(step, leader, refs, around):
         raise NeedsPick("Select the trim tool: a surface, a plane, a sketch curve or a body.")
     obj, sub = tool
     body = bodies.body_of(step)
-    if body is not None and (bodies.body_of(obj) is body) and not sub.startswith("Edge"):
+    own = bodies.body_of(obj) is body and obj.TypeId not in PLANE_TYPES + LINE_TYPES
+    if body is not None and own and not sub.startswith("Edge"):  # an origin plane is no body
         others = [whole_shape(o) for o, _s in refs[1]]
         if not others:
             raise SurfaceError("Nothing to trim the trim tool itself against.")

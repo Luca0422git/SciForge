@@ -1,0 +1,185 @@
+{
+  "id": "surface_sweep_loft_ruled_extend",
+  "title": "Sweep a V along a line, Loft two lines, Ruled from an edge, Extend an edge",
+  "tags": [
+    "surface",
+    "sweep",
+    "loft",
+    "ruled",
+    "extend"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            40
+          ]
+        },
+        {
+          "line": [
+            20,
+            -5,
+            30,
+            -5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s2",
+      "plane": "XZ",
+      "curves": [
+        {
+          "polyline": [
+            [
+              -5,
+              5
+            ],
+            [
+              0,
+              10
+            ],
+            [
+              5,
+              5
+            ]
+          ]
+        },
+        {
+          "line": [
+            20,
+            10,
+            30,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "sw",
+      "kind": "sweep",
+      "refs": [
+        {
+          "sketch": "s2",
+          "at": [
+            -2.5,
+            7.5
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "sketch": "s1",
+          "at": [
+            0,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 565.685424949238,
+        "faces": 2,
+        "source": "analytic",
+        "note": "two sides of sqrt(50) swept 40: 2 sqrt(50) 40"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "lo",
+      "kind": "loft",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            25,
+            -5
+          ]
+        },
+        {
+          "sketch": "s2",
+          "at": [
+            25,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 111.80339887498948,
+        "faces": 1,
+        "source": "analytic",
+        "note": "a flat strip between parallel 10 long lines (0, 5, 10) apart"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "ru",
+      "kind": "ruled",
+      "refs": [
+        {
+          "step": "lo",
+          "edges": {
+            "at": {
+              "axis": "z",
+              "value": "min"
+            },
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "distance": 5
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 50,
+        "faces": 1,
+        "source": "analytic",
+        "note": "Tangent: the strip carried on 5 past its lower edge: 10 x 5"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "ex",
+      "kind": "extend",
+      "refs": [
+        {
+          "step": "lo",
+          "edges": {
+            "at": {
+              "axis": "z",
+              "value": "max"
+            },
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "distance": 5
+      }
+    }
+  ],
+  "expect": {
+    "area": 161.80339887498948,
+    "faces": 1,
+    "solids": 0,
+    "source": "analytic",
+    "note": "Natural: the flat strip grows 5 past its upper edge, still one face"
+  }
+}

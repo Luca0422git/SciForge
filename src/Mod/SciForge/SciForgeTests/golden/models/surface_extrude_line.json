@@ -1,0 +1,58 @@
+{
+  "id": "surface_extrude_line",
+  "title": "SURFACE Extrude of an open sketch line, 10 each way (Symmetric)",
+  "tags": [
+    "surface",
+    "extrude"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            30,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10,
+        "direction": "symmetric"
+      }
+    }
+  ],
+  "expect": {
+    "area": 600,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      -10,
+      30,
+      0,
+      10
+    ],
+    "source": "analytic",
+    "note": "a 30 long line swept 10 up and 10 down: one flat face 30 x 20 = 600"
+  }
+}

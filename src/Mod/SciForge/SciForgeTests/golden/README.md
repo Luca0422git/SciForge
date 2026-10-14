@@ -89,6 +89,8 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `expect_bodies` | `bodies` {step id: {`volume`, `solids`}}, `used_up` [step ids], `followers` {step id: n}, `steps` {step id: times listed in the timeline} | check several bodies at this point |
 | `reopen_check` | `bodies` (as above) | save, open the file as a second design, check the bodies there |
 | `expect_move_refused` | `target`, `before` or `after`, `reason` | dragging a step before / after another in the timeline is refused (a multi-body extrude moves with its hidden steps; only a move before a body it changes exists is refused) |
+| `sf_surface` | `id`, `kind` (extrude/revolve/sweep/loft/patch/ruled/offset/boundary_fill/thicken/trim/untrim/extend/stitch/unstitch/reverse_normal), `refs` / `refs2` / `refs3` (the dialog's boxes in order: `{"sketch", "at": [x, y]}` a sketch curve, chained; `{"sketch"}` all its curves; `{"plane"}`; `{"axis"}`; `{"step"}` that step's body; `{"step", "faces" / "edges": selector}`), `options` (the dialog's fields, `surface_core.KINDS`), `remove` [{`step`, `at`: [x, y, z]}] (Trim's pieces), `cells` [[x, y, z]] (Boundary Fill), `bodies` (Reverse Normal), `target` (a Join / Cut body) | the SURFACE tab's tools (`golden/surface_ops.py`, `sciforge/surface.py`: the dialogs' code). A surface result is measured by its area and faces (no volume) |
+| `sf_surface_edit` | `target`, `set` {options} | double-click a surface step in the timeline and change its fields |
 
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).

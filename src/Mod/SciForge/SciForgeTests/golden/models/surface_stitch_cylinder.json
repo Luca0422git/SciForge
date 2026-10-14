@@ -1,0 +1,116 @@
+{
+  "id": "surface_stitch_cylinder",
+  "title": "A tube and two patched ends stitched into a solid cylinder",
+  "tags": [
+    "surface",
+    "stitch",
+    "patch"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            5,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            5,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "p2",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s2",
+          "at": [
+            5,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        },
+        {
+          "step": "p2"
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 785.3981633974482,
+    "faces": 3,
+    "solids": 1,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      5,
+      5,
+      10
+    ],
+    "source": "analytic",
+    "note": "a closed cylinder of radius 5 and height 10: pi 25 10"
+  }
+}
