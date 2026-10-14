@@ -625,7 +625,11 @@ class BlendPanel(Panel):
         rule = self.mode == "rule"
         self._show_row(self.rows_widget, not rule)
         self._show_row(self.select2_row, rule and self.spec.get("rule") == "between")
-        self.select_label.setText("Faces/Features" if rule else "Edges/Faces/Features")
+        self.select_label.setText(
+            "Faces/Features"
+            if rule
+            else "Center Face" if self.mode == "full_round" else ("Edges/Faces/Features")
+        )
         self._show_row(self.chain, self.kind == "fillet" and self.mode == "fillet")
 
     def _row_text(self, i):
@@ -1899,7 +1903,9 @@ class FilletPanel(BlendPanel):
         rtype = row.get("radius_type", "constant") if mode == "fillet" else "constant"
         self._show_row(self.radius_type, mode == "fillet")
         self._show_row(self.rule, mode == "rule")
-        self._show_row(self.radius.widget, mode == "rule" or rtype == "constant")
+        self._show_row(
+            self.radius.widget, mode == "rule" or (mode == "fillet" and rtype == "constant")
+        )
         self._show_row(self.chord_field.widget, mode == "fillet" and rtype == "chord")
         for field in (self.start_field, self.end_field):
             self._show_row(field.widget, mode == "fillet" and rtype == "variable")

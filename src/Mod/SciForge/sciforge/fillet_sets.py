@@ -584,7 +584,9 @@ def _plane_normal(face):
 
 def side_faces(shape, center_name):
     """(side face name, side face name) next to the centre face: flat, square to it, facing
-    away from each other (the walls of a rib). Raises SetError when there are none."""
+    away from each other, as far apart as the centre face is wide and at least half that
+    tall (the walls of a rib). The pairs along the longest edges are tried first. Raises
+    SetError when no pair fits, with the reason of the best one."""
     center = blend.element(shape, center_name)
     nc = _plane_normal(center) if center is not None else None
     if nc is None:
@@ -601,40 +603,46 @@ def side_faces(shape, center_name):
             if n is None or abs(n.dot(nc)) > 1e-6:
                 continue
             name = blend.face_name(shape, face)
-            if name and name not in [f for f, _n, _l in found]:
+            known = [i for i, (f, _n, _l) in enumerate(found) if f == name]
+            if known:
+                f, fn, length = found[known[0]]
+                found[known[0]] = (f, fn, length + edge.Length)
+            elif name:
                 found.append((name, n, edge.Length))
-    best = None
+    pairs = []
     for i, (a, na, la) in enumerate(found):
         for b, nb, lb in found[i + 1 :]:
             if na.dot(nb) < -1 + 1e-9:
-                if best is None or la + lb > best[2]:
-                    best = (a, b, la + lb)
-    if best is None:
+                pairs.append((la + lb, a, b))
+    if not pairs:
         raise core.SetError(
             "This face has no two parallel side faces next to it, so there is nothing to "
             "make a full round between. Click the top face of a rib or a wall."
         )
-    return best[0], best[1]
+    pairs.sort(key=lambda p: -p[0])
+    reason = None
+    for _length, a, b in pairs:
+        try:
+            full_round_plan(shape, a, center_name, b)
+            return a, b
+        except core.SetError as exc:
+            reason = reason or exc
+    raise reason
 
 
 def full_round_size(shape, names):
     """The radius of a full round (half the width between its side faces), or None."""
     if len(names) != 3:
         return None
-    faces = [blend.element(shape, n) for n in names]
-    if any(f is None for f in faces):
+    try:
+        return full_round_plan(shape, *names)["radius"]
+    except Exception:
         return None
-    n1 = _plane_normal(faces[0])
-    if n1 is None:
-        return None
-    width = abs((faces[2].Vertexes[0].Point - faces[0].Vertexes[0].Point).dot(n1))
-    return width / 2.0 if width > TOL else None
 
 
-def full_round(shape, side1, center, side2):
-    """`shape` with the centre face replaced by a half cylinder tangent to both side faces."""
-    import Part
-
+def full_round_plan(shape, side1, center, side2):
+    """Where the half round goes: {"radius", "axis_point", "direction", "face"}. Raises
+    SetError when the three faces are not a rib's top and walls."""
     faces = [blend.element(shape, n) for n in (side1, center, side2)]
     if any(f is None for f in faces):
         raise core.SetError("A face of this full round no longer exists. Pick it again.")
@@ -647,12 +655,11 @@ def full_round(shape, side1, center, side2):
     p2 = faces[2].Vertexes[0].Point
     width = abs((p2 - p1).dot(n1))
     radius = core.full_round_radius(width)
-    box = faces[1].BoundBox
     across = max(abs(v.Point.sub(p1).dot(n1)) for v in faces[1].Vertexes)
     if across < width - 1e-4 or across > width + 1e-4:
         raise core.SetError(
-            "The centre face does not reach from one side face to the other: Full Round "
-            "rounds a face that spans the whole width of a rib."
+            "This face does not reach from one side face to the other: Full Round rounds a "
+            "face that spans the whole width of a rib or a wall."
         )
     c = faces[1].CenterOfMass
     for side in (faces[0], faces[2]):
@@ -664,12 +671,28 @@ def full_round(shape, side1, center, side2):
                 "(the top of a rib or a wall)." % round(radius, 4)
             )
     mid = c - n1 * (c - p1).dot(n1) - n1 * (width / 2.0)
-    axis_point = mid - nc * radius
     direction = nc.cross(n1)
     direction.normalize()
-    length = box.DiagonalLength * 2.0 + 2.0
-    slab = faces[1].extrude(nc * -radius)
-    cylinder = Part.makeCylinder(radius, 2.0 * length, axis_point - direction * length, direction)
+    return {
+        "radius": radius,
+        "axis_point": mid - nc * radius,
+        "direction": direction,
+        "face": faces[1],
+        "normal": nc,
+    }
+
+
+def full_round(shape, side1, center, side2):
+    """`shape` with the centre face replaced by a half cylinder tangent to both side faces:
+    the slab under the centre face, half the width deep, minus that cylinder, is cut away."""
+    import Part
+
+    plan = full_round_plan(shape, side1, center, side2)
+    radius, direction, face = plan["radius"], plan["direction"], plan["face"]
+    length = face.BoundBox.DiagonalLength * 2.0 + 2.0
+    slab = face.extrude(plan["normal"] * -radius)
+    start = plan["axis_point"] - direction * length
+    cylinder = Part.makeCylinder(radius, 2.0 * length, start, direction)
     cutter = slab.cut(cylinder)
     if cutter.isNull() or cutter.Volume < 1e-9:
         return shape
