@@ -108,7 +108,7 @@ def no_flip():
 
 
 def flipped():
-    p = b.blend_panel()
+    h.check("dialog still open after Flip", b.blend_panel() is not None)
     v = h.solid_volume()
     h.check("Flip keeps the volume", b.close(v, legs((1, 1), (2, 2 * T30))), v)
     span = top_span()

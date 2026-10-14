@@ -1,11 +1,101 @@
 # Parity spec: Fillet (F) and Chamfer (outline 7.7)
 
-Source: Fusion's documented behaviour (public help topics on Fillet and Chamfer) and everyday
-use. Not yet checked against Luca's own screen captures (outline 2.4). Implemented in
-`src/Mod/SciForge/sciforge/fillet_ui.py` (dialogs, commands) and `sciforge/blend.py` (the
-geometry rules, no GUI), on top of FreeCAD's `PartDesign::Fillet` / `PartDesign::Chamfer`
-with Refine on; value boxes in `sciforge/blend_field.py`. Status: **first pass + QA pass
-(2026-10-11, branch `sf/fillet-qa`), not yet signed off by Luca**.
+Source: Fusion's documented behaviour (public help topics on Fillet and Chamfer, the Fusion
+API reference) and everyday use. Not yet checked against Luca's own screen captures (outline
+2.4). Implemented in `src/Mod/SciForge/sciforge/fillet_ui.py` (dialogs, commands),
+`sciforge/blend.py` (the geometry rules of a plain fillet / chamfer, no GUI) on top of
+FreeCAD's `PartDesign::Fillet` / `PartDesign::Chamfer` with Refine on, and, for everything a
+FreeCAD feature cannot hold (several sets, Chord Length, Variable, Tangent Chain off, Rule
+Fillet, Full Round, chamfer sets), SciForge's own step `sciforge/fillet_sets.py` with its
+maths in `sciforge/fillet_core.py` (unit tested); value boxes in `sciforge/blend_field.py`.
+Status: **first pass + QA pass (2026-10-11, branch `sf/fillet-qa`), part 2 (2026-10-14,
+branch `sf/fillet-2`), not yet signed off by Luca**.
+
+## Behaviour spec, part 2 (researched 2026-10-14)
+
+Source column: Autodesk = Fusion help or the Fusion API reference (read through search
+excerpts), Forum = Autodesk Community or a third-party tutorial, Guess = not documented.
+
+| # | Fusion behaviour | Source | SciForge |
+|---|---|---|---|
+| 1 | The Fillet dialog has a **Type**: Fillet, Rule Fillet, Full Round Fillet | Autodesk (Fillet reference) | Built (Type drop-down) |
+| 2 | The selection box has **rows (selection sets)**; "+" adds a row; each row has its own edges, Radius Type, radius and continuity; all rows are one feature (one timeline step, one undo) | Autodesk (Create a fillet) | Built: "Sets" list with + / −, one step, one undo; each set has its own arrow and value box on the canvas |
+| 3 | Picking an edge that is in another set moves it (an edge belongs to one set) | Guess | Built |
+| 4 | "+" gives the new row the settings of the current one | Guess | Built |
+| 5 | Dragging a set's arrow / typing in its value box changes that set only | Guess (from use) | Built (the set becomes the current row) |
+| 6 | **Radius Type Constant**: one radius along the whole fillet | Autodesk | Built (FreeCAD's Fillet when it is the only set) |
+| 7 | **Chord Length**: "the distance between the two edges where the fillet ends and the adjacent faces begin", the same chord along the whole fillet | Autodesk (Fillet reference) | Built: each edge gets R = chord / (2 sin(t/2)), t the turn of the faces' normals, at both ends of each edge (so a chord stays the same where the corner angle changes) |
+| 8 | **Variable**: a start radius, an end radius and radius points along one edge; each point has a Radius and a Position (0 = start of the edge, 1 = its end) | Autodesk (Fillet reference; API VariableRadiusFilletEdgeSet.addMidPosition: positions 0..1) | Built |
+| 9 | A point is added by clicking on the selected edge (a dot shows where); the points are sorted from start to end whatever order they were added in | Forum (third-party deep dive, quoted in search results) | Built: a click on the picked edge adds a point there (with the radius the law has there), and **Add Point** puts one in the middle of the widest gap; ✕ removes a point; the ✕ of the selection box drops the edge |
+| 10 | A point's position is typed, not dragged along the edge | Forum (2017 Community thread) | Same: the position box; each point's radius has its arrow and value box |
+| 11 | A variable set rounds one edge (with its tangent chain) | Autodesk (API: one edge or a set of tangent edges) / Forum | Built: a set with more edges is refused with the reason; the positions run along the edge and its tangent chain; a chain that closes on itself has no start: refused with the reason |
+| 12 | The radius between the points | Guess | OpenCASCADE's smooth law through the radii at the points and at the ends of the edges between them (it can bulge a little past a point between two far points) |
+| 13 | **Tangent Chain** checkbox, on by default: tangent edges are picked with the edge; off: only the picked edges are filleted | Autodesk (Tangent chain reference) / Forum | Built (see "Tangent Chain off" below for how) |
+| 14 | How a round with Tangent Chain off ends where the tangent edge begins | Guess | Cut square to the edge at that corner (a flat end) |
+| 15 | **Rule Fillet**, Rule **All Edges** (every edge of the faces / features of the selection) or **Between Faces/Features** (only the edges where two selections meet); faces or features are picked, not edges | Autodesk (Create a fillet; API RuleFilletFeatureInput) | Built: two boxes for Between; a timeline click picks a feature |
+| 16 | Rule Fillet's **Rounds / Fillets**: rounds on outside edges, fillets on inside edges, or both | Autodesk (Create a fillet) | Built: two check boxes; nothing left by the rule is explained |
+| 17 | The rule re-applies after the model changes (new edges of the picked faces / features are rounded) | Autodesk (the "rule" idea) / Guess (exact behaviour) | Built: the edges are found again at every compute |
+| 18 | **Full Round Fillet**: hover a face, its side faces highlight; click the centre face; "+" for another full round | Autodesk (Create a fillet) | Built: a click on the centre face finds its two side faces by itself; each full round is a row |
+| 19 | When the centre face has tangent faces, they are rounded too | Autodesk (API FullRoundFilletFaceSet) | Not built (one flat centre face between flat parallel walls) |
+| 20 | **Corner Type** Rolling Ball / Setback | Autodesk | Rolling Ball (OpenCASCADE's corner); Setback greyed: kernel limit (below) |
+| 21 | **Continuity** Tangent (G1) / Curvature (G2), tangency weight | Autodesk | G1; G2 greyed: kernel limit (below) |
+| 22 | Radius Type **Asymmetric** (a different distance on each face) | Autodesk (Fillet reference, newer releases; API: asymmetric sets use setback corners) | Not offered: OpenCASCADE builds circular rounds only (below) |
+| 23 | **Chamfer Type** Equal Distance, Two Distances, Distance and Angle; **Flip** swaps the sides | Autodesk (Chamfer reference, Create a chamfer) | Built (first pass); Flip also for Distance and Angle |
+| 24 | Chamfer selection sets ("+" rows), each with its own type and sizes | Guess (Fusion's API has chamfer edge sets) | Built |
+| 25 | Chamfer **Corner Type** Chamfer / Miter / Blend | Autodesk (Chamfer reference) | Chamfer; Miter and Blend greyed: kernel limit (below) |
+
+## Selection sets, Chord Length, Variable, Rule, Full Round (part 2, 2026-10-14)
+
+How it is built:
+
+- **One step for all of it.** One set of one constant radius (Tangent Chain on) stays FreeCAD's
+  `PartDesign::Fillet` (so Press Pull still edits its radius and the parameters table lists
+  it). The moment the dialog needs more (a second set with picks, Chord Length, Variable,
+  Tangent Chain off, Rule, Full Round) the step becomes SciForge's own
+  (`PartDesign::FeaturePython`, SciForgeType `FilletSets` / `ChamferSets`) in the same place
+  of the timeline, inside the dialog's one undo step; the steps after it stay on it.
+- **A radius per edge in one OpenCASCADE run.** FreeCAD's Python `makeFillet` takes one
+  radius for every edge, so a radius per edge goes through a `Part::Fillet` (`Part::Chamfer`
+  for chamfer sets) in a hidden throw-away document (opened and closed in about 20 ms). All
+  sets are built together, so where two sets meet OpenCASCADE blends their corner as one
+  fillet would.
+- **Variable**: the edge (with its tangent chain) is cut at the radius points by a vertex
+  (`generalFuse`, no face changes); each piece gets its two end radii and OpenCASCADE runs one
+  smooth law through them (one round face). Measured on a 40 mm edge (start 1, point 0.5 at
+  3, end 1.5): 1.000 / 3.000 / 1.500 at the three places.
+- **Chord Length**: measured 3.000 mm on a 90° and on a 120° edge of one set (R 2.12 and 3).
+- **Tangent Chain off**: OpenCASCADE always rounds the whole chain of tangent edges
+  (`BRepFilletAPI_MakeFillet::Add` builds the contour of tangent edges; a test listing only
+  one straight edge of a slot rounded the whole loop). SciForge rounds the chain, then puts
+  back the material taken off along the edges that were not picked: the removed material
+  is cut by a plane square to the picked edge where it meets an unpicked one, and only the
+  pieces along picked edges stay removed. Exact: a slot's straight edge alone removes
+  20 r² (1 − π/4).
+- **Rule Fillet**: the faces are kept as picks (FreeCAD and `picks.py` follow them through
+  edits), the features as links; the edges are found again at every compute (a feature's
+  faces are the ones on surfaces the step before it did not have). A hole drawn later in the
+  sketch of the picked extrude gets its rims rounded (scenario `fillet2_rule`).
+- **Full Round**: the slab under the centre face, half the width deep, minus a cylinder of
+  half the width between the side faces, is cut away (exact half round, one face). Refused
+  with the reason: a face not between two flat parallel walls, a face that does not span
+  the whole width, walls lower than the radius.
+- **Formulas**: each set's size is a property of the step (`Size1`, `SizeB1`, `Angle1`...),
+  so a parameter or formula typed in a box drives it like FreeCAD's own fillet's radius; the
+  parameters table lists them (`Set 1 Size`...). The positions and radii of variable points
+  are plain numbers.
+- **Element names**: the throw-away document's names are kept in plain text (its string
+  table goes away with it) and the throw-away input's tag in them is replaced by the part's
+  own, the way FreeCAD's own makeFillet names a result: stable through recomputes and
+  edits, and FreeCAD still notices when a later step's edge is really gone (picks.py then
+  finds it again by geometry).
+
+Dialog details: the current set's row is highlighted, its boxes show its values; clicking a
+row, dragging a set's arrow or typing in a set's value box makes that set the current one.
+Picks of every set stay highlighted; clicking one drops it from its set. Type changes start
+the picks over (each type picks something else). Rule Fillet shows Rule, one or two
+"Faces/Features" boxes, Radius, Rounds / Fillets; Full Round shows "Center Face" and the
+radius it found ("Half the width between the side faces: 2.00 mm"). A size that does not fit
+names its set ("Set 2: Radius 40 mm is too big here ..."); OK waits.
 
 ## What the user does (and what SciForge does)
 
@@ -16,7 +106,7 @@ with Refine on; value boxes in `sciforge/blend_field.py`. Status: **first pass +
 | Click edges to add them; no Ctrl needed; click a picked edge again to drop it; clicking empty space does not lose picks | Same (FreeCAD's "greedy" selection style while the dialog is open) |
 | Click a face: all its edges are rounded | Same; the face itself is stored, so if an earlier edit adds edges to that face they are rounded too |
 | Click a feature (timeline): its edges are rounded | Same: a click on a timeline item adds the sharp edges that step created |
-| Tangent Chain (on): tangent edges are picked together and highlighted | Same. Shown as a checked, greyed box: see gaps |
+| Tangent Chain (on): tangent edges are picked together and highlighted | Same; off, only the picked edges are highlighted and rounded (part 2) |
 | Only edges that can be rounded light up under the mouse | Same (selection filter: smooth edges, vertices, sketches, other bodies do not highlight) |
 | Live preview | The result is shown solid; the part before the fillet is shown see-through around it, with the picks highlighted at their original corner (so they stay clickable) |
 | Blue drag arrow on the first picked edge | Same. It lies on the face next to the edge, its tip on the line where the round starts, pointing away from the edge; drag it out to make the round bigger |
@@ -66,17 +156,18 @@ FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
 
 ## Known gaps (shown greyed in the dialog with the reason, never faked)
 
-| Fusion option | Why not yet |
+| Fusion option | Why not |
 |---|---|
-| Tangent Chain off | OpenCASCADE always rounds the whole tangent chain (`BRepFilletAPI_MakeFillet` has no switch). Needs kernel work (outline 9.2) |
-| Type: Rule Fillet, Full Round Fillet | Not built yet |
-| Radius Type: Chord Length, Variable | `PartDesign::Fillet` has one constant radius. Chord length is convertible for edges between flat faces; variable needs a new feature type |
-| Several selection sets with different radii in one fillet | One `PartDesign::Fillet` = one radius. Today: one fillet step per radius |
-| Continuity: Curvature (G2), Tangency weight | OpenCASCADE builds circular (G1) rounds only |
-| Corner Type: Setback (fillet), Miter / Blend (chamfer) | Not offered by OpenCASCADE's builders |
+| Continuity: Curvature (G2), tangency weight | Kernel. OpenCASCADE's `BRepFilletAPI_MakeFillet` builds rounds of circular section, tangent (G1) to the faces: its section shapes (`ChFi3d_Rational`, `ChFi3d_QuasiAngular`, `ChFi3d_Polynomial`) are all circular-arc forms, and FreeCAD's Python does not reach that choice anyway. A curvature-continuous blend needs a new algorithm (a conic / G2 section swept along the edge, e.g. with `GeomFill`): kernel work (outline 9.2) |
+| Corner Type: Setback | Kernel. `BRepFilletAPI_MakeFillet` has no setback distances; where three rounds meet it fills the corner itself (a box corner with three rounds gets one spherical face, measured). Needs a corner builder of our own |
+| Radius Type: Asymmetric | Kernel. No two-distance (conic) fillet in `BRepFilletAPI_MakeFillet` |
+| Chamfer Corner Type: Miter, Blend | Kernel. `BRepFilletAPI_MakeChamfer` closes a corner where chamfers meet with one flat face only (three chamfers at a box corner: one triangle, measured) |
+| Full Round of a curved rib, or a centre face with tangent faces | Not built: SciForge's full round takes a flat centre face between two flat parallel walls (a straight rib or wall). Others are refused with the reason |
+| Radius points driven by a formula | A radius point's position and radius are plain numbers (a formula typed in is worked out once); each set's size does follow a formula |
+| Press Pull on a face of SciForge's fillet step | Press Pull edits the radius of FreeCAD's own fillet (one set); on SciForge's step it offsets the face like any other |
 | Window (drag-box) selection of edges inside the dialog | Not handled specially yet |
 | A formula shown *inside* the value box | FreeCAD's number box can only show the number: the formula is listed under the boxes (as in Extrude) |
-| Edges of several bodies in one fillet | One `PartDesign::Fillet` belongs to one body: edges of another body are not picked (they do not light up) |
+| Edges of several bodies in one fillet | One step belongs to one body: edges of another body are not picked (they do not light up) |
 | Fusion draws no seam line on a cylinder | FreeCAD draws the seam of a round boss as a line; it cannot be picked (it is not an edge to round) |
 
 ## Tests
@@ -100,8 +191,43 @@ FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
   (`golden/blend_ops.py`: ops `blend_insert`, `blend_edit`) a chamfer inserted before a
   fillet with the marker rolled back, a fillet edited to trim a later chamfer's edge.
 - Unit tests: `SciForgeTests/unit/test_blend_core.py`.
+- Part 2 scenarios (real input; volumes and sizes measured on the part):
+  `fillet2_sets.py` (two radius sets in one step: "+", each set's arrow and value box, a
+  drag of set 1's arrow, Enter in set 2's box, a radius too big for its set refused with
+  the set named, undo/redo, edit and pick a row, Esc, save / close / reopen / edit),
+  `fillet2_chord.py` (Chord Length 3 on a 90° and a 120° edge of one set, measured on the
+  part; the arrow drags the chord; too big refused; undo/redo; edit), `fillet2_variable.py`
+  (start / end radius, a point added by clicking the edge, its position and radius typed,
+  Add Point and ✕, a point's arrow dragged, Enter in its value box; radii 1 / 3 / 1.5
+  measured; save / reopen / edit; an end radius of 0 refused), `fillet2_rule.py` (Rule
+  Fillet All Edges of the Extrude picked in the timeline; Rounds off refused with the
+  reason; a hole drawn later in its sketch gets rounded rims; edit the radius),
+  `fillet2_full_round.py` (a rib's end and a bar's end as two full rounds, a top face
+  refused, undo/redo, edit, ✕ of a row, Esc), `fillet2_chamfer.py` (chamfer sets: Equal and
+  Distance and Angle with Flip, measured; greyed corner types; edit each row; Cancel),
+  `fillet2_chain.py` (Tangent Chain on / off on a slot, Variable on a closed chain refused,
+  Variable with Tangent Chain off, G2 / Setback greyed), `fillet2_component.py` (two sets on
+  a body inside a component made by Extrude > New Component).
+- Part 2 golden models (`golden/fillet2_ops.py`: ops `fillet_sets`, `rule_fillet`,
+  `full_round`, `blend_radius_expect`): `fillet2_two_sets` (saved and reopened),
+  `fillet2_chord_90_120`, `fillet2_variable_points` (radius read off the part at 3 places),
+  `fillet2_tangent_chain_off`, `fillet2_rule_all_edges`, `fillet2_rule_between_follows_edit`
+  (the boss is made wider after the rule fillet), `fillet2_full_round_rib`,
+  `fillet2_chamfer_sets_angle_flip`; all analytic.
+- Part 2 unit tests: `SciForgeTests/unit/test_fillet_core.py` (chord to radius, the variable
+  law and how a chain is cut at its points, rounds / fillets, Distance and Angle as two
+  distances, full round, the settings).
 
 ## Lessons for other dialogs
+
+- **A document made and closed while a dialog's undo step is open can end that step.** The
+  dialog's `doc.openTransaction(...)` also sets the application's active transaction; a
+  throw-away document that then changes joins it, and closing that document ended the
+  transaction for every document: the dialog's step was committed half-way and FreeCAD
+  opened a "Delete" step of its own for the rest (Ctrl+Z after OK left the old fillet
+  behind). Set `UndoMode = 0` on a throw-away document right after making it.
+- **A check box without text toggles only on its tick square**: a test (or a person) that
+  clicks the middle of a wide one does nothing (`fillet2_steps.click_check`).
 
 - View-property changes (`Visibility`, `Transparency`, `Selectable`) made while a dialog's undo
   transaction is open are recorded in the undo history: a Ctrl+Z / Ctrl+Y replays them. Use

@@ -80,6 +80,9 @@ def _scratch(type_id):
         # document that joined it and was closed ended it (the dialog's step was committed
         # half-way, its Cancel / Ctrl+Z then left a "Delete" step behind)
         doc.UndoMode = 0
+        # Element names in plain text (not as references into this document's string table,
+        # which goes away with it): renamed() makes them the part's own (see there)
+        doc.UseHasher = False
         base = doc.addObject("Part::Feature", "Base")
         feature = doc.addObject(type_id, "Blend")
         feature.Base = base
@@ -100,19 +103,31 @@ def _scratch(type_id):
                 pass
 
 
-def _no_names(shape):
-    """A result without element names: the throw-away document's names would point into a
-    document that no longer exists (they changed at every compute and broke the steps after
-    this one). Without names FreeCAD numbers the faces, which is stable for one result."""
+def renamed(shape, scratch_tag, tag):
+    """The throw-away document's result with element names of the part's own: they are
+    built from the input's names plus the tag of the throw-away input object (a number that
+    changes at every compute, so a step after this one would lose its edge every time).
+    That tag is replaced by `tag`, the input shape's own, as FreeCAD's makeFillet names a
+    result: stable, and FreeCAD still follows the history of every element."""
+    import re
+
     out = shape.copy()
     try:
-        out.ElementMap = {}
+        names = dict(shape.ElementMap)
+        if tag and names:
+            pattern = re.compile(re.escape(":H%x" % scratch_tag) + r"(?=[,:;]|$)")
+            mapping = {pattern.sub(":H%x" % tag, k): v for k, v in names.items()}
+            out.ElementMap = {}
+            out.ElementMap = mapping
+        else:
+            out.ElementMap = {}  # no names rather than names that change every time
+        out.Tag = 0
     except Exception:
         pass
     return out
 
 
-def kernel(kind, shape, items):
+def kernel(kind, shape, items, tag=None):
     """`shape` blended along each (edge index, size 1, size 2) of `items` in one OpenCASCADE
     run. Fillet: radius 1 at the edge's first vertex, radius 2 at its last (a straight law in
     between, smoothed through every edge). Chamfer: distance 1 on the edge's first face,
@@ -147,7 +162,7 @@ def kernel(kind, shape, items):
                     raise KernelError(feature.getStatusString() or "command not done")
                 import Part
 
-                result = _no_names(Part.Shape(feature.Shape))
+                result = renamed(Part.Shape(feature.Shape), base.ID, tag or shape.Tag)
     except blend.BlendError as exc:
         raise KernelError(str(exc))
     except Exception as exc:
@@ -159,7 +174,8 @@ def kernel(kind, shape, items):
 
 # -- edges and their faces ------------------------------------------------------------------
 def _index(name):
-    return int(name[4:]) if name.startswith("Edge") else int(name[4:])
+    """1 for "Edge1" / "Face1"."""
+    return int(name[4:])
 
 
 def turn_at(info, name, parameter):
@@ -202,7 +218,8 @@ def ordered_chain(info, name):
         return [m for m in chain if m != n and any((p - point).Length < 1e-6 for p in ends(m))]
 
     start = None
-    for n in chain:
+    closed = any((ends(n)[0] - ends(n)[1]).Length < 1e-6 for n in chain)  # a circle
+    for n in [] if closed else chain:
         for point in ends(n):
             if not touches(n, point):
                 start = (n, point)
@@ -443,12 +460,15 @@ def _round_fillet_rows(shape, spec, groups):
     info = blend.ShapeInfo(shape)
     rows = spec.get("sets", [])
     chain = bool(spec.get("tangent_chain", True))
-    cut_points, variable = [], []
+    cut_points, variable, taken = [], [], set()
     for row, refs in zip(rows, groups):
         if refs and row.get("radius_type") == "variable":
             points, plan, rest = variable_plan(info, row, refs, chain)
             cut_points.extend(points)
             variable.append((plan, rest))
+            # its edges (and their chain) belong to the variable set: other sets skip them
+            for name in blend.blended_edges(info, refs):
+                taken.update(info.chain(name))
     try:
         work = split_at(shape, cut_points) if cut_points else shape
     except Exception as exc:
@@ -462,7 +482,7 @@ def _round_fillet_rows(shape, spec, groups):
             raise core.SetError("An edge of a set was lost cutting the variable edge.")
         return (found, b, a) if flipped else (found, a, b)
 
-    items, taken, chains, wanted = [], set(), [], []
+    items, chains, wanted = [], [], []
     for row, refs in zip(rows, groups):
         if not refs or row.get("radius_type") == "variable":
             continue
@@ -486,7 +506,7 @@ def _round_fillet_rows(shape, spec, groups):
                 chains.append(work.Edges[index - 1])
                 if picked:
                     wanted.append(work.Edges[index - 1])
-    result = kernel("fillet", work, items)
+    result = kernel("fillet", work, items, tag=shape.Tag)
     if not spec.get("tangent_chain", True):
         try:
             result = _local(work, result, wanted, chains)
@@ -961,6 +981,35 @@ def write_spec(obj, spec):
         current = float(getattr(current, "Value", current))
         if abs(current - value) > 1e-12:
             setattr(obj, prop, value)
+    used = _used_sizes(spec)
+    for prop in obj.PropertiesList:
+        if prop.startswith("Size") or prop.startswith("Angle"):
+            mode = [] if prop in used else ["Hidden"]
+            try:
+                if list(obj.getEditorMode(prop)) != mode:
+                    obj.setEditorMode(prop, mode)
+            except Exception:
+                pass
+
+
+def _used_sizes(spec):
+    """The size properties the settings use now (the parameters table lists only those)."""
+    if spec.get("mode") == "rule":
+        return {"Size1"} if spec.get("kind") == "fillet" else set()
+    if spec.get("mode") == "full_round":
+        return set()
+    used = set()
+    for i, row in enumerate(spec.get("sets", []), start=1):
+        if spec.get("kind") == "chamfer":
+            used.add("Size%d" % i)
+            ctype = row.get("chamfer_type", "equal")
+            if ctype == "two":
+                used.add("SizeB%d" % i)
+            elif ctype == "angle":
+                used.add("Angle%d" % i)
+        elif row.get("radius_type", "constant") != "variable":
+            used.add("Size%d" % i)
+    return used
 
 
 def _has_expression(obj, prop):

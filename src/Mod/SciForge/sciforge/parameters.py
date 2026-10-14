@@ -51,6 +51,17 @@ SCIFORGE_PROPS = {
         ("RotationAngle", "Rotation Angle"),
     ],
 }
+# SciForge's own Fillet / Chamfer step (fillet_sets.py): one size per selection set (row)
+SCIFORGE_PROPS["FilletSets"] = [("Size%d" % i, "Set %d Size" % i) for i in range(1, 13)]
+SCIFORGE_PROPS["ChamferSets"] = [
+    item
+    for i in range(1, 13)
+    for item in (
+        ("Size%d" % i, "Set %d Distance" % i),
+        ("SizeB%d" % i, "Set %d Distance 2" % i),
+        ("Angle%d" % i, "Set %d Angle" % i),
+    )
+]
 DIMENSION_TYPES = {"Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle"}
 
 

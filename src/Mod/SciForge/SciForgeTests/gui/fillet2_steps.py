@@ -112,5 +112,6 @@ def type_point(panel, k, position=None, radius=None):
 
 
 def report_errors():
-    """Kernel / fillet errors printed to the Report view (there must be none)."""
-    return b.report_has_kernel_errors()
+    """Kernel / fillet errors printed to the Report view (there must be none). picks.py's
+    note that it found a lost edge again is information, not an error."""
+    return [line for line in b.report_has_kernel_errors() if "found again" not in line]
