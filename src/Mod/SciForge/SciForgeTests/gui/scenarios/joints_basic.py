@@ -9,8 +9,8 @@ Plate = 0..40 x 0..30 x 10, Block = 50..70 x 0..10 x 20 (Extrude New Body).
      Click the plate's top face near its centre: the block flies onto the plate, faces mating
      (top against top: the block stands upside down on the plate, 10..30 high, centred on
      (20, 15)), keeping its heading. Type Revolute: the new motion plays once and comes back;
-     the plate was grounded (nothing held it), the note says so. OK: one "Revolute 1" in the
-     timeline and in the browser's Joints folder; the plate's row shows the anchor. Ctrl+Z
+     nothing is grounded (Fusion's joints need no ground; SciForge holds the plate only while
+     it solves). OK: one "Revolute 1" in the timeline and in the browser's Joints folder. Ctrl+Z
      puts the block back where it was and removes the joint; Ctrl+Y brings both back.
   B  Edit from the timeline (double-click "Revolute 1"): Angle 90 turns the block about the
      joint axis (its 20 x 10 footprint turns); Offset Z 5 lifts it; Flip turns it over (right
@@ -102,8 +102,10 @@ def a_joined():
     j.box_is(
         "block on the plate: 10..30 x 10..20 x 10..30", j.block().Shape.BoundBox, ON_PLATE, 1e-4
     )
-    h.check("the plate was grounded by itself", j.joints_module().is_grounded(j.plate()))
-    h.check("the note says so", "grounded" in p.note.text().lower(), p.note.text())
+    h.check("nothing was grounded for it", not j.joints_module().grounds(App.ActiveDocument))
+    h.check(
+        "the note says nothing of a ground", "grounded" not in p.note.text().lower(), p.note.text()
+    )
     h.check("the markers are gone", not p.markers, len(p.markers))
     state["anim"] = p.animator is not None
     h.shot("A-joined")
@@ -163,7 +165,7 @@ def a_undo():
 def a_undone():
     h.check("undo removed the joint", not j.joint_list(), [x.Label for x in j.joint_list()])
     j.box_is("undo put the block back", j.block().Shape.BoundBox, [50, 0, 0, 70, 10, 20], 1e-4)
-    h.check("undo removed the ground", not j.joints_module().is_grounded(j.plate()))
+    h.check("still no ground after undo", not j.joints_module().is_grounded(j.plate()))
 
 
 def a_redo():

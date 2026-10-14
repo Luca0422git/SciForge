@@ -162,10 +162,17 @@ class DragSession:
         self.prev_turn = 0.0
         self.values = None  # (angle, slide) the joint reads now
         self.told = False
+        self.joint = None
         if self.kind == "held":
             self._tell(self.plan["why"])
             log("Component Drag: %s" % self.plan["why"])
             self.start_places = None
+            _STATE["last"] = {
+                "part": part.Name,
+                "kind": "held",
+                "moved": False,
+                "why": self.plan["why"],
+            }
             return
         doc.openTransaction("Drag %s" % part.Label)
         movers = self.plan.get("movers") or [part]

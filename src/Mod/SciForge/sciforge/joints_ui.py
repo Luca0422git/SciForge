@@ -2162,6 +2162,12 @@ def position_prompt(doc, then):
             _PROMPT["box"] = None
             box.hide()
             box.deleteLater()
+            try:  # the keys (Esc...) go to the window again, as before the question
+                main = Gui.getMainWindow()
+                main.activateWindow()
+                main.raise_()
+            except Exception:
+                pass
 
     box.buttonClicked.connect(answered)
     _PROMPT["box"] = box
