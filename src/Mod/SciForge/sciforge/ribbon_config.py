@@ -451,32 +451,69 @@ SURFACE_MODIFY = group(
 MESH_CREATE = group(
     "m_create",
     "CREATE",
-    ["Insert Mesh"],
+    ["Insert Mesh", "Tessellate"],
     [
         item("Insert Mesh", "SciForge_InsertMesh", "insert_mesh"),
-        item("Tessellate", "Mesh_FromPartShape", "insert_mesh"),
+        item(
+            "Tessellate",
+            ("SciForge_MeshTessellate", "Mesh_FromPartShape"),
+            "mesh_tessellate",
+            note="A solid body into a mesh body, at a refinement; its faces become face groups.",
+        ),
+        item(
+            "Create Mesh Section Sketch",
+            "SciForge_MeshSectionSketch",
+            "mesh_section",
+            note="A sketch of where a plane cuts a mesh body.",
+        ),
     ],
 )
 MESH_PREPARE = group(
     "m_prepare",
     "PREPARE",
-    ["Repair", "Remesh"],
+    ["Generate Face Groups", "Repair"],
     [
-        item("Repair", "Mesh_Evaluation", "compute"),
-        item("Remesh", "Mesh_RemeshGmsh", "insert_mesh"),
-        item("Reduce", "Mesh_Decimating", "insert_mesh"),
-        item("Smooth", "Mesh_Smoothing", "insert_mesh"),
+        item("Generate Face Groups", "SciForge_MeshFaceGroups", "mesh_face_groups"),
+        item(
+            "Repair",
+            ("SciForge_MeshRepair", "Mesh_Evaluation"),
+            "mesh_repair",
+            note="Close holes, turn flipped faces round, stitch cracks, or rebuild it closed.",
+        ),
     ],
 )
 MESH_MODIFY = group(
     "m_modify",
     "MODIFY",
-    ["Plane Cut"],
+    ["Remesh", "Reduce", "Plane Cut"],
     [
-        item("Plane Cut", "Mesh_TrimByPlane", "split_body"),
-        item("Separate", "Mesh_SplitComponents", "split_body"),
-        item("Combine", "Mesh_Union", "combine"),
-        item("Reverse Normal", "Mesh_FlipNormals", "compute"),
+        item("Remesh", ("SciForge_MeshRemesh", "Mesh_RemeshGmsh"), "mesh_remesh"),
+        item("Reduce", ("SciForge_MeshReduce", "Mesh_Decimating"), "mesh_reduce"),
+        item(
+            "Plane Cut",
+            ("SciForge_MeshPlaneCut", "Mesh_TrimByPlane"),
+            "mesh_plane_cut",
+            note="Trim or split a mesh body with a plane, the cut closed.",
+        ),
+        item("Shell", "SciForge_MeshShell", "mesh_shell"),
+        item("Smooth", ("SciForge_MeshSmooth", "Mesh_Smoothing"), "mesh_smooth"),
+        SEP,
+        item("Combine", ("SciForge_MeshCombine", "Mesh_Union"), "mesh_combine"),
+        item("Separate", ("SciForge_MeshSeparate", "Mesh_SplitComponents"), "mesh_separate"),
+        item(
+            "Reverse Normal",
+            ("SciForge_MeshReverseNormal", "Mesh_FlipNormals"),
+            "mesh_reverse_normal",
+        ),
+        SEP,
+        item("Erase and Fill", "SciForge_MeshEraseFill", "mesh_erase_fill"),
+        item("Delete Faces", "SciForge_MeshDeleteFaces", "mesh_delete_faces"),
+        item(
+            "Make Closed Mesh",
+            "SciForge_MeshMakeClosed",
+            "mesh_repair",
+            note="Rebuild a closed (watertight) body from a broken mesh (Repair > Rebuild).",
+        ),
     ],
 )
 MESH_CONVERT = group(

@@ -27,6 +27,22 @@ DRAGGABLE = ("body", "component")
 DROP_TARGETS = ("component", "document")
 
 
+def _rename_mesh_body(doc, obj, text):
+    """A mesh body's name is carried by every step of its history (mesh.py): one undo step."""
+    from . import mesh
+
+    doc.openTransaction("Rename %s" % obj.Label)
+    try:
+        mesh.rename_body(obj, text)
+    except Exception as exc:
+        warn("browser rename: %s" % exc)
+    doc.commitTransaction()
+    try:
+        App.closeActiveTransaction()
+    except Exception:
+        pass
+
+
 def _isolated_names(doc):
     from . import components_ui
 
@@ -110,6 +126,10 @@ def _objects(doc):
                 "grounded": obj.Name in grounded,
             }
             _joint_row(row, obj)
+            if obj.TypeId in core.MESH_TYPES:
+                note = _mesh_note(obj)  # Fusion's warning beside a mesh body that is not closed
+                if note:
+                    row[note[0]] = note[1]
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
                     row["suppressed"] = True  # off, not broken: greyed, like Fusion
@@ -157,6 +177,15 @@ def _run_command(name):
         Gui.runCommand(name)
     except Exception as exc:
         warn("%s failed: %s" % (name, exc))
+
+
+def _mesh_note(obj):
+    try:
+        from . import mesh
+
+        return mesh.browser_note(obj)
+    except Exception:
+        return None
 
 
 def _origin_of(feature):
@@ -851,6 +880,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 self._doc.Label = text
             elif node["kind"] == "saved_view":
                 self._rename_view(node["object"], text)
+            elif node["kind"] == "mesh_body":
+                obj = self._object(node)
+                if obj is not None and text != obj.Label:
+                    _rename_mesh_body(self._doc, obj, text)
             else:
                 obj = self._object(node)
                 if obj is not None and text != obj.Label:
@@ -896,11 +929,19 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self.refresh(force=True)
 
     def _delete_plain(self, doc, names):
-        """Delete mesh bodies and canvases (no history to re-link), one undo step."""
+        """Delete mesh bodies (with the MESH steps that made only them) and canvases, one
+        undo step."""
         doc.openTransaction("Delete")
         try:
+            from . import mesh
+
             for name in names:
-                if doc.getObject(name) is not None:
+                obj = doc.getObject(name)
+                if obj is None:
+                    continue
+                if mesh.is_mesh(obj):
+                    mesh.delete_body(obj)
+                else:
                     doc.removeObject(name)
         except Exception as exc:
             warn("browser delete: %s" % exc)
@@ -1029,6 +1070,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Show All Sketches": lambda: self._show_all("sketch", True),
             "Hide All Sketches": lambda: self._show_all("sketch", False),
             "Convert Mesh": lambda: self._run_with(obj, "SciForge_ConvertMesh"),
+            "Repair": lambda: self._run_with(obj, "SciForge_MeshRepair"),
             "Edit Canvas": lambda: _edit_object(obj),
             "Calibrate": lambda: self._run_with(obj, "SciForge_CalibrateCanvas"),
             "Ground": lambda: _joint_action("toggle_ground", obj),

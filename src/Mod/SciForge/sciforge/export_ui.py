@@ -212,8 +212,7 @@ class _MeshDialog(QtWidgets.QDialog):
                 self.refinement.set_triangles(0)
                 return
             level, surface, normal = self.refinement.values()
-            shapes = [export.shape_of(b) for b in chosen]
-            self.refinement.set_triangles(export.triangle_count(shapes, level, surface, normal))
+            self.refinement.set_triangles(export.body_triangles(chosen, level, surface, normal))
         except export.ExportError as exc:
             self.refinement.set_triangles(None)
             self.say(str(exc))
@@ -316,7 +315,7 @@ class ExportDialog(_MeshDialog):
     def chosen_bodies(self):
         if self.what.currentText() == "Whole design":
             return export.exportable_bodies(self.doc)
-        return [b for b in self.bodies.chosen() if bodies.has_solid(b)]
+        return [b for b in self.bodies.chosen() if export.can_export(b)]
 
     def run(self, path=None):
         """Export (the button). `path` skips the Name / Location rows (tests)."""
@@ -439,7 +438,7 @@ class PrintDialog(_MeshDialog):
         """OK: write the file (asked for unless `path` is given) and open the folder, or
         hand it to the slicer. Returns True when done."""
         try:
-            chosen = [b for b in self.bodies.chosen() if bodies.has_solid(b)]
+            chosen = [b for b in self.bodies.chosen() if export.can_export(b)]
             if not chosen:
                 raise export.ExportError("Tick at least one body to print.")
             fmt = self.format.currentText()
@@ -498,7 +497,7 @@ def export_everything(doc, folder=None, open_after=True):
             folder = os.path.join(folder, export.safe_name(doc.Label) + export.EXPORT_FOLDER_SUFFIX)
     chosen = export.exportable_bodies(doc)
     if not chosen:
-        raise export.ExportError("There is no solid body to export yet.")
+        raise export.ExportError("There is no solid body or mesh body to export yet.")
 
     def screenshot(path):
         view = Gui.ActiveDocument.ActiveView if Gui.ActiveDocument else None
@@ -569,7 +568,7 @@ class ExportEverythingCommand(_Command):
         written = export_everything(doc)
         if written:
             commands.tell(
-                "%d files written to %s" % (len(written), os.path.dirname(written["step"]))
+                "%d files written to %s" % (len(written), os.path.dirname(written["readme"]))
             )
 
 
