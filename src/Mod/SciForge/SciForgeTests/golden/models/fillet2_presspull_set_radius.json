@@ -1,0 +1,109 @@
+{
+  "id": "fillet2_presspull_set_radius",
+  "title": "Press Pull on the round of set 2 of a two-set fillet edits set 2's radius (3 -> 2)",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2",
+    "presspull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "f1",
+      "sets": [
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 1
+        },
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "max"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 3
+        }
+      ]
+    },
+    {
+      "op": "press_pull",
+      "id": "pp1",
+      "distance": 2,
+      "fillet_face": {
+        "type": "cylinder",
+        "radius": 3,
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11957.07963267949,
+    "faces": 8,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Set 1 r 1 and set 2 r 3, then Press Pull on set 2's round sets it to 2: 12000 - 40 (1 + 4)(1 - pi/4). The fillet stays one step."
+  }
+}

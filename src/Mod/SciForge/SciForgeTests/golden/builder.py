@@ -342,10 +342,17 @@ class Builder:
         # Press Pull on a fillet face = edit that fillet's radius
         names = selectors.select(base.Shape, step["fillet_face"], "faces")
         face = base.Shape.getElement(names[0])
-        fillet = presspull_core.owning_fillet(self.body, face)
+        fillet = presspull_core.owning_fillet(self.body, face, sciforge=True)
         if fillet is None:
             raise BuildError("press_pull %r: the face is not made by a fillet" % step["id"])
-        fillet.Radius = step["distance"]
+        prop = "Radius"
+        if getattr(fillet, "SciForgeType", "") in ("FilletSets", "ChamferSets"):
+            from sciforge import fillet_sets  # the size of the set that made the face
+
+            prop, _label = fillet_sets.size_of_face(fillet, face)
+            if prop is None:
+                raise BuildError("press_pull %r: that round has no single size" % step["id"])
+        setattr(fillet, prop, step["distance"])
         self.objects[step["id"]] = fillet
         self.ops[step["id"]] = "fillet"
         self.doc.recompute()

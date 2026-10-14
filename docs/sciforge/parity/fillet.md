@@ -220,7 +220,8 @@ FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
   `fillet2_tangent_chain_off`, `fillet2_sets_tangent_chain_each`, `fillet2_rule_all_edges`,
   `fillet2_rule_between_follows_edit` (the boss is made wider after the rule fillet),
   `fillet2_full_round_rib`,
-  `fillet2_chamfer_sets_angle_flip`; all analytic.
+  `fillet2_chamfer_sets_angle_flip`, `fillet2_presspull_set_radius` (Press Pull on set 2's
+  round); all analytic.
 - Part 2 unit tests: `SciForgeTests/unit/test_fillet_core.py` (chord to radius, the variable
   law and how a chain is cut at its points, rounds / fillets, Distance and Angle as two
   distances, full round, the settings).
