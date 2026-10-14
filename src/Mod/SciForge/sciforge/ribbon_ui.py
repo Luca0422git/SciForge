@@ -358,8 +358,10 @@ class RibbonWidget(QtWidgets.QWidget):
         if on == self._sketch_mode:
             return
         self._sketch_mode = on
-        self.tab_buttons["sketch"].setVisible(on)
-        self.select_tab("sketch" if on else self._user_tab)
+        drawing = getattr(self, "_drawing_mode", False)  # (a drawing's tab keeps DRAWING)
+        self.tab_buttons["sketch"].setVisible(on and not drawing)
+        if not drawing:
+            self.select_tab("sketch" if on else self._user_tab)
         log("ribbon: sketch mode %s" % ("on" if on else "off"))
 
     def set_drawing_mode(self, on):
