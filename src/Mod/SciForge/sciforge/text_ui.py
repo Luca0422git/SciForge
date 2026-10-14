@@ -56,6 +56,21 @@ _state = {
 
 
 # -- small helpers ----------------------------------------------------------------------------
+def _safe(fn):
+    """For Qt slots and timers: an error is reported, never let out into Qt's event loop."""
+    import functools
+
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            warn("sketch text (%s): %s" % (fn.__name__, exc))
+            return None
+
+    return run
+
+
 def _param():
     return App.ParamGet(PREFS)
 
@@ -738,6 +753,7 @@ def picked_texts(session=None):
 
 
 # -- deleting and exploding -------------------------------------------------------------------
+@_safe
 def delete_texts(objs):
     objs = [o for o in objs if _alive(o)]
     if not objs:
@@ -768,6 +784,7 @@ def delete_texts(objs):
     log("deleted %d text(s)" % len(objs))
 
 
+@_safe
 def explode_texts(objs):
     objs = [o for o in objs if _alive(o)]
     if not objs:
@@ -1138,21 +1155,25 @@ class TextDialog(QtWidgets.QFrame):
                 errors.append("Angle: %s" % exc)
         return errors
 
+    @_safe
     def _changed(self, *_args):
         if self.closed:
             return
         self._timer.start()
 
+    @_safe
     def _type_changed(self, _index):
         self._collect()
         self._update_rows()
         self._timer.start()
 
+    @_safe
     def _path_clicked(self):
         self.path_button.setChecked(True)
         self.hint.setText("Click the curve of the sketch the text follows.")
 
     # -- preview -------------------------------------------------------------------------------
+    @_safe
     def _preview(self):
         if self.closed:
             return
@@ -1396,6 +1417,7 @@ class TextDialog(QtWidgets.QFrame):
         return list(self.target.FrameIds) if self.target is not None else []
 
     # -- OK / Cancel ------------------------------------------------------------------------------
+    @_safe
     def accept(self):
         if self.closed:
             return
@@ -1479,6 +1501,7 @@ class TextDialog(QtWidgets.QFrame):
         doc.commitTransaction()
         return obj
 
+    @_safe
     def reject(self):
         if self.closed:
             return
@@ -1625,6 +1648,7 @@ def _curve_under_mouse(sketch):
     return None
 
 
+@_safe
 def open_dialog(session=None, target=None):
     """Open the Text dialog in the open sketch (a new text, or `target`)."""
     session = session or _session()
@@ -1938,6 +1962,7 @@ def edit_text(obj):
         warn("could not edit %s: %s" % (getattr(obj, "Label", "the text"), exc))
 
 
+@_safe
 def _open_when_ready(obj, tries):
     session = _session()
     if session is not None and session.sketch is obj.Sketch and current_layer() is not None:
