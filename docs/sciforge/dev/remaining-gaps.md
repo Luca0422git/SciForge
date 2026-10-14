@@ -11,8 +11,9 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   curves sit outside the sketch (not in the browser or timeline).
 - **extrude-presspull.md**: To Object has no To Adjacent Faces / Through Body / Offset. Start:
   Object does not follow later changes. Move, Scale and Draft handles have no value box.
-- **fillet.md**: one constant radius per step (no variable, chord length, radius sets). No Rule
-  or Full Round fillet. Tangent Chain cannot be turned off. No G2 or setback corners.
+- **fillet.md**: (sf/fillet-2 built radius sets, Chord Length, Variable, Tangent Chain off,
+  Rule and Full Round fillets.) Left: G2, Setback, Asymmetric (kernel); Full Round only on a
+  straight rib between parallel walls; radius points take plain numbers.
 - **hole-thread.md**: no Taper Tapped (NPT). Clearance holes not chosen by fastener. The
   modeled thread ignores the class. A hole on a curved face does not follow the face.
 - **patterns.md**: no Compute Option Adjust / Optimized. No Pattern Type Components. No start
