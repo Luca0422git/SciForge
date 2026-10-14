@@ -759,9 +759,18 @@ def infer_dimension(picks, place=None):
     return {"type": _span_type(points[0], points[1], place), "use_centers": centers}
 
 
-def dimension_format(units, standard):
-    """TechDraw's FormatSpec: up to 2 decimals in mm, 3 in inches, no trailing zeros."""
-    return "%.3w" if units == "in" else "%.2w"
+DIAMETER_SIGN = "\u2300"  # the diameter sign drawn before a diameter's value
+
+
+def dimension_format(units, standard, dim_type="Distance"):
+    """TechDraw's FormatSpec: up to 2 decimals in mm, 3 in inches, no trailing zeros; a
+    diameter starts with the diameter sign and a radius with R (Fusion: "\u230012", "R5")."""
+    spec = "%.3w" if units == "in" else "%.2w"
+    if dim_type == "Diameter":
+        return DIAMETER_SIGN + spec
+    if dim_type == "Radius":
+        return "R" + spec
+    return spec
 
 
 def format_value(value_mm, units):

@@ -1746,6 +1746,9 @@ class DimensionPanel(DrawingPanel):
         result = self._infer(drawing.page_to_local(view, point))
         if "type" in result and result["type"] != self.dim.Type:
             self.dim.Type = result["type"]
+            self.dim.FormatSpec = core.dimension_format(
+                drawing.units_of(self.page), drawing.standard_of(self.page), result["type"]
+            )
             self.schedule()
         drawing.place_dimension(self.dim, point)
 

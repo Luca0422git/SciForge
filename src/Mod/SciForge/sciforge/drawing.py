@@ -1061,7 +1061,7 @@ def add_dimension(view, refs, dim_type, position):
     dim.Type = dim_type
     dim.References2D = [(view, r) for r in refs]
     dim.MeasureType = "Projected"
-    dim.FormatSpec = core.dimension_format(units_of(page), standard_of(page))
+    dim.FormatSpec = core.dimension_format(units_of(page), standard_of(page), dim_type)
     dim.ShowUnits = False
     page.addView(dim)
     place_dimension(dim, position)
@@ -1094,7 +1094,7 @@ def dimension_text(dim):
         return "%s°" % core._short(round(value, 2))
     text = core.format_value(value, units_of(page) if page is not None else "mm")
     if dim.Type == "Diameter":
-        return "⌀" + text
+        return core.DIAMETER_SIGN + text
     if dim.Type == "Radius":
         return "R" + text
     return text
@@ -1482,6 +1482,42 @@ def item_for_body(page, body):
 
 
 # ------------------------------------------------------------------ keeping up with the design
+def schema_length_unit():
+    """The length unit FreeCAD writes values in now ("mm", "in", ...)."""
+    try:
+        unit = App.Units.Quantity(1.0, App.Units.Length).getUserPreferred()[2]
+        return "in" if unit in ("in", '"') else unit
+    except Exception:
+        return "mm"
+
+
+def refresh_dimensions(page):
+    """A drawing in other units than FreeCAD's current ones writes its dimensions itself
+    (TechDraw formats in the current units only): the text follows each value."""
+    units = units_of(page)
+    native = schema_length_unit() == units
+    changed = False
+    for dim in annotations(page):
+        if dim.TypeId != DIMENSION:
+            continue
+        angular = dim.Type in ("Angle", "Angle3Pt")
+        if native or angular:
+            if dim.Arbitrary and _get(dim, "SciForgeOwnText", False):
+                dim.Arbitrary = False
+                dim.FormatSpec = core.dimension_format(units, standard_of(page), dim.Type)
+                changed = True
+            continue
+        text = dimension_text(dim)
+        if not text:
+            continue
+        if not dim.Arbitrary or dim.FormatSpec != text:
+            dim.Arbitrary = True
+            dim.FormatSpec = text
+            _add(dim, "App::PropertyBool", "SciForgeOwnText", True)
+            changed = True
+    return changed
+
+
 def refresh(page):
     """After the design changed: title block, parts list, centre marks. True when
     anything changed."""
@@ -1490,6 +1526,10 @@ def refresh(page):
         changed |= refresh_title(page)
     except Exception as exc:
         warn("drawing title block: %s" % exc)
+    try:
+        changed |= refresh_dimensions(page)
+    except Exception as exc:
+        warn("dimensions: %s" % exc)
     table = parts_list_of(page)
     if table is not None:
         try:

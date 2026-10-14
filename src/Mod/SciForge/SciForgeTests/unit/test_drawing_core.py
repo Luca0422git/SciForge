@@ -311,6 +311,9 @@ class DimensionTests(unittest.TestCase):
         self.assertEqual(core.format_value(12.5, "mm"), "12.5")
         self.assertEqual(core.format_value(60.0, "in"), "2.362")
         self.assertEqual(core.dimension_format("mm", "ISO"), "%.2w")
+        self.assertEqual(core.dimension_format("in", "ASME"), "%.3w")
+        self.assertEqual(core.dimension_format("mm", "ISO", "Diameter"), "\u2300%.2w")
+        self.assertEqual(core.dimension_format("mm", "ISO", "Radius"), "R%.2w")
 
 
 class PartsListTests(unittest.TestCase):
