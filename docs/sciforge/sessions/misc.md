@@ -57,7 +57,11 @@ needed).
 
 Scenarios: `misc_derive` (76 checks), `misc_decal` (54), `misc_preferences` (84),
 `misc_scripts` (52), `misc_materials` (51), `misc_compute` (14), `misc_capture` (25): all pass.
-Unit: `test_misc_cores.py` (39). Other areas run after the change: see the report.
+Unit: `test_misc_cores.py` (39; the whole unit suite: 763 OK). `--only base`: passes. Other
+areas run after the change, all pass: bodies_delete 63, bodies_look 58, inspect_com_interference
+79, insert_canvas 48, keys 8, luca 16, marking_menu_command 31, navigation_orbit 10, orbit_feel 67,
+patterns_params 48, ribbon_sweep 188, timeline_browser_qa 222, versions_save 69,
+viewer_settings_restart 9.
 
 ## FreeCAD facts and traps found
 
