@@ -115,8 +115,6 @@ sketches, a profile in another body) a hidden SubShapeBinder carries it into the
   (also from scripts and old steps that have no bodies list; 2026-10-13, sources in
   `parity/revolve.md`); one whose profiles only partly touch keeps the far piece in the body,
   like Fusion's multi-lump bodies (guess).
-- The hidden profile binder shows in the timeline as a Construct item for start-offset, multi-sketch
-  and new-body extrudes (the timeline could skip objects with `SciForgeRole`).
 - Value boxes: Move's triad, Scale's arrows (they set factor - 1 times a length, not a field)
   and Draft's angle disc have none. Which handle a typed digit goes to (last dragged or hovered,
   hover = within the handle plus 14 px) is SciForge's guess. The red colour and transparency of
