@@ -3,9 +3,11 @@
 four panes (Top, Front, Right and the 3D view that was there), a click in a pane makes it
 the active one; Two Views Horizontal (side by side), Two Views Vertical (one above the
 other), Single View (one tabbed view again, the extra views closed, the first one kept);
-Shift+1 switches Multiple Views on and off. Pan: the hand moves the view with the mouse
+Shift+1 switches Multiple Views on and off; another design opened meanwhile brings the tabs
+back (that design in front). Pan: the hand moves the view with the mouse
 (the model follows the pointer: the camera moves the other way by the dragged pixels times
-the view's millimetres per pixel); Esc ends it. Zoom: a drag up of 160 pixels halves the
+the view's millimetres per pixel); Esc ends it. Pan inside an open sketch: the sketch stays
+open, the drag draws nothing, Esc ends Pan only. Zoom: a drag up of 160 pixels halves the
 view's size; a right click ends it. Zoom Window: a box round the upper left quarter fills
 the view (half the size, its middle moves to the box's middle) and the command ends.
 
@@ -138,6 +140,29 @@ def single():
 
 def shift_1():
     h.check("Shift+1: Multiple Views", layout() == "Multiple Views", layout())
+    App.newDocument("Other")  # another design opened meanwhile
+
+
+def other_design():
+    h.check("another design opened: one view again", layout() == "Single View", layout())
+    h.check("tabs again (its tab too)", area().viewMode() == QtWidgets.QMdiArea.TabbedView)
+    gui = Gui.ActiveDocument
+    h.check("the new design in front", gui is not None and gui.Document.Name == "Other")
+    App.closeDocument("Other")
+
+
+other_design.wait_ms = 900
+
+
+def other_closed():
+    gui = Gui.ActiveDocument
+    h.check("the split design in front again", gui is not None and gui.Document.Name == "Viewports")
+    h.check("still one 3D view of it", len(views()) == 1, len(views()))
+    h.press(QtCore.Qt.Key_1, QtCore.Qt.ShiftModifier)
+
+
+def shift_1_on():
+    h.check("Shift+1: Multiple Views again", layout() == "Multiple Views", layout())
     h.press(QtCore.Qt.Key_1, QtCore.Qt.ShiftModifier)
 
 
@@ -242,6 +267,57 @@ def windowed():
     up = h.view().getCameraOrientation().multVec(V(0, 1, 0))
     h.check("the middle moved up and left", moved.dot(up) > 0, moved)
     h.check("Zoom Window ends by itself", navigate_ui.mode() is None)
+    h.fit()
+    h.click_empty()
+    h.ribbon("Create Sketch")
+
+
+# -- Pan in the middle of a command: the sketch stays open -----------------------------------
+def sketch_plane():
+    h.click(V(12, -8, 0))
+
+
+def sketch_pan():
+    sk = h.in_sketch()
+    h.check("a sketch is open", sk is not None)
+    st["sketch"] = sk.Name if sk is not None else None
+    n.click("Pan")
+
+
+def sketch_pan_drag():
+    from sciforge import navigate_ui
+
+    h.check("Pan is on in the sketch", navigate_ui.mode() == "pan")
+    h.check("the sketch is still open", h.in_sketch() is not None)
+    st["before"] = camera()
+    c = h.gl_widget().rect().center()
+    h.drag(c, QtCore.QPoint(c.x(), c.y() + 80), steps=8)
+
+
+def sketch_panned():
+    p0, p1 = st["before"][0], camera()[0]
+    moved = V(*p1) - V(*p0)
+    h.check("the view moved", moved.Length > 1e-6, moved)
+    sk = h.in_sketch()
+    h.check("the drag drew nothing in the sketch", sk is not None and len(sk.Geometry) == 0)
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def sketch_pan_ended():
+    from sciforge import navigate_ui
+
+    h.check("Esc ends Pan", navigate_ui.mode() is None)
+    sk = h.in_sketch()
+    h.check(
+        "... and leaves the sketch open",
+        sk is not None and sk.Name == st["sketch"],
+        sk and sk.Name,
+    )
+    h.ribbon("Finish Sketch")
+
+
+def sketch_done():
+    h.check("Finish Sketch closes it", h.in_sketch() is None)
 
 
 h.run(
@@ -255,6 +331,9 @@ h.run(
         two_v,
         single,
         shift_1,
+        other_design,
+        other_closed,
+        shift_1_on,
         shift_1_again,
         pan_drag,
         panned,
@@ -264,5 +343,11 @@ h.run(
         zoom_ended,
         window_drag,
         windowed,
+        sketch_plane,
+        sketch_pan,
+        sketch_pan_drag,
+        sketch_panned,
+        sketch_pan_ended,
+        sketch_done,
     ],
 )

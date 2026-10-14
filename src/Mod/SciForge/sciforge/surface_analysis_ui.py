@@ -1376,7 +1376,11 @@ class AnalysisPanel(bodypick.Tones, pickpanel.PickPanel):
             return False
 
     def reject(self):
-        done = super().reject()
+        try:
+            done = super().reject()
+        except Exception as exc:
+            warn("%s Cancel: %s" % (self.title, exc))
+            done = True
         schedule(self.doc)
         return done
 

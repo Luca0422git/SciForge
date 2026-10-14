@@ -101,25 +101,63 @@ class _Watch:
     def slotDeletedDocument(self, doc):
         try:
             if _STATE["doc"] == doc.Name:
-                QtCore.QTimer.singleShot(0, lambda: set_layout("Single View", quiet=True))
+                QtCore.QTimer.singleShot(0, back_to_single)
+        except Exception:
+            pass
+
+    def slotCreatedDocument(self, doc):
+        # another design opened (New, Open): its view would float over the panes
+        try:
+            if not is_single():
+                QtCore.QTimer.singleShot(300, _foreign_window)
         except Exception:
             pass
 
 
+def back_to_single(activate=None):
+    """Single View again (the split design was closed, another one opened)."""
+    try:
+        set_layout("Single View", quiet=True)
+        if activate is not None and _alive(activate):
+            area().setActiveSubWindow(activate)
+    except Exception as exc:
+        warn("viewports: %s" % exc)
+
+
+def _foreign_window():
+    """A visible view that is not one of the panes (a design opened meanwhile): back to
+    tabs, with that design in front."""
+    try:
+        mdi = area()
+        if mdi is None or is_single():
+            return
+        own = [s for s in [_STATE["base"]] + _STATE["extra"] if _alive(s)]
+        for sub in mdi.subWindowList():
+            if sub not in own and sub not in _STATE["hidden"] and sub.isVisible():
+                back_to_single(activate=sub)
+                return
+    except Exception as exc:
+        warn("viewports: %s" % exc)
+
+
 def place():
     """Put the panes in their cells."""
-    mdi = area()
-    if mdi is None or is_single():
-        return
-    subs = panes()
-    rect = mdi.viewport().rect()
-    for sub, (x, y, w, h) in zip(subs, nav_core.cells(current(), rect.width(), rect.height(), GAP)):
-        try:
-            sub.setGeometry(x, y, w, h)
-            sub.show()
-        except RuntimeError:
-            continue
-    _raise_bar()
+    try:
+        mdi = area()
+        if mdi is None or is_single():
+            return
+        subs = panes()
+        rect = mdi.viewport().rect()
+        cells = nav_core.cells(current(), rect.width(), rect.height(), GAP)
+        for sub, (x, y, w, h) in zip(subs, cells):
+            try:
+                sub.setGeometry(x, y, w, h)
+                sub.show()
+            except RuntimeError:
+                continue
+        _raise_bar()
+    except Exception as exc:
+        warn("viewports: %s" % exc)
 
 
 def _raise_bar():

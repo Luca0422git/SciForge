@@ -85,7 +85,6 @@ Unavailable items are greyed out. Separators group related commands.
   the browser too.
 - Timeline: no drag-to-reorder, suppress or groups yet.
 - Menu icons are 16 px (Fusion about 20 px); COMMENTS panel and "Unsaved" banner not done.
-- Orbit and Pan buttons on the navigation bar are hints only (the mouse does it).
 
 ## ViewCube (2026-10-12)
 
@@ -108,7 +107,8 @@ Matches Fusion (Autodesk sources, see the research report):
   ends centred; review fix 2026-10-13).
 - Arrow clicks add up: a second click while the view is still turning (a normal
   double-click, 150 ms) turns on from where the first one is going.
-- Right-click: Go Home; Orthographic / Perspective; Set Current View as Home > Fit to View
+- Right-click: Go Home; Orthographic / Perspective / Perspective with Ortho Faces (the
+  navigation bar's Camera choice, the same setting); Set Current View as Home > Fit to View
   / Fixed Distance; Reset Home. Ctrl+Alt+V shows or hides the cube (remembered).
 - X/Y/Z triad in red/green/blue.
 
@@ -126,8 +126,8 @@ Unconfirmed (check in real Fusion, research report checks 4 and 5), SciForge's g
 - Go Home turns first, then fits (Fit to View) or jumps to the stored zoom and position
   (Fixed Distance); Fusion probably does it in one move.
 
-Not done yet: Perspective with Ortho Faces, Set current view as Front / Reset Front; the
-cube is always drawn without perspective. The mouse wheel over the cube zooms the view;
+Not done yet: Set current view as Front / Reset Front; the cube is always drawn without
+perspective. The mouse wheel over the cube zooms the view;
 clicks and right-clicks on the see-through corners of the cube's square go to the 3D view
 underneath (selection, marking menu).
 
@@ -169,3 +169,68 @@ Unconfirmed (check in real Fusion), SciForge's guess:
 Known limits: Shift + middle click on sketch geometry inside an open sketch sets nothing
 (FreeCAD reports no object for edit-mode geometry; a body face works). With two views of
 one design the dot is drawn only in the view where it was set, the centre applies to both.
+
+## Navigation bar (2026-10-14)
+
+The bar at the bottom centre of the view (`navbar_ui.py`, entries in `ribbon_config.NAV_BAR`):
+Orbit (see above), Look At, Pan, Zoom / Zoom Window, Fit, Display Settings, Grid and Snaps,
+Viewports. Code: `nav_core.py` (choices and maths, no Qt, unit tested), `navigate_ui.py`
+(Pan, Zoom, Zoom Window), `display_ui.py`, `grid_ui.py` + `increments.py`, `viewports_ui.py`.
+Scenarios: `navbar_display` (71 checks), `navbar_grid` (55), `navbar_viewports` (42), plus
+`viewcube_menu` for the shared Camera choice. The choices are remembered (preferences
+`Mod/SciForge/Display` and `Mod/SciForge/Grid`, Object Visibility excepted); the test
+harness puts them back to the defaults before every scenario.
+
+Source column as in `inspect-analysis.md`: **Autodesk** (help or API, through search
+excerpts), **Forum** (Autodesk Community, tutorials), **Guess**.
+
+| Fusion | Source | SciForge |
+|---|---|---|
+| Pan: the hand; drag with the left button moves the view; until Esc | Autodesk (Pan moves the view parallel to the screen), Guess (Esc) | Same; the model follows the pointer exactly. Esc, a right click or another command ends it. While it runs the left button picks nothing. |
+| Zoom (drop-down): Zoom, Zoom Window | Autodesk | Zoom: drag up = in (160 px halves the view), until Esc / right click. Zoom Window: drag a box, what is inside fills the view, then the command ends. |
+| Display Settings > Visual Style: Shaded, Shaded with Hidden Edges, Shaded with Visible Edges Only (default), Wireframe, Wireframe with Hidden Edges, Wireframe with Visible Edges Only | Autodesk | Same six, every 3D view. Hidden edges are drawn dashed and lighter where something is in front of them; the two hidden-line wireframe styles fill the faces with the background colour (FreeCAD's own Hidden Line draws every triangle's edges). |
+| Environment: Theme (default), Photo Booth, Dark Sky and other lit scenes | Autodesk (Theme, Photo Booth, Dark Sky), Guess (Grey Room, Infinity Pool, Tranquility Blue, Warm Light) | The background only (a gradient per scene); the model is lit as before (see gaps). |
+| Effects: Ground Shadow, Ground Plane (Ground Plane off = plain background) | Autodesk, Forum | Ground Shadow: the bodies' outline straight below the model, soft dark; Ground Plane: a light floor. Ambient Occlusion and Reflections are in the menu greyed with the reason. |
+| Ground Plane Offset: moves the ground up / down | Autodesk | A slider under the bar: 0 = touching the model's lowest point, 100 = the model's size (its diagonal) below it. Ground Shadow and Ground Plane move with it. |
+| Object Visibility: Show All, Origins, Analysis, Joints, Joint Origins, Sketches, Construction Planes / Axes / Points, Canvases, Mesh Bodies | Autodesk (API ObjectVisibility) | Same kinds. A hidden kind is neither drawn nor clickable; the browser eyes stay as they are. Show All shows everything (or hides everything when all are shown). Not remembered (it belongs to this session). |
+| Camera: Orthographic, Perspective, Perspective with Ortho Faces | Autodesk | Same, every 3D view, and the same choice as the ViewCube's right-click menu. Perspective with Ortho Faces: orthographic while the view looks straight at a face (after a ViewCube face click, Top / Front ...), perspective otherwise. Default Orthographic (see gaps). |
+| Grid and Snaps > Layout Grid | Forum | A grid on the XY ground in the 3D views, light major and darker minor lines. Adaptive: about six major lines across the view, the spacing a 1-2-5 step that changes with the zoom. Default off (see gaps). |
+| Layout Grid Lock | Forum | The adaptive spacing stays as it is while zooming. |
+| Snap to Grid | Forum | The same setting as the Sketch Palette's Snap (new sketch points snap to the sketch grid). |
+| Grid Settings: Adaptive / Fixed, Major Grid Spacing, Minor Subdivisions | Forum | Same dialog values; they go to the layout grid and to the grid of every sketch (the open one at once, every sketch opened later). |
+| Incremental Move, Set Increments (linear, angular) | Forum | While on, dragging a handle goes in steps: the blue distance arrows (`taskui.ArrowDragger`, `handles3d.LinearHandle`: Extrude, Press Pull, Fillet, Hole, Offset Plane, Section ...), the angle handles made through `handles3d.angle_handle` (Section, Plane at Angle, Emboss) and Move/Copy's arrows and rings. Defaults 1 mm and 15 deg (Guess). Typed values are never rounded. |
+| Viewports: Single View, Multiple Views (Shift+!) | Forum | Multiple Views: four panes, Top, Front, Right and the 3D view that was there; Shift+1 switches it on and off. A click in a pane makes it the active one; each pane has its own camera and ViewCube. |
+| Two views side by side / one above the other | Guess (the brief's list; these names are SolidWorks', no Fusion source) | Two Views Horizontal and Two Views Vertical: the 3D view and Front. |
+
+How it maps onto FreeCAD: visual styles are FreeCAD's per-view draw styles (`setOverrideMode`:
+As Is, Flat Lines, Shaded, Wireframe) plus SciForge's own Coin nodes (hidden edges through a
+`SoDepthBuffer` with function GREATER, background-coloured fill faces); environments are the
+view's background (`setGradientBackground` / `setBackgroundColor`); Object Visibility puts a
+draw-style and pick-style override at child 0 of each hidden object's root node; the camera
+is `view.setCameraType` (a timer watches the view direction for Perspective with Ortho Faces);
+the extra panes are `Gui.Document.createView("Gui::View3DInventor")` shown frameless and tiled
+in the main window's MDI area (sub-window mode), Single View closes them and puts the tabs
+back; Pan / Zoom / Zoom Window edit the camera node directly from a Qt event filter.
+
+Gaps (not built, and why):
+- **Lit environments, reflections, ambient occlusion.** Fusion's environments light the
+  model from a picture all round it; FreeCAD's Coin viewer has a headlight and a background,
+  no image-based lighting, no environment maps on its materials and no screen-space effects.
+  SciForge gives each environment's background look only. Ambient Occlusion and Reflections
+  are greyed in the menu with that reason; Anti-aliasing is FreeCAD's preference (it only
+  applies to views opened afterwards), not in the menu.
+- **Ground Shadow** is the bodies' outline projected straight down (a flat soft shape), not a
+  light-dependent shadow.
+- **Defaults kept from FreeCAD:** the camera starts Orthographic and the Layout Grid off.
+  Fusion probably starts Perspective with the grid on (Guess); switching the default would
+  change every existing scenario's picture and clicks. One click in the menu changes it, and
+  the choice is remembered.
+- **Viewports:** the panes are equal and cannot be resized by dragging the border (Fusion's
+  quad view can, per a blog); no "synchronize views" (no source found). While several panes
+  are shown the document tabs are hidden; views of other open designs wait behind until
+  Single View.
+- **Incremental Move** does not yet step Extrude's taper angle, Revolve's own angle handles,
+  Primitives' arrows, Pattern's turn handle and Hole's point (each command's own handle
+  class, in other areas).
+- Environment names other than Theme, Photo Booth and Dark Sky, the grid colours, the 1-2-5
+  spacing steps and the increments' defaults need a look at real Fusion.

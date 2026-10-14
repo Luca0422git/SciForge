@@ -18,7 +18,7 @@ from . import commands, log, nav_core, warn
 from . import ui_icon_path
 from .compat import QtCore, QtWidgets
 
-_STATE = {"mode": None, "widgets": [], "filter": None, "view": None, "gl": None}
+_STATE = {"mode": None, "widgets": [], "filter": None, "view": None, "gl": None, "dialog": None}
 HINTS = {
     "pan": "Drag to pan. Esc ends.",
     "zoom": "Drag up to zoom in, down to zoom out. Esc ends.",
@@ -136,8 +136,8 @@ class _Filter(QtCore.QObject):
                     return True
                 if event.button() != QtCore.Qt.LeftButton:
                     return False
-                if Gui.Control.activeDialog():
-                    # a command was started meanwhile: Pan / Zoom give way to it
+                if _dialog_key() != _STATE["dialog"]:
+                    # a command was started (or ended) meanwhile: Pan / Zoom give way to it
                     QtCore.QTimer.singleShot(0, stop)
                     return False
                 self.press = QtCore.QPointF(event.position())
@@ -197,11 +197,33 @@ class _Filter(QtCore.QObject):
                 QtCore.QTimer.singleShot(0, stop)
 
 
+def _dialog_key():
+    """What is open: a command's dialog, a sketch or other edit (Pan and Zoom work inside
+    them, like Fusion's navigation; a different one opening ends Pan / Zoom)."""
+    current = edit = None
+    try:
+        from . import taskui
+
+        current = taskui.current()
+    except Exception:
+        current = None
+    try:
+        gui = Gui.ActiveDocument
+        vp = gui.getInEdit() if gui is not None else None
+        edit = vp.Object.Name if vp is not None else None
+    except Exception:
+        edit = None
+    try:
+        open_dialog = bool(Gui.Control.activeDialog())
+    except Exception:
+        open_dialog = False
+    return open_dialog, id(current) if current is not None else None, edit
+
+
 def start(which):
-    """Pan, Zoom or Zoom Window on the active 3D view."""
+    """Pan, Zoom or Zoom Window on the active 3D view. An open command or sketch stays open
+    (the navigation bar is used in the middle of a command)."""
     stop()
-    if not commands.finish_open_dialog():
-        return False
     view, gl, viewer = _view_parts()
     if view is None or gl is None:
         commands.tell("Open or start a design first.")
@@ -210,7 +232,7 @@ def start(which):
     _STATE["widgets"] = [w for w in (gl, viewer) if w is not None]
     for widget in _STATE["widgets"]:
         widget.installEventFilter(_STATE["filter"])
-    _STATE.update(mode=which, view=view, gl=gl)
+    _STATE.update(mode=which, view=view, gl=gl, dialog=_dialog_key())
     gl.setCursor(CURSORS[which])
     commands.tell(HINTS[which])
     log("%s: on" % {"pan": "Pan", "zoom": "Zoom", "window": "Zoom Window"}[which])
@@ -219,6 +241,14 @@ def start(which):
 
 def stop():
     """End Pan / Zoom / Zoom Window (Esc, a right click, another command)."""
+    try:
+        _stop()
+    except Exception as exc:
+        warn("navigation: %s" % exc)
+        _STATE.update(mode=None, widgets=[], filter=None, view=None, gl=None, dialog=None)
+
+
+def _stop():
     if _STATE["mode"] is None:
         return
     which = _STATE["mode"]
@@ -239,7 +269,7 @@ def stop():
             filt.band.deleteLater()
         except RuntimeError:
             pass
-    _STATE.update(mode=None, widgets=[], filter=None, view=None, gl=None)
+    _STATE.update(mode=None, widgets=[], filter=None, view=None, gl=None, dialog=None)
     log("%s: off" % {"pan": "Pan", "zoom": "Zoom", "window": "Zoom Window"}[which])
 
 
