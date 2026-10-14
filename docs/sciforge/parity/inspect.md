@@ -30,6 +30,7 @@ All 19 entries of the CONSTRUCT menu open the same kind of dialog:
 | Only what fits the blue box can be picked; clicks go through the rest | Same: construction planes / axes / points the box cannot take let the click through to what is behind (a corner behind a construction plane for Point at Vertex, the YZ square behind an axis for Midplane). |
 | Live preview of the plane / axis / point | Same: the datum is created at once and follows every change. |
 | Offset Plane: distance with a blue arrow | Same (drag or type; formulas and parameters work). Default 10 mm. |
+| Offset Plane Extent: Distance / To Object (a sketch point, a corner or a construction point the plane goes through; it follows the point) | Same (2026-10-13): Extent row between Plane and the value; To Object shows an Object box instead of Distance and no arrow; the plane follows the point when the part changes. Switching an edit back to Distance keeps the plane where it is and shows that distance. |
 | Value boxes take parameters and formulas; a typo is refused | Same: "gap", "gap * 3" follow the parameter and are listed under the boxes ("Distance = gap", also when editing); something that is no value ("gap +") keeps the dialog open on Enter and OK and says why. |
 | Pressing / letting go of a handle is not a pick | Same: FreeCAD also selects the face under the mouse at the press and at the release of a drag; those selections are ignored for a moment (`handles3d.just_used`), so letting go of an arrow over the part never re-picks the plane or face. |
 | Plane at Angle: line + angle, rotate handle | Same, with a curved blue handle. 0 deg = the plane the line already lies in (see "assumptions"). |
@@ -53,6 +54,18 @@ distance is an expression a parameter can drive). Everything else is attached to
 (`ConstructionFrame`, a `Part::Part2DObjectPython` in the body, `SciForgeTimeline = False`) that
 computes the exact frame on every recompute from the picks; the datum carries `SciForgeConstruct`
 (which entry) and `SciForgeRefs` (the picks, so the timeline knows what it depends on).
+
+### Offset Plane To Object, picks found again (2026-10-13, gaps work)
+
+Sources: **Autodesk** "Create an offset plane" (SLD-CONSTRUCT-OFFSET-PLANE, search excerpts):
+Extent Distance or To Object; To Object takes a sketch point or a vertex and the plane stays
+tied to it. **Autodesk** API: ConstructionPlaneOffsetThroughPointDefinition (a vertex, a sketch
+point or a construction point). A construction built on a face, an edge or a corner that
+FreeCAD loses after an earlier edit (its "missing element reference", e.g. the box's corner
+after the box is made wider) now finds it again where it was (the remember-element approach of
+Sweep and Loft: `curves.remember` / `curves.refind` in the hidden ConstructionFrame), so the
+plane follows the corner instead of staying behind. Golden `inspect_offset_plane_to_object`,
+scenario `gaps_offset_plane_to.py`.
 
 ## Measure (I)
 
@@ -115,7 +128,10 @@ computes the exact frame on every recompute from the picks; the datum carries `S
 - Tangent Plane has no "Reference Plane" input (the angle turns about the face's own axis).
 - Plane / Point Along Path take one edge (not a chain); Physical distance on a non-uniform
   spline is measured along the curve once (not re-measured when the curve changes shape).
-- Offset Plane has no "To Object" extent.
+- Tangent Plane's optional Reference Plane is not offered: Autodesk's help lists it as an
+  optional pick without saying how it orients the plane (so any rule would be a guess).
+- Plane / Point Along Path take one edge, not a chain (Fusion's help does not say a chain
+  is taken either).
 - The browser's Analysis folder opens collapsed (its items are edited by double-click or
   right-click Edit, or by selecting one and running the command again).
 - Measure inside a sketch measures the sketch's own curves and points (lines, circles,

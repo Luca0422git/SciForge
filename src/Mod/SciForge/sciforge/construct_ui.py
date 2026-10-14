@@ -393,6 +393,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         self.picks = [None] * len(self.inputs)
         self.active = 0
         self.values = construct.default_values(key)
+        self.values["extent"] = "distance"  # Offset Plane's Extent (Distance / To Object)
         self.formulas = {}
         self.formula_errors = {}  # value box -> why what was typed there is no value
         self.work_body = commands.find_body()
@@ -412,6 +413,8 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
                     self.picks[i] = (ref[0], ref[1], point)
                 self.values.update(values)
                 self.formulas.update(formulas)
+                if key == "OffsetPlane":
+                    self.values["extent"] = construct.offset_extent(refs)
             self.work_body = construct.owner_body(datum) or self.work_body
         self._build()
         if datum is None:
@@ -419,7 +422,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
                 self._place(obj, short, point, initial=True)
         self.active = self._first_empty()
         if self.active is None:
-            self.active = len(self.inputs) - 1
+            self.active = max(i for i in range(len(self.inputs)) if self._live(i))
         self.start_picking()
         if self.editing:
             # The construction being edited never takes a click, also while it waits for a
@@ -435,8 +438,15 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
     # -- the dialog ------------------------------------------------------------------------
     def _build(self):
         self.message.setObjectName("SciForgeConstruct_message")
+        self.extent = None
         for i, spec in enumerate(self.inputs):
-            empty = "Select" if not spec["optional"] else "Select (optional)"
+            if spec.get("when") and self.extent is None and self.spec.get("extents"):
+                # Fusion's Extent row sits between the plane and what it reaches to.
+                self.extent = pickpanel.combo(self.spec["extents"], self.values["extent"])
+                self.extent.setObjectName("SciForgeConstruct_extent")
+                self.extent.currentIndexChanged.connect(self._extent_changed)
+                self.layout.addRow("Extent", self.extent)
+            empty = "Select" if not spec["optional"] or spec.get("when") else "Select (optional)"
             box = hole_common.SelectionField(self, i, empty)
             box.button.setObjectName("SciForgeConstruct_input%d" % i)
             box.button.setToolTip("Click %s in the design" % spec["hint"])
@@ -533,6 +543,60 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
             pick = self.picks[i]
             box.set_text(construct.describe(pick[0], pick[1]) if pick else "")
             box.set_active(i == self.active and not self._closed)
+            live = self._live(i)
+            box.widget.setVisible(live)
+            label = self.layout.labelForField(box.widget)
+            if label is not None:
+                label.setVisible(live)
+        if self.extent is not None and self.distance is not None:
+            by_distance = self.values.get("extent") != "object"
+            self.distance.widget.setVisible(by_distance)
+            label = self.layout.labelForField(self.distance.widget)
+            if label is not None:
+                label.setVisible(by_distance)
+
+    def _live(self, index):
+        """Whether selection box `index` is in use: Offset Plane's Object box only with
+        Extent To Object."""
+        when = self.inputs[index].get("when")
+        return when is None or self.values.get("extent") == when
+
+    def _needed(self, index):
+        spec = self.inputs[index]
+        return self._live(index) and (not spec["optional"] or bool(spec.get("when")))
+
+    @_safe
+    def _extent_changed(self, *_):
+        extent = self.extent.currentData()
+        if extent == self.values.get("extent"):
+            return
+        if extent == "distance":
+            # Back to Distance: the plane stays where the point put it, the box shows how far.
+            try:
+                refs, _points = self.refs()
+                if len(refs) > 1:
+                    origin, normal = construct.plane_of(refs[0])
+                    gap = (construct.point_of(refs[1]) - origin).dot(normal)
+                    self.values["distance"] = gap
+                    self.formulas.pop("distance", None)
+                    if self.distance is not None:
+                        self.distance.set_value(gap)
+            except Exception:
+                pass
+        self.values["extent"] = extent
+        for i in range(len(self.inputs)):
+            if not self._live(i):
+                self.picks[i] = None  # To Object off: the point no longer counts
+        self.error = ""
+        following = self._first_empty()
+        if following is not None:
+            self.active = following
+        self._remove_handle()
+        self._sync()
+        self._show_boxes()
+        self._update_overlays()
+        self._prompt()
+        self.schedule()
 
     def _prompt(self):
         if self.formula_errors:
@@ -549,23 +613,21 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         self.hint("")
 
     def _complete(self):
-        return all(
-            self.picks[i] is not None for i, s in enumerate(self.inputs) if not s["optional"]
-        )
+        return all(self.picks[i] is not None for i in range(len(self.inputs)) if self._needed(i))
 
     def _first_empty(self):
         for i, pick in enumerate(self.picks):
-            if pick is None and not self.inputs[i]["optional"]:
+            if pick is None and self._needed(i):
                 return i
         for i, pick in enumerate(self.picks):
-            if pick is None:
+            if pick is None and self._live(i):
                 return i
         return None
 
     def refs(self):
         refs, points = [], []
-        for pick in self.picks:
-            if pick is None:
+        for i, pick in enumerate(self.picks):
+            if pick is None or not self._live(i):
                 continue
             refs.append((pick[0], pick[1]))
             points.append(pick[2])
@@ -675,9 +737,11 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         if obj is None or self._own(obj) or self._is_pick(obj, short):
             return False
         order = []
-        if self.active is not None:
+        if self.active is not None and self._live(self.active):
             order.append(self.active)
-        order += [i for i, p in enumerate(self.picks) if p is None and i not in order]
+        order += [
+            i for i, p in enumerate(self.picks) if p is None and i not in order and self._live(i)
+        ]
         for i in order:
             fitted = construct.as_input(self.key, i, obj, short)
             if fitted is None:
@@ -906,6 +970,9 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         kind = self.spec["value"]
         if kind is None or not self._complete() or self.error:
             self._remove_handle()
+            return
+        if self.values.get("extent") == "object":
+            self._remove_handle()  # To Object: the point sets the distance, no arrow
             return
         refs, points = self.refs()
         signature = (kind, tuple((r[0].Name, r[1]) for r in refs))
