@@ -1565,3 +1565,84 @@ def validate(model):  # noqa: F811  (adds the SURFACE checks)
     _validate_before_surface(model)
     _check_surface_steps(model)
     return model
+
+
+# Fillet / Chamfer options of SciForge's own fillet step (golden/fillet2_ops.py, the code the
+# F and Chamfer dialogs use): selection sets, Chord Length, Variable, Tangent Chain off, Rule
+# Fillet, Full Round, chamfer sets.
+FILLET2_ROW = {
+    "edges",
+    "faces",
+    "features",
+    "radius",
+    "radius_type",
+    "chord",
+    "start",
+    "end",
+    "points",
+    "chamfer_type",
+    "distance",
+    "distance2",
+    "angle",
+    "flip",
+    "tangent_chain",
+    "comment",
+}
+STEP_KEYS["fillet_sets"] = ({"id", "sets"}, {"kind", "tangent_chain", "comment"})
+STEP_KEYS["rule_fillet"] = (
+    {"id", "radius"},
+    {"rule", "faces", "features", "faces2", "features2", "rounds", "fillets", "comment"},
+)
+STEP_KEYS["full_round"] = ({"id", "faces"}, {"comment"})
+STEP_KEYS["blend_radius_expect"] = ({"at", "radius"}, {"tol", "comment"})
+
+
+def _check_fillet2_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "fillet_sets":
+            if step.get("kind", "fillet") not in ("fillet", "chamfer"):
+                _fail(here, "'kind' must be fillet or chamfer")
+            if not isinstance(step["sets"], list) or not step["sets"]:
+                _fail(here, "'sets' is a non-empty list of rows")
+            for k, row in enumerate(step["sets"]):
+                unknown = set(row) - FILLET2_ROW
+                if unknown:
+                    _fail("%s.sets[%d]" % (here, k), "unknown keys %s" % sorted(unknown))
+                if not ({"edges", "faces", "features"} & set(row)):
+                    _fail("%s.sets[%d]" % (here, k), "a row needs edges, faces or features")
+                if row.get("radius_type", "constant") not in ("constant", "chord", "variable"):
+                    _fail("%s.sets[%d]" % (here, k), "unknown radius_type")
+                for name in row.get("features", []):
+                    if name not in seen:
+                        _fail(here, "%r is not an earlier step" % name)
+        if op == "rule_fillet":
+            _check_number(here + ".radius", step["radius"], positive=True)
+            if step.get("rule", "all") not in ("all", "between"):
+                _fail(here, "'rule' must be all or between")
+            if not ({"faces", "features"} & set(step)):
+                _fail(here, "rule_fillet needs 'faces' and/or 'features'")
+            for name in step.get("features", []) + step.get("features2", []):
+                if name not in seen:
+                    _fail(here, "%r is not an earlier step" % name)
+        if op == "full_round":
+            if not isinstance(step["faces"], list) or not step["faces"]:
+                _fail(here, "'faces' is a list of selectors, one centre face each")
+        if op == "blend_radius_expect":
+            if not isinstance(step["at"], list) or len(step["at"]) != 3:
+                _fail(here, "'at' is a point [x, y, z]")
+            _check_number(here + ".radius", step["radius"], positive=True)
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_fillet2 = validate
+
+
+def validate(model):  # noqa: F811  (adds the fillet-2 checks)
+    _validate_before_fillet2(model)
+    _check_fillet2_steps(model)
+    return model

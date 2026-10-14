@@ -70,6 +70,10 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `blend_chamfer` | `id`, `distance`, `chamfer_type` (equal/two/angle), `distance2`, `angle`, `flip`, and `edges` / `faces` / `features` | Chamfer dialog |
 | `blend_insert` | `id`, `kind` (fillet/chamfer), the options above, `edges` / `faces` | Fillet / Chamfer made with the timeline marker rolled back (after a `roll`): later blends keep their edges (`golden/blend_ops.py`) |
 | `blend_edit` | `target`, `add_edges` / `add_faces` (selectors on the shape it is applied to), `set` {options} | double-click a Fillet / Chamfer in the timeline, pick more edges, change sizes; later blends keep their edges |
+| `fillet_sets` | `id`, `kind` (fillet/chamfer), `tangent_chain`, `sets`: rows of `edges` / `faces` / `features` plus `radius`, `radius_type` (constant/chord/variable), `chord`, `start`, `end`, `points` [[position, radius]] (chamfer rows: `chamfer_type`, `distance`, `distance2`, `angle`, `flip`) | Fillet / Chamfer dialog with several selection sets ("+"), Chord Length, Variable, Tangent Chain off (`golden/fillet2_ops.py`, `sciforge/fillet_sets.py`) |
+| `rule_fillet` | `id`, `radius`, `rule` (all/between), `faces` / `features` (step ids), `faces2` / `features2`, `rounds`, `fillets` | Fillet dialog, Type Rule Fillet |
+| `full_round` | `id`, `faces` (one selector per full round, each picking its centre face) | Fillet dialog, Type Full Round Fillet |
+| `blend_radius_expect` | `at` [x, y, z] (a corner of a 90 degree edge before the round), `radius`, `tol` | check: the radius of the round there (a Variable fillet's radius points) |
 | `shell` | `id`, `faces` (faces to remove), `thickness`, `direction` (inside/outside) | Shell |
 | `hole` | `id`, `sketch` (hole centres = its circles' centres), `diameter`, `depth` or `through_all`, `counterbore {diameter, depth}` or `countersink {diameter, angle}` | Hole |
 | `emboss` | `id`, `sketch` (every closed area of it is a profile), `faces` (selector), `depth`, `effect` (emboss/deboss), `h`, `v`, `angle`, `tangent_chain` | Emboss dialog (`sciforge/emboss.py`, details in `golden/emboss_ops.py`) |

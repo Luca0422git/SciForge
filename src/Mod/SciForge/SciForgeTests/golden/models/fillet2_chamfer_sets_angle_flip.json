@@ -1,0 +1,103 @@
+{
+  "id": "fillet2_chamfer_sets_angle_flip",
+  "title": "Chamfer dialog: two sets in one step, Equal 1 on the front top edge, Distance and Angle 2 mm at 30 degrees flipped on the back top edge",
+  "tags": [
+    "chamfer",
+    "blend",
+    "fillet-2"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "c1",
+      "kind": "chamfer",
+      "sets": [
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "chamfer_type": "equal",
+          "distance": 1
+        },
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "max"
+              }
+            ],
+            "count": 1
+          },
+          "chamfer_type": "angle",
+          "distance": 2,
+          "angle": 30,
+          "flip": true
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 11933.81197846483,
+    "faces": 8,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Legs a, b along a 40 mm edge remove 40 a b / 2; Distance and Angle on a 90 degree edge has legs d and d tan(angle). Flip only swaps the faces the legs lie on."
+  }
+}

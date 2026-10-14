@@ -322,13 +322,17 @@ def is_round_blend(face):
     )
 
 
-def owning_fillet(body, face):
+def owning_fillet(body, face, sciforge=False):
     """The Fillet/Chamfer feature of `body` that created `face`, or None.
+    sciforge: SciForge's own fillet / chamfer step (fillet_sets.py) counts too.
 
     A face was made by a fillet if it exists in the fillet's result but not in
     the fillet's input (BaseFeature)."""
+    kinds = ("FilletSets", "ChamferSets") if sciforge else ()
     for feature in reversed(body.Group):
-        if feature.TypeId not in ("PartDesign::Fillet", "PartDesign::Chamfer"):
+        if feature.TypeId not in ("PartDesign::Fillet", "PartDesign::Chamfer") and (
+            getattr(feature, "SciForgeType", "") not in kinds
+        ):
             continue
         base = feature.BaseFeature
         if base is None or feature.Shape.isNull():

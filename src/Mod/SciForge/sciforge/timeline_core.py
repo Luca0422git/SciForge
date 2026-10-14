@@ -164,6 +164,8 @@ KIND_BY_TYPEID = {
 # SciForge's own Python features report "SciForge::<SciForgeType>".
 KIND_BY_SCIFORGE_TYPE = {
     "PressPull": "presspull",
+    "FilletSets": "fillet",
+    "ChamferSets": "chamfer",
     "Extrude": "extrude",
     "OffsetFace": "offset_face",
     "ReplaceFace": "replace_face",

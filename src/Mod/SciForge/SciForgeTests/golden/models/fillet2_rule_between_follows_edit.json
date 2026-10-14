@@ -1,0 +1,90 @@
+{
+  "id": "fillet2_rule_between_follows_edit",
+  "title": "Rule Fillet: Between the plate and the boss (fillets at its foot, r 1), then the boss made wider: the rule follows",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2",
+    "rule"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "rect": [
+            10,
+            10,
+            30,
+            20
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "rule_fillet",
+      "id": "r1",
+      "radius": 1,
+      "rule": "between",
+      "features": [
+        "e1"
+      ],
+      "features2": [
+        "e2"
+      ]
+    },
+    {
+      "op": "edit",
+      "target": "s2",
+      "constraint": "boss.width",
+      "value": 26
+    }
+  ],
+  "expect": {
+    "volume": 7315.834813594871,
+    "faces": 15,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Plate 40x30x5 + boss 26x10x5 (after the edit); the rule fills the boss's foot: a frame of cross-section r^2 (1 - pi/4) whose centroid runs xbar = r (5/6 - pi/4)/(1 - pi/4) out from the boss, mitred at the corners: Pappus over the centroid's path 2(26 + 10) + 8 xbar."
+  }
+}

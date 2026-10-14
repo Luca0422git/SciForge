@@ -362,9 +362,8 @@ class PressPullPanel(Panel):
         except Exception:
             return
         if self.mode is None and not self.faces_only and core.is_round_blend(face):
-            blend = core.owning_fillet(self.body, face)
-            if blend is not None:
-                self._start_blend_edit(blend)
+            blend = core.owning_fillet(self.body, face, sciforge=True)
+            if blend is not None and self._start_blend_edit(blend, face):
                 return
         distance = self.field.value() if self.mode == "faces" else 0.0
         name = core.match_pick(base.Shape, face, _local(obj, point), self.names, distance)
@@ -474,16 +473,31 @@ class PressPullPanel(Panel):
         self.field_label.setText("Distance")
         self.schedule()
 
-    def _start_blend_edit(self, blend):
+    def _start_blend_edit(self, blend, face=None):
+        """Edit the size of the fillet / chamfer that made the clicked face; False when it
+        has none to edit (a variable round, a full round: the face is pushed instead)."""
+        label = None
+        if blend.TypeId == "PartDesign::Fillet":
+            prop = "Radius"
+        elif blend.TypeId == "PartDesign::Chamfer":
+            prop = "Size"
+        else:  # SciForge's fillet step: the size of the set that made the face
+            from . import fillet_sets
+
+            prop, label = fillet_sets.size_of_face(blend, face)
+            if prop is None:
+                return False
         self.target = blend
         self.mode = "edit_blend"
-        prop = "Radius" if blend.TypeId == "PartDesign::Fillet" else "Size"
         self.prop = prop
-        self.field_label.setText("Fillet radius" if prop == "Radius" else "Chamfer distance")
+        if label is None:
+            label = "Fillet radius" if prop == "Radius" else "Chamfer distance"
+        self.field_label.setText(label)
         self.field.set_value(getattr(blend, prop).Value)
         self._show_formula(preview.formula_of(blend, prop))
         self.what.setText("Editing %s (it stays one step in the timeline)" % blend.Label)
         self.selection_field.set_text(blend.Label)
+        return True
 
     def _describe(self):
         count = len(self.names)

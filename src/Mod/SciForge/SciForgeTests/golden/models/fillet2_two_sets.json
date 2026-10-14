@@ -1,0 +1,101 @@
+{
+  "id": "fillet2_two_sets",
+  "title": "Fillet dialog: two selection sets in one step (r 1 on the front top edge, r 3 on the back top edge), saved and reopened",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "f1",
+      "sets": [
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 1
+        },
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "max"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 3
+        }
+      ]
+    },
+    {
+      "op": "reopen"
+    }
+  ],
+  "expect": {
+    "volume": 11914.15926535898,
+    "faces": 8,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Each round of radius r on a 40 mm edge removes 40 r^2 (1 - pi/4); the two edges share no corner. 6 box faces + 2 round faces."
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "id": "fillet2_variable_points",
+  "title": "Fillet dialog: Variable radius on the front top edge, start 1, point 0.5 at 3, end 1.5",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "f1",
+      "sets": [
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "radius_type": "variable",
+          "start": 1,
+          "end": 1.5,
+          "points": [
+            [
+              0.5,
+              3
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "blend_radius_expect",
+      "at": [
+        0,
+        0,
+        10
+      ],
+      "radius": 1
+    },
+    {
+      "op": "blend_radius_expect",
+      "at": [
+        20,
+        0,
+        10
+      ],
+      "radius": 3
+    },
+    {
+      "op": "blend_radius_expect",
+      "at": [
+        40,
+        0,
+        10
+      ],
+      "radius": 1.5
+    }
+  ],
+  "expect": {
+    "faces": 7,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "The radius is read off the part at the start, the point and the end: the round on a 90 degree edge passes (sqrt(2) - 1) R from the old corner. One smooth round face (6 + 1); the law between the points is OpenCASCADE's (not checked by volume)."
+  }
+}

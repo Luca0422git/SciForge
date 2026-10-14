@@ -12,7 +12,7 @@ pick **SciForge** in the workbench list first).
 | `S` | Command search | Type a few letters, Enter runs the best match |
 | `Q` | Press Pull | Faces push/pull, edges fillet, a fillet face changes its radius |
 | `E` | Extrude | In a sketch: finishes the sketch and extrudes the picked profile |
-| `F` | Fillet | |
+| `F` | Fillet | "+" adds a set with its own size; Type: Rule / Full Round; Radius Type: Chord Length / Variable |
 | `H` | Hole | |
 | `M` | Move / Copy | |
 | `I` | Measure | |

@@ -21,6 +21,7 @@ fillets, returns a broken solid that FreeCAD would keep. trial() builds the blen
 and turns both into a plain-language BlendError, so the dialog can show it and keep the
 last good preview instead of breaking the part.
 """
+
 import contextlib
 import math
 import time
@@ -493,6 +494,16 @@ def make(body, base, refs, kind, options, name=None):
 DRESS_UPS = (FILLET, CHAMFER, "PartDesign::Draft", "PartDesign::Thickness")
 
 
+def _link_prop(obj):
+    """The property holding what a later step picked: a dress-up's Base, or the Picks of
+    SciForge's own fillet / chamfer step (fillet_sets.py); None for other steps."""
+    if getattr(obj, "TypeId", "") in DRESS_UPS:
+        return "Base"
+    if getattr(obj, "SciForgeType", "") in ("FilletSets", "ChamferSets"):
+        return "Picks"
+    return None
+
+
 def later_steps(body, after):
     """Features of `body` after `after` in the timeline (body order)."""
     if body is None or after is None:
@@ -617,10 +628,11 @@ class References:
     def __init__(self, body, after):
         self.items = []  # (feature, [(element name, element shape copy)])
         for obj in later_steps(body, after):
-            if obj.TypeId not in DRESS_UPS:
+            prop = _link_prop(obj)
+            if prop is None:
                 continue
             try:
-                base = obj.Base
+                base = getattr(obj, prop)
                 if not base or base[0] is None or base[0].Shape.isNull():
                     continue
                 shape = base[0].Shape
@@ -642,7 +654,8 @@ class References:
             if not _alive(obj):
                 continue
             try:
-                subs = list(obj.Base[1]) if obj.Base else []
+                link = getattr(obj, _link_prop(obj) or "Base")
+                subs = list(link[1]) if link else []
                 state = list(obj.State)
             except Exception:
                 continue
@@ -660,16 +673,29 @@ class References:
             if obj not in broken:
                 continue
             try:
-                src = obj.Base[0] if obj.Base else obj.BaseFeature
+                prop = _link_prop(obj) or "Base"
+                link = getattr(obj, prop)
+                src = link[0] if link else obj.BaseFeature
                 if src is None or src.Shape.isNull():
                     continue
-                names = []
-                for _name, old in subs:
-                    for match in find_same(src.Shape, old):
-                        if match not in names:
-                            names.append(match)
-                if names and list(obj.Base[1]) != names:
-                    obj.Base = (src, names)
+                if prop != "Base":
+                    # SciForge's fillet step keeps its picks in row order: each pick is
+                    # found again in its place (a lost one stays, marked, for the dialog)
+                    names = list(link[1]) if link else []
+                    original = [(n or "").split(".")[-1].lstrip("?") for n in names]
+                    for name, old in subs:
+                        found = find_same(src.Shape, old)
+                        for i, current in enumerate(original):
+                            if found and current == name:
+                                names[i] = found[0]
+                else:
+                    names = []
+                    for _name, old in subs:
+                        for match in find_same(src.Shape, old):
+                            if match not in names:
+                                names.append(match)
+                if names and list(link[1] if link else []) != names:
+                    setattr(obj, prop, (src, names))
                     changed.append(obj)
             except Exception:
                 continue

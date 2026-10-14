@@ -1,0 +1,92 @@
+{
+  "id": "fillet2_face_and_its_edge_in_two_sets",
+  "title": "Two fillet sets: set 1 the top face r 1, set 2 one of its edges r 2: the edge picked on its own takes set 2's radius",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "f1",
+      "sets": [
+        {
+          "faces": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": "max"
+            },
+            "count": 1
+          },
+          "radius": 1
+        },
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 2
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 11944.902318761953,
+    "faces": 10,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "baseline-freecad-1.1.4",
+    "note": "Same as FreeCAD 1.1.4's Part Fillet on a 40x30x10 box with the front top edge at r 2 and the other three top edges at r 1 (measured 11944.902318761953). Before the fix the face's set took the edge (r 1 everywhere, 11970.34)."
+  }
+}
