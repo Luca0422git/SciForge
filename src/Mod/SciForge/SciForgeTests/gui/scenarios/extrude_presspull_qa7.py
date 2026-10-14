@@ -5,12 +5,14 @@ Path 29, a slab floating 20 mm above the block is made as a New Body (Start: Off
          The block is made active again (browser: Activate Body); a column sketched on it
          extrudes To Object: the slab body, picked by
          clicking its row in the browser (Fusion lets you pick a body there). The column
-         stops at the slab's underside. Edit it from the timeline: the body is still the
+         stops at the slab's underside and, like Fusion, joins the slab too (a Join merges
+         every body the extrusion touches). Edit it from the timeline: the body is still the
          object; OK without a change; Undo, Redo (an unchanged dialog used to leave its
          undo step pending, and the next change threw the Redo away). The same after an
          Extrude cancelled with nothing picked.
 
-Numbers by hand: block 40 x 30 x 10, slab 40 x 30 x 5 at z 30..35, column 10 x 10.
+Numbers by hand: block 40 x 30 x 10, slab 40 x 30 x 5 at z 30..35, column 10 x 10; the
+block's body after the Join: 12000 + 10 x 10 x 20 + 6000 = 20000.
 """
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -23,6 +25,9 @@ from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
 s = {}
+JOINED = (
+    12000.0 + 2000.0 + 6000.0
+)  # block + column + the slab it joins (Fusion: every body touched)
 
 
 def xpanel():
@@ -195,8 +200,8 @@ def column_reaches():
         "the slab body is the object", p.options.get("extent_object") is not None, p.message.text()
     )
     h.check(
-        "the column joins the block and stops under the slab: +10 x 10 x 20",
-        near(vol(s["block"]), 14000.0),
+        "the column joins the block and the slab, stopping under it: 12000 + 2000 + 6000",
+        near(vol(s["block"]), JOINED),
         (vol(s["block"]), p.message.text()),
     )
     h.check("the slab is untouched", near(vol(s["slab"]), 6000.0), vol(s["slab"]))
@@ -205,7 +210,7 @@ def column_reaches():
 
 
 def edit_column():
-    h.check("kept", not dialog_open() and near(vol(s["block"]), 14000.0))
+    h.check("kept", not dialog_open() and near(vol(s["block"]), JOINED))
     titles = ui.timeline_titles()
     s["column"] = [t for t in titles if t.startswith("Extrude")][-1]
     h.check("double-click %s" % s["column"], ui.double_click_timeline(s["column"]), titles)
@@ -236,7 +241,7 @@ def undone():
 
 
 def redone():
-    h.check("Redo: the column again", near(vol(s["block"]), 14000.0), vol(s["block"]))
+    h.check("Redo: the column again", near(vol(s["block"]), JOINED), vol(s["block"]))
     h.check("nothing in error", not broken(), broken())
     h.shot("p29-end")
 
@@ -265,7 +270,7 @@ def redo_after_esc():
 def redone_after_esc():
     h.check(
         "Redo still works (the cancelled dialog left no step behind)",
-        near(vol(s["block"]), 14000.0),
+        near(vol(s["block"]), JOINED),
         (vol(s["block"]), App.ActiveDocument.UndoNames[:3]),
     )
 
