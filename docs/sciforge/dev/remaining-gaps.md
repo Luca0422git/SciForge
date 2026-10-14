@@ -16,19 +16,21 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   straight rib between parallel walls; radius points take plain numbers.
 - **hole-thread.md**: no Taper Tapped (NPT). Clearance holes not chosen by fastener. The
   modeled thread ignores the class. A hole on a curved face does not follow the face.
-- **patterns.md**: no Compute Option Adjust / Optimized. No Pattern Type Components. No start
-  point for Pattern on Path.
+- **patterns.md**: (Pattern Type Components built by sf/components-2, except Mirror.) No
+  Compute Option Adjust / Optimized. No start point for Pattern on Path.
 - **joints.md**: (sf/joints-2 built Component Drag, position modes, Motion Link, Contact Sets,
   Motion Study, nested components, no auto-ground.) Left: a drag pulls one joint at a time (no
   whole-mechanism drag solver), no contact during Animate, no Motion Study graph, no Lock
   Motion or Animate Joint Relationships.
-- **components.md**: a whole component cannot be moved. No copy/paste of components. Rolling the
-  marker back does not hide a component. Inactive components are not ghosted.
+- **components.md**: (sf/components-2 built Move/Copy, Set Pivot, Copy/Paste instances, Paste
+  New, component patterns, the marker hiding components, the see-through look.) Left: a copy's
+  nested components are flattened; deleting the original freezes its copies; no paste between
+  designs; no Mirror of components; no "position pending" question.
 - **drawings.md**: one sheet per drawing. No tolerances or dimension text editing, no
   ordinate / baseline / chain dimensions. No Leader, Note or GD&T. No section depth, offset,
   half or breakout sections. No automatic centre marks. No DWG.
-- **bodies.md**: Combine has no New Component. Split Body takes one tool. Move has no Set Pivot
-  and cannot move components or faces.
+- **bodies.md**: (Combine New Component, multi-tool Split, Set Pivot and component moves built
+  by sf/components-2.) Move cannot move faces.
 - **direct-modify.md**: no Press Pull Offset Type. Features in a direct design cannot be edited.
   Replace Face only takes flat, cylinder or sphere targets.
 - **revolve.md**: no Objects To Cut (Revolve, Sweep and Loft act on the sketch's body only).
