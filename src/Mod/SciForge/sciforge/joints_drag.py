@@ -216,7 +216,7 @@ class DragSession:
             self.slide_dir = j2.Rotation.multVec(App.Vector(*slide_axis))
         else:
             self.joint = None
-        self.pairs = joints.contact_pairs(doc, movers)
+        self.pairs = joints.free_pairs(joints.contact_pairs(doc, movers))
         log(
             "Component Drag: %s (%s%s)"
             % (part.Label, self.kind, ", %s" % joint.Label if joint is not None else "")

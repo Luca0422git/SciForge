@@ -412,8 +412,16 @@ def any_element_ref(part):
     candidates = [part]
     try:
         if part.TypeId == "App::Part":
-            candidates = [o for o in part.OutListRecursive if o.TypeId == "PartDesign::Body"] + [
-                o for o in part.OutListRecursive if o.isDerivedFrom("Part::Feature")
+            inside = list(part.OutListRecursive)
+            # its own bodies first: a body of a nested component moves with that one, and a
+            # reference through it would drag this component's place along
+            own = [o for o in inside if part_of(o) is part]
+            rest = [o for o in inside if o not in own]
+            candidates = [
+                o
+                for group in (own, rest)
+                for o in [x for x in group if x.TypeId == "PartDesign::Body"]
+                + [x for x in group if x.isDerivedFrom("Part::Feature")]
             ]
     except Exception:
         pass
@@ -1923,7 +1931,7 @@ def drive_until_contact(joint, angle=None, slide=None):
     doc = joint.Document
     part, _side = driven_part(joint)
     movers = [part] + downstream(part, joint)
-    pairs = contact_pairs(doc, movers)
+    pairs = free_pairs(contact_pairs(doc, movers))
     if not pairs:
         got = drive(joint, angle, slide)
         return got[0], got[1], None
@@ -2377,6 +2385,12 @@ def overlapping(a, b, tol=1e-3):
         return False
     smallest = min(_volume(sa), _volume(sb))
     return _volume(common) > max(1e-6, 1e-5 * smallest)
+
+
+def free_pairs(pairs):
+    """The pairs that do not run into each other now: parts that already overlap when a
+    move starts (built that way) must not stop every move."""
+    return [(a, b) for a, b in pairs if not overlapping(a, b)]
 
 
 def blocked(doc, pairs):
@@ -3010,7 +3024,7 @@ def reroot(doc):
             new = part_of(target)
             if new is not None and new is not target:
                 g.ObjectToGround = new
-    for group in rigid_groups(doc):
+    for group in rigid_groups(doc) + contact_sets(doc):
         members, seen = [], set()
         for m in group.Members:
             m = (part_of(m) or m) if m is not None else None
