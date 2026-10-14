@@ -370,6 +370,16 @@ class MeshPanel(insert_ui._InsertPanel):
 
     # -- finishing ----------------------------------------------------------------------
     def accept(self):
+        try:
+            return self._accept()
+        except Exception as exc:  # OK must never throw: say it, keep the dialog
+            warn("%s: %s" % (self.title, exc))
+            self.message.setText(
+                "⚠ This could not be finished (%s). Cancel leaves the body as it was." % exc
+            )
+            return False
+
+    def _accept(self):
         if self.step is None or not bodies.alive(self.step):
             self.message.setText("⚠ " + self.wait_text)
             return False
@@ -397,8 +407,11 @@ class MeshPanel(insert_ui._InsertPanel):
         return True
 
     def reject(self):
-        if self.step is not None and bodies.alive(self.step):
-            mesh.hold(self.step, False)
+        try:
+            if self.step is not None and bodies.alive(self.step):
+                mesh.hold(self.step, False)
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
         result = super().reject()
         for name, was in self._shown_before.items():
             obj = self.doc.getObject(name)
@@ -923,11 +936,11 @@ class CombinePanel(MeshPanel):
                 % (self.body.Label if self.body else "it")
             )
 
-    def accept(self):
+    def _accept(self):
         if self.step is not None and not self.tools:
             self.message.setText("⚠ Pick at least one tool body to combine with.")
             return False
-        return super().accept()
+        return super()._accept()
 
 
 # ============================================================================ Generate Face Groups

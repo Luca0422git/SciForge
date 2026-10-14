@@ -246,7 +246,10 @@ class PlaneRows:
     def _square_picked(self, role):
         if getattr(self, "_closed", False) or self.active != "plane":
             return
-        self.set_plane(origin_frame(role), None)
+        try:  # called from a timer: nothing may escape
+            self.set_plane(origin_frame(role), None)
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
 
     def pick_plane(self):
         """A construction plane or flat face from the selection (the top object and its full
@@ -415,16 +418,24 @@ class PlaneRows:
         QtCore.QTimer.singleShot(0, self._after_release)
 
     def _after_release(self):
-        if not getattr(self, "_closed", False):
+        if getattr(self, "_closed", False):
+            return
+        try:  # called from a timer: nothing may escape
             self.rebuild_handles()
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
 
     def _typed(self, field, text):
-        value = field.parse(text)
-        if value is None:
+        try:  # typed into a value box over the view (a key event): nothing may escape
+            value = field.parse(text)
+            if value is None:
+                return False
+            field.set_value(value)
+            self.plane_changed()
+            return True
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
             return False
-        field.set_value(value)
-        self.plane_changed()
-        return True
 
     def _typed_distance(self, text):
         return self._typed(self.distance, text)
@@ -586,11 +597,11 @@ class PlaneCutPanel(PlaneRows, mesh_ui.MeshPanel):
                 "plane or a flat face."
             )
 
-    def accept(self):
+    def _accept(self):
         if self.step is not None and self.frame is None:
             self.message.setText("⚠ Click a plane to cut along first.")
             return False
-        return mesh_ui.MeshPanel.accept(self)
+        return mesh_ui.MeshPanel._accept(self)
 
     def cleanup(self):
         self.cleanup_plane()
@@ -696,7 +707,7 @@ class SectionSketchPanel(PlaneRows, mesh_ui.MeshPanel):
     def report(self):
         pass
 
-    def accept(self):
+    def _accept(self):
         if self.body is None:
             self.message.setText("⚠ " + self.wait_text)
             return False

@@ -455,7 +455,7 @@ def export_everything(doc, folder, body_list=None, screenshot=None, base=None):
     if body_list is None:
         body_list = exportable_bodies(doc)
     if not body_list:
-        raise ExportError("There is no body to export yet (a solid or a mesh body).")
+        raise ExportError("There is no solid body or mesh body to export yet.")
     base = safe_name(base or os.path.splitext(os.path.basename(doc.FileName or ""))[0] or doc.Label)
     os.makedirs(folder, exist_ok=True)
     files = export_everything_plan(folder, base)

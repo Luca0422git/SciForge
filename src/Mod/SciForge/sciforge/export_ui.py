@@ -497,7 +497,7 @@ def export_everything(doc, folder=None, open_after=True):
             folder = os.path.join(folder, export.safe_name(doc.Label) + export.EXPORT_FOLDER_SUFFIX)
     chosen = export.exportable_bodies(doc)
     if not chosen:
-        raise export.ExportError("There is no body to export yet (a solid or a mesh body).")
+        raise export.ExportError("There is no solid body or mesh body to export yet.")
 
     def screenshot(path):
         view = Gui.ActiveDocument.ActiveView if Gui.ActiveDocument else None

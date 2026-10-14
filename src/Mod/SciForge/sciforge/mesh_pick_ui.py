@@ -190,11 +190,11 @@ class FacePickPanel(mesh_ui.MeshPanel):
                 "Brush Size; Ctrl+click takes them off)."
             )
 
-    def accept(self):
+    def _accept(self):
         if self.step is not None and not self.picked_faces:
             self.message.setText("⚠ Pick the faces first (click them on the body).")
             return False
-        return mesh_ui.MeshPanel.accept(self)
+        return mesh_ui.MeshPanel._accept(self)
 
     def cleanup(self):
         if self.marks is not None:

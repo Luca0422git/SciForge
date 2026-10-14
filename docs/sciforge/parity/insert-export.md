@@ -1,7 +1,8 @@
 # Parity spec: Insert, import, export, make (outline 7.12)
 
 Insert Mesh, Convert Mesh, Insert STEP, Insert SVG, Insert DXF, Canvas (Insert / Edit /
-Calibrate), Export, 3D Print, Export Everything. Copied behaviour only, never Fusion's assets,
+Calibrate), Export, 3D Print, Export Everything. The rest of the MESH tab (Repair, Remesh,
+Reduce, Plane Cut...) is in `parity/mesh.md`. Copied behaviour only, never Fusion's assets,
 wording or code. Status: **built and tested with real clicks (9 scenarios, 320 checks), not yet
 signed off by Luca**. Every choice marked **(assumed)** is a guess to confirm in real Fusion.
 
@@ -156,7 +157,7 @@ says nothing, and the Fusion API reference for defaults:
 | File > Export: Name, Type, Location, Export | the Export dialog: Export (Whole design / Selected bodies with a ticked list), Type (STEP, STL Binary, STL ASCII, 3MF, OBJ), Name, Location (…), "Open the folder afterwards", Export |
 | Mesh types from Save As Mesh: Unit Type, Structure One File / One File Per Body, Refinement Low / Medium / High / Custom, Surface Deviation, Normal Deviation, Number of Triangles | same rows (shown for mesh types; greyed for STEP); the count follows the refinement |
 | Formats SciForge does not write | IGES, SAT, SMT, F3D, DWG, DXF, FBX, USD (FreeCAD could do IGES and DXF; not offered yet) |
-| A body with no solid | left out of the list; "Whole design" exports the shown bodies **(hidden bodies left out: assumed)** |
+| A body with no solid | left out of the list; "Whole design" exports the shown bodies **(hidden bodies left out: assumed)**; mesh bodies are listed and written with their own triangles (STEP refuses them: `parity/mesh.md`) |
 
 ### 3D Print (UTILITIES > MAKE > 3D Print; File menu)
 
@@ -183,7 +184,6 @@ export. Fusion has no such command (its nearest is File > Export, one format at 
 | STEP into a component, Fusion's Move dialog after an insert | no components yet; the bodies are selected so M moves them |
 | Insert SVG / DXF manipulators (move, turn, scale on the plane) | fields only |
 | Convert Mesh "Organic", surface fitting of round faces (Prismatic keeps them faceted) | FreeCAD has no mesh-to-surface fitting |
-| Mesh repair, remesh, reduce (MESH tab PREPARE) | FreeCAD's own Mesh commands are wired in the MESH tab, not Fusion-styled yet |
 | Export: IGES, SAT, SMT, F3D, DWG, DXF, FBX, USD | not offered; FreeCAD could write IGES / DXF |
 | 3D Print: Maximum Edge Length, Aspect Ratio, Preview Mesh overlay, Manufacturing preparation | FreeCAD's mesher has no edge length / aspect settings; no CAM |
 | The exact refinement numbers of Low / Medium / High | from memory of Fusion's dialog, to confirm |

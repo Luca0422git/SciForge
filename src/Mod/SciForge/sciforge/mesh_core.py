@@ -382,7 +382,11 @@ def analysis_lines(info):
     lines = []
 
     def say(key, one, many):
-        n = int(info.get(key) or 0)
+        value = info.get(key)
+        if value is True:  # found, not counted (a big mesh)
+            lines.append(many.replace("%d ", "", 1))
+            return
+        n = int(value or 0)
         if n:
             lines.append((one if n == 1 else many) % n)
 

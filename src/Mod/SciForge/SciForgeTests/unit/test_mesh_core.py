@@ -199,6 +199,10 @@ class RepairHelperTests(unittest.TestCase):
         self.assertEqual(
             mc.analysis_lines({"inside_out": True}), ["inside out (the faces point inward)"]
         )
+        # a big mesh: found but not counted
+        self.assertEqual(
+            mc.analysis_lines({"non_manifold": True}), ["edges with more than two faces"]
+        )
         self.assertIn("closed", mc.repair_advice({"closed": True}, "Close Holes"))
         self.assertIn("try Wrap", mc.repair_advice({"holes": 1}, "Close Holes"))
         self.assertIn("1 hole left", mc.repair_advice({"holes": 1}, "Stitch and Remove"))
