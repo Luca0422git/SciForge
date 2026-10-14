@@ -96,7 +96,7 @@ def feature_picked():
     h.check("one arrow for the rule's radius", p is not None and len(p.arrows) == 1)
     h.shot("1-rule")
     if p:
-        b.click_widget(p.rounds)
+        f2.click_check(p.rounds)
 
 
 def rounds_off():
@@ -106,7 +106,7 @@ def rounds_off():
         "Rounds off: a box has no inside edges, the dialog says so", "fits the rule" in text, text
     )
     if p:
-        b.click_widget(p.rounds)
+        f2.click_check(p.rounds)
 
 
 def rounds_on():

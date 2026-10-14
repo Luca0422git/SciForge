@@ -55,6 +55,17 @@ def row_texts(panel):
     return [panel.rows.item(i).text() for i in range(panel.rows.count())]
 
 
+def click_check(box):
+    """Click a check box on its tick square, as a person does (a box without text toggles
+    only there)."""
+    style = box.style()
+    option = QtWidgets.QStyleOptionButton()
+    box.initStyleOption(option)
+    rect = style.subElementRect(QtWidgets.QStyle.SE_CheckBoxIndicator, option, box)
+    QtTest.QTest.mouseClick(box, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, rect.center())
+    QtWidgets.QApplication.processEvents()
+
+
 def press_plus(panel):
     b.click_widget(panel.add_row_button)
 

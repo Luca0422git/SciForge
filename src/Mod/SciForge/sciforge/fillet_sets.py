@@ -321,10 +321,12 @@ def _fillet_items(info, row, refs, taken):
     raise core.SetError("unknown radius type %r" % (rtype,))
 
 
-def variable_plan(info, row, refs):
-    """(cut points, [(start point, end point, middle point, r at start, r at end)]) of a
-    Variable row: where its edge (and tangent chain) is cut and the radius at each piece's
-    ends. Raises SetError."""
+def variable_plan(info, row, refs, chain=True):
+    """(cut points, [(start point, end point, middle point, r at start, r at end)], rest) of
+    a Variable row: where its edge (and tangent chain) is cut and the radius at each piece's
+    ends. Tangent Chain off (`chain` False): only the picked edge carries the law; `rest`
+    are the other edges of its chain (OpenCASCADE rounds them anyway; they are put back
+    afterwards), each with the radius of the end it touches. Raises SetError."""
     edges = blend.blended_edges(info, refs)
     if len(edges) != 1:
         raise core.SetError(
@@ -334,9 +336,24 @@ def variable_plan(info, row, refs):
     points = core.variable_points(
         row.get("start", 1.0), row.get("end", 1.0), [tuple(p) for p in row.get("points", [])]
     )
-    order = ordered_chain(info, edges[0])
+    order = ordered_chain(info, edges[0]) if chain else [(edges[0], False)]
     shapes = [blend.element(info.shape, n) for n, _r in order]
     cuts, pieces = core.split_plan([e.Length for e in shapes], points)
+    rest = []
+    if not chain:
+        picked = shapes[0]
+        first = picked.valueAt(picked.FirstParameter)
+        last = picked.valueAt(picked.LastParameter)
+        for name in info.chain(edges[0]):
+            if name == edges[0]:
+                continue
+            edge = blend.element(info.shape, name)
+            a, b = edge.valueAt(edge.FirstParameter), edge.valueAt(edge.LastParameter)
+            m = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+            near_start = min((a - first).Length, (b - first).Length)
+            near_end = min((a - last).Length, (b - last).Length)
+            r = points[0][1] if near_start <= near_end else points[-1][1]
+            rest.append((a, b, m, r, r))
     cut_points = [_point_on(shapes[i], order[i][1], f) for i, f in cuts]
     total = sum(e.Length for e in shapes)
     bounds = [0.0]
@@ -358,7 +375,7 @@ def variable_plan(info, row, refs):
                 r1,
             )
         )
-    return cut_points, out, order
+    return cut_points, out, rest
 
 
 def _relocate(old_shape, new_shape, index):
@@ -425,12 +442,13 @@ def _round_fillet_rows(shape, spec, groups):
     radius points first)."""
     info = blend.ShapeInfo(shape)
     rows = spec.get("sets", [])
+    chain = bool(spec.get("tangent_chain", True))
     cut_points, variable = [], []
     for row, refs in zip(rows, groups):
         if refs and row.get("radius_type") == "variable":
-            points, plan, _order = variable_plan(info, row, refs)
+            points, plan, rest = variable_plan(info, row, refs, chain)
             cut_points.extend(points)
-            variable.append(plan)
+            variable.append((plan, rest))
     try:
         work = split_at(shape, cut_points) if cut_points else shape
     except Exception as exc:
@@ -458,14 +476,16 @@ def _round_fillet_rows(shape, spec, groups):
             chains.append(edge)
             if name in picked:
                 wanted.append(edge)
-    for plan in variable:
-        for start, end, middle, r0, r1 in plan:
-            index, flipped = _edge_on(work, start, end, middle)
-            if index is None:
-                raise core.SetError("The variable edge could not be cut at its radius points.")
-            items.append((index, r1, r0) if flipped else (index, r0, r1))
-            chains.append(work.Edges[index - 1])
-            wanted.append(work.Edges[index - 1])
+    for plan, rest in variable:
+        for pieces, picked in ((plan, True), (rest, False)):
+            for start, end, middle, r0, r1 in pieces:
+                index, flipped = _edge_on(work, start, end, middle)
+                if index is None:
+                    raise core.SetError("The variable edge could not be cut at its radius points.")
+                items.append((index, r1, r0) if flipped else (index, r0, r1))
+                chains.append(work.Edges[index - 1])
+                if picked:
+                    wanted.append(work.Edges[index - 1])
     result = kernel("fillet", work, items)
     if not spec.get("tangent_chain", True):
         try:
@@ -1147,14 +1167,15 @@ def _frame_at(info, name, point):
     return blend.frame(info.shape, piece, faces, orientations)
 
 
-def chain_points(info, refs):
+def chain_points(info, refs, chain=True):
     """[(edge name, reversed, start position, end position)] of a Variable row's edge and its
-    tangent chain, positions 0..1 along the chain (as the radius points are measured)."""
+    tangent chain (Tangent Chain off: the edge alone), positions 0..1 along it (as the
+    radius points are measured)."""
     edges = blend.blended_edges(info, refs)
     if len(edges) != 1:
         return []
     try:
-        order = ordered_chain(info, edges[0])
+        order = ordered_chain(info, edges[0]) if chain else [(edges[0], False)]
     except core.SetError:
         return []
     shapes = [blend.element(info.shape, n) for n, _r in order]
@@ -1169,9 +1190,9 @@ def chain_points(info, refs):
     return out
 
 
-def point_at(info, refs, position):
+def point_at(info, refs, position, chain=True):
     """(edge name, 3D point) at `position` (0..1) along a Variable row's chain, or None."""
-    for name, rev, s0, s1 in chain_points(info, refs):
+    for name, rev, s0, s1 in chain_points(info, refs, chain):
         if position <= s1 + 1e-9:
             edge = blend.element(info.shape, name)
             fraction = (position - s0) / (s1 - s0) if s1 - s0 > TOL else 0.0
@@ -1179,13 +1200,13 @@ def point_at(info, refs, position):
     return None
 
 
-def position_of(info, refs, point):
+def position_of(info, refs, point, chain=True):
     """The position (0..1) along a Variable row's chain nearest to a clicked 3D point."""
     import Part
 
     best = None
     probe = Part.Vertex(point)
-    for name, rev, s0, s1 in chain_points(info, refs):
+    for name, rev, s0, s1 in chain_points(info, refs, chain):
         edge = blend.element(info.shape, name)
         try:
             dist, pairs, _info = edge.distToShape(probe)
@@ -1206,7 +1227,7 @@ def position_of(info, refs, point):
     return None if best is None else best[1]
 
 
-def variable_spots(info, row, refs, toward=None):
+def variable_spots(info, row, refs, toward=None, chain=True):
     """The drag arrows of a Variable row: one at its start, one at each radius point, one at
     its end, each where the round starts at that place: [spot] as blend.arrow_spots gives,
     "what" = "start" / "end" / "pt<k>"."""
@@ -1216,7 +1237,7 @@ def variable_spots(info, row, refs, toward=None):
     marks.append(("end", 1.0))
     spots = []
     for what, position in marks:
-        found = point_at(info, refs, min(max(position, 0.0), 1.0))
+        found = point_at(info, refs, min(max(position, 0.0), 1.0), chain)
         if found is None:
             continue
         name, point = found

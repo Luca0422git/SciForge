@@ -1134,9 +1134,13 @@ class BlendPanel(Panel):
             return None
         return row
 
+    def _chained(self):
+        return bool(self.spec.get("tangent_chain", True))
+
     def _variable_chain(self):
         try:
-            return [n for n, _r, _a, _b in fillet_sets.chain_points(self.info, self.refs)]
+            found = fillet_sets.chain_points(self.info, self.refs, self._chained())
+            return [n for n, _r, _a, _b in found]
         except Exception:
             return []
 
@@ -1149,7 +1153,7 @@ class BlendPanel(Panel):
             return False
         if time.time() - click[0] > CLICK_SECONDS:
             return False
-        position = fillet_sets.position_of(self.info, self.refs, click[2])
+        position = fillet_sets.position_of(self.info, self.refs, click[2], self._chained())
         if position is None:
             return False
         return self._add_point(round(position, 3))
@@ -1328,7 +1332,7 @@ class BlendPanel(Panel):
             if self.kind == "chamfer":
                 spots = blend.arrow_spots("chamfer", info, refs, row, toward)
             elif row.get("radius_type") == "variable":
-                spots = fillet_sets.variable_spots(info, row, refs, toward)
+                spots = fillet_sets.variable_spots(info, row, refs, toward, self._chained())
             else:
                 spots = blend.arrow_spots("fillet", info, refs, row, toward)
                 if row.get("radius_type") == "chord":
