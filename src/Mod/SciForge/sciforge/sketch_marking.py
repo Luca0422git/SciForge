@@ -61,6 +61,16 @@ def _session():
         return None
 
 
+def _text_entries():
+    """Edit Text / Explode Text while a text is picked (text_ui)."""
+    try:
+        from . import text_ui
+
+        return text_ui.marking_entries()
+    except Exception:
+        return []
+
+
 def _tool_running():
     session = _session()
     try:
@@ -104,7 +114,7 @@ def _menu_class():
                     int(RADIUS * math.cos(angle)), int(-RADIUS * math.sin(angle))
                 )
                 self.slots.append(self._slot(entry, pos, available))
-            listing = build_menu(self, LIST, available)
+            listing = build_menu(self, _text_entries() + LIST, available)
             self.list = QtWidgets.QListWidget(self)
             self.list.setObjectName("SciForgeMarkingList")
             self.list.setFixedWidth(200)

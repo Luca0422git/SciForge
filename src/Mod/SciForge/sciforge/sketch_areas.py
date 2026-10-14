@@ -59,7 +59,8 @@ class AreaPicker:
         self.picks = []  # (x, y) sketch mm: a point inside each picked area, in pick order
         self.hovered = None  # index of the area under the mouse
         self.regions = []  # sketch_areas_core.Region per shaded area
-        self.faces = []  # the same areas as Part faces (sketch coordinates)
+        self.faces = []  # the same areas as Part faces (sketch coordinates; None: a text)
+        self.text_keys = {}  # region index -> the sketch text it is (text_ui: one area)
         self._press = None  # (position, modifiers) of a left press that may be a pick
         self._mouse = None  # last mouse position over the view (widget pixels)
         self._curves = None  # the sketch's curves and points as one shape (for "on a curve")
@@ -99,6 +100,12 @@ class AreaPicker:
         try:
             self.faces = [face for face, _p, _t in shaded]
             self.regions = [core.Region(points, triangles) for _f, points, triangles in shaded]
+            # Fusion: a sketch text is one profile (all its letters), picked like an area
+            self.text_keys = {}
+            for obj, points, triangles in _text_areas(self.session):
+                self.text_keys[len(self.regions)] = obj
+                self.faces.append(None)
+                self.regions.append(core.Region(points, triangles))
             self.picks = core.keep_valid(self.picks, self.regions)
             self.hovered = None
             self._curves = None
@@ -218,6 +225,8 @@ class AreaPicker:
     def _anchor(self, index):
         """A point well inside area `index` (its middle can be in a hole), or None."""
         try:
+            if self.faces[index] is None:  # a text: the middle of its biggest triangle
+                return _triangle_anchor(self.regions[index])
             from . import extrude
 
             p = extrude.interior_point(self.faces[index])
@@ -254,7 +263,8 @@ class AreaPicker:
             point = self._sketch_point(pos)
             if point is None:
                 return
-            if self._sketch_item_under_mouse() or self._near_curve(point, pos):
+            on_text = core.region_at(self.regions, point[0], point[1]) in self.text_keys
+            if not on_text and (self._sketch_item_under_mouse() or self._near_curve(point, pos)):
                 if not additive and self.picks:
                     self._set([])  # the curve (or dimension) is the selection now
                 return
@@ -310,11 +320,51 @@ class AreaPicker:
             pass
 
 
+def _text_areas(session):
+    """[(text, points, triangles)] of the open sketch's texts (text_ui), or []."""
+    try:
+        from . import text_ui
+
+        return text_ui.area_entries(session)
+    except Exception:
+        return []
+
+
+def _triangle_anchor(region):
+    """The middle of a region's biggest triangle (a point surely inside it)."""
+    best, anchor = -1.0, None
+    pts = region.points
+    for i, j, k in region.triangles:
+        a, b, c = pts[i], pts[j], pts[k]
+        area = abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]))
+        if area > best:
+            best = area
+            anchor = ((a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0)
+    return anchor
+
+
+def _text_at(sketch, x, y):
+    """The sketch's text whose letters hold sketch point (x, y), or None."""
+    try:
+        from . import text
+
+        point = sketch.Placement.multVec(App.Vector(x, y, 0))  # the text's own coordinates
+        for obj in text.texts_of(sketch):
+            if "Touched" in obj.State or obj.Shape.isNull():
+                obj.recompute()
+            if any(f.isInside(point, 1e-4, True) for f in obj.Shape.Faces):
+                return obj
+    except Exception as exc:
+        warn("sketch text: %s" % exc)
+    return None
+
+
 # -- the picks become profiles ------------------------------------------------------------
 def profiles(sketch, points):
     """[(sketch, "InternalFaceN")] for points picked inside the open sketch, once it is
     closed and recomputed (FreeCAD's areas of the sketch): for each point the smallest
-    area holding it, in pick order, each once."""
+    area holding it, in pick order, each once. A point on a text gives (text, ""): the
+    whole text is one profile, as in Fusion."""
     from . import extrude, profile_pick
 
     if sketch is None or not points:
@@ -327,6 +377,11 @@ def profiles(sketch, points):
     placement = sketch.getGlobalPlacement()
     found = []
     for x, y in points:
+        on_text = _text_at(sketch, x, y)
+        if on_text is not None:
+            if (on_text, "") not in found:
+                found.append((on_text, ""))
+            continue
         point = placement.multVec(App.Vector(x, y, 0))
         best = None
         for sub, face in areas:

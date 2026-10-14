@@ -1,0 +1,85 @@
+{
+  "id": "emboss_flat_deboss",
+  "title": "Deboss a 10x4 rectangle 1 mm into the top of a 40x20x10 block",
+  "tags": [
+    "emboss"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 15,
+      "geometry": [
+        {
+          "center_rect": [
+            20,
+            10,
+            10,
+            4
+          ],
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "op": "emboss",
+      "id": "em1",
+      "sketch": "s2",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "depth": 1,
+      "effect": "deboss"
+    }
+  ],
+  "expect": {
+    "volume": 7960,
+    "area": 2828,
+    "faces": 11,
+    "edges": 24,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "A 10x4x1 pocket. V = 8000 - 40; A = 2800 + walls 28 * 1 (the floor replaces the opening)"
+  }
+}

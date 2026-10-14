@@ -282,10 +282,14 @@ def delete_steps(doc, steps):
     """Delete steps (no transaction of its own). Later steps of the body are re-linked
     around each one by PartDesign; the body's Tip moves back if it was deleted."""
     from . import extrude_bodies, move, split
+    from . import text as sketch_text
 
     steps = [s for s in steps if bodies.alive(s)]
     for step in list(steps):  # a multi-body extrude's steps in the other bodies go with it
         steps += [f for f in extrude_bodies.followers_of(step) if f not in steps]
+    for step in list(steps):  # a sketch's texts go with it (in the same undo step)
+        if step.TypeId == "Sketcher::SketchObject":
+            steps += [t for t in sketch_text.texts_of(step) if t not in steps]
     gone = {s.Name for s in steps}
     extra = extra_steps(steps)
     for body in extra:
@@ -307,6 +311,8 @@ def delete_steps(doc, steps):
             split.remove(step)
         elif move.is_copy(step):
             move.remove(step)
+        elif sketch_text.is_text(step):
+            sketch_text.remove(step)  # its frame lines too, when its sketch stays
         else:
             bodies.remove_step(step)
 

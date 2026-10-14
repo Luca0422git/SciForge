@@ -1,0 +1,67 @@
+{
+  "id": "emboss_cylinder_rect",
+  "title": "Emboss a 10x4 rectangle 1 mm round a cylinder r20 (wrapped like a label)",
+  "tags": [
+    "emboss",
+    "cylinder"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            20
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 40
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            20,
+            10,
+            4
+          ],
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "op": "emboss",
+      "id": "em1",
+      "sketch": "s2",
+      "faces": {
+        "type": "cylinder",
+        "radius": 20,
+        "count": 1
+      },
+      "depth": 1
+    }
+  ],
+  "expect": {
+    "volume": 50306.482457436694,
+    "area": 7570.322368615503,
+    "faces": 8,
+    "edges": 15,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Wrapped without stretch: 10 mm round = 0.5 rad, 4 mm along the axis. Boss = 0.5/2 * (21^2 - 20^2) * 4 = 41 (= area 40 * 1 * (1 + 1/(2*20))). Area: cylinder 2 pi 20 40 + 2 pi 400; boss top 21*0.5*4 = 42 replaces 20*0.5*4 = 40 (+2), two end walls 0.5/2*(441-400) = 10.25 each, two side walls 1*4 each: +30.5. Faces: 3 + top + 4 walls; edges: 2 circles + seam + 12"
+  }
+}

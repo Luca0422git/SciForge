@@ -1,0 +1,85 @@
+{
+  "id": "emboss_flat_rect",
+  "title": "Emboss a 10x4 rectangle 1 mm up on the top of a 40x20x10 block",
+  "tags": [
+    "emboss",
+    "basic"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 15,
+      "geometry": [
+        {
+          "center_rect": [
+            20,
+            10,
+            10,
+            4
+          ],
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "op": "emboss",
+      "id": "em1",
+      "sketch": "s2",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "depth": 1
+    }
+  ],
+  "expect": {
+    "volume": 8040,
+    "area": 2828,
+    "faces": 11,
+    "edges": 24,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      11
+    ],
+    "source": "analytic",
+    "note": "Flat face: a straight 10x4x1 boss. V = 40*20*10 + 10*4*1; A = 2800 + perimeter 28 * height 1 (its top replaces the same area of the block's top)"
+  }
+}
