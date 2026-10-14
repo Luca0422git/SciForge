@@ -1354,9 +1354,40 @@ def _apply_expressions(feature, options):
             feature.setExpression(prop, None)
 
 
-def evaluate(doc, text):
+# What a field takes (its DistanceField unit) -> (what it is called, an example).
+FIELD_KINDS = {"mm": ("a length", "25"), "deg": ("an angle", "30"), "": ("a number", "3")}
+
+
+def _article(word):
+    return ("an " if word[:1].lower() in "aeiou" else "a ") + word
+
+
+def check_kind(value, unit, text):
+    """Fusion's formulas carry units and a field takes only its own kind: a length formula
+    ("width", "width / 2") in an angle field, an angle in a distance field or a length in a
+    count is refused (FreeCAD would take the bare number: 40 mm read as 40 degrees). A
+    formula without a unit counts in the field's unit. Raises ExtrudeError with the reason."""
+    if unit not in FIELD_KINDS:
+        return
+    found = getattr(value, "Unit", None)
+    if found is None or found == App.Units.Unit():
+        return
+    wanted = App.Units.Quantity("1 " + unit).Unit if unit else App.Units.Unit()
+    if found == wanted:
+        return
+    kind = (getattr(found, "Type", "") or "").lower()
+    what, example = FIELD_KINDS[unit]
+    raise ExtrudeError(
+        "'%s' is %s, not %s. Type %s, for example %s."
+        % (text, _article(kind) if kind else "a value with a unit", what, what, example)
+    )
+
+
+def evaluate(doc, text, unit=None):
     """Value of a formula typed in a field ("width * 2", "=width+5 mm"): a float in mm (or
-    degrees for an angle). Raises ExtrudeError with the reason when it is no value."""
+    degrees for an angle). ``unit``: the field's unit ("mm", "deg", "" for a plain number);
+    a formula of another kind is refused (check_kind). Raises ExtrudeError with the reason
+    when it is no value."""
     from . import parameters, parameters_core
 
     text = (text or "").strip().lstrip("=").strip()
@@ -1370,6 +1401,8 @@ def evaluate(doc, text):
         value = host.evalExpression(expr)
     except Exception as exc:
         raise ExtrudeError("'%s' is not a value here: %s" % (text, exc))
+    if unit is not None:
+        check_kind(value, unit, text)
     try:
         return float(getattr(value, "Value", value))
     except Exception:

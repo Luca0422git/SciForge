@@ -543,6 +543,8 @@ class CountBox(QtWidgets.QSpinBox):
 class _CountAdapter:
     """CountBox seen as a value field by preview.FormulaInput."""
 
+    unit = ""  # a count: a formula with a unit (a length) is no count
+
     def __init__(self, spin):
         self.widget = spin
 
