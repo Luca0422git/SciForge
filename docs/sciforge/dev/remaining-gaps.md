@@ -6,16 +6,16 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 
 ## By area
 
-- **sketch.md**: Chamfer has one distance set by the mouse (no types, no typed value, no
-  dimension). A typed line angle is measured from the X axis. No 3D Sketch. Project to Surface
-  curves sit outside the sketch (not in the browser or timeline).
-- **extrude-presspull.md**: To Object has no To Adjacent Faces / Through Body / Offset. Start:
-  Object does not follow later changes. Move, Scale and Draft handles have no value box.
+- **sketch.md**: (Chamfer types with typed values and dimensions by sf/modeling-2; the typed
+  line angle from the X axis matches Fusion's forum answers.) No 3D Sketch. Project to Surface
+  curves sit outside the sketch (not in the browser or timeline). Chamfer lines only.
+- **extrude-presspull.md**: (To Object extend options, Offset and a following Start: Object by
+  sf/modeling-2.) Move, Scale and Draft handles have no value box.
 - **fillet.md**: (sf/fillet-2 built radius sets, Chord Length, Variable, Tangent Chain off,
   Rule and Full Round fillets.) Left: G2, Setback, Asymmetric (kernel); Full Round only on a
   straight rib between parallel walls; radius points take plain numbers.
-- **hole-thread.md**: no Taper Tapped (NPT). Clearance holes not chosen by fastener. The
-  modeled thread ignores the class. A hole on a curved face does not follow the face.
+- **hole-thread.md**: (NPT / BSPT, fastener clearance, thread class, curved faces by
+  sf/modeling-2.) Taper threads are cosmetic only; three screw types in the tables.
 - **patterns.md**: (Components by sf/components-2; Compute Option Adjust and the Path start
   point by sf/modify-2.) Left: Mirror of components; Adjust only re-runs extrudes.
 - **joints.md**: (sf/joints-2 built Component Drag, position modes, Motion Link, Contact Sets,
@@ -26,20 +26,22 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   New, component patterns, the marker hiding components, the see-through look.) Left: a copy's
   nested components are flattened; deleting the original freezes its copies; no paste between
   designs; no Mirror of components; no "position pending" question.
-- **drawings.md**: one sheet per drawing. No tolerances or dimension text editing, no
-  ordinate / baseline / chain dimensions. No Leader, Note or GD&T. No section depth, offset,
-  half or breakout sections. No automatic centre marks. No DWG.
+- **drawings.md**: (tolerances, fits, dimension text, ordinate / baseline / chain, Leader,
+  GD&T, sheets, Full / Half / Offset / Aligned sections, depth, breakout and auto centre marks
+  by sf/drawings-2.) Left: Exploded views, Note and Weld symbols, Arrange Dimensions, hole notes,
+  per-sheet size, DWG, depth only on straight cut lines.
 - **bodies.md**: (Combine New Component, multi-tool Split, Set Pivot, component moves by
   sf/components-2; Move Object Faces by sf/modify-2.) Left: faces of one body per Move.
 - **direct-modify.md**: (Press Pull Offset Type and Replace Face onto any surface by
   sf/modify-2.) Features in a direct design cannot be edited.
-- **revolve.md**: no Objects To Cut (Revolve, Sweep and Loft act on the sketch's body only).
+- **revolve.md**: (Objects To Cut for Revolve, Sweep and Loft by sf/modeling-2.) Editing an
+  older step does not roll the timeline back first.
 - **primitives.md**: no snapping to edge midpoints or to points off the plane.
 - **shell-draft-scale.md**: (Parting Line, Two Side, Symmetric, several bodies per step and
   Scale of sketches by sf/modify-2.) Left: Move Parting Line (kernel), components not scaled,
   non-uniform scale of a sketch.
-- **sweep-loft-rib.md**: no Loft Tangent Edges Merge. End conditions not with rails, a
-  centerline or a closed loft. Sweep distances take plain numbers only.
+- **sweep-loft-rib.md**: (Sweep formulas by sf/modeling-2.) No Loft Tangent Edges Merge. End
+  conditions not with rails, a centerline or a closed loft.
 - **surface.md**: surface Extrude has no From Object or All. Surface Revolve has no Type To.
   Surface Sweep has no rail or taper, surface Loft no rails or end conditions.
 - **text-emboss.md**: the text frame cannot be resized by dragging its corner.
@@ -63,6 +65,7 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 ## Needs FreeCAD C++ or the kernel
 
 - Patch Curvature continuity: core patch #14, in full build #6 (63fe08ff6d) and later.
-- A hole's seam line across section views: TechDraw's DrawViewSection (C++).
+- A hole's seam line across bent section views: TechDraw's DrawViewSection (C++); straight
+  sections hide it (sf/drawings-2).
 - Fillet Tangent Chain off, G2 fillets, setback corners: OpenCASCADE limits (fillet.md).
 - Sketch Curvature constraint: FreeCAD's solver has none (G2 only spline-line).

@@ -1344,6 +1344,234 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 
 ## Session log
 
+### Session log: modeling-2 (wave 4, branch `sf/modeling-2`)
+
+Started from `7282c76096`. No FreeCAD core file changed (no full build needed).
+
+#### What was built
+
+1. **Holes** (`hole_tables.py` new, Qt-free, unit tested; `hole.py`, `hole_ui.py`):
+   - Hole Tap Type **Taper Tapped**: NPT (ASME B1.20.1) and BSPT Rc (ISO 7-1), 1/16 to 3;
+     the hole starts at the pipe thread's minor diameter at the opening and narrows 1 in 16
+     on the diameter (FreeCAD Hole `Tapered`, `TaperedAngle` = 90 - 1.7899 degrees); the
+     thread is cosmetic.
+   - **Clearance by fastener**: Standard (ISO 273 / ASME B18.2.8), Fastener Type (socket
+     head, hex head, countersunk; offered by hole type), Size, Fit Close / Normal / Loose;
+     the fastener fills in the counterbore or countersink (DIN 974-1, ISO 10642 90 degrees,
+     ASME 82 degrees). M6 Normal = 6.6.
+   - **Modeled threads in their class** (`thread_tables.class_zone`, ISO 965-1 / ASME B1.1:
+     the middle of the tolerance zone; `thread_core.class_radii`); a tapped hole's drill and
+     major diameter shift with the class (FreeCAD `UseCustomThreadClearance`).
+   - **A hole on a curved face follows the face**: hidden helper "Hole On Face"
+     (`Part::Part2DObjectPython`, the face's u, v) whose `Spot` drives the hole sketch's
+     `AttachmentOffset` by an expression.
+2. **Extrude To Object** (`extrude.py`, `extrude_prism.py`, `extrude_ui.py`): Extend To
+   Selected Face / To Adjacent Faces (a face), To Body / Through Body (a body), none for a
+   plane; Offset per side (formulas too); **Start: Object follows** its object (hidden helper
+   `ExtrudeStart`, the profile binder's Placement is an expression on its Shift).
+3. **Objects To Cut for Revolve, Sweep and Loft** (`bodies_row_ui.py` new; `revolve.py`,
+   `sweep.py`, `loft.py` and their dialogs; the machinery of `extrude_bodies.py`, now
+   generic: `lead_kind`, `lead_tool`, `bodies_in_way`, `participants_of`): the row, the
+   clicks, the blue copies, followers / lead body / Join merge, the red cut preview; body
+   hiding paused while a Join preview merges; a step moved to another body goes in after
+   that body's older sketches (`insert_point`, also for Extrude).
+4. **Sweep values take formulas** (Distance, Distance Two, Taper, Twist): expressions on
+   SciForge's sweep, listed under the fields; `curve_pick.RatioBox(formulas=True)` +
+   `RatioField` adapter for `preview.FormulaInput`; a formula forces SciForge's own sweep.
+5. **Sketch Chamfer** (`sketch_chamfer_core.py` Qt-free + unit tests,
+   `sketch_chamfer_tool.py` on `sketch_draw.DrawTool`, `sketch_chamfer_ui.py`; ribbon
+   SKETCH > MODIFY > Chamfer now runs it): Equal distance / Distance and angle / Two
+   distances, a type box at the top left of the view, value boxes, dimensions from the kept
+   corner point (Equal: the second is an fx expression of the first). Sketch fillet radius
+   checked; the typed line angle researched (Forum: from the X axis, as FreeCAD does) and
+   checked.
+6. Parity docs: wave 4 sections with sources at the top of `sketch.md`, `hole-thread.md`,
+   `extrude-presspull.md`, `revolve.md`, `sweep-loft-rib.md`; their known gaps updated.
+
+#### Tests
+
+Scenarios (real input): `modeling2_holes` (84 checks), `modeling2_extrude` (53),
+`modeling2_bodies` (54), `modeling2_sweep_formula` (31), `modeling2_sketch` (128); all pass.
+Goldens new: `hole_taper_npt`, `hole_taper_bspt_through`, `hole_clearance_socket_cbore`,
+`hole_clearance_countersunk`, `hole_curved_follows`, `thread_shaft_modeled_6e`,
+`extrude_to_adjacent_faces`, `extrude_to_selected_face_extended`, `extrude_to_object_offset`,
+`extrude_through_body`, `extrude_start_object_follows`, `sf_revolve_cut_two_bodies`,
+`sf_revolve_cut_other_body`, `sf_sweep_join_two_bodies`, `sf_loft_cut_two_bodies`,
+`sf_sweep_distance_parameter`, `sf_sweep_taper_parameter`; the modeled-thread goldens were
+updated to their class. Unit tests `test_hole_tables.py`, `test_sketch_chamfer_core.py`.
+Regression scenarios run and passing: every `revolve_*`, `sweep_loft_*`, `extrude_multibody*`,
+`extrude_bodies_highlight`, `bodies_timeline`, `gaps_join_new_body`, `gaps_loft_ends`,
+`gaps_sweep_guide_surface`, `ribbon_sweep`, `sketch_sweep`, `sketch_qa`,
+`sketch_tools_audit`, `sketch_tools_modify`, `sketch_menu_switch`, `marking_menu_command`,
+the hole / thread / extrude scenarios listed in the first commit. `--only base`: unit 943
+OK, golden 356 pass + the 1 known xfail, smoke and journey pass; `check_install.sh`: all
+files installed.
+
+#### FreeCAD facts and traps found
+
+- A PartDesign Body accepts only PartDesign features, datums and sketch-like objects: a
+  hidden helper inside a body must be a `Part::Part2DObjectPython` (a `Part::FeaturePython`
+  is refused: "Only PartDesign features, datum features and sketches can be inserted").
+- FreeCAD's Hole clearance fallback factors give 5.92488 for a size the table lacks; do not
+  round (the dialog and the golden then disagree).
+- A Pocket To Face (FreeCAD's own) whose profile lies partly inside material also cut above
+  the profile plane (900 instead of 720 in `modeling2_extrude`'s first try). Not fixed.
+- `sketch.fillet(l1, l2, ref1, ref2, r, trim, createCorner=True, chamfer=True)` keeps the old
+  corner as a construction point and moves the corner's constraints (also the origin
+  coincidence) onto it; its construction arc holds both setbacks equal: delete it to free
+  them. The two-line form with reference points works for touching and non-touching lines.
+- Expressions between a sketch's own constraints work with names:
+  `sketch.setExpression("Constraints.B", "Constraints.A")`.
+- FreeCAD's line tool writes a typed angle as `Constraint('Angle', -1, line, value)` with
+  `%f`: six decimals of a radian, so a 20 mm line ends about 1e-5 mm off the exact angle.
+  `Constraint('Angle', g1, pos1, g2, pos2, v)` measures from each line's direction away from
+  the given end, anticlockwise from g1 to g2.
+- The timeline keeps each body's own order (its Group): a step inserted right after a solid
+  step but before an older sketch of that body jumps ahead of the sketch in the timeline (and
+  of other bodies' steps made in between). `extrude_bodies.insert_point`.
+- Removing a Join merge that was a body's Tip, then the old lead, leaves the new end of the
+  body hidden; `_show_only_tip` after a multi-body build.
+- `bodies.sync_consumed` hides a body a Join preview merges, from under the next click;
+  dialogs pause it while they preview a merge (Extrude did; Revolve, Sweep and Loft now too).
+- PySide6: `QWidget.isVisibleTo(x)` needs a QWidget (a task Panel is not one).
+- `SCIFORGE_GOLDEN_FILTER=sf_sweep` runs only the goldens whose name contains the text.
+
+#### Gaps (with the reason)
+
+- A modeled taper pipe thread (cosmetic only); fastener types beyond socket head, hex head
+  and countersunk screws.
+- Sketch chamfer: no drag arrow (the pointer sizes it), lines only (no line-arc chamfer).
+- The typed line angle relative to the previous line: not built because the forum threads
+  found (2016-2020) say Fusion measures it from the X axis; to confirm in Luca's Fusion.
+- Editing an older Revolve / Sweep / Loft does not roll the timeline back, so a body a later
+  Join merged away cannot be clicked in its Objects To Cut row (Fusion rolls back for the
+  edit). Objects To Cut across components was not tried.
+- The Pocket To Face quirk above.
+
+#### Next
+
+- Luca to check the Guess rows (chamfer type box place, the dimensions' form, Start Object
+  following, a plane having no Extend).
+- Roll the timeline back while editing an older multi-body step.
+
+### 2026-10-14: Drawings part 2: annotations, sheets, more views (branch `sf/drawings-2`)
+
+Written by the drawings-2 builder (wave 4) instead of a MEMORY.md entry (every branch
+editing MEMORY.md conflicts at the merge). Merge this into MEMORY.md's session log when
+the branch is merged. The behaviour spec with its sources and the gaps are in
+`docs/sciforge/parity/drawings.md` (part 2 rows 26-50, the gaps table, the facts list).
+
+#### Built
+
+All in `src/Mod/SciForge/sciforge/`, no FreeCAD core change:
+
+- **Dimension dialog** (double-click a dimension, or DIMENSIONS > Edit Dimension):
+  override, text before / after, symbol buttons, precision, Tolerance None / Symmetric /
+  Deviation / Limits / Fit (ISO 286 classes, preferred fits by basis and type or
+  custom, which member the dimension is, display Class / Class and tolerances / Limits /
+  Fit, the fit's limits and clearance in the dialog), tolerance precision, Basic,
+  Reference. `drawing_fits.py` (ISO 286 tables for 0-500 mm, holes from shafts by the
+  standard's rules), `drawing_dims_core.py` (the texts), `drawing_annot.py`
+  (settings kept as JSON on the dimension, written into TechDraw's Arbitrary text and
+  tolerance strings, refreshed when the value changes), `drawing_annot_ui.py`.
+- **Ordinate, Baseline, Chain, Arc Length** dimensions. Ordinates and arc lengths are
+  SVG symbols that follow their points; baseline and chain make real TechDraw
+  dimensions.
+- **Leader, Feature Control Frame (with composite rows), Datum Identifier, Surface
+  Texture, Edge Extension.** Annotations are TechDraw `DrawViewSymbol`s whose SVG is
+  drawn from `drawing_annot_core.py` primitives (also written to the DXF); each is
+  anchored to an edge by name and shape and finds it again after design changes; it
+  moves with its view; dragging its text moves the text and keeps the arrow.
+- **Several sheets per drawing** (`drawing_sheets.py`, `drawing_sheets_ui.py`): a
+  sheet bar at the bottom of the drawing's tab (a toolbar of the MDI view), +, right-
+  click New / Rename (in place) / Delete / Move Left / Right, drag to reorder, one tab
+  per drawing, title blocks "n / N", typed title fields shared, the first sheet's
+  deletion passes the drawing on, Undo of a sheet closes its orphan tab. Export PDF of
+  all sheets in one file (`drawing_pdf.py` merges TechDraw's one-page PDFs), a DXF per
+  sheet.
+- **Sections with bends** (half, offset, aligned via `TechDraw::DrawComplexSection` and
+  a hidden profile sketch) and **Section Depth** Full / Slice / Distance
+  (`drawing_depth.py`: TechDraw keeps drawing its section; the lines that lie deeper
+  than the depth are switched off one by one, matched by geometry against TechDraw's
+  own hidden-line removal of the trimmed parts, again after every change). The same
+  switch removes TechDraw's line along the middle of a hole cut in half (straight
+  sections). Style and view label in the section and detail dialogs.
+- **Breakout Section View** (`drawing_breakout.py`, `drawing_breakout_ui.py`): click a
+  view, the corners of a boundary and the first corner again; the view draws a trimmed
+  copy of its parts (a hidden `Part::FeaturePython` remade before the view in every
+  recompute), the cut floor hatched with cosmetic lines; depth typed or Default (half
+  the parts); double-click inside to change it or Remove Breakout; an isometric view
+  projected from it shows the cut too.
+- **Automated centre marks and centre lines** per view (Holes, Round Extrudes, Round
+  Cuts), the **view label** (text, Show), a **text box dragged** open.
+- Ribbon: the greyed DRAWING entries Ordinate / Baseline / Chain, Edge Extension,
+  Leader, Surface Texture, Feature Control Frame, Datum Identifier, Breakout Section
+  View wired; Arc Length and
+  Edit Dimension added. `theme.py`: TechDraw's tolerance text at 0.7 of the value (a
+  Float preference, kept and given back like the others).
+
+Scenarios (all passing, check counts in the last run): `drawing2_tolerance` (100),
+`drawing2_ordinate` (46), `drawing2_symbols` (72), `drawing2_sheets` (87),
+`drawing2_sections` (77), `drawing2_views` (50), `drawing2_update` (40),
+`drawing2_reopen` (44), `drawing2_breakout` (95). Unit tests: `test_drawing_fits.py`,
+`test_drawing_dims_core.py`, `test_drawing_annot_core.py` (with the PDF merge),
+`test_drawing_core.py` (section types, breakout boundaries). The ten older drawing
+scenarios pass unchanged.
+
+#### FreeCAD facts and traps found
+
+- `DrawView.findParentPage()` segfaults FreeCAD for a view on no page yet (TechDraw
+  dereferences a null page): never call it; use the InList.
+- `DrawViewDimension.getLinearPoints()` is y-down from the view's centre: the DXF's
+  linear dimension lines were mirrored before this branch (fixed).
+- Tolerance texts need `EqualTolerance = False`; `ArbitraryTolerances` takes the two
+  strings as they are; a two-line Arbitrary `FormatSpec` stacks limits.
+- TechDraw files a "Drag Dimension" undo step when a selected dimension label is laid
+  out again and then deselected: clear the selection before opening an undo step that
+  changes a dimension's text.
+- Never give a task panel an attribute named like a `taskui.Panel` method (`feature`):
+  OK then fails inside FreeCAD ("NoneType is not callable") and the panel's sheet mouse
+  handler stays alive (later clicks warn "QLabel already deleted").
+- `getGeometricCenter()` uses the 3D mesh's bounding box; TechDraw centres on the exact
+  one (0.02 mm apart on an R8 fillet): `drawing.centre_of` computes TechDraw's.
+- `makeCosmeticVertex` / `makeCosmeticLine` take y-up points; `formatGeometricEdge(i,
+  style, weight, colour, visible)` hides a geometry edge by index (indices change on
+  every recompute: SciForge matches the edges by geometry and works the list out again
+  after every change).
+- `DrawViewSection` cuts its parent view's shape (`getShapeToCut` takes the BaseView's
+  `getSourceShape()`), never its own `Source`: the first Section Depth (a trimmed copy as
+  the section's Source) changed nothing on the sheet; its checks looked at the copy, not
+  at the drawn lines. Test what is drawn.
+- `DrawViewPart.execute()` returns at once while the view's previous hidden-line removal
+  still runs: a source shape changed 30 ms after a recompute was missed (a flaky check).
+  A shape a view draws must be remade inside the recompute (a FeaturePython linking its
+  inputs), not after it.
+- A boolean leaves a hole's straight seam (or the join of its halves) as an ordinary
+  edge: TechDraw's section draws it as a hard line across the cut hole.
+- A complex section's profile must be a sketch square to the parent's direction; TechDraw
+  draws a line where an offset cut jogs.
+- FreeCAD's MDI views are QMainWindows (a toolbar can go at the bottom); FreeCAD's MDI
+  tabs are movable. A page removed by Undo while its tab shows leaves the tab open.
+- PySide: a menu opened with `popup()` returns at once; scenario helpers
+  (`widget_input.right_click`) expect `exec()`.
+
+#### Gaps (see the parity doc for the reasons)
+
+Exploded views; the breakout's spline profile, components left out of its cut; depth
+and the seam fix on bent cut lines; the jog line of offset sections; a line partly
+within a Distance shows whole; sheet thumbnails and per-sheet sizes;
+Center Mark Pattern and Hole vs Round Cut; arranging dimensions; hole notes; Note and
+Weld; multi-segment leaders and rich text; FCF / texture attached to dimensions;
+separate X / Y ordinate origins; DWG, CSV.
+
+#### Next
+
+Luca to compare with Fusion: the Dimension dialog's order and wording, the fit display
+choices, the sheet bar, the symbols' look (frame cell sizes, datum triangle, surface
+texture proportions), the ordinate text direction (ISO turned, ASME level), the
+breakout's dialog. Then Arrange Dimensions, hole and thread notes, the seam fix for
+bent sections.
+
 ### Session log: Modify, part 2 (branch `sf/modify-2`, wave 4, 2026-10-14)
 
 To be folded into MEMORY.md's Session log at the merge (this branch does not edit MEMORY.md).
@@ -4027,6 +4255,11 @@ components, active component see-through).
 parting line / two sides, Shell / Draft / Scale over several bodies, Scale of sketches, Move
 Object Faces, Press Pull Offset Type, Replace Face onto any surface). Move Object lists Bodies,
 Components, Faces: Components opens `component_move_ui`, Faces stays in `move_ui`.
+`sf/drawings-2` (224e2c2e13: tolerances and ISO fits, ordinate / baseline / chain / arc length,
+leaders, GD&T, sheets, bent sections, section depth, breakout, auto centre marks, seam line
+hidden on straight sections) and `sf/modeling-2` (20a19b9874: sketch Chamfer types, NPT/BSPT
+and fastener clearance holes, threads by class, holes on curved faces, Extrude To Object
+extend + offset, Revolve / Sweep / Loft Objects To Cut, Sweep formulas). **Wave 4 is merged.**
 
 **Merge trap (2026-10-14):** when two branches append blocks that end with the same lines
 (the golden `schema.py` `validate` wrappers), git's conflict hunk leaves the shared tail
