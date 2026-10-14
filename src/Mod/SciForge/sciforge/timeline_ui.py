@@ -84,12 +84,33 @@ def _defer(fn, ms=0):
 
 
 def _command_open():
-    """A command dialog is open or something is being edited (a sketch...)."""
+    """A command dialog is open or something is being edited (a sketch, a base feature)."""
     try:
         if Gui.Control.activeDialog():
             return True
+        if _base_feature_open():
+            return True  # editing a base feature: the marker waits for Finish Base Feature
         gdoc = Gui.ActiveDocument
         return gdoc is not None and gdoc.getInEdit() is not None
+    except Exception:
+        return False
+
+
+def _base_feature_open():
+    try:
+        from . import direct
+
+        return direct.session(_doc()) is not None
+    except Exception:
+        return False
+
+
+def _without_history(doc):
+    """A design that does not capture history has no timeline (Fusion)."""
+    try:
+        from . import direct
+
+        return doc is not None and direct.is_direct(doc)
     except Exception:
         return False
 
@@ -517,6 +538,7 @@ class TimelineWidget(QtWidgets.QWidget):
     def refresh(self, force=False):
         if self._busy or self._drag is not None or self._editor is not None:
             return  # never pull the widgets from under the mouse or the keyboard
+        self._follow_history_mode()
         try:
             doc = _doc()
             active = None
@@ -541,6 +563,23 @@ class TimelineWidget(QtWidgets.QWidget):
         self._hidden = _hidden_steps(doc, timeline, active)
         self._selected = [n for n in self._selected if timeline.find(n) is not None]
         self._rebuild()
+
+    def _follow_history_mode(self):
+        """Fusion: a design that does not capture history has no timeline at the bottom;
+        it comes back with Capture Design History (or another design that has one)."""
+        try:
+            dock = _dock
+            if dock is None or dock.widget() is not self:
+                return
+            without = _without_history(_doc())
+            if without and dock.isVisible():
+                self._hidden_for_history = True
+                dock.hide()
+            elif not without and getattr(self, "_hidden_for_history", False):
+                self._hidden_for_history = False
+                dock.show()
+        except Exception as exc:
+            _remember("info", "timeline history mode: %s" % exc)
 
     @property
     def _body(self):
@@ -1247,11 +1286,17 @@ class TimelineWidget(QtWidgets.QWidget):
         expand.setEnabled(bool(groups - self._open_groups))
         collapse = menu.addAction("Collapse All Groups")
         collapse.setEnabled(bool(groups & self._open_groups))
+        menu.addSeparator()
+        # Fusion's timeline settings switch the design to direct modeling too (it asks).
+        no_history = menu.addAction("Do Not Capture Design History")
+        no_history.setEnabled(_doc() is not None and not _base_feature_open())
         self._busy += 1
         try:
             chosen = menu.exec_(QtGui.QCursor.pos())
         finally:
             self._busy -= 1
+        if chosen is no_history:
+            _later(Gui.runCommand, "SciForge_DoNotCaptureDesignHistory")
         if chosen is to_end:
             _later(self.roll_to_end)
         elif chosen is expand:

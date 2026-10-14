@@ -1,0 +1,59 @@
+{
+  "id": "direct_silhouette_edit_to_faces",
+  "title": "Silhouette Split edited from Split Solid Body back to Split Faces Only",
+  "tags": [
+    "direct",
+    "modify",
+    "silhouette-split",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "sphere",
+      "plane": "XY",
+      "x": 0,
+      "y": 0,
+      "diameter": 20
+    },
+    {
+      "op": "silhouette_split",
+      "id": "l1",
+      "body": "b1",
+      "direction": "Z",
+      "operation": "body"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "solids": 2,
+        "source": "analytic",
+        "note": "two halves"
+      }
+    },
+    {
+      "op": "modify_edit",
+      "target": "l1",
+      "set": {
+        "operation": "faces"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4188.790204786391,
+    "area": 1256.6370614359173,
+    "faces": 2,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      -10,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "One ball again with its round face in two (r = 10)."
+  }
+}

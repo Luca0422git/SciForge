@@ -1093,7 +1093,13 @@ def _end_transaction(doc, abort=False):
     """Close a dialog's undo step. doc.commitTransaction()/abortTransaction() only close a
     step that holds changes: a dialog OK'd or cancelled without a change left its step name
     pending, and the next change anywhere opened a step under that name and threw away the
-    Redo list. The pending name is closed too (same as preview.end_transaction)."""
+    Redo list. The pending name is closed too (same as preview.end_transaction), and a
+    design without history bakes the change first (preview._bakes)."""
+    if not abort:
+        from . import preview
+
+        if preview._bakes(doc):
+            return
     if abort:
         doc.abortTransaction()
     else:

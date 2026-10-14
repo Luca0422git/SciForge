@@ -34,6 +34,7 @@ FEATURE_PROPS = {
 # SciForge's own features (their SciForgeType) -> [(property, label)], shown the same way.
 SCIFORGE_PROPS = {
     "PressPull": [("Distance", "Distance")],
+    "OffsetFace": [("Distance", "Distance")],
     "Shell": [("InsideThickness", "Inside Thickness"), ("OutsideThickness", "Outside Thickness")],
     "Scale": [
         ("Factor", "Scale Factor"),

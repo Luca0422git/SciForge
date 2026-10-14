@@ -1,0 +1,82 @@
+{
+  "id": "direct_split_face_then_press_pull",
+  "title": "Split Face then Press Pull on one half of the split top",
+  "tags": [
+    "direct",
+    "modify",
+    "split-face",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "split_face",
+      "id": "f1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "tool": "YZ"
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 3,
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "x",
+          "value": "max"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 13800,
+    "area": 4100,
+    "faces": 8,
+    "solids": 1,
+    "bbox": [
+      -20,
+      -15,
+      0,
+      20,
+      15,
+      13
+    ],
+    "source": "analytic",
+    "note": "Only the half x 0..20 goes up 3: V = 12000 + 20*30*3. A = 3800 + the step wall at x = 0 (30*3) + front and back (2*20*3) + the +X side (30*3). Faces: bottom, four sides (front and back L-shaped), two tops, the step wall."
+  }
+}

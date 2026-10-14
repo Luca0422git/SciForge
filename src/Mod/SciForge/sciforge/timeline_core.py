@@ -70,7 +70,10 @@ KINDS = {
     "insert_mesh": ("Insert Mesh", "insert_mesh"),
     "convert_mesh": ("Convert Mesh", "convert_mesh"),
     "insert_step": ("Insert STEP", "insert_step"),
-    "base": ("Base Feature", "document"),
+    "base": ("Base Feature", "base_feature"),
+    "remove": ("Remove", "remove"),
+    "align": ("Align", "align"),
+    "silhouette_split": ("Silhouette Split", "silhouette_split"),
     "component": ("Component", "new_component"),
     "group": ("Group", "folder"),
     "joint": ("Joint", "joint"),
@@ -165,6 +168,10 @@ KIND_BY_SCIFORGE_TYPE = {
     "JointOrigin": "joint_origin",
     "RigidGroup": "rigid_group",
     "Position": "position",
+    "BaseFeature": "base",
+    "Remove": "remove",
+    "Align": "align",
+    "SilhouetteSplit": "silhouette_split",
 }
 
 # Steps that are not a solid: they never carry the history marker (FreeCAD's Tip).

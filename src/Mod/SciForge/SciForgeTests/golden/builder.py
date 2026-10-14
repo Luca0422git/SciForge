@@ -638,3 +638,4 @@ from . import primitive_ops  # noqa: E402,F401  (registers Box/Cylinder/Sphere/T
 from . import sweep_loft_ops  # noqa: E402,F401  (registers the sweep / loft / rib / web steps)
 from . import extrude_bodies_ops  # noqa: E402,F401  (extrudes through several bodies)
 from . import emboss_ops  # noqa: E402,F401  (registers op_emboss)
+from . import direct_ops  # noqa: E402,F401  (history on/off and the Modify tools)

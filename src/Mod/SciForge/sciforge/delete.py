@@ -65,6 +65,13 @@ def plan(entries):
         if obj.TypeId == "Sketcher::SketchObject" and short:
             found["refused"] = "Points of a sketch are deleted with the sketch's curves."
             continue
+        if short.startswith("Face") and _plain_solid(obj):
+            # A solid without history (a STEP file opened by FreeCAD, a converted mesh): it
+            # becomes a body built on it when the faces go (run()).
+            found["faces"].setdefault(obj, [])
+            if short not in found["faces"][obj]:
+                found["faces"][obj].append(short)
+            continue
         if short.startswith("Face") and bodies.body_of(obj) is not None:
             body = bodies.body_of(obj)
             feature = body.Tip
@@ -88,6 +95,15 @@ def plan(entries):
     found["steps"] = [s for s in found["steps"] if not _in_bodies(s, inside)]
     found["faces"] = {f: n for f, n in found["faces"].items() if not _in_bodies(f, inside)}
     return found
+
+
+def _plain_solid(obj):
+    try:
+        from . import direct
+
+        return direct.is_adoptable(obj)
+    except Exception:
+        return False
 
 
 def _same_face(obj, short, feature):
@@ -412,6 +428,11 @@ def run(doc, found, title="Delete"):
         for sketch, indices in found["curves"].items():
             delete_curves(sketch, indices)
         for feature, names in found["faces"].items():
+            if _plain_solid(feature):
+                from . import direct
+
+                body = direct.adopt(feature)  # its base feature holds the solid
+                feature = body.Tip
             made.append(delete_faces(feature, names))
         if found["steps"]:
             delete_steps(doc, found["steps"])
@@ -421,6 +442,9 @@ def run(doc, found, title="Delete"):
         for step in made:
             if bodies.alive(step) and "Invalid" in list(step.State):
                 raise DeleteError(_face_failure(step))
+        from . import direct
+
+        direct.bake_before_commit(doc)  # a design without history: into the bodies
     except Exception:
         doc.abortTransaction()
         timeline_ops.recompute(doc)
@@ -433,7 +457,7 @@ def run(doc, found, title="Delete"):
     return made
 
 
-# -- orphans (a step deleted from the timeline or the browser) -----------------------------------------
+# -- orphans (a step deleted from the timeline or the browser) ---------------------------------
 def orphans(doc):
     """Bodies left behind by a deleted Split Body or copy step, and the hidden steps a deleted
     multi-body extrude drove in other bodies ((None, step))."""
@@ -469,7 +493,7 @@ def remove_orphans(doc):
     return True
 
 
-# -- Delete Face ------------------------------------------------------------------------------------
+# -- Delete Face -------------------------------------------------------------------------------
 class DeleteFaceFeature:
     """Removes faces and grows the faces around them to close the gap. Saved as
     "sciforge.delete.DeleteFaceFeature"."""
@@ -526,26 +550,25 @@ class DeleteFaceFeature:
 
 
 def heal(shape, faces, refine=True):
-    """The solid without `faces`, the faces around them grown to close it."""
+    """The solid without `faces`, the faces around them grown to close it (Fusion's Delete
+    on faces heals the solid). Refused with the reason and what to try when OpenCASCADE's
+    defeaturing cannot close the gap (it fails, or gives the solid back unchanged)."""
+    from . import direct_core
+
+    kinds = [type(f.Surface).__name__ for f in faces]
+    refusal = direct_core.delete_refusal(kinds, len(shape.Faces))
     if len(faces) >= len(shape.Faces):
-        raise DeleteError("Deleting every face would leave nothing.")
+        raise DeleteError(refusal)
     try:
         healed = shape.defeaturing(faces)
-    except Exception as exc:
-        raise DeleteError(
-            "These faces cannot be deleted: the faces around them cannot be extended to close "
-            "the gap (%s)." % exc
-        )
+    except Exception:
+        raise DeleteError(refusal)
     if healed.isNull() or not healed.Solids or not healed.isValid():
-        raise DeleteError(
-            "These faces cannot be deleted: the faces around them cannot be extended to close "
-            "the gap."
-        )
+        raise DeleteError(refusal)
+    if len(healed.Solids) != len(shape.Solids):
+        raise DeleteError(refusal)
     if len(healed.Faces) == len(shape.Faces) and abs(healed.Volume - shape.Volume) < 1e-9:
-        raise DeleteError(
-            "These faces cannot be deleted: the faces around them cannot be extended to close "
-            "the gap."
-        )
+        raise DeleteError(refusal)
     if refine:
         try:
             healed = healed.removeSplitter()

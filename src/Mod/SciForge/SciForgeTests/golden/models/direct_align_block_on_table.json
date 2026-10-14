@@ -1,0 +1,100 @@
+{
+  "id": "direct_align_block_on_table",
+  "title": "Align: a block's top face onto a table's top face (they end up facing each other)",
+  "tags": [
+    "direct",
+    "modify",
+    "align"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            80,
+            0,
+            100,
+            10
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5,
+      "operation": "new_body"
+    },
+    {
+      "op": "align_bodies",
+      "id": "a1",
+      "from": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        },
+        "of": "e2"
+      },
+      "to": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        },
+        "of": "e1"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1000,
+    "area": 700,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      20,
+      15,
+      10,
+      40,
+      25,
+      15
+    ],
+    "source": "analytic",
+    "note": "The block 20x10x5 lies upside down on the table, its top face's centre on the table top's centre (30, 20, 10). Measured: the block."
+  }
+}

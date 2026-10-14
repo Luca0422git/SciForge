@@ -1,0 +1,98 @@
+{
+  "id": "direct_replace_face_up_to_body",
+  "title": "Replace Face: a box's top goes up to the top of another body",
+  "tags": [
+    "direct",
+    "modify",
+    "replace-face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            70,
+            30
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 15,
+      "operation": "new_body"
+    },
+    {
+      "op": "replace_face",
+      "id": "r1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "of": "e1",
+      "target": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        },
+        "of": "e2"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 18000,
+    "area": 4500,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "The box 40x30 becomes 15 high: V = 40*30*15, A = 2*1200 + 2*600 + 2*450."
+  }
+}

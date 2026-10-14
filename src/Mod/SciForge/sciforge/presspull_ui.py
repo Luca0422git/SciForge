@@ -32,12 +32,17 @@ class ViewProviderPressPull:
         self.Object = vobj.Object
 
     def getIcon(self):
-        return ui_icon_path("press_pull")
+        obj = getattr(self, "Object", None)
+        return ui_icon_path(
+            "offset_face" if presspull.kind_of(obj) == "OffsetFace" else "press_pull"
+        )
 
     def setEdit(self, vobj, mode=0):
         if mode != 0:
             return None
-        Gui.Control.showDialog(PressPullPanel(vobj.Object.Document, feature=vobj.Object))
+        obj = vobj.Object
+        panel = OffsetFacePanel if presspull.kind_of(obj) == "OffsetFace" else PressPullPanel
+        Gui.Control.showDialog(panel(obj.Document, feature=obj))
         return True
 
     def unsetEdit(self, vobj, mode=0):
@@ -133,9 +138,12 @@ class PressPullPanel(Panel):
     title = "Press Pull"
     icon = "press_pull"
     last = None  # the most recent panel (for tests and diagnostics)
+    faces_only = False  # Offset Face: faces only (no fillets, no sketch areas)
+    step_type = "PressPull"  # SciForgeType of the step made
+    hint = "Click faces to push or pull, edges to fillet,\nor a fillet face to change its radius."
 
     def __init__(self, doc, feature=None):
-        super().__init__(doc, "Press Pull" if feature is None else "Edit Press Pull")
+        super().__init__(doc, self.title if feature is None else "Edit %s" % self.title)
         PressPullPanel.last = self
         self.escape = preview.EscapeCancels(self)
         self.undo_guard = preview.UndoCancels(self)
@@ -151,13 +159,11 @@ class PressPullPanel(Panel):
         self.editing = feature is not None
         self.value_boxes = ValueBoxes(self, default="distance")  # the box next to the arrow
         self.cut_view = None  # the red preview of the material taken away
+        self._adopted = []  # plain solids made bodies by a pick (shown again on Cancel)
 
         from .extrude_ui import SelectionField
 
-        self.what = QtWidgets.QLabel(
-            "Click faces to push or pull, edges to fillet,\n"
-            "or a fillet face to change its radius."
-        )
+        self.what = QtWidgets.QLabel(self.hint)
         self.what.setWordWrap(True)
         self.layout.addRow(self.what)
         self.selection_field = SelectionField(self, "faces", "Select faces")
@@ -196,7 +202,7 @@ class PressPullPanel(Panel):
         else:
             self._start_from_selection()
         self.picker = None
-        if self.mode is None:
+        if self.mode is None and not self.faces_only:
             self._shade_profiles()
             self._say_what_to_click()
         self._watch_selection()
@@ -285,7 +291,7 @@ class PressPullPanel(Panel):
         """Use clicked faces/edges: the first pick decides what Press Pull does."""
         from . import text as sketch_text
 
-        if self.mode is None:
+        if self.mode is None and not self.faces_only:
             areas = [
                 (obj, short)
                 for obj, short, _point in picks
@@ -323,12 +329,18 @@ class PressPullPanel(Panel):
 
     def _follow_body(self, obj):
         """The first pick decides the body (Fusion: Press Pull works on any body, not only
-        the active one); the feature goes into that body's timeline."""
+        the active one); the feature goes into that body's timeline. A solid without history
+        (a STEP part FreeCAD opened, a converted mesh) becomes a body built on it first: its
+        base feature holds the solid, the Press Pull comes after it (in a design without
+        history it is baked into it at OK)."""
         if self.mode is not None or self.editing:
             return
-        from . import extrude
+        from . import direct, extrude
 
         body = extrude.owner_body(obj)
+        if body is None and direct.is_adoptable(obj):
+            body = direct.adopt(obj)
+            self._adopted.append(obj)
         if body is None or body is self.body or body.Tip is None or body.Tip.Shape.isNull():
             return
         self.body, self.tip, self.base = body, body.Tip, None
@@ -349,7 +361,7 @@ class PressPullPanel(Panel):
             face = obj.Shape.getElement(short)
         except Exception:
             return
-        if self.mode is None and core.is_round_blend(face):
+        if self.mode is None and not self.faces_only and core.is_round_blend(face):
             blend = core.owning_fillet(self.body, face)
             if blend is not None:
                 self._start_blend_edit(blend)
@@ -371,6 +383,9 @@ class PressPullPanel(Panel):
         self._selection_updated()
 
     def _edge_picked(self, obj, short):
+        if self.faces_only:
+            self.message.setText("%s moves faces: click faces of the body." % self.title)
+            return
         if self.mode in ("faces", "edit_blend"):
             if self.mode == "faces":
                 self.message.setText("This Press Pull moves faces; click faces to add or drop.")
@@ -409,14 +424,17 @@ class PressPullPanel(Panel):
                 return
             self._remove_target()
             self.mode = None
-            self.what.setText(
-                "Click faces to push or pull, edges to fillet,\n"
-                "or a fillet face to change its radius."
-            )
+            self.what.setText(self.hint)
             return
         if self.mode == "faces":
             if self.target is None:
-                self.target = presspull.make(self.body, self.base, self.names, self.field.value())
+                self.target = presspull.make(
+                    self.body,
+                    self.base,
+                    self.names,
+                    self.field.value(),
+                    kind=self.step_type,
+                )
                 self._apply_formula()
             else:
                 self.target.Faces = (self.base, list(self.names))
@@ -723,8 +741,21 @@ class PressPullPanel(Panel):
         self.cleanup()
         preview.end_transaction(self.doc, abort=True)
         preview.recompute(self.doc)
+        self._show_adopted()
         self._close()
         return True
+
+    def _show_adopted(self):
+        """Cancel took away the body a plain solid was made into: the solid shows again."""
+        from . import bodies
+
+        for obj in self._adopted:
+            try:
+                if bodies.alive(obj) and not any(bodies.is_body(u) for u in obj.InList):
+                    bodies.set_shown(obj, True)
+            except Exception:
+                pass
+        self._adopted = []
 
     def cleanup(self):
         self._unwatch()
@@ -803,9 +834,46 @@ def edit(obj):
     try:
         if Gui.Control.activeDialog() and not commands.finish_open_dialog():
             return
-        Gui.Control.showDialog(PressPullPanel(obj.Document, feature=obj))
+        panel = OffsetFacePanel if presspull.kind_of(obj) == "OffsetFace" else PressPullPanel
+        Gui.Control.showDialog(panel(obj.Document, feature=obj))
     except Exception as exc:
         warn("could not edit %s: %s" % (obj.Label, exc))
 
 
-EDITORS = {"SciForge::PressPull": edit}
+# -- Offset Face (Modify > Offset Face) --------------------------------------------------------
+class OffsetFacePanel(PressPullPanel):
+    """Fusion's Offset Face: pick faces, drag the arrow or type a distance, OK: an Offset Face
+    step in the timeline (Press Pull's faces mode without its fillet and sketch-area modes).
+    Works on bodies without history too (their base feature holds the solid)."""
+
+    title = "Offset Face"
+    icon = "offset_face"
+    faces_only = True
+    step_type = "OffsetFace"
+    hint = "Click faces to offset (+ adds material, − removes it)."
+
+
+class OffsetFaceCommand:
+    def GetResources(self):
+        return {
+            "MenuText": "Offset Face",
+            "ToolTip": "Move faces along their normals by a distance; the faces around them "
+            "follow (an Offset Face step in the timeline)",
+            "Pixmap": ui_icon_path("offset_face"),
+        }
+
+    def IsActive(self):
+        return App.ActiveDocument is not None
+
+    def Activated(self):
+        try:
+            if not commands.finish_open_dialog():
+                return
+            Gui.Control.showDialog(OffsetFacePanel(App.ActiveDocument))
+            log("offset face started")
+        except Exception as exc:
+            warn("Offset Face failed to start: %s" % exc)
+
+
+COMMANDS = {"SciForge_OffsetFace": OffsetFaceCommand}
+EDITORS = {"SciForge::PressPull": edit, "SciForge::OffsetFace": edit}

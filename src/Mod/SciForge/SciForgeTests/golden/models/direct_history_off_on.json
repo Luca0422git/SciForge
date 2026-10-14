@@ -1,0 +1,102 @@
+{
+  "id": "direct_history_off_on",
+  "title": "Capture Design History off (one frozen step), on again, then a Press Pull step",
+  "tags": [
+    "direct",
+    "history",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "s2c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "cut",
+      "flip": true
+    },
+    {
+      "op": "history_off"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 11214.601836602551,
+        "faces": 7,
+        "source": "analytic",
+        "note": "the same part, now one frozen step"
+      }
+    },
+    {
+      "op": "history_on"
+    },
+    {
+      "op": "press_pull",
+      "id": "p1",
+      "distance": 5,
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 16821.902754903826,
+    "area": 4814.15926535898,
+    "faces": 7,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "The box with its through hole r 5, made 15 high: V = 15*(1200 - 25 pi); A = 2*(1200 - 25 pi) + 2*600 + 2*450 + the hole's wall 2 pi 5 * 15."
+  }
+}
