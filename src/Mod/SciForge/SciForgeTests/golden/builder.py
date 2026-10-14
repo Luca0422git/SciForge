@@ -584,6 +584,13 @@ class Builder:
             tips, before = timeline_core.marker_for_slot(tl, 0)
             timeline_ops.roll(self.doc, tips, before=before)
             return
+        if "before" in step:
+            # the marker dropped right before a step (a component's step, its captured move:
+            # components-2)
+            slot = tl.names().index(self._step_name(step["before"]))
+            tips, before = timeline_core.marker_for_slot(tl, slot)
+            timeline_ops.roll(self.doc, tips, before=before)
+            return
         if step.get("end"):
             tips = timeline_core.tips_for_count(tl, len(tl.items))
         else:
@@ -744,3 +751,4 @@ from . import emboss_ops  # noqa: E402,F401  (registers op_emboss)
 from . import direct_ops  # noqa: E402,F401  (history on/off and the Modify tools)
 from . import surface_ops  # noqa: E402,F401  (registers op_sf_surface, op_sf_surface_edit)
 from . import fillet2_ops  # noqa: E402,F401  (radius sets, rule, full round: fillet_sets.py)
+from . import component_ops  # noqa: E402,F401  (whole components: move, paste, patterns)

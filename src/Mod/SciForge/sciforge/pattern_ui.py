@@ -16,6 +16,7 @@ How it is used, like in Fusion:
   * Double-click the pattern in the timeline to change it.
 Geometry and the FreeCAD features behind each choice: pattern.py.
 """
+
 import math
 import time
 
@@ -681,7 +682,11 @@ class PatternPanel(Panel):
         self.pattern_type = _combo(
             PATTERN_TYPES,
             self.options["pattern_type"],
-            disabled={"components": "SciForge designs have no components yet."},
+            disabled=(
+                {"components": "Mirror of components is not built yet (patterns are)."}
+                if self.kind == "mirror"
+                else {}
+            ),
         )
         form.addRow("Pattern Type", self.pattern_type)
         self._selection("objects", "Select", "Objects")
@@ -921,6 +926,8 @@ class PatternPanel(Panel):
             problem = ""
             if self.options["pattern_type"] == "bodies" and self.kind != "mirror":
                 problem = "A pattern of bodies takes a plain number as its quantity."
+            elif self.options["pattern_type"] == "components":
+                problem = "A pattern of components takes a plain number as its quantity."
             elif value < 0.5:
                 problem = "'%s' is less than 1: the quantity must be 1 or more." % text
             if problem:
@@ -1031,10 +1038,12 @@ class PatternPanel(Panel):
 
     # -- start ------------------------------------------------------------------------------------
     def _start(self, preselection):
-        if self.body is None or self.base is None or self.base.Shape.isNull():
+        objects, ptype = self._from_selection(preselection)
+        if ptype == "components" or (objects == [] and self._components_only()):
+            self._use_design_frame()  # a pattern of components: the design's origin axes
+        elif self.body is None or self.base is None or self.base.Shape.isNull():
             self.message.setText("⚠ Make a solid first (Create Sketch, then Extrude).")
             return
-        objects, ptype = self._from_selection(preselection)
         if objects:
             self.options["pattern_type"] = ptype
             self.options["objects"] = objects
@@ -1053,8 +1062,12 @@ class PatternPanel(Panel):
     def _from_selection(self, preselection):
         """(objects, pattern type) from what was selected before the command started."""
         features, faces, bodies = [], [], []
+        parts = []
         for obj, sub in preselection:
             if obj is None or obj.Document is not self.doc:
+                continue
+            if obj.TypeId == "App::Part" and not sub:  # a component row (components-2)
+                parts.append((obj, ""))
                 continue
             if obj.TypeId == "PartDesign::Body":
                 if not sub:
@@ -1074,6 +1087,8 @@ class PatternPanel(Panel):
             return faces, "faces"
         if bodies:
             return bodies[:1], "bodies"
+        if parts and self.kind != "mirror":
+            return parts[:1], "components"
         return [], self.options["pattern_type"]
 
     def _next_box(self):
@@ -1088,6 +1103,8 @@ class PatternPanel(Panel):
             return "Click the features to repeat in the timeline (or a face they made)."
         if ptype == "faces":
             return "Click the faces to repeat: every face of a hole, a pocket or a boss."
+        if ptype == "components":
+            return "Click the component to repeat (in the window, or its browser row)."
         if self.kind == "mirror":
             return "Click the body to mirror (on the part, or in the browser)."
         return "Click the body to repeat: each copy becomes a new body."
@@ -1192,6 +1209,9 @@ class PatternPanel(Panel):
 
     def _object_picked(self, obj, short):
         ptype = self.options["pattern_type"]
+        if ptype == "components":
+            self._component_picked(obj)
+            return
         if obj.TypeId == "PartDesign::Body" and short:
             obj = obj.Tip
         if ptype == "bodies":
@@ -1258,6 +1278,60 @@ class PatternPanel(Panel):
                 self.message.setText("⚠ That face is one of the copies. Click an original face.")
                 return
             self._toggle(ref)
+
+    # -- Pattern Type Components (components-2: component_pattern.py) ----------------------------
+    def _components_only(self):
+        """True when the design has components but no body to pattern features of."""
+        from . import components
+
+        return self.body is None and bool(components.list_components(self.doc))
+
+    def _use_design_frame(self):
+        """A pattern of components works in design coordinates: the origin axes drawn are
+        the design's (a root body's or a component's at the origin)."""
+        from . import component_move
+
+        frame = component_move.frame_object(self.doc)
+        if frame is not None and frame is not self.body:
+            self.body = frame
+            self.base = None
+            for picker in (self.axis_picker, self.plane_picker):
+                if picker is not None:
+                    picker.remove()
+            self.axis_picker = self.plane_picker = None
+
+    def _component_picked(self, obj):
+        from . import components, components_core, instances
+
+        if components.is_component(obj):
+            part = obj
+        else:
+            chain = components.ancestors(obj)
+            active = components.active_component(self.doc)
+            name = components_core.component_to_pick(
+                [c.Name for c in chain], active.Name if active is not None else None
+            )
+            part = self.doc.getObject(name) if name else None
+        if part is None:
+            self.message.setText(
+                "⚠ That is in no component. Pick a component, or Pattern Type Bodies."
+            )
+            return
+        pattern_step = instances.pattern_of(part)
+        if pattern_step is not None and pattern_step is self.target:
+            self.message.setText("⚠ %s is a copy made by this pattern." % part.Label)
+            return
+        if instances.is_instance(part):
+            source = instances.source_of(part)
+            self.message.setText(
+                "⚠ %s is a copy of %s: pick the original component."
+                % (part.Label, source.Label if source is not None else "another component")
+            )
+            return
+        self.message.setText("")
+        self._use_design_frame()
+        self.options["objects"] = [(part, "")]
+        self._changed(new_geometry=True)
 
     def _adopt_body(self, obj):
         """Fusion has no "active body": a feature or face of any body can be picked, and the
@@ -1480,6 +1554,8 @@ class PatternPanel(Panel):
         # Fusion clears the objects when the pattern type changes (they are another kind).
         self.options["objects"] = []
         self.options["pattern_type"] = self.pattern_type.currentData()
+        if self.options["pattern_type"] == "components":
+            self._use_design_frame()
         self.activate("objects")
         self.info.setText(self._hint())
         self._update_visibility()

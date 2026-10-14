@@ -1,0 +1,108 @@
+{
+  "id": "comp_move_captured_roll",
+  "title": "A component moved with Capture Position, then the history marker before the move and back",
+  "tags": [
+    "components",
+    "move",
+    "timeline"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "components_from_bodies",
+      "id": "k1",
+      "bodies": [
+        "e1"
+      ],
+      "label": "Bracket"
+    },
+    {
+      "op": "component_move",
+      "id": "m1",
+      "components": [
+        "k1"
+      ],
+      "move_type": "translate",
+      "dx": 10,
+      "dy": 5,
+      "capture": true
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12000,
+        "bbox": [
+          10,
+          5,
+          0,
+          50,
+          35,
+          10
+        ],
+        "source": "analytic",
+        "note": "moved 10 in X, 5 in Y"
+      }
+    },
+    {
+      "op": "roll",
+      "before": "m1"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12000,
+        "bbox": [
+          0,
+          0,
+          0,
+          40,
+          30,
+          10
+        ],
+        "source": "analytic",
+        "note": "the marker before the captured move: back where it was"
+      }
+    },
+    {
+      "op": "roll",
+      "end": true
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "area": 3800,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [
+      10,
+      5,
+      0,
+      50,
+      35,
+      10
+    ],
+    "source": "analytic",
+    "note": "40x30x10 box (A = 2*(1200+400+300) = 3800) moved (10, 5, 0) by its component"
+  }
+}

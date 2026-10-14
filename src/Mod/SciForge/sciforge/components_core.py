@@ -124,3 +124,74 @@ def same_new(made, wanted):
     if made not in news or wanted not in news:
         return True
     return made == wanted
+
+
+# -- instances (Copy / Paste of a component, patterns of components) ----------------------------
+# Fusion names every occurrence of a component "<name>:<n>": the original is :1, a pasted
+# instance :2, the next :3 ... (a pattern's copies too). Editing one changes all of them.
+INSTANCE_RE = re.compile(r"^(?P<base>.*):(?P<n>\d+)$")
+
+
+def instance_label(base, n):
+    return "%s:%d" % (base, n)
+
+
+def split_instance_label(label):
+    """("Bracket", 2) for "Bracket:2"; (label, None) for a label without a number."""
+    found = INSTANCE_RE.match(label or "")
+    if not found:
+        return label, None
+    return found.group("base"), int(found.group("n"))
+
+
+def next_instance_number(used):
+    """The next free occurrence number (the original is 1, so instances start at 2)."""
+    taken = {int(n) for n in used if n is not None}
+    n = 2
+    while n in taken:
+        n += 1
+    return n
+
+
+def paste_new_label(label, labels):
+    """Paste New makes an independent component named after the copied one: "Bracket (1)",
+    then "Bracket (2)" ... (a guess at Fusion's naming)."""
+    base = re.sub(r"\s*\(\d+\)$", "", split_instance_label(label)[0] or "Component")
+    taken = set(labels)
+    n = 1
+    while "%s (%d)" % (base, n) in taken:
+        n += 1
+    return "%s (%d)" % (base, n)
+
+
+# -- picking a component in the 3D view -------------------------------------------------------
+def component_to_pick(chain, active):
+    """The component a click picks when Move's Object type is Components (Fusion selects the
+    occurrence just below the active component on the way to what was clicked).
+    ``chain``: the containers of the clicked object, nearest first (names); ``active``: the
+    active component (None: the root). None when the object lies in no component."""
+    chain = list(chain)
+    if not chain:
+        return None
+    if active is None or active not in chain:
+        return chain[-1]
+    index = chain.index(active)
+    return chain[index - 1] if index > 0 else chain[0]
+
+
+# -- Move: Set Pivot ---------------------------------------------------------------------------
+def pivot_shift(rotation, distances, old_pivot, new_pivot):
+    """Free Move turns about a pivot and then moves by the distances. Setting the pivot
+    somewhere else must not move what was already moved: the distances change by
+    (I - R)(old - new). ``rotation``: 3x3 rows; the rest (x, y, z)."""
+    diff = [old_pivot[i] - new_pivot[i] for i in range(3)]
+    turned = [sum(rotation[r][c] * diff[c] for c in range(3)) for r in range(3)]
+    return tuple(distances[i] + diff[i] - turned[i] for i in range(3))
+
+
+# -- the history marker and component steps ------------------------------------------------------
+def placement_steps_in_effect(steps):
+    """Fusion's captured moves of a component: which of them count where the history marker
+    stands. ``steps``: [(name, done, suppressed)] in timeline order. Returns the names whose
+    movement is applied, in order (a rolled-back or suppressed move is skipped)."""
+    return [name for name, done, suppressed in steps if done and not suppressed]

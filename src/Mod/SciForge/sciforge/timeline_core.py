@@ -59,6 +59,7 @@ KINDS = {
     "split_body": ("Split Body", "split_body"),
     "split_face": ("Split Face", "split_face"),
     "move": ("Move", "move"),
+    "component_move": ("Move", "move"),  # a captured move of a component (Capture Position)
     "presspull": ("Press Pull", "press_pull"),
     "offset_face": ("Offset Face", "offset_face"),
     "replace_face": ("Replace Face", "replace_face"),
@@ -178,6 +179,7 @@ KIND_BY_SCIFORGE_TYPE = {
     "DeleteFace": "delete_face",
     "Move": "move",
     "MoveCopy": "move",
+    "ComponentMove": "component_move",
     "InsertMesh": "insert_mesh",
     "ConvertMesh": "convert_mesh",
     "MeshRepair": "mesh_repair",
@@ -230,6 +232,7 @@ NON_SOLID_KINDS = {
     "rigid_group",
     "position",
     "motion_link",
+    "component_move",
 }
 
 
@@ -344,6 +347,11 @@ def merge(features):
             sequences[body] = []
             order.append(body)
         sequences[body].append(f)
+    if None in sequences:
+        # Steps outside the bodies (components, their moves, joints...) form no chain: each
+        # stands where its own key puts it (a component made while the timeline is rolled
+        # back goes in at the marker, before older steps of its kind).
+        sequences[None].sort(key=lambda f: float(f.get("key", 0)))
     effective = {}
     for body, seq in sequences.items():
         low = None
@@ -467,7 +475,10 @@ def build(features, tips, marker_before=None):
         if solid[i]:
             state = "done" if active[i] else "rolled_back"
         elif f.get("body") is None:
-            state = "done"
+            # Outside the bodies only a component, a captured move of one and a pattern of
+            # components roll back with the marker ("rolls"): Fusion hides a component made
+            # after the marker and puts a moved one back. The rest never rolls back.
+            state = "rolled_back" if (f.get("rolls") and i >= marker) else "done"
         else:
             state = "done" if i < marker else "rolled_back"
         status, message = _status(f)

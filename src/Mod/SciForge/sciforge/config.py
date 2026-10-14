@@ -175,6 +175,10 @@ SHORTCUTS = {
     "Std_New": "Ctrl+N",
     "Std_Open": "Ctrl+O",
     "Std_Delete": "Del",
+    # Fusion: Ctrl+C / Ctrl+V copy and paste components and bodies (sketch curves in a
+    # sketch: sketch_mode takes the keys there)
+    "SciForge_Copy": "Ctrl+C",
+    "SciForge_Paste": "Ctrl+V",
     "SciForge_ComponentColors": "Shift+N",  # Fusion: Display Component Colors
     "SciForge_ViewportsToggle": "Shift+1",  # Fusion: Shift+! switches Multiple Views
 }

@@ -87,7 +87,7 @@ STEP_KEYS = {
     "unsuppress": ({"target"}, {"comment"}),
     "delete": ({"target"}, {"comment"}),
     "move": ({"target"}, {"before", "after", "comment"}),
-    "roll": (set(), {"after", "end", "start", "comment"}),
+    "roll": (set(), {"after", "end", "start", "before", "comment"}),
     # File > Save, close, open again (only what is saved in the file is left).
     "reopen": (set(), {"comment"}),
     # Test setup: a coil / pipe as saved by SciForge before the primitives QA fixes.
@@ -366,11 +366,21 @@ def validate(model):
             refs = [k for k in ("before", "after") if k in step]
             if len(refs) != 1 or step[refs[0]] not in seen:
                 _fail(here, "move needs one of 'before'/'after' naming an earlier step")
-        ends = ["after" in step, bool(step.get("end")), bool(step.get("start"))]
+        ends = [
+            "after" in step,
+            bool(step.get("end")),
+            bool(step.get("start")),
+            "before" in step,
+        ]
         if op == "roll" and ends.count(True) != 1:
-            _fail(here, 'roll needs "after" (a step id), "end": true or "start": true')
+            _fail(
+                here,
+                'roll needs "after" or "before" (a step id), "end": true or "start": true',
+            )
         if op == "roll" and "after" in step and step["after"] not in seen:
             _fail(here, "'after' names unknown step %r" % step["after"])
+        if op == "roll" and "before" in step and step["before"] not in seen:
+            _fail(here, "'before' names unknown step %r" % step["before"])
 
     _check_expect(where + ".expect", model["expect"])
     return model
@@ -637,9 +647,10 @@ def _check_shell_draft_steps(model):
 # code as their dialogs). Bodies are named by a step that made them.
 STEP_KEYS["combine"] = (
     {"id", "target", "tools"},
-    {"operation", "new_body", "keep_tools", "comment"},
+    {"operation", "new_body", "new_component", "keep_tools", "comment"},
 )
-STEP_KEYS["split_body"] = ({"id", "body", "tool"}, {"extend", "comment"})
+# "tools": several splitting tools at once (Fusion's Splitting Tool(s), components-2)
+STEP_KEYS["split_body"] = ({"id", "body"}, {"tool", "tools", "extend", "comment"})
 STEP_KEYS["move_bodies"] = (
     {"id", "bodies"},
     {
@@ -691,22 +702,13 @@ def _check_body_steps(model):
         if op == "split_body":
             if step["body"] not in seen:
                 _fail(here, "split_body names unknown step %r" % step["body"])
-            tool = step["tool"]
-            if isinstance(tool, str):
-                if tool not in PLANES:
-                    _fail(here, "'tool' plane must be one of %s" % (PLANES,))
-            elif not isinstance(tool, dict) or len(set(tool) & {"face", "body", "sketch"}) != 1:
-                _fail(
-                    here,
-                    "'tool' must be XY/XZ/YZ, {'face': selector, 'of': id}, {'body': id} or "
-                    "{'sketch': id, 'edge': n}",
-                )
-            else:
-                if "sketch" in tool and seen.get(tool["sketch"]) != "sketch":
-                    _fail(here, "'tool' names unknown sketch %r" % tool["sketch"])
-                for key in ("of", "body"):
-                    if key in tool and tool[key] not in seen:
-                        _fail(here, "'tool' names unknown step %r" % tool[key])
+            if ("tool" in step) == ("tools" in step):
+                _fail(here, "split_body needs 'tool' or 'tools' (a list of tools)")
+            tools = step["tools"] if "tools" in step else [step["tool"]]
+            if not isinstance(tools, list) or not tools:
+                _fail(here, "'tools' must be a non-empty list")
+            for tool in tools:
+                _check_split_tool(here, tool, seen)
         if op == "move_bodies":
             if not step["bodies"] or any(b not in seen for b in step["bodies"]):
                 _fail(here, "'bodies' must name earlier steps")
@@ -732,6 +734,24 @@ def _check_body_steps(model):
             _fail(here, "%s names unknown steps" % op)
         if "id" in step:
             seen[step["id"]] = op
+
+
+def _check_split_tool(here, tool, seen):
+    if isinstance(tool, str):
+        if tool not in PLANES:
+            _fail(here, "'tool' plane must be one of %s" % (PLANES,))
+    elif not isinstance(tool, dict) or len(set(tool) & {"face", "body", "sketch"}) != 1:
+        _fail(
+            here,
+            "'tool' must be XY/XZ/YZ, {'face': selector, 'of': id}, {'body': id} or "
+            "{'sketch': id, 'edge': n}",
+        )
+    else:
+        if "sketch" in tool and seen.get(tool["sketch"]) != "sketch":
+            _fail(here, "'tool' names unknown sketch %r" % tool["sketch"])
+        for key in ("of", "body"):
+            if key in tool and tool[key] not in seen:
+                _fail(here, "'tool' names unknown step %r" % tool[key])
 
 
 _validate_before_shell_draft = validate
@@ -1639,10 +1659,91 @@ def _check_fillet2_steps(model):
             seen[step["id"]] = op
 
 
+# Whole components (golden/component_ops.py; sciforge/components.py, component_move.py,
+# instances.py, component_pattern.py: the same code as their dialogs). components-2.
+_COMPONENT_MOVE_KEYS = {"move_type", "dx", "dy", "dz", "rx", "ry", "rz", "pivot", "axis", "angle"}
+STEP_KEYS["components_from_bodies"] = ({"id", "bodies"}, {"label", "comment"})
+STEP_KEYS["component_move"] = (
+    {"id", "components"},
+    _COMPONENT_MOVE_KEYS | {"capture", "comment"},
+)
+STEP_KEYS["component_paste"] = ({"id", "component"}, {"new", "dx", "dy", "dz", "comment"})
+STEP_KEYS["component_pattern"] = (
+    {"id", "component", "kind"},
+    {
+        "axis",
+        "direction",
+        "direction2",
+        "quantity",
+        "quantity2",
+        "distance",
+        "distance2",
+        "angle",
+        "circular_type",
+        "distribution",
+        "direction_type",
+        "direction_type2",
+        "comment",
+    },
+)
+STEP_KEYS["measure_components"] = ({"steps"}, {"comment"})
+COMPONENT_PATTERN_KINDS = ("rectangular", "circular")
+
+
+def _check_component_steps(model):
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (model.get("id", "?"), i)
+        op = step.get("op")
+        if op == "components_from_bodies":
+            if not step["bodies"] or any(b not in seen for b in step["bodies"]):
+                _fail(here, "'bodies' must name earlier steps")
+        if op == "component_move":
+            if not step["components"] or any(
+                seen.get(c) != "components_from_bodies" and seen.get(c) != "component_paste"
+                for c in step["components"]
+            ):
+                _fail(here, "'components' must name earlier component steps")
+            kind = step.get("move_type", "free")
+            if kind not in MOVE_TYPES[:3]:
+                _fail(here, "'move_type' must be free, translate or rotate")
+            if kind == "rotate" and step.get("axis") not in AXES:
+                _fail(here, "rotate needs 'axis' X, Y or Z")
+            for key in ("dx", "dy", "dz", "rx", "ry", "rz", "angle"):
+                if key in step:
+                    _check_number(here + "." + key, step[key])
+        if op in ("component_paste", "component_pattern"):
+            if seen.get(step["component"]) not in ("components_from_bodies", "component_paste"):
+                _fail(here, "'component' must name an earlier component step")
+        if op == "component_pattern":
+            if step["kind"] not in COMPONENT_PATTERN_KINDS:
+                _fail(here, "'kind' must be one of %s" % (COMPONENT_PATTERN_KINDS,))
+            for key in ("axis", "direction", "direction2"):
+                if key in step and step[key] not in AXES:
+                    _fail(here, "'%s' must be X, Y or Z" % key)
+            if step["kind"] == "circular" and "axis" not in step:
+                _fail(here, "a circular pattern needs 'axis'")
+            if step["kind"] == "rectangular" and "direction" not in step:
+                _fail(here, "a rectangular pattern needs 'direction'")
+        if op == "measure_components" and any(s not in seen for s in step["steps"]):
+            _fail(here, "measure_components names unknown steps")
+        if "id" in step:
+            seen[step["id"]] = op
+
+
 _validate_before_fillet2 = validate
 
 
 def validate(model):  # noqa: F811  (adds the fillet-2 checks)
     _validate_before_fillet2(model)
     _check_fillet2_steps(model)
+    return model
+
+
+_validate_before_components = validate
+
+
+def validate(model):  # noqa: F811  (adds the component checks, components-2)
+    _validate_before_components(model)
+    _check_component_steps(model)
     return model

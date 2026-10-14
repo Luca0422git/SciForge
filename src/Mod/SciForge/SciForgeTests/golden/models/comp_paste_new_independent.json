@@ -1,0 +1,76 @@
+{
+  "id": "comp_paste_new_independent",
+  "title": "Paste New of a component: the independent copy keeps its shape when the original changes",
+  "tags": [
+    "components",
+    "paste"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "components_from_bodies",
+      "id": "k1",
+      "bodies": [
+        "e1"
+      ],
+      "label": "Bracket"
+    },
+    {
+      "op": "component_paste",
+      "id": "n1",
+      "component": "k1",
+      "new": true,
+      "dy": 50
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "distance": 20
+      }
+    },
+    {
+      "op": "measure_components",
+      "steps": [
+        "k1",
+        "n1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 36000,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      80,
+      20
+    ],
+    "source": "analytic",
+    "note": "the original 40x30x20 (24000), the copy still 40x30x10 (12000) at y 50..80"
+  }
+}

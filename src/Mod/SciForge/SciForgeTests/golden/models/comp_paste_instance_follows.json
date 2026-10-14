@@ -1,0 +1,75 @@
+{
+  "id": "comp_paste_instance_follows",
+  "title": "Copy / Paste of a component: the linked instance follows an edit of the original",
+  "tags": [
+    "components",
+    "paste"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "components_from_bodies",
+      "id": "k1",
+      "bodies": [
+        "e1"
+      ],
+      "label": "Bracket"
+    },
+    {
+      "op": "component_paste",
+      "id": "i1",
+      "component": "k1",
+      "dx": 60
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "distance": 20
+      }
+    },
+    {
+      "op": "measure_components",
+      "steps": [
+        "k1",
+        "i1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 48000,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      100,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "two 40x30x20 boxes (24000 each), the instance 60 to the right"
+  }
+}

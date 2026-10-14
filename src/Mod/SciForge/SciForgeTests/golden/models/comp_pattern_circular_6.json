@@ -1,0 +1,63 @@
+{
+  "id": "comp_pattern_circular_6",
+  "title": "Circular pattern of a component: 6 instances about the Z axis",
+  "tags": [
+    "components",
+    "pattern"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            20,
+            -5,
+            40,
+            5
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "components_from_bodies",
+      "id": "k1",
+      "bodies": [
+        "e1"
+      ],
+      "label": "Spoke"
+    },
+    {
+      "op": "component_pattern",
+      "id": "p1",
+      "component": "k1",
+      "kind": "circular",
+      "axis": "Z",
+      "quantity": 6
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "faces": 36,
+    "solids": 6,
+    "bbox": [
+      -40,
+      -37.141016,
+      0,
+      40,
+      37.141016,
+      10
+    ],
+    "source": "analytic",
+    "note": "six 20x10x10 blocks every 60 degrees; y max = 40 sin60 + 5 cos60 = 37.141016"
+  }
+}

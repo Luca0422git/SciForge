@@ -248,6 +248,18 @@ OPTIONS = [
         ],
     ),
     _option(
+        "active_component_visibility",
+        "design",
+        "Active component visibility",
+        "bool",
+        True,
+        (PREFS, "Bool", "ActiveComponentVisibility"),
+        group="General",
+        tip="While a component is active, everything outside it is drawn see-through (it can "
+        "still be picked). Off: everything stays as it is.",
+        apply="components",
+    ),
+    _option(
         "sketch_guides",
         "design",
         "Show inference guides while sketching",

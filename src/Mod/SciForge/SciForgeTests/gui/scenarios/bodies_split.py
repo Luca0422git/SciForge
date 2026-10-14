@@ -7,8 +7,9 @@ Body1 = rectangle -20..20 x -15..15, extruded 10 (12000), so the origin planes c
      Body1, then the big YZ origin square: the preview splits it at x = 0 into two bodies of
      6000 (Body1 keeps x < 0, the new body x > 0, both 6 faces); OK. Ctrl+Z gives one body
      of 12000 back, Ctrl+Y the two halves.
-  B  double-click the Split Body in the timeline, click the Splitting Tool box (the origin
-     squares show again), click the XZ square: now split at y = 0 (Body1 keeps y < 0). OK.
+  B  double-click the Split Body in the timeline, clear the Splitting Tool(s) box with its x
+     (the origin squares show again), click the XZ square: now split at y = 0 (Body1 keeps
+     y < 0). OK.
   C  Cancel: Split Body, click Body1, click the XY square... the bottom face plane does not
      cut; the reason is in the dialog; Cancel leaves the model unchanged.
   D  a second body (New Body, 25..35 x -5..5, 20 high) as the tool owner: Body1 selected
@@ -19,11 +20,13 @@ Body1 = rectangle -20..20 x -15..15, extruded 10 (12000), so the origin planes c
   F  a new design: a box 40 x 30 x 10, a sketch on its top with a line from corner to corner,
      Finish Sketch; Split Body, click the box, click the line: two wedges of 6000 (5 faces).
 """
+
 import FreeCAD as App
 from PySide import QtCore
 
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import widget_input as wi
 
 V = App.Vector
 state = {}
@@ -126,7 +129,9 @@ def b_click_box():
     if h.check("edit dialog open", p is not None and p.editing, p):
         h.check("edit: the tool box is the active one", p.active == "tool", p.active)
         h.check("no squares over the part while a tool is picked", p.plane_picker is None)
-    s.click_box("tool")
+        # Splitting Tool(s) takes several tools (Fusion): to replace the YZ plane, clear the
+        # box with its x first (a click on another plane would add it)
+        wi.click(p.fields["tool"].clear)
 
 
 def b_click_xz():

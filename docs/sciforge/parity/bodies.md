@@ -36,7 +36,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion | SciForge |
 |---|---|
-| Target Body, Tool Bodies, Operation Join / Cut / Intersect, New Component, Keep Tools | Target Body, Tool Bodies, Operation Join / Cut / Intersect, **New Body** (SciForge has no components; the result goes into a new body, the target is used up like the tools **(assumed)**), Keep Tools |
+| Target Body, Tool Bodies, Operation Join / Cut / Intersect, New Component, Keep Tools (**Autodesk**, *Combine reference*: New Component "creates a new component with the results") | Target Body, Tool Bodies, Operation Join / Cut / Intersect, **New Body** (a SciForge extra from before components: the result goes into a new body, the target is used up like the tools **(assumed)**), **New Component** (components-2: the result is the body of a new component, made in the active component; the target and the tools are used up; New Body is greyed while it is on; unticking it in an edit joins the target again and the component goes), Keep Tools |
 | nothing selected: the dialog waits for the target | same; the Target Body box takes the first click, then the Tool Bodies box every further one (a click on a picked tool drops it, also where the Join preview is drawn over it: the click means the body really under the pointer) |
 | bodies selected first | taken at once: the first is the target, the others tools |
 | live preview | same; the tool bodies stay visible, see-through, while the dialog is open (they can be clicked to drop them) |
@@ -49,7 +49,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion | SciForge |
 |---|---|
-| Body to Split, Splitting Tool(s), Extend Splitting Tool | same (one splitting tool) |
+| Body to Split, Splitting Tool(s), Extend Splitting Tool | same; the Splitting Tool(s) box takes several tools (components-2): every click adds one, a click on a picked tool drops it, the box reads "2 tools"; all of them split the body in one step (**Guess**: the dialog's "(s)"; older Autodesk forum posts ask for it, *Split body with multiple splitting tools*); click the box to show the origin squares again for a second plane |
 | tools: planes, faces, bodies, sketch curves | origin planes (the big squares of Create Sketch are drawn while the box waits for a tool), construction planes, faces of any body (flat or round), bodies (click them in the browser), sketch lines and arcs (cut straight through along the sketch's normal) |
 | Extend Splitting Tool | on: a flat face is taken as its whole plane, a round face as its whole cylinder; off: only where the face is (the reason is shown when it then does not cut) |
 | result: bodies in the browser and the timeline | same; deleting the Split Body step deletes the bodies it made |
@@ -58,9 +58,10 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion | SciForge |
 |---|---|
-| Move Object Bodies / Components / Faces / Sketch Objects | Bodies (M in an open sketch moves sketch curves: the sketch's own Move/Copy) |
+| Move Object Bodies / Components / Faces / Sketch Objects | Bodies and Components (components-2: the dialog switches to the components one, `parity/components.md`; a component selected first opens it directly); M in an open sketch moves sketch curves (the sketch's own Move/Copy). Faces: modify-2 |
 | Move Type Free Move: manipulator with arrows and rotation handles; X/Y/Z Distance, X/Y/Z Angle | same: three arrows (X red, Y green, Z blue) and three curved turn handles at the middle of the bodies, drawn on top of the part; turns are about X, then Y, then Z through that middle **(assumed order)** |
 | Translate: X/Y/Z Distance, arrows | same |
+| Set Pivot (Free Move): press it, click geometry to snap the manipulator to it or type where it goes, the check (Done) to finish; turns are about the pivot from then on (**Autodesk**, *Move or copy geometry*: "Click Set Pivot to adjust the pivot point of the manipulator. In the canvas, hover over the geometry you want to snap to, then click to place the pivot point, or enter exact values in the dialog"; **Forum**, *Rotating Assemblies?*: "it is a toggle", click the green check when done) | same (components-2): Set Pivot and ✓ Done buttons; while it is on the arrows move only the manipulator (no turn handles), a click takes the corner / edge middle / circle centre / face centre under the pointer, Pivot X / Y / Z show and take its place; nothing that was moved moves (the distances are adjusted, `components_core.pivot_shift`); Done goes back to moving |
 | Rotate: Axis, Angle | same; the axis: an origin axis (drawn as long lines while the box waits), a straight edge, a round edge or face (its axis); a blue handle turns round it |
 | Point to Point | same; a click near a corner takes the corner (Fusion lights it up), a round edge its centre (also right next to the point where OpenCASCADE starts the circle, which is no corner), a straight edge its middle |
 | Move Type chosen before the bodies | the Objects box keeps the first click (the body), then the dialog moves on to the axis or the point |
@@ -92,11 +93,9 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion behaviour | Why not (yet) |
 |---|---|
-| Combine "New Component" | Not built yet (components exist since 2026-10-13; New Body is offered); belongs to the Combine dialog's owner |
-| Split Body with several tools at once | one tool: a plane, a face, a body or a sketch curve |
-| Move: Set Pivot, Move Object Components / Faces | not built yet (Faces: Press Pull moves faces); Free Move turns about the middle of the bodies |
+| Move: Move Object Faces | not built here (modify-2's area; Press Pull moves faces). Set Pivot only re-places the pivot; Fusion's manipulator can also be turned while setting it (its axes then follow): SciForge's axes stay the design's X / Y / Z |
 | The timeline's and the browser's own Delete re-route dependants like SciForge's Delete | they belong to the timeline/browser module; they delete the bodies a Split Body or a copy made (bodies_gui.Watch), and flag what breaks |
-| Rolling the timeline marker back before a Create Copy hides the copy | the copy's step sits outside the bodies, so the marker does not hide it |
+| Rolling the timeline marker back before a Create Copy hides the copy | the copy's step sits outside the bodies, so the marker does not hide it (a body copy inside a component sits in that component since components-2, so it is placed right in a moved component) |
 | Physical material shown in the browser | the browser module shows no material; the Physical Material dialog lists them ("In This Design") with each body's mass |
 | Inspect > mass properties | `bodies.mass(body)` gives the mass from the material; the Inspect module (separate work) is to use it |
 | Fusion's photo-real appearances (textures, reflections) | FreeCAD's material colours (diffuse, specular, shininess, transparency) |

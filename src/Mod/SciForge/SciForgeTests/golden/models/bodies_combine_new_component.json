@@ -1,0 +1,80 @@
+{
+  "id": "bodies_combine_new_component",
+  "title": "Combine (Join) with New Component: the result is the body of a new component",
+  "tags": [
+    "bodies",
+    "combine",
+    "components"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            10,
+            60,
+            20
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "combine",
+      "id": "c1",
+      "target": "e1",
+      "tools": [
+        "e2"
+      ],
+      "new_component": true
+    }
+  ],
+  "expect": {
+    "volume": 14000,
+    "faces": 10,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "12000 + 3000 - the 1000 they share; the joined outline has 8 sides, top, bottom"
+  }
+}

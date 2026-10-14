@@ -5,11 +5,15 @@ Extend Splitting Tool.
 The Body to Split box takes the first click on a body; then the Splitting Tool box waits:
 click one of the three big origin planes, a construction plane, a face of any body (flat or
 round; Extend Splitting Tool takes its whole plane or cylinder), or a body in the browser
-(split along its faces). A body or face selected before the command is taken at once. The
+(split along its faces). Fusion's box takes several tools: every further click adds one
+(a click on a picked tool drops it; click the box to show the origin squares again), and
+all of them split the body in one step. A body or face selected before the command is
+taken at once. The
 pieces are previewed live (each new body shows); OK / Enter keeps them (one undo step),
 Cancel / Esc throws them away, the reason is said in the dialog when the tool does not cut
 the body. Double-click the Split Body in the timeline to change it. Document side: split.py.
 """
+
 import time
 
 import FreeCAD as App
@@ -52,7 +56,7 @@ class SplitPanel(BodyPanel):
     # -- form ----------------------------------------------------------------------------------------
     def build_form(self):
         self.selection_box("body", "Body to Split")
-        self.selection_box("tool", "Splitting Tool")
+        self.selection_box("tool", "Splitting Tool(s)")
         self.extend, _ = self.check_box(
             "Extend Splitting Tool",
             self.options["extend"],
@@ -67,10 +71,21 @@ class SplitPanel(BodyPanel):
     def _show_picks(self):
         body = self.options["body"]
         self.fields["body"].set_text(body.Label if body is not None else "")
-        self.fields["tool"].set_text(_tool_text(self.options["tool"]))
+        tools = self.options.get("tools") or []
+        if len(tools) > 1:
+            self.fields["tool"].set_text("%d tools" % len(tools))
+        else:
+            self.fields["tool"].set_text(_tool_text(self.options["tool"]))
+
+    def _set_tools(self, tools):
+        self.options["tools"] = list(tools)
+        self.options["tool"] = tools[0] if tools else None
 
     def cleared(self, name):
-        self.options[name] = None
+        if name == "tool":
+            self._set_tools([])
+        else:
+            self.options[name] = None
         self._show_picks()
 
     def activate(self, name):
@@ -120,8 +135,9 @@ class SplitPanel(BodyPanel):
             if body is None or self._made_by_preview(body):
                 return
             self.options["body"] = body
-            if self.options["tool"] is not None and self._tool_body() is body:
-                self.options["tool"] = None
+            kept = [t for t in self.options.get("tools") or [] if bodies.body_of(t[0]) is not body]
+            if len(kept) != len(self.options.get("tools") or []):
+                self._set_tools(kept)  # a tool on the body to split cannot split it
             self._show_picks()
             self._go("tool")
             self.changed()
@@ -176,7 +192,12 @@ class SplitPanel(BodyPanel):
         if self._closed:
             return
         try:
-            self.options["tool"] = ref
+            tools = list(self.options.get("tools") or [])
+            if ref in tools:
+                tools.remove(ref)  # a click on a picked tool drops it (Fusion)
+            else:
+                tools.append(ref)  # Splitting Tool(s): every click adds one
+            self._set_tools(tools)
             self._show_picks()
             self.message.setText("")
             self._planes_wanted = False  # picked: the squares go (click the box to pick again)
@@ -184,10 +205,6 @@ class SplitPanel(BodyPanel):
             self.changed()
         except Exception as exc:
             warn("Split Body pick: %s" % exc)
-
-    def _tool_body(self):
-        tool = self.options["tool"]
-        return bodies.body_of(tool[0]) if tool else None
 
     def _made_by_preview(self, body):
         feature = self.target
