@@ -1025,6 +1025,54 @@ def _():
     )
 
 
+@icon("motion_link")
+def _():
+    # two turning joints tied together: two dials and a link between them
+    return (
+        circle(14, 30, 8, "none", STROKE, 2.0)
+        + circle(34, 18, 8, "none", STROKE, 2.0)
+        + circle(14, 30, 2.5, ORANGE)
+        + circle(34, 18, 2.5, ORANGE)
+        + line(19, 26, 29, 21, GREEN, 2.6)
+        + poly([(29, 21), (24, 21), (27, 25)], GREEN)
+    )
+
+
+@icon("contact_set")
+def _():
+    # two blocks touching, a spark where they meet
+    return (
+        block(0, 0, 0, 12, 12, 10, GREY, 15, 36)
+        + block(0, 0, 0, 12, 12, 10, BLUE, 33, 36)
+        + poly(
+            [(24, 8), (27, 16), (34, 14), (28, 20), (31, 27), (24, 22), (17, 27), (20, 20)], ORANGE
+        )
+    )
+
+
+@icon("motion_study")
+def _():
+    # a graph of a joint's value over the steps, with a play mark
+    return (
+        line(8, 40, 42, 40, STROKE, 1.8)
+        + line(8, 40, 8, 8, STROKE, 1.8)
+        + path("M8 36 L18 30 L28 14 L40 18", ORANGE, 2.2)
+        + circle(18, 30, 2.4, POINT)
+        + circle(28, 14, 2.4, POINT)
+        + poly([(32, 26), (32, 38), (42, 32)], GREEN)
+    )
+
+
+@icon("component_drag")
+def _():
+    # a component and the hand-drag arrow
+    return (
+        block(0, 0, 0, 14, 14, 11, BLUE, 20, 34)
+        + arrow(30, 22, 44, 12, STROKE, 2.2, 5)
+        + _cursor(28, 22)
+    )
+
+
 @icon("select")
 def _():
     return rect(

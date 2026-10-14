@@ -96,6 +96,7 @@ KINDS = {
     "joint_origin": ("Joint Origin", "joint_origin"),
     "rigid_group": ("Rigid Group", "rigid_group"),
     "position": ("Position", "position"),
+    "motion_link": ("Motion Link", "motion_link"),
     "other": ("Feature", "workspace_design"),
 }
 
@@ -196,6 +197,7 @@ KIND_BY_SCIFORGE_TYPE = {
     "JointOrigin": "joint_origin",
     "RigidGroup": "rigid_group",
     "Position": "position",
+    "MotionLink": "motion_link",
     "BaseFeature": "base",
     "Remove": "remove",
     "Align": "align",
@@ -225,6 +227,7 @@ NON_SOLID_KINDS = {
     "joint_origin",
     "rigid_group",
     "position",
+    "motion_link",
 }
 
 

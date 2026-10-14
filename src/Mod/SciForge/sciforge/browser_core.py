@@ -139,7 +139,12 @@ def _item(prefix, obj, icon, kind, **extra):
     )
 
 
-JOINT_TYPES = {"Joint": "joint", "AsBuiltJoint": "joint", "RigidGroup": "rigid_group"}
+JOINT_TYPES = {
+    "Joint": "joint",
+    "AsBuiltJoint": "joint",
+    "RigidGroup": "rigid_group",
+    "MotionLink": "motion_link",  # in the Joints folder (Fusion)
+}
 JOINT_ICONS = {
     "rigid": "joint",
     "revolute": "joint_revolute",
@@ -172,6 +177,7 @@ def _folders(objects, active_body, component):
     bodies, sketches, construction, origin, analysis, canvases = [], [], [], [], [], []
     decals = []
     joints, joint_origins = [], []
+    contacts, studies = [], []  # Fusion's Contacts and Motion Studies folders
     drawings = []
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
@@ -221,8 +227,8 @@ def _folders(objects, active_body, component):
         elif sciforge_type in JOINT_TYPES:
             kind = JOINT_TYPES[sciforge_type]
             icon = (
-                "rigid_group"
-                if kind == "rigid_group"
+                kind
+                if kind in ("rigid_group", "motion_link")
                 else JOINT_ICONS.get(obj.get("joint_type"), "joint")
             )
             if sciforge_type == "AsBuiltJoint":
@@ -233,6 +239,15 @@ def _folders(objects, active_body, component):
             joints.append(node)
         elif sciforge_type == "JointOrigin":
             joint_origins.append(_item("joint_origin:", obj, "joint_origin", "joint_origin"))
+        elif sciforge_type == "ContactSet":
+            node = _item("contact_set:", obj, "contact_set", "contact_set")
+            node["visible"] = None  # nothing to show or hide
+            contacts.append(node)
+        elif sciforge_type == "MotionStudy":
+            if component is None:
+                node = _item("motion_study:", obj, "motion_study", "motion_study")
+                node["visible"] = None
+                studies.append(node)
         elif sciforge_type == "DrawingBreak":
             pass  # a drawing's break lines (drawing.py): part of the drawing, not the design
         elif type_id in SKETCH_TYPES:
@@ -253,6 +268,8 @@ def _folders(objects, active_body, component):
                 origin.append(_origin_node(obj))  # the component's own origin
     origin.sort(key=lambda n: ORIGIN_ROLES.index(n["role"]))
     folders = []
+    if studies and component is None:  # Fusion: at the top of the browser
+        folders.append(_folder("motion_studies", "Motion Studies", studies))
     if analysis and component is None:
         folders.append(_folder("analysis", "Analysis", analysis))
     suffix = "" if component is None else ":" + component
@@ -264,6 +281,8 @@ def _folders(objects, active_body, component):
         folders.append(_folder("joints" + suffix, "Joints", joints))
     if joint_origins:
         folders.append(_folder("joint_origins" + suffix, "Joint Origins", joint_origins))
+    if contacts:
+        folders.append(_folder("contacts" + suffix, "Contacts", contacts))
     if sketches:
         folders.append(_folder("sketches" + suffix, "Sketches", sketches))
     if construction:
@@ -468,6 +487,29 @@ MENUS = {
         "-",
         "Suppress",
         "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "motion_link": [
+        "Edit Motion Link",
+        "-",
+        "Suppress",
+        "Find in Timeline",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "contact_set": [
+        "Edit Contact Set",
+        "-",
+        "Suppress",
+        "-",
+        "Rename",
+        "Delete",
+    ],
+    "motion_study": [
+        "Edit Motion Study",
         "-",
         "Rename",
         "Delete",

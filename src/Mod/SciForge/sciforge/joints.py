@@ -627,7 +627,7 @@ def snap_record(pick, snap):
     return {"kind": snap["kind"], "element": pick.element, "at": snap.get("at", "")}
 
 
-# -- position modes: Between Two Faces, Two Edge Intersection ----------------------------------------
+# -- position modes: Between Two Faces, Two Edge Intersection -------------------------------------
 def _plane_of(shape, element):
     face = shape.getElement(element) if element.startswith("Face") else None
     if face is None or face.Surface.TypeId != "Part::GeomPlane":
@@ -735,7 +735,9 @@ def mode_snap(mode, picks, snap_pick=None, snap=None):
         if snap_pick is None or snap is None:
             raise JointError("Pick a snap point: the joint origin goes there, between the faces.")
         if snap_pick.obj is not first.obj:
-            raise JointError("Pick the snap point on %s, where the two faces are." % first.obj.Label)
+            raise JointError(
+                "Pick the snap point on %s, where the two faces are." % first.obj.Label
+            )
         record = {
             "kind": "twofaces",
             "faces": [first.element, second.element],
@@ -1476,9 +1478,7 @@ def clusters(doc, excluding=None):
     """The groups of parts that active joints chain together: [[part, ...]], each with the
     joints / helpers inside it, oldest first: [(parts, links)]."""
     skipped = {o.Name for o in _with_helpers(excluding)}
-    links = sorted(
-        (j for j in active_links(doc) if j.Name not in skipped), key=lambda o: o.ID
-    )
+    links = sorted((j for j in active_links(doc) if j.Name not in skipped), key=lambda o: o.ID)
     owner = {}
 
     def find(name):
@@ -1530,6 +1530,131 @@ def anchor_of(part):
                 return None
             return part2(links[0])
     return None
+
+
+def takes_part_in_assembly(part):
+    """A root body or solid is moved by hand only when it stands in for a component in the
+    assembly (jointed, grounded, in a rigid group or a contact set): Fusion drags
+    components, never bodies, and a drag on a plain body draws a selection box."""
+    if part is None:
+        return False
+    if part.TypeId == "App::Part":
+        return True
+    doc = part.Document
+    if is_grounded(part):
+        return True
+    for j in active_links(doc):
+        if part1(j) is part or part2(j) is part:
+            return True
+    for group in rigid_groups(doc) + contact_sets(doc):
+        if any(m is part for m in group.Members):
+            return True
+    return False
+
+
+def _graph(doc):
+    """{part name: [(other part, link)]} over the active joints and rigid-group links (a
+    Pin-Slot's slot helper rides with its joint)."""
+    graph = {}
+    for link in active_links(doc):
+        if getattr(link, PROPS["role"], "") == HELPER_ROLE:
+            continue
+        a, b = part1(link), part2(link)
+        graph.setdefault(a.Name, []).append((b, link))
+        graph.setdefault(b.Name, []).append((a, link))
+    return graph
+
+
+def _chain_to(graph, start, goals):
+    """The shortest chain of links from `start` to one of `goals` (names): [(link, from,
+    to)], or None."""
+    if start.Name in goals:
+        return []
+    queue = [start]
+    back = {start.Name: None}
+    while queue:
+        current = queue.pop(0)
+        for other, link in graph.get(current.Name, []):
+            if other.Name in back:
+                continue
+            back[other.Name] = (current, link, other)
+            if other.Name in goals:
+                chain = []
+                step = back[other.Name]
+                while step is not None:
+                    chain.append((step[1], step[0], step[2]))
+                    step = back[step[0].Name]
+                return list(reversed(chain))
+            queue.append(other)
+    return None
+
+
+def _reach(graph, start, cut=None, stop=()):
+    """The parts reachable from `start` without crossing link `cut` nor going past parts
+    named in `stop`."""
+    seen = {start.Name: start}
+    queue = [start]
+    while queue:
+        current = queue.pop()
+        if current.Name in stop and current is not start:
+            continue
+        for other, link in graph.get(current.Name, []):
+            if cut is not None and link is cut:
+                continue
+            if other.Name not in seen:
+                seen[other.Name] = other
+                queue.append(other)
+    return list(seen.values())
+
+
+def drag_plan(part):
+    """What a canvas drag of `part` moves (Fusion's Component Drag), as a dict:
+
+    - {"kind": "held", "why": text}: it cannot move (grounded, or held to a ground by
+      rigid joints only);
+    - {"kind": "free", "movers": [parts]}: nothing holds it (no joint), or it is the part a
+      free group of jointed parts hangs on: it moves (with the group) in the view plane;
+    - {"kind": "joint", "joint": J, "side": 0 / 1, "movers": [parts], "anchor": part}: it
+      moves along joint J, the first joint with a motion on its way to the ground (or to
+      the part its free group hangs on); `side` is the side of J that moves."""
+    doc = part.Document
+    if is_grounded(part):
+        return {
+            "kind": "held",
+            "why": "%s is grounded: it does not move. Unground it in the browser to drag it."
+            % part.Label,
+        }
+    graph = _graph(doc)
+    held = {g.ObjectToGround.Name for g in grounds(doc) if g.ObjectToGround is not None}
+    group = _reach(graph, part)
+    names = {p.Name for p in group}
+    anchor = None
+    if not names & held:
+        if len(group) == 1:
+            return {"kind": "free", "movers": [part]}
+        anchor = anchor_of(part)
+        if anchor is None or anchor is part:
+            return {"kind": "free", "movers": group}
+        goals = {anchor.Name}
+    else:
+        goals = names & held
+    chain = _chain_to(graph, part, goals)
+    if chain is None:
+        return {"kind": "free", "movers": [part]}
+    for link, near, far in chain:
+        if link.JointType == "Fixed" or fusion_type(link) == "rigid":
+            continue
+        movers = [p for p in _reach(graph, near, cut=link, stop=goals) if p.Name not in goals]
+        if any(p.Name in held for p in movers):
+            movers = [near]
+        side = 0 if part1(link) is near else 1
+        return {"kind": "joint", "joint": link, "side": side, "movers": movers, "anchor": anchor}
+    if anchor is not None:
+        return {"kind": "free", "movers": group}
+    return {
+        "kind": "held",
+        "why": "%s is held by rigid joints to a grounded component: it does not move." % part.Label,
+    }
 
 
 def _hold_free_groups(doc, keep=None):
@@ -1792,6 +1917,43 @@ def drive(joint, angle=None, slide=None, do_solve=True, links=True, keep=None):
     return value(joint)
 
 
+def drive_until_contact(joint, angle=None, slide=None):
+    """drive(), but with contact sets on the parts stop where they touch: the joint goes
+    the part of the way it can. Returns (angle, slide, blocked pair or None)."""
+    doc = joint.Document
+    part, _side = driven_part(joint)
+    movers = [part] + downstream(part, joint)
+    pairs = contact_pairs(doc, movers)
+    if not pairs:
+        got = drive(joint, angle, slide)
+        return got[0], got[1], None
+    start = placements(doc)
+    a0, s0 = value(joint)
+    angle, slide = clamp_values(joint, angle, slide)
+
+    def put(fraction):
+        apply_placements(doc, start)
+        drive(
+            joint,
+            None if angle is None else a0 + (angle - a0) * fraction,
+            None if slide is None else s0 + (slide - s0) * fraction,
+            do_solve=False,
+        )
+
+    put(1.0)
+    hit = blocked(doc, pairs)
+    if hit is not None:
+
+        def stuck(fraction):
+            put(fraction)
+            return blocked(doc, pairs) is not None
+
+        put(motion_core.last_free(stuck))
+    solve(doc)
+    got = value(joint)
+    return got[0], got[1], hit
+
+
 def place_joint(joint, angle=None, slide=None, side=0, part=None, movers=None):
     """Move one side of a joint so it reads `angle` / `slide` (already within limits):
     side 0 moves component 1 (and what hangs on it), side 1 component 2; `movers` (a list
@@ -1975,7 +2137,9 @@ def follow_links(joint, seen=None):
         if link.Joint1 is joint:
             other, motion = link.Joint2, data["motion2"] or default_motion(link.Joint2)
             mine = data["motion1"] or default_motion(joint)
-            target = motion_core.linked_value(joint_motion_value(joint, mine), ratio, data["offset"])
+            target = motion_core.linked_value(
+                joint_motion_value(joint, mine), ratio, data["offset"]
+            )
         else:
             other, motion = link.Joint1, data["motion1"] or default_motion(link.Joint1)
             mine = data["motion2"] or default_motion(joint)
@@ -2263,7 +2427,13 @@ def motion_studies(doc):
 
 
 def study_data(study):
-    data = {"joints": [], "keys": {}, "steps": motion_core.STUDY_STEPS, "mode": "once", "speed": 1.0}
+    data = {
+        "joints": [],
+        "keys": {},
+        "steps": motion_core.STUDY_STEPS,
+        "mode": "once",
+        "speed": 1.0,
+    }
     if study is not None:
         data.update(_json(study, STUDY_PROP))
     return data
@@ -2565,6 +2735,11 @@ def _snap_frame(pick, snap):
     """The global frame of a stored snap (kind + the element it sits on) on today's geometry."""
     if snap.get("frame") is not None:
         return App.Placement(snap["frame"])
+    record = snap.get("record") or {}
+    if record.get("kind") in ("twofaces", "twoedges"):
+        shape, to_local = geometry(pick.obj)
+        point, z, hint = mode_frame(shape, record)
+        return global_of(pick.ref) * to_local * from_frame(_frame_from(point, z, hint))
     candidates = snap_candidates(pick)
     for c in candidates:
         if c["kind"] == snap.get("kind") and c.get("at", "") == snap.get("at", ""):

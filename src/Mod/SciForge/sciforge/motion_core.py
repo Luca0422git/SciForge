@@ -92,7 +92,8 @@ def turn_from_ray(center, axis, grab, ray_o, ray_d, previous=0.0):
     def point_at(deg):
         t = math.radians(deg)
         return core.vadd(
-            hub, core.vadd(core.vscale(e1, radius * math.cos(t)), core.vscale(e2, radius * math.sin(t)))
+            hub,
+            core.vadd(core.vscale(e1, radius * math.cos(t)), core.vscale(e2, radius * math.sin(t))),
         )
 
     best = []
@@ -106,9 +107,7 @@ def turn_from_ray(center, axis, grab, ray_o, ray_d, previous=0.0):
     near = [
         deg
         for i, (dist, deg) in enumerate(best)
-        if dist <= lowest + slack
-        and dist <= best[i - 1][0]
-        and dist <= best[(i + 1) % count][0]
+        if dist <= lowest + slack and dist <= best[i - 1][0] and dist <= best[(i + 1) % count][0]
     ] or [min(best)[1]]
     prev = previous if previous is not None else 0.0
     chosen = min(near, key=lambda deg: abs(unwrap(deg, prev) - prev))

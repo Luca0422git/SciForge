@@ -589,6 +589,12 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
             preferences_ui.reset_for_tests()
         except Exception as exc:
             print("[SciForge] preferences reset failed: %s" % exc, flush=True)
+        try:  # SELECT > Component Drag (a drag on a component moves it) back on
+            from sciforge import joints_drag
+
+            joints_drag.reset()
+        except Exception as exc:
+            print("[SciForge] component drag reset failed: %s" % exc, flush=True)
         _tap = _ConsoleTap()
         new_errors()  # start-up messages are not the scenario's
 

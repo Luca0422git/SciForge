@@ -291,7 +291,40 @@ ASSEMBLE = group(
         item("Rigid Group", "SciForge_RigidGroup", "rigid_group"),
         SEP,
         item("Drive Joints", "SciForge_DriveJoints", "drive_joints"),
-        item("Motion Link", None, "joint"),
+        item(
+            "Motion Link",
+            "SciForge_MotionLink",
+            "motion_link",
+            note="Tie two joints: when one moves, the other follows by a ratio (gear and rack).",
+        ),
+        SEP,
+        # Fusion's contact choices: one of the three is on (joints_motion_ui.py)
+        item(
+            "Enable Contact Sets",
+            "SciForge_EnableContactSets",
+            "contact_set",
+            checked="joints_motion_ui:contact_sets_on",
+        ),
+        item(
+            "Enable All Contact",
+            "SciForge_EnableAllContact",
+            "contact_set",
+            checked="joints_motion_ui:contact_all_on",
+        ),
+        item(
+            "Disable Contact",
+            "SciForge_DisableContact",
+            "contact_set",
+            checked="joints_motion_ui:contact_off",
+        ),
+        item("New Contact Set", "SciForge_NewContactSet", "contact_set"),
+        SEP,
+        item(
+            "Motion Study",
+            "SciForge_MotionStudy",
+            "motion_study",
+            note="Joint values at steps 0 to 100, played back.",
+        ),
         SEP,
         # Fusion shows these in a POSITION panel that appears once a component was moved;
         # here they stay in the menu and are greyed while nothing moved (parity/joints.md).
@@ -441,6 +474,14 @@ SELECT = group(
             note="Everything under the pointer, front to back (or hold the left button there)",
         ),
         item("Select All", "Std_SelectAll", "select"),
+        SEP,
+        item(
+            "Component Drag",
+            "SciForge_ComponentDrag",
+            "component_drag",
+            note="Dragging a component moves it along its joints (untick: a drag draws a box)",
+            toggle="joints_drag:enabled",
+        ),
     ],
 )
 
