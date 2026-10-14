@@ -85,7 +85,10 @@ Autodesk forums, often by Autodesk staff), **Guess** (nothing found; SciForge's 
   with the bodies after a separator) and its radius for nearby edges (SciForge: twice
   FreeCAD's pick radius, 10 px).
 - Esc outside a command clearing the selection (SciForge: yes).
-- Not built: Components / Component Drag (no components yet), the Joint Origins / Canvas
+- Component Drag is built by the joints work (wave 4, `joints_drag.py`, spec in
+  `parity/joints.md` "Dragging components"): a plain drag that starts on a component moves
+  it along its joints instead of drawing a box; SELECT > Component Drag turns it off.
+- Not built: the Components filter and priority, the Joint Origins / Canvas
   filters (nothing to filter), the sketch double-click chain (the sketch area; FreeCAD's
   Sketcher handles the mouse there), window selection of work geometry (planes, axes).
 - A box drag that starts on a shaded sketch area while Extrude waits also picks that area
