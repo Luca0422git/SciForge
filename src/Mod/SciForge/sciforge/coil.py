@@ -205,7 +205,12 @@ class CoilSection:
                 obj.BaseOffset = obj.AttachmentOffset  # a coil saved before this existed
 
     def onDocumentRestored(self, obj):
+        old = "Taper" not in obj.PropertiesList  # saved before the QA fixes (upgrade.py)
         self.ensure_properties(obj)
+        if old:
+            from . import upgrade
+
+            upgrade.mark(obj, "coil")
 
     def execute(self, obj):
         options = {

@@ -1,0 +1,59 @@
+{
+  "id": "picks_shell_kept_on_taper",
+  "title": "A shell keeps its open top face when the extrude under it gets a taper",
+  "tags": [
+    "picks",
+    "reference-stability",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "inside": 1.5
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "taper": 3
+      }
+    }
+  ],
+  "expect": {
+    "volume": 3549.785453991189,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "Same volume as building the final steps in their own order (the extrude tapered 3 degrees first, then the 1.5 mm shell on the same open top face): 3549.785453991189 on FreeCAD 1.1.4. FreeCAD alone loses the name of the face when the taper is added (\"?Edge4\", the step goes red); SciForge remembers where it was (saved in the file) and finds it again."
+  }
+}

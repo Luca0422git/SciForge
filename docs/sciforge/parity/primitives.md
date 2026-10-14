@@ -98,6 +98,23 @@ lumps (left by a cut, or a profile that only partly touches); SciForge keeps tho
   (`components.body_for_new`). Golden models `sf_join_away_new_body`, `sf_cylinder_new_component`;
   scenario `gaps_join_new_body.py` (J3, J4).
 
+## Coils and pipes of an older SciForge rebuilt on opening (2026-10-14, gaps work)
+
+FreeCAD keeps the shapes stored in a file and recomputes nothing when it opens one, so a coil
+or pipe saved before the QA fixes of 2026-10-11 kept its old, wrong shape until it was
+edited: a coil with a negative angle was its mirror image (849.83 instead of 571.39 for the
+`sf_coil_taper_narrow` spring), a tapered coil on a raised face drifted, a hollow pipe round
+a closed path was a solid ring. Their hidden sections notice it while the file is read (the
+coil section has no `Taper` yet, the pipe section still links the path object) and, once the
+file is open, `sciforge/upgrade.py` rebuilds the step from its own saved options (as an edit
++ OK would) and writes one line to the Report view ("Coil was saved by an older SciForge
+... rebuilt with today's coil"). The design shows as changed; a save keeps the new shape and
+the next opening rebuilds nothing. Fusion has nothing like it (its files are its own), so
+there is no source: the behaviour is SciForge's. Golden `sf_coil_old_narrow_upgraded`
+(fails without the rebuild), `sf_pipe_old_upgraded`; scenario `gaps_old_coil.py`. Left: no
+test recreates an old hollow ring (FreeCAD's own pipe with a hollow section); it goes
+through the same rebuild as the other pipes.
+
 ## FreeCAD bug found and worked around
 
 Undo a step that put a formula on a value, then redo it: the formula comes back but its link

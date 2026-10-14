@@ -412,6 +412,10 @@ class PipeSection:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        if obj.Path is not None:  # saved before the QA fixes (upgrade.py)
+            from . import upgrade
+
+            upgrade.mark(obj, "pipe")
 
     def execute(self, obj):
         import Part

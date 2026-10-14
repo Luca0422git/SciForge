@@ -1,0 +1,98 @@
+{
+  "id": "picks_fillet_chamfer_kept_after_reopen",
+  "title": "A round and a chamfer keep their edges when the extrude under them gets a taper, after the design was saved and opened again",
+  "tags": [
+    "picks",
+    "reference-stability",
+    "reopen"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "z",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "min"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "blend_chamfer",
+      "id": "c1",
+      "distance": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "z",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "reopen",
+      "comment": "only what the file holds is left"
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "set": {
+        "taper": 3
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12310.318356241278,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "Same volume as building the final steps in their own order (the extrude tapered 3 degrees first, then the r2 round and the 1 mm chamfer on the same top edges): 12310.318356241278 on FreeCAD 1.1.4. FreeCAD alone loses the name of the edges when the taper is added, also after a save and reopen (\"?Edge4\", the step goes red); SciForge remembers where it was (saved in the file) and finds it again."
+  }
+}

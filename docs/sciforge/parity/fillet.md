@@ -42,6 +42,28 @@ each lying on the face its distance is measured on (so it is visible which side 
 Press Pull on a round or bevelled face still edits that fillet's/chamfer's size (it is the same
 PartDesign feature), as before.
 
+## Picked edges kept through edits, saving and reopening (2026-10-14, gaps work)
+
+Fusion keeps a fillet on the edge it rounds when an earlier step changes (it names edges by
+the history that made them). FreeCAD 1.1 mostly does too (a wider or taller box, a hole added
+to the sketch, a symmetric extrude: all fine, also after reopening), but loses the name in
+some edits: a taper added to the extrude under a round made its edge "?Edge4" and the round
+went red (the same for a chamfer and a shell's open face; also after a save and reopen).
+`sciforge/picks.py` remembers where every picked edge, face and corner of a step or a sketch
+was after each good compute (the hidden property `SciForgePicks`, saved in the file) and,
+the moment FreeCAD marks one lost, points the step at the element found again there (same
+kind, facing about the same way, nearest relative to the part's bounding box, within a
+quarter of its size), before the step is computed: no red step. The same keeper serves
+Chamfer, Shell, Draft, Hole, Thread, the patterns, Split, Move and sketches on faces (any
+step with picks; Sweep, Loft, Press Pull and the constructions keep their own). Timeline
+suppress, delete and move decide themselves which steps break and pause it. Sources:
+**Guess** (from use: a Fusion fillet stays on its edge when the extrude under it gets a
+taper; no help page says how Fusion names edges), and how far a found-again edge may be
+from the old place. Golden
+`picks_fillet_chamfer_kept_after_reopen`, `picks_shell_kept_on_taper`; scenario
+`gaps_picks_kept.py`. Left: a Draft of a tapered extrude's side face is found again but
+FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
+
 ## Known gaps (shown greyed in the dialog with the reason, never faked)
 
 | Fusion option | Why not yet |

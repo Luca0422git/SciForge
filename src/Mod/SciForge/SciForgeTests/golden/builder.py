@@ -51,6 +51,9 @@ _EDIT_PROPS = {
 
 class Builder:
     def __init__(self, doc):
+        from sciforge import picks
+
+        picks.install()  # what the GUI runs: picked edges / faces kept when names get lost
         self.doc = doc
         self.body = doc.addObject("PartDesign::Body", "Body")
         self.objects = {}  # step id -> FreeCAD object
@@ -505,6 +508,63 @@ class Builder:
             timeline_ops.move(self.doc, name, slot)
         except timeline_ops.TimelineError as exc:
             raise BuildError("move %r: %s" % (step["target"], exc))
+
+    def op_reopen(self, step):
+        """Save the design, close it and open the file again (what was only in memory is
+        gone; what the steps keep in the file must do)."""
+        import os
+        import tempfile
+
+        names = {key: obj.Name for key, obj in self.objects.items()}
+        body = self.body.Name
+        folder = tempfile.mkdtemp(prefix="sciforge_golden_")
+        path = os.path.join(folder, self.doc.Name + ".FCStd")
+        self.doc.saveAs(path)
+        App.closeDocument(self.doc.Name)
+        self.doc = App.openDocument(path)
+        self.doc.recompute()
+        self.body = self.doc.getObject(body)
+        self.objects = {key: self.doc.getObject(name) for key, name in names.items()}
+        from sciforge import upgrade
+
+        # What the GUI does once a file is open: steps of an older SciForge are rebuilt.
+        for new in upgrade.after_open(self.doc):
+            for key, name in names.items():
+                if self.doc.getObject(name) is None and new.Label == key:
+                    self.objects[key] = new  # rebuilt as another object (same label)
+        try:
+            os.remove(path)
+            os.rmdir(folder)
+        except OSError:
+            pass
+
+    def op_age(self, step):
+        """Test setup: make a coil or pipe look as saved by SciForge before the primitives QA
+        fixes of 2026-10-11 (its old shape, its section without what the fixes added)."""
+        from sciforge import coil, pipe, primitives
+
+        feature = self.objects[step["target"]]
+        if coil.is_coil(feature):
+            _ref, options = coil.read(feature)
+            meta = primitives.load_meta(feature, coil.META)
+            section = self.doc.getObject(meta["helpers"][-1])
+            section.Taper = 0.0  # no narrowing at the far end: the old section
+            _turns, height, _pitch = coil.resolved(options)
+            feature.Angle = float(options["angle"])  # the old helix: a negative angle as is
+            feature.Reversed = height < 0
+            section.touch()
+            self.doc.recompute()
+            section.removeProperty("Taper")  # what the fixes added
+        elif pipe.is_pipe(feature):
+            meta = primitives.load_meta(feature, pipe.META)
+            helpers = [self.doc.getObject(n) for n in meta["helpers"]]
+            spine = [h for h in helpers if h is not None and h.Name.startswith("PipePath")][0]
+            section = [h for h in helpers if h is not None and h is not spine][0]
+            section.Path = spine  # the old link to the path object, no edges of its own
+            section.Edges = []
+            self.doc.recompute()
+        else:
+            raise BuildError("age %r: only a coil or a pipe" % step["target"])
 
     def op_roll(self, step):
         """Drag the history marker after a step (or to the end, or to the start)."""

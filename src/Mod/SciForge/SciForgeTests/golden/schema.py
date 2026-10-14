@@ -88,6 +88,10 @@ STEP_KEYS = {
     "delete": ({"target"}, {"comment"}),
     "move": ({"target"}, {"before", "after", "comment"}),
     "roll": (set(), {"after", "end", "start", "comment"}),
+    # File > Save, close, open again (only what is saved in the file is left).
+    "reopen": (set(), {"comment"}),
+    # Test setup: a coil / pipe as saved by SciForge before the primitives QA fixes.
+    "age": ({"target"}, {"comment"}),
 }
 
 # Fusion-style Fillet / Chamfer (sciforge/blend.py, the same code as the F and Chamfer dialogs):

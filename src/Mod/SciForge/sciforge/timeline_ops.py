@@ -277,7 +277,10 @@ _guard = {"observer": None}
 
 
 def install_guard(defer=None):
+    from . import picks
+
     install_marker_inserts()
+    picks.install()  # picked edges / faces kept when FreeCAD loses their names
     if _guard["observer"] is None:
         _guard["observer"] = RecomputeGuard(defer)
         App.addDocumentObserver(_guard["observer"])
@@ -933,6 +936,21 @@ def set_marker_untracked(doc, tips, before=None):
     return True
 
 
+def _picks_paused(fn):
+    """The operation decides which steps break and keeps their references itself:
+    picks.Keeper must not point a step at another edge meanwhile."""
+    import functools
+
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        from . import picks
+
+        with picks.paused():
+            return fn(*args, **kwargs)
+
+    return run
+
+
 # -- suppress --------------------------------------------------------------------------
 def dependents(doc, names):
     """Steps that use any of ``names``, directly or through each other."""
@@ -1053,6 +1071,7 @@ def _names(names):
     return [names] if isinstance(names, str) else list(names)
 
 
+@_picks_paused
 def suppress(doc, names):
     """Suppress steps and, like Fusion, the steps that depend on them, as one undo
     step. Returns the names suppressed with them."""
@@ -1100,6 +1119,7 @@ def suppress(doc, names):
     return sorted(group - set(names))
 
 
+@_picks_paused
 def unsuppress(doc, names):
     """Turn suppressed steps back on, with the steps that went off with them."""
     names = [n for n in _names(names) if doc.getObject(n) is not None]
@@ -1160,6 +1180,7 @@ def _attached_to(obj, gone):
     return any(o.Name in gone for o in _objects_in(support))
 
 
+@_picks_paused
 def delete(doc, names):
     """Delete steps, one undo step. Later steps keep working where possible: the
     body's history is re-linked around the gap, a sketch that sat on a deleted face
@@ -1357,6 +1378,7 @@ def plan(doc, name, slot):
     return core.plan_move(timeline(doc), name, slot)
 
 
+@_picks_paused
 def move(doc, name, slot):
     """Move a step to ``slot`` of the timeline. Raises TimelineError with the reason
     (like Fusion's red marker) when the move is impossible or would break a step. A

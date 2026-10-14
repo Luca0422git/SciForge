@@ -134,3 +134,7 @@ Ctrl+Z / Ctrl+Y, the browser's "Sketch 1" / "Sketch 2", Enter renames nothing, p
   Group inside its `slotChangedObject(body, "Group")`: FreeCAD takes the new order as part of
   the same change (no second notice, one undo step) and `setBaseProperty` then links the
   feature's base from the new order.
+- A taper added to a Pad turns its side faces into B-splines (flat, but not `GeomPlane`) and
+  FreeCAD loses the names of its edges for the steps after it ("?Edge4", "missing element
+  reference", printed while the Pad recomputes): `sciforge/picks.py` finds them again in the
+  same recompute (`slotRecomputedObject` of the Pad comes before the later steps run).
