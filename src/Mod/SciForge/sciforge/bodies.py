@@ -205,12 +205,11 @@ def baked(shape):
 
 
 def global_shape(obj):
-    """The solid of a feature (or a body: its Tip) in design coordinates, as a copy."""
-    if is_body(obj):
-        shape = obj.Shape
-        if shape.isNull():
-            return shape.copy()
-        return baked(shape)
+    """The solid of a feature (or a body: its Tip) in design coordinates, as a copy.
+
+    A body's Shape carries the body's own placement but not that of the component
+    (App::Part) it sits in; a feature's carries neither (its parent is the body). Both get
+    their parent's global placement, so a body in a moved component is where it shows."""
     shape = obj.Shape
     if shape.isNull():
         return shape.copy()
