@@ -770,6 +770,157 @@ FINISH_SKETCH = group(
     ],
 )
 
+# ---------------------------------------------------------------- DRAWING tab (contextual)
+# Fusion's DRAWING workspace toolbar (Autodesk "Drawing workspace reference"); it shows
+# while a drawing's tab is the active one (drawing_ui.py), like the SKETCH tab.
+DRAWING_CREATE = group(
+    "d_create",
+    "CREATE",
+    ["Base View", "Projected View", "Section View", "Detail View"],
+    [
+        item(
+            "Base View",
+            "SciForge_DrawingBaseView",
+            "dw_base_view",
+            note="The first view of the design: orientation, style and scale; click to place it.",
+        ),
+        item(
+            "Projected View",
+            "SciForge_DrawingProjectedView",
+            "dw_projected_view",
+            note="Move round the base view and click: top, side and isometric views.",
+        ),
+        item(
+            "Section View",
+            "SciForge_DrawingSectionView",
+            "dw_section_view",
+            note="Click a view, draw the cut line with two clicks, then place the section.",
+        ),
+        item(
+            "Detail View",
+            "SciForge_DrawingDetailView",
+            "dw_detail_view",
+            note="Click the centre and the size of a circle on a view, then place it larger.",
+        ),
+        item(
+            "Break View",
+            "SciForge_DrawingBreakView",
+            "dw_break_view",
+            note="Click a long view, then the two ends of the part to leave out.",
+        ),
+        SEP,
+        item("Breakout Section View", None, "dw_section_view"),
+        item("Exploded View", None, "dw_base_view"),
+    ],
+)
+DRAWING_MODIFY = group(
+    "d_modify",
+    "MODIFY",
+    ["Delete"],
+    [
+        item(
+            "Edit View", "SciForge_DrawingEditView", "dw_base_view", note="Or double-click a view"
+        ),
+        item(
+            "Title Block",
+            "SciForge_DrawingTitleBlock",
+            "dw_title_block",
+            note="Or double-click the title block",
+        ),
+        SEP,
+        item("Move", None, "move", note="Drag a view by its frame on the sheet"),
+        item("Rotate", None, "move"),
+        item("Delete", "SciForge_DrawingDelete", "delete", "Del"),
+    ],
+)
+DRAWING_GEOMETRY = group(
+    "d_geometry",
+    "GEOMETRY",
+    ["Center Mark", "Centerline"],
+    [
+        item("Centerline", "SciForge_DrawingCenterline", "dw_centerline"),
+        item("Center Mark", "SciForge_DrawingCenterMark", "dw_center_mark"),
+        item("Center Mark Pattern", None, "dw_center_mark"),
+        item("Edge Extension", None, "dw_centerline"),
+    ],
+)
+DRAWING_DIMENSIONS = group(
+    "d_dimensions",
+    "DIMENSIONS",
+    ["Dimension"],
+    [
+        item(
+            "Dimension",
+            "SciForge_DrawingDimension",
+            "dw_dimension",
+            "D",
+            note="Pick an edge, a circle or two things; the right kind of dimension follows.",
+        ),
+        SEP,
+        item("Linear Dimension", "SciForge_DrawingLinearDimension", "dw_dimension"),
+        item("Aligned Dimension", "SciForge_DrawingAlignedDimension", "dw_dimension"),
+        item("Angular Dimension", "SciForge_DrawingAngularDimension", "dw_dimension"),
+        item("Radius Dimension", "SciForge_DrawingRadiusDimension", "dw_dimension"),
+        item("Diameter Dimension", "SciForge_DrawingDiameterDimension", "dw_dimension"),
+        SEP,
+        item("Ordinate Dimension", None, "dw_dimension"),
+        item("Baseline Dimension", None, "dw_dimension"),
+        item("Chain Dimension", None, "dw_dimension"),
+    ],
+)
+DRAWING_TEXT = group(
+    "d_text",
+    "TEXT",
+    ["Text"],
+    [
+        item("Text", "SciForge_DrawingText", "dw_text", note="Click two corners, then type."),
+        item("Leader", None, "dw_text"),
+        item("Note", None, "dw_text"),
+    ],
+)
+DRAWING_SYMBOLS = group(
+    "d_symbols",
+    "SYMBOLS",
+    ["Surface Texture"],
+    [
+        item("Surface Texture", None, "dw_symbol"),
+        item("Feature Control Frame", None, "dw_symbol"),
+        item("Datum Identifier", None, "dw_symbol"),
+    ],
+)
+DRAWING_TABLES = group(
+    "d_tables",
+    "TABLES",
+    ["Table", "Balloon"],
+    [
+        item(
+            "Table",
+            "SciForge_DrawingTable",
+            "dw_table",
+            note="A parts list of the components a view shows, with balloons.",
+        ),
+        item(
+            "Balloon",
+            "SciForge_DrawingBalloon",
+            "dw_balloon",
+            note="Click a component on a view, then where the balloon goes.",
+        ),
+        item("Renumber", None, "dw_balloon"),
+        item("Align Balloons", None, "dw_balloon"),
+    ],
+)
+DRAWING_EXPORT = group(
+    "d_export",
+    "EXPORT",
+    ["Export PDF", "Export DXF"],
+    [
+        item("Export PDF", "SciForge_DrawingExportPDF", "dw_export_pdf"),
+        item("Export DXF", "SciForge_DrawingExportDXF", "dw_export_dxf"),
+        item("Export DWG", None, "export"),
+        item("Export CSV", None, "export"),
+    ],
+)
+
 TABS = [
     {
         "id": "solid",
@@ -809,6 +960,21 @@ TABS = [
             FINISH_SKETCH,
         ],
     },
+    {
+        "id": "drawing",
+        "title": "DRAWING",
+        "contextual": True,
+        "groups": [
+            DRAWING_CREATE,
+            DRAWING_MODIFY,
+            DRAWING_GEOMETRY,
+            DRAWING_DIMENSIONS,
+            DRAWING_TEXT,
+            DRAWING_SYMBOLS,
+            DRAWING_TABLES,
+            DRAWING_EXPORT,
+        ],
+    },
 ]
 
 # Fusion's File menu (the application menu), in its order; cloud-only entries (upload,
@@ -817,6 +983,12 @@ TABS = [
 # Fusion's File menu (the app bar's Menu button opens it, FreeCAD's own menus below).
 FILE_MENU = [
     item("New Design", "SciForge_NewDesign", "qa_new", "Ctrl+N"),
+    item(
+        "New Drawing",
+        "SciForge_NewDrawing",
+        "dw_new",
+        note="From Design: views of this design on a sheet",
+    ),
     item("Open", "Std_Open", "qa_open", "Ctrl+O"),
     item("Recover Documents", "SciForge_RecoverDocuments", "document"),
     SEP,

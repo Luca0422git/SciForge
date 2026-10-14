@@ -264,6 +264,38 @@ def _edit_object(obj):
     taskui.edit_object(obj)
 
 
+def _open_drawing(page):
+    from . import drawing_ui
+
+    drawing_ui.open_drawing(page)
+
+
+def _delete_drawings(doc, names):
+    """Delete whole drawings (their views, dimensions and sheet), one undo step."""
+    from . import drawing, drawing_ui
+
+    tab = drawing_ui.active_tab()
+    for name in names:
+        page = doc.getObject(name)
+        if page is not None:
+            drawing_ui.close_tab(page)
+    doc.openTransaction("Delete Drawing")
+    try:
+        for name in names:
+            page = doc.getObject(name)
+            if page is not None:
+                drawing.delete_drawing(page)
+    except Exception as exc:
+        warn("browser delete: %s" % exc)
+    doc.commitTransaction()
+    try:
+        App.closeActiveTransaction()
+    except Exception:
+        pass
+    doc.recompute()
+    drawing_ui.restore_tab(tab)
+
+
 def _joint_action(name, obj):
     """A joint entry of the right-click menu (joints_ui does the work)."""
     from . import joints_ui
@@ -417,6 +449,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "decals",
             "joints",  # new joints show at once
             "joint_origins",
+            "drawings",
         }
         # Component rows and their Bodies / Sketches folders start open (keys are made per
         # component); this remembers the ones the user closed.
@@ -693,7 +726,12 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         try:
             Gui.Selection.clearSelection()
             for item in self.selectedItems():
-                obj = self._object(item.data(1, ROLE_NODE))
+                node = item.data(1, ROLE_NODE)
+                if node["kind"] == "drawing":
+                    # (not in the 3D view; FreeCAD would bring the drawing's tab to the
+                    # front when it is selected, even for a right-click > Delete)
+                    continue
+                obj = self._object(node)
                 if obj is not None:
                     Gui.Selection.addSelection(self._doc.Name, obj.Name)
         except Exception as exc:
@@ -779,6 +817,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 self.activate_component(obj)
             elif node["kind"] == "document" and self._doc is not None:
                 self.activate_component(None)
+            elif node["kind"] == "drawing" and obj is not None:
+                _later(_open_drawing, obj)  # Fusion: open the drawing (its own tab)
             elif (
                 node["kind"]
                 in ("sketch", "construction", "analysis", "mesh_body", "canvas", "decal")
@@ -853,6 +893,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "mesh_body",
         "canvas",
         "decal",
+        "drawing",
     )
     OBJECT_KINDS = (
         "body",
@@ -866,6 +907,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "joint",
         "rigid_group",
         "joint_origin",
+        "drawing",
     )
 
     def rename(self, item):
@@ -935,6 +977,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         part_names = [n["object"] for n in nodes if n["kind"] == "component"]
         views = [n["object"] for n in nodes if n["kind"] == "saved_view"]
         plain = [n["object"] for n in nodes if n["kind"] in ("mesh_body", "canvas")]
+        drawings = [n["object"] for n in nodes if n["kind"] == "drawing"]
         Gui.Selection.clearSelection()
         if steps:
             ops.delete(doc, [s for s in steps if doc.getObject(s) is not None])
@@ -949,6 +992,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             self._delete_plain(doc, plain)
         for name in views:
             self._delete_view(name)
+        if drawings:
+            _delete_drawings(doc, drawings)
         self.refresh(force=True)
 
     def _delete_plain(self, doc, names):
@@ -1105,6 +1150,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Drive Joints": lambda: _joint_action("drive", obj),
             "Animate Joint": lambda: _joint_action("animate", obj),
             "Suppress": lambda: self._toggle_suppress(obj),
+            "Open Drawing": lambda: _open_drawing(obj),
         }
         isolated = _isolated_names(doc)
         if node["kind"] in ("body", "component") and isolated:

@@ -241,6 +241,10 @@ class RibbonWidget(QtWidgets.QWidget):
         outer.addLayout(body)
 
         self.tab_buttons["sketch"].setVisible(False)
+        # The DRAWING tab shows only while a drawing's tab is active (drawing_ui).
+        self._drawing_mode = False
+        if "drawing" in self.tab_buttons:
+            self.tab_buttons["drawing"].setVisible(False)
         self.select_tab("solid")
 
         self._timer = QtCore.QTimer(self)
@@ -290,18 +294,28 @@ class RibbonWidget(QtWidgets.QWidget):
         button.setProperty("role", "workspace")
         button.setText("DESIGN ▾")
         button.setFixedSize(136, 74)
+        self.workspace = button
+        button.clicked.connect(lambda: self._workspace_menu(button))
+        return button
+
+    def _workspace_menu(self, button):
+        """Fusion's workspace switcher: Design, or Drawing (a new one from the design, or
+        one of the design's drawings)."""
         menu = QtWidgets.QMenu(button)
+        menu.setObjectName("SciForgeWorkspaceMenu")
+        menu.setToolTipsVisible(True)
         design = menu.addAction(ui_icon("workspace_design"), "Design")
         design.setCheckable(True)
-        design.setChecked(True)
-        drawing = menu.addAction("Drawing")
-        drawing.setEnabled(False)
-        drawing.setToolTip("Planned (outline 7.16)")
-        menu.setToolTipsVisible(True)
-        button.clicked.connect(
-            lambda: menu.exec_(button.mapToGlobal(QtCore.QPoint(0, button.height())))
-        )
-        return button
+        design.setChecked(not self._drawing_mode)
+        drawings = menu.addMenu(ui_icon("dw_base_view"), "Drawing")
+        try:
+            from . import drawing_ui
+
+            design.triggered.connect(lambda: drawing_ui.show_design())
+            drawing_ui.fill_workspace_menu(drawings)
+        except Exception as exc:
+            warn("workspace menu: %s" % exc)
+        menu.exec_(button.mapToGlobal(QtCore.QPoint(0, button.height())))
 
     def _show_app_menu(self, button):
         """Fusion's File menu (ribbon_config.FILE_MENU) on top, then all of FreeCAD's menus,
@@ -336,7 +350,7 @@ class RibbonWidget(QtWidgets.QWidget):
         for tid, button in self.tab_buttons.items():
             button.setChecked(tid == tab_id)
         self.pages.setCurrentIndex(self.page_index[tab_id])
-        if user and tab_id != "sketch":
+        if user and tab_id not in ("sketch", "drawing"):
             self._user_tab = tab_id
 
     def set_sketch_mode(self, on):
@@ -344,9 +358,31 @@ class RibbonWidget(QtWidgets.QWidget):
         if on == self._sketch_mode:
             return
         self._sketch_mode = on
-        self.tab_buttons["sketch"].setVisible(on)
-        self.select_tab("sketch" if on else self._user_tab)
+        drawing = getattr(self, "_drawing_mode", False)  # (a drawing's tab keeps DRAWING)
+        self.tab_buttons["sketch"].setVisible(on and not drawing)
+        if not drawing:
+            self.select_tab("sketch" if on else self._user_tab)
         log("ribbon: sketch mode %s" % ("on" if on else "off"))
+
+    def set_drawing_mode(self, on):
+        """While a drawing's tab is active, Fusion's DRAWING toolbar is the only one shown
+        (the workspace button says DRAWING); back to the design's tabs after."""
+        if on == self._drawing_mode or "drawing" not in self.tab_buttons:
+            return
+        self._drawing_mode = on
+        for tid, button in self.tab_buttons.items():
+            if tid == "drawing":
+                button.setVisible(on)
+            elif tid == "sketch":
+                button.setVisible(self._sketch_mode and not on)
+            else:
+                button.setVisible(not on)
+        self.workspace.setText("DRAWING ▾" if on else "DESIGN ▾")
+        if on:
+            self.select_tab("drawing")
+        else:
+            self.select_tab("sketch" if self._sketch_mode else self._user_tab)
+        log("ribbon: drawing mode %s" % ("on" if on else "off"))
 
     def current_tab(self):
         for tid, button in self.tab_buttons.items():

@@ -147,6 +147,7 @@ def _rgba(hex_color):
 
 
 _NAVICUBE_PARAMS = "User parameter:BaseApp/Preferences/NaviCube"
+_TECHDRAW_COLORS = "User parameter:BaseApp/Preferences/Mod/TechDraw/Colors"
 
 # (parameter group, kind, name, SciForge value). Fusion: flat dark background; middle
 # button pans, Shift+middle orbits, wheel zooms at the cursor (FreeCAD's "Revit" style);
@@ -181,6 +182,14 @@ VIEWER_SETTINGS = [
     # Bodies names the component after its body. FreeCAD would rename the second "Body1"
     # to "Body1001" unless duplicate labels are allowed (its own tree copes with them).
     ("User parameter:BaseApp/Preferences/Document", "Bool", "DuplicateLabels", True),
+    # Drawings (drawing_ui.py): opening a drawing keeps SciForge's window; FreeCAD would
+    # switch to its TechDraw workbench and turn the SciForge interface off.
+    ("User parameter:BaseApp/Preferences/Mod/TechDraw/General", "Bool", "SwitchToWB", False),
+    # A drawing's sheet is white, like the paper it is printed on (Fusion), and so are the
+    # cut faces under a section's hatching; FreeCAD's light theme makes both grey, and the
+    # grey went into the exported PDF as well.
+    (_TECHDRAW_COLORS, "Unsigned", "PageColor", _rgba("#ffffff")),
+    (_TECHDRAW_COLORS, "Unsigned", "FaceColor", _rgba("#ffffff")),
 ]
 
 _saved_qss = None

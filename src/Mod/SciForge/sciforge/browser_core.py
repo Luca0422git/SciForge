@@ -46,6 +46,9 @@ COMPONENT_TYPES = {"App::Part"}
 # images) in a Canvases folder of their own.
 MESH_TYPES = {"Mesh::Feature", "Mesh::FeaturePython"}
 CANVAS_TYPES = {"Image::ImagePlane"}
+# A drawing of the design (drawing.py): Fusion keeps drawings as files of their own;
+# SciForge keeps them in the design, listed in a Drawings folder (double-click opens one).
+DRAWING_TYPES = {"TechDraw::DrawPage"}
 ORIGIN_ROLES = ("Origin", "X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane")
 ORIGIN_LABELS = {
     "Origin": "O",
@@ -167,6 +170,7 @@ def _folders(objects, active_body, component):
     bodies, sketches, construction, origin, analysis, canvases = [], [], [], [], [], []
     decals = []
     joints, joint_origins = [], []
+    drawings = []
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
         # Fusion's design has one origin. FreeCAD gives every body its own: show the active
@@ -207,6 +211,11 @@ def _folders(objects, active_body, component):
             canvases.append(_item("canvas:", obj, "canvas", "canvas"))
         elif sciforge_type == "Decal":  # a picture on a face (decal.py), under its component
             decals.append(_item("decal:", obj, "decal", "decal"))
+        elif type_id in DRAWING_TYPES:
+            if component is None:
+                node = _item("drawing:", obj, "dw_base_view", "drawing")
+                node["visible"] = None  # no eye: a drawing opens in its own tab
+                drawings.append(node)
         elif sciforge_type in JOINT_TYPES:
             kind = JOINT_TYPES[sciforge_type]
             icon = (
@@ -222,6 +231,8 @@ def _folders(objects, active_body, component):
             joints.append(node)
         elif sciforge_type == "JointOrigin":
             joint_origins.append(_item("joint_origin:", obj, "joint_origin", "joint_origin"))
+        elif sciforge_type == "DrawingBreak":
+            pass  # a drawing's break lines (drawing.py): part of the drawing, not the design
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
         elif type_id in CONSTRUCTION_TYPES:
@@ -259,6 +270,8 @@ def _folders(objects, active_body, component):
         folders.append(_folder("canvases" + suffix, "Canvases", canvases))
     if decals:
         folders.append(_folder("decals" + suffix, "Decals", decals))
+    if drawings:
+        folders.append(_folder("drawings", "Drawings", drawings))
     return folders
 
 
@@ -520,6 +533,7 @@ MENUS = {
         "Rename",
         "Delete",
     ],
+    "drawing": ["Open Drawing", "-", "Rename", "Delete"],
 }
 
 
