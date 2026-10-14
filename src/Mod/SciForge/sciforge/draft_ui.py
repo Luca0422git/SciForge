@@ -689,20 +689,26 @@ class DraftPanel(pickpanel.PickPanel):
             warn("Draft flip: %s" % exc)
 
     def _type_changed(self, *_):
-        self.options["draft_type"] = self.type.currentData()
-        self._rows()
-        if self.options["draft_type"] == "parting" and not self.parting:
-            if self.plane_ref is not None:
-                self._activate("parting", schedule=False)
-        elif self.active == "parting":
-            self._activate("faces", schedule=False)
-        self._picks_updated()
+        try:
+            self.options["draft_type"] = self.type.currentData()
+            self._rows()
+            if self.options["draft_type"] == "parting" and not self.parting:
+                if self.plane_ref is not None:
+                    self._activate("parting", schedule=False)
+            elif self.active == "parting":
+                self._activate("faces", schedule=False)
+            self._picks_updated()
+        except Exception as exc:
+            warn("Draft Type: %s" % exc)
 
     def _sides_changed(self, *_):
-        self.options["sides"] = self.sides.currentData()
-        self._rows()
-        self._update_handles()
-        self.schedule()
+        try:
+            self.options["sides"] = self.sides.currentData()
+            self._rows()
+            self._update_handles()
+            self.schedule()
+        except Exception as exc:
+            warn("Draft Sides: %s" % exc)
 
     # -- values -------------------------------------------------------------------------------
     def _typed(self, value):
