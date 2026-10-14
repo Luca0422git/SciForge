@@ -419,10 +419,19 @@ def _relabel_sheets(doc_name, page_name):
         drawing_sheets.relabel(page)
 
 
-def refresh_drawings(doc_name):
+LATE_REFRESH_MS = 1500  # TechDraw draws a view's lines in a thread: look again after this
+
+
+def refresh_drawings(doc_name, again=True):
     doc = App.getDocument(doc_name) if doc_name in App.listDocuments() else None
     if doc is None or getattr(doc, "Restoring", False):
         return
+    if again:
+        # a big view's lines can come later than this first look: annotations, marks
+        # and extensions that follow edges look once more (it changes only what moved)
+        _later(refresh_drawings, doc_name, False, ms=LATE_REFRESH_MS)
+    else:
+        _later(_watch_depth, doc_name, 0, ms=DEPTH_WATCH_MS[0])
     for page in drawing.all_pages(doc):
         try:
             drawing.refresh(page)
@@ -436,6 +445,28 @@ def refresh_drawings(doc_name):
 
             log("drawing looks failed:\n%s" % traceback.format_exc())
             warn("drawing looks: %s" % exc)
+
+
+DEPTH_WATCH_MS = (3000, 6000, 12000)  # a big section's lines can come later still
+
+
+def _watch_depth(doc_name, step=0):
+    """A Slice / Distance section switches off its deeper lines once TechDraw has drawn
+    them, however long that takes (a quick look: nothing happens when they are done)."""
+    doc = App.getDocument(doc_name) if doc_name in App.listDocuments() else None
+    if doc is None or getattr(doc, "Restoring", False):
+        return
+    found = False
+    try:
+        for page in drawing.all_pages(doc):
+            for view in drawing.all_views(page):
+                if drawing.is_section(view) and drawing.section_depth(view)[0] != "Full":
+                    found = True
+                    drawing.refresh_depth(view)
+    except Exception as exc:
+        warn("section depth: %s" % exc)
+    if found and step + 1 < len(DEPTH_WATCH_MS):
+        _later(_watch_depth, doc_name, step + 1, ms=DEPTH_WATCH_MS[step + 1] - DEPTH_WATCH_MS[step])
 
 
 def _rounded(color):
@@ -584,6 +615,13 @@ def default_double_click(page, point):
             return True
     except Exception as exc:
         warn("edit: %s" % exc)
+    try:
+        from . import drawing_breakout_ui
+
+        if drawing_breakout_ui.edit_at(page, point):
+            return True
+    except Exception as exc:
+        warn("breakout: %s" % exc)
     view = view_at(page, point)
     if view is not None:
         _later(edit_view, view)
@@ -1371,7 +1409,7 @@ class SectionPanel(DrawingPanel):
         self.layout.addRow("Section Depth", self.depth)
         self.layout.addRow("Distance (mm)", self.distance)
         self.layout.addRow(self.hatch)
-        self.show_label = _label_rows(self, section)
+        self.show_label = _label_rows(self, section, with_text=False)
         self.auto_boxes = _auto_mark_rows(self, section)
         self.label.textChanged.connect(self._label)
         self.scale.currentTextChanged.connect(self._scale)
@@ -1658,17 +1696,17 @@ class SectionPanel(DrawingPanel):
 
 
 # ------------------------------------------------------------------ view label and centre marks
-def _label_rows(panel, view):
-    """Fusion's View Label: its text and whether it shows (the "Show" box)."""
-    text = QtWidgets.QLineEdit(drawing.view_label(view) if view is not None else "")
-    text.setObjectName("SciForgeViewLabel")
+def _label_rows(panel, view, with_text=True):
+    """Fusion's View Label: its text and whether it shows (the "Show" box). A section's
+    or detail's label follows its letter (with_text False: only the box)."""
+    text = None
+    if with_text:
+        text = QtWidgets.QLineEdit(drawing.view_label(view) if view is not None else "")
+        text.setObjectName("SciForgeViewLabel")
+        panel.layout.addRow("View label", text)
     shown = QtWidgets.QCheckBox("Show the view label")
     shown.setObjectName("SciForgeViewLabelShown")
-    shown.setChecked(drawing.label_shown(view) if view is not None else True)
-    if view is None or (not drawing.is_section(view) and view.TypeId != drawing.DETAIL):
-        panel.layout.addRow("View label", text)
-    else:
-        text = None  # (a section's or detail's label follows its letter)
+    shown.setChecked(drawing.label_shown(view) if view is not None else not with_text)
     panel.layout.addRow(shown)
 
     def changed(*_args):
@@ -1776,7 +1814,7 @@ class DetailPanel(DrawingPanel):
         self.layout.addRow("Label", self.label)
         self.layout.addRow("Scale", self.scale)
         self.layout.addRow("Style", self.style)
-        self.show_label = _label_rows(self, detail)
+        self.show_label = _label_rows(self, detail, with_text=False)
         self.auto_boxes = _auto_mark_rows(self, detail)
         self.label.textChanged.connect(self._label)
         self.scale.currentTextChanged.connect(self._scale)

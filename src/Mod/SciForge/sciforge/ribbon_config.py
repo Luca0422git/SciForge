@@ -809,7 +809,12 @@ DRAWING_CREATE = group(
             note="Click a long view, then the two ends of the part to leave out.",
         ),
         SEP,
-        item("Breakout Section View", None, "dw_section_view"),
+        item(
+            "Breakout Section View",
+            "SciForge_DrawingBreakoutView",
+            "dw_section_view",
+            note="Click a view, then a closed boundary around what should show inside.",
+        ),
         item("Exploded View", None, "dw_base_view"),
     ],
 )

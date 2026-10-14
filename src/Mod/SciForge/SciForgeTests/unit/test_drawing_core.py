@@ -398,5 +398,56 @@ class DxfTests(unittest.TestCase):
         self.assertIn("HIDDEN", text)
 
 
+class SectionKindTests(unittest.TestCase):
+    """Fusion's section type follows the cut line: Full, Half, Offset, Aligned."""
+
+    def test_kinds(self):
+        self.assertEqual(core.section_kind([(0, 30), (0, -30)]), "Full")
+        self.assertEqual(core.section_kind([(0, 30), (0, 0), (40, 0)]), "Half")
+        self.assertEqual(core.section_kind([(-20, -35), (-20, 0), (20, 0), (20, 35)]), "Offset")
+        self.assertEqual(core.section_kind([(-20, -10), (0, 0), (20, 0)]), "Aligned")
+        # a click on the way along a straight run is no bend
+        self.assertEqual(core.section_kind([(0, 30), (0, 0), (0, -10)]), "Full")
+        self.assertEqual(core.simplify_line([(0, 30), (0, 0), (0, -10)]), [(0, 30), (0, -10)])
+
+    def test_nearly_square_counts_as_square(self):
+        self.assertEqual(core.section_kind([(0, 30), (0, 0), (40, 0.3)]), "Half")
+        self.assertEqual(core.section_kind([(0, 30), (0, 0), (40, 3.0)]), "Aligned")
+
+    def test_bad_lines(self):
+        self.assertIsNone(core.section_kind([(0, 0)]))
+        self.assertIsNone(core.section_kind([(0, 0), (0, 0)]))
+        # a point clicked twice is one point
+        self.assertEqual(core.section_kind([(0, 0), (1, 0), (1, 0)]), "Full")
+
+
+class BreakoutBoundaryTests(unittest.TestCase):
+    """A breakout's boundary: clicked corners of a closed polygon."""
+
+    SQUARE = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    L_SHAPE = [(0, 0), (10, 0), (10, 4), (4, 4), (4, 10), (0, 10)]
+
+    def test_area(self):
+        self.assertAlmostEqual(core.polygon_area(self.SQUARE), 100.0)
+        self.assertAlmostEqual(core.polygon_area(list(reversed(self.SQUARE))), -100.0)
+        self.assertAlmostEqual(core.polygon_area(self.L_SHAPE), 64.0)
+        # three points on a line enclose nothing
+        self.assertAlmostEqual(core.polygon_area([(0, 0), (5, 5), (10, 10)]), 0.0)
+
+    def test_inside(self):
+        self.assertTrue(core.point_in_polygon(self.SQUARE, (5, 5)))
+        self.assertFalse(core.point_in_polygon(self.SQUARE, (15, 5)))
+        self.assertFalse(core.point_in_polygon(self.SQUARE, (5, -1)))
+        self.assertTrue(core.point_in_polygon(self.L_SHAPE, (2, 8)))
+        self.assertTrue(core.point_in_polygon(self.L_SHAPE, (8, 2)))
+        self.assertFalse(core.point_in_polygon(self.L_SHAPE, (8, 8)))  # the notch
+
+    def test_isometric_kinds(self):
+        self.assertTrue(core.is_iso_kind("FrontTopRight"))
+        self.assertTrue(core.is_iso_kind("FrontBottomLeft"))
+        self.assertFalse(core.is_iso_kind("Right"))
+        self.assertFalse(core.is_iso_kind("Bottom"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -777,7 +777,12 @@ def add_projected(parent, kind_name, x, y):
         raise DrawingError("There is already a %s view of that view." % _kind_label(kind_name))
     direction, xdir = core.projected_axes(axes_of(parent), kind_name)
     view = doc.addObject(PART_VIEW, "ProjectedView")
-    view.Source = list(parent.Source)
+    view.Source = _view_sources(parent)  # (not a breakout's trimmed copy)
+    clip = _get(parent, "SciForgeDepthClip", None)
+    if core.is_iso_kind(kind_name) and has_breakout(parent) and alive(clip):
+        # Fusion: an isometric view made from a view with a breakout shows its cut
+        _add(view, "App::PropertyLinkListGlobal", "SciForgeCutSources", _view_sources(parent))
+        view.Source = [clip]
     view.Direction = V(*direction)
     view.XDirection = V(*xdir)
     view.ScaleType = "Custom"
@@ -890,7 +895,7 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None, points=N
     page = page_of(parent)
     doc = parent.Document
     projection = page.ProjectionType
-    pts = [tuple(p) for p in (points or [p1, p2])]
+    pts = core.simplify_line([tuple(p) for p in (points or [p1, p2])])
     if len(pts) < 2:
         raise DrawingError("Click at least two points for the cut line.")
     p1, p2 = pts[0], pts[1]
@@ -907,7 +912,7 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None, points=N
     label = label or core.next_label(used_labels(page))
     complex_cut = len(pts) > 2
     section = doc.addObject(COMPLEX if complex_cut else SECTION, "Section")
-    section.Source = list(parent.Source)
+    section.Source = _view_sources(parent)
     section.Direction = V(*direction)
     section.XDirection = V(*xdir)
     section.SectionNormal = V(*normal)
@@ -931,9 +936,9 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None, points=N
     _add(section, "App::PropertyString", "SciForgeSectionKind", section_kind)
     px, py = view_position(parent)
     _add(section, "App::PropertyFloatList", "SciForgeOffset", [position[0] - px, position[1] - py])
-    _style(section, style_of(parent), tangent_of(parent))
-    section.HardHidden = False  # Fusion's section views show no hidden edges by default
-    section.SmoothHidden = False
+    # Fusion's section views show no hidden edges by default
+    style = {"Visible and Hidden Edges": "Visible Edges", "Shaded with Hidden Edges": "Shaded"}
+    _style(section, style.get(style_of(parent), style_of(parent)), tangent_of(parent))
     section.Label = section_caption(label)
     apply_caption(section)  # written under the view, also in the PDF
     if depth is not None and depth[0] != "Full":
@@ -1011,9 +1016,11 @@ def section_depth(section):
 
 def set_section_depth(section, mode, value=0.0):
     """Fusion's Section Depth: Full shows everything behind the cut; Slice only what the
-    cut line cuts through; Distance what lies up to `value` mm behind it. TechDraw cuts
-    everything behind its plane, so a Slice or Distance section cuts a copy of the parts
-    trimmed to that depth (a hidden shape kept up to date with the design)."""
+    cut line cuts through; Distance what lies up to `value` mm behind it. TechDraw draws
+    everything behind its cut: the lines that lie deeper are switched off
+    (drawing_depth.py)."""
+    from . import drawing_depth
+
     if mode not in DEPTH_MODES:
         raise DrawingError("Choose Full, Slice or Distance.")
     if mode == "Distance" and value <= 0:
@@ -1022,97 +1029,21 @@ def set_section_depth(section, mode, value=0.0):
         raise DrawingError(
             "Section depth works with a straight cut line: this section's line has bends."
         )
-    doc = section.Document
-    clip = _get(section, "SciForgeDepthClip", None)
-    sources = [s for s in (_get(section, "SciForgeCutSources", []) or []) if alive(s)]
-    if not sources:
-        sources = [s for s in section.Source if alive(s) and kind(s) != "DrawingDepth"]
-        _add(section, "App::PropertyLinkListGlobal", "SciForgeCutSources", sources)
     _add(
         section, "App::PropertyString", "SciForgeDepth", json.dumps({"mode": mode, "value": value})
     )
-    if mode == "Full":
-        if [s.Name for s in section.Source] != [s.Name for s in sources]:
-            section.Source = sources
-        return section
-    if not alive(clip):
-        clip = doc.addObject("Part::Feature", "SectionDepth")
-        _mark(clip, "DrawingDepth")
-        _add(section, "App::PropertyLink", "SciForgeDepthClip", clip)
-    clip.Shape = _depth_shape(section, sources, mode, value)
-    _set_shown(clip, False)
-    if [s.Name for s in section.Source] != [clip.Name]:
-        section.Source = [clip]
+    drawing_depth.refresh(section, force=True)
     return section
 
 
-def _depth_shape(section, sources, mode, value):
-    """The parts trimmed to the section's depth: from 1 mm in front of the cut (TechDraw
-    makes the cut face itself) to `value` behind it."""
-    import Part
-
-    from . import bodies
-
-    shapes = []
-    for src in sources:
-        try:
-            shape = bodies.global_shape(src)
-        except Exception:
-            shape = src.Shape.copy()
-        if not shape.isNull():
-            shapes.append(shape)
-    if not shapes:
-        return Part.Shape()
-    whole = Part.makeCompound(shapes)
-    depth = SLICE_DEPTH if mode == "Slice" else max(value, SLICE_DEPTH)
-    size = max(whole.BoundBox.DiagonalLength * 2.0, 10.0)
-    normal = V(section.SectionNormal)
-    normal.normalize()
-    origin = V(section.SectionOrigin)
-    slab = Part.makeBox(size, size, depth + 1.0, V(-size / 2.0, -size / 2.0, -depth))
-    slab.Placement = App.Placement(origin, App.Rotation(V(0, 0, 1), normal))
-    solids = []
-    for solid in whole.Solids:
-        try:
-            part = solid.common(slab)
-            if not part.isNull():
-                solids += part.Solids
-        except Exception as exc:
-            warn("section depth: %s" % exc)
-    return Part.makeCompound(solids) if solids else Part.Shape()
-
-
 def refresh_depth(view):
-    """A Slice / Distance section follows the design: its trimmed copy is made again
-    when the parts changed. True when it changed."""
-    clip = _get(view, "SciForgeDepthClip", None)
-    if not alive(clip):
+    """A Slice / Distance section follows the design: the lines beyond its depth are
+    worked out again when its lines or the parts changed. True when it changed."""
+    if not is_section(view):
         return False
-    mode, value = section_depth(view)
-    if mode == "Full":
-        return False
-    sources = [s for s in (_get(view, "SciForgeCutSources", []) or []) if alive(s)]
-    if not sources:
-        return False
-    shape = _depth_shape(view, sources, mode, value)
-    old = clip.Shape
-    try:
-        same_shape = (
-            not old.isNull()
-            and abs(old.Volume - shape.Volume) < 1e-6
-            and abs(old.BoundBox.DiagonalLength - shape.BoundBox.DiagonalLength) < 1e-6
-            and (old.BoundBox.Center - shape.BoundBox.Center).Length < 1e-6
-        )
-    except Exception:
-        same_shape = False
-    if same_shape:
-        return False
-    clip.Shape = shape
-    try:
-        view.recompute()
-    except Exception as exc:
-        warn("section %s: %s" % (view.Label, exc))
-    return True
+    from . import drawing_depth
+
+    return drawing_depth.refresh(view)
 
 
 def _hatch(section):
@@ -1197,7 +1128,7 @@ def add_detail(parent, centre, radius, position, label=None, scale=None):
         raise DrawingError("Make the circle bigger: drag away from its centre.")
     label = label or core.next_label(used_labels(page))
     detail = doc.addObject(DETAIL, "Detail")
-    detail.Source = list(parent.Source)
+    detail.Source = _view_sources(parent)
     detail.Direction = parent.Direction
     detail.XDirection = parent.XDirection
     detail.AnchorPoint = V(centre[0], centre[1], 0)
@@ -1243,7 +1174,7 @@ def add_break(view, a, b, gap=None):
             segments.append(((-reach, end[1]), (reach, end[1])))
     marker = _plane_sketch(view, "DrawingBreak", segments, "DrawingBreak")
     broken = doc.addObject(BROKEN, "BrokenView")
-    broken.Source = list(view.Source)
+    broken.Source = _view_sources(view)
     broken.Breaks = [marker]
     broken.Direction = view.Direction
     broken.XDirection = view.XDirection
@@ -1557,9 +1488,13 @@ def set_auto_marks(view, settings):
     return refresh_auto_marks(view, force=True)
 
 
+def has_breakout(view):
+    """True when a view has a Breakout Section View (drawing_breakout.py)."""
+    return bool(_get(view, "SciForgeBreakout", ""))
+
+
 def _view_sources(view):
-    """The parts a view shows (a Slice / Distance section's trimmed copy stands for its
-    parts)."""
+    """The parts a view shows (a breakout's trimmed copy stands for its parts)."""
     cut = [s for s in (_get(view, "SciForgeCutSources", []) or []) if alive(s)]
     if cut:
         return cut
@@ -1889,7 +1824,7 @@ def parts_list_of(page):
 
 
 def parts_rows_for(view):
-    sources = [s for s in getattr(view, "Source", []) if alive(s)]
+    sources = _view_sources(view)
     comps = components_of(sources)
     rows = core.parts_rows(comps)
     by_key = {}
@@ -2068,7 +2003,7 @@ def _sight_hit(view, bodies, local_point, tolerance=0.05):
 def component_at(view, local_point, sources=None):
     """The component (or root body) a picked point of a view belongs to: the body nearest
     to the viewer along the sight line through it (where two touch, the one in front)."""
-    hit = _sight_hit(view, sources or [s for s in view.Source if alive(s)], local_point)
+    hit = _sight_hit(view, sources or _view_sources(view), local_point)
     return hit[0] if hit is not None else None
 
 
@@ -2094,30 +2029,12 @@ def schema_length_unit():
 
 
 def refresh_dimensions(page):
-    """A drawing in other units than FreeCAD's current ones writes its dimensions itself
-    (TechDraw formats in the current units only): the text follows each value."""
-    units = units_of(page)
-    native = schema_length_unit() == units
-    changed = False
-    for dim in annotations(page):
-        if dim.TypeId != DIMENSION:
-            continue
-        angular = dim.Type in ("Angle", "Angle3Pt")
-        if native or angular:
-            if dim.Arbitrary and _get(dim, "SciForgeOwnText", False):
-                dim.Arbitrary = False
-                dim.FormatSpec = core.dimension_format(units, standard_of(page), dim.Type)
-                changed = True
-            continue
-        text = dimension_text(dim)
-        if not text:
-            continue
-        if not dim.Arbitrary or dim.FormatSpec != text:
-            dim.Arbitrary = True
-            dim.FormatSpec = text
-            _add(dim, "App::PropertyBool", "SciForgeOwnText", True)
-            changed = True
-    return changed
+    """Every dimension's text from its settings (drawing_annot.apply_dimension_text): a
+    drawing in other units than FreeCAD's current ones, or a dimension with a tolerance
+    or other text, writes its text itself and follows each value."""
+    from . import drawing_annot
+
+    return drawing_annot.refresh_dimension_texts(page)
 
 
 def follow_assembly(page):
@@ -2137,9 +2054,17 @@ def follow_assembly(page):
     page.SciForgeSources = wanted
     changed = []
     for view in all_views(page):
-        current = sorted(s.Name for s in view.Source if alive(s))
+        current = sorted(s.Name for s in _view_sources(view))
         if current == old_names or not current:
-            view.Source = list(wanted)
+            if has_breakout(view):
+                from . import drawing_breakout
+
+                drawing_breakout.set_sources(view, wanted)  # its trimmed copy follows
+            elif any(kind(s) == "DrawingDepth" for s in view.Source):
+                # (an isometric view showing its parent's breakout)
+                _add(view, "App::PropertyLinkListGlobal", "SciForgeCutSources", list(wanted))
+            else:
+                view.Source = list(wanted)
             changed.append(view)
     for view in sorted(changed, key=lambda v: v.ID):
         try:
@@ -2163,16 +2088,19 @@ def refresh(page):
     except Exception as exc:
         warn("drawing title block: %s" % exc)
     try:
-        from . import drawing_annot
-
-        changed |= drawing_annot.refresh_dimension_texts(page)
+        changed |= refresh_dimensions(page)
     except Exception as exc:
         warn("dimensions: %s" % exc)
     for view in all_views(page):
         try:
-            changed |= refresh_depth(view)
+            if has_breakout(view):
+                from . import drawing_breakout
+
+                changed |= drawing_breakout.refresh(view)
+            else:
+                changed |= refresh_depth(view)
         except Exception as exc:
-            warn("section depth of %s: %s" % (view.Label, exc))
+            warn("section depth / breakout of %s: %s" % (view.Label, exc))
     table = parts_list_of(page)
     if table is not None:
         try:
@@ -2246,8 +2174,8 @@ def delete_objects(doc, objects):
             for marker in obj.Breaks:
                 if marker.Name not in names:
                     names.append(marker.Name)
-        # a section's cut line (several segments) and its depth go with it
-        if obj is not None and obj.TypeId in (SECTION, COMPLEX):
+        # a section's cut line (several segments) and a breakout's trimmed copy go with it
+        if obj is not None and is_view(obj):
             for helper in (
                 _get(obj, "CuttingToolWireObject", None),
                 _get(obj, "SciForgeDepthClip", None),
@@ -2448,18 +2376,32 @@ def _dxf_view(dxf, view):
                 a = local_to_page(view, near)
                 b = local_to_page(view, point)
                 dxf.line(a[0], a[1], b[0], b[1], "VISIBLE")
+    hatch = []
+    if has_breakout(view):
+        from . import drawing_breakout
+
+        for x1, y1, x2, y2 in drawing_breakout.hatch_of(view):
+            hatch.append(((s * x1, s * y1), (s * x2, s * y2)))
+    from . import drawing_depth
+
+    def deeper(edge):
+        return is_section(view) and drawing_depth.is_hidden(view, edge, s)
+
     try:
         visible = view.getVisibleEdges(True)
     except Exception:
         visible = []
     for edge in visible:
-        if _same_segment(edge, marks):
+        if _same_segment(edge, marks) or _same_segment(edge, hatch) or deeper(edge):
             continue
         _dxf_edge(dxf, edge, ox, oy, "VISIBLE")
+    for p, q in hatch:
+        dxf.line(ox + p[0], oy + p[1], ox + q[0], oy + q[1], "HATCH")
     if _get(view, "HardHidden", False):
         try:
             for edge in view.getHiddenEdges(True):
-                _dxf_edge(dxf, edge, ox, oy, "HIDDEN")
+                if not deeper(edge):
+                    _dxf_edge(dxf, edge, ox, oy, "HIDDEN")
         except Exception:
             pass
     label = _get(view, "Caption", "") or ""
@@ -2488,7 +2430,11 @@ def section_faces(section):
     its centre; the faces lie in a plane square to the view's direction)."""
     import Part
 
-    shapes = [s.Shape for s in section.Source if alive(s) and not s.Shape.isNull()]
+    # (TechDraw cuts what the parent view shows)
+    parent = _get(section, "BaseView", None)
+    sources = [s for s in getattr(parent, "Source", []) if alive(s)] if alive(parent) else []
+    sources = sources or [s for s in section.Source if alive(s)]
+    shapes = [s.Shape for s in sources if not s.Shape.isNull()]
     if not shapes:
         return []
     normal = section.SectionNormal

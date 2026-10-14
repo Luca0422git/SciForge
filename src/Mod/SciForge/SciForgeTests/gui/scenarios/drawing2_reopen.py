@@ -13,7 +13,7 @@ A  Ctrl+S on the sheet: the Save dialog; name "Reo2" and the folder typed; Save.
 B  The design closed and opened again (by script, as drawing_reopen does); the browser's
    Drawings folder lists one drawing; a double-click opens it: the sheet bar has
    "Sheet 1" and "Notes"; every annotation is back with what it says; the dimension's
-   limits; the Slice section's trimmed copy and the offset section's cut line; the
+   limits; the Slice section's depth and the offset section's cut line; the
    automated marks and the edge extension; the title blocks 1 / 2 and 2 / 2.
 C  Double-click the dimension: Display Class: "10 H7"; OK; Ctrl+Z: the limits again;
    Ctrl+Y: the class.
@@ -169,9 +169,10 @@ def b_whole():
         obj("dim").FormatSpec == DIA + "10.015\n" + DIA + "10.000",
         obj("dim").FormatSpec,
     )
-    clip = obj("slice").SciForgeDepthClip
-    h.check("the slice's copy", clip is not None and clip.Shape.Volume > 0)
-    h.check("the slice cuts it", [x.Name for x in obj("slice").Source] == [clip.Name])
+    from sciforge import drawing_depth
+
+    h.check("the slice's depth", drawing.section_depth(obj("slice"))[0] == "Slice")
+    h.check("its deeper lines switched off", len(drawing_depth.stored(obj("slice"))) > 0)
     profile = obj("offset").CuttingToolWireObject
     h.check("the offset section's cut line", profile is not None and len(profile.Geometry) == 3)
     h.check(

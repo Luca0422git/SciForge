@@ -15,7 +15,7 @@ A  Workspace > Design, Fillet 1 radius 12 in the timeline, OK; Workspace > Drawi
 B  Hole 1 moved to (25, 15) and made 12 mm across (by script): the diameter's limits are
    12.018 / 12.000 (H7 at 12), the ordinate reads 25, the leader's arrow is on the moved
    hole, the centre mark went with it, the frame stays on hole 2, the Slice section's
-   trimmed copy is made again, the offset section still has its geometry.
+   lines beyond the cut are worked out again, the offset section still has its geometry.
 C  Back in the design, Ctrl+Z (the fillet edit undone): the arc length reads 12.57 again.
 """
 
@@ -57,7 +57,10 @@ def s_check():
     h.check("arc 12.57", w.describe(obj("arc")) == "⌒12.57", w.describe(obj("arc")))
     h.check("the offset section has geometry", len(obj("offset").getVisibleEdges()) > 0)
     h.check("the slice section has geometry", len(obj("slice").getVisibleEdges()) > 0)
-    state["clip"] = obj("slice").SciForgeDepthClip.Shape.Volume
+    from sciforge import drawing_depth
+
+    h.check("the slice switches lines off", len(drawing_depth.stored(obj("slice"))) > 0)
+    state["sig"] = drawing_depth.signature(obj("slice"))
     state["ext"] = drawing.extensions_of(w.base())[0]
     h.shot("s-set-up")
 
@@ -171,10 +174,11 @@ def b_followed():
         [-15.0, -10.0, 6.0] in [[round(v, 3) for v in m] for m in marks],
         marks,
     )
-    volume = obj("slice").SciForgeDepthClip.Shape.Volume
-    h.check(
-        "the slice's copy made again", abs(volume - state["clip"]) > 1e-6, (volume, state["clip"])
-    )
+    from sciforge import drawing_depth
+
+    sig = drawing_depth.signature(obj("slice"))
+    h.check("the slice's lines worked out again", sig != state["sig"], (sig, state["sig"]))
+    h.check("it still switches lines off", len(drawing_depth.stored(obj("slice"))) > 0)
     h.check("the offset section still drawn", len(obj("offset").getVisibleEdges()) > 0)
     h.shot("b-hole")
 

@@ -538,6 +538,29 @@ def projected_axes(parent_axes, kind):
     return direction, xdir
 
 
+def is_iso_kind(kind):
+    """True for the projected views at the parent's corners (isometric)."""
+    return kind in _ISO
+
+
+def polygon_area(points):
+    """Signed area of a closed polygon (counter-clockwise positive)."""
+    area = 0.0
+    for (x1, y1), (x2, y2) in zip(points, list(points[1:]) + list(points[:1])):
+        area += x1 * y2 - x2 * y1
+    return area / 2.0
+
+
+def point_in_polygon(points, p):
+    """True when the point p lies inside the closed polygon `points` (even-odd rule)."""
+    x, y = p
+    found = False
+    for (x1, y1), (x2, y2) in zip(points, list(points[1:]) + list(points[:1])):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            found = not found
+    return found
+
+
 def outside(dx, dy, half_w, half_h, margin=2.0):
     """The mouse is out of the parent view's box (Fusion shows no projection over it)."""
     return abs(dx) > half_w + margin or abs(dy) > half_h + margin
@@ -647,6 +670,23 @@ def section_line(p1, p2, side, projection):
     return {"t": t, "n": n, "look": look, "mid": mid, "length": length}
 
 
+def simplify_line(points, tolerance_deg=0.5):
+    """A cut line without the points in the middle of a straight run (a click on the way
+    along a segment is no bend)."""
+    pts = [tuple(p) for p in points]
+    out = pts[:1]
+    for i in range(1, len(pts)):
+        if i + 1 < len(pts):
+            a, b, c = out[-1], pts[i], pts[i + 1]
+            d1 = math.atan2(b[1] - a[1], b[0] - a[0])
+            d2 = math.atan2(c[1] - b[1], c[0] - b[0])
+            diff = abs((d2 - d1 + math.pi) % (2 * math.pi) - math.pi)
+            if diff < math.radians(tolerance_deg) and math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-9:
+                continue
+        out.append(pts[i])
+    return out
+
+
 def section_kind(points, tolerance_deg=1.0):
     """Fusion's section type from the cut line's points (parent view coordinates): Full
     (one straight segment), Half (two segments at a right angle), Offset (more segments,
@@ -654,6 +694,7 @@ def section_kind(points, tolerance_deg=1.0):
     when two points coincide."""
     if len(points) < 2:
         return None
+    points = simplify_line(points)
     dirs = []
     for a, b in zip(points, points[1:]):
         dx, dy = b[0] - a[0], b[1] - a[1]
