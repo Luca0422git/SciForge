@@ -662,6 +662,20 @@ def orientation_of(view):
     return _get(view, "SciForgeOrientation", "") or "Front"
 
 
+def is_isometric(view):
+    """A view looking at the design from a slant (Home, or an isometric projected view):
+    its lengths are foreshortened, so Fusion does not dimension it. A section is a true
+    view of its cut whatever its direction; a detail is what its parent is."""
+    if view.TypeId == SECTION:
+        return False
+    if view.TypeId == DETAIL:
+        parent = view.BaseView
+        return is_isometric(parent) if alive(parent) else False
+    d = view.Direction
+    big = [abs(c) for c in (d.x, d.y, d.z) if abs(c) > 1e-6]
+    return len(big) > 1
+
+
 def _family(view):
     """A view and the projected views made from it, at any depth."""
     found = [view]

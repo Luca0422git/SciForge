@@ -1749,6 +1749,12 @@ class DimensionPanel(DrawingPanel):
 
     def on_press(self, point, event):
         view, name, local = pick_at(self.page, point, self.tolerance())
+        if name is not None and drawing.is_isometric(view):
+            self.message.setText(
+                "An isometric view cannot be dimensioned: its lengths are drawn shorter "
+                "than they are. Dimension a front, top or side view."
+            )
+            return True
         if (
             name is not None
             and (not self.picks or drawing.same(self.picks[0][0], view))

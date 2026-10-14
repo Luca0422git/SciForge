@@ -14,6 +14,9 @@ B  The bottom edge: a horizontal dimension 50, placed below. The left edge: vert
 C  Undo removes the last one (the angle); Redo brings it back.
 D  DIMENSIONS > Diameter Dimension on a fillet: a diameter 10 (the forced kind).
 E  Dimension, an edge picked, Esc: no dimension left behind.
+F  An isometric view (added by script at the lower right): Dimension, a click on one of
+   its edges: it says an isometric view cannot be dimensioned (Fusion's rule); nothing
+   made; Esc.
 """
 
 import math
@@ -213,6 +216,52 @@ def e_done():
     h.check("no dimension left behind", len(dims()) == state["count"], len(dims()))
 
 
+# -- F ------------------------------------------------------------------------------------------
+def f_iso():
+    from sciforge import drawing
+    from sciforge import drawing_core as core
+
+    state["count"] = len(dims())
+    kind = core.projected_kind(1.0, -1.0, d.page().ProjectionType)
+    state["iso"] = drawing.add_projected(base(), kind, BASE[0] + 100.0, BASE[1] - 80.0)
+    App.ActiveDocument.recompute()
+
+
+f_iso.wait_ms = 3000
+
+
+def f_start():
+    from sciforge import drawing
+
+    h.check("an isometric view", drawing.is_isometric(state["iso"]), state["iso"].Direction)
+    h.check("the base view is not", not drawing.is_isometric(base()))
+    h.ribbon("Dimension")
+
+
+def f_click():
+    point = d.edge_point(state["iso"], lambda info: info["kind"] == "line")
+    if h.check("an edge of the isometric view", point is not None):
+        d.click_at(*point)
+
+
+f_click.wait_ms = 1000
+
+
+def f_refused():
+    p = d.panel_of("DimensionPanel")
+    h.check(
+        "says it cannot be dimensioned",
+        p is not None and "isometric view cannot be dimensioned" in p.message.text(),
+        p and p.message.text(),
+    )
+    h.check("nothing made", len(dims()) == state["count"], len(dims()))
+    d.key(QtCore.Qt.Key_Escape)
+
+
+def f_done():
+    h.check("Esc ends it", d.panel() is None)
+
+
 h.run(
     "drawing_dimensions",
     [new_design]
@@ -239,5 +288,10 @@ h.run(
         e_escape,
         e_second_escape,
         e_done,
+        f_iso,
+        f_start,
+        f_click,
+        f_refused,
+        f_done,
     ],
 )
