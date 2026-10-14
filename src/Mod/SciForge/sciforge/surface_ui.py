@@ -1780,7 +1780,18 @@ class ExtendPanel(SurfacePanel):
             [("Natural", "natural"), ("Perpendicular", "perpendicular"), ("Tangent", "tangent")],
         )
         self.add_combo(
-            "alignment", "Edge Alignment", [("Free Edges", "free"), ("Align Edges", "align")]
+            "alignment",
+            "Edge Alignment",
+            [
+                ("Free Edges", "free"),
+                (
+                    "Align Edges",
+                    "align",
+                    False,
+                    "Not in SciForge yet: the extension follows the face's own surface, or "
+                    "carries it on tangent where it cannot",
+                ),
+            ],
         )
 
     def update_visibility(self):
@@ -2574,7 +2585,11 @@ def edit(feature):
         kind = surface.kind_of(leader)
         _edit(PANELS[kind], leader)
     except Exception as exc:
-        warn("could not edit %s: %s" % (feature.Label, exc))
+        try:
+            label = feature.Label
+        except Exception:
+            label = "the step"
+        warn("could not edit %s: %s" % (label, exc))
 
 
 # A plain table (the unit tests and the registry read the names from the source).

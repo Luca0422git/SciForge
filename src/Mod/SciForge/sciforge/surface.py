@@ -39,6 +39,8 @@ LINKS = ("Refs", "Refs2", "Refs3")
 PLANE_TYPES = ("App::Plane", "PartDesign::Plane", "Part::DatumPlane")
 LINE_TYPES = ("App::Line", "PartDesign::Line", "Part::DatumLine")
 POINT_TYPES = ("App::Point", "PartDesign::Point", "Part::DatumPoint")
+# Construction geometry: it lives in a body (its Origin) but picking it never means that body.
+CONSTRUCTION_TYPES = PLANE_TYPES + LINE_TYPES + POINT_TYPES
 
 # Dialog option -> the feature's number property (so a parameter or formula can drive it).
 NUMBERS = {
@@ -281,7 +283,7 @@ def _as_body_pick(obj, sub, step):
     if sub:
         return (obj, sub)
     body = bodies.body_of(obj)
-    if body is not None and body is not obj and obj.TypeId not in PLANE_TYPES + LINE_TYPES:
+    if body is not None and body is not obj and obj.TypeId not in CONSTRUCTION_TYPES:
         if not getattr(obj, "TypeId", "").startswith("Sketcher"):
             return (body, "")
     return (obj, sub)
@@ -618,7 +620,7 @@ def trim_cutter(step, leader, refs, around):
         raise NeedsPick("Select the trim tool: a surface, a plane, a sketch curve or a body.")
     obj, sub = tool
     body = bodies.body_of(step)
-    own = bodies.body_of(obj) is body and obj.TypeId not in PLANE_TYPES + LINE_TYPES
+    own = bodies.body_of(obj) is body and obj.TypeId not in CONSTRUCTION_TYPES
     if body is not None and own and not sub.startswith("Edge"):  # an origin plane is no body
         others = [whole_shape(o) for o, _s in refs[1]]
         if not others:
@@ -781,8 +783,10 @@ def _set_links(step, prop, refs, keep_steps=None):
     value = []
     had = {}
     for obj, sub in refs_of(step, prop):
+        if sub or obj.TypeId in CONSTRUCTION_TYPES or curves.is_sketch(obj):
+            continue  # an origin plane or a whole sketch is not its body
         body = bodies.body_of(obj)
-        if not sub and body is not None:
+        if body is not None:
             had[body.Name] = obj
     for obj, sub in _flat(refs):
         if bodies.is_body(obj):
@@ -1203,6 +1207,8 @@ def _fill_tools(step):
     found = []
     own = bodies.body_of(step)
     for obj, sub in refs_of(step, "Refs"):
+        if obj.TypeId in CONSTRUCTION_TYPES:
+            continue  # an origin plane is not its body
         body = bodies.body_of(obj)
         if not sub and body is not None and body is not own and body not in found:
             found.append(body)
