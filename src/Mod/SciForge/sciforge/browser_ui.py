@@ -232,8 +232,13 @@ def _open_drawing(page):
 
 def _delete_drawings(doc, names):
     """Delete whole drawings (their views, dimensions and sheet), one undo step."""
-    from . import drawing
+    from . import drawing, drawing_ui
 
+    tab = drawing_ui.active_tab()
+    for name in names:
+        page = doc.getObject(name)
+        if page is not None:
+            drawing_ui.close_tab(page)
     doc.openTransaction("Delete Drawing")
     try:
         for name in names:
@@ -248,6 +253,7 @@ def _delete_drawings(doc, names):
     except Exception:
         pass
     doc.recompute()
+    drawing_ui.restore_tab(tab)
 
 
 def _joint_action(name, obj):
@@ -679,7 +685,12 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         try:
             Gui.Selection.clearSelection()
             for item in self.selectedItems():
-                obj = self._object(item.data(1, ROLE_NODE))
+                node = item.data(1, ROLE_NODE)
+                if node["kind"] == "drawing":
+                    # (not in the 3D view; FreeCAD would bring the drawing's tab to the
+                    # front when it is selected, even for a right-click > Delete)
+                    continue
+                obj = self._object(node)
                 if obj is not None:
                     Gui.Selection.addSelection(self._doc.Name, obj.Name)
         except Exception as exc:

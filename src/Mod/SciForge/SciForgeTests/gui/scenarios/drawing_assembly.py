@@ -17,6 +17,9 @@ E  TABLES > Balloon: a click on empty paper says to click a component's edge; a 
    it: balloon 1; Enter. Ctrl+Z removes both (one step); Ctrl+Y brings them back.
 F  The Post renamed Pillar (by script): the parts list's row 2 says Pillar.
 G  Table again: this drawing already has a parts list.
+H  The browser's right-click menu of the first drawing (Open Drawing, Rename, Delete);
+   Delete: that drawing, its view and its tab are gone, the other drawing (still the
+   active tab) and both components stay; Undo (the quick-access button) brings it back with its view.
 """
 
 import FreeCAD as App
@@ -272,6 +275,63 @@ def g_refused():
     h.check("no Table dialog", d.panel() is None, d.panel())
 
 
+# -- H ------------------------------------------------------------------------------------------
+def drawing_names():
+    from sciforge import drawing
+
+    return sorted(p.Label for p in drawing.drawings(App.ActiveDocument))
+
+
+def part_views():
+    from sciforge import drawing
+
+    return [o.Name for o in App.ActiveDocument.Objects if o.TypeId in drawing.VIEW_TYPES]
+
+
+def h_menu():
+    from SciForgeTests.gui import timeline_input as t
+
+    state["views"] = part_views()
+    entries = [e for e, _on in t.row_menu_entries("Asm Drawing")]
+    h.check(
+        "Open Drawing, Rename, Delete",
+        all(x in entries for x in ("Open Drawing", "Rename", "Delete")),
+        entries,
+    )
+    t.row_menu("Asm Drawing", "Delete")
+
+
+h_menu.wait_ms = 1500
+
+
+def h_gone():
+    h.check("the drawing is gone", drawing_names() == ["Asm Drawing 2"], drawing_names())
+    from sciforge import drawing_ui
+
+    tabs = [sub.windowTitle().replace("[*]", "") for sub in drawing_ui._area().subWindowList()]
+    h.check("its tab closed", "Asm Drawing" not in tabs, tabs)
+    h.check("its view too", len(part_views()) == len(state["views"]) - 1, part_views())
+    h.check(
+        "both components stay",
+        abs(state["plate_body"].Shape.Volume - 80 * 50 * 8) < 1e-6
+        and abs(state["post_body"].Shape.Volume - 20 * 20 * 30) < 1e-6,
+    )
+    h.check(
+        "the other drawing's tab stays", d.page() is not None and d.page().Label == "Asm Drawing 2"
+    )
+    from SciForgeTests.gui import timeline_input as t
+
+    t.undo()
+
+
+h_gone.wait_ms = 2000
+
+
+def h_back():
+    h.check("Undo: the drawing is back", drawing_names() == ["Asm Drawing", "Asm Drawing 2"])
+    h.check("with its view", sorted(part_views()) == sorted(state["views"]), part_views())
+
+
 h.run(
     "drawing_assembly",
     [new_design]
@@ -287,5 +347,6 @@ h.run(
     + d.drawing_steps("asm", base_at=BASE, scale="1:1", orientation="Front")
     + [c_balloon, c_refused, d_table, d_move, d_place, d_made, d_done]
     + [e_start, e_paper, e_said, e_place_post, e_plate, e_place_plate, e_enter]
-    + [e_made, e_undone, e_redone, f_rename, f_followed, g_table, g_refused],
+    + [e_made, e_undone, e_redone, f_rename, f_followed, g_table, g_refused]
+    + [h_menu, h_gone, h_back],
 )

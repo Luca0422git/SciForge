@@ -455,7 +455,9 @@ def create_drawing(
     _add(page, "App::PropertyString", "SciForgeUnits", units)
     _add(page, "App::PropertyString", "SciForgeSheet", sheet)
     _add(page, "App::PropertyBool", "SciForgeTitleBlock", bool(title_block))
-    _add(page, "App::PropertyLinkList", "SciForgeSources", sources)
+    # (Global: the bodies may be inside components; a plain link list warned that they
+    # were out of its scope on every recompute)
+    _add(page, "App::PropertyLinkListGlobal", "SciForgeSources", sources)
     _add(page, "App::PropertyStringList", "SciForgeTitleEdits", [])
     date = datetime.date.today().isoformat()
     values = core.title_values(

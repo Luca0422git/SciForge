@@ -92,6 +92,39 @@ def page_of_window(sub):
     return None
 
 
+def close_tab(page):
+    """Close a drawing's tab (before the drawing is deleted: a page removed with undo kept
+    keeps its tab open). Outside the delete's undo step, so that Undo brings the drawing
+    back closed instead of reopening its tab before its sheet is back."""
+    try:
+        if page.ViewObject is not None and page.ViewObject.Visibility:
+            page.ViewObject.hide()
+    except Exception as exc:
+        log("tab of %s not closed: %s" % (getattr(page, "Label", "?"), exc))
+
+
+def active_tab():
+    """The active tab (MDI sub-window), to come back to after a drawing is deleted."""
+    area = _area()
+    return area.activeSubWindow() if area is not None else None
+
+
+def restore_tab(sub):
+    """Make `sub` the active tab again if it still exists (FreeCAD brought another tab to
+    the front when a drawing's tab closed, even one in the background)."""
+    area = _area()
+    if area is None or sub is None:
+        return
+    try:
+        if any(s is sub or s == sub for s in area.subWindowList()) and (
+            area.activeSubWindow() is not sub
+        ):
+            area.setActiveSubWindow(sub)
+            _later(sync_mode, ms=0)
+    except RuntimeError:
+        pass  # (it was the deleted drawing's own tab)
+
+
 def page_widget():
     """TechDraw's graphics view of the active drawing tab."""
     area = _area()
