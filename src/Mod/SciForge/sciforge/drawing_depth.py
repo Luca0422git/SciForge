@@ -128,8 +128,10 @@ class _Frame:
             x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, d[0], d[1], d[2], 0, 0, 0, 0, 1
         )
         box = behind.transformed(self.matrix, True).optimalBoundingBox(True, False)
+        self.middle = ((box.XMin + box.XMax) / 2.0, (box.YMin + box.YMax) / 2.0)
+        self.depth = (box.ZMin + box.ZMax) / 2.0
         self.move = App.Matrix()
-        self.move.move(V(-(box.XMin + box.XMax) / 2.0, -(box.YMin + box.YMax) / 2.0, 0))
+        self.move.move(V(-self.middle[0], -self.middle[1], 0))
 
     def shape(self, shape):
         return shape.transformed(self.matrix, True).transformed(self.move, True)
@@ -137,6 +139,42 @@ class _Frame:
     def point(self, p):
         q = self.move.multVec(self.matrix.multVec(V(p)))
         return V(q.x, q.y, 0)
+
+
+_CENTRES = {}  # (document, section) -> (what it was worked out from, the centre)
+
+
+def cut_centre(section):
+    """The model point TechDraw centres a straight section on (the middle of the box of
+    what lies behind its cut, seen its way), or None. Kept until the parts or the cut
+    change."""
+    from . import drawing_core as core
+
+    whole = _whole(_sources(section))
+    if whole is None:
+        return None
+    key = _key(section)
+    sig = "%s | %s %s %s %s" % (
+        _fingerprint(whole),
+        tuple(section.SectionOrigin),
+        tuple(section.SectionNormal),
+        tuple(section.Direction),
+        tuple(section.XDirection),
+    )
+    known = _CENTRES.get(key)
+    if known is not None and known[0] == sig:
+        return known[1]
+    size = max(whole.BoundBox.DiagonalLength * 2.0, 10.0)
+    behind = _common(whole, _slab(section, size, size, FRONT))
+    if behind is None:
+        return None
+    frame = _Frame(section, behind)
+    axes = drawing.axes_of(section)
+    d = axes[2]
+    lift = (d[0] * frame.depth, d[1] * frame.depth, d[2] * frame.depth)
+    centre = core.to_model(axes, lift, frame.middle[0], frame.middle[1])
+    _CENTRES[key] = (sig, centre)
+    return centre
 
 
 def _seen(flat):
@@ -427,7 +465,12 @@ def refresh(section, force=False):
     sig = "%s %g | %s | %s" % (mode, value, _signature(lines), _fingerprint(whole))
     if not force and sig == signature(section):
         return False
-    hidden = hidden_lines(section, lines, whole, mode, value)
+    try:
+        hidden = hidden_lines(section, lines, whole, mode, value)
+    except Exception as exc:
+        # (do no harm: every line shows, the next change tries again)
+        warn("lines of %s: %s" % (section.Label, exc))
+        hidden = {}
     data = [[i] + [round(c, 4) for c in _middle(e)] for i, e in sorted(hidden.items())]
     changed = _apply(section, hidden, data)
     _SIGNATURES[_key(section)] = sig

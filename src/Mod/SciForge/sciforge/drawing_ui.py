@@ -451,8 +451,9 @@ DEPTH_WATCH_MS = (3000, 6000, 12000)  # a big section's lines can come later sti
 
 
 def _watch_depth(doc_name, step=0):
-    """A Slice / Distance section switches off its deeper lines once TechDraw has drawn
-    them, however long that takes (a quick look: nothing happens when they are done)."""
+    """A straight section switches off its deeper lines (Slice / Distance) and a cut
+    hole's seam line once TechDraw has drawn it, however long that takes (a quick look:
+    nothing happens when they are done)."""
     doc = App.getDocument(doc_name) if doc_name in App.listDocuments() else None
     if doc is None or getattr(doc, "Restoring", False):
         return
@@ -460,7 +461,7 @@ def _watch_depth(doc_name, step=0):
     try:
         for page in drawing.all_pages(doc):
             for view in drawing.all_views(page):
-                if drawing.is_section(view) and drawing.section_depth(view)[0] != "Full":
+                if view.TypeId == drawing.SECTION:
                     found = True
                     drawing.refresh_depth(view)
     except Exception as exc:
@@ -1672,6 +1673,9 @@ class SectionPanel(DrawingPanel):
             self.message.setText("")
         except drawing.DrawingError as exc:
             self.message.setText(str(exc))
+            return
+        except Exception as exc:
+            warn("section depth: %s" % exc)
             return
         self.schedule()
 

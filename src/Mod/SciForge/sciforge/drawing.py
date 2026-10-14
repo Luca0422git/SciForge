@@ -243,7 +243,17 @@ def centre_of(view):
     TechDraw centres a view on the exact bounding box of its parts seen along the view
     (a copy without the 3D view's mesh); its getGeometricCenter() measures the meshed
     parts instead, which is off by the mesh's sag on curved faces (0.02 mm on an R8
-    fillet): marks and cuts made from it missed TechDraw's lines by that much."""
+    fillet): marks and cuts made from it missed TechDraw's lines by that much. A
+    straight section is centred on what lies behind its cut."""
+    if getattr(view, "TypeId", "") == SECTION:
+        try:
+            from . import drawing_depth
+
+            centre = drawing_depth.cut_centre(view)
+            if centre is not None:
+                return centre
+        except Exception as exc:
+            log("section centre of %s: %s" % (getattr(view, "Label", "?"), exc))
     try:
         import Part
 
@@ -911,6 +921,17 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None, points=N
     origin = core.to_model(axes, centre_of(parent), mid[0], mid[1])
     label = label or core.next_label(used_labels(page))
     complex_cut = len(pts) > 2
+    if depth is not None and depth[0] != "Full":
+        # (refused before anything is made)
+        if depth[0] not in DEPTH_MODES:
+            raise DrawingError("Choose Full, Slice or Distance.")
+        if depth[0] == "Distance" and (depth[1] if len(depth) > 1 else 0.0) <= 0:
+            raise DrawingError("Type how far behind the cut the section shows (more than 0 mm).")
+        if complex_cut:
+            raise DrawingError(
+                "Section depth works with a straight cut line: choose Full for a line "
+                "with bends."
+            )
     section = doc.addObject(COMPLEX if complex_cut else SECTION, "Section")
     section.Source = _view_sources(parent)
     section.Direction = V(*direction)

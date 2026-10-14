@@ -7,7 +7,7 @@ is in drawing_breakout.py."""
 
 import math
 
-from . import commands, drawing, drawing_breakout, drawing_ui
+from . import commands, drawing, drawing_breakout, drawing_ui, warn
 from .compat import QtCore, QtWidgets
 from .drawing_ui import DrawingPanel, view_at
 
@@ -59,7 +59,11 @@ class BreakoutPanel(DrawingPanel):
     def _default(self):
         if self._closed or self.view is None:
             return
-        self.distance.setText("%g" % drawing_breakout.default_depth(self.view))
+        try:
+            self.distance.setText("%g" % drawing_breakout.default_depth(self.view))
+        except Exception as exc:
+            warn("breakout depth: %s" % exc)
+            return
         self._depth()
 
     def _depth(self, *_args):
@@ -70,6 +74,9 @@ class BreakoutPanel(DrawingPanel):
             self.message.setText("")
         except drawing.DrawingError as exc:
             self.message.setText(str(exc))
+            return
+        except Exception as exc:
+            warn("breakout depth: %s" % exc)
             return
         self.schedule()
 
