@@ -100,14 +100,18 @@ def a_free():
 
 # -- B joint origin ------------------------------------------------------------------------------
 def b_command():
-    h.fit()
+    # Looking straight down: in the isometric view the pin's top is squeezed along one
+    # diagonal, so a point near its corner is either within a pick radius of an edge (CI
+    # picked the edge: its midpoint and ends only) or nearer a midpoint on the screen.
+    h.view().viewTop()
+    h.fit(iso=False)
     j.menu("Joint Origin")
 
 
 def b_hover():
     p = j.panel()
     h.check("Joint Origin dialog open", p is not None and p.title == "Joint Origin", p and p.title)
-    j.hover(V(1, 41, 10))
+    j.hover(V(1.5, 41.5, 10))  # well inside the top, the corner the nearest snap point
 
 
 def b_snaps():
@@ -121,7 +125,7 @@ def b_snaps():
 
 
 def b_click():
-    h.click(V(1, 41, 10))
+    h.click(V(1.5, 41.5, 10))
 
 
 def b_offset():
@@ -150,6 +154,7 @@ def b_done():
         (t.children("Joint Origins") or []) == ["Joint Origin 1"],
         t.children("Joint Origins"),
     )
+    h.fit()  # back to the isometric view the next steps click in
 
 
 def b_press_j():
