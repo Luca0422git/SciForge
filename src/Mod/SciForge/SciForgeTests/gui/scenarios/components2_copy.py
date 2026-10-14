@@ -67,7 +67,7 @@ def setup_rename():
 def setup_done():
     h.check("Bracket exists", bracket() is not None, c.labels())
     state["steps0"] = len(c.doc().Objects)
-    state["titles0"] = list(t.titles())
+    state["titles0"] = list(cs.all_timeline_titles())
 
 
 # -- A --------------------------------------------------------------------------------------------
@@ -94,7 +94,11 @@ def a_pasted():
     c.box_is("right on the original", copy, [0, 0, 0, 40, 30, 10])
     labels = c.browser_labels()
     h.check("browser: Bracket:1 and Bracket:2", {"Bracket:1", "Bracket:2"} <= set(labels), labels)
-    h.check("no new timeline step", list(t.titles()) == state["titles0"], t.titles())
+    h.check(
+        "no new timeline step",
+        list(cs.all_timeline_titles()) == state["titles0"],
+        cs.all_timeline_titles(),
+    )
     p = c.component_panel()
     if h.check("Move opens on the paste", p is not None, c.panel()):
         h.check("Bracket:2 picked", p.options.get("components") == [copy], p.options)
@@ -163,7 +167,11 @@ def c_pasted():
         return
     state["new"] = copy.Name
     h.check("not an instance", not instances_mod().is_instance(copy))
-    h.check("its own steps in the timeline", len(t.titles()) > len(state["titles0"]), t.titles())
+    h.check(
+        "its own steps in the timeline",
+        len(cs.all_timeline_titles()) > len(state["titles0"]),
+        cs.all_timeline_titles(),
+    )
     p = c.component_panel()
     if h.check("Move opens on it", p is not None, c.panel()):
         h.check("Bracket (1) picked", p.options.get("components") == [copy])

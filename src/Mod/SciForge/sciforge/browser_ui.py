@@ -210,7 +210,11 @@ def _instance_names(doc, rows):
             continue
         obj = doc.getObject(row["name"])
         try:
-            if obj is not None and not instances.is_instance(obj) and instances.has_instances(obj):
+            if obj is None or instances.is_instance(obj):
+                continue
+            # copies the history marker hides do not exist at the marker (a pattern after it)
+            shown = [p for p in instances.instances_of(obj) if not ops.hidden_by_marker(p)]
+            if shown:
                 row["display"] = "%s:1" % obj.Label
         except Exception:
             continue

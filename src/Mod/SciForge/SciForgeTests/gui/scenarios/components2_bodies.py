@@ -84,7 +84,7 @@ def a_preview():
     part = components.container_of(made) if made is not None else None
     h.check("a new component holds the result", part is not None, c.labels())
     h.check("its body 14000", made is not None and c.close(c.volume(made), 14000), c.volume(made))
-    h.check("New Body ticked by it, greyed", p.new_body.isEnabled() is False)
+    h.check("New Body greyed while New Component is on", p.new_body.isEnabled() is False)
     h.shot("A-preview")
 
 
@@ -239,7 +239,7 @@ def f_show_squares():
 
 
 def f_click_xz():
-    h.click(V(15, 0, 18))
+    h.click(V(8, 0, 12))  # the squares are sized from the quarter body being edited
 
 
 def f_preview():

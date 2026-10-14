@@ -243,7 +243,14 @@ def d_follow():
 
 
 # -- E --------------------------------------------------------------------------------------------
+def e_root():
+    # editing Spoke's extrude made Spoke the active component (its timeline shows its own
+    # steps only): the design's ring shows the whole timeline again
+    cs.click_radio(App.ActiveDocument.Label)
+
+
 def e_roll():
+    h.check("the root active", cs.active_label() is None, cs.active_label())
     t.drag_marker(before_title="Circular Pattern 1")
 
 
@@ -290,7 +297,7 @@ def f_direction_box():
 
 def f_click_x():
     h.fit()
-    h.click(V(-30, 0, 0))
+    h.click(V(10, 0, 0))  # between the origin and Spoke (the copies cover x < 0)
 
 
 def f_values():
@@ -389,6 +396,7 @@ h.run(
             d_type,
             d_ok,
             d_follow,
+            e_root,
             e_roll,
             e_rolled,
             e_end,

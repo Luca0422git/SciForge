@@ -56,9 +56,11 @@ class CombinePanel(BodyPanel):
         self.operation, _ = self.combo(
             "Operation", OPERATIONS, self.options["operation"], self._typed
         )
+        # The New Body box shows the user's own choice; New Component (Fusion's) makes the
+        # new body by itself and greys the box (unticking it again joins the target)
         self.new_body, _ = self.check_box(
             "New Body",
-            self.options["new_body"],
+            self.options["new_body"] and not self.options.get("new_component"),
             self._typed,
             "Put the result in a new body (the target body is used up like the tools)",
         )
