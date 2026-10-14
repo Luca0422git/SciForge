@@ -309,7 +309,8 @@ def makes_body(kind):
 
 def with_defaults(kind, options=None):
     merged = dict(spec(kind)["defaults"])
-    merged.update({k: v for k, v in (options or {}).items() if v is not None or k in merged})
+    # a value left empty (None) keeps the starting value
+    merged.update({k: v for k, v in (options or {}).items() if v is not None})
     for key, value in list(merged.items()):
         if isinstance(value, list):
             merged[key] = list(value)

@@ -2383,11 +2383,8 @@ class BoundaryFillPanel(SurfacePanel):
         return any(self._owner(p) == index for p in self.chosen)
 
     def _toggle(self, index):
-        cell = self.cell_data[index]
-        kept = [p for p in self.chosen if self._owner(p) != index]
-        if len(kept) == len(self.chosen):
-            kept.append([float(c) for c in cell["point"]])
-        self.chosen = kept
+        point = self.cell_data[index]["point"]
+        self.chosen = core.toggle_point(self.chosen, index, point, self._owner)
         self.show_picks()
         self._paint_cells()
         self._fill_list()
