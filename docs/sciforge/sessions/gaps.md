@@ -95,8 +95,9 @@ To be copied into MEMORY.md by whoever merges (this branch does not edit MEMORY.
   joins that body too, as in `gaps_extrude_taper_to` X2), `revolve_qa_more.py` P15/P16 (the
   ring apart from the part is a New Body: every body is counted), `shell_draft_qa_shell.py` P4
   (after a drag too far the last good preview is any wall that fits, not only the thin one),
-  `sweep_loft_loft_guides.py` (wait), several op-list checks ("New Component"), golden builder (`reopen`, `age`, roll `start`, picks installed) and
-  runner (closes a reopened document).
+  `sweep_loft_loft_guides.py` (wait), several op-list checks ("New Component"), golden
+  builder (`reopen`, `age`, roll `start`, picks installed) and runner (closes a reopened
+  document).
 
 ## Tests seen failing that this branch did not cause
 
@@ -105,3 +106,12 @@ To be copied into MEMORY.md by whoever merges (this branch does not edit MEMORY.
 - `sweep_loft_web` sometimes keeps the previous preview after a click (a second curve, Extend
   Curves, Flip) and then fails a run of checks; it passed and failed on the same commits,
   also where the changed code never runs (checked with a log line). Suggested as its own task.
+
+## Final runs (2026-10-14, branch head)
+
+`--only base`: unit 469 OK; golden 314 pass + 1 xfail (`plate_hole_grid`, core patch #4);
+smoke 71/71; journey all pass. Scenarios, one at a time: every `extrude*`, `sweep_loft*`,
+`fillet*`, `inspect_construct*`, `hole*`, `patterns*`, `shell_draft*`, `revolve*`,
+`primitives*`, `timeline*`, `components*`, `bodies*` and `gaps_*` scenario passes, except
+`bodies_combine` (fails the same way on the base commit) and `sweep_loft_web` (flaky, see
+above; passed twice in a row at the end).
