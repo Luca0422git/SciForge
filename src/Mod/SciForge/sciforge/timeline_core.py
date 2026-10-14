@@ -18,7 +18,8 @@ before its body's Tip. Only solid steps can be a Tip, so by the Tips alone the m
 sits just before the first rolled-back solid step (or at the end). Fusion's marker can
 also stand before a sketch or plane that comes after the last active solid step: the
 name of the step right after the marker (``marker_before``) says so; it is ignored when
-it does not fit the Tips (after an undo, say).
+it does not fit the Tips (after an undo, say). Before the first solid step every body
+has no Tip (an empty design, like Fusion's timeline rolled to the beginning).
 """
 
 import re
@@ -419,6 +420,19 @@ def build(features, tips, marker_before=None):
     return Timeline(tuple(items), marker, dict(tips), before)
 
 
+def display_names(rows):
+    """{name: what the timeline calls the step} for ``rows`` (build()'s input dicts).
+    Steps are numbered per kind, so the rows of a few kinds (the browser's sketches and
+    construction) get the same names as in the whole timeline."""
+    kinds = [classify(f["type_id"]) for f in rows]
+    names = {}
+    for f, kind, number in zip(rows, kinds, _numbers(rows, kinds)):
+        label = f.get("label", f["name"])
+        title = "%s %d" % (title_base(f["type_id"], kind), number)
+        names[f["name"]] = title if is_default_label(label, f["name"]) else label
+    return names
+
+
 def tooltip(item):
     """Hover text: the step's name, its component, then why it is red/yellow or off."""
     lines = [item.display]
@@ -561,13 +575,12 @@ def _consistent(timeline):
 
 
 def tips_for_slot(timeline, slot):
-    """{body: tip} for the marker dropped after ``slot`` steps. The marker cannot go
-    before the first solid step (FreeCAD needs one to show anything), so it snaps
-    after it. None when nothing would change."""
+    """{body: tip} for the marker dropped after ``slot`` steps (before the first solid
+    step: no body has a Tip, the design is empty). None when nothing would change."""
     solids = _solid_indexes(timeline)
     if not solids:
         return None
-    count = max(1, len([i for i in solids if i < slot]))
+    count = len([i for i in solids if i < slot])
     if count == active_count(timeline) and _consistent(timeline):
         return None
     return tips_for_count(timeline, count)
@@ -586,8 +599,8 @@ def marker_for_slot(timeline, slot):
     solids = _solid_indexes(timeline)
     if not solids:
         return None, None
-    count = max(1, len([i for i in solids if i < slot]))
-    last = solids[count - 1]
+    count = len([i for i in solids if i < slot])
+    last = solids[count - 1] if count else -1
     nxt = solids[count] if count < len(solids) else len(timeline.items)
     before = timeline.items[slot].name if last < slot < nxt else None
     tips = tips_for_count(timeline, count)
@@ -603,7 +616,7 @@ def tips_for_step(timeline, where):
         return None
     current = active_count(timeline)
     if where == "start":
-        count = 1
+        count = 0  # Fusion's Move to Beginning: an empty design
     elif where == "end":
         count = len(solids)
     elif where == "prev":
@@ -612,7 +625,7 @@ def tips_for_step(timeline, where):
         count = current + 1
     else:
         raise ValueError("unknown step %r" % where)
-    if count < 1 or count > len(solids):
+    if count < 0 or count > len(solids):
         return None
     if count == current and _consistent(timeline):
         return None
@@ -621,6 +634,45 @@ def tips_for_step(timeline, where):
 
 def can_roll_forward(timeline):
     return not timeline.at_end
+
+
+def place_at_marker(old, new, tip, note, solids):
+    """Where a new step goes in its body: Fusion adds it at the history marker.
+
+    ``old``/``new``: the body's step names before and after FreeCAD put a new one in
+    (``Body.addObject``: right before the next solid step after the Tip, at the end when
+    the body has no Tip); ``tip``: the body's Tip name (None: none); ``note``: the step the
+    marker stands right before (``marker_before``), if any; ``solids``: names of solid
+    steps. Returns the body's new order, or None when the step already is at the marker
+    or was not put in by FreeCAD's default rule (SciForge placed it on purpose).
+
+    Two places differ from FreeCAD's rule: with no Tip while the body has solid steps
+    (the marker before them all) FreeCAD put the step after every rolled-back step; with
+    the marker standing before a sketch or plane, after that sketch."""
+    if len(new) != len(old) + 1:
+        return None
+    added = [n for n in new if n not in old]
+    if len(added) != 1:
+        return None
+    name = added[0]
+    at = new.index(name)
+    if new[:at] + new[at + 1 :] != list(old):
+        return None
+    if tip is not None and tip not in old:
+        return None  # a Tip FreeCAD does not know: leave it alone
+    start = old.index(tip) + 1 if tip is not None else 0
+    following = next((i for i in range(start, len(old)) if old[i] in solids), len(old))
+    default = following if tip is not None else len(old)
+    if at != default:
+        return None
+    target = None
+    if note and note in old and start <= old.index(note) < following:
+        target = old.index(note)
+    elif tip is None and following < len(old):
+        target = following
+    if target is None or target >= at:
+        return None
+    return list(old[:target]) + [name] + list(old[target:])
 
 
 # -- reordering ----------------------------------------------------------------------

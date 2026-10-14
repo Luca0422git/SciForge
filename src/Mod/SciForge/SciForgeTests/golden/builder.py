@@ -507,10 +507,15 @@ class Builder:
             raise BuildError("move %r: %s" % (step["target"], exc))
 
     def op_roll(self, step):
-        """Drag the history marker after a step (or to the end)."""
+        """Drag the history marker after a step (or to the end, or to the start)."""
         from sciforge import timeline_core, timeline_ops
 
         tl = timeline_ops.timeline(self.doc)
+        if step.get("start"):
+            # Fusion's Move to Beginning: before every step, an empty design.
+            tips, before = timeline_core.marker_for_slot(tl, 0)
+            timeline_ops.roll(self.doc, tips, before=before)
+            return
         if step.get("end"):
             tips = timeline_core.tips_for_count(tl, len(tl.items))
         else:

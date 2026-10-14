@@ -230,7 +230,8 @@ def timeline_sketch():
 def check_synced():
     h.check("timeline click selects the sketch", selected() == ["Sketch"], selected())
     QtWidgets.QApplication.processEvents()
-    h.check("and the browser shows it selected", selected_rows() == ["Sketch"], selected_rows())
+    # The row shows the timeline's name (Fusion: one name in both).
+    h.check("and the browser shows it selected", selected_rows() == ["Sketch 1"], selected_rows())
 
 
 def hover_body():

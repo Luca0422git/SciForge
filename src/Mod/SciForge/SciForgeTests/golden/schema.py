@@ -87,7 +87,7 @@ STEP_KEYS = {
     "unsuppress": ({"target"}, {"comment"}),
     "delete": ({"target"}, {"comment"}),
     "move": ({"target"}, {"before", "after", "comment"}),
-    "roll": (set(), {"after", "end", "comment"}),
+    "roll": (set(), {"after", "end", "start", "comment"}),
 }
 
 # Fusion-style Fillet / Chamfer (sciforge/blend.py, the same code as the F and Chamfer dialogs):
@@ -362,8 +362,9 @@ def validate(model):
             refs = [k for k in ("before", "after") if k in step]
             if len(refs) != 1 or step[refs[0]] not in seen:
                 _fail(here, "move needs one of 'before'/'after' naming an earlier step")
-        if op == "roll" and ("after" in step) == bool(step.get("end")):
-            _fail(here, "roll needs 'after' (a step id) or \"end\": true")
+        ends = ["after" in step, bool(step.get("end")), bool(step.get("start"))]
+        if op == "roll" and ends.count(True) != 1:
+            _fail(here, 'roll needs "after" (a step id), "end": true or "start": true')
         if op == "roll" and "after" in step and step["after"] not in seen:
             _fail(here, "'after' names unknown step %r" % step["after"])
 

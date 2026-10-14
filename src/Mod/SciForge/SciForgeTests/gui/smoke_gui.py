@@ -197,8 +197,10 @@ def _check_browser():
     check("Browser hides features (they are in the timeline)", "Pad" not in labels, labels)
     # Click the eye of the sketch: it must show/hide the sketch in the 3D view.
     tree.refresh()
+    # The sketch is called what the timeline calls it (Fusion shows one name).
+    check("Browser names the sketch like the timeline", "Sketch 1" in tree.labels(), tree.labels())
     item = [
-        i for i in tree.findItems("Sketch", QtCore.Qt.MatchExactly | QtCore.Qt.MatchRecursive, 1)
+        i for i in tree.findItems("Sketch 1", QtCore.Qt.MatchExactly | QtCore.Qt.MatchRecursive, 1)
     ][0]
     sketch = App.ActiveDocument.getObject("Sketch")
     before = sketch.ViewObject.Visibility
@@ -500,7 +502,7 @@ def step_construct():
 
 
 def step_marker():
-    """Drag the history marker to the start: the design rolls back to the first extrude."""
+    """Drag the history marker to the start: an empty design, like Fusion."""
     from sciforge import commands, timeline_ui
 
     widget = timeline_ui._dock.widget()
@@ -515,13 +517,17 @@ def step_marker():
     QtTest.QTest.mouseRelease(marker, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, target)
     body = commands.active_body()
     check(
-        "Dragging the marker to the start rolls back to the first extrude",
-        body.Tip is not None and body.Tip.Name == "Pad",
+        "Dragging the marker to the start rolls back to an empty design",
+        body.Tip is None and body.Shape.isNull(),
         body.Tip and body.Tip.Name,
     )
     widget.refresh()
     widget.step("end")
-    check("Go to end rolls forward again", body.Tip.Name != "Pad", body.Tip.Name)
+    check(
+        "Go to end rolls forward again",
+        body.Tip is not None and body.Tip.Name != "Pad",
+        body.Tip and body.Tip.Name,
+    )
     later(300, step_print)
 
 

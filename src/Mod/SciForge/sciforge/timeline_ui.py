@@ -1108,6 +1108,9 @@ class TimelineWidget(QtWidgets.QWidget):
         self._editor = None
         doc = _doc()
         try:
+            item = self._timeline.find(name) if self._timeline is not None else None
+            if item is not None and (text or "").strip() == item.display:
+                text = None  # Enter on the name shown: no rename ("Extrude 1" stays a number)
             if doc is not None and text is not None:
                 ops.rename(doc, name, text)
         except Exception as exc:

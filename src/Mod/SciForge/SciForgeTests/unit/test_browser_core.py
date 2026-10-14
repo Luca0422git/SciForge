@@ -64,6 +64,17 @@ class BrowserTests(unittest.TestCase):
         bodies = self.folder(other, "Bodies")["children"]
         self.assertEqual([b["active"] for b in bodies], [True, False])
 
+    def test_timeline_names(self):
+        """Fusion's browser and timeline show one name: "Sketch 2", not "Sketch001"."""
+        objects = [o for o in OBJECTS if o["name"] != "Sketch"] + [
+            obj("Sketch001", "Sketcher::SketchObject", body="Body", display="Sketch 2")
+        ]
+        sketch = self.folder(self.tree(objects), "Sketches")["children"][0]
+        self.assertEqual(sketch["label"], "Sketch 2")
+        self.assertEqual(sketch["object_label"], "Sketch001")
+        plane = self.folder(self.tree(), "Construction")["children"][0]
+        self.assertEqual(plane["label"], "DatumPlane")  # no timeline name: the label
+
     def test_origin_in_fusion_order(self):
         self.assertEqual(self.labels(self.folder(self.tree(), "Origin")), ["O", "X", "XY"])
 

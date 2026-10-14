@@ -275,7 +275,7 @@ def playback_start():
 
 
 def check_start():
-    h.check("Go to beginning: first extrude only", near(volume(), BOX), volume())
+    h.check("Go to beginning: an empty design (Fusion)", volume() == 0.0, volume())
 
 
 def playback_end():
@@ -499,7 +499,7 @@ def check_found():
     item = browser_ui.widget().currentItem()
     h.check(
         "browser shows Sketch 1's row",
-        item is not None and item.text(1) == "Sketch",
+        item is not None and item.text(1) == "Sketch 1",  # the timeline's name (Fusion)
         item and item.text(1),
     )
 

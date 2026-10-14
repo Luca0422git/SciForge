@@ -3,7 +3,8 @@
 
 Input: one dict per document object
     {"name", "label", "type_id", "visible", "body" (name of its body or None), "role",
-     "sciforge_type" (optional), "error"/"warning" (optional reason), "suppressed" (bool)}
+     "sciforge_type" (optional), "error"/"warning" (optional reason), "suppressed" (bool),
+     "display" (optional: the timeline's name for it, "Sketch 2", shown instead of "label")}
 Output: a tree of nodes
     {"key", "label", "icon", "kind", "object" (name or None), "visible" (bool or None),
      "active" (bool), "status" ("ok"|"warning"|"error"|"suppressed"), "tip", "children": [...]}
@@ -105,13 +106,14 @@ def _item(prefix, obj, icon, kind, **extra):
     status, tip = _status(obj)
     return _node(
         prefix + obj["name"],
-        obj["label"],
+        obj.get("display") or obj["label"],  # Fusion: the timeline's name ("Sketch 2")
         icon,
         kind,
         obj["name"],
         obj["visible"],
         status=status,
         tip=tip,
+        object_label=obj["label"],  # FreeCAD's label ("Sketch001")
         **extra,
     )
 
