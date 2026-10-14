@@ -176,7 +176,7 @@ The bar at the bottom centre of the view (`navbar_ui.py`, entries in `ribbon_con
 Orbit (see above), Look At, Pan, Zoom / Zoom Window, Fit, Display Settings, Grid and Snaps,
 Viewports. Code: `nav_core.py` (choices and maths, no Qt, unit tested), `navigate_ui.py`
 (Pan, Zoom, Zoom Window), `display_ui.py`, `grid_ui.py` + `increments.py`, `viewports_ui.py`.
-Scenarios: `navbar_display` (71 checks), `navbar_grid` (55), `navbar_viewports` (42), plus
+Scenarios: `navbar_display` (71 checks), `navbar_grid` (55), `navbar_viewports` (57), plus
 `viewcube_menu` for the shared Camera choice. The choices are remembered (preferences
 `Mod/SciForge/Display` and `Mod/SciForge/Grid`, Object Visibility excepted); the test
 harness puts them back to the defaults before every scenario.

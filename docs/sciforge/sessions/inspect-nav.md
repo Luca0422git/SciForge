@@ -29,7 +29,7 @@
   No FreeCAD core change.
 - 7 scenarios with real input, all green: inspect_analysis_zebra (74), inspect_analysis_draft
   (56), inspect_analysis_curvature (71), inspect_analysis_components (28), navbar_display
-  (71), navbar_grid (55), navbar_viewports (42); unit tests `test_analysis_core.py`,
+  (71), navbar_grid (55), navbar_viewports (57); unit tests `test_analysis_core.py`,
   `test_nav_core.py`. Bugs they caught: the overlay not on screen until the next redraw
   (a change inside a view provider's own nodes needs `view.redraw()`), speckles where the
   overlay and the model's faces (and FreeCAD's selection highlight) fought for the same
@@ -64,3 +64,15 @@ layout grid default off (FreeCAD's, Fusion probably differs); viewport panes not
 mesh bodies not analysable; Include Sharp Curves and Cycle Component Color not built;
 Incremental Move not yet on each command's own handle classes (taper, Revolve, Primitives,
 Pattern, Hole point).
+
+Review pass (same day): Pan / Zoom / Zoom Window used to finish the open command first
+(`commands.finish_open_dialog`), so Pan in a sketch closed the sketch; they now leave it open
+and end only when a different command opens (`navbar_viewports` checks it). Multiple Views
+goes back to tabs when another design is opened (its view would float over the panes).
+Regression runs on the final tree: bodies_move, components_move, drag_release_lost,
+extrude_feel_box, handles_on_top, inspect_construct_planes, inspect_section, primitives_box,
+revolve_basic, timeline_browser, viewcube_click / drag / home / menu, viewer_settings_restart
+all green. `orbit_feel` failed once in that 16-scenario run (the orbit about a set centre did
+not turn; probably the xvfb stray button-less move described in MEMORY's selection notes,
+which makes orbit_ui drop the drag) and passed twice right after, alone and after
+inspect_section; orbit_ui is untouched by this branch.
