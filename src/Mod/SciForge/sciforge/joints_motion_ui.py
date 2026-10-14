@@ -751,13 +751,6 @@ class MotionStudyPanel(_JointsPanel):
         super().remove_handles()
 
 
-def play_study(study, mode=None):
-    """Play a stored motion study (its browser menu)."""
-    if study is None:
-        return None
-    return _edit(MotionStudyPanel, study)
-
-
 # -- commands --------------------------------------------------------------------------------------
 class _Command:
     text = ""
