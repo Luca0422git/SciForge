@@ -47,6 +47,7 @@ class MaterialError(ValueError):
 USER_LIBRARY = "User"  # FreeCAD's library in the user's settings folder
 USER_FOLDER = "SciForge"  # where Manage Materials > New Material keeps the user's own
 USER_PREFIX = "user:"
+DENSITY_MODEL = "454661e5-265b-4320-8e6f-fcf6223ac3af"  # FreeCAD's Mechanical/Density model
 FAVORITES = "MaterialFavorites"
 
 
@@ -86,7 +87,7 @@ def user_entries():
     try:
         manager = _manager()
         for uuid, mat in manager.Materials.items():
-            if mat.LibraryName != USER_LIBRARY:
+            if mat.LibraryName != USER_LIBRARY or uuid in _DELETED:
                 continue
             full = manager.getMaterial(uuid)
             rows.append(
@@ -102,6 +103,9 @@ def user_entries():
     except Exception:
         return []
     return sorted(rows, key=lambda r: r["label"].lower())
+
+
+_DELETED = set()  # user materials deleted this session (FreeCAD keeps them in its cache)
 
 
 def _look_of_parent(uuid):
@@ -158,6 +162,11 @@ def create_user_material(name, base_key, density):
     manager = _manager()
     mat = manager.inheritMaterial(base.UUID)
     mat.Name = name
+    try:
+        if not mat.hasPhysicalModel(DENSITY_MODEL):
+            mat.addPhysicalModel(DENSITY_MODEL)  # not every parent's model is carried over
+    except Exception:
+        pass
     mat.setPhysicalValue("Density", "%r g/cm^3" % density)
     manager.save(USER_LIBRARY, mat, "%s/%s.FCMat" % (USER_FOLDER, name), saveAsCopy=True)
     try:
@@ -189,6 +198,7 @@ def delete_user_material(key):
     path = user_material_file(row)
     if os.path.isfile(path):
         os.remove(path)
+    _DELETED.add(row["uuid"])
     try:
         _manager().refresh()
     except Exception:
