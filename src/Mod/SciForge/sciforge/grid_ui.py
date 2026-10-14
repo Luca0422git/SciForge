@@ -2,7 +2,7 @@
 """Navigation bar > Grid and Snaps, Fusion-style.
 
   Layout Grid        a grid on the ground (the XY plane) in the 3D views. Adaptive (its
-                     spacing follows the zoom: about a dozen lines across the view) or
+                     spacing follows the zoom: about six lines across the view) or
                      Fixed (Grid Settings).
   Layout Grid Lock   the adaptive spacing stays where it is while you zoom.
   Snap to Grid       new sketch points snap to the sketch grid (the same setting as the
@@ -32,8 +32,8 @@ DEFAULTS = {
     "Subdivisions": 5,
 }
 NODE_NAME = "SciForgeLayoutGrid"
-MAJOR_COLOR = (0.40, 0.43, 0.48)
-MINOR_COLOR = (0.30, 0.32, 0.36)
+MAJOR_COLOR = (0.34, 0.36, 0.40)
+MINOR_COLOR = (0.22, 0.23, 0.25)
 _STATE = {"nodes": {}, "timer": None, "step": None, "locked_step": None, "observer": None}
 
 

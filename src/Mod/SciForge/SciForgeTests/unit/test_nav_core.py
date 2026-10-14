@@ -88,11 +88,11 @@ class ViewportTest(unittest.TestCase):
 
 class GridTest(unittest.TestCase):
     def test_step(self):
-        self.assertEqual(n.grid_step(120), 10.0)
-        self.assertEqual(n.grid_step(100), 10.0)
+        self.assertEqual(n.grid_step(60), 10.0)
+        self.assertEqual(n.grid_step(100), 20.0)
         self.assertEqual(n.grid_step(30), 5.0)
-        self.assertEqual(n.grid_step(20), 2.0)
-        self.assertEqual(n.grid_step(1300), 200.0)
+        self.assertEqual(n.grid_step(12), 2.0)
+        self.assertEqual(n.grid_step(1300), 500.0)
         self.assertEqual(n.grid_step(0), 10.0)
 
     def test_lines(self):

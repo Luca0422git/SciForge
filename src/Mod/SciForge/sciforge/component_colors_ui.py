@@ -106,7 +106,10 @@ def draw(doc):
     pick = coin.SoPickStyle()
     pick.style = coin.SoPickStyle.UNPICKABLE
     node.addChild(pick)
+    analysed = ui.analysed_owners(doc)  # an analysis shows on those
     for owner in owners(doc):
+        if owner.Name in analysed:
+            continue
         try:
             m = sa.mesh(owner, (), coarse=True)
             if not m.triangles:

@@ -85,6 +85,10 @@ def refresh(doc):
 
         if display_ui.fill_owners(doc) or display_ui.filling():
             display_ui.schedule(doc)  # a hidden-line style leaves the analysed bodies alone
+        from . import component_colors_ui
+
+        if component_colors_ui.is_on(doc):
+            component_colors_ui.schedule(doc)  # so do the component colours
     except Exception as exc:
         warn("analysis display: %s" % exc)
     redraw_views(doc)

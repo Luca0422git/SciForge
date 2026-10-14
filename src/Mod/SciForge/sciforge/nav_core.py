@@ -160,9 +160,9 @@ def views_of(layout):
 NICE = (1.0, 2.0, 5.0)
 
 
-def grid_step(view_height, lines=12.0):
+def grid_step(view_height, lines=6.0):
     """Adaptive grid spacing: a round number (1, 2, 5 x 10^n mm) giving about `lines`
-    major lines across the view."""
+    major lines across the view's height."""
     if view_height <= 0:
         return 10.0
     raw = view_height / lines
