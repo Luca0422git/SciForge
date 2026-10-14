@@ -3437,6 +3437,12 @@ per merged push).
   by `src/Mod/SciForge/CMakeLists.txt`; the test fixtures folder is installed whole.
 - Test checks on clicked positions allow a pixel (CI's window differs by one pixel).
 
+**State at 07:25 UTC 2026-10-14:** CI #117 on f6a7318d9d (every builder of the first plan
+merged + the CI #116 fixes) is fully green; its quick update is
+`SciForge-quick-update-f6a7318d9d98fc32fbffbcf77b8a570662a6cf18`. Luca's base install is full
+build #6 (`SciForge-Windows-installer-20261014-63fe08ff`, core patch #14 included); later
+changes are Python only, so that quick update on top of it is the whole product so far.
+
 **CI #116 / gaps-merge lessons (2026-10-14):**
 - A step must never run while a document recomputes. A long recompute runs Qt's event loop
   nested, a harness step can fire inside it, and FreeCAD's progress handling then swallows
