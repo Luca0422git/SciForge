@@ -148,6 +148,16 @@ ENTER_FINISHES = {
     "SciForge_PolygonCircumscribed",
     "SciForge_PolygonInscribed",
 }
+# FreeCAD's spline tools (Fusion's Fit Point / Control Point Spline) and the undo step
+# their points are kept in while a spline is drawn.
+SPLINE_COMMANDS = (
+    "Sketcher_CreateBSpline",
+    "Sketcher_CreateBSplineByInterpolation",
+    "Sketcher_CreatePeriodicBSpline",
+    "Sketcher_CreatePeriodicBSplineByInterpolation",
+    "Sketcher_CompCreateBSpline",
+)
+SPLINE_STEP = "Add Sketch B-Spline"
 # Commands after which a new dimension gets the in-place value box.
 DIMENSION_COMMANDS = {
     "Sketcher_Dimension",
@@ -736,6 +746,7 @@ class SketchSession:
         from .sketch_line import LineChain
 
         self.line = LineChain(self)
+        self.tool = None  # SciForge's own drawing tool while one runs (sketch_draw.py)
         self.infer = None
         try:
             from .sketch_infer import Inference
@@ -777,6 +788,8 @@ class SketchSession:
     def changed(self, prop):
         if self.infer is not None:
             self.infer.invalidate()
+        if self.tool is not None:
+            self.tool.changed()
         self.fixed.invalidate()
         self._refresh.start()
 
@@ -812,6 +825,9 @@ class SketchSession:
             QtCore.QTimer.singleShot(0, lambda: self._new_dimension(count - 1))
         if kind in ("undo", "redo") and self.editor is not None:
             QtCore.QTimer.singleShot(0, self._close_editor_after_undo)
+        if kind in ("undo", "redo") and self.tool is not None:
+            tool = self.tool
+            QtCore.QTimer.singleShot(0, lambda: _tool_undone(tool))
 
     def _close_editor_after_undo(self):
         """Undo and Redo put the sketch's curves and dimensions back as whole lists, so the
@@ -1022,13 +1038,84 @@ class SketchSession:
         on the 3D view (FreeCAD gives Python no other sign of its active tool)."""
         if self.closed:
             return False
-        if self.line.active:
+        if self.line.active or (self.tool is not None and self.tool.active):
             return True
         try:
             gl = self.gl
             return gl is not None and _is_valid(gl) and gl.cursor().shape() != QtCore.Qt.ArrowCursor
         except Exception:
             return False
+
+    def stop_tool(self):
+        """End SciForge's own drawing tool, if one runs (sketch_draw.py)."""
+        tool = self.tool
+        if tool is not None:
+            try:
+                tool.stop()
+            except Exception as exc:
+                warn("sketch tool: %s" % exc)
+            self.tool = None
+
+    def _spline_tool(self):
+        """FreeCAD's spline tool is drawing (Fusion's Fit Point / Control Point Spline)."""
+        from . import recent
+
+        last = recent.last()
+        if last is None or last[0] not in SPLINE_COMMANDS:
+            return False
+        try:
+            return self.gl is not None and self.gl.cursor().shape() != QtCore.Qt.ArrowCursor
+        except Exception:
+            return False
+
+    def open_spline_step(self):
+        """FreeCAD's spline tool adds a point (or control circle) to the sketch at each
+        click, meant to be kept in its undo step "Add Sketch B-Spline"; but FreeCAD's
+        command runner closes that step as soon as the tool has started, so the points
+        land outside any undo step (Esc could not take them back, and Ctrl+Z after the
+        spline undid the step before it). SciForge opens the step again at the click."""
+        try:
+            if self._spline_tool() and App.getActiveTransaction() is None:
+                App.setActiveTransaction(SPLINE_STEP)
+        except Exception as exc:
+            warn("spline: %s" % exc)
+
+    def _commit_spline(self):
+        """Fusion's Enter / OK on a spline being drawn: the spline is made from the points
+        clicked so far. FreeCAD's spline tool makes it on Esc (or its right click), which
+        SciForge otherwise takes for "cancel": that Esc is handed to FreeCAD directly."""
+        gl = self.gl
+        if gl is None or not _is_valid(gl):
+            return
+        before = len(self.sketch.Geometry)
+        self.keys.pass_escape = True
+        try:
+            gl.setFocus()
+            for kind in (QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease):
+                event = QtGui.QKeyEvent(kind, QtCore.Qt.Key_Escape, QtCore.Qt.NoModifier)
+                QtWidgets.QApplication.sendEvent(gl, event)
+        finally:
+            self.keys.pass_escape = False
+        log(
+            "spline: made from the points clicked (%d curve(s) added)"
+            % (len(self.sketch.Geometry) - before)
+        )
+
+    def _drop_spline(self, cancelled=True):
+        """Fusion's Esc on a spline being drawn cancels that spline: the undo step that
+        holds its points so far (open_spline_step) is dropped. Also run after Enter / OK
+        (cancelled=False): FreeCAD opens a fresh step for the next spline, which would
+        hold whatever the user changes next."""
+        try:
+            active = App.getActiveTransaction()
+            name = active[0] if isinstance(active, (tuple, list)) else active
+            if name == SPLINE_STEP:
+                App.closeActiveTransaction(True)
+                self.sketch.solve()
+                if cancelled:
+                    log("spline: the spline being drawn was cancelled")
+        except Exception as exc:
+            warn("spline: %s" % exc)
 
     def enter_finishes_tool(self):
         """Fusion: Enter while a tool runs and nothing was typed for the shape completes
@@ -1047,6 +1134,12 @@ class SketchSession:
         if self.closed or editing_sketch() is not self.sketch:
             return
         self._typed_since_commit = False
+        if self.tool is not None and self.tool.active:
+            # SciForge's own tool: what can be kept is made (the conic's rho step)
+            tool, self.tool = self.tool, None
+            tool.finish()
+            log("sketch: tool finished")
+            return
         self.line.stop()
         if self.infer is not None:
             self.infer.reset()
@@ -1058,10 +1151,18 @@ class SketchSession:
         except Exception:
             pass
         _state["polygon"] = None if not self.polygon.active else _state["polygon"]
+        spline = self._spline_tool()
+        if spline:
+            try:
+                self._commit_spline()
+            except Exception as exc:
+                warn("spline: %s" % exc)
         try:
             Gui.runCommand("Sketcher_StopOperation")  # quits FreeCAD's tool
         except Exception as exc:
             warn("sketch OK: %s" % exc)
+        if spline:
+            self._drop_spline(cancelled=False)  # the empty step opened for a next spline
         log("sketch: tool finished")
 
     def escape(self):
@@ -1070,6 +1171,7 @@ class SketchSession:
         if self.closed or editing_sketch() is not self.sketch:
             return
         self._typed_since_commit = False
+        self.stop_tool()  # SciForge's own tool: the half-drawn shape goes with it
         self.line.stop()
         if self.infer is not None:
             self.infer.reset()
@@ -1083,10 +1185,13 @@ class SketchSession:
         except Exception:
             pass
         _state["polygon"] = None if not self.polygon.active else _state["polygon"]
+        spline = self._spline_tool()
         try:
             Gui.runCommand("Sketcher_StopOperation")  # quits the tool, clears the selection
         except Exception:
             pass
+        if spline:
+            self._drop_spline()
         try:
             Gui.Selection.clearSelection()
         except Exception:
@@ -1269,6 +1374,7 @@ class SketchSession:
         if self.closed:
             return
         self.closed = True
+        self.stop_tool()
         self.line.stop()
         if self.infer is not None:
             try:
@@ -1324,15 +1430,19 @@ class _KeyFilter(QtCore.QObject):
     def __init__(self, session):
         super().__init__()
         self.session = session
+        self.pass_escape = False  # an Esc meant for FreeCAD (finishing a spline)
 
     def eventFilter(self, obj, event):
         try:
             session = self.session
-            if session.closed:
+            if session.closed or self.pass_escape:
                 return False
             kind = event.type()
             if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
                 return False
+            tool = session.tool
+            if tool is not None and tool.active and tool.key(obj, event):
+                return True  # SciForge's own tool: its value boxes, Enter, its keys
             if isinstance(obj, QtWidgets.QAbstractSpinBox):
                 if kind == QtCore.QEvent.KeyPress:
                     return session.field_key(obj, event)
@@ -1395,6 +1505,32 @@ class _ViewFilter(QtCore.QObject):
             if session.closed:
                 return False
             kind = event.type()
+            tool = session.tool
+            if tool is not None and tool.active:
+                # SciForge's own drawing tool (sketch_draw.py) has the mouse first; the
+                # inference layer below is FreeCAD's tools'
+                if tool.mouse(obj, event):
+                    return True
+                if kind in _REDRAWS:
+                    session.fixed.poke()
+                if (
+                    kind == QtCore.QEvent.MouseButtonPress
+                    and event.button() == QtCore.Qt.RightButton
+                ):
+                    self.right_pressed = event.globalPosition().toPoint()
+                    return True
+                if (
+                    kind == QtCore.QEvent.MouseButtonRelease
+                    and event.button() == QtCore.Qt.RightButton
+                ):
+                    start, self.right_pressed = self.right_pressed, None
+                    pos = event.globalPosition().toPoint()
+                    if start is not None and (pos - start).manhattanLength() <= 6:
+                        QtCore.QTimer.singleShot(0, lambda: _open_marking(pos))
+                    return True
+                if kind == QtCore.QEvent.Leave:
+                    session.areas.left()
+                return False
             if kind == QtCore.QEvent.MouseButtonDblClick and event.button() == QtCore.Qt.LeftButton:
                 if session.line.at_current(event.position().toPoint()):
                     # Fusion: a double-click on the end of the line being drawn ends the
@@ -1403,6 +1539,8 @@ class _ViewFilter(QtCore.QObject):
                     # FreeCAD must not get this second press as another click there.
                     QtCore.QTimer.singleShot(0, session.line.break_chain)
                     return True
+            if kind == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton:
+                session.open_spline_step()  # (FreeCAD's spline tool: the points' undo step)
             # Fusion's inference (sketch_infer.py) may hand FreeCAD a copy of the event
             # with the point moved onto a guide; the copy comes back through here.
             if session.infer is not None and session.infer.mouse(obj, event):
@@ -1454,6 +1592,25 @@ _REDRAWS = (
     QtCore.QEvent.MouseButtonRelease,
     QtCore.QEvent.Leave,
 )
+
+
+def _tool_undone(tool):
+    """Undo / redo while SciForge's own tool runs (from a timer)."""
+    try:
+        if tool.active:
+            tool.undone()
+    except Exception as exc:
+        warn("sketch tool after undo: %s" % exc)
+
+
+def _open_marking(pos):
+    """The sketch's right-click menu at the global position (from a timer)."""
+    try:
+        from . import sketch_marking
+
+        sketch_marking.open_at(pos)
+    except Exception as exc:
+        warn("sketch marking menu: %s" % exc)
 
 
 # Keys that mean something else in a sketch than on the part (Fusion): M moves/copies

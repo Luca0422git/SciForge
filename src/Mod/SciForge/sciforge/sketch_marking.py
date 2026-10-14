@@ -37,7 +37,7 @@ RING = [
 
 LIST = [
     item("Redo", "Std_Redo", "qa_redo", "Ctrl+Y"),
-    item("Trim", "Sketcher_Trimming", "sk_trim", "T"),
+    item("Trim", ("SciForge_SketchTrim", "Sketcher_Trimming"), "sk_trim", "T"),
     item("Offset", "SciForge_SketchOffset", "sk_offset", "O"),
     item("Project", "SciForge_SketchProject", "sk_project", "P"),
     item("Move/Copy", "SciForge_SketchMove", "sk_move", "M"),

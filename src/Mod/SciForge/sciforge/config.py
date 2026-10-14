@@ -185,6 +185,9 @@ PREFERRED = {
     "Std_Delete": "SciForge_Delete",
     "Sketcher_CreateLine": "SciForge_SketchLine",
     "Sketcher_Offset": "SciForge_SketchOffset",
+    # Fusion's T trims a piece, or every piece a press-drag crosses; P is its Project
+    "Sketcher_Trimming": "SciForge_SketchTrim",
+    "Sketcher_Projection": "SciForge_SketchProject",
     # Fusion's Save: Name + Location on the first save, a version description after.
     "Std_Save": "SciForge_Save",
 }
