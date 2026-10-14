@@ -581,6 +581,7 @@ class ViewProviderSurfaceAnalysis:
             return
         content.removeAllChildren()
         self.stripes = []
+        self.curves = []
         try:
             if obj.ViewObject is None or not obj.ViewObject.Visibility:
                 return
@@ -596,6 +597,7 @@ class ViewProviderSurfaceAnalysis:
 
         if kind in (sa.COMB, sa.ISOCURVE):
             data = sa.comb_data(obj) if kind == sa.COMB else sa.iso_data(obj)
+            self.curves = data  # what is drawn (the scenarios count the teeth)
             for owner, curves in data:
                 group = group_for(coin, owner)
                 self._curves(coin, group, curves, kind == sa.ISOCURVE)

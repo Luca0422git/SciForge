@@ -86,11 +86,13 @@ def analyses(kind=None):
     return sa.analyses(App.ActiveDocument, kind) if App.ActiveDocument else []
 
 
-def inspect(label):
-    """INSPECT > `label` in the ribbon menu, with the mouse."""
+def inspect(label, keep_selection=False):
+    """INSPECT > `label` in the ribbon menu, with the mouse (after a click on empty space,
+    unless what is selected should go into the command)."""
     from SciForgeTests.gui import sketch_input as si
 
-    h.click_empty()
+    if not keep_selection:
+        h.click_empty()
     return si.menu_item("INSPECT", label)
 
 
