@@ -28,6 +28,8 @@ ICONS = {
     "Align": "align",
     "ReplaceFace": "replace_face",
     "SplitFace": "split_face",
+    "FilletSets": "fillet",
+    "ChamferSets": "chamfer",
     "SilhouetteSplit": "silhouette_split",
 }
 

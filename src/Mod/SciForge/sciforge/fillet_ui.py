@@ -6,7 +6,7 @@ Picking works like inside a Fusion command:
     (no Ctrl needed; clicking empty space does not lose the picks);
   * click a face to round every sharp edge around it;
   * click a feature in the timeline to round the edges that feature made;
-  * edges tangent to a picked edge are picked with it (Tangent Chain);
+  * edges tangent to a picked edge are picked with it (Tangent Chain; it can be turned off);
   * press F with edges already selected and the fillet starts at once.
 While picking, the part before the fillet is shown see-through with the picks
 highlighted, and the result is previewed solid on top. A blue arrow on the first
@@ -14,36 +14,64 @@ edge drags the radius (chamfer: the distance; two arrows for two distances).
 A size that does not fit is reported in the dialog and OK waits for a fix; nothing
 is printed to the Report view.
 
-Built on PartDesign::Fillet / PartDesign::Chamfer (refined), so Press Pull's fillet
-editing (presspull_core.owning_fillet) keeps working on these features.
+Fusion's selection box has rows ("+" adds one): each row is a selection set with its own
+size and type, one step in the timeline, one undo step. The Fillet dialog also has
+Fusion's Type (Fillet / Rule Fillet / Full Round Fillet), Radius Type (Constant / Chord
+Length / Variable with radius points) and Tangent Chain on/off; the Chamfer dialog has
+chamfer sets. A plain fillet / chamfer (one row, one constant size, Tangent Chain on) is
+FreeCAD's PartDesign::Fillet / Chamfer (refined), so Press Pull's fillet editing
+(presspull_core.owning_fillet) keeps working on it; anything more is SciForge's own step
+(fillet_sets.py), and the dialog swaps one for the other the moment it is needed.
 """
+
 import contextlib
 import math
+import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import blend, commands, log, ui_icon, ui_icon_path, warn
+from . import blend, commands, fillet_core as core, fillet_sets, log, ui_icon, ui_icon_path, warn
 from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction, handle_size_at
 
 GHOST = 75  # transparency (%) of the part before the blend while the preview is shown
 MIN_DRAG = 0.1  # mm: dragging an arrow back through its edge stops here (and it shows "mm")
-# dialog value -> property of the feature that holds its formula
+# dialog value -> property of FreeCAD's feature that holds its formula
 PROPS = {
     "radius": "Radius",
     "distance": "Size",
     "distance2": "Size2",
     "angle": "Angle",
 }
-NAMES = {"radius": "Radius", "distance": "Distance", "distance2": "Distance 2", "angle": "Angle"}
+NAMES = {
+    "radius": "Radius",
+    "chord": "Chord Length",
+    "start": "Start Radius",
+    "end": "End Radius",
+    "distance": "Distance",
+    "distance2": "Distance 2",
+    "angle": "Angle",
+}
 GREEDY = 1  # FreeCAD selection style where a click toggles a pick, like in Fusion's commands
 NORMAL = 0
 PICK_HELP = (
     "Click edges or faces of the part (or a feature in the timeline).\n"
     "Click a pick again to drop it."
 )
+RULE_HELP = (
+    "Click faces of the part or a feature in the timeline: every edge of them is rounded, "
+    "also edges a later change adds (Rule)."
+)
+ROUND_HELP = (
+    "Click the face to round: the top of a rib or a wall. Its two side faces are found by "
+    "themselves."
+)
+VARIABLE_HELP = (
+    "Click on the picked edge to add a radius point there (or Add Point). ✕ drops the edge."
+)
+CLICK_SECONDS = 2.0  # a press on a Variable edge counts as "add a point" for this long
 
 
 @contextlib.contextmanager
@@ -147,6 +175,15 @@ def _combo(items, current=0):
                 item.setEnabled(False)
     box.setCurrentIndex(current)
     return box
+
+
+def _select(box, value):
+    """Show `value` in a combo without running its change handler."""
+    index = box.findData(value)
+    if index >= 0 and index != box.currentIndex():
+        box.blockSignals(True)
+        box.setCurrentIndex(index)
+        box.blockSignals(False)
 
 
 class _Observer:
@@ -265,7 +302,8 @@ class _DocumentWatch:
 
 class _Gate:
     """Only edges/faces that can be rounded (and whole features of the body) can be picked;
-    everything else does not even light up under the mouse."""
+    everything else does not even light up under the mouse. Rule Fillet and Full Round take
+    faces only."""
 
     def __init__(self, panel):
         self.panel = panel
@@ -279,12 +317,41 @@ class _Gate:
                 return False  # another design (its own "Extrude" is not this part's)
             name = (sub or "").split(".")[-1]
             if obj.Name == panel.base.Name:
-                return panel.info.pickable(name) if name else True
+                return panel._pickable(name) if name else True
             if name:
                 return False
             return panel._is_body_feature(obj)  # a timeline click: round the edges it made
         except Exception:
             return False
+
+
+class _PointPanel:
+    """What a radius point's value box (blend_field.ValueField) talks to: the dialog, with
+    the point's own key."""
+
+    def __init__(self, panel):
+        self.panel = panel
+
+    @property
+    def options(self):
+        return {}
+
+    @property
+    def doc(self):
+        return self.panel.doc
+
+    @property
+    def _closed(self):
+        return self.panel._closed
+
+    def _typed(self, key, value):
+        self.panel._typed(key, value)
+
+    def _formula_changed(self, key):
+        self.panel.schedule()
+
+    def _formula_failed(self, key, text):
+        self.panel._formula_failed(key, text)
 
 
 class BlendPanel(Panel):
@@ -303,12 +370,22 @@ class BlendPanel(Panel):
         self.body = feature.getParentGeoFeatureGroup() if feature else commands.find_body()
         self.base = None
         self.info = None
-        self.refs = []
+        # The selection box: one row (selection set) per entry of spec["sets"], its picks in
+        # groups[row]. Rule Fillet: groups[0] and refs2 are the two boxes' faces, features /
+        # features2 the steps picked in them.
+        self.spec = core.default_spec(self.kind)
+        self.groups = [[]]
+        self.active = 0
+        self.refs2 = []
+        self.features = []
+        self.features2 = []
+        self.rule_box = 0
+        self.row_formulas = {}  # (row, or None for the rule radius; value name) -> formula
         self.error = None
-        self.options = blend.default_options(self.kind)
         self.arrows = []  # (ArrowDragger, spot, origin, direction) in global coordinates
         self.value_boxes = ValueBoxes(self)  # the value box next to each arrow
         self.fields = {}  # option name -> ValueField
+        self.point_rows = []  # (position box, radius ValueField, remove button) of Variable
         self.formula_error = ""
         self.keep = None  # blend.References of the later steps (kept on their edges)
         self._saving = None
@@ -323,6 +400,8 @@ class BlendPanel(Panel):
         self._ghost = False  # the preview is shown (before-shape see-through)
         self.view = None
         self._keys = None
+        self._mouse = None
+        self._click = None  # (time, edge name, point) of a press on a Variable row's edge
         self._watch = None
         self._held = []  # QShortcuts switched off while the dialog is open
         self._doc_name = doc.Name
@@ -336,8 +415,7 @@ class BlendPanel(Panel):
         self._hint.timeout.connect(self._compute_hint)
 
         if feature is not None:
-            self.base, self.refs = blend.refs_of(feature)
-            self.options.update(blend.read(feature))
+            self._read(feature)
         else:
             self.base = solid_base(self.body)
         if self.base is not None and not self.base.Shape.isNull():
@@ -349,12 +427,7 @@ class BlendPanel(Panel):
             warn("%s: later steps not tracked: %s" % (self.title, exc))
 
         self._build()
-        if feature is not None:
-            from . import preview
-
-            for key, field in self.fields.items():
-                field.set_formula(preview.formula_of(feature, PROPS[key]))
-            self.show_formulas()
+        self._load_row()
         self.finish_layout()
         try:
             self._start(refs)
@@ -362,46 +435,174 @@ class BlendPanel(Panel):
             self._say("⚠ %s" % exc)
             warn("%s could not start picking: %s" % (self.title, exc))
 
+    def _read(self, feature):
+        """An existing step's settings and picks (FreeCAD's or SciForge's)."""
+        from . import preview
+
+        if fillet_sets.is_sets(feature):
+            base, spec, flat, refs2, features, features2 = fillet_sets.read(feature)
+            self.base, self.spec = base, spec
+            self.groups = core.split_refs(spec, flat) or [[]]
+            while len(self.groups) < len(spec["sets"]):
+                self.groups.append([])
+            if not spec["sets"]:
+                spec["sets"].append(core.new_set(self.kind, spec.get("mode", "fillet")))
+            self.refs2, self.features, self.features2 = refs2, features, features2
+            for prop in feature.PropertiesList:
+                row, option = fillet_sets.prop_key(spec, prop)
+                if option is not None:
+                    formula = preview.formula_of(feature, prop)
+                    if formula:
+                        self.row_formulas[(row, option)] = formula
+        else:
+            self.base, flat = blend.refs_of(feature)
+            self.spec["sets"][0].update(blend.read(feature))
+            self.groups = [list(flat)]
+            for key, prop in PROPS.items():
+                formula = preview.formula_of(feature, prop)
+                if formula:
+                    self.row_formulas[(0, key)] = formula
+
+    # -- the rows of the selection box ---------------------------------------------------------
+    @property
+    def mode(self):
+        return self.spec.get("mode", "fillet")
+
+    @property
+    def refs(self):
+        """The picks of the row (Rule Fillet: the box) that clicks go into now."""
+        if self.mode == "rule":
+            return self.refs2 if self.rule_box == 1 else self.groups[0]
+        return self.groups[self.active]
+
+    @refs.setter
+    def refs(self, value):
+        value = list(value)
+        if self.mode == "rule" and self.rule_box == 1:
+            self.refs2 = value
+        elif self.mode == "rule":
+            self.groups[0] = value
+        else:
+            self.groups[self.active] = value
+
+    @property
+    def options(self):
+        """The values the dialog's boxes edit now: the active row (Rule Fillet: the step)."""
+        if self.mode == "rule":
+            return self.spec
+        return self.spec["sets"][self.active]
+
+    def _row_key(self):
+        return None if self.mode == "rule" else self.active
+
+    def _has_picks(self):
+        if self.mode == "rule":
+            return bool(self.groups[0] or self.features)
+        return any(self.groups)
+
+    def _needs_step(self):
+        """SciForge's own step is needed (FreeCAD's holds one row of one constant size)."""
+        return core.needs_step(self.spec, self.groups)
+
+    def _native_row(self):
+        """The row a FreeCAD Fillet / Chamfer holds (the only row with picks)."""
+        for i, group in enumerate(self.groups):
+            if group:
+                return i
+        return self.active
+
+    def _flat(self):
+        """Every row's picks as one list (the step's Picks), with each row's count."""
+        flat, counts = core.join_refs(self.groups)
+        for row, count in zip(self.spec["sets"], counts):
+            row["count"] = count
+        return flat
+
     # -- layout -------------------------------------------------------------------------
     def _build(self):
-        row = QtWidgets.QWidget()
-        line = QtWidgets.QHBoxLayout(row)
+        self._type_row()
+        rows = QtWidgets.QWidget()
+        line = QtWidgets.QHBoxLayout(rows)
         line.setContentsMargins(0, 0, 0, 0)
         line.setSpacing(4)
-        self.select_button = QtWidgets.QPushButton("Select")
-        self.select_button.setIcon(ui_icon("select"))
-        self.select_button.setCheckable(True)
-        self.select_button.setChecked(True)
-        self.select_button.setToolTip(PICK_HELP)
-        self.select_button.setStyleSheet(
-            "QPushButton:checked { background: #2f7fd1; color: white; border-radius: 3px; }"
-        )
-        self.select_button.clicked.connect(lambda *_: self.select_button.setChecked(True))
-        self.clear_button = QtWidgets.QToolButton()
-        self.clear_button.setText("✕")
-        self.clear_button.setToolTip("Drop every pick")
-        self.clear_button.clicked.connect(self._clear_picks)
-        line.addWidget(self.select_button, 1)
-        line.addWidget(self.clear_button)
-        self.layout.addRow("Edges/Faces/Features", row)
+        self.rows = QtWidgets.QListWidget()
+        self.rows.setObjectName("SciForgeBlendRows")
+        self.rows.setToolTip("The selection sets of this step: each has its own size")
+        self.rows.currentRowChanged.connect(self._row_clicked)
+        buttons = QtWidgets.QVBoxLayout()
+        buttons.setSpacing(2)
+        self.add_row_button = QtWidgets.QToolButton()
+        self.add_row_button.setText("+")
+        self.add_row_button.setToolTip("Add a selection set with its own size")
+        self.add_row_button.clicked.connect(self._add_row)
+        self.remove_row_button = QtWidgets.QToolButton()
+        self.remove_row_button.setText("−")
+        self.remove_row_button.setToolTip("Remove the selected set")
+        self.remove_row_button.clicked.connect(self._remove_row)
+        buttons.addWidget(self.add_row_button)
+        buttons.addWidget(self.remove_row_button)
+        buttons.addStretch(1)
+        line.addWidget(self.rows, 1)
+        line.addLayout(buttons)
+        self.rows_widget = rows
+        self.layout.addRow("Sets", rows)
+        self.rule_rows()
+        self.select_button, self.clear_button, row = self._select_row(0)
+        self.select_label = QtWidgets.QLabel("Edges/Faces/Features")
+        self.layout.addRow(self.select_label, row)
+        self.select2_button, self.clear2_button, row2 = self._select_row(1)
+        self.select2_label = QtWidgets.QLabel("Faces/Features 2")
+        self.layout.addRow(self.select2_label, row2)
+        self.select2_row = row2
         self.help = QtWidgets.QLabel(PICK_HELP)
         self.help.setWordWrap(True)
         self.help.setStyleSheet("color: #9aa4b1;")
         self.layout.addRow(self.help)
         self.chain = QtWidgets.QCheckBox()
-        self.chain.setChecked(True)
-        self.chain.setEnabled(False)
+        self.chain.setChecked(bool(self.spec.get("tangent_chain", True)))
         self.chain.setToolTip(
-            "Edges tangent to a picked edge are always rounded with it: the geometry kernel "
-            "(OpenCASCADE) cannot stop at a tangent edge, so this cannot be switched off yet."
+            "On: edges tangent to a picked edge are rounded with it. Off: only the picked "
+            "edges (the round stops where a tangent edge begins)."
         )
-        self.layout.addRow("Tangent Chain", self.chain)
+        self.chain.toggled.connect(self._chain_toggled)
+        self.chain_label = QtWidgets.QLabel("Tangent Chain")
+        self.layout.addRow(self.chain_label, self.chain)
         self._fields()
         self.formulas = QtWidgets.QLabel("")  # values that follow a parameter / formula
         self.formulas.setWordWrap(True)
         self.formulas.setStyleSheet("color: #b8c7d9;")
         self.formulas.setVisible(False)  # shown when a box follows a formula
         self.layout.addRow(self.formulas)
+        self._update_visible()
+        self._refresh_rows()
+
+    def _type_row(self):
+        """Fusion's Type drop-down (the Fillet dialog has one)."""
+
+    def rule_rows(self):
+        """Rule Fillet's Rule drop-down (the Fillet dialog has one)."""
+
+    def _select_row(self, box):
+        row = QtWidgets.QWidget()
+        line = QtWidgets.QHBoxLayout(row)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(4)
+        button = QtWidgets.QPushButton("Select")
+        button.setIcon(ui_icon("select"))
+        button.setCheckable(True)
+        button.setChecked(box == 0)
+        button.setToolTip(PICK_HELP)
+        button.setStyleSheet(
+            "QPushButton:checked { background: #2f7fd1; color: white; border-radius: 3px; }"
+        )
+        button.clicked.connect(lambda *_a, b=box: self._choose_box(b))
+        clear = QtWidgets.QToolButton()
+        clear.setText("✕")
+        clear.setToolTip("Drop every pick of this set")
+        clear.clicked.connect(lambda *_a, b=box: self._clear_picks(b))
+        line.addWidget(button, 1)
+        line.addWidget(clear)
+        return button, clear, row
 
     def _fields(self):
         raise NotImplementedError
@@ -413,21 +614,173 @@ class BlendPanel(Panel):
         self.layout.addRow(caption, field.widget)
         return field, caption
 
+    def _show_row(self, widget, visible, label=None):
+        widget.setVisible(visible)
+        label = label or self.layout.labelForField(widget)
+        if label is not None:
+            label.setVisible(visible)
+
+    def _update_visible(self):
+        """Which rows of the dialog show (subclasses)."""
+        rule = self.mode == "rule"
+        self._show_row(self.rows_widget, not rule)
+        self._show_row(self.select2_row, rule and self.spec.get("rule") == "between")
+        self.select_label.setText("Faces/Features" if rule else "Edges/Faces/Features")
+        self._show_row(self.chain, self.kind == "fillet" and self.mode == "fillet")
+
+    def _row_text(self, i):
+        row = self.spec["sets"][i]
+        count = len(self.groups[i]) if i < len(self.groups) else 0
+        if self.mode == "full_round":
+            if count != 3:
+                return "%d: click a face" % (i + 1)
+            size = self._round_radius(i)
+            return "%d: full round" % (i + 1) + (", r %.2f mm" % size if size else "")
+        picks = "%d pick%s" % (count, "" if count == 1 else "s")
+        if self.kind == "chamfer":
+            ctype = row.get("chamfer_type", "equal")
+            if ctype == "two":
+                size = "%g / %g mm" % (row.get("distance", 1.0), row.get("distance2", 1.0))
+            elif ctype == "angle":
+                size = "%g mm, %g°" % (row.get("distance", 1.0), row.get("angle", 45.0))
+            else:
+                size = "%g mm" % row.get("distance", 1.0)
+            return "%d: %s · %s" % (i + 1, picks, size)
+        rtype = row.get("radius_type", "constant")
+        if rtype == "chord":
+            size = "chord %g mm" % row.get("chord", 1.0)
+        elif rtype == "variable":
+            size = "variable %g → %g mm" % (row.get("start", 1.0), row.get("end", 1.0))
+        else:
+            size = "%g mm" % row.get("radius", 1.0)
+        return "%d: %s · %s" % (i + 1, picks, size)
+
+    def _round_radius(self, i):
+        try:
+            return fillet_sets.full_round_size(self.info.shape, self.groups[i])
+        except Exception:
+            return None
+
+    def _refresh_rows(self):
+        if not hasattr(self, "rows"):
+            return
+        self.rows.blockSignals(True)
+        try:
+            while self.rows.count() > len(self.spec["sets"]):
+                self.rows.takeItem(self.rows.count() - 1)
+            for i in range(len(self.spec["sets"])):
+                text = self._row_text(i)
+                if i < self.rows.count():
+                    if self.rows.item(i).text() != text:
+                        self.rows.item(i).setText(text)
+                else:
+                    self.rows.addItem(text)
+            self.rows.setCurrentRow(self.active)
+        finally:
+            self.rows.blockSignals(False)
+        self.remove_row_button.setEnabled(len(self.spec["sets"]) > 1)
+        # as tall as its rows (2 to 5), so no row hides half under the list's edge
+        try:
+            line = max(self.rows.sizeHintForRow(0), 16)
+            shown = min(max(self.rows.count(), 2), 5)
+            self.rows.setFixedHeight(line * shown + 2 * self.rows.frameWidth() + 4)
+            self.rows.scrollToItem(self.rows.item(self.active))
+        except Exception:
+            pass
+
+    def _row_clicked(self, index):
+        try:
+            if 0 <= index < len(self.spec["sets"]) and index != self.active:
+                self._activate(index)
+        except Exception as exc:
+            warn("%s set: %s" % (self.title, exc))
+
+    def _activate(self, index, rebuild=True):
+        """Make row `index` the one clicks go into and the boxes edit."""
+        self.active = index
+        self._load_row()
+        self._refresh_rows()
+        if rebuild:
+            self._refs_changed(recompute=False)
+
+    def _add_row(self, *_):
+        """Fusion's "+": a new, empty selection set with the sizes of the current one."""
+        try:
+            if self._closed:
+                return
+            like = self.spec["sets"][self.active]
+            self.spec["sets"].append(core.new_set(self.kind, self.mode, like))
+            self.groups.append([])
+            for (row, key), formula in list(self.row_formulas.items()):
+                if row == self.active:
+                    self.row_formulas[(len(self.groups) - 1, key)] = formula
+            self._activate(len(self.groups) - 1)
+            self.help.setText("Set %d: click the edges for this size." % len(self.groups))
+        except Exception as exc:
+            warn("%s +: %s" % (self.title, exc))
+
+    def _remove_row(self, *_):
+        try:
+            if self._closed or len(self.spec["sets"]) < 2:
+                return
+            gone = self.active
+            del self.spec["sets"][gone]
+            del self.groups[gone]
+            moved = {}
+            for (row, key), formula in self.row_formulas.items():
+                if row is None or row < gone:
+                    moved[(row, key)] = formula
+                elif row > gone:
+                    moved[(row - 1, key)] = formula
+            self.row_formulas = moved
+            self.active = max(0, gone - 1)
+            self._load_row()
+            self._refresh_rows()
+            self._sync()
+            self._refs_changed()
+        except Exception as exc:
+            warn("%s −: %s" % (self.title, exc))
+
+    def _choose_box(self, box):
+        """Rule Fillet's two selection boxes: clicks go into the one chosen."""
+        self.rule_box = box if self.mode == "rule" else 0
+        self.select_button.setChecked(self.rule_box == 0)
+        self.select2_button.setChecked(self.rule_box == 1)
+
+    def _load_row(self):
+        """The boxes show the active row's values and formulas (subclasses add theirs)."""
+        key = self._row_key()
+        for what, field in self.fields.items():
+            value = self.options.get(what)
+            if value is not None:
+                field.set_value(float(value))
+            field.set_formula(self.row_formulas.get((key, what), ""))
+        if hasattr(self, "formulas"):
+            self.show_formulas()
+
     # -- starting -----------------------------------------------------------------------
     def _start(self, refs):
         if self.base is None or self.info is None:
             self._say("⚠ Make a solid first (Create Sketch, then Extrude).")
             return
         if self.target is not None:
-            missing = [r for r in self.refs if not self.info.pickable(r)]
+            missing = 0
+            for i, group in enumerate(self.groups):
+                kept = [r for r in group if self._pickable(r)]
+                if self.mode == "full_round" and len(kept) != len(group):
+                    kept = []
+                missing += len(group) - len(kept)
+                self.groups[i] = kept
+            kept2 = [r for r in self.refs2 if self._pickable(r)]
+            missing += len(self.refs2) - len(kept2)
+            self.refs2 = kept2
             if missing:
-                self.refs = [r for r in self.refs if r not in missing]
                 self._say(
                     "⚠ %d picked edge(s) no longer exist after an earlier change. "
-                    "Pick them again." % len(missing)
+                    "Pick them again." % missing
                 )
         elif refs:
-            self.refs = [r for r in refs if self.info.pickable(r)]
+            self.groups[0] = [r for r in refs if self.info.pickable(r)]
         self._prepare_display()
         Gui.Selection.clearSelection()
         self.observer = _Observer(self)
@@ -447,6 +800,7 @@ class BlendPanel(Panel):
         try:
             self.view = Gui.ActiveDocument.ActiveView
             self._keys = self.view.addEventCallback("SoKeyboardEvent", self._key)
+            self._mouse = self.view.addEventCallback("SoMouseButtonEvent", self._mouse_event)
         except Exception as exc:
             warn("%s: Esc key unavailable: %s" % (self.title, exc))
         self._hold_delete(True)
@@ -455,9 +809,10 @@ class BlendPanel(Panel):
         except Exception as exc:
             warn("%s: Ctrl+S guard unavailable: %s" % (self.title, exc))
         self._sync()
+        self._refresh_rows()
         self._refs_changed()
         if self.target is not None:
-            self._show_preview(bool(self.refs))
+            self._show_preview(self._has_picks())
 
     def _document_event(self, doc, closing):
         try:
@@ -536,6 +891,26 @@ class BlendPanel(Panel):
         except Exception as exc:
             warn("%s key: %s" % (self.title, exc))
 
+    def _mouse_event(self, info):
+        """A press on the edge of a Variable row: remembered, so the click adds a radius point
+        there instead of dropping the edge (nothing is built here: rule 2)."""
+        try:
+            if self._closed or info.get("State") != "DOWN" or info.get("Button") != "BUTTON1":
+                return
+            if self._variable_row() is None:
+                return
+            found = self.view.getObjectInfo(tuple(info.get("Position")))
+            if not found or found.get("Object") != self.base.Name:
+                return
+            name = (found.get("Component") or "").split(".")[-1]
+            if name not in self._variable_chain():
+                return
+            point = App.Vector(found["x"], found["y"], found["z"])
+            placement = self.body.getGlobalPlacement() if self.body else App.Placement()
+            self._click = (time.time(), name, placement.inverse().multVec(point))
+        except Exception as exc:
+            warn("%s click: %s" % (self.title, exc))
+
     def _escape(self):
         try:
             if not self._closed:
@@ -552,17 +927,26 @@ class BlendPanel(Panel):
             warn("%s could not finish: %s" % (self.title, exc))
 
     # -- the picks ----------------------------------------------------------------------
+    def _pickable(self, name):
+        if self.info is None or not name:
+            return False
+        if self.mode in ("rule", "full_round") and not name.startswith("Face"):
+            return False
+        return self.info.pickable(name)
+
     def _display_of(self, ref):
-        if ref.startswith("Edge"):
+        if ref.startswith("Edge") and self.spec.get("tangent_chain", True):
             return self.info.chain(ref)
         return [ref]
 
     def _display_set(self):
         names = []
-        for ref in self.refs:
-            for name in self._display_of(ref):
-                if name not in names:
-                    names.append(name)
+        lists = list(self.groups) + ([self.refs2] if self.mode == "rule" else [])
+        for refs in lists:
+            for ref in refs:
+                for name in self._display_of(ref):
+                    if name not in names:
+                        names.append(name)
         return names
 
     def _sync(self):
@@ -590,7 +974,7 @@ class BlendPanel(Panel):
             if self._closed or self.base is None:
                 return
             cleared, self._cleared = self._cleared, False
-            self.help.setText(PICK_HELP)  # (a timeline click below says what it added)
+            self.help.setText(self._help_text())  # (a timeline click below says what it added)
             names, features = [], []
             for sel in Gui.Selection.getSelectionEx(self._doc_name):
                 for obj, name in _resolve(sel):
@@ -604,6 +988,9 @@ class BlendPanel(Panel):
             if not cleared:  # a pick that is no longer selected was clicked again: drop it
                 for name in self._shown:
                     if name not in names:
+                        if self._point_click(name):
+                            changed = True
+                            continue
                         changed = self._drop(name) or changed
             for name in names:
                 if name not in self._shown:
@@ -612,20 +999,64 @@ class BlendPanel(Panel):
                 changed = self._add_feature(obj) or changed
             self._sync()
             if changed:
+                self._refresh_rows()
                 self._refs_changed()
         except Exception as exc:
             warn("%s pick: %s" % (self.title, exc))
 
+    def _help_text(self):
+        if self.mode == "rule":
+            return RULE_HELP
+        if self.mode == "full_round":
+            return ROUND_HELP
+        if self._variable_row() is not None:
+            return VARIABLE_HELP
+        return PICK_HELP
+
     def _add(self, name):
-        if name in self.refs or not self.info.pickable(name):
+        if not self._pickable(name):
             return False
+        if self.mode == "full_round":
+            try:
+                side1, side2 = fillet_sets.side_faces(self.info.shape, name)
+            except core.SetError as exc:
+                self.help.setText(str(exc))
+                return False
+            for i, group in enumerate(self.groups):
+                if i != self.active and name in group:
+                    self.groups[i] = []
+            self.groups[self.active] = [side1, name, side2]
+            return True
+        if name in self.refs:
+            return False
+        # an edge belongs to one set: picked into another set, it moves there
+        for i, group in enumerate(self.groups):
+            if group is not self.refs and name in group:
+                group.remove(name)
+        if self.mode == "rule":
+            other = self.groups[0] if self.rule_box == 1 else self.refs2
+            if name in other:
+                other.remove(name)
         self.refs.append(name)
         return True
 
     def _drop(self, name):
-        before = len(self.refs)
-        self.refs = [r for r in self.refs if name not in self._display_of(r)]
-        return len(self.refs) != before
+        changed = False
+        for i, group in enumerate(self.groups):
+            if self.mode == "full_round":
+                if name in group:
+                    self.groups[i] = []
+                    changed = True
+                continue
+            kept = [r for r in group if name not in self._display_of(r)]
+            if len(kept) != len(group):
+                self.groups[i] = kept
+                changed = True
+        kept2 = [r for r in self.refs2 if name not in self._display_of(r)]
+        if len(kept2) != len(self.refs2):
+            self.refs2 = kept2
+            changed = True
+        return changed
 
     def _is_body_feature(self, obj):
         body = self.body
@@ -639,65 +1070,179 @@ class BlendPanel(Panel):
     def _add_feature(self, obj):
         if not self._is_body_feature(obj):
             return False
+        if self.mode == "full_round":
+            self.help.setText(ROUND_HELP)
+            return False
+        if self.mode == "rule":
+            box = self.features2 if self.rule_box == 1 else self.features
+            if any(o.Name == obj.Name for o in box):
+                return False
+            box.append(obj)
+            self.help.setText("%s added: the rule rounds its edges." % obj.Label)
+            return True
         edges = blend.feature_edges(obj, self.info)
         added = [e for e in edges if e not in self.refs]
         if not added:
             self.help.setText("%s has no sharp edges left to round here." % obj.Label)
             return False
-        self.refs.extend(added)
+        for name in added:
+            self._add(name)
         self.help.setText("%d edge(s) of %s added." % (len(added), obj.Label))
         return True
 
-    def _clear_picks(self):
-        if self.refs:
+    def _clear_picks(self, box=0):
+        self._choose_box(box)
+        if self.mode == "rule":
+            if box == 1:
+                changed = bool(self.refs2 or self.features2)
+                self.refs2, self.features2 = [], []
+            else:
+                changed = bool(self.groups[0] or self.features)
+                self.groups[0], self.features = [], []
+        else:
+            changed = bool(self.refs)
             self.refs = []
+        if changed:
             self._sync()
+            self._refresh_rows()
             self._refs_changed()
 
-    def _refs_changed(self):
-        count = len(self.refs)
+    def _refs_changed(self, recompute=True):
+        count = len(self.groups[0] if self.mode == "rule" else self.refs)
+        if self.mode == "rule":
+            count += len(self.features)
+            count2 = len(self.refs2) + len(self.features2)
+            self.select2_button.setText("%d selected" % count2 if count2 else "Select")
         self.select_button.setText("%d selected" % count if count else "Select")
+        if hasattr(self, "_rebuild_points"):
+            self._rebuild_points()
         self._update_arrows()
-        self.schedule()
+        if recompute:
+            self.schedule()
+
+    # -- Variable radius points --------------------------------------------------------------
+    def _variable_row(self):
+        """The active row when it is a Variable row with its edge picked, else None."""
+        if self.kind != "fillet" or self.mode != "fillet":
+            return None
+        row = self.spec["sets"][self.active]
+        if row.get("radius_type") != "variable" or not self.refs:
+            return None
+        return row
+
+    def _variable_chain(self):
+        try:
+            return [n for n, _r, _a, _b in fillet_sets.chain_points(self.info, self.refs)]
+        except Exception:
+            return []
+
+    def _point_click(self, name):
+        """A click on the edge of a Variable row (it would drop the edge): a radius point is
+        added there instead, like Fusion's green dot on the edge."""
+        click, self._click = self._click, None
+        row = self._variable_row()
+        if row is None or click is None or click[1] != name:
+            return False
+        if time.time() - click[0] > CLICK_SECONDS:
+            return False
+        position = fillet_sets.position_of(self.info, self.refs, click[2])
+        if position is None:
+            return False
+        return self._add_point(round(position, 3))
+
+    def _add_point(self, position=None):
+        """A radius point at `position` (0..1; None: the middle of the widest gap) with the
+        radius the law has there now."""
+        row = self._variable_row()
+        if row is None:
+            self.help.setText("Pick the edge first, then add radius points on it.")
+            return False
+        points = [list(p) for p in row.get("points", [])]
+        marks = sorted([0.0, 1.0] + [p[0] for p in points])
+        if position is None:
+            gaps = [(b - a, (a + b) / 2.0) for a, b in zip(marks, marks[1:])]
+            position = round(max(gaps)[1], 3)
+        if any(abs(position - m) < 0.02 for m in marks):
+            self.help.setText("There is already a radius point there.")
+            return False
+        try:
+            law = core.variable_points(row.get("start", 1.0), row.get("end", 1.0), points)
+            radius = round(core.law(law, position), 2)
+        except core.SetError:
+            radius = float(row.get("start", 1.0))
+        points.append([position, radius])
+        points.sort()
+        row["points"] = points
+        self.help.setText("Radius point added at %g (radius %g mm)." % (position, radius))
+        return True
 
     # -- values ---------------------------------------------------------------------------
+    def _value(self, row, what):
+        if row is None:
+            return float(self.spec.get(what, 1.0))
+        data = self.spec["sets"][row]
+        if what.startswith("pt"):
+            k = int(what[2:])
+            points = data.get("points", [])
+            return float(points[k][1]) if k < len(points) else 0.0
+        return float(data.get(what, 1.0))
+
+    def _set_value(self, row, what, value):
+        if row is None:
+            self.spec[what] = value
+            return
+        data = self.spec["sets"][row]
+        if what.startswith("pt"):
+            k = int(what[2:])
+            if k < len(data.get("points", [])):
+                data["points"][k][1] = value
+            return
+        data[what] = value
+
+    def _field_for(self, what):
+        if what.startswith("pt"):
+            k = int(what[2:])
+            return self.point_rows[k][1] if k < len(self.point_rows) else None
+        return self.fields.get(what)
+
     def _typed(self, what, value):
         """A new value from a box (typed number, formula, the box's arrows)."""
         self.formula_error = ""
-        self.options[what] = value
-        self._place_arrows(what)
+        self._set_value(self._row_key(), what, value)
+        self._place_arrows(self._row_key(), what)
+        self._refresh_rows()
         self.schedule()
 
-    def _place_arrows(self, what):
-        value = float(self.options.get(what, 0.0))
+    def _place_arrows(self, row, what):
+        value = self._value(row, what)
         for dragger, spot, _origin, _direction in self.arrows:
-            if spot["what"] == what:
+            if spot["what"] == what and spot.get("row") == row:
                 dragger.set_distance(max(value, 0.0) * spot["per_unit"])
 
     def _dragged(self, spot, distance, released=False):
         """An arrow moved: the size follows it. Dragged back through its edge the size stops
         at MIN_DRAG, and when the mouse is let go the arrow comes back to the size shown."""
-        what = spot["what"]
+        what, row = spot["what"], spot.get("row")
+        if row is not None and row != self.active and row < len(self.groups):
+            self._activate(row, rebuild=False)  # dragging a set's arrow makes it the current one
         value = max(MIN_DRAG, round(distance / spot["per_unit"], 2))
-        changed = abs(value - float(self.options.get(what, 0.0))) > 1e-12
-        self.options[what] = value
-        field = self.fields.get(what)
+        changed = abs(value - self._value(row, what)) > 1e-12
+        self._set_value(row, what, value)
+        field = self._field_for(what)
         if field is not None:
             field.set_value(value)
             if field.formula:  # a dragged size is a plain number again (Fusion)
                 field.formula = ""
                 self._formula_changed(what)
         if released:
-            self._place_arrows(what)
+            self._place_arrows(row, what)
         if changed:
             self.formula_error = ""
+            self._refresh_rows()
             self.schedule()
 
-    def _field_for(self, what):
-        return self.fields.get(what)
-
     def _collect(self):
-        """Read the dialog's choices into self.options (subclasses). The value boxes report
+        """Read the dialog's choices into the settings (subclasses). The value boxes report
         their values themselves (ValueField), they are not read back here: FreeCAD's box can
         hold a half-read value while a number is being typed."""
 
@@ -715,6 +1260,13 @@ class BlendPanel(Panel):
 
     def _formula_changed(self, what):
         self.formula_error = ""
+        field = self.fields.get(what)
+        if field is not None:
+            key = (self._row_key(), what)
+            if field.formula:
+                self.row_formulas[key] = field.formula
+            else:
+                self.row_formulas.pop(key, None)
         self.show_formulas()
         self.schedule()
 
@@ -723,17 +1275,24 @@ class BlendPanel(Panel):
         self._say("⚠ " + text)
 
     def _sync_formulas(self):
-        """The formulas typed in the boxes go onto the feature as expressions (and a box
-        that holds a plain number again drops its expression)."""
+        """The formulas typed in the boxes go onto the step as expressions (and a box that
+        holds a plain number again drops its expression)."""
         from . import preview
 
         target = self.target
         if not _alive(target):
             return
-        for key, field in self.fields.items():
+        if fillet_sets.is_sets(target):
+            for prop in target.PropertiesList:
+                row, option = fillet_sets.prop_key(self.spec, prop)
+                if option is not None:
+                    preview.set_formula(target, prop, self.row_formulas.get((row, option), ""))
+            return
+        row = self._native_row()
+        for key in self.fields:
             prop = PROPS.get(key)
             if prop in target.PropertiesList:
-                preview.set_formula(target, prop, field.formula)
+                preview.set_formula(target, prop, self.row_formulas.get((row, key), ""))
 
     # -- arrows ---------------------------------------------------------------------------
     def _remove_arrows(self):
@@ -741,26 +1300,62 @@ class BlendPanel(Panel):
             dragger.remove()
         self.arrows = []
 
+    def _spots(self, toward):
+        """[(row or None, spot)] of every arrow: one per row (Variable: one per radius point,
+        Two Distances: one per distance); Rule Fillet: on its first edge."""
+        info = self.info
+        out = []
+        if self.mode == "full_round":
+            return out
+        if self.mode == "rule":
+            try:
+                edges = fillet_sets.rule_edges(
+                    info, self.spec, self.groups[0], self.features, self.refs2, self.features2
+                )
+            except Exception:
+                edges = []
+            if edges:
+                spots = blend.arrow_spots("fillet", info, edges[:1], self.spec, toward)
+                out += [(None, s) for s in spots]
+            return out
+        for i, (row, refs) in enumerate(zip(self.spec["sets"], self.groups)):
+            if not refs:
+                continue
+            if self.kind == "chamfer":
+                spots = blend.arrow_spots("chamfer", info, refs, row, toward)
+            elif row.get("radius_type") == "variable":
+                spots = fillet_sets.variable_spots(info, row, refs, toward)
+            else:
+                spots = blend.arrow_spots("fillet", info, refs, row, toward)
+                if row.get("radius_type") == "chord":
+                    for spot in spots:
+                        spot["what"] = "chord"
+                        spot["per_unit"] = fillet_sets.chord_per_unit(info, refs)
+            out += [(i, s) for s in spots]
+        return out
+
     def _update_arrows(self):
         self._remove_arrows()
-        if not self.refs or self.info is None:
+        if self.info is None or not self._has_picks():
             return
         try:
             view = Gui.ActiveDocument.ActiveView
             toward = -view.getViewDirection()
             placement = self.body.getGlobalPlacement() if self.body else App.Placement()
             local_toward = placement.Rotation.inverted().multVec(toward)
-            spots = blend.arrow_spots(self.kind, self.info, self.refs, self.options, local_toward)
-            # The arrow looks the same size on the screen whatever the part is (about 75 px
-            # after Fit, like Extrude's), but never longer than about half the picked edge
-            # (it would dwarf a short one) and never shorter than about 1 mm (a tiny part):
-            # at 8 mm it was 16 px on a 400 mm part, and 1.5 mm put it off a 4 mm part.
-            longest = self.info.shape.BoundBox.DiagonalLength * 0.3
-            if self.refs and self.refs[0].startswith("Edge"):
-                edge = blend.element(self.info.shape, self.refs[0])
-                if edge is not None and edge.Length > 1e-6:
-                    longest = edge.Length
-            for spot in spots:
+            for row, spot in self._spots(local_toward):
+                spot["row"] = row
+                refs = self.groups[row] if row is not None else self.groups[0]
+                # The arrow looks the same size on the screen whatever the part is (about 75
+                # px after Fit, like Extrude's), but never longer than about half the picked
+                # edge (it would dwarf a short one) and never shorter than about 1 mm (a tiny
+                # part): at 8 mm it was 16 px on a 400 mm part, and 1.5 mm put it off a 4 mm
+                # part.
+                longest = self.info.shape.BoundBox.DiagonalLength * 0.3
+                if refs and refs[0].startswith("Edge"):
+                    edge = blend.element(self.info.shape, refs[0])
+                    if edge is not None and edge.Length > 1e-6:
+                        longest = edge.Length
                 size = handle_size_at(view, placement.multVec(spot["point"]), hi=longest / 6.0)
                 # The arrow's inner tip sits on the line where the blend starts; it lies on the
                 # face (lifted a little) and points away from the edge.
@@ -769,7 +1364,7 @@ class BlendPanel(Panel):
                 )
                 origin = placement.multVec(local)
                 direction = placement.Rotation.multVec(spot["direction"])
-                value = float(self.options.get(spot["what"], 1.0))
+                value = self._value(row, spot["what"])
                 dragger = ArrowDragger(
                     origin,
                     direction,
@@ -779,28 +1374,37 @@ class BlendPanel(Panel):
                     on_release=lambda d, s=spot: self._dragged(s, d, True),
                 )
                 self.arrows.append((dragger, spot, origin, direction))
-                self._attach_box(dragger, spot["what"], len(self.arrows) - 1)
+                self._attach_box(dragger, spot, len(self.arrows) - 1)
         except Exception as exc:
             warn("%s arrow unavailable: %s" % (self.title, exc))
 
-    def _attach_box(self, dragger, what, index):
-        """The value box next to an arrow: the text of the size box it sets (radius, a
-        chamfer distance...), and a value or formula typed in it goes to that box. Several
-        arrows can set one size (one per edge): each has a box of its own."""
-        field = self.fields.get(what)
-        if field is None:
-            return None
+    def _attach_box(self, dragger, spot, index):
+        """The value box next to an arrow: the size it sets (radius, a chamfer distance, a
+        radius point...), and a value or formula typed in it goes to that size. Each arrow has
+        a box of its own; typing into the box of another set's arrow makes that set the
+        current one."""
+        what, row = spot["what"], spot.get("row")
+
+        def text():
+            field = self._field_for(what)
+            if field is not None and (row is None or row == self.active):
+                return field.widget.text()
+            unit = "°" if what == "angle" else " mm"
+            return "%.2f%s" % (self._value(row, what), unit)
+
         return self.value_boxes.attach(
             dragger,
             "%s#%d" % (what, index),
-            lambda: field.widget.text(),
-            lambda text: self._box_typed(what, text),
+            text,
+            lambda typed: self._box_typed(row, what, typed),
         )
 
-    def _box_typed(self, what, text):
+    def _box_typed(self, row, what, text):
         if self._closed:
             return
-        field = self.fields.get(what)
+        if row is not None and row != self.active and row < len(self.groups):
+            self._activate(row, rebuild=False)
+        field = self._field_for(what)
         if field is not None:
             field.take_text(text)
 
@@ -879,11 +1483,32 @@ class BlendPanel(Panel):
             self.error = str(exc)
             self.show_status()
 
+    def _uses_step(self):
+        """SciForge's own step builds this (or already holds it)."""
+        if self.target is not None and fillet_sets.is_sets(self.target):
+            return True
+        return self._needs_step()
+
+    def _trial(self):
+        """Build the blend without touching the document; BlendError says why it fails."""
+        if self._uses_step():
+            fillet_sets.compute(
+                self.info.shape,
+                self.spec,
+                self._flat(),
+                self.refs2,
+                self.features,
+                self.features2,
+            )
+        else:
+            row = self._native_row()
+            blend.trial(self.kind, self.info, self.groups[row], self.spec["sets"][row])
+
     def _preview(self):
         if self._closed:
             return
         self._collect()
-        if not self.refs or self.info is None:
+        if not self._has_picks() or self.info is None:
             self.error = None
             self._show_preview(False)
             if self.created:
@@ -891,26 +1516,76 @@ class BlendPanel(Panel):
             self.show_status()
             return
         try:
-            blend.trial(self.kind, self.info, self.refs, self.options)
+            self._trial()
         except blend.BlendError as exc:
             self.error = str(exc)
             self.show_status()
             self._hint.start()
             return
         self.error = None
-        subs = blend.base_subs(self.info, self.refs)
         with quiet_errors():
-            if self.target is None:
-                self.target = blend.make(self.body, self.base, self.refs, self.kind, self.options)
+            if self._uses_step():
+                flat = self._flat()
+                if self.target is None:
+                    self.target = fillet_sets.make(
+                        self.body,
+                        self.base,
+                        self.spec,
+                        flat,
+                        self.refs2,
+                        self.features,
+                        self.features2,
+                    )
+                elif not fillet_sets.is_sets(self.target):
+                    self._swap(flat)
+                else:
+                    fillet_sets.update(
+                        self.target,
+                        self.base,
+                        self.spec,
+                        flat,
+                        self.refs2,
+                        self.features,
+                        self.features2,
+                    )
                 self._sync_formulas()
             else:
-                blend.set_refs(self.target, self.base, subs)
-                self._sync_formulas()
-                blend.apply(self.target, self.options)
+                row = self._native_row()
+                refs, options = self.groups[row], self.spec["sets"][row]
+                subs = blend.base_subs(self.info, refs)
+                if self.target is None:
+                    self.target = blend.make(self.body, self.base, refs, self.kind, options)
+                    self._sync_formulas()
+                else:
+                    blend.set_refs(self.target, self.base, subs)
+                    self._sync_formulas()
+                    blend.apply(self.target, options)
             # later steps (marker rolled back, or an earlier fillet edited) stay on their edges
             blend.recompute_keeping(self.doc, self.keep)
         self._show_preview(True)
+        self._refresh_rows()
         self.show_status()
+
+    def _swap(self, flat):
+        """FreeCAD's Fillet / Chamfer becomes SciForge's step (a second set, another type):
+        the new step takes its place in the timeline, the steps after it stay on it."""
+        old = self.target
+        label = old.Label
+        self._looks.restore()
+        self._ghost = False
+
+        def build(body):
+            return fillet_sets.make(
+                body, self.base, self.spec, flat, self.refs2, self.features, self.features2
+            )
+
+        new, _expressions = fillet_sets.replace(old, build)
+        try:
+            new.Label = label
+        except Exception:
+            pass
+        self.target = new
+        log("%s is now SciForge's own step %s (more than FreeCAD's one size)" % (label, new.Name))
 
     def _discard_target(self):
         """Every pick dropped (x, or the last edge clicked again) while making a new blend:
@@ -941,13 +1616,17 @@ class BlendPanel(Panel):
 
     def _compute_hint(self):
         try:
-            if self._closed or not self.error or not self.refs:
+            if self._closed or not self.error or not self._has_picks():
                 return
+            if self._uses_step():
+                return  # several sets / types: the message names what to change
+            row = self._native_row()
+            options = self.spec["sets"][row]
             what = "radius" if self.kind == "fillet" else "distance"
-            size = float(self.options.get(what, 0.0))
+            size = float(options.get(what, 0.0))
             if size <= 0:
                 return
-            best = blend.max_size(self.kind, self.info, self.refs, self.options, size)
+            best = blend.max_size(self.kind, self.info, self.groups[row], options, size)
             if best and best < size and self.error:
                 shown = math.floor(best * 100.0) / 100.0
                 if shown > 0:
@@ -966,7 +1645,7 @@ class BlendPanel(Panel):
             self._say("⚠ " + self.error)
             return
         obj = self.target
-        if obj is None or not self.refs:
+        if obj is None or not self._has_picks():
             self._say("")
             return
         state = list(getattr(obj, "State", []))
@@ -999,7 +1678,7 @@ class BlendPanel(Panel):
     def accept(self):
         try:
             self._timer.stop()
-            if not self.refs or self.info is None:
+            if not self._has_picks() or self.info is None:
                 self._say(
                     "⚠ Select the edges or faces to %s first." % self.title.lower()
                     if self.info is not None
@@ -1044,12 +1723,16 @@ class BlendPanel(Panel):
                 pass
         self._remove_arrows()
         self.value_boxes.discard()
-        if self._keys is not None:
-            try:
-                self.view.removeEventCallback("SoKeyboardEvent", self._keys)
-            except Exception:
-                pass
-            self._keys = None
+        for callback, kind in (
+            (self._keys, "SoKeyboardEvent"),
+            (self._mouse, "SoMouseButtonEvent"),
+        ):
+            if callback is not None:
+                try:
+                    self.view.removeEventCallback(kind, callback)
+                except Exception:
+                    pass
+        self._keys = self._mouse = None
         if self.observer is not None:
             try:
                 Gui.Selection.removeObserver(self.observer)
@@ -1084,44 +1767,322 @@ class BlendPanel(Panel):
             warn("%s could not restore the view: %s" % (self.title, exc))
         super().cleanup()
 
+    # -- shared handlers ------------------------------------------------------------------
+    def _chain_toggled(self, on):
+        try:
+            self.spec["tangent_chain"] = bool(on)
+            self._sync()
+            self._refs_changed()
+        except Exception as exc:
+            warn("%s tangent chain: %s" % (self.title, exc))
+
 
 class FilletPanel(BlendPanel):
     kind = "fillet"
     title = "Fillet"
     icon = "fillet"
 
-    def _fields(self):
+    def _type_row(self):
         self.type = _combo(
             [
-                ("Fillet", "fillet", True, "Round the picked edges with one radius"),
-                ("Rule Fillet", "rule", False, "Not available in SciForge yet"),
-                ("Full Round Fillet", "full_round", False, "Not available in SciForge yet"),
+                ("Fillet", "fillet", True, "Round the picked edges"),
+                (
+                    "Rule Fillet",
+                    "rule",
+                    True,
+                    "Round every edge of the picked faces or features (also edges a later "
+                    "change adds)",
+                ),
+                (
+                    "Full Round Fillet",
+                    "full_round",
+                    True,
+                    "Replace the top face of a rib or wall by a half round",
+                ),
             ]
         )
-        self.layout.insertRow(0, "Type", self.type)
+        _select(self.type, self.mode)
+        self.type.currentIndexChanged.connect(self._mode_changed)
+        self.layout.addRow("Type", self.type)
+
+    def rule_rows(self):
+        self.rule = _combo(
+            [
+                ("All Edges", "all", True, "Every edge of the faces / features picked"),
+                (
+                    "Between Faces/Features",
+                    "between",
+                    True,
+                    "Only the edges where the first faces / features meet the second ones",
+                ),
+            ]
+        )
+        _select(self.rule, self.spec.get("rule", "all"))
+        self.rule.currentIndexChanged.connect(self._rule_changed)
+        self.layout.addRow("Rule", self.rule)
+
+    def _fields(self):
         self.radius_type = _combo(
             [
                 ("Constant", "constant", True, "The same radius along the whole edge"),
-                ("Chord Length", "chord", False, "Not available in SciForge yet"),
-                ("Variable", "variable", False, "Not available in SciForge yet"),
+                (
+                    "Chord Length",
+                    "chord",
+                    True,
+                    "The width of the round (from where it starts on one face to the other)",
+                ),
+                ("Variable", "variable", True, "Radius points along the edge"),
             ]
         )
+        self.radius_type.currentIndexChanged.connect(self._radius_type_changed)
         self.layout.addRow("Radius Type", self.radius_type)
-        self.radius, _ = self._size_field("Radius", "radius")
+        self.radius, self.radius_label = self._size_field("Radius", "radius")
+        self.chord_field, self.chord_label = self._size_field("Chord Length", "chord")
+        self.start_field, self.start_label = self._size_field("Start Radius", "start")
+        self.end_field, self.end_label = self._size_field("End Radius", "end")
+        self.points_box = QtWidgets.QWidget()
+        self.points_layout = QtWidgets.QVBoxLayout(self.points_box)
+        self.points_layout.setContentsMargins(0, 0, 0, 0)
+        self.points_layout.setSpacing(2)
+        self.add_point_button = QtWidgets.QPushButton("Add Point")
+        self.add_point_button.setToolTip("A radius point in the middle of the widest gap")
+        self.add_point_button.clicked.connect(self._add_point_clicked)
+        self.points_layout.addWidget(self.add_point_button)
+        self.layout.addRow("Radius Points", self.points_box)
+        self.rounds = QtWidgets.QCheckBox("Rounds (outside edges)")
+        self.rounds.setChecked(bool(self.spec.get("rounds", True)))
+        self.fillets = QtWidgets.QCheckBox("Fillets (inside edges)")
+        self.fillets.setChecked(bool(self.spec.get("fillets", True)))
+        self.rounds.toggled.connect(self._rule_toggled)
+        self.fillets.toggled.connect(self._rule_toggled)
+        both = QtWidgets.QWidget()
+        line = QtWidgets.QVBoxLayout(both)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.addWidget(self.rounds)
+        line.addWidget(self.fillets)
+        self.rule_kinds = both
+        self.layout.addRow("Rounds/Fillets", both)
+        self.round_info = QtWidgets.QLabel("")
+        self.round_info.setWordWrap(True)
+        self.layout.addRow("Radius", self.round_info)
         self.continuity = _combo(
             [
                 ("Tangent (G1)", "g1", True, "The round meets the faces smoothly (tangent)"),
-                ("Curvature (G2)", "g2", False, "Not available: the kernel builds G1 rounds"),
+                (
+                    "Curvature (G2)",
+                    "g2",
+                    False,
+                    "Not available: OpenCASCADE builds circular (G1) rounds only",
+                ),
             ]
         )
         self.layout.addRow("Continuity", self.continuity)
         self.corner = _combo(
             [
                 ("Rolling Ball", "rolling_ball", True, "Corners where rounds meet are blended"),
-                ("Setback", "setback", False, "Not available in SciForge yet"),
+                (
+                    "Setback",
+                    "setback",
+                    False,
+                    "Not available: OpenCASCADE's fillet builder has no setback corners",
+                ),
             ]
         )
         self.layout.addRow("Corner Type", self.corner)
+
+    def _update_visible(self):
+        super()._update_visible()
+        if not hasattr(self, "radius_type"):
+            return
+        mode = self.mode
+        row = self.spec["sets"][min(self.active, len(self.spec["sets"]) - 1)]
+        rtype = row.get("radius_type", "constant") if mode == "fillet" else "constant"
+        self._show_row(self.radius_type, mode == "fillet")
+        self._show_row(self.rule, mode == "rule")
+        self._show_row(self.radius.widget, mode == "rule" or rtype == "constant")
+        self._show_row(self.chord_field.widget, mode == "fillet" and rtype == "chord")
+        for field in (self.start_field, self.end_field):
+            self._show_row(field.widget, mode == "fillet" and rtype == "variable")
+        self._show_row(self.points_box, mode == "fillet" and rtype == "variable")
+        self._show_row(self.rule_kinds, mode == "rule")
+        self._show_row(self.round_info, mode == "full_round")
+        self._show_row(self.continuity, mode != "full_round")
+        self._show_row(self.corner, mode != "full_round")
+        self.add_row_button.setToolTip(
+            "Add another full round" if mode == "full_round" else "Add a selection set"
+        )
+        if hasattr(self, "formulas"):
+            self.show_formulas()
+
+    def _load_row(self):
+        super()._load_row()
+        if not hasattr(self, "radius_type"):
+            return
+        if self.mode == "fillet":
+            _select(self.radius_type, self.options.get("radius_type", "constant"))
+        _select(self.rule, self.spec.get("rule", "all"))
+        _select(self.type, self.mode)
+        for box, key in ((self.rounds, "rounds"), (self.fillets, "fillets")):
+            box.blockSignals(True)
+            box.setChecked(bool(self.spec.get(key, True)))
+            box.blockSignals(False)
+        self.chain.blockSignals(True)
+        self.chain.setChecked(bool(self.spec.get("tangent_chain", True)))
+        self.chain.blockSignals(False)
+        self._rebuild_points()
+        self._update_visible()
+
+    def _preview(self):
+        super()._preview()
+        if self.mode == "full_round" and hasattr(self, "round_info"):
+            sizes = [self._round_radius(i) for i, g in enumerate(self.groups) if len(g) == 3]
+            sizes = [s for s in sizes if s]
+            self.round_info.setText(
+                "Half the width between the side faces: %s"
+                % ", ".join("%.2f mm" % s for s in sizes)
+                if sizes
+                else "Half the width between the side faces (pick a face)."
+            )
+
+    # -- Fusion's Type and Rule ------------------------------------------------------------------
+    def _mode_changed(self, *_):
+        """Fillet / Rule Fillet / Full Round Fillet: each picks something else, so the picks
+        start over (as in Fusion)."""
+        try:
+            mode = self.type.currentData()
+            if mode == self.mode:
+                return
+            self.spec["mode"] = mode
+            self.spec["sets"] = [core.new_set(self.kind, mode)]
+            self.groups = [[]]
+            self.active = 0
+            self.refs2, self.features, self.features2 = [], [], []
+            self.row_formulas = {}
+            self._choose_box(0)
+            self.help.setText(self._help_text())
+            self._load_row()
+            self._refresh_rows()
+            self._sync()
+            self._refs_changed()
+        except Exception as exc:
+            warn("Fillet type: %s" % exc)
+
+    def _rule_changed(self, *_):
+        try:
+            self.spec["rule"] = self.rule.currentData()
+            if self.spec["rule"] != "between":
+                self.refs2, self.features2 = [], []
+                self._choose_box(0)
+            self._update_visible()
+            self._sync()
+            self._refs_changed()
+        except Exception as exc:
+            warn("Fillet rule: %s" % exc)
+
+    def _rule_toggled(self, *_):
+        self.spec["rounds"] = self.rounds.isChecked()
+        self.spec["fillets"] = self.fillets.isChecked()
+        self._refs_changed()
+
+    # -- Radius Type -----------------------------------------------------------------------------
+    def _radius_type_changed(self, *_):
+        try:
+            rtype = self.radius_type.currentData()
+            row = self.options
+            if row.get("radius_type") == rtype:
+                return
+            if rtype == "variable" and not row.get("points"):
+                row["start"] = row["end"] = float(row.get("radius", 1.0))
+            if rtype == "chord" and row.get("radius_type") == "constant":
+                row["chord"] = round(core.radius_chord(row.get("radius", 1.0), math.pi / 2), 2)
+            row["radius_type"] = rtype
+            self._load_row()
+            self._refresh_rows()
+            self.help.setText(self._help_text())
+            self._refs_changed()
+        except Exception as exc:
+            warn("Fillet radius type: %s" % exc)
+
+    def _rebuild_points(self):
+        """The Variable row's radius points: a position (0 = start of the edge, 1 = its end)
+        and a radius each, and a button that removes the point."""
+        if not hasattr(self, "points_layout"):
+            return
+        row = self.options if self.mode == "fillet" else {}
+        points = row.get("points", []) if row.get("radius_type") == "variable" else []
+        if len(points) == len(self.point_rows):
+            for (spin, field, _button), (position, radius) in zip(self.point_rows, points):
+                spin.blockSignals(True)
+                spin.setValue(float(position))
+                spin.blockSignals(False)
+                field.set_value(float(radius))
+            return
+        for spin, field, button in self.point_rows:
+            for widget in (spin, field.widget, button):
+                widget.hide()
+                widget.deleteLater()
+        for i in reversed(range(self.points_layout.count())):
+            item = self.points_layout.itemAt(i)
+            if item is not None and item.layout() is not None:
+                self.points_layout.takeAt(i)
+        self.point_rows = []
+        for k, (position, radius) in enumerate(points):
+            line = QtWidgets.QHBoxLayout()
+            line.setSpacing(4)
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setObjectName("SciForgeRadiusPointPosition%d" % k)
+            spin.setDecimals(3)
+            spin.setRange(0.001, 0.999)
+            spin.setSingleStep(0.05)
+            spin.setValue(float(position))
+            spin.setToolTip("Where the point is: 0 = start of the edge, 1 = its end")
+            spin.valueChanged.connect(lambda value, k=k: self._point_moved(k, value))
+            field = ValueField(_PointPanel(self), "pt%d" % k, float(radius), minimum=0.0)
+            button = QtWidgets.QToolButton()
+            button.setText("✕")
+            button.setToolTip("Remove this radius point")
+            button.clicked.connect(lambda *_a, k=k: self._remove_point(k))
+            line.addWidget(spin)
+            line.addWidget(field.widget, 1)
+            line.addWidget(button)
+            self.points_layout.insertLayout(self.points_layout.count() - 1, line)
+            self.point_rows.append((spin, field, button))
+
+    def _point_moved(self, k, value):
+        try:
+            points = self.options.get("points", [])
+            if k < len(points):
+                points[k][0] = float(value)
+                self._update_arrows()
+                self.schedule()
+        except Exception as exc:
+            warn("Fillet radius point: %s" % exc)
+
+    def _remove_point(self, k):
+        try:
+            points = self.options.get("points", [])
+            if k < len(points):
+                del points[k]
+                QtCore.QTimer.singleShot(0, self._points_changed)
+        except Exception as exc:
+            warn("Fillet radius point: %s" % exc)
+
+    def _points_changed(self):
+        try:
+            if self._closed:
+                return
+            self._rebuild_points()
+            self._refresh_rows()
+            self._refs_changed()
+        except Exception as exc:
+            warn("Fillet radius points: %s" % exc)
+
+    def _add_point_clicked(self, *_):
+        try:
+            if self._add_point():
+                self._points_changed()
+        except Exception as exc:
+            warn("Fillet add point: %s" % exc)
 
 
 class ChamferPanel(BlendPanel):
@@ -1149,8 +2110,18 @@ class ChamferPanel(BlendPanel):
         self.corner = _combo(
             [
                 ("Chamfer", "chamfer", True, "Corners where chamfers meet get a flat face"),
-                ("Miter", "miter", False, "Not available in SciForge yet"),
-                ("Blend", "blend", False, "Not available in SciForge yet"),
+                (
+                    "Miter",
+                    "miter",
+                    False,
+                    "Not available: OpenCASCADE's chamfer builder makes flat corners only",
+                ),
+                (
+                    "Blend",
+                    "blend",
+                    False,
+                    "Not available: OpenCASCADE's chamfer builder makes flat corners only",
+                ),
             ]
         )
         self.layout.addRow("Corner Type", self.corner)
@@ -1171,9 +2142,20 @@ class ChamferPanel(BlendPanel):
         if hasattr(self, "formulas"):
             self.show_formulas()
 
+    def _load_row(self):
+        super()._load_row()
+        if not hasattr(self, "ctype"):
+            return
+        _select(self.ctype, self.options.get("chamfer_type", "equal"))
+        self.flip.blockSignals(True)
+        self.flip.setChecked(bool(self.options.get("flip")))
+        self.flip.blockSignals(False)
+        self._update_rows()
+
     def _type_changed(self, *_):
         self._update_rows()
         self._collect()
+        self._refresh_rows()
         self._update_arrows()
         self.schedule()
 
@@ -1300,4 +2282,9 @@ def edit_chamfer(obj):
 
 
 COMMANDS = {"SciForge_Fillet": FilletCommand, "SciForge_Chamfer": ChamferCommand}
-EDITORS = {blend.FILLET: edit_fillet, blend.CHAMFER: edit_chamfer}
+EDITORS = {
+    blend.FILLET: edit_fillet,
+    blend.CHAMFER: edit_chamfer,
+    "SciForge::" + fillet_sets.SCIFORGE_TYPES["fillet"]: edit_fillet,
+    "SciForge::" + fillet_sets.SCIFORGE_TYPES["chamfer"]: edit_chamfer,
+}
