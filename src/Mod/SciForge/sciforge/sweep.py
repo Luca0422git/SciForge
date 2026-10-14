@@ -118,6 +118,14 @@ FORMULAS = {
 }
 
 
+def _formula_used(key, options):
+    """Taper and Twist apply to a single-path sweep only, Twist not with Parallel (their
+    fields are hidden or greyed then): a formula left in them is not used."""
+    if key in ("taper", "twist") and options["type"] != "single":
+        return False
+    return not (key == "twist" and options["orientation"] == "parallel")
+
+
 def evaluate_formulas(doc, options):
     """options with each value typed as a formula worked out now (the preview and the
     checks use it; the formula itself goes on the sweep as an expression)."""
@@ -125,6 +133,8 @@ def evaluate_formulas(doc, options):
     if not typed:
         return options
     options = dict(options)
+    typed = {k: v for k, v in typed.items() if _formula_used(k, options)}
+    options["expressions"] = typed
     for key, text in typed.items():
         prop, unit, words = FORMULAS[key]
         try:
@@ -1260,6 +1270,12 @@ def update(feature, profiles=None, path_refs=None, rail_refs=None, options=None)
     old_profiles, old_path, old_rail, old_options = read(feature)
     merged = dict(old_options)
     merged.update(options or {})
+    if options and "expressions" not in options:
+        # A plain value given for a field that followed a formula: the value wins (as a
+        # number typed over a formula in the dialog).
+        merged["expressions"] = {
+            k: v for k, v in (old_options.get("expressions") or {}).items() if k not in options
+        }
     return build(
         normalize(profiles) if profiles is not None else old_profiles,
         path_refs if path_refs is not None else old_path,
