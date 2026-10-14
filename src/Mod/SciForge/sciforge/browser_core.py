@@ -66,6 +66,20 @@ def unit_label(schema):
     return None
 
 
+# The icon of each kind of analysis in the Analysis folder (Section is the default).
+ANALYSIS_ICONS = {
+    "CenterOfMassAnalysis": "center_of_mass",
+    "InterferenceAnalysis": "interference",
+    "ZebraAnalysis": "zebra",
+    "DraftAnalysis": "draft_analysis",
+    "CurvatureCombAnalysis": "curvature",
+    "CurvatureMapAnalysis": "curvature_map",
+    "IsocurveAnalysis": "isocurve",
+    "AccessibilityAnalysis": "accessibility",
+    "MinimumRadiusAnalysis": "min_radius",
+}
+
+
 def is_analysis(obj):
     kind = obj.get("sciforge_type") or ""
     return "Analysis" in kind or "Section" in kind
@@ -213,7 +227,8 @@ def _folders(objects, active_body, component):
             )
             construction.append(_item("construct:", obj, icon, "construction"))
         elif is_analysis(obj):
-            analysis.append(_item("analysis:", obj, "section", "analysis"))
+            icon = ANALYSIS_ICONS.get(sciforge_type, "section")
+            analysis.append(_item("analysis:", obj, icon, "analysis"))
         elif obj.get("role") in ORIGIN_ROLES:
             if component is None:
                 if origin_body is not None and obj["body"] == origin_body:

@@ -27,7 +27,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, drag_guard, handles3d, move, profile_pick, ui_icon_path, warn
+from . import bodies, drag_guard, handles3d, increments, move, profile_pick, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField
@@ -303,7 +303,8 @@ class Triad:
             if kind == "move":
                 value = self._along(position, index)
                 if value is not None:
-                    self._pending = (kind, index, value - self._start)
+                    # Incremental Move (navigation bar): in steps of the increment
+                    self._pending = (kind, index, increments.linear(value - self._start))
             else:
                 angle = self._angle(position, index)
                 if angle is not None:
@@ -311,7 +312,7 @@ class Triad:
                     # follow the hand past half a turn: the step nearest the last one
                     delta += 360.0 * round((self._last_angle - delta) / 360.0)
                     self._last_angle = delta
-                    self._pending = (kind, index, delta)
+                    self._pending = (kind, index, increments.angular(delta))
         except Exception as exc:
             warn("move handle: %s" % exc)
 

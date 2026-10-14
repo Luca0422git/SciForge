@@ -194,9 +194,13 @@ INSPECT = group(
     [
         item("Measure", ("SciForge_Measure", "Std_Measure"), "measure", "I"),
         item("Interference", "SciForge_Interference", "interference"),
-        item("Curvature Comb Analysis", None, "curvature"),
-        item("Zebra Analysis", None, "zebra"),
-        item("Draft Analysis", None, "draft"),
+        item("Curvature Comb Analysis", "SciForge_CurvatureCombAnalysis", "curvature"),
+        item("Zebra Analysis", "SciForge_ZebraAnalysis", "zebra"),
+        item("Draft Analysis", "SciForge_DraftAnalysis", "draft_analysis"),
+        item("Curvature Map Analysis", "SciForge_CurvatureMapAnalysis", "curvature_map"),
+        item("Isocurve Analysis", "SciForge_IsocurveAnalysis", "isocurve"),
+        item("Accessibility Analysis", "SciForge_AccessibilityAnalysis", "accessibility"),
+        item("Minimum Radius Analysis", "SciForge_MinimumRadiusAnalysis", "min_radius"),
         SEP,
         item(
             "Section Analysis",
@@ -204,6 +208,13 @@ INSPECT = group(
             "section",
         ),
         item("Center of Mass", "SciForge_CenterOfMass", "center_of_mass"),
+        item(
+            "Display Component Colors",
+            "SciForge_ComponentColors",
+            "component_colors",
+            "Shift+N",
+            toggle="component_colors_ui:is_on",
+        ),
     ],
 )
 
@@ -844,20 +855,278 @@ NAV_BAR = [
         note="Shift + middle mouse button",
     ),
     item("Look At", "Std_AlignToSelection", "nav_lookat"),
-    item("Pan", None, "nav_pan", note="Middle mouse button"),
-    item("Zoom Window", "Std_ViewBoxZoom", "nav_zoom"),
+    item("Pan", "SciForge_Pan", "nav_pan", note="Drag to move the view (or the middle button)"),
+    sub(
+        "Zoom",
+        [
+            item("Zoom", "SciForge_Zoom", "nav_zoom", note="Drag up or down (or the wheel)"),
+            item("Zoom Window", "SciForge_ZoomWindow", "nav_zoom_window"),
+        ],
+        "nav_zoom",
+    ),
     item("Fit", "Std_ViewFitAll", "nav_fit", "F6"),
     sub(
         "Display Settings",
         [
-            item("Visual Style", "Std_DrawStyle", "nav_display"),
-            item("Orthographic", "Std_OrthographicCamera", "nav_display"),
-            item("Perspective", "Std_PerspectiveCamera", "nav_display"),
+            sub(
+                "Visual Style",
+                [
+                    item(
+                        "Shaded",
+                        "SciForge_StyleShaded",
+                        "nav_display",
+                        checked="display_ui:is_shaded",
+                    ),
+                    item(
+                        "Shaded with Hidden Edges",
+                        "SciForge_StyleShadedHidden",
+                        "nav_display",
+                        checked="display_ui:is_shaded_hidden",
+                    ),
+                    item(
+                        "Shaded with Visible Edges Only",
+                        "SciForge_StyleShadedVisible",
+                        "nav_display",
+                        checked="display_ui:is_shaded_visible",
+                    ),
+                    item(
+                        "Wireframe",
+                        "SciForge_StyleWireframe",
+                        "nav_display",
+                        checked="display_ui:is_wireframe",
+                    ),
+                    item(
+                        "Wireframe with Hidden Edges",
+                        "SciForge_StyleWireframeHidden",
+                        "nav_display",
+                        checked="display_ui:is_wireframe_hidden",
+                    ),
+                    item(
+                        "Wireframe with Visible Edges Only",
+                        "SciForge_StyleWireframeVisible",
+                        "nav_display",
+                        checked="display_ui:is_wireframe_visible",
+                    ),
+                ],
+                "nav_display",
+            ),
+            sub(
+                "Environment",
+                [
+                    item("Theme", "SciForge_EnvTheme", None, checked="display_ui:is_env_theme"),
+                    item(
+                        "Photo Booth",
+                        "SciForge_EnvPhotoBooth",
+                        None,
+                        checked="display_ui:is_env_photo_booth",
+                    ),
+                    item(
+                        "Grey Room",
+                        "SciForge_EnvGreyRoom",
+                        None,
+                        checked="display_ui:is_env_grey_room",
+                    ),
+                    item(
+                        "Dark Sky",
+                        "SciForge_EnvDarkSky",
+                        None,
+                        checked="display_ui:is_env_dark_sky",
+                    ),
+                    item(
+                        "Infinity Pool",
+                        "SciForge_EnvInfinityPool",
+                        None,
+                        checked="display_ui:is_env_infinity_pool",
+                    ),
+                    item(
+                        "Tranquility Blue",
+                        "SciForge_EnvTranquilityBlue",
+                        None,
+                        checked="display_ui:is_env_tranquility_blue",
+                    ),
+                    item(
+                        "Warm Light",
+                        "SciForge_EnvWarmLight",
+                        None,
+                        checked="display_ui:is_env_warm_light",
+                    ),
+                ],
+                "nav_display",
+            ),
+            sub(
+                "Effects",
+                [
+                    item(
+                        "Ground Shadow",
+                        "SciForge_GroundShadow",
+                        None,
+                        toggle="display_ui:ground_shadow_on",
+                    ),
+                    item(
+                        "Ground Plane",
+                        "SciForge_GroundPlane",
+                        None,
+                        toggle="display_ui:ground_plane_on",
+                    ),
+                    item(
+                        "Ambient Occlusion",
+                        None,
+                        None,
+                        note="Not available: FreeCAD's 3D view has no ambient occlusion",
+                    ),
+                    item(
+                        "Reflections",
+                        None,
+                        None,
+                        note="Not available: FreeCAD's 3D view draws no reflections",
+                    ),
+                ],
+                "nav_display",
+            ),
+            sub(
+                "Object Visibility",
+                [
+                    item(
+                        "Show All", "SciForge_ShowAllObjects", None, toggle="display_ui:all_shown"
+                    ),
+                    SEP,
+                    item(
+                        "Origins", "SciForge_ShowOrigins", None, toggle="display_ui:shows_origins"
+                    ),
+                    item(
+                        "Analysis",
+                        "SciForge_ShowAnalysis",
+                        None,
+                        toggle="display_ui:shows_analysis",
+                    ),
+                    item("Joints", "SciForge_ShowJoints", None, toggle="display_ui:shows_joints"),
+                    item(
+                        "Joint Origins",
+                        "SciForge_ShowJointOrigins",
+                        None,
+                        toggle="display_ui:shows_joint_origins",
+                    ),
+                    item(
+                        "Sketches",
+                        "SciForge_ShowSketches",
+                        None,
+                        toggle="display_ui:shows_sketches",
+                    ),
+                    item(
+                        "Construction Planes",
+                        "SciForge_ShowConstructionPlanes",
+                        None,
+                        toggle="display_ui:shows_planes",
+                    ),
+                    item(
+                        "Construction Axes",
+                        "SciForge_ShowConstructionAxes",
+                        None,
+                        toggle="display_ui:shows_axes",
+                    ),
+                    item(
+                        "Construction Points",
+                        "SciForge_ShowConstructionPoints",
+                        None,
+                        toggle="display_ui:shows_points",
+                    ),
+                    item(
+                        "Canvases",
+                        "SciForge_ShowCanvases",
+                        None,
+                        toggle="display_ui:shows_canvases",
+                    ),
+                    item(
+                        "Mesh Bodies",
+                        "SciForge_ShowMeshBodies",
+                        None,
+                        toggle="display_ui:shows_meshes",
+                    ),
+                ],
+                "nav_display",
+            ),
+            sub(
+                "Camera",
+                [
+                    item(
+                        "Orthographic",
+                        "SciForge_CameraOrthographic",
+                        None,
+                        checked="display_ui:is_orthographic",
+                    ),
+                    item(
+                        "Perspective",
+                        "SciForge_CameraPerspective",
+                        None,
+                        checked="display_ui:is_perspective",
+                    ),
+                    item(
+                        "Perspective with Ortho Faces",
+                        "SciForge_CameraOrthoFaces",
+                        None,
+                        checked="display_ui:is_ortho_faces",
+                    ),
+                ],
+                "nav_display",
+            ),
+            item("Ground Plane Offset", "SciForge_GroundPlaneOffset", "nav_display"),
         ],
         "nav_display",
     ),
-    item("Grid and Snaps", None, "nav_grid"),
-    item("Viewports", None, "nav_viewports"),
+    sub(
+        "Grid and Snaps",
+        [
+            item("Layout Grid", "SciForge_LayoutGrid", "nav_grid", toggle="grid_ui:layout_grid_on"),
+            item(
+                "Layout Grid Lock",
+                "SciForge_LayoutGridLock",
+                "nav_grid",
+                toggle="grid_ui:grid_locked",
+            ),
+            item("Snap to Grid", "SciForge_SnapToGrid", "grid_snap", toggle="grid_ui:snap_on"),
+            item("Grid Settings", "SciForge_GridSettings", "nav_grid"),
+            SEP,
+            item(
+                "Incremental Move",
+                "SciForge_IncrementalMove",
+                "increment",
+                toggle="grid_ui:incremental_on",
+            ),
+            item("Set Increments", "SciForge_SetIncrements", "increment"),
+        ],
+        "nav_grid",
+    ),
+    sub(
+        "Viewports",
+        [
+            item(
+                "Single View",
+                "SciForge_ViewportSingle",
+                "view_single",
+                checked="viewports_ui:is_single",
+            ),
+            item(
+                "Two Views Horizontal",
+                "SciForge_ViewportTwoHorizontal",
+                "view_two_h",
+                checked="viewports_ui:is_two_h",
+            ),
+            item(
+                "Two Views Vertical",
+                "SciForge_ViewportTwoVertical",
+                "view_two_v",
+                checked="viewports_ui:is_two_v",
+            ),
+            item(
+                "Multiple Views",
+                "SciForge_ViewportMultiple",
+                "nav_viewports",
+                "Shift+1",
+                checked="viewports_ui:is_multiple",
+            ),
+        ],
+        "nav_viewports",
+    ),
 ]
 
 

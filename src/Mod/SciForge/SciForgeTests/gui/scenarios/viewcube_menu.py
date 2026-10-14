@@ -8,6 +8,7 @@ square is the view's (marking menu). Perspective: the camera is a perspective on
 in the menu next time); Orthographic: back. From FRONT, Go Home: the isometric view.
 Ctrl+Alt+V hides the cube, again shows it. Switching to the Part Design workbench (SciForge
 off): no SciForge cube, FreeCAD's own NaviCube is back; back to SciForge: the other way."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
@@ -18,7 +19,14 @@ from SciForgeTests.gui import viewcube_input as vc
 
 st = {}
 ISO = App.Rotation(0.4247081321999479, 0.1759200437218226, 0.339851090706265, 0.8204732639190053)
-ENTRIES = ["Go Home", "Orthographic", "Perspective", "Set Current View as Home", "Reset Home"]
+ENTRIES = [
+    "Go Home",
+    "Orthographic",
+    "Perspective",
+    "Perspective with Ortho Faces",
+    "Set Current View as Home",
+    "Reset Home",
+]
 
 
 def setup():

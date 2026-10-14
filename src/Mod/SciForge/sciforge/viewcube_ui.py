@@ -11,7 +11,8 @@ What a person can do with it (Fusion's behaviour, SciForge's own drawing and wor
   two curved arrows turn the picture 90 degrees;
 * the small house above it: Go Home. Home is stored in the design (survives save and
   reopen); without one it is the isometric view from the front-right-top, fitted;
-* right-click: Go Home, Orthographic / Perspective, Set Current View as Home (Fit to View
+* right-click: Go Home, Orthographic / Perspective / Perspective with Ortho Faces (the
+  navigation bar's Camera choice), Set Current View as Home (Fit to View
   or Fixed Distance), Reset Home;
 * Ctrl+Alt+V hides or shows it.
 
@@ -22,6 +23,7 @@ has moved. The cube's shape and all the maths are in viewcube.py (no Qt). FreeCA
 cube (the "NaviCube") is switched off by theme.VIEWER_SETTINGS while SciForge is on and
 comes back when leaving SciForge.
 """
+
 import re
 import time
 
@@ -595,8 +597,9 @@ class ViewCube(QtWidgets.QWidget):
         menu.setObjectName("SciForgeViewCubeMenu")
         menu.addAction("Go Home", lambda: _safely(lambda: go_home(view, _document(doc_name))))
         menu.addSeparator()
-        kind = view.getCameraType()
-        for label in ("Orthographic", "Perspective"):
+        # the same Camera choice as the navigation bar's Display Settings (Fusion shares it)
+        kind = _camera_choice(view)
+        for label in ("Orthographic", "Perspective", "Perspective with Ortho Faces"):
             action = menu.addAction(label, lambda t=label: _safely(lambda: _camera(view, t)))
             action.setCheckable(True)
             action.setChecked(kind == label)
@@ -613,9 +616,25 @@ class ViewCube(QtWidgets.QWidget):
         menu.deleteLater()
 
 
+def _camera_choice(view):
+    try:
+        from . import display_ui
+
+        return display_ui.get("Camera")
+    except Exception:
+        return view.getCameraType()
+
+
 def _camera(view, kind):
-    view.setCameraType(kind)
-    log("camera: %s" % kind.lower())
+    try:
+        from . import display_ui
+
+        display_ui.set_camera(kind)  # every view, and remembered (navigation bar)
+    except Exception as exc:
+        warn("camera: %s" % exc)
+        if kind in ("Orthographic", "Perspective"):
+            view.setCameraType(kind)
+            log("camera: %s" % kind.lower())
 
 
 def _safely(step):

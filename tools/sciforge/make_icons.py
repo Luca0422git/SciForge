@@ -1609,6 +1609,121 @@ def _():
     )
 
 
+# -- INSPECT analyses and the navigation bar (sf/inspect-nav) ------------------------------
+@icon("draft_analysis")
+def _():
+    return (
+        poly([(10, 40), (24, 40), (24, 10), (16, 10)], "#3cc46a")
+        + poly([(24, 40), (38, 40), (32, 10), (24, 10)], "#ef6f6c")
+        + arrow(24, 30, 24, 4, WHITE, 2.2)
+    )
+
+
+@icon("curvature_map")
+def _():
+    out = ""
+    colors = ["#3cc46a", "#a8d84a", "#f6dc5c", "#f2a14a", "#ef6f6c"]
+    for i, color in enumerate(colors):
+        out += path(
+            "M%.1f 40 Q24 %.1f %.1f 40" % (6 + i * 3.2, 6 + i * 6.0, 42 - i * 3.2),
+            color,
+            3.0,
+        )
+    return out
+
+
+@icon("isocurve")
+def _():
+    out = path("M6 38 Q24 6 42 38", STROKE, 1.6)
+    for k in range(1, 5):
+        t = k / 5
+        x = (1 - t) ** 2 * 6 + 2 * (1 - t) * t * 24 + t * t * 42
+        out += path("M%.1f %.1f Q%.1f %.1f %.1f %.1f" % (x - 6, 42, x, 30, x + 4, 14), POINT, 1.6)
+    out += path("M8 30 Q24 14 40 30", ORANGE, 1.6)
+    return out
+
+
+@icon("accessibility")
+def _():
+    return (
+        poly(
+            [(6, 40), (42, 40), (42, 26), (30, 26), (30, 34), (18, 34), (18, 26), (6, 26)], GREY[1]
+        )
+        + rect(18, 34, 12, 6, "#ef6f6c")
+        + poly([(6, 26), (18, 26), (18, 29), (6, 29)], "#3cc46a")
+        + poly([(30, 26), (42, 26), (42, 29), (30, 29)], "#3cc46a")
+        + arrow(24, 4, 24, 22, WHITE, 2.2)
+    )
+
+
+@icon("min_radius")
+def _():
+    return (
+        poly([(8, 40), (40, 40), (40, 10), (32, 10), (32, 24), (24, 32), (8, 32)], GREY[1])
+        + path("M32 22 Q32 32 22 32", "#ef6f6c", 3.0)
+        + circle(26, 26, 5, "none", WHITE, 1.4)
+    )
+
+
+@icon("component_colors")
+def _():
+    return (
+        block(0, 0, 0, 10, 10, 10, ("#bfe5ff", "#8fd0ff", "#5aaee8"), 16, 38)
+        + block(0, 0, 0, 10, 10, 10, ("#f6dc8c", "#e8c460", "#c9a23e"), 32, 38)
+        + block(0, 0, 0, 10, 10, 10, ("#c8f0c8", "#8ed69a", "#5cb36c"), 24, 24)
+    )
+
+
+@icon("nav_zoom_window")
+def _():
+    return (
+        rect(
+            6,
+            10,
+            28,
+            22,
+            "none",
+            0,
+            'stroke="%s" stroke-width="1.6" stroke-dasharray="3 2"' % STROKE,
+        )
+        + circle(32, 30, 7, "none", STROKE, 2.2)
+        + line(37, 35, 43, 41, STROKE, 2.6)
+    )
+
+
+@icon("view_single")
+def _():
+    return rect(6, 8, 36, 32, "none", 1.5, 'stroke="%s" stroke-width="2"' % STROKE)
+
+
+@icon("view_two_h")
+def _():
+    return rect(6, 8, 16, 32, STROKE, 1.5) + rect(26, 8, 16, 32, STROKE, 1.5)
+
+
+@icon("view_two_v")
+def _():
+    return rect(6, 8, 36, 14, STROKE, 1.5) + rect(6, 26, 36, 14, STROKE, 1.5)
+
+
+@icon("grid_snap")
+def _():
+    out = ""
+    for k in range(4):
+        out += line(8 + k * 10.6, 8, 8 + k * 10.6, 40, "#7d8593", 1.2) + line(
+            8, 8 + k * 10.6, 40, 8 + k * 10.6, "#7d8593", 1.2
+        )
+    return out + circle(18.6, 29.2, 4, POINT) + path("M18.6 29.2 L36 12", WHITE, 1.6)
+
+
+@icon("increment")
+def _():
+    out = line(6, 34, 42, 34, STROKE, 1.6)
+    for k in range(5):
+        out += line(8 + k * 8, 30, 8 + k * 8, 38, STROKE, 1.6)
+    return out + arrow(8, 22, 40, 22, POINT, 2.2)
+
+
 @icon("workspace_design")
 def _():
     return block(0, 0, 0, 16, 16, 14, BLUE, 24, 30)
