@@ -1,0 +1,122 @@
+{
+  "id": "extrude_through_body",
+  "title": "Extrude Cut To Object a body, Through Body: through the upper plate only",
+  "tags": [
+    "extrude",
+    "to_object",
+    "extend",
+    "bodies"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 6,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "the next sketch belongs to Body1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 40,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s3",
+      "operation": "cut",
+      "extent": "to_object",
+      "to": {
+        "step": "e2"
+      },
+      "extend": "through",
+      "bodies": "auto"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 12000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 7030.3539967061515,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 19030.35399670615,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      26
+    ],
+    "source": "analytic",
+    "note": "a d6 cut from z 40 down To Object the upper plate (z 20..26), Through Body: it goes through that plate and stops where it leaves it, so the lower plate keeps its 12000; the upper loses pi 9 6 (To Body would stop on its top and cut nothing)"
+  }
+}

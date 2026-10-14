@@ -16,6 +16,7 @@ or a given length from one end. Two ways to show it, like Fusion's Modeled check
 The feature is a PartDesign::FeaturePython, so later steps build on it and editing earlier
 steps recomputes it. Saved documents store "sciforge.thread.ThreadFeature": keep that name.
 """
+
 import json
 import math
 
@@ -174,7 +175,14 @@ def resolve(options, cylinder):
 
 def thread_class(options, internal):
     o = options_with_defaults(options)
-    wanted = o["thread_class"]
+    return thread_class_for(o["standard"], o["thread_class"], internal)
+
+
+def thread_class_for(standard, wanted, internal):
+    """The class a thread of this standard uses on a hole (internal) or a shaft: the one
+    asked for, its counterpart ("6g" asked for a hole: "6H"), else the usual one."""
+    o = {"standard": standard}
+    wanted = wanted or ""
     known = tables.classes(o["standard"], internal)
     if wanted in known:
         return wanted
@@ -215,15 +223,19 @@ def _sweep(spine, profile):
     return spine.makePipeShell([profile], True, True)
 
 
-def cutter(cylinder, designation, z0, z1, left_hand=False):
-    """The solid a modeled thread removes from the part (shape coordinates)."""
+def cutter(cylinder, designation, z0, z1, left_hand=False, thread_class=""):
+    """The solid a modeled thread removes from the part (shape coordinates). The tolerance
+    class sets where the thread lies (thread_tables.class_zone: the profile moved out or in,
+    the shaft turned / the hole bored to the middle of the class's diameters, like Fusion's
+    modeled threads follow the class)."""
     import Part
 
     if z1 - z0 <= TOL:
         raise ThreadError("The thread length must be more than 0.")
     pitch = designation.pitch
-    major = designation.diameter / 2.0
     internal = cylinder.internal
+    zone = tables.class_zone(designation, thread_class, internal)
+    major, limit = core.class_radii(designation.diameter, internal, zone)
     corners = core.groove(major, pitch, internal)
     # Start one pitch early and end one late: inside [z0, z1] every turn is complete.
     start = z0 - pitch
@@ -240,12 +252,11 @@ def cutter(cylinder, designation, z0, z1, left_hand=False):
     tool = sweep.common(bound)
     extra = None
     if internal:
-        minor = major - 5.0 * h / 8.0
-        if cylinder.radius < minor - TOL:  # bore the hole up to the minor diameter
-            extra = Part.makeCylinder(minor, z1 - z0, App.Vector(0, 0, z0))
-    elif cylinder.radius > major + TOL:  # turn the shaft down to the major diameter
+        if cylinder.radius < limit - TOL:  # bore the hole up to the minor diameter
+            extra = Part.makeCylinder(limit, z1 - z0, App.Vector(0, 0, z0))
+    elif cylinder.radius > limit + TOL:  # turn the shaft down to the major diameter
         outer = Part.makeCylinder(cylinder.radius + 1.0, z1 - z0, App.Vector(0, 0, z0))
-        inner = Part.makeCylinder(major, z1 - z0, App.Vector(0, 0, z0))
+        inner = Part.makeCylinder(limit, z1 - z0, App.Vector(0, 0, z0))
         extra = outer.cut(inner)
     if extra is not None:
         tool = tool.fuse(extra)
@@ -253,9 +264,16 @@ def cutter(cylinder, designation, z0, z1, left_hand=False):
     return tool
 
 
-def build(base_shape, cylinders, designation, z_spans, left_hand=False, refine=True):
-    """base_shape with modeled threads cut (one cylinder and span per face)."""
-    tools = [cutter(c, designation, z0, z1, left_hand) for c, (z0, z1) in zip(cylinders, z_spans)]
+def build(
+    base_shape, cylinders, designation, z_spans, left_hand=False, refine=True, thread_class=""
+):
+    """base_shape with modeled threads cut (one cylinder and span per face); `thread_class`
+    is the class asked for (the right one for a hole or a shaft is used, see
+    thread_class())."""
+    tools = []
+    for c, (z0, z1) in zip(cylinders, z_spans):
+        wanted = thread_class_for(designation.standard, thread_class, c.internal)
+        tools.append(cutter(c, designation, z0, z1, left_hand, wanted))
     result = base_shape
     for tool in tools:
         result = result.cut(tool)
@@ -382,7 +400,13 @@ class ThreadFeature:
         }
         if obj.Modeled:
             obj.Shape = build(
-                base.Shape, cylinders, designation, spans, obj.LeftHanded, refine=obj.Refine
+                base.Shape,
+                cylinders,
+                designation,
+                spans,
+                obj.LeftHanded,
+                refine=obj.Refine,
+                thread_class=obj.ThreadClass,
             )
         else:
             obj.Shape = base.Shape.copy()

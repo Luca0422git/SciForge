@@ -71,7 +71,7 @@
     }
   ],
   "expect": {
-    "volume": 12312.706357416553,
+    "volume": 12309.081752596665,
     "bbox": [
       0,
       0,
@@ -82,6 +82,6 @@
     ],
     "solids": 1,
     "source": "analytic",
-    "note": "after the edit the groove runs 5 mm: V = boss - 5 * 5.317129834"
+    "note": "a modeled thread lies in the middle of its class's tolerance zone (ISO 965-1, thread_tables.class_zone): after the edit the M6x1 6g groove runs 5 mm: V = boss - 5 * thread_core.removed_area(2.959327, 1, False, 3, 2.942788) = 6.042050798"
   }
 }

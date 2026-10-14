@@ -16,18 +16,23 @@ Placement
                 when the sketch lies under the part; Flip turns them round).
 
 Extents Distance / To (a face or plane) / All. Hole Type Simple / Counterbore /
-Countersink. Hole Tap Type Simple / Clearance (ISO metric or ANSI sizes with a Close /
-Normal / Loose fit) / Tapped (size, designation, class, direction, Modeled, full or partial
-tap depth). Drill Point Flat / Angle (118 degrees by default). The depth is measured to the
-end of the full diameter; an angled drill point comes on top, as a drill makes it.
+Countersink. Hole Tap Type Simple / Clearance (ISO metric or ANSI sizes, a fastener type and
+a Close / Normal / Loose fit: hole_tables.py) / Tapped (size, designation, class, direction,
+Modeled, full or partial tap depth; a modeled thread sits in the middle of its class's
+tolerance zone) / Taper Tapped (NPT or BSPT pipe threads: a hole tapering 1 in 16 from the
+thread's minor diameter at the opening, the thread itself cosmetic, as in Fusion). Drill
+Point Flat / Angle (118 degrees by default). The depth is measured to the end of the full
+diameter; an angled drill point comes on top, as a drill makes it.
 
 The hole and its sketch are created in one undo step by the dialog (taskui.Panel).
 """
+
 import json
 import math
 
 import FreeCAD as App
 
+from . import hole_tables
 from . import thread_tables as tables
 
 TYPE = "PartDesign::Hole"
@@ -53,7 +58,7 @@ COUNTERSINK_CUTS = (
 PLACEMENTS = ("single", "sketch")
 EXTENTS = ("distance", "to", "all")
 HOLE_TYPES = ("simple", "counterbore", "countersink")
-TAP_TYPES = ("simple", "clearance", "tapped")
+TAP_TYPES = ("simple", "clearance", "tapped", "taper")
 DRILL_POINTS = ("flat", "angle")
 
 DEFAULTS = {
@@ -75,6 +80,9 @@ DEFAULTS = {
     "size": "6",
     "designation": "M6x1",
     "fit": "normal",
+    "fastener": "",  # clearance: the fastener type (hole_tables.FASTENERS key; "" = first)
+    "taper_kind": "npt",  # taper tapped: npt | bspt
+    "taper_size": "1/8",
     "thread_class": "6H",
     "direction": "right",
     "modeled": False,
@@ -415,14 +423,16 @@ def earliest_edge(base, edge_name):
     return best
 
 
-def _attach(sketch, body, base, face_name, point):
+def _attach(sketch, body, base, face_name, point, hole=None):
     """Put the sketch flat on the face (planar faces: parametric attachment, the sketch
     follows the face, on the step that made it: earliest_face). On a curved face the sketch
     is tangent to the face at `point` (body coordinates), its normal the face's outward
-    normal there."""
+    normal there, and it keeps that spot on the face when the face changes later (a hidden
+    HoleOnFace helper: cylinders, cones, spheres and tori; other faces keep the spot)."""
     face = base.Shape.getElement(face_name)
     point = snap_to_face(face, point)
     if face.Surface.TypeId == "Part::GeomPlane":
+        _drop_follow_face(hole, sketch)
         sketch.AttachmentOffset = App.Placement()
         sketch.AttachmentSupport = [earliest_face(base, face_name, point)]
         sketch.MapMode = "FlatFace"
@@ -431,7 +441,11 @@ def _attach(sketch, body, base, face_name, point):
     rotation = App.Rotation(Z, normal)
     sketch.AttachmentSupport = [(_origin_plane(body), "")]
     sketch.MapMode = "FlatFace"
-    sketch.AttachmentOffset = App.Placement(App.Vector(point), rotation)
+    if face.Surface.TypeId in CURVED_KINDS and hole is not None:
+        _follow_face(hole, sketch, body, base, face_name, face, point)
+    else:
+        _drop_follow_face(hole, sketch)
+        sketch.AttachmentOffset = App.Placement(App.Vector(point), rotation)
     return "curved"
 
 
@@ -585,7 +599,7 @@ def set_position(hole, base, face_name, point, refs=None):
         and sketch.AttachmentOffset.isIdentity()
     )
     if not same_face:
-        _attach(sketch, body, base, face_name, point)
+        _attach(sketch, body, base, face_name, point, hole)
         sketch.recompute()
     xy = _sketch_xy(sketch, point)
     wanted, lines = [], []
@@ -644,8 +658,10 @@ def drop_orphans(body):
     """Helper sketches whose hole was deleted (timeline Delete keeps a hole's sketch)."""
     doc = body.Document
     for obj in list(body.Group):
-        if (is_to_helper(obj) and hole_of_to(obj) is None) or (
-            is_helper(obj) and hole_of(obj) is None
+        if (
+            (is_to_helper(obj) and hole_of_to(obj) is None)
+            or (is_helper(obj) and hole_of(obj) is None)
+            or (is_on_face_helper(obj) and hole_of_on_face(obj) is None)
         ):
             try:
                 body.removeObject(obj)
@@ -679,9 +695,9 @@ def make_single(body, base, face_name, point, options=None, name="Hole", refs=No
     sketch = body.newObject(SKETCH_TYPE, "HoleSketch")
     _mark(sketch, SKETCH_ROLE)
     hole = _new_hole(body, name)
-    _attach(sketch, body, base, face_name, point)
-    sketch.recompute()
     hole.Profile = (sketch, [""])
+    _attach(sketch, body, base, face_name, point, hole)
+    sketch.recompute()
     body.Tip = hole
     sketch.Label = helper_label(hole)
     _hide(sketch)
@@ -1064,6 +1080,171 @@ def _drop_to(hole):
     _delete(helper)
 
 
+# -- a hole on a curved face follows the face ----------------------------------------------------
+ON_FACE_ROLE = "HoleOnFace"
+ON_FACE_TYPE = "Part::Part2DObjectPython"  # a Body takes only sketch-like helpers
+CURVED_KINDS = (
+    "Part::GeomCylinder",
+    "Part::GeomCone",
+    "Part::GeomSphere",
+    "Part::GeomToroid",
+)
+
+
+class HoleOnFace:
+    """Fusion puts a hole on a curved face square to the face where it was clicked, and the
+    hole stays there when an earlier step changes the face (a cylinder made wider). A
+    FreeCAD sketch cannot be attached to a curved face, so this hidden helper (in the body,
+    just before the hole's sketch) finds the spot again on every recompute: the same surface
+    parameters (u, v) on the face (a cylinder: the same angle and height), and the face's
+    outward normal there. The hole's sketch takes its AttachmentOffset from "Spot" (an
+    expression). When FreeCAD loses the face's name, the nearest face of the same kind is
+    used. Saved documents store "sciforge.hole.HoleOnFace": keep the name and properties."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        def add(kind, name, doc):
+            if name not in obj.PropertiesList:
+                obj.addProperty(kind, name, "Hole On Face", doc)
+
+        add("App::PropertyLinkSub", "Face", "The curved face the hole sits on")
+        add("App::PropertyFloat", "U", "Surface parameter u of the spot")
+        add("App::PropertyFloat", "V", "Surface parameter v of the spot")
+        add("App::PropertyString", "Kind", "The face's surface type")
+        add("App::PropertyVector", "Last", "Where the spot was last (body coordinates)")
+        add("App::PropertyPlacement", "Spot", "The hole's start: on the face, square to it")
+        try:
+            obj.setPropertyStatus("Spot", "Output")
+            obj.setPropertyStatus("Last", "Output")
+        except Exception:
+            pass
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        import Part
+
+        link = obj.Face
+        if not link or link[0] is None:
+            raise HoleError("The face the hole sits on is gone. Edit the hole and click a face.")
+        base = link[0]
+        name = (list(link[1]) or [""])[0]
+        face = None
+        try:
+            face = base.Shape.getElement(name) if name else None
+        except Exception:
+            face = None
+        if face is None or face.Surface.TypeId != obj.Kind:
+            face, name = _refind_curved(base.Shape, obj.Kind, obj.Last)
+            if face is None:
+                raise HoleError(
+                    "The curved face the hole sits on is gone. Edit the hole and click a face."
+                )
+            obj.Face = (base, [name])  # stop FreeCAD reporting the lost name every time
+        point = App.Vector(face.Surface.value(obj.U, obj.V))
+        normal = face_normal_at(face, point)
+        spot = App.Placement(point, App.Rotation(Z, normal))
+        if not obj.Spot.isSame(spot, 1e-12):
+            obj.Spot = spot
+        if (obj.Last - point).Length > 1e-12:
+            obj.Last = point
+        obj.Shape = Part.Vertex(point)
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _refind_curved(shape, kind, last):
+    """(face, "FaceN") of `shape`: the face of surface type `kind` nearest to `last`."""
+    import Part
+
+    best = None
+    for i, face in enumerate(shape.Faces, start=1):
+        if face.Surface.TypeId != kind:
+            continue
+        try:
+            gap = face.distToShape(Part.Vertex(App.Vector(last)))[0]
+        except Exception:
+            continue
+        if best is None or gap < best[0]:
+            best = (gap, face, "Face%d" % i)
+    if best is None:
+        return None, ""
+    return best[1], best[2]
+
+
+def is_on_face_helper(obj):
+    return obj is not None and getattr(obj, ROLE, "") == ON_FACE_ROLE
+
+
+def on_face_helper(hole):
+    """The HoleOnFace helper of a Single Hole on a curved face, or None."""
+    name = load_meta(hole).get("on_face")
+    obj = hole.Document.getObject(name) if name else None
+    return obj if is_on_face_helper(obj) else None
+
+
+def hole_of_on_face(helper):
+    """The hole whose sketch a HoleOnFace helper places, or None."""
+    for obj in helper.Document.Objects:
+        if is_hole(obj) and load_meta(obj).get("on_face") == helper.Name:
+            return obj
+    return None
+
+
+def _follow_face(hole, sketch, body, base, face_name, face, point):
+    """The hole's sketch keeps its place on the curved face (HoleOnFace)."""
+    helper = on_face_helper(hole)
+    if helper is None:
+        helper = body.Document.addObject(ON_FACE_TYPE, "HoleOnFace")
+        HoleOnFace(helper)
+        body.insertObject(helper, sketch, False)  # just before the hole's sketch
+        _mark(helper, ON_FACE_ROLE)
+        if TIMELINE not in helper.PropertiesList:
+            helper.addProperty("App::PropertyBool", TIMELINE, "SciForge", "", 4)
+        setattr(helper, TIMELINE, False)
+        meta = load_meta(hole)
+        meta["on_face"] = helper.Name
+        _save_meta(hole, meta)
+    u, v = face.Surface.parameter(App.Vector(point))
+    helper.Face = (base, [face_name])
+    helper.U, helper.V = float(u), float(v)
+    helper.Kind = face.Surface.TypeId
+    helper.Last = App.Vector(point)
+    helper.Label = "%s Spot" % display_name(hole)
+    _hide(helper)
+    helper.recompute()
+    expr = "%s.Spot" % helper.Name
+    if dict(sketch.ExpressionEngine).get("AttachmentOffset") != expr:
+        sketch.setExpression("AttachmentOffset", expr)
+    return helper
+
+
+def _drop_follow_face(hole, sketch):
+    """The hole is placed on a flat face (or a face kind the helper does not follow): its
+    sketch's offset is plain again and the helper goes."""
+    if dict(sketch.ExpressionEngine).get("AttachmentOffset"):
+        sketch.setExpression("AttachmentOffset", None)
+    helper = on_face_helper(hole) if hole is not None else None
+    if helper is None:
+        return
+    meta = load_meta(hole)
+    meta.pop("on_face", None)
+    _save_meta(hole, meta)
+    _delete(helper)
+
+
 # -- options <-> the PartDesign::Hole ----------------------------------------------------------
 def _set(obj, prop, value):
     """Set a property only when it changes (every write marks the feature for recompute)."""
@@ -1086,6 +1267,80 @@ def designation_of(options):
     return d
 
 
+def taper_of(options):
+    """The taper pipe thread a Taper Tapped hole asks for (hole_tables.TaperThread)."""
+    found = hole_tables.taper_thread(options["taper_kind"], options["taper_size"])
+    if found is None:
+        sizes = hole_tables.taper_sizes(options["taper_kind"])
+        found = hole_tables.taper_thread(options["taper_kind"], sizes[0]) if sizes else None
+    if found is None:
+        raise HoleError("Unknown pipe thread %s." % options["taper_size"])
+    return found
+
+
+def fastener_of(options):
+    """The clearance hole's fastener type (hole_tables.Fastener) for its hole type, or None."""
+    wanted = hole_tables.fastener(options["standard"], options.get("fastener") or "")
+    usable = hole_tables.fasteners(options["standard"], options["hole_type"])
+    if wanted in usable:
+        return wanted
+    return usable[0] if usable else None
+
+
+def with_fastener_head(options):
+    """The options with a clearance hole's counterbore or countersink sized for its
+    fastener's head (hole_tables.head_cut): Fusion fills them in when the fastener, the size
+    or the hole type changes (they can still be typed over afterwards). Other holes, and
+    sizes the fastener has no head data for, come back unchanged."""
+    o = options_with_defaults(options)
+    if o["tap_type"] != "clearance" or o["hole_type"] == "simple":
+        return o
+    found = fastener_of(o)
+    cut = hole_tables.head_cut(o["standard"], found.key, o["size"]) if found else None
+    if cut is None or cut["hole_type"] != o["hole_type"]:
+        return o
+    o["fastener"] = found.key
+    o["expressions"] = dict(o.get("expressions") or {})
+    if cut["hole_type"] == "counterbore":
+        o["cbore_diameter"] = cut["diameter"]
+        o["cbore_depth"] = cut["depth"]
+        for key in ("cbore_diameter", "cbore_depth"):
+            o["expressions"].pop(key, None)
+    else:
+        o["csink_diameter"] = cut["diameter"]
+        o["csink_angle"] = cut["angle"]
+        for key in ("csink_diameter", "csink_angle"):
+            o["expressions"].pop(key, None)
+    return o
+
+
+def _set_taper(hole, taper):
+    """FreeCAD's Hole tapers its wall by TaperedAngle (90 = straight)."""
+    if taper is None:
+        if hole.Tapered:
+            hole.Tapered = False
+        return
+    if not hole.Tapered:
+        hole.Tapered = True
+    _set(hole, "TaperedAngle", 90.0 - hole_tables.TAPER_HALF_ANGLE)
+
+
+def _set_class_clearance(hole, designation, options):
+    """A modeled thread in the middle of its class's tolerance zone (Fusion follows the
+    class): FreeCAD's Hole moves the thread and the tap drill out by CustomThreadClearance."""
+    modeled = options["tap_type"] == "tapped" and bool(options["modeled"])
+    if "UseCustomThreadClearance" not in hole.PropertiesList:
+        return
+    if not modeled:
+        if hole.UseCustomThreadClearance:
+            hole.UseCustomThreadClearance = False
+        return
+    zone = tables.class_zone(designation, options["thread_class"], True)
+    if not hole.UseCustomThreadClearance:
+        hole.UseCustomThreadClearance = True
+    _set(hole, "CustomThreadClearance", max(0.0, zone["shift"]))
+
+
 def apply(hole, options):
     """Write the Fusion options onto the PartDesign::Hole (and remember the rest)."""
     o = options_with_defaults(options)
@@ -1099,7 +1354,19 @@ def apply(hole, options):
             raise HoleError("%s must be one of %s" % (key, ", ".join(allowed)))
     tap = o["tap_type"]
     pitch = 0.0
-    if tap == "simple":
+    taper = None
+    if tap == "taper":
+        # Fusion's Taper Tapped: the hole starts at the pipe thread's minor diameter and
+        # narrows 1 in 16; the thread is cosmetic (Fusion has no modeled pipe threads).
+        taper = taper_of(o)
+        _set(hole, "ThreadType", "None")
+        if hole.Threaded:
+            hole.Threaded = False
+        _set(hole, "Diameter", taper.minor)
+        pitch = taper.pitch
+        if "UseCustomThreadClearance" in hole.PropertiesList and hole.UseCustomThreadClearance:
+            hole.UseCustomThreadClearance = False
+    elif tap == "simple":
         _set(hole, "ThreadType", "None")
         if hole.Threaded:
             hole.Threaded = False
@@ -1121,6 +1388,8 @@ def apply(hole, options):
             _set(hole, "ThreadClass", tables.freecad_class(d.series, o["thread_class"]))
             _set(hole, "ThreadDirection", "Left" if o["direction"] == "left" else "Right")
             _set(hole, "ModelThread", bool(o["modeled"]))
+        _set_class_clearance(hole, d, o)
+    _set_taper(hole, taper)
     _set(hole, "Reversed", bool(o["flip"]) and placement_of(hole) == "sketch")
     if o["extent"] == "all":
         _drop_to(hole)
@@ -1180,6 +1449,13 @@ def apply(hole, options):
             "extent": o["extent"],
             "to": _ref_json(o.get("to")),
             "fit": o["fit"],
+            "fastener": (
+                (fastener_of(o).key if fastener_of(o) is not None else "")
+                if tap == "clearance"
+                else o.get("fastener", "")
+            ),
+            "taper_kind": o["taper_kind"],
+            "taper_size": taper.size if taper is not None else o["taper_size"],
             "thread_class": o["thread_class"],
             "full_tap": bool(o["full_tap"]),
             "tap_depth": float(o["tap_depth"]),
@@ -1308,7 +1584,12 @@ def read(hole):
         o["cbore_depth"] = hole.HoleCutDepth.Value
     series = hole.ThreadType
     o["diameter"] = hole.Diameter.Value
-    if series == "None" or series not in tables.TABLES:
+    o["fastener"] = meta.get("fastener", "") or ""
+    o["taper_kind"] = meta.get("taper_kind", o["taper_kind"])
+    o["taper_size"] = meta.get("taper_size", o["taper_size"])
+    if meta.get("tap_type") == "taper" and bool(getattr(hole, "Tapered", False)):
+        o["tap_type"] = "taper"
+    elif series == "None" or series not in tables.TABLES:
         o["tap_type"] = "simple"
     else:
         d = tables.from_freecad(series, hole.ThreadSize)
@@ -1349,13 +1630,25 @@ def thread_pitch(hole):
 def cosmetic_threads(hole):
     """Where a tapped hole that is not modeled has its thread (drawn as a cosmetic thread):
     [{"start", "direction" (global), "radius" (drilled), "major", "length", "pitch",
-    "left"}], or [] for any other hole."""
-    if not hole.Threaded or hole.ModelThread or hole.ThreadType not in tables.TABLES:
-        return []
-    d = tables.from_freecad(hole.ThreadType, hole.ThreadSize)
-    if d is None:
-        return []
-    if hole.ThreadDepthType == "Dimension":
+    "left"}], or [] for any other hole. A Taper Tapped hole's pipe thread is cosmetic
+    (Fusion's too): drawn at its size at the opening, the hole's whole depth."""
+    taper = None
+    meta = load_meta(hole)
+    if meta.get("tap_type") == "taper" and bool(getattr(hole, "Tapered", False)):
+        taper = hole_tables.taper_thread(meta.get("taper_kind"), meta.get("taper_size"))
+        if taper is None:
+            return []
+        major, pitch = taper.major / 2.0, taper.pitch
+    else:
+        if not hole.Threaded or hole.ModelThread or hole.ThreadType not in tables.TABLES:
+            return []
+        d = tables.from_freecad(hole.ThreadType, hole.ThreadSize)
+        if d is None:
+            return []
+        major, pitch = d.diameter / 2.0, d.pitch
+    if taper is not None:
+        length = through_length(hole) if hole.DepthType == "ThroughAll" else hole.Depth.Value
+    elif hole.ThreadDepthType == "Dimension":
         length = hole.ThreadDepth.Value
     elif hole.DepthType == "ThroughAll":
         length = through_length(hole)
@@ -1368,10 +1661,10 @@ def cosmetic_threads(hole):
                 "start": centre,
                 "direction": direction,
                 "radius": hole.Diameter.Value / 2.0,
-                "major": d.diameter / 2.0,
+                "major": major,
                 "length": length,
-                "pitch": d.pitch,
-                "left": hole.ThreadDirection == "Left",
+                "pitch": pitch,
+                "left": hole.ThreadDirection == "Left" and taper is None,
             }
         )
     return found
@@ -1398,10 +1691,13 @@ def remove(hole):
     base = hole.BaseFeature
     helper = helper_sketch(hole)
     to = to_helper(hole)
+    spot = on_face_helper(hole)
     was_tip = body is not None and body.Tip is hole
     _delete(hole)
     if to is not None:
         _delete(to)
+    if spot is not None:
+        _delete(spot)
     if helper is not None:
         _delete(helper)
     if was_tip and base is not None:

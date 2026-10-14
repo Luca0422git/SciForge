@@ -1,0 +1,82 @@
+{
+  "id": "extrude_to_object_offset",
+  "title": "Extrude Cut To Object with an Offset: stops 3 mm short of the bottom face",
+  "tags": [
+    "extrude",
+    "to_object",
+    "offset",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            10,
+            5,
+            30,
+            25
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "c1",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "count": 1
+        }
+      },
+      "object_offset": -3
+    }
+  ],
+  "expect": {
+    "volume": 9200,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "a 20 x 20 pocket from the top To Object the bottom face, Offset -3 (short of it): 7 deep, V = 12000 - 400 7 (offset 0 would cut through: 8000)"
+  }
+}

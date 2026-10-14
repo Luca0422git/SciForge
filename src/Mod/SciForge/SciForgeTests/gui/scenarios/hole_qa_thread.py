@@ -68,7 +68,12 @@ def near(a, c, tol=1e-6):
 def removed(length, pitch=1.5):
     from sciforge import thread_core
 
-    return thread_core.removed_volume(R, pitch, False, R, length)
+    from sciforge import thread_tables
+
+    # a modeled thread lies in the middle of its class's zone (6g on a shaft)
+    size = thread_tables._trim(2 * R)
+    d = thread_tables.find("iso", "M%sx%s" % (size, thread_tables._trim(pitch)))
+    return thread_core.class_removed_volume(d, "6g", False, R, length)
 
 
 def drawn():
@@ -387,7 +392,10 @@ def t4_done():
     from sciforge import thread_core
 
     v = h.solid_volume()
-    expect = s["v"] - thread_core.removed_volume(5.0, 1.5, True, 4.25, 10.0)
+    from sciforge import thread_tables
+
+    m10 = thread_tables.find("iso", "M10x1.5")  # 6H: the middle of its class's zone
+    expect = s["v"] - thread_core.class_removed_volume(m10, "6H", True, 4.25, 10.0)
     h.check("T4 modeled inside thread through the plate", hs.close(v, expect, 1e-5), (v, expect))
     part_ok("T4")
     s["v"] = v

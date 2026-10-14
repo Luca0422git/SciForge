@@ -11,6 +11,7 @@ The numbers (major diameter, pitch, tap drill, all in mm) are the standard value
 ISO 262 / ISO 2306 and ASME B1.1 give; they are the same rows FreeCAD's Hole uses
 (src/Mod/PartDesign/App/FeatureHole.cpp), so a size picked here is one FreeCAD knows.
 """
+
 import math
 
 STANDARDS = (("iso", "ISO Metric profile"), ("ansi", "ANSI Unified Screw Threads"))
@@ -188,6 +189,134 @@ def freecad_class(series, wanted):
     if wanted in known:
         return wanted
     return "6H" if series.startswith("ISO") else "2B"
+
+
+# -- tolerance classes: where a modeled thread sits ---------------------------------------------
+# Fusion's modeled thread follows the class picked (6H / 7H, 2B / 3B ...): the class sets how
+# far the thread's diameters lie from the basic profile. SciForge models each thread in the
+# middle of its class's tolerance zone (Guess: Fusion's thread data holds one value per class;
+# the middle is what a part made to that class measures on average).
+#
+# ISO 965-1 (metric): fundamental deviation (micrometres) G: EI = +(15 + 11 P), H: 0;
+# e: es = -(50 + 11 P), f: -(30 + 11 P), g: -(15 + 11 P), h: 0. Tolerance grade 6 widths:
+# Td2 = 90 P^0.4 d^0.1 (pitch diameter, bolt; d the geometric mean of the size's diameter
+# range), TD2 = 1.32 Td2 (nut), Td = 180 P^(2/3) - 3.15 / sqrt(P) (major diameter, bolt),
+# TD1 = 433 P - 190 P^1.22 for P < 1, else 230 P^0.7 (minor diameter, nut); other grades
+# times 0.5 (3), 0.63 (4), 0.8 (5), 1.25 (7), 1.6 (8), 2 (9). (The standard's tables round
+# these formulas to the R40 series: within about 3 %.)
+#
+# ASME B1.1 (Unified, inches): Td2(2A) = 0.0015 D^(1/3) + 0.0015 sqrt(LE) + 0.015 P^(2/3) with
+# the length of engagement LE = D (this matches B1.1's rows, e.g. 1/4-20: 0.0037, 1/2-13:
+# 0.0050); 1A x1.5, 3A x0.75, 1B x1.95, 2B x1.3, 3B x0.975. Allowance es = -0.3 Td2(2A) for 1A
+# and 2A, 0 for 3A and every internal class. Major tolerance (bolt) 0.060 P^(2/3) (0.090 for
+# 1A); minor tolerance (nut) 0.25 P - 0.4 P^2 (sizes 1/4 and up), else
+# 0.05 P^(2/3) + 0.03 P / D - 0.002.
+ISO_RANGES = (
+    (0.99, 1.4),
+    (1.4, 2.8),
+    (2.8, 5.6),
+    (5.6, 11.2),
+    (11.2, 22.4),
+    (22.4, 45.0),
+    (45.0, 90.0),
+    (90.0, 180.0),
+    (180.0, 355.0),
+    (355.0, 600.0),
+)
+GRADE_FACTOR = {3: 0.5, 4: 0.63, 5: 0.8, 6: 1.0, 7: 1.25, 8: 1.6, 9: 2.0}
+UN_FACTOR = {"1A": 1.5, "2A": 1.0, "3A": 0.75, "1B": 1.95, "2B": 1.3, "3B": 0.975}
+
+
+def _iso_range_mean(d):
+    for low, high in ISO_RANGES:
+        if low < d <= high:
+            return math.sqrt(low * high)
+    low, high = ISO_RANGES[-1] if d > 1 else ISO_RANGES[0]
+    return math.sqrt(low * high)
+
+
+def _iso_zone(d, p, thread_class, internal):
+    grade = int(thread_class[0])
+    letter = thread_class[1]
+    factor = GRADE_FACTOR.get(grade, 1.0)
+    td2_6 = 90.0 * p**0.4 * _iso_range_mean(d) ** 0.1  # micrometres
+    d2 = d - 0.649519 * p
+    d1 = d - 1.082532 * p
+    if internal:
+        ei = {"G": 15.0 + 11.0 * p, "H": 0.0}.get(letter, 0.0)
+        td2 = 1.32 * td2_6 * factor
+        td1_6 = 433.0 * p - 190.0 * p**1.22 if p < 1.0 else 230.0 * p**0.7
+        td1 = td1_6 * factor
+        return {
+            "shift": (ei + td2 / 2.0) / 1000.0,
+            "pitch": d2 + (ei + td2 / 2.0) / 1000.0,
+            "minor": d1 + (ei + td1 / 2.0) / 1000.0,
+            "major": d + ei / 1000.0,
+        }
+    es = {
+        "e": -(50.0 + 11.0 * p),
+        "f": -(30.0 + 11.0 * p),
+        "g": -(15.0 + 11.0 * p),
+        "h": 0.0,
+    }.get(letter, 0.0)
+    td2 = td2_6 * factor
+    td = (180.0 * p ** (2.0 / 3.0) - 3.15 / math.sqrt(p)) * (factor if grade in (4, 8) else 1.0)
+    return {
+        "shift": (es - td2 / 2.0) / 1000.0,
+        "pitch": d2 + (es - td2 / 2.0) / 1000.0,
+        "major": d + (es - td / 2.0) / 1000.0,
+        "minor": d - 1.226869 * p + es / 1000.0,  # d3, the bolt's root
+    }
+
+
+def _un_zone(d_mm, p_mm, thread_class, internal):
+    d = d_mm / 25.4
+    p = p_mm / 25.4
+    td2_2a = 0.0015 * d ** (1.0 / 3.0) + 0.0015 * math.sqrt(d) + 0.015 * p ** (2.0 / 3.0)
+    td2 = td2_2a * UN_FACTOR.get(thread_class, 1.0)
+    d2 = d - 0.649519 * p
+    d1 = d - 1.082532 * p
+    if internal:
+        if d >= 0.25:
+            td1 = 0.25 * p - 0.4 * p * p
+        else:
+            td1 = 0.05 * p ** (2.0 / 3.0) + 0.03 * p / d - 0.002
+        zone = {
+            "shift": td2 / 2.0,
+            "pitch": d2 + td2 / 2.0,
+            "minor": d1 + td1 / 2.0,
+            "major": d,
+        }
+    else:
+        es = 0.0 if thread_class == "3A" else -0.3 * td2_2a
+        td = (0.090 if thread_class == "1A" else 0.060) * p ** (2.0 / 3.0)
+        zone = {
+            "shift": es - td2 / 2.0,
+            "pitch": d2 + es - td2 / 2.0,
+            "major": d + es - td / 2.0,
+            "minor": d - 1.226869 * p + es,
+        }
+    return {k: v * 25.4 for k, v in zone.items()}
+
+
+def class_zone(designation, thread_class, internal):
+    """Where a modeled thread of this class lies (mm, on the diameter): "shift" (how far the
+    profile moves out from the basic one: the middle of the pitch diameter's zone minus the
+    basic pitch diameter; negative for a bolt), and the middle of the class's "pitch",
+    "major" and "minor" diameters (a bolt is turned to its "major", a hole bored to its
+    "minor"). An unknown class gives the basic profile (shift 0)."""
+    d, p = designation.diameter, designation.pitch
+    known = classes(designation.standard, internal)
+    if thread_class not in known:
+        return {
+            "shift": 0.0,
+            "pitch": d - 0.649519 * p,
+            "major": d,
+            "minor": d - (1.082532 if internal else 1.226869) * p,
+        }
+    if designation.standard == "iso":
+        return _iso_zone(d, p, thread_class, internal)
+    return _un_zone(d, p, thread_class, internal)
 
 
 # -- the tables (generated from FreeCAD 1.1.4's FeatureHole.cpp) --------------------------------

@@ -1,0 +1,79 @@
+{
+  "id": "hole_curved_follows",
+  "title": "A hole on a cylinder stays on the cylinder when its radius changes",
+  "tags": [
+    "hole",
+    "curved",
+    "follow",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            15,
+            10
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 40,
+      "direction": "symmetric"
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "type": "cylinder",
+        "count": 1
+      },
+      "at": [
+        0,
+        0,
+        25
+      ],
+      "diameter": 6,
+      "depth": 5,
+      "drill_point": "flat"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12428.216640264614,
+        "faces": 5,
+        "source": "analytic",
+        "note": "a d6 hole 5 deep, square to the top of an R10 cylinder 40 long: V = pi 100 40 - integral over the drill's disk of (sqrt(R^2 - x^2) - R + 5)"
+      }
+    },
+    {
+      "op": "edit",
+      "target": "s1",
+      "constraint": "boss.diameter",
+      "value": 24
+    }
+  ],
+  "expect": {
+    "volume": 17956.87385871184,
+    "faces": 5,
+    "bbox": [
+      -12,
+      -20,
+      3,
+      12,
+      20,
+      27
+    ],
+    "source": "analytic",
+    "note": "the cylinder grows to R12 (its top to z 27): the hole stays on the face, square to it at the same angle and height, still 5 deep: V = pi 144 40 - integral over the disk of (sqrt(144 - x^2) - 12 + 5) (Gauss-Legendre, 200 points). A hole left where it was would start 2 mm inside the part"
+  }
+}

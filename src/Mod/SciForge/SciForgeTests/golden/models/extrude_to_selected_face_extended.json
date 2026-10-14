@@ -1,0 +1,104 @@
+{
+  "id": "extrude_to_selected_face_extended",
+  "title": "Extrude To Object, To Selected Face: the face's plane, extended past the slope",
+  "tags": [
+    "extrude",
+    "to_object",
+    "extend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              10
+            ],
+            [
+              25,
+              10
+            ],
+            [
+              15,
+              20
+            ],
+            [
+              0,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 30,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "rect": [
+            5,
+            -5,
+            20,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s2",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "at": {
+            "axis": "z",
+            "value": "max"
+          },
+          "count": 1
+        }
+      },
+      "extend": "face"
+    }
+  ],
+  "expect": {
+    "volume": 19500,
+    "solids": 1,
+    "bbox": [
+      0,
+      -15,
+      0,
+      40,
+      15,
+      30
+    ],
+    "source": "analytic",
+    "note": "the same column To Selected Face ends on the top face's plane (z 20) everywhere, over the slope too: 15 * 10 * 10 = 1500 more"
+  }
+}

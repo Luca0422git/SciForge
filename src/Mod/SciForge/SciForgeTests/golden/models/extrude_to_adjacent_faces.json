@@ -1,0 +1,104 @@
+{
+  "id": "extrude_to_adjacent_faces",
+  "title": "Extrude To Object, To Adjacent Faces: ends on the face and the slope next to it",
+  "tags": [
+    "extrude",
+    "to_object",
+    "extend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              10
+            ],
+            [
+              25,
+              10
+            ],
+            [
+              15,
+              20
+            ],
+            [
+              0,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 30,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "rect": [
+            5,
+            -5,
+            20,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "x1",
+      "profile": "s2",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "at": {
+            "axis": "z",
+            "value": "max"
+          },
+          "count": 1
+        }
+      },
+      "extend": "adjacent"
+    }
+  ],
+  "expect": {
+    "volume": 19625.0,
+    "solids": 1,
+    "bbox": [
+      0,
+      -15,
+      0,
+      40,
+      15,
+      30
+    ],
+    "source": "analytic",
+    "note": "a block (cross-section 600 mm^2: flat top z 20 for x 0..15, a slope down to z 10 at x 25) 30 long; a 15 x 10 column from z 30 down To Adjacent Faces: over x 5..15 it ends on the top face (10 high), over x 15..20 on the slope z = 20 - (x - 15): 10 * (100 + int_15^20 (10 + x - 15) dx) = 1625 more"
+  }
+}

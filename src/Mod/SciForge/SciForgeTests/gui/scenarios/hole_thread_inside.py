@@ -15,6 +15,7 @@ Hand-derived:
   the inside thread removes (2 pi / P) * integral of r w(r) dr per mm (thread_core) over the
   plate's 10 mm.
 """
+
 import math
 
 import FreeCAD as App
@@ -51,7 +52,11 @@ def radial_hole_volume(a=1.0, t=3.0, R=3.0, n=20000):
 def inside_removed():
     from sciforge import thread_core
 
-    return thread_core.removed_volume(3.0, 1.0, True, 2.5, 10.0)
+    from sciforge import thread_tables
+
+    # a modeled thread lies in the middle of its class's zone (6H in a hole)
+    d = thread_tables.find("iso", "M6x1")
+    return thread_core.class_removed_volume(d, "6H", True, 2.5, 10.0)
 
 
 def hole_on_boss():

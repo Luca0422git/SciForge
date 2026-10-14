@@ -395,6 +395,10 @@ _HOLE_OPTION_KEYS = {
     "size",
     "designation",
     "fit",
+    "fastener",
+    "fastener_head",
+    "taper_kind",
+    "taper_size",
     "thread_class",
     "direction",
     "modeled",
@@ -1349,6 +1353,8 @@ def validate(model):  # noqa: F811  (adds the body_material checks)
 
 # -- Extrude through several bodies (golden/extrude_bodies_ops.py; sciforge/extrude.py) ----------
 STEP_KEYS["extrude"][1].add("bodies")
+# To Object's Extend choice (face / adjacent / body / through) and Offset, per side
+STEP_KEYS["extrude"][1].update({"extend", "extend2", "object_offset", "object_offset2"})
 STEP_KEYS["use_body"] = ({"step"}, {"comment"})
 STEP_KEYS["expect_bodies"] = (set(), {"bodies", "used_up", "followers", "steps", "comment"})
 STEP_KEYS["reopen_check"] = ({"bodies"}, {"comment"})

@@ -7,8 +7,10 @@ straight edges of the part to measure the hole from them, and type the distances
 references). From Sketch: click the points and circles of a sketch, one hole at each.
 
 Fields as in Fusion: Placement, Extents (Distance / To / All), Hole Type (Simple /
-Counterbore / Countersink), Hole Tap Type (Simple / Clearance / Tapped with ISO metric or
-ANSI sizes, Modeled), Drill Point (Flat / Angle) and the sizes. The blue arrow above the
+Counterbore / Countersink), Hole Tap Type (Simple / Clearance with Standard, Fastener Type,
+Size and Fit (the fastener's head sizes the counterbore or countersink) / Tapped with ISO
+metric or ANSI sizes, Modeled / Taper Tapped with NPT or BSPT pipe threads), Drill Point
+(Flat / Angle) and the sizes. The blue arrow above the
 hole sets its depth (drag it down to drill deeper), the one at its rim its diameter.
 Problems are shown in the dialog, which then stays open. One undo step; double-click the
 hole in the timeline to edit it.
@@ -21,6 +23,7 @@ import FreeCADGui as Gui
 
 from . import commands, drag_guard, hole, log, preview, ui_icon_path, warn
 from . import hole_common as common
+from . import hole_tables
 from . import thread_tables as tables
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes, on_top_root
@@ -32,7 +35,12 @@ HOLE_TYPE_LABELS = [
     ("Counterbore", "counterbore"),
     ("Countersink", "countersink"),
 ]
-TAP_TYPE_LABELS = [("Simple", "simple"), ("Clearance", "clearance"), ("Tapped", "tapped")]
+TAP_TYPE_LABELS = [
+    ("Simple", "simple"),
+    ("Clearance", "clearance"),
+    ("Tapped", "tapped"),
+    ("Taper Tapped", "taper"),
+]
 DRILL_LABELS = [("Flat", "flat"), ("Angle", "angle")]
 FIT_LABELS = [("Close", "close"), ("Normal", "normal"), ("Loose", "loose")]
 DIRECTION_LABELS = [("Right hand", "right"), ("Left hand", "left")]
@@ -357,6 +365,23 @@ class HolePanel(Panel):
         self.standard = common.combo([(label, key) for key, label in tables.STANDARDS])
         self.standard_label = QtWidgets.QLabel("Thread Type")
         form.addRow(self.standard_label, self.standard)
+        # Clearance: the fastener the hole is for (its head sizes a counterbore/countersink)
+        self.fastener = QtWidgets.QComboBox()
+        self.fastener.setToolTip(
+            "The screw or bolt this hole is for: a counterbore or countersink takes its "
+            "head's size"
+        )
+        self.fastener_label = QtWidgets.QLabel("Fastener Type")
+        form.addRow(self.fastener_label, self.fastener)
+        # Taper Tapped: a pipe thread (NPT / BSPT) and its size
+        self.taper_kind = common.combo(
+            [(label, key) for key, label in hole_tables.TAPER_KINDS], self.options["taper_kind"]
+        )
+        self.taper_kind_label = QtWidgets.QLabel("Thread Type")
+        form.addRow(self.taper_kind_label, self.taper_kind)
+        self.taper_size = QtWidgets.QComboBox()
+        self.taper_size_label = QtWidgets.QLabel("Size")
+        form.addRow(self.taper_size_label, self.taper_size)
         self.size = QtWidgets.QComboBox()
         self.size_label = QtWidgets.QLabel("Size")
         form.addRow(self.size_label, self.size)
@@ -431,13 +456,16 @@ class HolePanel(Panel):
                 edit.textEdited.connect(lambda text, key=key: self._text_edited(key, text))
         for box in (
             self.extent,
-            self.hole_type,
             self.drill_point,
             self.fit,
             self.thread_class,
             self.direction,
+            self.taper_size,
         ):
             box.currentIndexChanged.connect(self._typed)
+        self.hole_type.currentIndexChanged.connect(self._hole_type_changed)
+        self.fastener.currentIndexChanged.connect(self._fastener_changed)
+        self.taper_kind.currentIndexChanged.connect(self._taper_kind_changed)
         self.placement.currentIndexChanged.connect(self._placement_changed)
         self.tap_type.currentIndexChanged.connect(self._tap_type_changed)
         self.standard.currentIndexChanged.connect(self._standard_changed)
@@ -457,7 +485,10 @@ class HolePanel(Panel):
             common.set_combo(self.hole_type, o["hole_type"])
             common.set_combo(self.tap_type, o["tap_type"])
             common.set_combo(self.standard, o["standard"])
+            self._fill_fasteners(o["standard"], o["hole_type"], o.get("fastener"))
             self._fill_sizes(o["standard"], o["size"], o["designation"])
+            common.set_combo(self.taper_kind, o["taper_kind"])
+            self._fill_taper_sizes(o["taper_kind"], o["taper_size"])
             common.set_combo(self.fit, o["fit"])
             common.set_combo(self.direction, o["direction"])
             common.set_combo(self.drill_point, o["drill_point"])
@@ -477,10 +508,36 @@ class HolePanel(Panel):
             self._quiet = False
         self._update_visibility()
 
-    def _fill_sizes(self, standard, size, designation):
+    def _fill_fasteners(self, standard, hole_type, wanted):
+        found = hole_tables.fasteners(standard, hole_type)
+        current = wanted if any(f.key == wanted for f in found) else None
+        common.fill_combo(self.fastener, [(f.label, f.key) for f in found], current)
+
+    def _fill_taper_sizes(self, kind, size):
+        sizes = hole_tables.taper_sizes(kind)
+        labels = [(hole_tables.taper_thread(kind, s).label, s) for s in sizes]
+        common.fill_combo(self.taper_size, labels, size if size in sizes else "1/8")
+
+    def _clearance_sizes(self, standard):
+        """The sizes a clearance hole offers: those of the fastener when its head sizes a
+        counterbore or countersink (Fusion lists the fastener's sizes), else every size."""
         sizes = tables.sizes(standard)
+        if self.tap_type.currentData() != "clearance":
+            return sizes
+        if self.hole_type.currentData() == "simple":
+            return sizes
+        found = hole_tables.fastener(standard, self.fastener.currentData() or "")
+        if found is None:
+            return sizes
+        mine = [s for s in sizes if s in found.heads]
+        return mine or sizes
+
+    def _fill_sizes(self, standard, size, designation):
+        sizes = self._clearance_sizes(standard)
         if size not in sizes:
-            size = "6" if standard == "iso" else "1/4"
+            size = "6" if standard == "iso" and "6" in sizes else sizes[0] if sizes else ""
+            if standard == "ansi" and "1/4" in sizes:
+                size = "1/4"
         common.fill_combo(self.size, [(s, s) for s in sizes], size)
         found = tables.designations(standard, self.size.currentData())
         common.fill_combo(self.designation, [(d.label, d.label) for d in found], designation)
@@ -497,7 +554,8 @@ class HolePanel(Panel):
         kind = self.hole_type.currentData()
         tap = self.tap_type.currentData()
         single = placement == "single"
-        threaded = tap != "simple"
+        threaded = tap in ("clearance", "tapped")
+        taper = tap == "taper"
         refs = hole.references(self.target) if self.target is not None and single else []
         # X / Y move the point in the face's plane: only for a hole on a flat face.
         placed = self.target is not None and single and hole.on_flat_face(self.target)
@@ -520,6 +578,12 @@ class HolePanel(Panel):
             (self.flip_label, not single),
             (self.standard, threaded),
             (self.standard_label, threaded),
+            (self.fastener, tap == "clearance"),
+            (self.fastener_label, tap == "clearance"),
+            (self.taper_kind, taper),
+            (self.taper_kind_label, taper),
+            (self.taper_size, taper),
+            (self.taper_size_label, taper),
             (self.size, threaded),
             (self.size_label, threaded),
             (self.designation, tap == "tapped"),
@@ -562,6 +626,8 @@ class HolePanel(Panel):
 
     @staticmethod
     def _tap_name(tap):
+        if tap == "taper":
+            return "pipe thread's minor diameter at the opening"
         return "clearance hole" if tap == "clearance" else "tap drill"
 
     def _collect(self):
@@ -577,6 +643,9 @@ class HolePanel(Panel):
         if o["tap_type"] == "clearance" and designations:
             o["designation"] = designations[0].label  # a clearance hole is per size
         o["fit"] = self.fit.currentData()
+        o["fastener"] = self.fastener.currentData() or ""
+        o["taper_kind"] = self.taper_kind.currentData() or o["taper_kind"]
+        o["taper_size"] = self.taper_size.currentData() or o["taper_size"]
         o["thread_class"] = self.thread_class.currentData() or o["thread_class"]
         o["direction"] = self.direction.currentData()
         o["modeled"] = self.modeled.isChecked()
@@ -1053,18 +1122,89 @@ class HolePanel(Panel):
         if self._quiet:
             return
         tap = self.tap_type.currentData()
-        if tap != "simple" and self.options.get("tap_type") == "simple":
-            # Start from the size nearest to the diameter the hole has now.
-            d = tables.closest(
-                self.standard.currentData(), self.diameter.value(), internal=tap == "tapped"
-            )
-            if d is not None:
-                self._quiet = True
-                try:
+        self._quiet = True
+        try:
+            if tap in ("clearance", "tapped") and self.options.get("tap_type") in (
+                "simple",
+                "taper",
+            ):
+                # Start from the size nearest to the diameter the hole has now.
+                d = tables.closest(
+                    self.standard.currentData(), self.diameter.value(), internal=tap == "tapped"
+                )
+                if d is not None:
                     self._fill_sizes(d.standard, d.size, d.label)
-                finally:
-                    self._quiet = False
+            elif tap == "clearance":
+                self._fill_sizes(self.standard.currentData(), self.size.currentData(), None)
+        finally:
+            self._quiet = False
+        self._fastener_head()
         self._changed()
+
+    def _hole_type_changed(self, *_):
+        """Fusion offers the fasteners whose head the new hole type holds, and sizes the
+        counterbore or countersink for the head."""
+        if self._quiet:
+            return
+        self._quiet = True
+        try:
+            standard = self.standard.currentData()
+            self._fill_fasteners(
+                standard, self.hole_type.currentData(), self.fastener.currentData()
+            )
+            self._fill_sizes(standard, self.size.currentData(), self.designation.currentData())
+        finally:
+            self._quiet = False
+        self._fastener_head()
+        self._changed()
+
+    def _fastener_changed(self, *_):
+        if self._quiet:
+            return
+        self._quiet = True
+        try:
+            self._fill_sizes(
+                self.standard.currentData(),
+                self.size.currentData(),
+                self.designation.currentData(),
+            )
+        finally:
+            self._quiet = False
+        self._fastener_head()
+        self._changed()
+
+    def _taper_kind_changed(self, *_):
+        if self._quiet:
+            return
+        self._quiet = True
+        try:
+            self._fill_taper_sizes(self.taper_kind.currentData(), self.taper_size.currentData())
+        finally:
+            self._quiet = False
+        self._changed()
+
+    def _fastener_head(self):
+        """A clearance hole's counterbore / countersink sized for the fastener's head (Fusion
+        fills them in; typing over them afterwards keeps the typed value)."""
+        if self.tap_type.currentData() != "clearance":
+            return
+        self._collect()
+        sized = hole.with_fastener_head(self.options)
+        fields = (
+            ("cbore_diameter", self.cbore_diameter),
+            ("cbore_depth", self.cbore_depth),
+            ("csink_diameter", self.csink_diameter),
+            ("csink_angle", self.csink_angle),
+        )
+        self._quiet = True
+        try:
+            for key, field in fields:
+                if abs(sized[key] - self.options[key]) > 1e-12:
+                    self.drop_formula(key)
+                    field.set_value(sized[key])
+                    self.options[key] = sized[key]
+        finally:
+            self._quiet = False
 
     def _standard_changed(self, *_):
         if self._quiet:
@@ -1074,9 +1214,13 @@ class HolePanel(Panel):
         self._quiet = True
         try:
             self.options["thread_class"] = tables.default_class(standard, True)
+            self._fill_fasteners(
+                standard, self.hole_type.currentData(), self.fastener.currentData()
+            )
             self._fill_sizes(standard, d.size if d else "", d.label if d else "")
         finally:
             self._quiet = False
+        self._fastener_head()
         self._changed()
 
     def _size_changed(self, *_):
@@ -1085,6 +1229,7 @@ class HolePanel(Panel):
         standard = self.standard.currentData()
         found = tables.designations(standard, self.size.currentData())
         common.fill_combo(self.designation, [(d.label, d.label) for d in found], None)
+        self._fastener_head()
         self._changed()
 
     def _thread_diameter(self):

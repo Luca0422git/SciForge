@@ -164,6 +164,9 @@ class Builder:
             "start": step.get("start", "profile"),
             "start_offset": step.get("start_offset", 0.0),
         }
+        for key in ("extend", "extend2", "object_offset", "object_offset2"):
+            if key in step:  # To Object's Extend choice and Offset (sciforge/extrude.py)
+                options[key] = step[key]
         if "to" in step:
             options["extent_object"] = self._extrude_ref(step, step["to"])
         if "to2" in step:

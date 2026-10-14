@@ -18,6 +18,7 @@ and P/8 wide at the major radius R (H = sqrt(3)/2 P). In a slice across the axis
 takes the fraction w(r)/P of each circle of radius r, so the slab of thickness 1 loses
 pi r_drill^2 + (2 pi / P) * integral from r_drill to R of r w(r) dr.
 """
+
 import math
 
 import FreeCAD as App
@@ -123,7 +124,12 @@ through.wait_ms = 3000  # FreeCAD blocks input while it models the thread
 def modeled():
     shape = h.body().Shape
     slab = shape.common(Part.makeBox(40, 30, 1, V(0, 0, 4))).Volume
-    expect = 1200.0 - freecad_thread_slab(2.5, 3.0, 1.0)
+    from sciforge import thread_tables
+
+    # the thread lies in the middle of 6H's zone: FreeCAD's tap drill and thread move out
+    # by the class's shift (CustomThreadClearance, on the diameter)
+    c = thread_tables.class_zone(thread_tables.find("iso", "M6x1"), "6H", True)["shift"]
+    expect = 1200.0 - freecad_thread_slab(2.5 + c / 2.0, 3.0 + c / 2.0, 1.0)
     h.check("modeled M6x1: a 1 mm slab of the part", hs.close(slab, expect, 1e-5), (slab, expect))
     h.check("valid solid", shape.isValid())
     h.check("no cosmetic drawing for a modeled thread", drawn() == 0, drawn())

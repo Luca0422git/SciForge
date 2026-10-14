@@ -1,0 +1,68 @@
+{
+  "id": "hole_taper_bspt_through",
+  "title": "Taper Tapped hole Rc 1/4 (BSPT) through a 10 mm plate",
+  "tags": [
+    "hole",
+    "taper",
+    "bspt"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "tap_type": "taper",
+      "taper_kind": "bspt",
+      "taper_size": "1/4",
+      "extent": "all"
+    }
+  ],
+  "expect": {
+    "volume": 11026.385944826094,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "ISO 7-1 Rc 1/4: gauge diameter 13.157, minor d - 2 * 0.640327 P = 11.444968 at the opening, 1 in 16 taper: V = 12000 - pi 10/3 (r1^2 + r1 r2 + r2^2), r2 = r1 - 10/32"
+  }
+}

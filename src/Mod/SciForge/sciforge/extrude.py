@@ -14,13 +14,23 @@ Profiles (what is extruded), a list of (object, sub-element):
 
 Options (dict, see DEFAULTS):
   operation    join | cut | intersect | new_body
-  start        profile | offset | object      (+ start_offset mm / start_object ref)
+  start        profile | offset | object      (+ start_offset mm / start_object ref; an
+               object start follows the object when an earlier step moves it: a hidden
+               ExtrudeStart helper measures the offset on every recompute)
   direction    one_side | two_sides | symmetric
   extent       distance | to_object | all     (side 1; extent2 for side 2)
   distance     mm along the profile normal; negative goes the other way (one side, two
                sides). Symmetric: each side's length ("half") or the total ("whole"),
                see measurement.
   extent_object  (object, sub) where "to_object" ends: a face, a plane or a body
+  extend       To Object's Extend choice (Fusion): "face" To Selected Face (the face's surface
+               extended, the default for a face), "adjacent" To Adjacent Faces (the face and
+               the faces next to it, as they are: the extrusion follows the part's shape
+               there), "body" To Body (where the extrusion first meets the body, the
+               default for a body), "through" Through Body (on through the body to where
+               it leaves it); "" = the default for the object; extend2 for side two
+  object_offset  mm past the object along the extrusion (negative: stops short of it);
+               object_offset2 for side two (Guess: Fusion measures it along the extrusion)
   taper        degrees, positive widens (Fusion: outward)
   distance2 / extent2 / extent_object2 / taper2   the second side (two_sides)
   flip         extent "all": go against the profile normal
@@ -72,6 +82,14 @@ DIRECTIONS = ("one_side", "two_sides", "symmetric")
 EXTENTS = ("distance", "to_object", "all")
 STARTS = ("profile", "offset", "object")
 MEASUREMENTS = ("half", "whole")
+EXTENDS = ("face", "adjacent", "body", "through")
+# SciForge's own feature stores the Extend choice as one of these (feature enum).
+EXTEND_NAMES = {
+    "face": "Selected",
+    "adjacent": "Adjacent",
+    "body": "Selected",
+    "through": "Through",
+}
 WALL_LOCATIONS = ("side1", "center", "side2")
 WALL_NAMES = {"side1": "Side 1", "center": "Center", "side2": "Side 2"}  # feature enum
 
@@ -84,10 +102,14 @@ DEFAULTS = {
     "extent": "distance",
     "distance": 10.0,
     "extent_object": None,
+    "extend": "",
+    "object_offset": 0.0,
     "taper": 0.0,
     "extent2": "distance",
     "distance2": 10.0,
     "extent_object2": None,
+    "extend2": "",
+    "object_offset2": 0.0,
     "taper2": 0.0,
     "measurement": "whole",
     "flip": False,
@@ -567,7 +589,89 @@ def options_with_defaults(options):
     for name in ("wall_location", "wall_location2"):
         if merged[name] not in WALL_LOCATIONS:
             raise ExtrudeError("unknown wall location %r" % merged[name])
+    for name in ("extend", "extend2"):
+        merged[name] = merged.get(name) or ""
+        if merged[name] and merged[name] not in EXTENDS:
+            raise ExtrudeError("unknown extend %r" % merged[name])
+    for name in ("object_offset", "object_offset2"):
+        merged[name] = float(merged.get(name) or 0.0)
     return merged
+
+
+def object_kind(ref):
+    """What a To Object pick is: "plane" (an origin or construction plane, a flat face's
+    plane is a face), "face" or "body" (a whole solid), or "" for nothing."""
+    if not ref or ref[0] is None:
+        return ""
+    obj, sub = ref
+    if obj.TypeId in PLANE_TYPES:
+        return "plane"
+    if sub and sub.startswith("Face"):
+        return "face"
+    if not sub:
+        try:
+            if obj.Shape.Solids:
+                return "body"
+        except Exception:
+            pass
+    return "face"
+
+
+def extend_choices(ref):
+    """Fusion's Extend choices for a To Object pick: a face [face, adjacent], a body [body,
+    through], a plane none (a plane is endless)."""
+    kind = object_kind(ref)
+    if kind == "face":
+        return ["face", "adjacent"]
+    if kind == "body":
+        return ["body", "through"]
+    return []
+
+
+def extend_of(options, side=1):
+    """The Extend choice in use for a side (the object's default when none was made)."""
+    suffix = "" if side == 1 else "2"
+    ref = options.get("extent_object" + suffix)
+    choices = extend_choices(ref)
+    if not choices:
+        return ""
+    wanted = options.get("extend" + suffix) or ""
+    if wanted in choices:
+        return wanted
+    return choices[0]
+
+
+def adjacent_names(shape, face_name):
+    """The face and the faces sharing an edge with it ("FaceN" names of `shape`): Fusion's
+    To Adjacent Faces ends the extrusion on all of them as they are."""
+    import Part
+
+    face = shape.getElement(face_name)
+    names = [face_name]
+    for edge in face.Edges:
+        try:
+            neighbours = shape.ancestorsOfType(edge, Part.Face)
+        except Exception:
+            continue
+        for other in neighbours:
+            for i, candidate in enumerate(shape.Faces, start=1):
+                if candidate.isSame(other):
+                    name = "Face%d" % i
+                    if name not in names:
+                        names.append(name)
+                    break
+    return names
+
+
+def _side_target(shape, sub, extend):
+    """The shape a side ends on: the picked face (or body), or for To Adjacent Faces the
+    face and its neighbours as one compound (never extended)."""
+    import Part
+
+    if extend == "adjacent" and sub.startswith("Face"):
+        names = adjacent_names(shape, sub)
+        return Part.Compound([shape.getElement(n) for n in names])
+    return shape.getElement(sub) if sub else shape
 
 
 def thin_spec(options):
@@ -602,14 +706,22 @@ def own_feature_needed(options):
     tapers every extent)."""
     if options["operation"] == "intersect" or options.get("thin"):
         return True
-    sides = [("extent", "taper")]
+    sides = [("extent", "taper", 1)]
     if options["direction"] == "two_sides":
-        sides.append(("extent2", "taper2"))
-    for extent, taper in sides:
+        sides.append(("extent2", "taper2", 2))
+    for extent, taper, side in sides:
         if abs(float(options[taper])) > 1e-9 and not native_taper(
             options["operation"], options[extent]
         ):
             return True
+        if options[extent] == "to_object":
+            # Fusion's To Adjacent Faces, Through Body and an offset from the object: Pad and
+            # Pocket have none of them (their "up to face" extends the face).
+            suffix = "" if side == 1 else "2"
+            if extend_of(options, side) in ("adjacent", "through"):
+                return True
+            if abs(float(options.get("object_offset" + suffix) or 0.0)) > 1e-9:
+                return True
     return False
 
 
@@ -778,7 +890,112 @@ def _mark(obj, role):
 
 
 def is_helper(obj):
-    return getattr(obj, ROLE, "") in ("ExtrudeProfile", "ExtrudeRef", FOLLOWER_ROLE)
+    return getattr(obj, ROLE, "") in ("ExtrudeProfile", "ExtrudeRef", START_ROLE, FOLLOWER_ROLE)
+
+
+# -- Start: Object follows the object ------------------------------------------------------
+START_ROLE = "ExtrudeStart"
+START_TYPE = "Part::Part2DObjectPython"  # a Body takes only sketch-like helpers
+
+
+class ExtrudeStart:
+    """Fusion's Start: Object keeps the extrusion starting on its object when an earlier
+    step moves that face or plane. The start offset is the profile's binder's placement
+    (_binder); this hidden helper (in the body, just before the binder) measures the offset
+    from the profile to the object on every recompute, and the binder's Placement is an
+    expression on its Shift. Saved documents store "sciforge.extrude.ExtrudeStart": keep the
+    name and the properties."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        def add(kind, name, doc):
+            if name not in obj.PropertiesList:
+                obj.addProperty(kind, name, "Extrude Start", doc)
+
+        add("App::PropertyLinkSubListGlobal", "Profiles", "The profiles that are extruded")
+        add(
+            "App::PropertyLinkSubGlobal", "StartObject", "The face or plane the extrusion starts on"
+        )
+        add("App::PropertyDistance", "Offset", "From the profile to the object (worked out)")
+        add("App::PropertyPlacement", "Shift", "The profile moved onto the object (body coords)")
+        for name in ("Offset", "Shift"):
+            try:
+                obj.setPropertyStatus(name, "Output")
+            except Exception:
+                pass
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        import Part
+
+        profiles = []
+        for linked, subs in obj.Profiles:
+            for sub in subs or [""]:
+                profiles.append((linked, sub))
+        link = obj.StartObject
+        if not profiles or not link or link[0] is None:
+            raise ExtrudeError("The extrusion's start object is gone. Edit it and pick one.")
+        ref = (link[0], (list(link[1]) or [""])[0])
+        offset = start_offset_of(profiles, {"start": "object", "start_object": ref})
+        if abs(obj.Offset.Value - offset) > 1e-12:
+            obj.Offset = offset
+        body = owner_body(obj)
+        rot = body.getGlobalPlacement().Rotation if body is not None else App.Rotation()
+        shift = App.Placement(
+            rot.inverted().multVec(profile_normal(profiles) * offset), App.Rotation()
+        )
+        if not obj.Shift.isSame(shift, 1e-12):
+            obj.Shift = shift
+        a = profile_point(profiles)
+        obj.Shape = Part.Vertex(a + profile_normal(profiles) * offset)
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _start_helper(body, feature, binder, profiles, ref, existing=None):
+    """The ExtrudeStart helper that keeps `binder` on the start object (made or updated)."""
+    helper = existing
+    if helper is None:
+        helper = body.Document.addObject(START_TYPE, "ExtrudeStart")
+        ExtrudeStart(helper)
+        body.insertObject(helper, binder, False)  # just before the binder
+        _mark(helper, START_ROLE)
+        try:
+            if App.GuiUp:
+                helper.ViewObject.Visibility = False
+                if "ShowInTree" in helper.ViewObject.PropertiesList:
+                    helper.ViewObject.ShowInTree = False
+        except Exception:
+            pass
+    links = {}
+    order = []
+    for obj, sub in profiles:
+        if obj.Name not in links:
+            links[obj.Name] = (obj, [])
+            order.append(obj.Name)
+        if sub:
+            links[obj.Name][1].append(sub)
+    helper.Profiles = [(links[n][0], links[n][1] or [""]) for n in order]
+    helper.StartObject = (ref[0], [ref[1]] if ref[1] else [])
+    helper.Label = "%s start" % feature.Label
+    helper.recompute()
+    expr = "%s.Shift" % helper.Name
+    if dict(binder.ExpressionEngine).get("Placement") != expr:
+        binder.setExpression("Placement", expr)
+    return helper
 
 
 # -- the intersect feature -----------------------------------------------------------------
@@ -827,6 +1044,13 @@ class ExtrudeFeature:
             add("App::PropertyLength", "Length" + suffix, "Distance")
             add("App::PropertyAngle", "TaperAngle" + suffix, "Taper angle (+ widens)")
             add("App::PropertyLinkSub", "UpToFace" + suffix, "Face or plane where the side ends")
+            if add(
+                "App::PropertyEnumeration",
+                "Extend" + suffix,
+                "To Object: the face extended, the face and its neighbours, or through the body",
+            ):
+                setattr(obj, "Extend" + suffix, ["Selected", "Adjacent", "Through"])
+            add("App::PropertyDistance", "ObjectOffset" + suffix, "Offset past the object")
         add("App::PropertyBool", "Reversed", "Go against the profile's normal")
         add("App::PropertyDistance", "StartOffset", "Start this far from the profile plane")
         if add("App::PropertyBool", "Refine", "Merge coplanar faces, like Fusion"):
@@ -874,11 +1098,23 @@ class ExtrudeFeature:
         profiles = [(linked, (subs or [""])[0]) for linked, subs in obj.Profiles]
         normal = _profile_normal_in_body(profiles, obj)
 
-        def target(link):
+        def target(link, suffix):
             if not link or link[0] is None:
                 return None
             linked, subs = link[0], link[1]
-            return _ref_shape((linked, subs[0] if subs else ""))
+            sub = subs[0] if subs else ""
+            extend = getattr(obj, "Extend" + suffix, "Selected")
+            if extend == "Adjacent" and sub.startswith("Face"):
+                return _side_target(linked.Shape, sub, "adjacent")
+            return _ref_shape((linked, sub))
+
+        def extend(suffix):
+            value = getattr(obj, "Extend" + suffix, "Selected")
+            return {"Adjacent": "adjacent", "Through": "through"}.get(value, "")
+
+        def offset(suffix):
+            prop = getattr(obj, "ObjectOffset" + suffix, None)
+            return prop.Value if prop is not None else 0.0
 
         spec = {
             "side_type": obj.SideType,
@@ -887,11 +1123,15 @@ class ExtrudeFeature:
             "type": obj.Type,
             "length": obj.Length.Value,
             "taper": obj.TaperAngle.Value,
-            "target": target(obj.UpToFace),
+            "target": target(obj.UpToFace, ""),
+            "extend": extend(""),
+            "offset": offset(""),
             "type2": obj.Type2,
             "length2": obj.Length2.Value,
             "taper2": obj.TaperAngle2.Value,
-            "target2": target(obj.UpToFace2),
+            "target2": target(obj.UpToFace2, "2"),
+            "extend2": extend("2"),
+            "offset2": offset("2"),
         }
         if thin:
             names = {v: k for k, v in WALL_NAMES.items()}
@@ -1199,9 +1439,10 @@ def _binder(body, feature, sources, offset, existing=None, role="ExtrudeProfile"
     return binder
 
 
-def _local_ref(body, feature, ref, helpers, old_refs):
+def _local_ref(body, feature, ref, helpers, old_refs, extend=""):
     """A reference FreeCAD may link from `feature` (same body); otherwise a hidden binder
-    (re-used from the last update when there is one)."""
+    (re-used from the last update when there is one). To Adjacent Faces on a face of
+    another body: the binder carries the face and its neighbours (linked whole)."""
     obj, sub = ref
     if obj.TypeId in PLANE_TYPES and owner_body(obj) is body:
         return (obj, "")
@@ -1210,9 +1451,15 @@ def _local_ref(body, feature, ref, helpers, old_refs):
             raise ExtrudeError("Pick a face of the body, a plane, or another body to extrude to.")
         return (obj, sub)
     existing = old_refs.pop(0) if old_refs else None
-    binder = _binder(body, feature, [ref], App.Vector(), existing=existing, role="ExtrudeRef")
+    sources = [ref]
+    adjacent = extend == "adjacent" and sub.startswith("Face")
+    if adjacent:
+        sources = [(obj, name) for name in adjacent_names(obj.Shape, sub)]
+    binder = _binder(body, feature, sources, App.Vector(), existing=existing, role="ExtrudeRef")
     binder.Label = "%s target" % feature.Label
     helpers.append(binder)
+    if adjacent:
+        return (binder, "")
     return (binder, "Face1" if sub.startswith("Face") else "")
 
 
@@ -1295,7 +1542,16 @@ def _apply(feature, body, profiles, options, refs):
         feature.SideType = side_type
         feature.Reversed = sign < 0
         feature.StartOffset = 0.0  # a start offset travels with the profile's binder
-        _fp_side(feature, "", options["extent"], length, options["taper"], refs.get(1))
+        _fp_side(
+            feature,
+            "",
+            options["extent"],
+            length,
+            options["taper"],
+            refs.get(1),
+            extend_of(options, 1),
+            options["object_offset"],
+        )
         if direction == "two_sides":
             _fp_side(
                 feature,
@@ -1304,6 +1560,8 @@ def _apply(feature, body, profiles, options, refs):
                 options["distance2"],
                 options["taper2"],
                 refs.get(2),
+                extend_of(options, 2),
+                options["object_offset2"],
             )
         _fp_thin(feature, options)
         feature.Refine = True
@@ -1331,7 +1589,15 @@ def _apply(feature, body, profiles, options, refs):
         feature.AllowMultiFace = True
 
 
-def _fp_side(feature, suffix, extent, length, taper, ref):
+def _fp_side(feature, suffix, extent, length, taper, ref, extend="", offset=0.0):
+    if ("Extend" + suffix) not in feature.PropertiesList:
+        ExtrudeFeature.ensure_properties(feature)
+    name = EXTEND_NAMES.get(extend, "Selected") if extent == "to_object" else "Selected"
+    if getattr(feature, "Extend" + suffix) != name:
+        setattr(feature, "Extend" + suffix, name)
+    value = float(offset) if extent == "to_object" else 0.0
+    if abs(getattr(feature, "ObjectOffset" + suffix).Value - value) > 1e-12:
+        setattr(feature, "ObjectOffset" + suffix, value)
     setattr(feature, "TaperAngle" + suffix, float(taper))
     setattr(feature, "Length" + suffix, max(abs(float(length)), 1e-6))
     if extent == "distance":
@@ -1375,6 +1641,8 @@ EXPRESSION_PROPS = {
     "taper2": "TaperAngle2",
     "wall_thickness": "WallThickness",
     "wall_thickness2": "WallThickness2",
+    "object_offset": "ObjectOffset",
+    "object_offset2": "ObjectOffset2",
 }
 
 
@@ -1390,6 +1658,10 @@ def _expression_used(key, options):
         return bool(options.get("thin"))
     if key == "wall_thickness2":
         return bool(options.get("thin")) and two
+    if key == "object_offset":
+        return options["extent"] == "to_object"
+    if key == "object_offset2":
+        return two and options["extent2"] == "to_object"
     return True
 
 
@@ -1685,15 +1957,31 @@ def _update(feature, body, profiles, options, hide=True):
     old_helpers = [h for h in old_helpers if h is not None]
     old_profile = [h for h in old_helpers if getattr(h, ROLE, "") == "ExtrudeProfile"]
     old_refs = [h for h in old_helpers if getattr(h, ROLE, "") == "ExtrudeRef"]
+    old_start = [h for h in old_helpers if getattr(h, ROLE, "") == START_ROLE]
     helpers = []
     normal = profile_normal(profiles)
     if _needs_binder(body, profiles, options):
         offset = start_offset_of(profiles, options)
         existing = old_profile[0] if old_profile else None
+        if existing is not None and dict(existing.ExpressionEngine).get("Placement"):
+            existing.setExpression("Placement", None)  # placed again below
         binder = _binder(body, feature, profiles, normal * offset, existing=existing)
         helpers.append(binder)
         link = binder
         fp_profiles = [(binder, "")]
+        same_body = all(owner_body(obj) is body for obj, _sub in profiles)
+        if options["start"] == "object" and same_body and options.get("start_object"):
+            # Fusion: the extrusion keeps starting on its object when that moves later
+            helpers.append(
+                _start_helper(
+                    body,
+                    feature,
+                    binder,
+                    profiles,
+                    options["start_object"],
+                    old_start[0] if old_start else None,
+                )
+            )
     else:
         link = _direct_profile(profiles)
         fp_profiles = list(profiles)
@@ -1706,7 +1994,9 @@ def _update(feature, body, profiles, options, hide=True):
         if side == 2 and options["direction"] != "two_sides":
             continue
         if options[ext] == "to_object" and options.get(opt) is not None:
-            refs[side] = _local_ref(body, feature, options[opt], helpers, old_refs)
+            refs[side] = _local_ref(
+                body, feature, options[opt], helpers, old_refs, extend_of(options, side)
+            )
     # Helpers that are no longer needed go (a profile binder after "start: profile", ...).
     keep = {h.Name for h in helpers}
     for helper in old_helpers:
@@ -1728,6 +2018,10 @@ def _update(feature, body, profiles, options, hide=True):
             "profiles": [[obj.Name, sub] for obj, sub in profiles],
             "extent_object": _ref_json(options.get("extent_object")),
             "extent_object2": _ref_json(options.get("extent_object2")),
+            "extend": options.get("extend") or "",
+            "extend2": options.get("extend2") or "",
+            "object_offset": float(options.get("object_offset") or 0.0),
+            "object_offset2": float(options.get("object_offset2") or 0.0),
             "helpers": [h.Name for h in helpers],
             "normal": list(body.getGlobalPlacement().Rotation.inverted().multVec(normal)),
         }
@@ -1907,6 +2201,10 @@ def read(feature):
     options["extent_object2"] = _ref_load(doc, meta.get("extent_object2")) or _link_ref(
         feature, "2"
     )
+    for name in ("extend", "extend2"):
+        options[name] = meta.get(name, "") if meta.get(name, "") in EXTENDS else ""
+    for name in ("object_offset", "object_offset2"):
+        options[name] = float(meta.get(name, 0.0) or 0.0)
     length = feature.Length.Value
     # Direction actually used, against the profile normal: the sign of the distance.
     sign = 1.0
