@@ -308,6 +308,10 @@ def g5_captured():
     p = j.panel()
     h.check("the Joint dialog opened", p is not None and p.title == "Joint", p and p.title)
     angle_is("the block stays at 90", 90)
+    _CAPTURED["angle"] = angle_now()  # where the drag put it (CI's window: 89.7, CI #121)
+
+
+_CAPTURED = {"angle": None}
 
 
 def g5_escape():
@@ -336,7 +340,14 @@ g5_revert.wait_ms = 1200
 
 
 def g5_reverted():
-    angle_is("Revert: the block is back at the captured 90", 90, 1e-3)
+    captured = _CAPTURED["angle"]
+    got = angle_now()
+    h.check(
+        "Revert: the block is back at the captured angle (about 90)",
+        captured is not None and got is not None and abs(got - captured) <= 1e-3,
+        (got, captured),
+    )
+    angle_is("Revert: about 90", 90)
     p = j.panel()
     h.check("the Joint dialog opened after Revert", p is not None and p.title == "Joint")
     h.check("nothing moved since the capture now", not jm().positions_dirty(doc()))
