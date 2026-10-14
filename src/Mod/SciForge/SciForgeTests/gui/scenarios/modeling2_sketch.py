@@ -8,7 +8,8 @@ A 40 x 20 rectangle from (10, 10) to (50, 30) (fully dimensioned: 40, 20, its co
    Enter: the chamfer runs from (45, 10) to (50, 10 + 5 tan 30); a 5 mm dimension from the old
    corner (kept as a construction point) and a 30 degree angle between the bottom line and
    the chamfer; the sketch stays fully constrained.
-2. Equal distance: click the corner (50, 30), type 4, Enter: (50, 26) to (46, 30); two 4 mm
+2. Equal distance: click the corner (50, 30); 30 is refused (longer than the side, the reason
+   beside the pointer); type 4, Enter: (50, 26) to (46, 30); two 4 mm
    dimensions, the second follows the first (fx): changing the first to 6 moves both.
 3. Two distances: click the top line, then the left line, type 3, Tab, 6, Enter: 3 along
    the top line, 6 down the left one. Ctrl+Z takes it away, Ctrl+Y brings it back.
@@ -28,6 +29,7 @@ import os
 import tempfile
 
 import FreeCAD as App
+import FreeCADGui as Gui
 
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
@@ -75,6 +77,15 @@ def chamfer_line(a, b, tol=1e-6):
 
 
 # -- the rectangle ---------------------------------------------------------------------------
+def no_sketch():
+    """An empty design: Chamfer (from the command search) says it needs a sketch."""
+    from sciforge import commands
+
+    Gui.runCommand("SciForge_SketchChamfer")
+    told = commands._TOLD["msg"] or ""
+    h.check("no sketch: Chamfer says why", "inside a sketch" in told, told)
+
+
 def rectangle():
     import Sketcher
 
@@ -150,6 +161,21 @@ def eq_type():
 def eq_corner():
     st.click(V(50, 30, 0))
     st.hover(V(47, 27, 0))
+
+
+def eq_too_long():
+    st.keys("30\n")  # longer than the right side (17 mm left of it): refused
+
+
+def eq_refused():
+    t = st.tool()
+    hint = t.hint_text() if t is not None else ""
+    h.check(
+        "a chamfer longer than the line is refused with the reason",
+        "longer than" in hint and t.step == 2,
+        (hint, t and t.step),
+    )
+    h.check("nothing changed", chamfer_line(V(50, 0, 0), V(20, 30, 0)) is None)
 
 
 def eq_keys():
@@ -352,7 +378,7 @@ def reopened():
 h.run(
     "modeling2_sketch",
     si.watched(
-        st.start_steps("M2Sketch")
+        [st.new_design("M2Sketch"), no_sketch, st.create_sketch, st.pick_xy, st.sketch_open]
         + [
             rectangle,
             open_chamfer,
@@ -363,6 +389,8 @@ h.run(
             da_check,
             eq_type,
             eq_corner,
+            eq_too_long,
+            eq_refused,
             eq_keys,
             eq_check,
             two_type,

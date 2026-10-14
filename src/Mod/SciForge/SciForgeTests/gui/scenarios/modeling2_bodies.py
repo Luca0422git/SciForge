@@ -5,7 +5,9 @@ second made as a New Body.
 
 1. Revolve a 70 x 5 rectangle on the XY plane about the X axis, Full, Cut: the row "Bodies to
    Cut" lists both plates, the rod cuts both (one timeline step). Click the row, click the
-   second plate: it is left out (only the first is cut); click it again: taken back. OK.
+   second plate: it is left out (only the first is cut); click it again: taken back. The
+   row's x leaves every body out: the dialog says the row is empty and OK is refused; click
+   both plates to take them back. OK.
 2. Edit the revolve from the timeline: the row starts from its saved list; leave the second
    plate out, OK: only the first plate keeps the cut.
 3. Ctrl+Z / Ctrl+Y.
@@ -245,6 +247,38 @@ def taken_back():
         "1 taken back: both cut",
         near(total(), 2 * (PLATE - HALF)),
         (volumes(), p and p.message.text(), p and p.fields["bodies"].button.text()),
+    )
+    if p is not None:
+        w.click(p.fields["bodies"].clear)  # the row's x: every body left out
+
+
+def cleared():
+    p = rpanel()
+    if p is None:
+        return
+    h.check(
+        "1 an empty row is refused with the reason",
+        "is empty" in p.message.text() and "click a body" in p.message.text().lower(),
+        p.message.text(),
+    )
+    ok()  # refused: the dialog stays
+
+
+def ok_refused():
+    h.check("1 OK is refused while the row is empty", rpanel() is not None)
+    h.click(V(85, 10, 10))  # take the second plate back
+
+
+def one_back():
+    h.click(V(5, 10, 10))  # and the first
+
+
+def both_back():
+    p = rpanel()
+    h.check(
+        "1 both taken back: both cut",
+        near(total(), 2 * (PLATE - HALF)) and p is not None and "⚠" not in p.message.text(),
+        (volumes(), p and p.message.text()),
     )
     ok()
 
@@ -536,6 +570,8 @@ draw_plate1.wait_ms = 300
 both_cut.wait_ms = 1200
 left_out.wait_ms = 1200
 taken_back.wait_ms = 1200
+cleared.wait_ms = 1200
+both_back.wait_ms = 1200
 sweep_built.wait_ms = 1500
 edit_ok.wait_ms = 1200
 loft_built.wait_ms = 1500
@@ -570,6 +606,10 @@ h.run(
         leave_out,
         left_out,
         taken_back,
+        cleared,
+        ok_refused,
+        one_back,
+        both_back,
         revolve_done,
         edit_revolve,
         edit_open,
