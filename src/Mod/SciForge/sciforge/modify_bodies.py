@@ -224,14 +224,6 @@ def _hide(obj):
         pass
 
 
-def restore_view_providers(doc):
-    """Saved designs: followers get their view provider back (it is not saved)."""
-    for obj in doc.Objects:
-        if is_follower(obj) and getattr(obj, "ViewObject", None) is not None:
-            if getattr(obj.ViewObject, "Proxy", None) is None:
-                _hide(obj)
-
-
 # -- coordinates -------------------------------------------------------------------------------
 def placement_of(obj):
     """The global placement of the body `obj` belongs to (identity outside a body)."""

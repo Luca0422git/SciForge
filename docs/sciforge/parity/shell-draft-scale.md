@@ -54,7 +54,7 @@ checked against Fusion):
 | D10 | One Draft over faces of several bodies | Same: a face of another body joins the step; that body gets a hidden step (the Draft's follower) that drafts its faces with the same pull direction, parting tool and angles; undo, the timeline's Delete, suppress and the marker treat them as one step | G (Fusion features act on several bodies) |
 | S1 | Shell: faces of several bodies (or several bodies) in one Shell | Same: clicking a face of another body adds that body to the step (its own hidden step, same thicknesses and type); clicking its last face again drops it. The selection box says "N faces + K other bodies" | G (6) |
 | S2 | Scale: several bodies in the Entities box | Same: every clicked body is scaled by the same factor about the same point (one step, hidden steps in the other bodies). After the first body the Point box takes the next click (as before); click the Entities box again to add bodies | A (4) |
-| S3 | Scale: a sketch (its browser row, or the sketch selected before Scale) | Same: the sketch's curves are scaled about the point (the design origin until a point is picked) in its own plane; its driving dimensions are scaled with it, a dimension that follows a parameter keeps its value (the dialog says which). The step is a "Scale" item in the timeline; editing it scales from the sketch as drawn; deleting it puts the sketch back | A (4), F (5); point default G |
+| S3 | Scale: a sketch (its browser row, or the sketch selected before Scale) | Same: the sketch's curves are scaled about the point (the sketch's own origin until a point is picked) in its own plane; its driving dimensions are scaled with it, a dimension that follows a parameter keeps its value (the dialog says which). The step is a "Scale" item in the timeline; editing it scales from the sketch as drawn; deleting it puts the sketch back | A (4), F (5); point default G |
 | S4 | Scale Type Non Uniform with a sketch | Refused with the reason (Fusion scales sketches uniformly) | A (4) |
 
 ## Shell (MODIFY > Shell)
@@ -127,7 +127,8 @@ corner used as the point follows edits of earlier steps.
 | Draft, Shell, Scale handles for the new options | Angle 2 has no handle of its own (typed in its field); the Angle handle drives Angle 1 |
 | Scale of components | Belongs to the components area (components-2) |
 | Rolling the history marker back before a sketch's Scale step | The sketch stays scaled (the step changed the sketch itself; Undo or deleting the step puts it back) |
-| A sketch's Scale default point | The design origin (Fusion gives "a default point", not documented which) |
+| A sketch's Scale default point | The sketch's own origin (Fusion gives "a default point", not documented which) |
+| Scale of a sketch with projected (external) curves | Its own curves and dimensions scale; constraints to projected curves keep those points on them (the projections follow the part, not the scale) |
 | Non uniform scale of round faces | Exact shape, but the faces become NURBS: FreeCAD then measures their volume only to about 1 % and Refine cannot merge flat NURBS faces |
 | Sharp shell walls on some parts (a narrow slot open at the side of the part) | OpenCASCADE's sharp (intersection) walls give up where rounded ones work: the dialog says so and suggests Shell Type Rounded (before modify-2 it said "too thick") |
 | Per-face wall thickness (outline 7.6 mentions it) | Not in Fusion's Shell dialog; OpenCASCADE supports it but FreeCAD exposes no Python call |

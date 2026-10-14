@@ -95,6 +95,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | Fusion option | Why not yet |
 |---|---|
 | Adjust for features other than extrudes (a hole reaching a slanted face, a revolve To Object) | Their copies stay identical: only extrudes are run again at every copy (`pattern_adjust.py`) |
+| A pattern of an extrude that intersected several bodies | The cut through several bodies is repeated in each (M1); an Intersect's other bodies are not intersected again (a Join merged its bodies into one, so its pattern is in that body anyway) |
 | Optimized faster than Identical | Both are FreeCAD's pattern of the feature's tool: the same result at the same speed |
 | Pattern Type Components | Not built yet: it belongs to the components area (components-2) |
 | Faces: copies "heal" into different surroundings | The closed faces are copied as they are (a hole copied into a thicker area stays as deep as the original). Faces that do not close up with one face around each opening (a fillet's face) are refused with the reason |
