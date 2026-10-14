@@ -125,11 +125,11 @@ class SummaryDialog(QtWidgets.QDialog):
             self.list.setCurrentItem(self.list.topLevelItem(0))
 
     def find_selected(self):
-        item = self.list.currentItem()
-        if item is None:
-            return False
-        name = item.data(0, QtCore.Qt.UserRole)
         try:
+            item = self.list.currentItem()
+            if item is None:
+                return False
+            name = item.data(0, QtCore.Qt.UserRole)
             from . import timeline_ui
 
             return timeline_ui.find(name)

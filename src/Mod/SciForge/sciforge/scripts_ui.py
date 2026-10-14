@@ -356,12 +356,12 @@ class ScriptsDialog(QtWidgets.QDialog):
         self.filter = QtWidgets.QLineEdit()
         self.filter.setObjectName("SciForgeScriptsFilter")
         self.filter.setPlaceholderText("Search")
-        self.filter.textChanged.connect(lambda *_: self.refresh())
+        self.filter.textChanged.connect(lambda *_: self._guarded(self.refresh))
         self.add_button = QtWidgets.QPushButton("+")
         self.add_button.setObjectName("SciForgeScriptsAdd")
         self.add_button.setFixedWidth(32)
         self.add_button.setToolTip("Add a script from another folder (it is copied here)")
-        self.add_button.clicked.connect(self._add)
+        self.add_button.clicked.connect(lambda _=False: self._guarded(self._add))
         top.addWidget(self.filter, 1)
         top.addWidget(self.add_button)
         layout.addLayout(top)
@@ -371,10 +371,14 @@ class ScriptsDialog(QtWidgets.QDialog):
         self.list.setHeaderLabels(self.COLUMNS)
         self.list.setRootIsDecorated(False)
         self.list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.list.customContextMenuRequested.connect(self._menu)
-        self.list.itemDoubleClicked.connect(lambda *_: self.run_selected())
-        self.list.itemChanged.connect(self._item_changed)
-        self.list.currentItemChanged.connect(lambda *_: self._buttons())
+        self.list.customContextMenuRequested.connect(
+            lambda pos: self._guarded(lambda: self._menu(pos))
+        )
+        self.list.itemDoubleClicked.connect(lambda *_: self._guarded(self.run_selected))
+        self.list.itemChanged.connect(
+            lambda item, column: self._guarded(lambda: self._item_changed(item, column))
+        )
+        self.list.currentItemChanged.connect(lambda *_: self._guarded(self._buttons))
         layout.addWidget(self.list, 1)
         self.where = QtWidgets.QLabel("")
         self.where.setWordWrap(True)
@@ -512,7 +516,7 @@ class ScriptsDialog(QtWidgets.QDialog):
     def create_new(self):
         dialog = CreateDialog(self)
         dialog.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
-        dialog.accepted.connect(lambda: self._created(dialog.created))
+        dialog.accepted.connect(lambda: self._guarded(lambda: self._created(dialog.created)))
         dialog.open()
         return dialog
 

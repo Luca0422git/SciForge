@@ -526,11 +526,14 @@ class PreferencesDialog(QtWidgets.QDialog):
             warn("preferences: %s" % exc)
 
     def _page_changed(self, current, _previous):
-        if current is None:
-            return
-        pid = current.data(0, QtCore.Qt.UserRole)
-        if pid in self.page_index:
-            self.stack.setCurrentIndex(self.page_index[pid])
+        try:
+            if current is None:
+                return
+            pid = current.data(0, QtCore.Qt.UserRole)
+            if pid in self.page_index:
+                self.stack.setCurrentIndex(self.page_index[pid])
+        except Exception as exc:
+            warn("preferences: %s" % exc)
 
     def show_page(self, pid):
         for item in self.pages.findItems("*", QtCore.Qt.MatchWildcard | QtCore.Qt.MatchRecursive):
@@ -640,8 +643,10 @@ class PreferencesDialog(QtWidgets.QDialog):
         for opt in core.options():
             if opt["store"] is None:
                 continue
-            default = opt["default"] if opt["default"] is not None else _fallback_default(opt)
             try:
+                default = opt["default"]
+                if default is None:
+                    default = _fallback_default(opt)
                 self.set_widget(opt["key"], default)
             except Exception as exc:
                 warn("preferences: %s: %s" % (opt["key"], exc))

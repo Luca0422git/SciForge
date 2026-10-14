@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Decal maths without FreeCAD or Qt (unit tested in SciForgeTests/unit/test_decal_core.py).
+"""Decal maths without FreeCAD or Qt (unit tested in SciForgeTests/unit/test_misc_cores.py).
 
 A decal is a picture laid on a face. Its frame sits on the face: an origin, the face's outward
 normal, an X direction along the face. Points of the face get picture coordinates (u, v) in

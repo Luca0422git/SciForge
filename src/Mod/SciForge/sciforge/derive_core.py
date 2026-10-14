@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Derive / Insert Derive without FreeCAD or Qt: what can be derived, the item keys a Derive
 remembers, where its source design is, whether the source changed since, the names derived
-parameters get. Unit tested (SciForgeTests/unit/test_derive_core.py).
+parameters get. Unit tested (SciForgeTests/unit/test_misc_cores.py).
 
 Fusion (sources in docs/sciforge/parity/misc.md): Derive brings bodies, sketches,
 construction geometry and parameters of another saved design into this one, linked: when the

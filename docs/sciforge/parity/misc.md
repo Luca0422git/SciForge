@@ -2,7 +2,7 @@
 
 The ribbon entries that still had no command or ran FreeCAD's raw dialogs, built Fusion's way.
 Copied behaviour only, never Fusion's assets, wording or code. Status: **built and tested with
-real clicks (8 scenarios, 380 checks), not yet checked by Luca in real Fusion**. Every row is
+real clicks (7 scenarios, 356 checks, and the ribbon sweep), not yet checked by Luca in real Fusion**. Every row is
 marked with its source: **Autodesk** (help pages, API reference, Autodesk's blog), **Forum**
 (Autodesk Community answers, tutorials) or **Guess** (no source found: SciForge's choice, to
 check in real Fusion).
@@ -18,7 +18,7 @@ check in real Fusion).
 | `capture_ui.py` | Capture Image (File menu) |
 
 Tests: scenarios `misc_derive` (76 checks), `misc_decal` (54), `misc_preferences` (84),
-`misc_scripts` (49), `misc_materials` (44), `misc_compute` (14), `misc_capture` (25), and the
+`misc_scripts` (52), `misc_materials` (51), `misc_compute` (14), `misc_capture` (25), and the
 ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (39).
 
 ## Sources (read 2026-10-14 through search summaries; help.autodesk.com is not reachable from the build sandbox)
@@ -73,7 +73,7 @@ ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (39).
 | Break the link: objects stay, parameters become editable | Same: right-click > Break Link (or in the dialog); derived parameters become the design's own | Forum |
 | CREATE > Derive (in the source): Destination New Design / Existing Design | Same: the selection is ticked; New Design opens in its own tab; Existing Design asks for the file; the source must be saved (saved first otherwise) | Autodesk |
 | (cloud data) | The source is found by its relative path first, then its absolute path: a project folder moved as a whole keeps working; a copied folder with unchanged designs is not "out of date" (the content is compared) | SciForge |
-| — | Refused with the reason: a design deriving from itself, from a design that already derives from it, an older version opened read-only | SciForge |
+| — | Refused with the reason: a design deriving from itself, from a design that already derives from it (directly or through other designs), an older version opened read-only | SciForge |
 | Undo | Insert, Update, Edit, Break Link: one undo step each | — |
 
 ## Decal
@@ -138,7 +138,7 @@ pages, cloud and account settings.
 | + adds a script from the computer | Same: copied into the scripts folder (a taken name refused) | Autodesk |
 | Right-click: Open File Location | Same (with Run / Edit) | Autodesk |
 | Autodesk App Store | **Get Add-Ons**: FreeCAD's Add-on Manager (also UTILITIES > Add-on Manager) | SciForge |
-| A script that fails | The window says what went wrong (the error's last line); SciForge goes on | — |
+| A script that fails | The window says what went wrong (the error's last line), its changes are undone; SciForge goes on. `sys.exit()` is a normal end (its changes stay) | — |
 
 Scripts are FreeCAD macros (`.FCMacro`, `.py`) in the scripts folder (FreeCAD's macro folder);
 add-ins are folders with a Python file of the same name defining `run(context)` and

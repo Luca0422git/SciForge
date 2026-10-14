@@ -56,7 +56,7 @@ needed).
 ## Tests
 
 Scenarios: `misc_derive` (76 checks), `misc_decal` (54), `misc_preferences` (84),
-`misc_scripts` (49), `misc_materials` (44), `misc_compute` (14), `misc_capture` (25): all pass.
+`misc_scripts` (52), `misc_materials` (51), `misc_compute` (14), `misc_capture` (25): all pass.
 Unit: `test_misc_cores.py` (39). Other areas run after the change: see the report.
 
 ## FreeCAD facts and traps found
@@ -87,6 +87,13 @@ Unit: `test_misc_cores.py` (39). Other areas run after the change: see the repor
   dead until `versions_ui._refocus_main()` ran (all new windows call it when they close).
 - FreeCAD's `Gui::SolidWorksNavigationStyle` gives the SolidWorks preset; `orbit_ui._plan`
   steps aside for any preset that is not Fusion's.
+- FreeCAD tells a parameter's observers about every write, **even of the same value**; a write
+  of View/NavigationStyle makes every 3D view build a new navigation style, which loses the
+  orbit settings written before it (OrbitStyle...). Writing it again at start-up broke
+  `orbit_feel` (Shift+middle orbit about the centre, Ctrl+Shift zoom); the fix writes it only
+  when it changes and then writes the orbit settings again (`preferences_ui._set_navigation`).
+- The MaterialManager's cache keeps a deleted user material: its name must not count as taken
+  (`material.taken_names` skips `_DELETED`), or it cannot be made again in the same session.
 
 ## Gaps (what Fusion does that was not built, why)
 

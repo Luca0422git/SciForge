@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Fusion's Preferences window as data: its pages, the options SciForge honours, where each one
 is kept (FreeCAD's own parameters or SciForge's), and the defaults Restore Defaults puts back.
-No FreeCAD, no Qt: unit tested (SciForgeTests/unit/test_prefs_core.py). preferences_ui.py is
+No FreeCAD, no Qt: unit tested (SciForgeTests/unit/test_misc_cores.py). preferences_ui.py is
 the window and applies the values.
 
 Options SciForge cannot honour yet are listed too, greyed with the reason (like the greyed

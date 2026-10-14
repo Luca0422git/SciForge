@@ -51,7 +51,7 @@ class ImageOptions(QtWidgets.QDialog):
             if value == "view":
                 label = "%s (%d x %d)" % ((label,) + view_size())
             self.preset.addItem(label, value)
-        self.preset.currentIndexChanged.connect(lambda *_: self._preset_changed())
+        self.preset.currentIndexChanged.connect(lambda *_: _safely(self._preset_changed))
         form.addRow("Image Resolution", self.preset)
         self.width = QtWidgets.QSpinBox()
         self.width.setObjectName("SciForgeImageWidth")
@@ -64,8 +64,8 @@ class ImageOptions(QtWidgets.QDialog):
         w, h = view_size()
         self.width.setValue(w)
         self.height.setValue(h)
-        self.width.valueChanged.connect(lambda v: self._locked("w", v))
-        self.height.valueChanged.connect(lambda v: self._locked("h", v))
+        self.width.valueChanged.connect(lambda v: _safely(self._locked, "w", v))
+        self.height.valueChanged.connect(lambda v: _safely(self._locked, "h", v))
         form.addRow("Width", self.width)
         form.addRow("Height", self.height)
         self.lock = QtWidgets.QCheckBox("Lock aspect ratio")
@@ -165,10 +165,19 @@ class ImageOptions(QtWidgets.QDialog):
         super().accept()
 
 
+def _safely(fn, *args):
+    try:
+        fn(*args)
+    except Exception as exc:
+        warn("Capture Image: %s" % exc)
+
+
 def save(path, width, height, transparent=False):
     """The 3D view as an image file of width x height pixels."""
     view = Gui.ActiveDocument.ActiveView
     background = "Transparent" if transparent else "Current"
+    if os.path.isfile(path):
+        os.remove(path)  # the save dialog asked about replacing it: a failure must show
     view.saveImage(path, int(width), int(height), background)
     if not os.path.isfile(path):
         raise IOError("nothing was written")

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Scripts and Add-Ins without FreeCAD or Qt: what is in the scripts and add-ins folders, the
 names a new one may have, the files Create writes, the Run on Startup list. Unit tested
-(SciForgeTests/unit/test_scripts_core.py); scripts_ui.py is the dialog.
+(SciForgeTests/unit/test_misc_cores.py); scripts_ui.py is the dialog.
 
 Fusion (sources in docs/sciforge/parity/misc.md): a script runs once when Run is pressed; an
 add-in is loaded (its run() is called) and stays until Stop (its stop()); either can be set to
