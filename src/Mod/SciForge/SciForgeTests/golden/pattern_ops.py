@@ -45,6 +45,8 @@ VALUE_KEYS = (
     "orientation",
     "operation",
     "suppressed",
+    "compute",  # Compute Option: optimized | identical | adjust (modify-2)
+    "start_point",  # Pattern on Path: 0 (path start) .. 1 (path end) (modify-2)
 )
 
 

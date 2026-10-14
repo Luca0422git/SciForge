@@ -1,0 +1,170 @@
+{
+  "id": "modify2_draft_two_bodies",
+  "title": "Two boxes (two bodies) drafted in one step: Fixed Plane XY, One Side, 3 deg",
+  "tags": [
+    "draft",
+    "multi-body",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            40,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 20,
+      "direction": "symmetric",
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_draft2",
+      "id": "d1",
+      "plane": "XY",
+      "angle": 3,
+      "faces": [
+        {
+          "body": "e1",
+          "faces": {
+            "any_of": [
+              {
+                "type": "plane",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "type": "plane",
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "type": "plane",
+                "normal": [
+                  0,
+                  1,
+                  0
+                ]
+              },
+              {
+                "type": "plane",
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ]
+              }
+            ],
+            "count": 4
+          }
+        },
+        {
+          "body": "e2",
+          "faces": {
+            "any_of": [
+              {
+                "type": "plane",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "type": "plane",
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "type": "plane",
+                "normal": [
+                  0,
+                  1,
+                  0
+                ]
+              },
+              {
+                "type": "plane",
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ]
+              }
+            ],
+            "count": 4
+          }
+        }
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 8007.324200878346,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 8007.324200878346,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 16014.648401756693,
+    "solids": 2,
+    "source": "analytic",
+    "note": "Each box 20x20, z -10..10: its 4 sides turn by 3 deg about where they meet the XY plane (narrower above, wider below): the section at height z is (20 - 2 z tan 3)^2, V = integral -10..10 = 8000 + 8000 tan^2(3)/3 per body. One Draft step; the second body gets its hidden follower step."
+  }
+}

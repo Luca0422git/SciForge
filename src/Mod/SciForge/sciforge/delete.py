@@ -299,12 +299,13 @@ def _relink_to_base(doc, step, gone):
 def delete_steps(doc, steps):
     """Delete steps (no transaction of its own). Later steps of the body are re-linked
     around each one by PartDesign; the body's Tip moves back if it was deleted."""
-    from . import extrude_bodies, move, split
+    from . import extrude_bodies, modify_bodies, move, split
     from . import text as sketch_text
 
     steps = [s for s in steps if bodies.alive(s)]
     for step in list(steps):  # a multi-body extrude's steps in the other bodies go with it
         steps += [f for f in extrude_bodies.followers_of(step) if f not in steps]
+        steps += [f for f in modify_bodies.followers_of(step) if f not in steps]
     from . import derive
 
     for step in list(steps):  # a Derive's sketches and planes go with it (bodies: extra_steps)
@@ -481,6 +482,9 @@ def orphans(doc):
     from . import extrude_bodies, move, split
 
     found = [(None, step) for step in extrude_bodies.orphan_followers(doc)]
+    from . import modify_bodies
+
+    found += [(None, step) for step in modify_bodies.orphans(doc)]  # Shell / Draft / Scale...
     for piece in split.orphan_pieces(doc):
         body = split.piece_body(piece)
         if body is not None:
@@ -503,7 +507,9 @@ def remove_orphans(doc):
         if body is not None:
             bodies.remove_body(body)
         if piece is not None and bodies.alive(piece):
-            if extrude_bodies.is_follower(piece):
+            from . import modify_bodies
+
+            if extrude_bodies.is_follower(piece) or modify_bodies.is_follower(piece):
                 bodies.remove_step(piece)  # out of its body's history, the Tip shown again
                 continue
             try:

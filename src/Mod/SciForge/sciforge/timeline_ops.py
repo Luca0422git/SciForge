@@ -684,7 +684,7 @@ def snapshot(doc, deps=True):
 # Such an extrude is one timeline step (the "lead") plus hidden follower steps in the other
 # bodies (extrude_bodies.py, SciForgeRole ExtrudeFollower, linked to the lead by "Source"). A
 # follower is never a step of its own, but it can be a body's Tip.
-FOLLOWER_ROLES = ("ExtrudeFollower",)
+FOLLOWER_ROLES = ("ExtrudeFollower", "ModifyFollower")  # ModifyFollower: modify_bodies.py
 
 
 def is_follower(obj):

@@ -1,0 +1,106 @@
+{
+  "id": "modify2_pattern_path_auto_start",
+  "title": "The same boss and L path, the pattern starting by itself (nearest the boss)",
+  "tags": [
+    "pattern",
+    "path",
+    "start-point",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "box"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            2
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "b1",
+      "profile": "s2",
+      "distance": 4
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "polyline": [
+            [
+              10,
+              10
+            ],
+            [
+              40,
+              10
+            ],
+            [
+              40,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "path_pattern",
+      "id": "p1",
+      "features": [
+        "b1"
+      ],
+      "path": {
+        "sketch": "s3"
+      },
+      "quantity": 2,
+      "distance": 30
+    }
+  ],
+  "expect": {
+    "volume": 16100.530964914873,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      42,
+      40,
+      14
+    ],
+    "source": "analytic",
+    "note": "As modify2_pattern_path_start_point without a start point: the pattern starts at the point of the path nearest the boss, (10,10) = 0 along it, so the copy 30 mm along is at (40,10): the boss moved by (30,0), hanging 2 mm over the right edge (x up to 42). V = 16000 + 32 pi; faces 11 (the overhanging half of the copy has an underside face)."
+  }
+}

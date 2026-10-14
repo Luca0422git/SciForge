@@ -1,0 +1,107 @@
+{
+  "id": "modify2_pattern_path_start_point",
+  "title": "Box 40x40x10, a boss repeated along an L path that starts a quarter of the way along it",
+  "tags": [
+    "pattern",
+    "path",
+    "start-point",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            40
+          ],
+          "name": "box"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            2
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "b1",
+      "profile": "s2",
+      "distance": 4
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "polyline": [
+            [
+              10,
+              10
+            ],
+            [
+              40,
+              10
+            ],
+            [
+              40,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "path_pattern",
+      "id": "p1",
+      "features": [
+        "b1"
+      ],
+      "path": {
+        "sketch": "s3"
+      },
+      "quantity": 2,
+      "distance": 30,
+      "start_point": 0.25
+    }
+  ],
+  "expect": {
+    "volume": 16100.530964914873,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      40,
+      14
+    ],
+    "source": "analytic",
+    "note": "The path is the L (10,10)-(40,10)-(40,40), 60 mm long. Start Point 0.25: the distance is counted from 15 mm along it, (25,10). The copy 30 mm further is at 45 mm, (40,25): it is the boss moved by (40,25)-(25,10) = (15,15), to (25,25), inside the top face (from the path's own start it would be at (40,10) and hang over the edge, x up to 42). V = 40*40*10 + 2*pi*2^2*4; faces: the box's 6 + 2 per boss."
+  }
+}

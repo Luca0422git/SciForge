@@ -22,6 +22,7 @@ FreeCAD 1.1.4 stores LinearPattern.Spacings2 = [0.0] by default, which stacks a 
 on the first (core patch #4 fixes the default in C++). SciForge always writes both spacing
 lists itself, so two-direction patterns are right on stock FreeCAD and in old files too.
 """
+
 import json
 import math
 import re
@@ -89,6 +90,12 @@ DEFAULTS = {
     "orientation": "identical",  # or "path": copies turn with the path
     "suppressed": [],  # Suppression: copies (index among the copies) that are not made
     "expressions": {},  # value field key -> formula typed in the dialog
+    # Compute Option (Fusion): "optimized" (its default), "identical" or "adjust" (every
+    # copy of an extrude built again where it lands: pattern_adjust.py)
+    "compute": "optimized",
+    # Pattern on Path: where along the path the distance is counted from, 0 (the path's
+    # start) to 1 (its end); None = the point of the path nearest the objects
+    "start_point": None,
 }
 
 
@@ -409,10 +416,22 @@ def quantity_formulas(options):
     return [k for k in ("quantity", "quantity2") if (exprs.get(k) or "").strip()]
 
 
+def adjusts(options):
+    """True when Compute Option Adjust has something to compute again: a pattern of
+    features with an extrude among them (other features' copies are identical anyway)."""
+    if options.get("compute") != "adjust" or options.get("pattern_type") != "features":
+        return False
+    from . import pattern_adjust
+
+    return any(pattern_adjust.extrude_spec(f) is not None for f in _features(options))
+
+
 def implementation(kind, options):
     """'native' (FreeCAD's pattern features) or 'engine' (SciForge's PatternFeature)."""
     if kind == "path":
         return "engine"
+    if adjusts(options):
+        return "engine"  # FreeCAD's pattern features copy the feature's result as it is
     if options.get("suppressed") and kind != "mirror":
         return "engine"  # FreeCAD's pattern features cannot leave an instance out
     if quantity_formulas(options) and kind != "mirror":
@@ -492,8 +511,15 @@ def check(kind, options):
             raise PatternError("The quantity must be at least 1.")
         if int(options["quantity"]) > 1 and abs(float(options["distance"])) < 1e-9:
             raise PatternError("The distance must not be 0.")
+        start = options.get("start_point")
+        if start is not None and not (-1e-9 <= float(start) <= 1.0 + 1e-9):
+            raise PatternError(
+                "The start point is a share of the path: 0 (its start) to 1 (its end)."
+            )
     else:
         raise PatternError("Unknown pattern %r." % kind)
+    if options.get("compute", "optimized") not in ("optimized", "identical", "adjust"):
+        raise PatternError("Compute Option must be Optimized, Identical or Adjust.")
 
 
 def _check_direction(options, suffix):
@@ -525,6 +551,7 @@ def build(kind, options, feature=None, name=None):
         same = feature.TypeId == wanted and kind_of(feature) == kind
         if same and owner_body(feature) is body:
             _update(feature, kind, options)
+            _sync_followers(feature)
             return feature
     new = _create(body, kind, wanted, name or TITLES[kind].replace(" ", ""), feature)
     try:
@@ -544,7 +571,16 @@ def build(kind, options, feature=None, name=None):
         new.Label = label
         if was_tip:
             body.Tip = new
+    _sync_followers(new)
     return new
+
+
+def _sync_followers(feature):
+    """A pattern of an extrude that cut other bodies repeats the cut there too (a hidden
+    follower step in each of them, pattern_adjust.py)."""
+    from . import pattern_adjust
+
+    pattern_adjust.sync_followers(feature)
 
 
 def _create(body, kind, type_id, name, replacing=None):
@@ -895,6 +931,9 @@ def remove(feature):
     """Take a pattern out again (a dialog's preview that is cancelled or dropped)."""
     if not alive(feature):
         return
+    from . import modify_bodies
+
+    modify_bodies.remove_all(feature)
     if is_body_pattern(feature):
         _remove_body_copies(feature)
         return
@@ -964,7 +1003,10 @@ def _update(obj, kind, options):
         "quantity2": int(options["quantity2"]),
         "orientation": options["orientation"],
         "expressions": {k: v for k, v in options["expressions"].items() if v},
+        "compute": options.get("compute", "optimized"),
     }
+    if options.get("start_point") is not None:
+        meta["start_point"] = float(options["start_point"])
     _save_meta(obj, meta)
 
 
@@ -1150,6 +1192,7 @@ ENUMS = {
     "DirectionType2": ["One Direction", "Symmetric"],
     "CircularType": ["Full", "Angle", "Symmetric"],
     "Orientation": ["Identical", "Path Direction"],
+    "ComputeOption": ["Optimized", "Identical", "Adjust"],
 }
 ENUM_VALUES = {
     "PatternType": ["features", "faces", "bodies"],
@@ -1158,6 +1201,7 @@ ENUM_VALUES = {
     "DirectionType2": ["one", "symmetric"],
     "CircularType": ["full", "angle", "symmetric"],
     "Orientation": ["identical", "path"],
+    "ComputeOption": ["optimized", "identical", "adjust"],
 }
 
 
@@ -1212,6 +1256,13 @@ class PatternFeature:
         if add("App::PropertyBool", "Refine", "Merge faces that end up coplanar, like Fusion"):
             obj.Refine = True
         add("App::PropertyIntegerList", "SuppressedCopies", "Copies left out (Suppression)")
+        if add(
+            "App::PropertyFloat",
+            "StartPoint",
+            "Pattern on Path: where the distance is counted from, 0 (path start) to 1 (path "
+            "end); -1 = nearest the objects",
+        ):
+            obj.StartPoint = -1.0
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
@@ -1233,10 +1284,17 @@ class PatternFeature:
             # A path pattern starts where the dialog's arrow is: nearest the objects' centre.
             center = objects_center(options)[0] if kind == "path" else None
             moves = placements(kind, options, tools, center)
-            obj.Shape = apply_tools(base.Shape, tools, moves, kind, refine=obj.Refine)
+            if adjusts(options):
+                obj.Shape = _adjusted(obj, base.Shape, moves)
+            else:
+                obj.Shape = apply_tools(base.Shape, tools, moves, kind, refine=obj.Refine)
         except PatternError:
             raise
         except Exception as exc:
+            from . import pattern_adjust
+
+            if isinstance(exc, pattern_adjust.AdjustError):
+                raise PatternError(str(exc))
             # OpenCASCADE's own errors read "<unknown exception data>" in the dialog/timeline
             raise PatternError(kernel_message(exc))
 
@@ -1248,6 +1306,28 @@ class PatternFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _adjusted(obj, base_shape, moves):
+    """Compute Option Adjust: every extrude built again at each copy (pattern_adjust.py),
+    the other features' copies identical."""
+    from . import pattern_adjust
+
+    per_copy = []
+    for feature in in_timeline_order(list(obj.Originals)):
+        if not alive(feature) or _suppressed(feature):
+            continue
+        tools = pattern_adjust.adjusted_tools(feature, moves, base_shape)
+        if tools is not None:
+            per_copy += tools
+            continue
+        for tool, how in feature_tools(feature):
+            per_copy += [(_moved(tool, move), how) for move in moves]
+    result = pattern_adjust.apply_adjusted(base_shape, per_copy, refine=obj.Refine)
+    if result.isNull() or not result.Solids:
+        raise PatternError("The pattern leaves no solid.")
+    solids = result.Solids
+    return solids[0] if len(solids) == 1 else Part.makeCompound(solids)
 
 
 def kernel_message(exc):
@@ -1289,6 +1369,9 @@ def _update_engine(obj, kind, options):
     _enum_set(obj, "DirectionType2", options["direction_type2"])
     _enum_set(obj, "CircularType", options["circular_type"])
     _enum_set(obj, "Orientation", options["orientation"])
+    _enum_set(obj, "ComputeOption", options.get("compute", "optimized"))
+    start = options.get("start_point")
+    _set(obj, "StartPoint", -1.0 if start is None else float(start))
     for prop, key in (
         ("Direction", "direction"),
         ("Direction2", "direction2"),
@@ -1338,6 +1421,9 @@ def read_engine(obj):
     options["direction_type2"] = _enum_get(obj, "DirectionType2")
     options["circular_type"] = _enum_get(obj, "CircularType")
     options["orientation"] = _enum_get(obj, "Orientation")
+    options["compute"] = _enum_get(obj, "ComputeOption")
+    start = float(getattr(obj, "StartPoint", -1.0))
+    options["start_point"] = start if start >= 0.0 else None
     for prop, key in (
         ("Direction", "direction"),
         ("Direction2", "direction2"),
@@ -1708,9 +1794,12 @@ def _length_between(edge, a, b):
 
 def path_placements(options, tools, center=None):
     path = _Path(path_edges(options["path"]))
-    if center is None:
-        center = _objects_center(options, tools)
-    start = path.locate(center)
+    if options.get("start_point") is not None:
+        start = float(options["start_point"]) * path.total
+    else:
+        if center is None:
+            center = _objects_center(options, tools)
+        start = path.locate(center)
     offsets = core.linear_offsets(
         options["quantity"], options["distance"], options["distribution"], options["direction_type"]
     )
@@ -1728,6 +1817,25 @@ def path_placements(options, tools, center=None):
         else:
             moves.append(App.Placement(point - point0, App.Rotation()))
     return moves
+
+
+def auto_start_point(options):
+    """Where a Pattern on Path starts by itself, as a share of the path (0 its start, 1 its
+    end): the point of the path nearest the objects. None until objects and path are
+    picked."""
+    if not options.get("path") or not options.get("objects"):
+        return None
+    path = _Path(path_edges(options["path"]))
+    if path.total <= 0:
+        return None
+    center = objects_center(options)[0]
+    return max(0.0, min(1.0, path.locate(center) / path.total))
+
+
+def start_point_at(options, share):
+    """(point, tangent) in body coordinates of the path at `share` (0..1) of its length."""
+    path = _Path(path_edges(options["path"]))
+    return path.at(max(0.0, min(1.0, float(share))) * path.total)
 
 
 def _turn(t0, t1, normal):
@@ -1760,6 +1868,7 @@ def read(feature):
         options = read_engine(feature)
     else:
         options = _read_native(feature, kind, meta)
+        options["compute"] = meta.get("compute", "identical")
         if kind == "mirror" and options["pattern_type"] == "bodies":
             options["operation"] = "join"
     options["expressions"] = {

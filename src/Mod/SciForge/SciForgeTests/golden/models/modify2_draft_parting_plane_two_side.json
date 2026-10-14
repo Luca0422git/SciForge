@@ -1,0 +1,105 @@
+{
+  "id": "modify2_draft_parting_plane_two_side",
+  "title": "Box z -8..12, Parting Line at the XY plane, pull from the top face, Two Side 5 / 2 deg",
+  "tags": [
+    "draft",
+    "parting-line",
+    "two-side",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 12,
+      "direction": "two_sides",
+      "distance2": 8
+    },
+    {
+      "op": "sf_draft2",
+      "id": "d1",
+      "faces": {
+        "any_of": [
+          {
+            "type": "plane",
+            "normal": [
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              -1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              -1,
+              0
+            ]
+          }
+        ],
+        "count": 4
+      },
+      "draft_type": "parting",
+      "plane": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "parting": "XY",
+      "sides": "two",
+      "angle": 5,
+      "angle2": 2
+    }
+  ],
+  "expect": {
+    "volume": 7425.136042411757,
+    "faces": 10,
+    "bbox": [
+      -10,
+      -10,
+      -8,
+      10,
+      10,
+      12
+    ],
+    "source": "analytic",
+    "note": "The pull direction comes out of the top face (+Z); the parting line is where the XY plane crosses the sides (z = 0). Above it the sides lean in by 5 deg over 12 mm, below by 2 deg (toward -Z) over 8 mm: V = frustum(20, 12, 5) + frustum(20, 8, 2)."
+  }
+}

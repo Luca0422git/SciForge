@@ -1,0 +1,92 @@
+{
+  "id": "modify2_draft_fixed_two_side",
+  "title": "Box 20x20x20 around the XY plane, its 4 sides drafted Two Side: 5 deg up, 3 deg down",
+  "tags": [
+    "draft",
+    "two-side",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sf_draft2",
+      "id": "d1",
+      "faces": {
+        "any_of": [
+          {
+            "type": "plane",
+            "normal": [
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              -1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              -1,
+              0
+            ]
+          }
+        ],
+        "count": 4
+      },
+      "plane": "XY",
+      "sides": "two",
+      "angle": 5,
+      "angle2": 3
+    }
+  ],
+  "expect": {
+    "volume": 7454.282017530715,
+    "faces": 10,
+    "bbox": [
+      -10,
+      -10,
+      -10,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "Fixed plane XY splits the 4 side faces at z = 0; the upper halves lean in by 5 deg toward +Z, the lower halves by 3 deg toward -Z (each side narrows away from the plane). Each half is a frustum of a square pyramid: V = h/3 (A1 + A2 + sqrt(A1 A2)), h = 10, A1 = 400, A2 = (20 - 2*10*tan a)^2. Faces: top, bottom, 4 + 4 drafted."
+  }
+}

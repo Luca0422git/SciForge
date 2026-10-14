@@ -1,0 +1,103 @@
+{
+  "id": "modify2_pattern_identical_to_slope",
+  "title": "The same wedge and hole, repeated 3 times with Compute Option Identical",
+  "tags": [
+    "pattern",
+    "compute-option",
+    "identical",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              60,
+              0
+            ],
+            [
+              60,
+              20
+            ],
+            [
+              0,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            10,
+            0,
+            3
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "type": "plane",
+          "at": {
+            "axis": "z",
+            "value": "max"
+          },
+          "count": 1
+        }
+      }
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "e2"
+      ],
+      "direction": "X",
+      "quantity": 3,
+      "distance": 40,
+      "compute": "identical"
+    }
+  ],
+  "expect": {
+    "volume": 17010.398314119215,
+    "faces": 11,
+    "bbox": [
+      0,
+      -10,
+      0,
+      60,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "As modify2_pattern_adjust_to_slope, but Identical: the copies are the first hole's cut moved 40 and 80 mm along X (each a cylinder of r 3 under a slanted top at its centre height 35/3), so the copies stop below the slope (blind holes with a slanted end face). Removed = 3*pi*9*35/3 = 315 pi; V = 18000 - 315 pi. Faces: 6 + 3 walls + 2 slanted end faces = 11."
+  }
+}
