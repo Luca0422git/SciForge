@@ -48,6 +48,19 @@ def about(obj, width, height, tol=0.1):
     return abs(w - width) <= tol and abs(h - height) <= tol
 
 
+def calibrated(obj):
+    """The size Calibrate gives for the distance actually picked: 52 x 26 scaled by 60 /
+    picked. The clicks land on whole pixels, worth more than a tenth of a millimetre at
+    this zoom (a CI window one pixel different picked 38.88), so the exact 80 x 40 holds
+    only within the pixel tolerance; the scaling itself is checked to the micrometre."""
+    picked = state.get("picked")
+    if not picked:
+        return about(obj, 80, 40)
+    return about(obj, 52 * 60.0 / picked, 26 * 60.0 / picked, 0.01) and about(
+        obj, 80, 40, 2 * 60.0 / picked * state.get("pixel_mm", 0.05) + 0.01
+    )
+
+
 def drawn_through(obj):
     """True when the canvas is drawn as a Coin annotation (Display Through)."""
     from pivy import coin
@@ -228,6 +241,10 @@ def d_waits():
     state["dot1"] = c.Placement.multVec(V(-half, 0, 0))
     state["dot2"] = c.Placement.multVec(V(half, 0, 0))
     h.fit()
+    # How many millimetres one screen pixel is worth here (the clicks' own precision).
+    a, b = h.screen_point(state["dot1"]), h.screen_point(state["dot2"])
+    pixels = max(1.0, ((a.x() - b.x()) ** 2 + (a.y() - b.y()) ** 2) ** 0.5)
+    state["pixel_mm"] = 2.0 * half / pixels
 
 
 def d_click_first():
@@ -243,7 +260,10 @@ def d_type_distance():
     if p is None:
         return
     shown = p.distance.value()
-    h.check("the picked distance is shown (39 mm)", abs(shown - 39.0) < 0.05, shown)
+    state["picked"] = shown
+    # each click is within a pixel of its dot
+    tol = 2 * state.get("pixel_mm", 0.05) + 0.01
+    h.check("the picked distance is shown (39 mm)", abs(shown - 39.0) <= tol, (shown, tol))
     i.type_value(p.distance, "60")
 
 
@@ -253,7 +273,7 @@ def d_enter():
 
 def d_check():
     c = canvas()
-    h.check("calibrated: 80 x 40 mm", c is not None and about(c, 80, 40), c and size(c))
+    h.check("calibrated: 80 x 40 mm", c is not None and calibrated(c), c and size(c))
     h.check("dialog closed", i.panel() is None)
 
 
@@ -273,7 +293,7 @@ def e_redo():
 
 def e_check_redo():
     c = canvas()
-    h.check("Ctrl+Y: 80 wide", c is not None and about(c, 80, 40), c and size(c))
+    h.check("Ctrl+Y: 80 wide", c is not None and calibrated(c), c and size(c))
 
 
 # -- F ----------------------------------------------------------------------------------------
@@ -336,7 +356,7 @@ def g_undo():
 
 def g_check_undo():
     c = canvas()
-    h.check("Ctrl+Z: the canvas is back", c is not None and about(c, 80, 40), c and size(c))
+    h.check("Ctrl+Z: the canvas is back", c is not None and calibrated(c), c and size(c))
     i.no_file()
     h.shot("end")
 

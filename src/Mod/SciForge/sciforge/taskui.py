@@ -19,6 +19,7 @@
 import math
 import re
 import time
+import weakref
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -566,6 +567,52 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             pass
 
 
+_LIVE_HANDLES = weakref.WeakSet()  # every drag handle that polled lately (BoxCarrier)
+LIVE_S = 0.5  # a handle that has not polled for this long has been removed
+
+
+def live_handles():
+    """The drag handles shown now: they poll every few tens of milliseconds while they
+    live (follow_box), so one silent for half a second has gone with its dialog."""
+    now = time.monotonic()
+    try:
+        return [h for h in list(_LIVE_HANDLES) if now - getattr(h, "_polled_at", 0.0) < LIVE_S]
+    except Exception:
+        return []
+
+
+def handle_pixels(handle, widget):
+    """(tail, tip, radius) of a handle's grabbable part in `widget` pixels (the 3D view's
+    drawing widget), worked out as the value box does; None when it cannot be."""
+    try:
+        anchor, tail, tip, radius = handle.box_geometry()
+        view = handle.view
+        ratio = widget.devicePixelRatioF() or 1.0
+        height = widget.height()
+
+        def pixel(p):
+            x, y = view.getPointOnViewport(App.Vector(p))
+            return x / ratio, height - y / ratio
+
+        anchor = App.Vector(anchor)
+        ax, ay = pixel(anchor)
+        radius_px = 0.0
+        if radius > 0:
+            look = App.Vector(view.getViewDirection())
+            along = App.Vector(tip) - App.Vector(tail)
+            side = look.cross(along) if along.Length > 1e-9 else App.Vector()
+            if side.Length < 1e-9:
+                side = look.cross(App.Vector(1, 0, 0))
+                if side.Length < 1e-9:
+                    side = look.cross(App.Vector(0, 1, 0))
+            side.normalize()
+            edge = pixel(anchor + side * radius)
+            radius_px = ((edge[0] - ax) ** 2 + (edge[1] - ay) ** 2) ** 0.5
+        return pixel(App.Vector(tail)), pixel(App.Vector(tip)), radius_px
+    except Exception:
+        return None
+
+
 class BoxCarrier:
     """What a drag handle needs to carry a value box (Fusion shows the value next to every
     handle you can drag): where its grabbable part is, and a hook its poll calls so the box
@@ -600,6 +647,13 @@ class BoxCarrier:
         """Keep the box next to the handle and showing the dialog's value: run on every
         poll (it follows a drag and a turned or zoomed view). A handle in use (dragged, or
         the mouse over it) becomes the one a number typed over the view goes to."""
+        # Alive: a press on this handle starts its drag, never a selection box, whether
+        # or not the dialog gave it a value box (selection_ui._handle_under).
+        self._polled_at = time.monotonic()
+        try:
+            _LIVE_HANDLES.add(self)
+        except TypeError:
+            pass
         box = self.value_box
         if box is None:
             return
@@ -628,6 +682,8 @@ class BoxCarrier:
         """The handle goes (rebuilt or removed): the box stays with the dialog, hidden until
         the next handle shows it again. Never hidden while the user types in it (hiding
         would take the keyboard away mid-value)."""
+        _LIVE_HANDLES.discard(self)
+        self._polled_at = 0.0
         box, self.value_box = self.value_box, None
         self.box_owner = None
         if box is not None and _alive(box):

@@ -19,6 +19,7 @@ file is only written at the end.
 The result goes to $SCIFORGE_SMOKE_OUT/<name>-result.json, screenshots to
 $SCIFORGE_SMOKE_OUT/<name>-*.png.
 """
+
 import json
 import os
 import re
@@ -537,6 +538,14 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
         App.ParamGet("User parameter:BaseApp/Preferences/View").SetBool(
             "UseNavigationAnimations", False
         )
+        # A CI shard shares one profile: an earlier scenario's selection mode or filter
+        # (remembered between sessions, like Fusion) must not change how this one picks.
+        try:
+            from sciforge import selection_ui
+
+            selection_ui.reset()
+        except Exception as exc:
+            print("[SciForge] selection reset failed: %s" % exc, flush=True)
         _tap = _ConsoleTap()
         new_errors()  # start-up messages are not the scenario's
 

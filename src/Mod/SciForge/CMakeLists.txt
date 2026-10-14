@@ -26,8 +26,12 @@ FILE(GLOB SciForge_UiIcons RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPEND
 FILE(GLOB_RECURSE SciForge_Tests RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
     SciForgeTests/*.py SciForgeTests/*.json SciForgeTests/*.md SciForgeTests/*.txt)
 
+# Sample files the Insert/Export tests open (meshes, STEP, SVG, DXF, images): every file.
+FILE(GLOB SciForge_Fixtures RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
+    SciForgeTests/fixtures/*)
+
 SET(SciForge_ALL ${SciForge_Init} ${SciForge_Package} ${SciForge_Icons} ${SciForge_UiIcons}
-    ${SciForge_Tests})
+    ${SciForge_Tests} ${SciForge_Fixtures})
 
 ADD_CUSTOM_TARGET(SciForge ALL SOURCES ${SciForge_ALL})
 
@@ -40,3 +44,4 @@ INSTALL(FILES ${SciForge_UiIcons} DESTINATION Mod/SciForge/sciforge/icons/ui)
 INSTALL(DIRECTORY SciForgeTests DESTINATION Mod/SciForge
     FILES_MATCHING PATTERN "*.py" PATTERN "*.json" PATTERN "*.md" PATTERN "*.txt"
     PATTERN "__pycache__" EXCLUDE)
+INSTALL(FILES ${SciForge_Fixtures} DESTINATION Mod/SciForge/SciForgeTests/fixtures)

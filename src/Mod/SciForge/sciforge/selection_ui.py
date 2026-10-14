@@ -97,6 +97,19 @@ def _save():
         warn("selection settings: %s" % exc)
 
 
+def reset():
+    """Fusion's defaults again: window selection, every filter on, Select Through off.
+
+    The tests call it before each scenario: the choices are remembered between sessions,
+    and one scenario's Paint Selection or filter must not change how the next one picks."""
+    try:
+        _state["mode"] = core.DEFAULT_MODE
+        _state["filters"] = core.Filters()
+        _filters_changed()
+    except Exception as exc:
+        warn("selection reset: %s" % exc)
+
+
 def mode():
     return _state["mode"]
 
@@ -499,20 +512,27 @@ def _handle_under(gl, pos):
     try:
         from . import arrow_box_core, taskui
 
+        point = (float(pos.x()), float(pos.y()))
+
+        def near(pixels):
+            if pixels is None:
+                return False
+            tail, tip, radius = pixels
+            return (
+                arrow_box_core._segment_point(tail, tip, point) <= max(radius, 0.0) + HANDLE_MARGIN
+            )
+
         panel = taskui.current()
         boxes = getattr(getattr(panel, "value_boxes", None), "boxes", None) if panel else None
-        if not boxes:
-            return False
-        point = (float(pos.x()), float(pos.y()))
-        for box in list(boxes.values()):
+        for box in list((boxes or {}).values()):
             try:
-                pixels = box.handle_pixels
+                if near(box.handle_pixels):
+                    return True
             except RuntimeError:
                 continue
-            if pixels is None:
-                continue
-            tail, tip, radius = pixels
-            if arrow_box_core._segment_point(tail, tip, point) <= max(radius, 0.0) + HANDLE_MARGIN:
+        # A handle without a value box (Draft's angle disc...) is a handle all the same.
+        for handle in taskui.live_handles():
+            if near(taskui.handle_pixels(handle, gl)):
                 return True
     except Exception as exc:
         warn("selection: %s" % exc)
@@ -857,14 +877,35 @@ def _elements_in(view, gl, polygon_qt, crossing, filters_):
     return taken
 
 
+def _pixel_mm(view, gl):
+    """How many model units one screen pixel spans (at the view's focal plane)."""
+    try:
+        x, y = int(gl.width() / 2), int(gl.height() / 2)
+        a = App.Vector(view.getPoint(x, y))
+        b = App.Vector(view.getPoint(x + 1, y))
+        return max(0.0, (a - b).Length)
+    except Exception:
+        return 0.0
+
+
 def _is_visible(view, gl, el, to_screen):
     """Without Select Through: the element shows at one of its sample points (the pick
-    there lands on it, not on something in front of it)."""
+    there lands on it, not on something in front of it).
+
+    "In front" is measured along the line of sight: a sketch curve lying on a face is
+    seen, though the pick at its pixel may land on the face a pixel's width beside the
+    curve's own point (graphics drivers break that depth tie differently)."""
     try:
         diag = el.feature.Shape.BoundBox.DiagonalLength
     except Exception:
         diag = 100.0
     tol = core.depth_tolerance(diag)
+    try:
+        look = App.Vector(view.getViewDirection())
+        look = App.Vector(look).normalize() if look.Length > 1e-12 else None
+    except Exception:
+        look = None
+    slack = 2.0 * _pixel_mm(view, gl)
     ratio = gl.devicePixelRatioF()
     for point in el.samples:
         x, y = to_screen(point)
@@ -879,8 +920,14 @@ def _is_visible(view, gl, el, to_screen):
         if info.get("Object") == el.feature.Name and info.get("Component") == el.short:
             return True
         picked = App.Vector(info["x"], info["y"], info["z"])
-        if (picked - App.Vector(point)).Length <= tol:
+        offset = picked - App.Vector(point)
+        if offset.Length <= tol:
             return True
+        if look is not None and slack > 0:
+            depth = offset.dot(look)  # below zero: what the pick hit is nearer the eye
+            beside = (offset - look * depth).Length
+            if beside <= slack and depth >= -(tol + slack):
+                return True
     return False
 
 
