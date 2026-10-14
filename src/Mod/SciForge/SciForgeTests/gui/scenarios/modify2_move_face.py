@@ -68,7 +68,8 @@ def faces_listed():
     if not h.check("Move/Copy dialog open", p is not None):
         return
     labels = [p.move_object.itemText(i) for i in range(p.move_object.count())]
-    h.check("Move Object: Bodies, Faces", labels == ["Bodies", "Faces"], labels)
+    want = ["Bodies", "Components", "Faces"]  # Components: components-2's dialog
+    h.check("Move Object: Bodies, Components, Faces", labels == want, labels)
     h.check("Create Copy shows for bodies", p.copy.isVisible())
     h.check("choose Faces", b.choose(p.move_object, "Faces"))
 

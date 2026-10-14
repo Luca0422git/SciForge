@@ -16,8 +16,8 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   straight rib between parallel walls; radius points take plain numbers.
 - **hole-thread.md**: no Taper Tapped (NPT). Clearance holes not chosen by fastener. The
   modeled thread ignores the class. A hole on a curved face does not follow the face.
-- **patterns.md**: (Pattern Type Components built by sf/components-2, except Mirror.) No
-  Compute Option Adjust / Optimized. No start point for Pattern on Path.
+- **patterns.md**: (Components by sf/components-2; Compute Option Adjust and the Path start
+  point by sf/modify-2.) Left: Mirror of components; Adjust only re-runs extrudes.
 - **joints.md**: (sf/joints-2 built Component Drag, position modes, Motion Link, Contact Sets,
   Motion Study, nested components, no auto-ground.) Left: a drag pulls one joint at a time (no
   whole-mechanism drag solver), no contact during Animate, no Motion Study graph, no Lock
@@ -29,14 +29,15 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 - **drawings.md**: one sheet per drawing. No tolerances or dimension text editing, no
   ordinate / baseline / chain dimensions. No Leader, Note or GD&T. No section depth, offset,
   half or breakout sections. No automatic centre marks. No DWG.
-- **bodies.md**: (Combine New Component, multi-tool Split, Set Pivot and component moves built
-  by sf/components-2.) Move cannot move faces.
-- **direct-modify.md**: no Press Pull Offset Type. Features in a direct design cannot be edited.
-  Replace Face only takes flat, cylinder or sphere targets.
+- **bodies.md**: (Combine New Component, multi-tool Split, Set Pivot, component moves by
+  sf/components-2; Move Object Faces by sf/modify-2.) Left: faces of one body per Move.
+- **direct-modify.md**: (Press Pull Offset Type and Replace Face onto any surface by
+  sf/modify-2.) Features in a direct design cannot be edited.
 - **revolve.md**: no Objects To Cut (Revolve, Sweep and Loft act on the sketch's body only).
 - **primitives.md**: no snapping to edge midpoints or to points off the plane.
-- **shell-draft-scale.md**: Draft has no Parting Line or Two Sides. One body per step.
-  Sketches and components cannot be scaled.
+- **shell-draft-scale.md**: (Parting Line, Two Side, Symmetric, several bodies per step and
+  Scale of sketches by sf/modify-2.) Left: Move Parting Line (kernel), components not scaled,
+  non-uniform scale of a sketch.
 - **sweep-loft-rib.md**: no Loft Tangent Edges Merge. End conditions not with rails, a
   centerline or a closed loft. Sweep distances take plain numbers only.
 - **surface.md**: surface Extrude has no From Object or All. Surface Revolve has no Type To.
