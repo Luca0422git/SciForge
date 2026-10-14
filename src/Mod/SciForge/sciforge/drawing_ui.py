@@ -33,6 +33,9 @@ STATE = {
 # How an exported file is opened (a scenario swaps this to record instead of opening).
 OPENER = {"open": lambda path: QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))}
 SHADED_FACE = (0.82, 0.86, 0.9)
+# Section hatching drawn like the edges. FreeCAD's default hatch colour is green with no
+# opacity (0x00FF0000), so its hatching never showed on the sheet nor in the PDF.
+HATCH_COLOR = (0.13, 0.145, 0.16, 1.0)
 
 
 def _later(fn, *args, ms=0):
@@ -323,9 +326,14 @@ def refresh_drawings(doc_name):
             warn("drawing looks: %s" % exc)
 
 
+def _rounded(color):
+    return tuple(round(c, 3) for c in tuple(color)[:4])
+
+
 def apply_view_looks(page):
     """What a view's style means for TechDraw's drawing of it (GUI only): Shaded fills
-    the faces with one light colour (TechDraw has no shaded rendering)."""
+    the faces with one light colour (TechDraw has no shaded rendering); a section's
+    hatching is drawn in the edges' colour."""
     for view in drawing.all_views(page):
         try:
             vo = getattr(view, "ViewObject", None)
@@ -337,6 +345,12 @@ def apply_view_looks(page):
                 vo.FaceTransparency = want
             if shaded and tuple(round(c, 3) for c in vo.FaceColor[:3]) != SHADED_FACE:
                 vo.FaceColor = SHADED_FACE
+            if view.TypeId == drawing.SECTION:
+                for prop in ("GeomHatchColor", "HatchColor"):
+                    if prop in vo.PropertiesList and _rounded(getattr(vo, prop)) != _rounded(
+                        HATCH_COLOR
+                    ):
+                        setattr(vo, prop, HATCH_COLOR)
         except Exception as exc:
             # (a view TechDraw could not compute refuses its colours: the view itself
             # shows the problem; the next update tries again)

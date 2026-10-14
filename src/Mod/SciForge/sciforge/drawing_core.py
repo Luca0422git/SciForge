@@ -596,6 +596,35 @@ def to_view(axes, centre, point):
     return v_dot(rel, x), v_dot(rel, y)
 
 
+def hatch_lines(box, spacing, angle_deg=45.0):
+    """Parallel lines at `angle_deg`, `spacing` apart (measured square to them), through
+    the origin's family, long enough to cross the box (umin, vmin, umax, vmax): the
+    hatching of a section's cut faces before it is trimmed to them."""
+    umin, vmin, umax, vmax = box
+    if spacing <= 0 or umax < umin or vmax < vmin:
+        return []
+    a = math.radians(angle_deg)
+    d = (math.cos(a), math.sin(a))  # along the lines
+    n = (-d[1], d[0])  # square to them
+    corners = [(umin, vmin), (umin, vmax), (umax, vmin), (umax, vmax)]
+    offsets = [c[0] * n[0] + c[1] * n[1] for c in corners]
+    along = [c[0] * d[0] + c[1] * d[1] for c in corners]
+    t0, t1 = min(along) - spacing, max(along) + spacing
+    first = math.floor(min(offsets) / spacing)
+    last = math.ceil(max(offsets) / spacing)
+    lines = []
+    for k in range(int(first), int(last) + 1):
+        o = k * spacing
+        base = (n[0] * o, n[1] * o)
+        lines.append(
+            (
+                (base[0] + d[0] * t0, base[1] + d[1] * t0),
+                (base[0] + d[0] * t1, base[1] + d[1] * t1),
+            )
+        )
+    return lines
+
+
 # ------------------------------------------------------------------ section views
 def section_line(p1, p2, side, projection):
     """A section line from p1 to p2 (parent view coordinates, 2D) with the view to be

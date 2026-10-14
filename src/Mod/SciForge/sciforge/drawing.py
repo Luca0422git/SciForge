@@ -52,6 +52,7 @@ LINE_DASHDOT = 4  # TechDraw line styles: 1 continuous, 2 dash, 3 dot, 4 dash-do
 CENTER_EXTENSION = 3.0  # mm on the paper a centre mark reaches past its circle
 HATCH_FILE = "FCPAT.pat"  # TechDraw's own patterns
 HATCH_NAME = "Diagonal4"  # 45 degree lines, like ANSI31
+HATCH_SPACING = 4.0  # mm on the paper between the hatch lines (Diagonal4's spacing)
 
 
 class DrawingError(ValueError):
@@ -1654,6 +1655,7 @@ def export_dxf(page, path):
     dxf.layer("VISIBLE", 7)
     dxf.layer("HIDDEN", 8, "HIDDEN")
     dxf.layer("CENTER", 1, "CENTER")
+    dxf.layer("HATCH", 8)
     dxf.layer("DIMENSIONS", 3)
     dxf.layer("TEXT", 7)
     dxf.layer("TABLE", 7)
@@ -1793,6 +1795,12 @@ def _dxf_view(dxf, view):
         dxf.text(ox, oy - half_h - 7.0, 3.5, label, "TEXT", "center")
     if view.TypeId == SECTION:
         _dxf_section_line(dxf, view)
+        if _get(view, "CutSurfaceDisplay", "") != "Hide":
+            try:
+                for a, b in section_hatch(view):
+                    dxf.line(ox + a[0], oy + a[1], ox + b[0], oy + b[1], "HATCH")
+            except Exception as exc:
+                warn("DXF: hatching of %s: %s" % (view.Label, exc))
     if view.TypeId == DETAIL:
         parent = view.BaseView
         if alive(parent):
@@ -1800,6 +1808,46 @@ def _dxf_view(dxf, view):
             r = _value(view.Radius) * scale_of(parent)
             dxf.circle(px, py, r, "CENTER")
             dxf.text(px + r * 0.75, py + r * 0.75, 3.5, view.Reference, "TEXT", "left")
+
+
+def section_faces(section):
+    """The faces a section cuts, in the section view's own coordinates (unscaled, from
+    its centre; the faces lie in a plane square to the view's direction)."""
+    import Part
+
+    shapes = [s.Shape for s in section.Source if alive(s) and not s.Shape.isNull()]
+    if not shapes:
+        return []
+    normal = section.SectionNormal
+    origin = section.SectionOrigin
+    wires = Part.makeCompound(shapes).slice(normal, normal.dot(origin))
+    if not wires:
+        return []
+    face = Part.makeFace(wires, "Part::FaceMakerBullseye")
+    x, y, d = axes_of(section)
+    c = centre_of(section)
+    matrix = App.Matrix(x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, d[0], d[1], d[2], 0)
+    matrix.move(matrix.multVec(V(-c[0], -c[1], -c[2])))
+    return face.transformed(matrix).Faces
+
+
+def section_hatch(section, spacing=HATCH_SPACING):
+    """The hatch lines of a section's cut faces on the paper, relative to the view's
+    position: [((x1, y1), (x2, y2))]. For the DXF (the sheet shows TechDraw's own)."""
+    import Part
+
+    s = scale_of(section) or 1.0
+    found = []
+    for face in section_faces(section):
+        box = face.BoundBox
+        z = (box.ZMin + box.ZMax) / 2.0
+        for a, b in core.hatch_lines((box.XMin, box.YMin, box.XMax, box.YMax), spacing / s, 45.0):
+            line = Part.LineSegment(V(a[0], a[1], z), V(b[0], b[1], z)).toShape()
+            for edge in face.common(line).Edges:
+                p, q = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+                if (q - p).Length > 1e-6:
+                    found.append(((s * p.x, s * p.y), (s * q.x, s * q.y)))
+    return found
 
 
 def _dxf_section_line(dxf, section):

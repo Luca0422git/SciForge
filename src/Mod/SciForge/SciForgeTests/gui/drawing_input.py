@@ -365,6 +365,7 @@ def drawing_steps(
     contents=None,
     untick=(),
     orientation=None,
+    units=None,
 ):
     """Steps: File > New Drawing, the dialog's choices, OK; then (manual views) a click
     that places the base view at `base_at`, the style and scale typed, OK."""
@@ -390,6 +391,8 @@ def drawing_steps(
                         item.setCheckState(QtCore.Qt.Unchecked)
         if standard:
             choose(p.standard, standard)
+        if units:
+            choose(p.units, units)
         if sheet:
             choose(p.sheet, sheet)
         if views:

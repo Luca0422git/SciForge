@@ -353,6 +353,31 @@ class PartsListTests(unittest.TestCase):
         self.assertGreater(x, 130)
 
 
+class HatchTests(unittest.TestCase):
+    def test_lines_cross_the_box_at_45_degrees_evenly_spaced(self):
+        lines = core.hatch_lines((0.0, 0.0, 20.0, 10.0), 4.0)
+        self.assertGreater(len(lines), 5)
+        offsets = []
+        for a, b in lines:
+            self.assertTrue(close(math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])), 45.0, 1e-9))
+            offsets.append((a[1] - a[0]) / math.sqrt(2.0))  # distance square to the lines
+        offsets.sort()
+        for o1, o2 in zip(offsets, offsets[1:]):
+            self.assertTrue(close(o2 - o1, 4.0, 1e-9))
+        # every point of the box is within half a spacing of one of the lines
+        for u, v in ((0, 0), (20, 10), (20, 0), (0, 10), (7.3, 4.1)):
+            nearest = min(abs((v - u) / math.sqrt(2.0) - o) for o in offsets)
+            self.assertLessEqual(nearest, 2.0 + 1e-9)
+        # and the lines are long enough: neither end is inside the box
+        for line in lines:
+            for u, v in line:
+                self.assertFalse(0.0 < u < 20.0 and 0.0 < v < 10.0, (u, v))
+
+    def test_nothing_to_hatch(self):
+        self.assertEqual(core.hatch_lines((0, 0, 10, 10), 0.0), [])
+        self.assertEqual(core.hatch_lines((5, 5, 1, 1), 2.0), [])
+
+
 class DxfTests(unittest.TestCase):
     def test_round_trip(self):
         dxf = core.DxfWriter()
