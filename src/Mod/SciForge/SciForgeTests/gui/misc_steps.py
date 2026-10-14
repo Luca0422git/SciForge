@@ -199,3 +199,64 @@ def told():
     from sciforge import commands
 
     return commands._TOLD["msg"] or ""
+
+
+# -- the application menu (the quick-access Menu button) -----------------------------------------
+def app_menu_item(path):
+    """Click the Menu button at the top left, then the entries of `path` ("File", "Capture
+    Image") with the mouse, opening the submenus on the way. Returns a dict whose "clicked"
+    turns True once the last entry was clicked."""
+    done = {"clicked": False}
+    button = w.quick_access("Menu")
+    if not h.check("the Menu button", button is not None):
+        return done
+
+    def step(index, tries=0):
+        try:
+            menu = QtWidgets.QApplication.activePopupWidget()
+            if not isinstance(menu, QtWidgets.QMenu) or (
+                index and menu.objectName() != ("SciForgeFileMenu")
+            ):
+                if tries < 30:
+                    QtCore.QTimer.singleShot(100, lambda: step(index, tries + 1))
+                else:
+                    h.check(
+                        "menu %s opened" % path[index],
+                        False,
+                        menu.objectName() if menu is not None else None,
+                    )
+                    close_popups()
+                return
+            action = None
+            for candidate in menu.actions():  # the first one (SciForge's File, not FreeCAD's)
+                if candidate.text().split("\t")[0].replace("&", "") == path[index]:
+                    action = candidate
+                    break
+            if action is None:
+                h.check("menu entry %s" % path[index], False, [a.text() for a in menu.actions()])
+                close_popups()
+                return
+            rect = menu.actionGeometry(action)
+            QtTest.QTest.mouseMove(menu, rect.center())
+            if index < len(path) - 1:
+                menu.setActiveAction(action)
+                QtTest.QTest.keyClick(menu, QtCore.Qt.Key_Right)
+                QtCore.QTimer.singleShot(400, lambda: step(index + 1))
+                return
+            QtTest.QTest.mouseClick(menu, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, rect.center())
+            done["clicked"] = True
+        except Exception as exc:
+            h.check("app menu %s" % "/".join(path), False, exc)
+            close_popups()
+
+    QtCore.QTimer.singleShot(300, lambda: step(0))
+    QtCore.QTimer.singleShot(8000, close_popups)  # never leave a menu open
+    w.click(button)
+    return done
+
+
+def close_popups():
+    popup = QtWidgets.QApplication.activePopupWidget()
+    while popup is not None:
+        popup.close()
+        popup = QtWidgets.QApplication.activePopupWidget()

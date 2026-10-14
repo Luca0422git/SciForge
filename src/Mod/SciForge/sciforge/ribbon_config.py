@@ -810,7 +810,7 @@ FILE_MENU = [
     item("Export", ("SciForge_Export", "Std_Export"), "export"),
     item("3D Print", "SciForge_3DPrint", "insert_mesh"),
     item("Export Everything", "SciForge_ExportEverything", "export_all"),
-    item("Capture Image", "Std_ViewScreenShot", "canvas"),
+    item("Capture Image", ("SciForge_CaptureImage", "Std_ViewScreenShot"), "canvas"),
     SEP,
     item("Insert Mesh", "SciForge_InsertMesh", "insert_mesh"),
     item("Insert STEP", "SciForge_InsertSTEP", "insert_step"),
