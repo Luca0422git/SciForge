@@ -758,8 +758,10 @@ def full_round(shape, side1, center, side2):
 
 
 # -- the whole step ----------------------------------------------------------------------------
-_RESULTS = []  # (key, result) of the last few computes: the dialog's trial and the step's
-# own compute that follows it build the same thing once
+_RESULTS = []  # (key, input shape, result) of the last few computes: the dialog's trial and
+# the step's own compute that follows it build the same thing once. The input shape is kept
+# (and compared as the same shape, not only by its hash): a freed shape's memory could be
+# reused by another one with the same hash.
 _KEEP = 4
 
 
@@ -781,12 +783,15 @@ def compute(shape, spec, refs, refs2=(), features=(), features2=()):
     """The blended shape. `refs`: the step's picks (all rows, in order). Raises BlendError
     with a plain-language reason."""
     key = _key(shape, spec, refs, refs2, features, features2)
-    for known, result in _RESULTS:
-        if key is not None and known == key:
-            return result
+    for known, source, result in _RESULTS:
+        try:
+            if key is not None and known == key and source.isSame(shape):
+                return result
+        except Exception:
+            continue
     result = _compute(shape, spec, refs, refs2, features, features2)
     if key is not None:
-        _RESULTS.insert(0, (key, result))
+        _RESULTS.insert(0, (key, shape, result))
         del _RESULTS[_KEEP:]
     return result
 
