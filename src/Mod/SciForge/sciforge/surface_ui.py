@@ -1807,6 +1807,45 @@ class StitchPanel(SurfacePanel):
     def _mine(self, body):
         return self.step is not None and _alive(self.step) and bodies.body_of(self.step) is body
 
+    def interpret(self, name, obj, short, point):
+        # The preview draws the stitched surfaces as the first body: a click on a face that
+        # came from another picked body means that body (clicking it again drops it).
+        if self._mine(bodies.body_of(obj)) and point is not None:
+            found = self._source_body(point)
+            if found is not None:
+                return (found, "")
+        ref = super().interpret(name, obj, short, point)
+        if ref is not None and bodies.has_solid(ref[0]) and not self._mine(ref[0]):
+            # Fusion's Stitch selects surface bodies only
+            self.message.setText(
+                "⚠ %s is a solid: Stitch joins surface bodies. Unstitch it first, or pick "
+                "surfaces." % ref[0].Label
+            )
+            return None
+        return ref
+
+    def _source_body(self, point):
+        import Part
+
+        own = bodies.body_of(self.step)
+        try:
+            vertex = Part.Vertex(App.Vector(point))
+        except Exception:
+            return None
+        best = None
+        for body, _sub in self.picks.get("bodies") or []:
+            if body is own or not _alive(body):
+                continue
+            try:
+                shape = surface.whole_shape(body)
+                d = shape.distToShape(vertex)[0]
+            except Exception:
+                continue
+            tol = max(1e-4, 1e-4 * shape.BoundBox.DiagonalLength)
+            if d <= tol and (best is None or d < best[1]):
+                best = (body, d)
+        return best[0] if best is not None else None
+
     def after_recompute(self):
         super().after_recompute()
         try:
@@ -1883,6 +1922,21 @@ class ReverseNormalPanel(SurfacePanel):
 
     def build_rows(self):
         self.box("bodies")
+
+    def interpret(self, name, obj, short, point):
+        ref = super().interpret(name, obj, short, point)
+        if ref is not None and bodies.has_solid(ref[0]) and not self._turned(ref[0]):
+            # Fusion's Reverse Normal selects surface bodies only
+            self.message.setText(
+                "⚠ %s is a solid: a solid's faces always point out of it. Pick a surface "
+                "body (in the browser when it lies on a solid's face)." % ref[0].Label
+            )
+            return None
+        return ref
+
+    def _turned(self, body):
+        steps = [self.step] + surface.followers_of(self.step) if self.step is not None else []
+        return any(_alive(x) and bodies.body_of(x) is body for x in steps)
 
     def after_recompute(self):
         super().after_recompute()

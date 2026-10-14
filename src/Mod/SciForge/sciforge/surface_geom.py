@@ -867,35 +867,28 @@ def offset_faces(faces, distance):
 # -- CREATE: Thicken -------------------------------------------------------------------------------
 def thicken(faces, thickness, direction="one_side", thicken_type="sharp"):
     """A solid from faces given a thickness (One Side along the normal, Symmetric about the
-    faces). Sharp corners meet in an edge, Rounded ones in an arc."""
+    faces). Sharp corners meet in an edge, Rounded ones in an arc of the thickness (half of
+    it for Symmetric) about the corner."""
     if not faces:
         raise NeedsPick("Select the faces (or a surface body) to thicken.")
     t = float(thickness)
     if abs(t) < 1e-7:
         raise NeedsPick("Drag the arrow or type a thickness.")
-    join = 0 if thicken_type == "rounded" else 2
-    start, depth = core.thicken_offsets(direction, t)
     solids = []
     for piece in shells_or_faces(sew(faces)):
-        base = piece
         try:
-            if abs(start) > 1e-9:
-                moved = piece.makeOffsetShape(start, 1e-6, False, False, 0, join, False)
-                base = moved.Shells[0] if moved.Shells else moved.Faces[0]
-            solid = base.makeOffsetShape(depth, 1e-6, False, False, 0, join, True)
+            solid = _thick_sharp(piece, t, direction)
+            if thicken_type == "rounded":
+                solid = _round_corners(piece, solid, t, direction)
+        except SurfaceError:
+            raise
         except Exception as exc:
             raise SurfaceError(
                 "These faces cannot be thickened by %g mm (%s). Use a smaller thickness: a "
                 "curved face whose radius is smaller than the thickness cannot thicken "
-                "inwards%s." % (t, exc, "; or try Thicken Type Sharp" if join == 0 else "")
+                "inwards." % (t, exc)
             )
-        found = list(solid.Solids) if solid.ShapeType != "Solid" else [solid]
-        if not found:
-            try:
-                found = [Part.Solid(Part.Shell(solid.Faces))]
-            except Exception:
-                found = []
-        for s in found:
+        for s in solid.Solids:
             if s.Volume < 0:
                 s = s.copy()
                 s.reverse()
@@ -908,6 +901,83 @@ def thicken(faces, thickness, direction="one_side", thicken_type="sharp"):
     if not solids:
         raise SurfaceError("Nothing could be thickened. Check the faces.")
     return compound(solids)
+
+
+def _offset_solid(piece, depth):
+    """The solid between a face / shell and its offset by `depth` (corners meet sharp)."""
+    solid = piece.makeOffsetShape(depth, 1e-6, False, False, 0, 2, True)
+    found = list(solid.Solids)
+    if not found:
+        found = [Part.Solid(Part.Shell(solid.Faces))]
+    return found[0] if len(found) == 1 else compound(found)
+
+
+def _thick_sharp(piece, t, direction):
+    if direction != "symmetric":
+        return _offset_solid(piece, t)
+    try:  # half the thickness each way: offset back by t/2, then thicken by t
+        moved = piece.makeOffsetShape(-t / 2.0, 1e-6, False, False, 0, 2, False)
+        base = moved.Shells[0] if moved.Shells else moved.Faces[0]
+        solid = _offset_solid(base, t)
+        if solid.isValid() and solid.Volume > 1e-9:
+            return solid
+    except Exception:
+        pass
+    both = _offset_solid(piece, t / 2.0).fuse(_offset_solid(piece, -t / 2.0))
+    return both.removeSplitter()
+
+
+def _sharp_edges(piece):
+    """Edges two faces of `piece` share at an angle (not tangent)."""
+    found = []
+    for edge in piece.Edges:
+        faces = piece.ancestorsOfType(edge, Part.Face)
+        if len(faces) != 2:
+            continue
+        try:
+            point = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+            n1 = face_normal_at(faces[0], point)
+            n2 = face_normal_at(faces[1], point)
+            if abs(n1.dot(n2)) < 1.0 - 1e-6 or n1.dot(n2) < 0:
+                found.append(edge)
+        except Exception:
+            continue
+    return found
+
+
+def _tube(edge, radius):
+    """A solid round bar of `radius` along an edge."""
+    if edge.Curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment"):
+        a = edge.valueAt(edge.FirstParameter)
+        b = edge.valueAt(edge.LastParameter)
+        return Part.makeCylinder(radius, (b - a).Length, a, b - a)
+    start = edge.valueAt(edge.FirstParameter)
+    circle = Part.Wire([Part.makeCircle(radius, start, edge.tangentAt(edge.FirstParameter))])
+    return Part.Wire([edge]).makePipeShell([circle], True, True)
+
+
+def _round_corners(piece, sharp, t, direction):
+    """Rounded: where two faces meet at an angle, the outside corner of the sharp solid
+    becomes an arc about the corner. The rounded solid is the sharp one cut down to the
+    faces thickened one by one plus a round bar of the thickness along each corner and a
+    ball where corners meet (OCC's own arc join cannot close an open surface into a
+    solid)."""
+    corners = _sharp_edges(piece)
+    if not corners:
+        return sharp
+    radius = abs(t) / 2.0 if direction == "symmetric" else abs(t)
+    parts = [_thick_sharp(face, t, direction) for face in piece.Faces]
+    parts += [_tube(edge, radius) for edge in corners]
+    for vertex in piece.Vertexes:  # where corners meet, a ball rounds the corner off
+        if sum(1 for edge in corners if any(vertex.isSame(v) for v in edge.Vertexes)) >= 2:
+            parts.append(Part.makeSphere(radius, vertex.Point))
+    blob = parts[0].fuse(parts[1:]) if len(parts) > 1 else parts[0]
+    out = sharp.common(blob).removeSplitter()
+    if not out.Solids:
+        raise SurfaceError("The corners could not be rounded: use Thicken Type Sharp.")
+    if len(out.Solids) == 1:
+        return out.Solids[0]
+    return out
 
 
 # -- cells -----------------------------------------------------------------------------------------
