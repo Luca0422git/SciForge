@@ -506,6 +506,14 @@ class SurfacePanel(BodyPanel):
         """What a click on (obj, short) means for box `name`, or None (with a word why)."""
         _n, _label, _role, accepts, _empty = self._box_spec(name)
         short = _short(short)
+        if (
+            ("curve" in accepts or "sketch_curve" in accepts)
+            and point is not None
+            and not short.startswith(("Edge", "Vertex"))
+        ):
+            near = self.sketch_curve_near(point)
+            if near is not None:
+                obj, short = near
         if self.own_preview(obj) and core.makes_body(self.kind):
             self.message.setText("⚠ That is what this dialog is making. Pick something else.")
             return None
@@ -558,6 +566,39 @@ class SurfacePanel(BodyPanel):
                 return (obj, "")
         self.message.setText("⚠ " + self.wrong_pick(name))
         return None
+
+    def sketch_curve_near(self, point, pixels=6.0):
+        """(sketch, "EdgeN") of a shown sketch curve within a few pixels of a click that
+        FreeCAD gave as a face: Fusion picks the curve then, but FreeCAD's selection can
+        give the face a sketch curve lies on (a sketch on the face's plane)."""
+        import math
+
+        import Part
+
+        try:
+            point = App.Vector(point)
+            here = self.view.getPointOnViewport(point)
+            vertex = Part.Vertex(point)
+        except Exception:
+            return None
+        best = None
+        for obj in self.doc.Objects:
+            if not curves.is_sketch(obj) or not bodies.is_shown(obj):
+                continue
+            try:
+                shape = bodies.global_shape(obj)
+            except Exception:
+                continue
+            for i, edge in enumerate(shape.Edges):
+                try:
+                    nearest = edge.distToShape(vertex)[1][0][0]
+                    there = self.view.getPointOnViewport(nearest)
+                except Exception:
+                    continue
+                gap = math.hypot(there[0] - here[0], there[1] - here[1])
+                if gap <= pixels and (best is None or gap < best[0]):
+                    best = (gap, obj, "Edge%d" % (i + 1))
+        return (best[1], best[2]) if best is not None else None
 
     def wrong_pick(self, name):
         _n, label, _role, accepts, _empty = self._box_spec(name)
