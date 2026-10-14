@@ -430,9 +430,18 @@ def next_drawing_label(doc):
 
 
 def create_drawing(
-    doc, sources, standard="ISO", units="mm", sheet=None, title_block=True, label=None
+    doc,
+    sources,
+    standard="ISO",
+    units="mm",
+    sheet=None,
+    title_block=True,
+    label=None,
+    contents="",
 ):
-    """A new drawing (Fusion: File > New Drawing > From Design) with an empty sheet."""
+    """A new drawing (Fusion: File > New Drawing > From Design) with an empty sheet.
+    contents "Full Assembly": the drawing keeps showing every body of the design (one
+    added later comes into its views and parts list); otherwise the given bodies."""
     if standard not in core.STANDARDS:
         raise DrawingError("Choose ASME or ISO.")
     if units not in core.UNITS:
@@ -459,6 +468,7 @@ def create_drawing(
     # were out of its scope on every recompute)
     _add(page, "App::PropertyLinkListGlobal", "SciForgeSources", sources)
     _add(page, "App::PropertyStringList", "SciForgeTitleEdits", [])
+    _add(page, "App::PropertyString", "SciForgeContents", contents or "")
     date = datetime.date.today().isoformat()
     values = core.title_values(
         design=doc.Label,
@@ -1548,10 +1558,44 @@ def refresh_dimensions(page):
     return changed
 
 
+def follow_assembly(page):
+    """A Full Assembly drawing shows the design's bodies as they are now: a body or
+    component added later comes into the views that show the whole design (and so into
+    the parts list). True when the views changed."""
+    if _get(page, "SciForgeContents", "") != "Full Assembly":
+        return False
+    wanted = design_bodies(page.Document)
+    if not wanted:
+        return False
+    old = [s for s in (_get(page, "SciForgeSources", []) or []) if alive(s)]
+    names = sorted(b.Name for b in wanted)
+    if sorted(b.Name for b in old) == names:
+        return False
+    old_names = sorted(b.Name for b in old)
+    page.SciForgeSources = wanted
+    changed = []
+    for view in all_views(page):
+        current = sorted(s.Name for s in view.Source if alive(s))
+        if current == old_names or not current:
+            view.Source = list(wanted)
+            changed.append(view)
+    for view in sorted(changed, key=lambda v: v.ID):
+        try:
+            view.recompute()
+        except Exception as exc:
+            warn("view %s: %s" % (view.Label, exc))
+    log("drawing %s shows %d bodies now" % (page.Label, len(wanted)))
+    return True
+
+
 def refresh(page):
-    """After the design changed: title block, parts list, centre marks. True when
-    anything changed."""
+    """After the design changed: the bodies a Full Assembly drawing shows, title block,
+    parts list, centre marks. True when anything changed."""
     changed = False
+    try:
+        changed |= follow_assembly(page)
+    except Exception as exc:
+        warn("drawing contents: %s" % exc)
     try:
         changed |= refresh_title(page)
     except Exception as exc:

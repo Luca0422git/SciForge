@@ -1016,6 +1016,7 @@ class CreateDrawingPanel(taskui.Panel):
                 units=self.units.currentText(),
                 sheet=self.sheet.currentText(),
                 title_block=self.template.currentIndex() == 0,
+                contents=self.contents.currentText(),
             )
         except drawing.DrawingError as exc:
             self.message.setText(str(exc))

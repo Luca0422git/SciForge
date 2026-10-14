@@ -15,11 +15,14 @@ D  TABLES > Table: the table follows the mouse; a click at (290, 120): the parts
 E  TABLES > Balloon: a click on empty paper says to click a component's edge; a click on
    the Post's top edge, then above it: balloon 2; on the Plate's bottom edge, then below
    it: balloon 1; Enter. Ctrl+Z removes both (one step); Ctrl+Y brings them back.
-F  The Post renamed Pillar (by script): the parts list's row 2 says Pillar.
+F  The Post renamed Pillar (by script): the parts list's row 2 says Pillar. A third
+   component, Pin, added to the design (by script): the Full Assembly drawing's view shows
+   it and the parts list has row 3 Pin; the plate-only drawing (Select) stays as it was.
 G  Table again: this drawing already has a parts list.
 H  The browser's right-click menu of the first drawing (Open Drawing, Rename, Delete);
    Delete: that drawing, its view and its tab are gone, the other drawing (still the
-   active tab) and both components stay; Undo (the quick-access button) brings it back with its view.
+   active tab) and the components stay; Undo (the quick-access button) brings it back
+   with its view.
 """
 
 import FreeCAD as App
@@ -262,6 +265,38 @@ f_rename.wait_ms = 1500
 
 def f_followed():
     h.check("row 2 says Pillar", rows() == [(1, "Plate", 1), (2, "Pillar", 1)], rows())
+    from sciforge import components
+
+    doc = App.ActiveDocument
+    doc.openTransaction("Pin")
+    part = components.new_component(doc, "Pin")
+    body = components.new_body_in(doc, part, "Body1")
+    box = body.newObject("PartDesign::AdditiveCylinder", "PinShape")
+    box.Radius, box.Height = 3.0, 20.0
+    box.Placement.Base = App.Vector(10, 10, 8)
+    body.Tip = box
+    doc.commitTransaction()
+    doc.recompute()
+    state["pin_body"] = body
+
+
+f_followed.wait_ms = 3000
+
+
+def f_added():
+    from sciforge import drawing
+
+    h.check("row 3 Pin", rows() == [(1, "Plate", 1), (2, "Pillar", 1), (3, "Pin", 1)], rows())
+    names = sorted(b.Name for b in base().Source)
+    h.check("the view shows the pin", state["pin_body"].Name in names and len(names) == 3, names)
+    plate_page = [p for p in drawing.drawings(App.ActiveDocument) if p.Label == "Asm Drawing"]
+    plate_view = drawing.base_views(plate_page[0])[0] if plate_page else None
+    h.check(
+        "the plate-only drawing stays",
+        plate_view is not None
+        and [b.Name for b in plate_view.Source] == [state["plate_body"].Name],
+        plate_view and plate_view.Source,
+    )
 
 
 # -- G ------------------------------------------------------------------------------------------
@@ -312,9 +347,10 @@ def h_gone():
     h.check("its tab closed", "Asm Drawing" not in tabs, tabs)
     h.check("its view too", len(part_views()) == len(state["views"]) - 1, part_views())
     h.check(
-        "both components stay",
+        "the components stay",
         abs(state["plate_body"].Shape.Volume - 80 * 50 * 8) < 1e-6
-        and abs(state["post_body"].Shape.Volume - 20 * 20 * 30) < 1e-6,
+        and abs(state["post_body"].Shape.Volume - 20 * 20 * 30) < 1e-6
+        and state["pin_body"].Shape.Volume > 0,
     )
     h.check(
         "the other drawing's tab stays", d.page() is not None and d.page().Label == "Asm Drawing 2"
@@ -347,6 +383,6 @@ h.run(
     + d.drawing_steps("asm", base_at=BASE, scale="1:1", orientation="Front")
     + [c_balloon, c_refused, d_table, d_move, d_place, d_made, d_done]
     + [e_start, e_paper, e_said, e_place_post, e_plate, e_place_plate, e_enter]
-    + [e_made, e_undone, e_redone, f_rename, f_followed, g_table, g_refused]
+    + [e_made, e_undone, e_redone, f_rename, f_followed, f_added, g_table, g_refused]
     + [h_menu, h_gone, h_back],
 )
