@@ -345,7 +345,9 @@ def l4_reversed():
     moved = rack_x() - state["rack_x"]
     expect = -state.get("sign", 1.0) * TURN / 4
     h.check(
-        "a quarter turn slides the rack the other way", abs(moved - expect) < LINK_TOL, (moved, expect)
+        "a quarter turn slides the rack the other way",
+        abs(moved - expect) < LINK_TOL,
+        (moved, expect),
     )
 
 
