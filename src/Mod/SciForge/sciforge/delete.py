@@ -191,11 +191,13 @@ def _show_profiles(doc, gone):
 
 
 def extra_steps(steps):
-    """Steps that go with the ones deleted: the bodies a split or copy made."""
-    from . import move, split
+    """Steps that go with the ones deleted: the bodies a split, copy or Derive made."""
+    from . import derive, move, split
 
     more_bodies = []
     for step in steps:
+        if derive.is_derive(step):
+            more_bodies += derive.result_bodies(step)
         if split.is_split(step):
             more_bodies += split.piece_bodies(step)
         if move.is_copy(step):
@@ -303,6 +305,11 @@ def delete_steps(doc, steps):
     steps = [s for s in steps if bodies.alive(s)]
     for step in list(steps):  # a multi-body extrude's steps in the other bodies go with it
         steps += [f for f in extrude_bodies.followers_of(step) if f not in steps]
+    from . import derive
+
+    for step in list(steps):  # a Derive's sketches and planes go with it (bodies: extra_steps)
+        if derive.is_derive(step):
+            steps += [o for o in derive.result_steps(step) if o not in steps]
     for step in list(steps):  # a sketch's texts go with it (in the same undo step)
         if step.TypeId == "Sketcher::SketchObject":
             steps += [t for t in sketch_text.texts_of(step) if t not in steps]
@@ -329,8 +336,16 @@ def delete_steps(doc, steps):
             move.remove(step)
         elif sketch_text.is_text(step):
             sketch_text.remove(step)  # its frame lines too, when its sketch stays
+        elif derive.is_derive(step):
+            derive.remove_master_parts(step)  # its parameters
+            bodies.remove_step(step)
         else:
             bodies.remove_step(step)
+    for holder in derive.orphan_solids(doc):  # the solids of the derived bodies that went
+        try:
+            doc.removeObject(holder.Name)
+        except Exception:
+            pass
 
 
 def delete_bodies(doc, targets):
@@ -362,7 +377,9 @@ def delete_bodies(doc, targets):
         base = body.BaseFeature
         bodies.remove_body(body)
         # The hidden first step of a copied or split-off body goes with it.
-        if base is not None and bodies.alive(base) and (move.is_copy(base) or split.is_piece(base)):
+        if base is not None and bodies.alive(base) and (
+            move.is_copy(base) or split.is_piece(base) or bodies.kind(base) == "DerivedSolid"
+        ):
             try:
                 doc.removeObject(base.Name)
             except Exception:
@@ -473,6 +490,9 @@ def orphans(doc):
     for step in doc.Objects:  # a copied body deleted from the browser: its copy step goes too
         if move.is_copy(step) and move.copy_body(step) is None:
             found.append((None, step))
+    from . import derive
+
+    found += [(None, holder) for holder in derive.orphan_solids(doc)]  # a derived body's solid
     return found
 
 

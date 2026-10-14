@@ -51,7 +51,12 @@ SOLID_CREATE = group(
     ["Create Sketch", "Extrude", "Revolve", "Hole", "Rectangular Pattern", "Mirror"],
     [
         item("Create Sketch", "SciForge_NewSketch", "sketch_create"),
-        item("Derive", None, "derive"),
+        item(
+            "Derive",
+            "SciForge_Derive",
+            "derive",
+            note="Bodies, sketches, planes and parameters into another design, linked.",
+        ),
         SEP,
         item(
             "Extrude",
@@ -229,7 +234,12 @@ INSERT = group(
             "insert_component",
             note="Another design's bodies, linked to its file by a relative path",
         ),
-        item("Insert Derive", None, "derive"),
+        item(
+            "Insert Derive",
+            "SciForge_InsertDerive",
+            "derive",
+            note="Bodies, sketches, planes and parameters of a saved design, linked.",
+        ),
         # Fusion brings STEP files in through its Data Panel (upload, then Insert into the
         # design); SciForge has no cloud panel, so the file is picked straight away.
         item(

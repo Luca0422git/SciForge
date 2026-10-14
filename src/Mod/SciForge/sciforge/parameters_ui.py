@@ -10,7 +10,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import log, parameters, parameters_core as core, ui_icon, ui_icon_path, warn
-from .compat import QtCore, QtWidgets
+from .compat import QtCore, QtGui, QtWidgets
 
 USER_COLUMNS = ["Name", "Unit", "Expression", "Value", "Comment"]
 MODEL_COLUMNS = ["Parameter", "Name", "Expression", "Value"]
@@ -84,8 +84,9 @@ class ParametersDialog(QtWidgets.QDialog):
         self._loading = True
         try:
             rows = parameters.user_parameters(self.doc)
-            self.user.setRowCount(len(rows))
-            for r, row in enumerate(rows):
+            derived = parameters.derived_parameters(self.doc)
+            self.user.setRowCount(len(rows) + len(derived))
+            for r, row in enumerate(rows + derived):
                 cells = [
                     row["name"],
                     row["unit"],
@@ -95,8 +96,10 @@ class ParametersDialog(QtWidgets.QDialog):
                 ]
                 for c, text in enumerate(cells):
                     item = QtWidgets.QTableWidgetItem(text)
-                    if c in (0, 1, 3):
+                    if c in (0, 1, 3) or r >= len(rows):
                         item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
+                    if r >= len(rows):  # derived (Derive): greyed, changed in its source
+                        item.setForeground(QtGui.QBrush(QtGui.QColor("#8a94a6")))
                     self.user.setItem(r, c, item)
             self.user.resizeColumnsToContents()
             expanded = {
