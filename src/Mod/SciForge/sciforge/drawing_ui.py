@@ -151,13 +151,31 @@ def load_techdraw():
 def open_drawing(page):
     """Show a drawing in its tab (opening it if it was closed)."""
     load_techdraw()
+    gdoc = None
+    try:
+        gdoc = Gui.getDocument(page.Document.Name)
+        saved = not gdoc.Modified
+    except Exception:
+        saved = False
     try:
         page.ViewObject.show()
         log("drawing %s shown (active: %s)" % (page.Label, getattr(active_page(), "Label", None)))
     except Exception as exc:
         warn("could not open %s: %s" % (page.Label, exc))
         return
+    if saved:
+        # TechDraw opens a tab by setting the page's Visibility, which marked a saved design
+        # as changed (Fusion: looking at a drawing changes nothing)
+        _not_modified(gdoc)
+        _later(_not_modified, gdoc, ms=0)
     _later(sync_mode, ms=50)
+
+
+def _not_modified(gdoc):
+    try:
+        gdoc.Modified = False
+    except Exception:
+        pass
 
 
 def show_design(doc=None):
