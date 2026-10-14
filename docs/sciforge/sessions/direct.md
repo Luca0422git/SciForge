@@ -26,7 +26,17 @@
   golden models `direct_*.json` (analytic); 10 scenarios with real input: `direct_history`,
   `direct_step_box`, `direct_base_feature`, `direct_components`, `direct_commands`,
   `modify_replace_face`, `modify_split_face`, `modify_silhouette`, `modify_align`,
-  `modify_remove`. Results of the last run are in the report of this branch (see below).
+  `modify_remove`.
+- **Last run** (FreeCAD 1.1.4, one scenario at a time): direct_history 228, direct_step_box
+  186, direct_base_feature 291, direct_components 219, direct_commands 188,
+  modify_replace_face 243, modify_split_face 236, modify_silhouette 198, modify_align 231,
+  modify_remove 307: all PASS. Regressions: bodies_delete / look / move / qa / qa_2 / split /
+  timeline, components_basic / extrude / move, extrude_multibody (3), extrude_presspull_*
+  (11), timeline_browser (2), timeline_browser_qa (4), fillet: all PASS. bodies_combine
+  FAILS the same way on the base commit 4c647dd090 (its `body1()` looks for the label
+  "Body1", which since the components work names the *second* body: a scenario problem,
+  not this branch's). `--only base`: unit 484 OK, golden 307 pass + 1 known xfail, smoke
+  70/70, journey 25/25.
 - **Bugs the scenarios found (fixed)**: the origin squares' "ignore the click that went
   through to the part" window also ate a quick next click (now only the same mouse press);
   a ball's face was taken as a direction (its axis is arbitrary); history off / a base
