@@ -669,8 +669,9 @@ def dimension_points(dim):
         p, q = dim.getLinearPoints()
     except Exception:
         return None
+    # (TechDraw gives them with y down, scaled, from the view's centre)
     x, y = drawing.view_position(view)
-    return (x + p.x, y + p.y), (x + q.x, y + q.y)
+    return (x + p.x, y - p.y), (x + q.x, y - q.y)
 
 
 def dimension_line_offset(dim):

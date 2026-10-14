@@ -164,7 +164,7 @@ class SheetBar(QtWidgets.QToolBar):
                 action = menu.addAction(text)
                 action.setEnabled(enabled)
                 action.triggered.connect(fn)
-            menu.popup(self.tabs.mapToGlobal(pos))
+            menu.exec(self.tabs.mapToGlobal(pos))
         except Exception as exc:
             warn("sheet menu: %s" % exc)
 
@@ -301,7 +301,16 @@ def new_sheet(page, index=None):
     if sheet is not None:
         switch_to(sheet)
         _later(_refresh_bars, page, ms=60)
+        _later(_fit, ms=120)  # the whole new sheet in sight
     return sheet
+
+
+def _fit():
+    try:
+        if drawing_ui.page_widget() is not None:
+            Gui.SendMsgToActiveView("ViewFit")
+    except Exception as exc:
+        log("fit: %s" % exc)
 
 
 def rename(sheet, name):

@@ -486,7 +486,7 @@ class OrdinatePanel(DrawingPanel):
         super().__init__(page, "Ordinate Dimension")
         self.view = None
         self.origin = None
-        self.feature = None
+        self.measured_point = None
         self.made = []
         self.lines = {}  # axis -> the text line's page coordinate of the first one
         self.finish_layout()
@@ -517,13 +517,13 @@ class OrdinatePanel(DrawingPanel):
             self.message.setText("")
             self.say("Click a point to dimension from the origin.")
             return True
-        if self.feature is None:
+        if self.measured_point is None:
             view, anchor = self._anchor(point)
             if anchor is None:
                 if not self.message.text():
                     self.message.setText("Click a corner, an edge or a circle of the same view.")
                 return True
-            self.feature = anchor
+            self.measured_point = anchor
             self.message.setText("")
             self.say("Move up or down (x) or sideways (y) and click where the value goes.")
             return True
@@ -531,7 +531,7 @@ class OrdinatePanel(DrawingPanel):
         return True
 
     def _feature_page(self):
-        return drawing.local_to_page(self.view, drawing_annot.centre_point(self.feature))
+        return drawing.local_to_page(self.view, drawing_annot.centre_point(self.measured_point))
 
     def _snapped(self, axis, point):
         """Values of one axis line up (the first one's line, when the mouse is near it)."""
@@ -555,10 +555,10 @@ class OrdinatePanel(DrawingPanel):
             else:
                 zero_at = (point[0], origin_page[1])
             drawing_annot.add_ordinate(self.view, self.origin, self.origin, axis, zero_at)
-        obj = drawing_annot.add_ordinate(self.view, self.origin, self.feature, axis, point)
+        obj = drawing_annot.add_ordinate(self.view, self.origin, self.measured_point, axis, point)
         self.lines.setdefault(axis, point[1] if axis == "x" else point[0])
         self.made.append(obj.Name)
-        self.feature = None
+        self.measured_point = None
         self.clear_overlay()
         self.doc.recompute()
         taskui._end_transaction(self.doc)
@@ -566,7 +566,7 @@ class OrdinatePanel(DrawingPanel):
         self.say("%s placed. Click the next point, or Enter / Esc." % obj.Label)
 
     def on_move(self, point, event):
-        if self._closed or self.feature is None:
+        if self._closed or self.measured_point is None:
             return
         self.clear_overlay()
         f = self._feature_page()
@@ -576,8 +576,8 @@ class OrdinatePanel(DrawingPanel):
         self.overlay_line(f, end, dashed=False)
 
     def escape(self):
-        if self.feature is not None:
-            self.feature = None
+        if self.measured_point is not None:
+            self.measured_point = None
             self.clear_overlay()
             self.say("Click a point to dimension from the origin.")
             return
@@ -633,7 +633,7 @@ class StackPanel(DrawingPanel):
     def __init__(self, page):
         super().__init__(page, self.title)
         self.base = None  # (dim, view, base vertex name, base page point)
-        self.last = None  # (vertex name, page point) chain: the point before
+        self.previous = None  # (vertex name, page point) chain: the point before
         self.count = 0
         self.made = []
         self.finish_layout()
@@ -656,10 +656,7 @@ class StackPanel(DrawingPanel):
             view = dim.References2D[0][0]
             self.base = (dim, view, name, end)
             if self.chain:
-                points = drawing_annot.dimension_points(dim)
-                other = max(points, key=lambda p: math.hypot(p[0] - end[0], p[1] - end[1]))
-                other_name = drawing_annot.vertex_at(view, drawing.page_to_local(view, other))
-                self.last = (other_name or name, other if other_name else end)
+                self.previous = (name, end)  # the chain goes on from the end clicked
             self.message.setText("")
             self.say("Click the next point to dimension; Enter or Esc when done.")
             return True
@@ -673,7 +670,7 @@ class StackPanel(DrawingPanel):
             self.message.setText("Click a corner or a circle (its centre is used).")
             return True
         target = drawing.local_to_page(view, vertex[1])
-        start_name, start_page = self.last if self.chain else (base_name, base_page)
+        start_name, start_page = self.previous if self.chain else (base_name, base_page)
         if start_name == vertex[0]:
             self.message.setText("Click a point other than the one the dimension starts from.")
             return True
@@ -682,7 +679,7 @@ class StackPanel(DrawingPanel):
         new = drawing.add_dimension(view, [start_name, vertex[0]], dim.Type, text_at)
         self.made.append(new.Name)
         if self.chain:
-            self.last = (vertex[0], target)
+            self.previous = (vertex[0], target)
         self.message.setText("")
         self.doc.recompute()
         taskui._end_transaction(self.doc)
@@ -996,7 +993,7 @@ class FeatureControlPanel(AnnotationPanel):
     def _row(self, index, row):
         dia = QtWidgets.QCheckBox("⌀ (a round zone)")
         dia.setObjectName("SciForgeFcfDiameter%d" % index)
-        dia.setChecked(bool(row.get("dia", index == 1 and not row)))
+        dia.setChecked(bool(row.get("dia", True)))  # (a position zone is round)
         tol = QtWidgets.QLineEdit(str(row.get("tol", "0.1" if index == 1 else "0.05")))
         tol.setObjectName("SciForgeFcfTolerance%d" % index)
         mod = _combo([m[1] for m in ac.MODIFIERS])

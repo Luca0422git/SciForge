@@ -2538,9 +2538,9 @@ def _dxf_dimension(dxf, dim):
     lx, ly = ox + _value(dim.X), oy + _value(dim.Y)
     layer = "DIMENSIONS"
     if dim.Type in core.LINEAR_TYPES:
-        p, q = dim.getLinearPoints()
-        a = (ox + p.x, oy + p.y)
-        b = (ox + q.x, oy + q.y)
+        p, q = dim.getLinearPoints()  # (y down, from the view's centre)
+        a = (ox + p.x, oy - p.y)
+        b = (ox + q.x, oy - q.y)
         if dim.Type == "DistanceX":
             a2, b2 = (a[0], ly), (b[0], ly)
         elif dim.Type == "DistanceY":
