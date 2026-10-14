@@ -9,7 +9,8 @@ The full behaviour spec with sources is at the top of `docs/sciforge/parity/fill
    have a "Sets" list with + / −; each set has its own edges, Radius Type and size (chamfer:
    type, distances, angle, Flip), its own arrow and value box on the canvas; all sets are one
    timeline step and one undo step. Clicking a row, dragging a set's arrow or typing in its
-   value box makes that set the current one; an edge picked into another set moves there.
+   value box makes that set the current one; an edge picked into another set moves there,
+   and an edge picked on its own beats a face of another set that has it.
 2. **Radius Type**: Constant, **Chord Length** (each edge gets R = chord / (2 sin(t/2)) at both
    of its ends, t = the turn of the faces' normals; measured 3.000 mm on a 90° and a 120°
    edge), **Variable** (start / end radius, radius points with position 0..1 and radius: a
@@ -81,7 +82,9 @@ The full behaviour spec with sources is at the top of `docs/sciforge/parity/fill
 - Continuity G2, Corner Type Setback, Radius Type Asymmetric, Chamfer corners Miter / Blend:
   OpenCASCADE has no such blends (needs kernel work, outline 9.2).
 - Full Round of a curved rib or with tangent centre faces: refused with the reason.
-- Radius points take plain numbers (no formulas); Press Pull edits only FreeCAD's own fillet.
+- Radius points take plain numbers (no formulas); no dot is drawn under the mouse on the
+  edge before a radius point is clicked; Press Pull on a variable round or a full round
+  pushes the face (no single size to edit).
 - Rule Fillet: Fusion's exact rule for features changed by later steps is undocumented.
 
 ## Small changes in other areas (for the merger)
@@ -93,6 +96,42 @@ The full behaviour spec with sources is at the top of `docs/sciforge/parity/fill
   `presspull_ui._start_blend_edit(blend, face)`: Press Pull on a round of SciForge's step.
 - Golden: `golden/fillet2_ops.py` (ops `fillet_sets`, `rule_fillet`, `full_round`,
   `blend_radius_expect`), `schema.py` (a new `validate` wrapper at the end: mind the merge
-  trap in MEMORY's handoff), `builder.py` (one import line).
+  trap in MEMORY's handoff), `builder.py` (one import line; `press_pull` with `fillet_face`
+  also edits a set of SciForge's step).
 
 ## Tests (final runs at the end of this file)
+
+All runs on real FreeCAD 1.1.4 under xvfb, one scenario at a time
+(`tools/sciforge/run_tests.sh --scenario NAME`).
+
+| Run | Result |
+|---|---|
+| `fillet2_sets` (two sets with "+", each set's arrow and value box, one step, one undo / redo, edit from the timeline, a set too big explained, Esc, save / reopen and edit) | PASS, 56 checks |
+| `fillet2_chord` (Chord Length on a 90° and a 120° edge, measured) | PASS, 30 checks |
+| `fillet2_variable` (start / end and a radius point by clicking the edge, Add Point, ✕, measured 1 / 3 / 1.5) | PASS, 40 checks |
+| `fillet2_rule` (All Edges, Between Faces/Features, Rounds / Fillets, a hole drawn later gets rounded) | PASS, 30 checks |
+| `fillet2_full_round` (a rib's top, the end of a wall, refused faces with the reason) | PASS, 28 checks |
+| `fillet2_chamfer` (chamfer sets: Equal, Distance and Angle with Flip, measured; greyed corners; Cancel) | PASS, 37 checks |
+| `fillet2_chain` (Tangent Chain on / off per set on a slot; Variable on a closed chain refused; G2 / Setback greyed) | PASS, 33 checks |
+| `fillet2_component` (two sets on a body inside a component) | PASS, 23 checks |
+| `fillet2_edit_later` (FreeCAD's fillet with a chamfer after it edited into two sets; undo / redo; Press Pull on set 2's round) | PASS, 26 checks |
+| Part 1 scenarios `fillet`, `fillet_chain`, `fillet_chamfer`, `fillet_qa_more` | PASS: 67, 14, 48, 93 checks |
+| Press Pull scenarios `presspull`, `extrude_presspull_qa2`, `extrude_presspull_qa3`, `misc_compute` (Press Pull code touched) | PASS: 53, 78, 75, 14 checks |
+| `--only base`: unit tests | 926 run, OK (23 new in `test_fillet_core.py`) |
+| `--only base`: golden models | 350 pass, 1 xfail (`plate_hole_grid`, known before this branch); all 11 `fillet2_*` pass |
+| `--only base`: smoke + journey | PASS (71 + 25 checks) |
+
+Last-minute fix found by a headless edge-case run (a face in set 1 and one of its edges in
+set 2): the face's set took the edge. Now an edge picked on its own wins, for fillets and
+chamfers (golden `fillet2_face_and_its_edge_in_two_sets`, same volume as FreeCAD's own
+Part Fillet with those radii). `fillet2_chain`, `fillet2_chamfer`, `fillet2_chord` and
+`fillet2_component` were run again after it: PASS, 33, 37, 30 and 23 checks (the other
+fillet scenarios above started after the fix; the Press Pull ones ran just before it, on
+code it does not touch).
+
+Headless checks (freecadcmd, not part of the suite): a formula on `Size2` ("1 mm * 2")
+drives set 2 (volume exact), survives save / reopen, and typing a value after clearing it
+works; twelve edge cases (sets meeting at a corner, Variable with two edges / a face / a
+circle refused, Chord Length on a face and a circle's rim, Distance and Angle on a face,
+an angle past 90° refused, Rule Between Faces, Full Round on a box top refused, Tangent
+Chain off with no chain, set 2 too big named) gave the expected volume or refusal.

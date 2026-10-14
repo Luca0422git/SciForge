@@ -20,7 +20,7 @@ excerpts), Forum = Autodesk Community or a third-party tutorial, Guess = not doc
 |---|---|---|---|
 | 1 | The Fillet dialog has a **Type**: Fillet, Rule Fillet, Full Round Fillet | Autodesk (Fillet reference) | Built (Type drop-down) |
 | 2 | The selection box has **rows (selection sets)**; "+" adds a row; each row has its own edges, Radius Type, radius and continuity; all rows are one feature (one timeline step, one undo) | Autodesk (Create a fillet) | Built: "Sets" list with + / −, one step, one undo; each set has its own arrow and value box on the canvas |
-| 3 | Picking an edge that is in another set moves it (an edge belongs to one set) | Guess | Built |
+| 3 | Picking an edge that is in another set moves it (an edge belongs to one set) | Guess | Built. An edge picked on its own beats a face of another set that has it, whatever the order of the sets (golden `fillet2_face_and_its_edge_in_two_sets`) |
 | 4 | "+" gives the new row the settings of the current one | Guess | Built |
 | 5 | Dragging a set's arrow / typing in its value box changes that set only | Guess (from use) | Built (the set becomes the current row) |
 | 6 | **Radius Type Constant**: one radius along the whole fillet | Autodesk | Built (FreeCAD's Fillet when it is the only set) |
@@ -221,7 +221,8 @@ FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
   `fillet2_rule_between_follows_edit` (the boss is made wider after the rule fillet),
   `fillet2_full_round_rib`,
   `fillet2_chamfer_sets_angle_flip`, `fillet2_presspull_set_radius` (Press Pull on set 2's
-  round); all analytic.
+  round): analytic; `fillet2_face_and_its_edge_in_two_sets` (a face in set 1, one of its
+  edges in set 2: measured against FreeCAD's own Part Fillet with the same radii).
 - Part 2 unit tests: `SciForgeTests/unit/test_fillet_core.py` (chord to radius, the variable
   law and how a chain is cut at its points, rounds / fillets, Distance and Angle as two
   distances, full round, the settings).

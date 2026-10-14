@@ -333,10 +333,11 @@ def _edge_item(info, row, name):
 
 def _claims(info, rows, groups, taken):
     """[(edge name, row index, wanted)] of the Constant / Chord Length rows: first every
-    picked edge (each to its own set), then the edges tangent to them: those of a set with
-    Tangent Chain on are rounded with it (wanted), those of a set with it off only get a
-    size for OpenCASCADE (which rounds the whole chain) and are put back afterwards
-    (_local). An edge goes to the first set that claims it."""
+    edge picked on its own, then the edges of picked faces (an edge picked by itself beats a
+    face that has it, whatever the order of the sets), then the edges tangent to them: those
+    of a set with Tangent Chain on are rounded with it (wanted), those of a set with it off
+    only get a size for OpenCASCADE (which rounds the whole chain) and are put back
+    afterwards (_local). Otherwise an edge goes to the first set that claims it."""
     claimed, out = set(taken), []
 
     def claim(name, i, wanted):
@@ -349,9 +350,11 @@ def _claims(info, rows, groups, taken):
         for i, (row, refs) in enumerate(zip(rows, groups))
         if refs and row.get("radius_type") != "variable"
     ]
-    for i, _row, refs in usable:
-        for name in blend.blended_edges(info, refs):
-            claim(name, i, True)
+    for faces in (False, True):
+        for i, _row, refs in usable:
+            picked = [ref for ref in refs if ref.startswith("Face") == faces]
+            for name in blend.blended_edges(info, picked):
+                claim(name, i, True)
     for chained in (True, False):
         for i, row, refs in usable:
             if bool(row.get("tangent_chain", True)) != chained:
@@ -541,7 +544,12 @@ def _round_fillet_rows(shape, spec, groups):
 def _chamfer_rows(shape, spec, groups):
     info = blend.ShapeInfo(shape)
     items, taken = [], set()
-    for row, refs in zip(spec.get("sets", []), groups):
+    # an edge picked on its own belongs to its set even when another set has its face
+    owner = {}
+    for i, refs in enumerate(groups):
+        for name in blend.blended_edges(info, [ref for ref in refs if ref.startswith("Edge")]):
+            owner.setdefault(name, i)
+    for i, (row, refs) in enumerate(zip(spec.get("sets", []), groups)):
         if not refs:
             continue
         ctype = row.get("chamfer_type", "equal")
@@ -551,7 +559,7 @@ def _chamfer_rows(shape, spec, groups):
             raise core.SetError("A chamfer distance must be more than 0 mm.")
         flip = bool(row.get("flip"))
         for name in _expand(info, refs):
-            if name in taken:
+            if name in taken or owner.get(name, i) != i:
                 continue
             taken.add(name)
             if ctype == "equal":
