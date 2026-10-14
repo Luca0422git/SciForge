@@ -18,9 +18,10 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   modeled thread ignores the class. A hole on a curved face does not follow the face.
 - **patterns.md**: no Compute Option Adjust / Optimized. No Pattern Type Components. No start
   point for Pattern on Path.
-- **joints.md**: only the Simple position mode. No dragging components along joints. No Motion
-  Link, Contact Sets or Motion Study. Nested components cannot move on their own. Free joints
-  get auto-grounded.
+- **joints.md**: (sf/joints-2 built Component Drag, position modes, Motion Link, Contact Sets,
+  Motion Study, nested components, no auto-ground.) Left: a drag pulls one joint at a time (no
+  whole-mechanism drag solver), no contact during Animate, no Motion Study graph, no Lock
+  Motion or Animate Joint Relationships.
 - **components.md**: a whole component cannot be moved. No copy/paste of components. Rolling the
   marker back does not hide a component. Inactive components are not ghosted.
 - **drawings.md**: one sheet per drawing. No tolerances or dimension text editing, no
@@ -47,8 +48,8 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 - **inspect-analysis.md**: meshes cannot be analysed. No Include Sharp Curves.
 - **misc.md**: Derive brings components in flat. The source version cannot be chosen. No adsk
   add-in API.
-- **selection.md**: no Component Drag. No double-click chain selection in sketches. No box
-  selection of planes and axes.
+- **selection.md**: no double-click chain selection in sketches. No box selection of planes
+  and axes.
 - **timeline-browser.md**: an Extrude made while rolled back before a fillet cannot switch to
   Cut. Groups cannot be dragged as a whole. No New Body command.
 - **versions.md**: no automatic version on close, Milestone, Data Panel Move/Copy or
