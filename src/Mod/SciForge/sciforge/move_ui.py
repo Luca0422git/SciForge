@@ -787,10 +787,14 @@ class MovePanel(BodyPanel):
                 base, names = faces
                 body = bodies.body_of(base)
                 place = body.getGlobalPlacement() if body is not None else App.Placement()
+                try:  # the faces are shaded where the movement puts them, like in Fusion
+                    place = move.transform(self.options).multiply(place)
+                except Exception:
+                    pass
                 for name in names:
                     try:
                         face = base.Shape.getElement(name).copy()
-                        face.transformShape(place.toMatrix(), True)
+                        face.Placement = place.multiply(face.Placement)
                         shapes.append(face)
                     except Exception:
                         continue
@@ -1058,6 +1062,7 @@ class MovePanel(BodyPanel):
         step = move_face.build(self.options, current)
         self.steps = [step]
         self.target = step
+        self._show_marks()
 
     def after_recompute(self):
         for step in self.steps:

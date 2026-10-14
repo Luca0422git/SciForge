@@ -795,25 +795,7 @@ class PressPullPanel(Panel):
                 pass
         self._adopted = []
 
-    def cleanup(self):
-        self._unwatch()
-        self._unshade()
-        self.escape.remove()
-        self.undo_guard.remove()
-        self.enter.remove()
-        self._remove_dragger()
-        self._discard_value_box()
-        try:
-            self._remove_cut_preview()
-        except Exception as exc:
-            warn("cut preview: %s" % exc)
-        super().cleanup()
-
-
-def _offset_methods():
-    """Press Pull's Offset Type (modify-2): Modify Existing Feature changes the extrude that
-    made the faces instead of adding a Press Pull step (offset_type.py)."""
-
+    # -- Offset Type: Modify Existing Feature (offset_type.py) -------------------------------
     def offset_kind(self):
         return self.offset_type.currentData() or "automatic"
 
@@ -871,9 +853,15 @@ def _offset_methods():
             self._modify = (feature, prop, sign, start)
             self.target = feature
         self._describe()
+        try:
+            from . import timeline_ops
+
+            title = timeline_ops.display_names(self.doc, self.doc.Objects).get(feature.Name)
+        except Exception:
+            title = None
         self.what.setText(
-            "%d face(s): the end of %s moves (no new step). Drag the arrow or type a distance."
-            % (len(self.names), feature.Label)
+            "%d face(s): %s changes, no new step. Drag the arrow or type a distance."
+            % (len(self.names), title or feature.Label)
         )
         self._make_dragger()
         self._apply_modify(self.field.value())
@@ -906,18 +894,19 @@ def _offset_methods():
         self._remove_dragger()
         self.schedule()
 
-    return {
-        "offset_kind": offset_kind,
-        "_offset_type_changed": _offset_type_changed,
-        "_drop_step": _drop_step,
-        "_update_modify": _update_modify,
-        "_apply_modify": _apply_modify,
-        "_end_modify": _end_modify,
-    }
-
-
-for _name, _fn in _offset_methods().items():
-    setattr(PressPullPanel, _name, _fn)
+    def cleanup(self):
+        self._unwatch()
+        self._unshade()
+        self.escape.remove()
+        self.undo_guard.remove()
+        self.enter.remove()
+        self._remove_dragger()
+        self._discard_value_box()
+        try:
+            self._remove_cut_preview()
+        except Exception as exc:
+            warn("cut preview: %s" % exc)
+        super().cleanup()
 
 
 class PressPullCommand:

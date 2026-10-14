@@ -86,19 +86,49 @@ def _extrude_cap(feature, face):
     return 1 if n.dot(direction) > 0 else -1
 
 
-def _steps_before(body, until):
+def _offset_cap(feature, face):
+    """+1 when `face` (body coordinates) is where an earlier Press Pull / Offset Face step put
+    one of its faces (pushing it further out makes that step's distance bigger); else None."""
+    from . import presspull
+
+    if not presspull.is_press_pull(feature) or face.Surface.TypeId != "Part::GeomPlane":
+        return None
+    link = getattr(feature, "Faces", None)
+    if not link or not link[1]:
+        return None
+    distance = float(feature.Distance.Value)
+    n = _normal(face)
+    point = _inner_point(face)
+    for name in link[1]:
+        try:
+            moved = link[0].Shape.getElement(name)
+        except Exception:
+            continue
+        if moved.Surface.TypeId != "Part::GeomPlane":
+            continue
+        n0 = _normal(moved)
+        if n.dot(n0) < 1.0 - 1e-9:
+            continue
+        if abs((point - moved.CenterOfMass).dot(n0) - distance) <= TOL:
+            return 1
+    return None
+
+
+def _steps_upto(body, base):
+    """The body's solid steps up to `base` (included): what made the faces of `base`."""
     found = []
     for obj in bodies.solid_steps(body):
-        if until is not None and obj is until:
-            break
         found.append(obj)
+        if obj is base:
+            break
     return found
 
 
 def modify_target(body, base, names):
     """(feature, property, change per mm) of what Modify Existing Feature changes for faces
     `names` of `base` (the step before the Press Pull): an extrude's "Length" (+1 / -1 per mm
-    pushed out of the part). Raises OffsetTypeError with the reason."""
+    pushed out of the part) or an earlier Press Pull's "Distance" (+1). The latest step that
+    put the face where it is wins. Raises OffsetTypeError with the reason."""
     if not names:
         raise OffsetTypeError("Pick the faces to push or pull.")
     found = None
@@ -108,16 +138,19 @@ def modify_target(body, base, names):
         except Exception:
             raise OffsetTypeError("The face %s no longer exists." % name)
         hit = None
-        for feature in reversed(_steps_before(body, None)):
-            if feature is base or bodies.body_of(feature) is body:
-                sign = _extrude_cap(feature, face)
-                if sign is not None:
-                    hit = (feature, "Length", sign)
-                    break
+        for feature in reversed(_steps_upto(body, base)):
+            sign = _offset_cap(feature, face)
+            if sign is not None:
+                hit = (feature, "Distance", sign)
+                break
+            sign = _extrude_cap(feature, face)
+            if sign is not None:
+                hit = (feature, "Length", sign)
+                break
         if hit is None:
             raise OffsetTypeError(
-                "%s was not made as the end of an extrude, so no feature can be changed to "
-                "move it. Use New Offset (a Press Pull step)." % name
+                "%s was not made as the end of an extrude or by an earlier Press Pull, so no "
+                "feature can be changed to move it. Use New Offset (a Press Pull step)." % name
             )
         if any(path.lstrip(".") == hit[1] for path, _e in hit[0].ExpressionEngine):
             raise OffsetTypeError(
@@ -135,6 +168,13 @@ def modify_target(body, base, names):
 
 
 def check_length(feature, prop, value):
+    if prop == "Distance":  # a Press Pull: in or out, but it must still move the faces
+        if abs(value) <= 1e-6:
+            raise OffsetTypeError(
+                "That would make the distance of %s 0: the faces would not move. Use another "
+                "distance." % feature.Label
+            )
+        return
     if value <= 1e-6:
         raise OffsetTypeError(
             "That would make %s %s %.4g mm: it must stay longer than 0. Pull less far."

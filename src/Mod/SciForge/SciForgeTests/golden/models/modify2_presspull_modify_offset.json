@@ -1,0 +1,76 @@
+{
+  "id": "modify2_presspull_modify_offset",
+  "title": "Press Pull, Offset Type Modify Existing Feature on a face an earlier Press Pull moved: that step's distance changes, no new step",
+  "tags": [
+    "press-pull",
+    "offset-type",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "press_pull_type",
+      "id": "pp",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "distance": 5,
+      "offset_type": "new"
+    },
+    {
+      "op": "press_pull_type",
+      "id": "pp2",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "distance": 3,
+      "offset_type": "modify"
+    }
+  ],
+  "expect": {
+    "volume": 14400,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      18
+    ],
+    "source": "analytic",
+    "note": "The first Press Pull (New Offset) puts the top at z = 15; Modify Existing Feature on that top changes the same step's distance from 5 to 8 (no new step): 40*20*18."
+  }
+}

@@ -1799,9 +1799,11 @@ class PatternPanel(Panel):
     def _ref_text(ref, titles):
         """A picked reference as the user knows it: "X Axis", "Edge of Extrude 1"."""
         text = pattern.ref_label(ref)
-        if not ref or not ref[1] or not pattern.alive(ref[0]):
+        if not ref or not pattern.alive(ref[0]):
             return text
         title = titles.get(ref[0].Name)
+        if not ref[1]:
+            return title or text  # a whole sketch as the path: "Sketch 3", as in the browser
         if title:
             return "%s of %s" % (ref[1].rstrip("0123456789") or ref[1], title)
         return text
