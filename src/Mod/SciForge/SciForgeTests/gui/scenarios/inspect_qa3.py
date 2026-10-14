@@ -23,6 +23,7 @@ Part (real input): box 40 x 30 x 10 with a round boss r = 5 at (10, 10), 10 high
      Undo brings body 2 and every result back.
   R  Interference with one body picked: Compute and OK say what is missing and wait.
 """
+
 import math
 import os
 import tempfile
@@ -606,6 +607,12 @@ def r_start():
 
 
 def r_one():
+    if panel() is None and not st.get("r_retried"):
+        # The menu click can land while FreeCAD is still busy (CI #114): open it again.
+        st["r_retried"] = True
+        s.menu("INSPECT", "Interference")
+        h.state["queue"].insert(0, r_one)
+        return
     h.fit()
     h.click(V(5, 5, 10))
 
@@ -658,7 +665,7 @@ STEPS = (
     + [q_com_b2, q_com_pick_b2, q_com_b2_ok, q_com_all, q_com_all_ok, q_save, q_close]
     + [q_reopen, q_reopened, q_select_int, q_edit_int, q_int_dialog, q_delete_b2]
     + [q_b2_deleted, q_edit_after_delete, q_int_problem, q_undo, q_restored]
-    + [r_start, r_one, r_compute, r_said, r_ok_waits, r_escaped, the_end]
+    + [h.idle_step(), r_start, r_one, r_compute, r_said, r_ok_waits, r_escaped, the_end]
 )
 
 h.run("inspect_qa3", ti.watched(STEPS))

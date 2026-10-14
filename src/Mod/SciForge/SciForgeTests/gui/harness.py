@@ -521,6 +521,27 @@ def _finish():
     QtCore.QTimer.singleShot(200, QtWidgets.QApplication.instance().quit)
 
 
+def idle_step(name="wait_idle", tries=40):
+    """A step that comes back every 250 ms (at most `tries` times) while the document is
+    still recomputing. A long recompute (an Undo that brings bodies and analyses back)
+    lets Qt run the next step from inside it, where a menu click or a key is lost."""
+    count = {"n": 0}
+
+    def step():
+        try:
+            doc = App.ActiveDocument
+            busy = bool(doc is not None and doc.Recomputing)
+        except Exception:
+            busy = False
+        if busy and count["n"] < tries:
+            count["n"] += 1
+            state["queue"].insert(0, step)
+
+    step.__name__ = name
+    step.wait_ms = 250
+    return step
+
+
 def add_steps(steps):
     """Append steps while running (e.g. one per command found at start-up)."""
     state["queue"].extend(steps)
