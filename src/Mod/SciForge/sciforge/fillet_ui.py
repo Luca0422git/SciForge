@@ -685,10 +685,15 @@ class BlendPanel(Panel):
         self.remove_row_button.setEnabled(len(self.spec["sets"]) > 1)
         # as tall as its rows (2 to 5), so no row hides half under the list's edge
         try:
-            line = max(self.rows.sizeHintForRow(0), 16)
+            # (a row's size hint is not known before the list is shown: the font's height
+            # with the theme's padding is the floor)
+            line = max(self.rows.sizeHintForRow(0), self.rows.fontMetrics().height() + 6, 18)
             shown = min(max(self.rows.count(), 2), 5)
-            self.rows.setFixedHeight(line * shown + 2 * self.rows.frameWidth() + 4)
-            self.rows.scrollToItem(self.rows.item(self.active))
+            self.rows.setFixedHeight(line * shown + 2 * self.rows.frameWidth() + 6)
+            if self.rows.count() <= 5:
+                self.rows.scrollToTop()
+            else:
+                self.rows.scrollToItem(self.rows.item(self.active))
         except Exception:
             pass
 
