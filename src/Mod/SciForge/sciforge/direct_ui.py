@@ -333,19 +333,6 @@ def _refresh_panels():
             pass
 
 
-def toggle_history(doc=None):
-    """The browser's / timeline's entry: the one that switches."""
-    doc = doc or _doc()
-    if doc is None:
-        return
-    name = (
-        "SciForge_CaptureDesignHistory"
-        if direct.is_direct(doc)
-        else ("SciForge_DoNotCaptureDesignHistory")
-    )
-    Gui.runCommand(name)
-
-
 # -- base features -----------------------------------------------------------------------------
 class CreateBaseFeatureCommand:
     def GetResources(self):
