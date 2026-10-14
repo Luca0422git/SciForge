@@ -58,7 +58,9 @@ Regression scenarios run and passing: every `revolve_*`, `sweep_loft_*`, `extrud
 `extrude_bodies_highlight`, `bodies_timeline`, `gaps_join_new_body`, `gaps_loft_ends`,
 `gaps_sweep_guide_surface`, `ribbon_sweep`, `sketch_sweep`, `sketch_qa`,
 `sketch_tools_audit`, `sketch_tools_modify`, `sketch_menu_switch`, `marking_menu_command`,
-the hole / thread / extrude scenarios listed in the first commit.
+the hole / thread / extrude scenarios listed in the first commit. `--only base`: unit 943
+OK, golden 356 pass + the 1 known xfail, smoke and journey pass; `check_install.sh`: all
+files installed.
 
 ## FreeCAD facts and traps found
 
