@@ -190,6 +190,9 @@ VIEWER_SETTINGS = [
     # grey went into the exported PDF as well.
     (_TECHDRAW_COLORS, "Unsigned", "PageColor", _rgba("#ffffff")),
     (_TECHDRAW_COLORS, "Unsigned", "FaceColor", _rgba("#ffffff")),
+    # A dimension's tolerances (drawing_annot.py) at 0.7 of its text, not half: Fusion
+    # writes them nearly as large as the value, so they stay readable on paper.
+    ("User parameter:BaseApp/Preferences/Mod/TechDraw/Dimensions", "Float", "TolSizeAdjust", 0.7),
 ]
 
 _saved_qss = None
@@ -218,6 +221,8 @@ def _decode(kind, text):
         return text == "1"
     if kind in ("Int", "Unsigned"):
         return int(text)
+    if kind == "Float":
+        return float(text)
     return text
 
 

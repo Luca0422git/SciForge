@@ -841,7 +841,12 @@ DRAWING_GEOMETRY = group(
         item("Centerline", "SciForge_DrawingCenterline", "dw_centerline"),
         item("Center Mark", "SciForge_DrawingCenterMark", "dw_center_mark"),
         item("Center Mark Pattern", None, "dw_center_mark"),
-        item("Edge Extension", None, "dw_centerline"),
+        item(
+            "Edge Extension",
+            "SciForge_DrawingEdgeExtension",
+            "dw_centerline",
+            note="Click two edges: they reach to where they would meet (a rounded corner).",
+        ),
     ],
 )
 DRAWING_DIMENSIONS = group(
@@ -862,10 +867,33 @@ DRAWING_DIMENSIONS = group(
         item("Angular Dimension", "SciForge_DrawingAngularDimension", "dw_dimension"),
         item("Radius Dimension", "SciForge_DrawingRadiusDimension", "dw_dimension"),
         item("Diameter Dimension", "SciForge_DrawingDiameterDimension", "dw_dimension"),
+        item("Arc Length Dimension", "SciForge_DrawingArcLengthDimension", "dw_dimension"),
         SEP,
-        item("Ordinate Dimension", None, "dw_dimension"),
-        item("Baseline Dimension", None, "dw_dimension"),
-        item("Chain Dimension", None, "dw_dimension"),
+        item(
+            "Ordinate Dimension",
+            "SciForge_DrawingOrdinateDimension",
+            "dw_dimension",
+            note="Click the origin, then each point and where its value goes.",
+        ),
+        item(
+            "Baseline Dimension",
+            "SciForge_DrawingBaselineDimension",
+            "dw_dimension",
+            note="Click a dimension, then more points: each one from the same start.",
+        ),
+        item(
+            "Chain Dimension",
+            "SciForge_DrawingChainDimension",
+            "dw_dimension",
+            note="Click a dimension, then more points: each one from the point before.",
+        ),
+        SEP,
+        item(
+            "Edit Dimension",
+            "SciForge_DrawingEditDimension",
+            "dw_dimension",
+            note="Or double-click a dimension: text, tolerance, fits, basic, reference.",
+        ),
     ],
 )
 DRAWING_TEXT = group(
@@ -874,7 +902,12 @@ DRAWING_TEXT = group(
     ["Text"],
     [
         item("Text", "SciForge_DrawingText", "dw_text", note="Click two corners, then type."),
-        item("Leader", None, "dw_text"),
+        item(
+            "Leader",
+            "SciForge_DrawingLeader",
+            "dw_text",
+            note="Click an edge, then where the text goes; type the text.",
+        ),
         item("Note", None, "dw_text"),
     ],
 )
@@ -883,9 +916,14 @@ DRAWING_SYMBOLS = group(
     "SYMBOLS",
     ["Surface Texture"],
     [
-        item("Surface Texture", None, "dw_symbol"),
-        item("Feature Control Frame", None, "dw_symbol"),
-        item("Datum Identifier", None, "dw_symbol"),
+        item("Surface Texture", "SciForge_DrawingSurfaceTexture", "dw_symbol"),
+        item(
+            "Feature Control Frame",
+            "SciForge_DrawingFeatureControlFrame",
+            "dw_symbol",
+            note="GD&T: characteristic, tolerance and datums; click an edge, then the place.",
+        ),
+        item("Datum Identifier", "SciForge_DrawingDatumIdentifier", "dw_symbol"),
     ],
 )
 DRAWING_TABLES = group(

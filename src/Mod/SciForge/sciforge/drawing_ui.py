@@ -78,7 +78,7 @@ def page_of_window(sub):
     docs = [App.ActiveDocument] if App.ActiveDocument is not None else []
     docs += [d for d in App.listDocuments().values() if d not in docs]
     for doc in docs:
-        for page in drawing.drawings(doc):
+        for page in drawing.all_pages(doc):
             if page.Label == title:
                 return page
     try:
@@ -304,6 +304,13 @@ def sync_mode():
             STATE["input"].attach(gv, page)
         else:
             STATE["input"].detach()
+    if page is not None:
+        try:
+            from . import drawing_sheets_ui
+
+            drawing_sheets_ui.ensure_bar(page)
+        except Exception as exc:
+            warn("sheet bar: %s" % exc)
     current = taskui.current()
     if isinstance(current, DrawingPanel) and (page is None or not drawing.same(current.page, page)):
         current.finish()  # another tab: the drawing command ends, like Fusion's
@@ -363,9 +370,25 @@ class _Observer:
         except Exception:
             pass
 
+    def slotDeletedObject(self, obj):
+        try:
+            if drawing.is_page(obj):
+                # Undo took a sheet away while its tab showed: close that tab
+                from . import drawing_sheets_ui
+
+                _later(drawing_sheets_ui.close_orphans, ms=50)
+        except Exception:
+            pass
+
     def slotChangedObject(self, obj, prop):
         try:
-            if prop not in ("X", "Y") or not drawing.is_view(obj):
+            if prop == "Label" and drawing.is_page(obj) and drawing.kind(obj) == drawing.TYPE:
+                # a renamed drawing: its further sheets' tab titles follow
+                _later(_relabel_sheets, obj.Document.Name, obj.Name, ms=0)
+                return
+            if prop not in ("X", "Y"):
+                return
+            if not (drawing.is_view(obj) or drawing.kind(obj) == "DrawingAnnotation"):
                 return
             name = obj.Document.Name
             if name in self.pending:
@@ -376,19 +399,31 @@ class _Observer:
             pass
 
     def _align(self, doc_name):
+        from . import drawing_annot
+
         self.pending.discard(doc_name)
         doc = App.listDocuments().get(doc_name)
         if doc is None or getattr(doc, "Transacting", False):
             return
-        for page in drawing.drawings(doc):
+        for page in drawing.all_pages(doc):
             drawing.keep_aligned(page)
+            drawing_annot.follow(page)
+
+
+def _relabel_sheets(doc_name, page_name):
+    from . import drawing_sheets
+
+    doc = App.listDocuments().get(doc_name)
+    page = doc.getObject(page_name) if doc is not None else None
+    if drawing.alive(page) and not getattr(doc, "Transacting", False):
+        drawing_sheets.relabel(page)
 
 
 def refresh_drawings(doc_name):
     doc = App.getDocument(doc_name) if doc_name in App.listDocuments() else None
     if doc is None or getattr(doc, "Restoring", False):
         return
-    for page in drawing.drawings(doc):
+    for page in drawing.all_pages(doc):
         try:
             drawing.refresh(page)
             drawing.keep_aligned(page)
@@ -422,7 +457,7 @@ def apply_view_looks(page):
                 vo.FaceTransparency = want
             if shaded and tuple(round(c, 3) for c in vo.FaceColor[:3]) != SHADED_FACE:
                 vo.FaceColor = SHADED_FACE
-            if view.TypeId == drawing.SECTION:
+            if drawing.is_section(view):
                 for prop in ("GeomHatchColor", "HatchColor"):
                     if prop in vo.PropertiesList and _rounded(getattr(vo, prop)) != _rounded(
                         HATCH_COLOR
@@ -540,7 +575,15 @@ class PageInput(QtCore.QObject):
 
 
 def default_double_click(page, point):
-    """No command open: double-click a view to edit it, the title block to fill it in."""
+    """No command open: double-click a dimension or an annotation to edit it (Fusion's
+    Dimension dialog...), a view to edit it, the title block to fill it in."""
+    try:
+        from . import drawing_annot_ui
+
+        if drawing_annot_ui.edit_at(page, point):
+            return True
+    except Exception as exc:
+        warn("edit: %s" % exc)
     view = view_at(page, point)
     if view is not None:
         _later(edit_view, view)
@@ -1134,6 +1177,8 @@ class BaseViewPanel(DrawingPanel):
         self.layout.addRow("Style", self.style)
         self.layout.addRow("Scale", self.scale)
         self.layout.addRow("Tangent Edges", self.tangent)
+        self.show_label = _label_rows(self, view)
+        self.auto_boxes = _auto_mark_rows(self, view)
         self.orientation.currentTextChanged.connect(self._orientation)
         self.style.currentTextChanged.connect(self._style)
         self.tangent.currentTextChanged.connect(self._style)
@@ -1145,6 +1190,9 @@ class BaseViewPanel(DrawingPanel):
             else "Move the view where you want it and click to place it."
         )
         self.doc.recompute()
+
+    def target_view(self):
+        return self.view
 
     def _orientation(self, text):
         if not self._closed:
@@ -1275,9 +1323,13 @@ class ProjectedPanel(DrawingPanel):
 
 
 # ------------------------------------------------------------------ Section View
+PLACE_ZONE = 12.0  # mm beyond the parent view's box: a click there places the section
+
+
 class SectionPanel(DrawingPanel):
-    """Fusion's Section View: click the view, the cut line's start and end, then place
-    the section view on either side (it moves lined up with its parent)."""
+    """Fusion's Section View: click the view, the cut line's points (more than two make
+    a half, offset or aligned section), Enter (or move well away from the view), then
+    place the section view on either side (it moves lined up with its parent)."""
 
     title = "Section View"
     icon = "dw_section_view"
@@ -1285,26 +1337,49 @@ class SectionPanel(DrawingPanel):
     def __init__(self, page, section=None):
         super().__init__(page, "Section View" if section is None else "Edit View")
         self.parent = None
-        self.p1 = None
-        self.p2 = None
+        self.points = []
+        self.line_done = False
         self.section = section
         self.placed = section is not None
         self.side = None
         self.label = QtWidgets.QLineEdit(section.SectionSymbol if section is not None else "")
         self.label.setObjectName("SciForgeDrawingLabel")
+        self.kind = QtWidgets.QLabel(
+            drawing.section_kind_of(section) if section is not None else ""
+        )
+        self.kind.setObjectName("SciForgeSectionKind")
         self.scale = _combo(
             core.scale_choices(),
             core.format_scale(drawing.scale_of(section)) if section is not None else "",
             True,
         )
+        self.style = _combo(
+            core.STYLES, drawing.style_of(section) if section is not None else "Visible Edges"
+        )
+        self.style.setObjectName("SciForgeDrawingStyle")
+        mode, value = drawing.section_depth(section) if section is not None else ("Full", 10.0)
+        self.depth = _combo(drawing.DEPTH_MODES, mode)
+        self.depth.setObjectName("SciForgeSectionDepth")
+        self.distance = QtWidgets.QLineEdit(core._short(value or 10.0))
+        self.distance.setObjectName("SciForgeSectionDistance")
         self.hatch = QtWidgets.QCheckBox("Hatch the cut faces")
         self.hatch.setChecked(section is None or section.CutSurfaceDisplay != "Hide")
         self.layout.addRow("Label", self.label)
+        self.layout.addRow("Type", self.kind)
         self.layout.addRow("Scale", self.scale)
+        self.layout.addRow("Style", self.style)
+        self.layout.addRow("Section Depth", self.depth)
+        self.layout.addRow("Distance (mm)", self.distance)
         self.layout.addRow(self.hatch)
+        self.show_label = _label_rows(self, section)
+        self.auto_boxes = _auto_mark_rows(self, section)
         self.label.textChanged.connect(self._label)
         self.scale.currentTextChanged.connect(self._scale)
+        self.style.currentTextChanged.connect(self._style)
+        self.depth.currentTextChanged.connect(self._depth)
+        self.distance.editingFinished.connect(self._depth)
         self.hatch.toggled.connect(self._hatch)
+        self._depth_rows()
         self.finish_layout()
         if section is not None:
             self.say("Change the options, then OK.")
@@ -1315,6 +1390,15 @@ class SectionPanel(DrawingPanel):
             else:
                 self.say("Click the view to cut.")
 
+    def target_view(self):
+        return self.section
+
+    def _depth_rows(self):
+        try:
+            self.layout.setRowVisible(self.distance, self.depth.currentText() == "Distance")
+        except Exception:
+            self.distance.setEnabled(self.depth.currentText() == "Distance")
+
     def _parent(self, view):
         if view.TypeId == drawing.DETAIL:
             self.message.setText("Pick a base, projected or section view (not a detail view).")
@@ -1322,6 +1406,12 @@ class SectionPanel(DrawingPanel):
         self.parent = view
         self.message.setText("")
         self.say("Click where the cut line starts (it snaps to points, centres and middles).")
+
+    def _far_out(self, point):
+        """The mouse is well away from the parent view: where a section view goes."""
+        px, py = drawing.view_position(self.parent)
+        half_w, half_h = drawing.view_extent(self.parent)
+        return abs(point[0] - px) > half_w + PLACE_ZONE or abs(point[1] - py) > half_h + PLACE_ZONE
 
     def on_press(self, point, event):
         if self.placed:
@@ -1333,41 +1423,99 @@ class SectionPanel(DrawingPanel):
                 return True
             self._parent(view)
             return True
-        local = snap_point(self.parent, drawing.page_to_local(self.parent, point), self.tolerance())
-        if self.p1 is None:
-            self.p1 = local
-            self.say("Click where the cut line ends.")
+        if not self.line_done:
+            if len(self.points) >= 2 and self._far_out(point):
+                self._finish_line()
+                self.on_move(point, event)
+                return self._place(point)
+            local = snap_point(
+                self.parent, drawing.page_to_local(self.parent, point), self.tolerance()
+            )
+            if self.points:
+                local = _straighten(self.points[-1], local)
+                last = self.points[-1]
+                if math.hypot(local[0] - last[0], local[1] - last[1]) < 1e-6:
+                    if len(self.points) >= 2:
+                        self._finish_line()  # a click on the last point again ends the line
+                        return True
+                    self.message.setText("Click a second point away from the first one.")
+                    return True
+            self.points.append(local)
+            self.message.setText("")
+            if len(self.points) == 1:
+                self.say("Click where the cut line ends.")
+            else:
+                self.say(
+                    "Click more points to bend the line, or Enter (or move away from the view) "
+                    "and click to place the section view."
+                )
+            self._draw_line(None)
             return True
-        if self.p2 is None:
-            local = _straighten(self.p1, local)
-            if math.hypot(local[0] - self.p1[0], local[1] - self.p1[1]) < 1e-6:
-                self.message.setText("Click a second point away from the first one.")
-                return True
-            self.p2 = local
-            self.clear_overlay()
-            self.say("Move to the side the section view goes and click to place it.")
-            self.on_move(point, event)
-            return True
+        return self._place(point)
+
+    def _place(self, point):
         if self.section is not None:
             self.placed = True
+            self.clear_overlay()
             self.say("Change the options, then OK.")
         return True
+
+    def _finish_line(self):
+        if len(self.points) < 2:
+            self.message.setText("Click at least two points for the cut line.")
+            return False
+        kind = core.section_kind(self.points)
+        if kind is None:
+            self.message.setText("Two points of the cut line are the same: click again.")
+            self.points = self.points[:1]
+            return False
+        self.line_done = True
+        self.kind.setText(kind)
+        self.clear_overlay()
+        self.say("Move to the side the section view goes and click to place it.")
+        return True
+
+    def _draw_line(self, mouse_local):
+        self.clear_overlay()
+        pts = list(self.points)
+        if mouse_local is not None:
+            pts.append(mouse_local)
+        for a, b in zip(pts, pts[1:]):
+            self.overlay_line(
+                drawing.local_to_page(self.parent, a), drawing.local_to_page(self.parent, b)
+            )
+
+    def on_key(self, key, event):
+        if (
+            key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter)
+            and self.parent is not None
+            and not self.line_done
+            and not self.placed
+        ):
+            if self._finish_line() and self.last_point is not None:
+                _later(self.on_move, self.last_point, None)
+            return True
+        return super().on_key(key, event)
+
+    last_point = None
 
     def on_move(self, point, event):
         if self._closed or self.placed or self.parent is None:
             return
-        if self.p1 is not None and self.p2 is None:
-            self.clear_overlay()
-            local = _straighten(self.p1, drawing.page_to_local(self.parent, point))
-            self.overlay_line(
-                drawing.local_to_page(self.parent, self.p1),
-                drawing.local_to_page(self.parent, local),
-            )
-            return
-        if self.p2 is None:
-            return
+        self.last_point = point
+        if not self.line_done:
+            if not self.points:
+                return
+            if len(self.points) >= 2 and self._far_out(point):
+                if not self._finish_line():
+                    return
+            else:
+                local = _straighten(self.points[-1], drawing.page_to_local(self.parent, point))
+                self._draw_line(local)
+                return
         local = drawing.page_to_local(self.parent, point)
-        line = core.section_line(self.p1, self.p2, local, self.page.ProjectionType)
+        p1, p2 = self.points[0], self.points[1]
+        line = core.section_line(p1, p2, local, self.page.ProjectionType)
         if line is None:
             return
         side = (
@@ -1384,12 +1532,29 @@ class SectionPanel(DrawingPanel):
         if self.section is None or side != self.side:
             label = self.label.text().strip() if self.section is not None else ""
             self._drop()
-            self.section = drawing.add_section(
-                self.parent, self.p1, self.p2, local, position, label=label or None
-            )
+            try:
+                self.section = drawing.add_section(
+                    self.parent,
+                    p1,
+                    p2,
+                    local,
+                    position,
+                    label=label or None,
+                    points=self.points,
+                    depth=self._depth_value(),
+                )
+            except drawing.DrawingError as exc:
+                self.message.setText(str(exc))
+                self.section = None
+                return
             self.side = side
             if not self.hatch.isChecked():
                 self.section.CutSurfaceDisplay = "Hide"
+            if self.style.currentText() != drawing.style_of(self.section):
+                drawing.set_view_style(self.section, self.style.currentText())
+            if not self.show_label.isChecked():
+                drawing.set_view_label(self.section, shown=False)
+            _apply_auto_marks(self)
             self._sync_fields()
             self.schedule()
         else:
@@ -1403,15 +1568,28 @@ class SectionPanel(DrawingPanel):
         self.scale.blockSignals(True)
         self.scale.setEditText(core.format_scale(drawing.scale_of(self.section)))
         self.scale.blockSignals(False)
+        self.kind.setText(drawing.section_kind_of(self.section))
 
     def _drop(self):
         if self.section is not None and drawing.alive(self.section):
-            name = self.section.Name
-            try:
-                self.page.removeView(self.section)
-            except Exception:
-                pass
-            self.doc.removeObject(name)
+            doomed = drawing.dependents(self.section)
+            helpers = [
+                h
+                for h in (
+                    drawing._get(self.section, "CuttingToolWireObject", None),
+                    drawing._get(self.section, "SciForgeDepthClip", None),
+                )
+                if drawing.alive(h)
+            ]
+            for obj in doomed:
+                try:
+                    if obj in list(self.page.Views):
+                        self.page.removeView(obj)
+                except Exception:
+                    pass
+                self.doc.removeObject(obj.Name)
+            for helper in helpers:
+                self.doc.removeObject(helper.Name)
         self.section = None
 
     def _label(self, text):
@@ -1420,7 +1598,7 @@ class SectionPanel(DrawingPanel):
             return
         self.section.SectionSymbol = text
         self.section.Label = drawing.section_caption(text)
-        self.section.Caption = self.section.Label
+        drawing.apply_caption(self.section)
         self.schedule()
 
     def _scale(self, text):
@@ -1428,6 +1606,35 @@ class SectionPanel(DrawingPanel):
         if self.section is None or value is None:
             return
         drawing.set_scale(self.section, value)
+        self.schedule()
+
+    def _style(self, text):
+        if self.section is None or self._closed:
+            return
+        drawing.set_view_style(self.section, text)
+        self.schedule()
+
+    def _depth_value(self):
+        mode = self.depth.currentText()
+        try:
+            value = float(self.distance.text().replace(",", "."))
+        except ValueError:
+            value = 0.0
+        return (mode, value)
+
+    def _depth(self, *_args):
+        if self._closed:
+            return
+        self._depth_rows()
+        if self.section is None:
+            return
+        mode, value = self._depth_value()
+        try:
+            drawing.set_section_depth(self.section, mode, value)
+            self.message.setText("")
+        except drawing.DrawingError as exc:
+            self.message.setText(str(exc))
+            return
         self.schedule()
 
     def _hatch(self, on):
@@ -1443,7 +1650,74 @@ class SectionPanel(DrawingPanel):
         if self.section is None:
             self.message.setText("Draw the cut line and place the section view first.")
             return False
+        mode, value = self._depth_value()
+        if mode == "Distance" and value <= 0:
+            self.message.setText("Type how far behind the cut the section shows (more than 0 mm).")
+            return False
         return super().accept()
+
+
+# ------------------------------------------------------------------ view label and centre marks
+def _label_rows(panel, view):
+    """Fusion's View Label: its text and whether it shows (the "Show" box)."""
+    text = QtWidgets.QLineEdit(drawing.view_label(view) if view is not None else "")
+    text.setObjectName("SciForgeViewLabel")
+    shown = QtWidgets.QCheckBox("Show the view label")
+    shown.setObjectName("SciForgeViewLabelShown")
+    shown.setChecked(drawing.label_shown(view) if view is not None else True)
+    if view is None or (not drawing.is_section(view) and view.TypeId != drawing.DETAIL):
+        panel.layout.addRow("View label", text)
+    else:
+        text = None  # (a section's or detail's label follows its letter)
+    panel.layout.addRow(shown)
+
+    def changed(*_args):
+        target = panel.target_view()
+        if target is None or panel._closed:
+            return
+        drawing.set_view_label(
+            target, text=text.text() if text is not None else None, shown=shown.isChecked()
+        )
+        panel.schedule()
+
+    if text is not None:
+        text.textEdited.connect(changed)
+    shown.toggled.connect(changed)
+    panel.label_text = text
+    return shown
+
+
+def _auto_mark_rows(panel, view):
+    """Fusion's Automated Center Marks and Center Lines: which round features of the
+    view get them."""
+    settings = drawing.auto_mark_settings(view) if view is not None else {}
+    row = QtWidgets.QWidget()
+    layout = QtWidgets.QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    boxes = {}
+    for key, text in (("holes", "Holes"), ("extrudes", "Round Extrudes"), ("cuts", "Round Cuts")):
+        box = QtWidgets.QCheckBox(text)
+        box.setObjectName("SciForgeAutoMarks_" + key)
+        box.setChecked(bool(settings.get(key)))
+        box.toggled.connect(lambda _on, p=panel: _apply_auto_marks(p))
+        layout.addWidget(box)
+        boxes[key] = box
+    panel.layout.addRow("Center marks", row)
+    return boxes
+
+
+def _apply_auto_marks(panel):
+    try:
+        target = panel.target_view()
+        if target is None or panel._closed:
+            return
+        settings = {k: b.isChecked() for k, b in panel.auto_boxes.items()}
+        if settings == drawing.auto_mark_settings(target) and not any(settings.values()):
+            return
+        drawing.set_auto_marks(target, settings)
+        panel.schedule()
+    except Exception as exc:
+        warn("centre marks: %s" % exc)
 
 
 def _straighten(p1, p2, degrees=3.0):
@@ -1495,10 +1769,18 @@ class DetailPanel(DrawingPanel):
             core.format_scale(drawing.scale_of(detail)) if detail is not None else "",
             True,
         )
+        self.style = _combo(
+            core.STYLES, drawing.style_of(detail) if detail is not None else "Visible Edges"
+        )
+        self.style.setObjectName("SciForgeDrawingStyle")
         self.layout.addRow("Label", self.label)
         self.layout.addRow("Scale", self.scale)
+        self.layout.addRow("Style", self.style)
+        self.show_label = _label_rows(self, detail)
+        self.auto_boxes = _auto_mark_rows(self, detail)
         self.label.textChanged.connect(self._label)
         self.scale.currentTextChanged.connect(self._scale)
+        self.style.currentTextChanged.connect(self._style)
         self.finish_layout()
         if detail is not None:
             self.say("Change the options, then OK.")
@@ -1508,6 +1790,15 @@ class DetailPanel(DrawingPanel):
                 self._parent(preselected[0])
             else:
                 self.say("Click the view to take the detail from.")
+
+    def target_view(self):
+        return self.detail
+
+    def _style(self, text):
+        if self.detail is None or self._closed:
+            return
+        drawing.set_view_style(self.detail, text)
+        self.schedule()
 
     def _parent(self, view):
         self.parent = view
@@ -1554,6 +1845,11 @@ class DetailPanel(DrawingPanel):
             return
         if self.detail is None:
             self.detail = drawing.add_detail(self.parent, self.centre, self.radius, point)
+            if self.style.currentText() != drawing.style_of(self.detail):
+                drawing.set_view_style(self.detail, self.style.currentText())
+            if not self.show_label.isChecked():
+                drawing.set_view_label(self.detail, shown=False)
+            _apply_auto_marks(self)
             self.label.blockSignals(True)
             self.label.setText(self.detail.Reference)
             self.label.blockSignals(False)
@@ -1571,7 +1867,7 @@ class DetailPanel(DrawingPanel):
             return
         self.detail.Reference = text
         self.detail.Label = drawing.detail_caption(self.detail)
-        self.detail.Caption = self.detail.Label
+        drawing.apply_caption(self.detail)
         self.schedule()
 
     def _scale(self, text):
@@ -1965,8 +2261,22 @@ class TextPanel(DrawingPanel):
             return True
         if self.corner is None:
             self.corner = point
-            self.say("Click the opposite corner.")
+            self.pressed = point
+            self.say("Click the opposite corner (or drag to it).")
             return True
+        return self._frame(point)
+
+    pressed = None
+
+    def on_release(self, point, event):
+        """Fusion: the text box can also be dragged open."""
+        start, self.pressed = self.pressed, None
+        if self.note is None and start is not None and self.corner is not None:
+            if math.hypot(point[0] - start[0], point[1] - start[1]) > 1.5:
+                return self._frame(point)
+        return True
+
+    def _frame(self, point):
         x0, y0 = self.corner
         x1, y1 = point
         width = abs(x1 - x0)
@@ -2167,8 +2477,13 @@ class EditViewPanel(DrawingPanel):
             self.gap.setValue(float(view.Gap))
             self.layout.addRow("Gap", self.gap)
             self.gap.valueChanged.connect(self._gap)
+        self.show_label = _label_rows(self, view)
+        self.auto_boxes = _auto_mark_rows(self, view)
         self.finish_layout()
         self.say("Change the options, then OK.")
+
+    def target_view(self):
+        return self.view
 
     def _style(self, text):
         drawing.set_view_style(self.view, text)
@@ -2189,7 +2504,7 @@ def edit_view(view):
     try:
         if drawing.kind(view) == "BaseView":
             return BaseViewPanel(page, view).show()
-        if view.TypeId == drawing.SECTION:
+        if drawing.is_section(view):
             return SectionPanel(page, view).show()
         if view.TypeId == drawing.DETAIL:
             return DetailPanel(page, view).show()
@@ -2222,7 +2537,9 @@ class TitleBlockPanel(DrawingPanel):
         self.say("Type into the fields; OK keeps them.")
 
     def _edited(self, key, text):
-        drawing.set_title(self.page, {key: text}, by_hand=True)
+        from . import drawing_sheets
+
+        drawing_sheets.set_title_everywhere(self.page, {key: text})
         self.schedule()
 
     @classmethod
@@ -2289,9 +2606,14 @@ class ExportDialog(QtWidgets.QDialog):
         self.kind = kind
         self.setObjectName("SciForgeDrawingExport")
         self.setWindowTitle("Export %s" % kind.upper())
+        from . import drawing_sheets
+
         layout = QtWidgets.QFormLayout(self)
-        self.name = QtWidgets.QLineEdit(page.Label)
+        self.name = QtWidgets.QLineEdit(drawing_sheets.main_page(page).Label)
         self.name.setObjectName("SciForgeDrawingExportName")
+        # Fusion: All Sheets in one PDF, or the current sheet; a DXF per sheet
+        self.sheets = _combo(["All Sheets", "Current Sheet"])
+        self.sheets.setObjectName("SciForgeDrawingExportSheets")
         self.folder = QtWidgets.QLineEdit(_default_folder(page.Document))
         self.folder.setObjectName("SciForgeDrawingExportFolder")
         browse = QtWidgets.QPushButton("Browse...")
@@ -2306,6 +2628,7 @@ class ExportDialog(QtWidgets.QDialog):
         self.message.setWordWrap(True)
         self.message.setStyleSheet("color: #ff8a80;")
         layout.addRow("Name", self.name)
+        layout.addRow("Sheets", self.sheets)
         layout.addRow("Location", row)
         layout.addRow(self.open_after)
         layout.addRow(self.message)
@@ -2317,6 +2640,7 @@ class ExportDialog(QtWidgets.QDialog):
         cancel.clicked.connect(self.reject)
         layout.addRow(buttons)
         self.path = None
+        self.paths = []
 
     def _browse(self):
         try:
@@ -2341,12 +2665,17 @@ class ExportDialog(QtWidgets.QDialog):
             if not name.lower().endswith("." + self.kind):
                 name += "." + self.kind
             path = os.path.join(folder, name)
+            from . import drawing_sheets
+
+            which = "all" if self.sheets.currentIndex() == 0 else "current"
             if self.kind == "pdf":
-                drawing.export_pdf(self.page, path)
+                drawing_sheets.export_pdf(self.page, path, which)
+                self.paths = [path]
             else:
-                drawing.export_dxf(self.page, path)
+                self.paths = drawing_sheets.export_dxf(self.page, path, which)
+                path = self.paths[0]
             self.path = path
-            log("exported %s" % path)
+            log("exported %s" % ", ".join(self.paths))
             if self.open_after.isChecked():
                 OPENER["open"](path)
             self.accept()

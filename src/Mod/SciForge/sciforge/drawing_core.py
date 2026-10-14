@@ -647,6 +647,29 @@ def section_line(p1, p2, side, projection):
     return {"t": t, "n": n, "look": look, "mid": mid, "length": length}
 
 
+def section_kind(points, tolerance_deg=1.0):
+    """Fusion's section type from the cut line's points (parent view coordinates): Full
+    (one straight segment), Half (two segments at a right angle), Offset (more segments,
+    each square or parallel to the first), Aligned (a segment at another angle). None
+    when two points coincide."""
+    if len(points) < 2:
+        return None
+    dirs = []
+    for a, b in zip(points, points[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        if math.hypot(dx, dy) < 1e-9:
+            return None
+        dirs.append(math.atan2(dy, dx))
+    if len(dirs) == 1:
+        return "Full"
+    tol = math.radians(tolerance_deg)
+    for angle in dirs[1:]:
+        diff = (angle - dirs[0]) % (math.pi / 2.0)
+        if min(diff, math.pi / 2.0 - diff) > tol:
+            return "Aligned"
+    return "Half" if len(dirs) == 2 else "Offset"
+
+
 def section_axes(parent_axes, line):
     """TechDraw Direction and XDirection of a section view cut along `line`
     (section_line) through a parent view with axes (X, Y, D).
