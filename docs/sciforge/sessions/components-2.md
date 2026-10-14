@@ -100,3 +100,18 @@ models `comp_move_captured_roll`, `comp_move_rotate_pivot`, `comp_paste_instance
 `comp_paste_new_independent`, `comp_pattern_circular_6`, `comp_pattern_rect_extent`,
 `bodies_split_two_planes`, `bodies_combine_new_component`. Unit tests in
 `test_components_core.py` (labels, picks, pivot, history) and `test_timeline_core.py`.
+
+Regression runs at the end (one scenario at a time, all PASS): bodies_split 81, bodies_move
+85, bodies_combine 92, bodies_qa 311, bodies_qa_2 234, bodies_timeline 64,
+components_basic 251, components_extrude 170, components_move 218, sketch_qa 457,
+sketch_qa_keys 119, patterns_circ 68, patterns_rect 88, patterns_path 58, patterns_qa 54,
+patterns_qa_part 65, patterns_qa_edit 70, patterns_qa_more 52, patterns_qa_features 50,
+patterns_qa_paths 72, patterns_params 48, patterns_mirror 62, patterns_suppress 40,
+timeline_browser 92, timeline_browser_2 133, timeline_browser_qa 222, timeline_browser_qa2
+245, timeline_browser_qa3 239, timeline_browser_qa4 280 (failed once on a scroll check while
+six builders shared the CPUs, passed when run again), timeline_roll_view 6,
+timeline_rolled_cut 64, gaps_timeline_start 129, joints_basic 85, joints_components 46,
+joints_drive 107, misc_preferences 84, drag_release_lost 102, direct_components 219,
+inspect_analysis_components 28, drawing_assembly 62, modify_split_face 236,
+selection_filters 58, viewcube_menu 21. `--only base`: 919 unit tests OK, golden 347 pass +
+1 known xfail (plate_hole_grid), smoke 71 and journey 25 checks pass.
