@@ -72,6 +72,16 @@ def _mark(obj, sciforge_type):
     _add(obj, "App::PropertyBool", "SciForgeTimeline", False)
 
 
+def _add_to_page(page, view, x=None, y=None):
+    """Put a view on the page at (x, y): TechDraw's addView moves a new view to the
+    middle of the sheet, so the position is set after it."""
+    if x is None:
+        x, y = _value(view.X), _value(view.Y)
+    page.addView(view)
+    view.X = x
+    view.Y = y
+
+
 def _get(obj, name, default=""):
     try:
         return getattr(obj, name)
@@ -615,7 +625,7 @@ def add_base_view(page, sources, x, y, orientation="Front", style=None, scale=No
     _mark(view, "BaseView")
     _add(view, "App::PropertyString", "SciForgeOrientation", orientation)
     view.Label = "Base View"
-    page.addView(view)
+    _add_to_page(page, view)
     return view
 
 
@@ -689,7 +699,7 @@ def add_projected(parent, kind_name, x, y):
     px, py = view_position(parent)
     _add(view, "App::PropertyFloatList", "SciForgeOffset", [x - px, y - py])
     view.Label = "%s View" % _kind_label(kind_name)
-    page.addView(view)
+    _add_to_page(page, view)
     return view
 
 
@@ -805,7 +815,7 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None):
     section.X = position[0]
     section.Y = position[1]
     _hatch(section)
-    page.addView(section)
+    _add_to_page(page, section)
     section.BaseView = parent
     _mark(section, "SectionView")
     _add(section, "App::PropertyStringList", "SciForgeLine", [json.dumps([p1, p2, side])])
@@ -857,7 +867,7 @@ def add_detail(parent, centre, radius, position, label=None, scale=None):
     detail.Scale = scale if scale else scale_of(parent) * core.DEFAULT_DETAIL_FACTOR
     detail.X = position[0]
     detail.Y = position[1]
-    page.addView(detail)
+    _add_to_page(page, detail)
     detail.BaseView = parent
     _mark(detail, "DetailView")
     _style(detail, style_of(parent), tangent_of(parent))
@@ -911,7 +921,7 @@ def add_break(view, a, b, gap=None):
     x, y = view_position(view)
     broken.X = x
     broken.Y = y
-    page.addView(broken)
+    _add_to_page(page, broken)
     _style(broken, style_of(view), tangent_of(view))
     _mark(broken, "BreakView")
     _add(broken, "App::PropertyLink", "SciForgeBrokenOf", view)
@@ -1193,7 +1203,7 @@ def add_text(page, lines, position, size=3.5, width=None):
             pass
     note.X = position[0]
     note.Y = position[1]
-    page.addView(note)
+    _add_to_page(page, note)
     _mark(note, "DrawingText")
     note.Label = "Text"
     return note
@@ -1260,7 +1270,7 @@ def add_parts_list(page, view, top_left, balloons=True):
     _add(table, "App::PropertyLink", "SciForgeView", view)
     _add(table, "App::PropertyFloatList", "SciForgeCorner", [top_left[0], top_left[1]])
     table.Label = "Parts List"
-    page.addView(table)
+    _add_to_page(page, table)
     _draw_table(table, rows, top_left)
     made = []
     if balloons:

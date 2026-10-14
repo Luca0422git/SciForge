@@ -95,7 +95,10 @@ def b_opened():
     state["page"] = page.Name
     h.check("named after the design", page.Label == "Bracket Drawing", page.Label)
     h.check("first angle (ISO)", page.ProjectionType == "First angle", page.ProjectionType)
-    h.check("DRAWING tab shown and current", d.ribbon_tab_shown("drawing") and d.current_tab() == "drawing")
+    h.check(
+        "DRAWING tab shown and current",
+        d.ribbon_tab_shown("drawing") and d.current_tab() == "drawing",
+    )
     h.check("SOLID tab hidden", not d.ribbon_tab_shown("solid"))
     from sciforge import shell
 

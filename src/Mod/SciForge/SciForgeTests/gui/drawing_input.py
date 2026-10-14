@@ -351,3 +351,99 @@ def active_doc():
 
 def main_window():
     return Gui.getMainWindow()
+
+
+# -- a drawing made the way a person makes one ---------------------------------------------
+def drawing_steps(
+    prefix,
+    standard=None,
+    sheet=None,
+    views=None,
+    base_at=None,
+    scale=None,
+    style=None,
+    contents=None,
+    untick=(),
+):
+    """Steps: File > New Drawing, the dialog's choices, OK; then (manual views) a click
+    that places the base view at `base_at`, the style and scale typed, OK."""
+    state = {}
+
+    def new_drawing():
+        state["before"] = len(drawing_module().drawings(App.ActiveDocument))
+        file_menu("New Drawing")
+
+    def dialog():
+        p = panel_of("CreateDrawingPanel")
+        if not h.check("%s: Create Drawing dialog" % prefix, p is not None, panel()):
+            return
+        if contents:
+            choose(p.contents, contents)
+        for label in untick:
+            for i in range(p.bodies.count()):
+                item = p.bodies.item(i)
+                if item.text() == label:
+                    rect = p.bodies.visualItemRect(item)
+                    wi.click(p.bodies.viewport(), QtCore.QPoint(rect.left() + 8, rect.center().y()))
+                    if item.checkState() != QtCore.Qt.Unchecked:
+                        item.setCheckState(QtCore.Qt.Unchecked)
+        if standard:
+            choose(p.standard, standard)
+        if sheet:
+            choose(p.sheet, sheet)
+        if views:
+            choose(p.views, views)
+
+    def accept():
+        ok()
+
+    accept.wait_ms = 2500
+
+    def opened():
+        count = len(drawing_module().drawings(App.ActiveDocument))
+        h.check("%s: a new drawing" % prefix, count == state["before"] + 1, count)
+        h.check("%s: its tab is active" % prefix, page() is not None)
+
+    steps = [new_drawing, dialog, accept, opened]
+    if base_at is not None:
+
+        def place():
+            move_to(base_at[0] + 10, base_at[1] + 10)
+            click_at(*base_at)
+
+        def options():
+            p = panel_of("BaseViewPanel")
+            if not h.check("%s: Base View dialog" % prefix, p is not None, panel()):
+                return
+            if style:
+                choose(p.style, style)
+            if scale:
+                set_combo_text(p.scale, scale)
+
+        options.wait_ms = 1200
+
+        def base_ok():
+            ok()
+
+        base_ok.wait_ms = 2000
+
+        def placed():
+            found = bases()
+            h.check("%s: one base view more" % prefix, len(found) >= 1, found)
+
+        steps += [place, options, base_ok, placed]
+    for step in steps:
+        step.__name__ = "%s_%s" % (prefix, step.__name__)
+    return steps
+
+
+def drag_page(a, b, steps=12):
+    """Press at page point a, move to b, release (a person dragging a view)."""
+    view = gv()
+    if view is None:
+        h.check("a drawing tab is active", False)
+        return
+    start = widget_point(*a)
+    end = widget_point(*b)
+    wi.drag(view.viewport(), start, view.viewport().mapToGlobal(end), steps)
+    _process()
