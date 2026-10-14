@@ -16,7 +16,6 @@ How it is used, like in Fusion:
   * Double-click the pattern in the timeline to change it.
 Geometry and the FreeCAD features behind each choice: pattern.py.
 """
-
 import math
 import time
 

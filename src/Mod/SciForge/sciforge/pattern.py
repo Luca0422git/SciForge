@@ -22,7 +22,6 @@ FreeCAD 1.1.4 stores LinearPattern.Spacings2 = [0.0] by default, which stacks a 
 on the first (core patch #4 fixes the default in C++). SciForge always writes both spacing
 lists itself, so two-direction patterns are right on stock FreeCAD and in old files too.
 """
-
 import json
 import math
 import re

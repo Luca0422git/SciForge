@@ -1,0 +1,64 @@
+{
+  "id": "modify2_move_face_top",
+  "title": "Box 40x20x10, its top face moved 5 mm up (Move, Move Object Faces)",
+  "tags": [
+    "move",
+    "faces",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_face",
+      "id": "m1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "move": [
+        0,
+        0,
+        5
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      15
+    ],
+    "source": "analytic",
+    "note": "The top face moves 5 mm up, the side faces grow to meet it: 40*20*15."
+  }
+}

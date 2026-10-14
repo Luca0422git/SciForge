@@ -1,0 +1,89 @@
+{
+  "id": "modify2_presspull_modify_pocket",
+  "title": "Press Pull Modify Existing Feature on a pocket's floor: the pocket gets 1 mm shallower",
+  "tags": [
+    "press-pull",
+    "offset-type",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "rect": [
+            5,
+            5,
+            15,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "p1",
+      "profile": "s2",
+      "distance": 4,
+      "flip": true,
+      "operation": "cut"
+    },
+    {
+      "op": "press_pull_type",
+      "id": "pp",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "distance": 1,
+      "offset_type": "modify"
+    }
+  ],
+  "expect": {
+    "volume": 7700,
+    "faces": 11,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "The pocket's floor (z = 6) is the end of the cut extrude: pulling it 1 mm out of the part makes the cut 3 deep instead of 4: 8000 - 10*10*3. Faces: 6 + 4 walls + floor."
+  }
+}

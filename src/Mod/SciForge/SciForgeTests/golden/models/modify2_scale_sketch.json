@@ -1,0 +1,57 @@
+{
+  "id": "modify2_scale_sketch",
+  "title": "A sketch scaled x1.5 after it was extruded, the scale then edited to x2",
+  "tags": [
+    "scale",
+    "sketch",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_scale_sketch",
+      "id": "sc",
+      "sketch": "s1",
+      "factor": 1.5
+    },
+    {
+      "op": "sf_scale_sketch_edit",
+      "target": "sc",
+      "factor": 2
+    }
+  ],
+  "expect": {
+    "volume": 8000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "The 20x10 rectangle (from the origin) is scaled about the sketch origin: x1.5 gives 30x15, the edit to x2 gives 40x20 (the curves are scaled back and again); the extrude made from it follows: 40*20*10 = 8000."
+  }
+}

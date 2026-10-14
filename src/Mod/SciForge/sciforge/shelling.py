@@ -731,6 +731,9 @@ def _replace(old, base, names, options, formulas):
     new = make(body, base, names, options, before=old, formulas=formulas)
     _compute(new)  # its faces must exist to point the later steps at them
     _repoint(old, new)
+    from . import modify_bodies
+
+    modify_bodies.move_followers(old, new)  # its steps in other bodies (modify-2)
     try:
         body.removeObject(old)
     except Exception:
@@ -842,6 +845,9 @@ def show_tip(body):
 
 def remove(feature):
     """Delete a shell made by the dialog (its preview), showing the step before it."""
+    from . import modify_bodies
+
+    modify_bodies.remove_all(feature)  # its steps in other bodies (modify-2)
     body = owner_body(feature)
     doc = feature.Document
     base = feature.BaseFeature

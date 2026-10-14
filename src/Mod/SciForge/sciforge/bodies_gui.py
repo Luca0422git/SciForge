@@ -29,6 +29,7 @@ ICONS = {
     "ReplaceFace": "replace_face",
     "SplitFace": "split_face",
     "SilhouetteSplit": "silhouette_split",
+    "MoveFace": "move",  # Move/Copy of faces (modify-2, move_face.py)
 }
 
 

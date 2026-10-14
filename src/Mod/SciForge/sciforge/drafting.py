@@ -27,7 +27,6 @@ FreeCAD's Draft is silent about some failures (a face it cannot tilt is just ski
 with a message in the Report view only), so check() refuses such faces first and
 undrafted() finds any face the result left untouched.
 """
-
 import json
 import math
 
