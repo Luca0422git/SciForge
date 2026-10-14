@@ -219,6 +219,8 @@ def _folders(objects, active_body, component):
             canvases.append(_item("canvas:", obj, "canvas", "canvas"))
         elif sciforge_type == "Decal":  # a picture on a face (decal.py), under its component
             decals.append(_item("decal:", obj, "decal", "decal"))
+        elif sciforge_type in ("DrawingSheet", "DrawingProfile", "DrawingDepth"):
+            pass  # a further sheet of a drawing, a section's cut line or depth (drawing.py)
         elif type_id in DRAWING_TYPES:
             if component is None:
                 node = _item("drawing:", obj, "dw_base_view", "drawing")

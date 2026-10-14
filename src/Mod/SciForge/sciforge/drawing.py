@@ -42,12 +42,13 @@ ITEM = "TechDraw::DrawProjGroupItem"
 PART_VIEW = "TechDraw::DrawViewPart"
 SECTION = "TechDraw::DrawViewSection"
 DETAIL = "TechDraw::DrawViewDetail"
+COMPLEX = "TechDraw::DrawComplexSection"
 BROKEN = "TechDraw::DrawBrokenView"
 DIMENSION = "TechDraw::DrawViewDimension"
 BALLOON = "TechDraw::DrawViewBalloon"
 ANNOTATION = "TechDraw::DrawViewAnnotation"
 SYMBOL = "TechDraw::DrawViewSymbol"
-VIEW_TYPES = (ITEM, PART_VIEW, SECTION, DETAIL, BROKEN)
+VIEW_TYPES = (ITEM, PART_VIEW, SECTION, COMPLEX, DETAIL, BROKEN)
 LINE_DASHDOT = 4  # TechDraw line styles: 1 continuous, 2 dash, 3 dot, 4 dash-dot
 CENTER_EXTENSION = 3.0  # mm on the paper a centre mark reaches past its circle
 HATCH_FILE = "FCPAT.pat"  # TechDraw's own patterns
@@ -116,6 +117,15 @@ def is_page(obj):
         return False
 
 
+def is_section(obj):
+    """A section view: a straight cut (DrawViewSection) or one with several segments
+    (DrawComplexSection)."""
+    try:
+        return obj.TypeId in (SECTION, COMPLEX)
+    except Exception:
+        return False
+
+
 def is_view(obj):
     try:
         return obj.TypeId in VIEW_TYPES
@@ -123,11 +133,17 @@ def is_view(obj):
         return False
 
 
-def drawings(doc):
-    """The design's drawings (its TechDraw pages), in the order they were made."""
+def all_pages(doc):
+    """Every TechDraw page of the design: each sheet of each drawing."""
     if doc is None:
         return []
     return sorted([o for o in doc.Objects if o.TypeId == PAGE], key=lambda o: o.ID)
+
+
+def drawings(doc):
+    """The design's drawings (their first sheets), in the order they were made; further
+    sheets of a drawing (drawing_sheets.py) are not drawings of their own."""
+    return [p for p in all_pages(doc) if kind(p) != "DrawingSheet"]
 
 
 def page_of(obj):
@@ -136,12 +152,7 @@ def page_of(obj):
         return None
     if is_page(obj):
         return obj
-    try:
-        page = obj.findParentPage()
-        if page is not None:
-            return page
-    except Exception:
-        pass
+    # (not TechDraw's findParentPage: it crashes FreeCAD for a view on no page yet)
     for parent in getattr(obj, "InList", []):
         if is_page(parent):
             return parent
@@ -227,6 +238,48 @@ def axes_of(view):
 
 
 def centre_of(view):
+    """The model point at the middle of a view (its own coordinates' origin).
+
+    TechDraw centres a view on the exact bounding box of its parts seen along the view
+    (a copy without the 3D view's mesh); its getGeometricCenter() measures the meshed
+    parts instead, which is off by the mesh's sag on curved faces (0.02 mm on an R8
+    fillet): marks and cuts made from it missed TechDraw's lines by that much. A
+    straight section is centred on what lies behind its cut."""
+    if getattr(view, "TypeId", "") == SECTION:
+        try:
+            from . import drawing_depth
+
+            centre = drawing_depth.cut_centre(view)
+            if centre is not None:
+                return centre
+        except Exception as exc:
+            log("section centre of %s: %s" % (getattr(view, "Label", "?"), exc))
+    try:
+        import Part
+
+        from . import bodies
+
+        shapes = []
+        for src in getattr(view, "Source", []):
+            if not alive(src):
+                continue
+            try:
+                shape = bodies.global_shape(src)
+            except Exception:
+                shape = src.Shape.copy()
+            if not shape.isNull():
+                shapes.append(shape)
+        if shapes:
+            x, y, d = axes_of(view)
+            matrix = App.Matrix(
+                x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, d[0], d[1], d[2], 0, 0, 0, 0, 1
+            )
+            local = Part.makeCompound(shapes).transformed(matrix, True)
+            box = local.optimalBoundingBox(False, False)
+            c = box.Center
+            return core.to_model((x, y, d), (d[0] * c.z, d[1] * c.z, d[2] * c.z), c.x, c.y)
+    except Exception as exc:
+        log("view centre of %s: %s" % (getattr(view, "Label", "?"), exc))
     try:
         c = view.getGeometricCenter()
         return (c.x, c.y, c.z)
@@ -540,9 +593,20 @@ def auto_title_values(page):
         "Size": sheet_of(page),
         "Units": units_of(page),
         "Material": _material_text(sources),
-        "Sheet": "1 / 1",
+        "Sheet": _sheet_text(page),
         "Standard": standard,
     }
+
+
+def _sheet_text(page):
+    """The title block's sheet number: "2 / 3" (follows added, deleted, moved sheets)."""
+    try:
+        from . import drawing_sheets
+
+        return drawing_sheets.sheet_title_value(page)
+    except Exception as exc:
+        warn("sheet number of %s: %s" % (getattr(page, "Label", "?"), exc))
+        return "1 / 1"
 
 
 def refresh_title(page):
@@ -678,7 +742,7 @@ def is_isometric(view):
     """A view looking at the design from a slant (Home, or an isometric projected view):
     its lengths are foreshortened, so Fusion does not dimension it. A section is a true
     view of its cut whatever its direction; a detail is what its parent is."""
-    if view.TypeId == SECTION:
+    if is_section(view):
         return False
     if view.TypeId == DETAIL:
         parent = view.BaseView
@@ -711,7 +775,7 @@ def set_scale(view, scale):
         target.Scale = scale
         if target.TypeId == DETAIL:
             target.Label = detail_caption(target)
-            target.Caption = target.Label
+            apply_caption(target)
 
 
 def add_projected(parent, kind_name, x, y):
@@ -723,7 +787,12 @@ def add_projected(parent, kind_name, x, y):
         raise DrawingError("There is already a %s view of that view." % _kind_label(kind_name))
     direction, xdir = core.projected_axes(axes_of(parent), kind_name)
     view = doc.addObject(PART_VIEW, "ProjectedView")
-    view.Source = list(parent.Source)
+    view.Source = _view_sources(parent)  # (not a breakout's trimmed copy)
+    clip = _get(parent, "SciForgeDepthClip", None)
+    if core.is_iso_kind(kind_name) and has_breakout(parent) and alive(clip):
+        # Fusion: an isometric view made from a view with a breakout shows its cut
+        _add(view, "App::PropertyLinkListGlobal", "SciForgeCutSources", _view_sources(parent))
+        view.Source = [clip]
     view.Direction = V(*direction)
     view.XDirection = V(*xdir)
     view.ScaleType = "Custom"
@@ -748,7 +817,7 @@ def _axis_of(view):
         return (1.0, 0.0)
     if child_kind in ("Top", "Bottom"):
         return (0.0, 1.0)
-    if view.TypeId == SECTION:
+    if is_section(view):
         line = section_line_of(view)
         parent = parent_of(view)
         if line is not None and parent is not None:
@@ -769,12 +838,12 @@ def keep_aligned(page):
     views = all_views(page)
     for view in views:
         parent = _get(view, "SciForgeParent", None) if view.TypeId != DETAIL else None
-        if view.TypeId == SECTION:
+        if is_section(view):
             parent = _get(view, "BaseView", None)
         if not alive(parent):
             continue
         axis = _axis_of(view)
-        if axis is None and view.TypeId == SECTION:
+        if axis is None and is_section(view):
             continue
         px, py = view_position(parent)
         cx, cy = view_position(view)
@@ -826,22 +895,45 @@ def used_labels(page):
     return labels
 
 
-def add_section(parent, p1, p2, side, position, label=None, scale=None):
+def add_section(parent, p1, p2, side, position, label=None, scale=None, points=None, depth=None):
     """Section View: cut along the line p1-p2 (parent view coordinates) and look from the
-    side the view is placed on (third angle) or from the other side (first angle)."""
+    side the view is placed on (third angle) or from the other side (first angle).
+
+    points: the whole cut line when it has bends (Fusion's half, offset and aligned
+    sections): TechDraw's complex section cuts along it (the first segment sets the
+    viewing direction). depth: ("Full" | "Slice" | "Distance", mm) for a straight line."""
     page = page_of(parent)
     doc = parent.Document
     projection = page.ProjectionType
+    pts = core.simplify_line([tuple(p) for p in (points or [p1, p2])])
+    if len(pts) < 2:
+        raise DrawingError("Click at least two points for the cut line.")
+    p1, p2 = pts[0], pts[1]
     line = core.section_line(p1, p2, side, projection)
     if line is None:
         raise DrawingError("The section line has no length: click two different points.")
+    section_kind = core.section_kind(pts)
+    if section_kind is None:
+        raise DrawingError("Two points of the cut line are the same: click different points.")
     axes = axes_of(parent)
     direction, xdir, normal = core.section_axes(axes, line)
     mid = line["mid"]
     origin = core.to_model(axes, centre_of(parent), mid[0], mid[1])
     label = label or core.next_label(used_labels(page))
-    section = doc.addObject(SECTION, "Section")
-    section.Source = list(parent.Source)
+    complex_cut = len(pts) > 2
+    if depth is not None and depth[0] != "Full":
+        # (refused before anything is made)
+        if depth[0] not in DEPTH_MODES:
+            raise DrawingError("Choose Full, Slice or Distance.")
+        if depth[0] == "Distance" and (depth[1] if len(depth) > 1 else 0.0) <= 0:
+            raise DrawingError("Type how far behind the cut the section shows (more than 0 mm).")
+        if complex_cut:
+            raise DrawingError(
+                "Section depth works with a straight cut line: choose Full for a line "
+                "with bends."
+            )
+    section = doc.addObject(COMPLEX if complex_cut else SECTION, "Section")
+    section.Source = _view_sources(parent)
     section.Direction = V(*direction)
     section.XDirection = V(*xdir)
     section.SectionNormal = V(*normal)
@@ -852,19 +944,127 @@ def add_section(parent, p1, p2, side, position, label=None, scale=None):
     section.Scale = scale if scale else scale_of(parent)
     section.X = position[0]
     section.Y = position[1]
+    if complex_cut:
+        profile = _plane_sketch(parent, "SectionLine", list(zip(pts, pts[1:])), "DrawingProfile")
+        section.CuttingToolWireObject = profile
+        section.ProjectionStrategy = "Aligned" if section_kind == "Aligned" else "Offset"
     _hatch(section)
     _add_to_page(page, section)
     section.BaseView = parent
     _mark(section, "CutView")  # (a "Section" type would be an analysis in the browser)
     _add(section, "App::PropertyStringList", "SciForgeLine", [json.dumps([p1, p2, side])])
+    _add(section, "App::PropertyString", "SciForgePoints", json.dumps([list(p) for p in pts]))
+    _add(section, "App::PropertyString", "SciForgeSectionKind", section_kind)
     px, py = view_position(parent)
     _add(section, "App::PropertyFloatList", "SciForgeOffset", [position[0] - px, position[1] - py])
-    _style(section, style_of(parent), tangent_of(parent))
-    section.HardHidden = False  # Fusion's section views show no hidden edges by default
-    section.SmoothHidden = False
+    # Fusion's section views show no hidden edges by default
+    style = {"Visible and Hidden Edges": "Visible Edges", "Shaded with Hidden Edges": "Shaded"}
+    _style(section, style.get(style_of(parent), style_of(parent)), tangent_of(parent))
     section.Label = section_caption(label)
-    section.Caption = section.Label  # written under the view, also in the PDF
+    apply_caption(section)  # written under the view, also in the PDF
+    if depth is not None and depth[0] != "Full":
+        set_section_depth(section, depth[0], depth[1] if len(depth) > 1 else 0.0)
     return section
+
+
+def section_points(section):
+    """The cut line's points (parent view coordinates)."""
+    try:
+        pts = json.loads(_get(section, "SciForgePoints", "") or "[]")
+        if len(pts) >= 2:
+            return [tuple(p) for p in pts]
+    except ValueError:
+        pass
+    line = section_line_of(section)
+    return [line[0], line[1]] if line else []
+
+
+def section_kind_of(section):
+    return _get(section, "SciForgeSectionKind", "") or core.section_kind(section_points(section))
+
+
+def _plane_sketch(view, name, segments, sciforge_type):
+    """A hidden sketch in a view's plane through its centre holding line segments given in
+    the view's own coordinates (TechDraw's break lines and complex section profiles must
+    be sketches lying square to the view)."""
+    import Part
+    import Sketcher  # noqa: F401
+
+    doc = view.Document
+    xa, ya, da = axes_of(view)
+    centre = centre_of(view)
+    matrix = App.Matrix(
+        xa[0],
+        ya[0],
+        da[0],
+        centre[0],
+        xa[1],
+        ya[1],
+        da[1],
+        centre[1],
+        xa[2],
+        ya[2],
+        da[2],
+        centre[2],
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    )
+    sketch = doc.addObject("Sketcher::SketchObject", name)
+    sketch.Placement = App.Placement(matrix)
+    for a, b in segments:
+        sketch.addGeometry(Part.LineSegment(V(a[0], a[1], 0), V(b[0], b[1], 0)))
+    _set_shown(sketch, False)
+    _mark(sketch, sciforge_type)
+    return sketch
+
+
+# ------------------------------------------------------------------ section depth
+DEPTH_MODES = ("Full", "Slice", "Distance")
+SLICE_DEPTH = 0.01  # mm behind the cut a Slice keeps (only the cut faces show)
+
+
+def section_depth(section):
+    """(mode, distance) of a section view (Fusion's Section Depth)."""
+    try:
+        data = json.loads(_get(section, "SciForgeDepth", "") or "{}")
+    except ValueError:
+        data = {}
+    mode = data.get("mode", "Full")
+    return (mode if mode in DEPTH_MODES else "Full"), float(data.get("value", 0.0) or 0.0)
+
+
+def set_section_depth(section, mode, value=0.0):
+    """Fusion's Section Depth: Full shows everything behind the cut; Slice only what the
+    cut line cuts through; Distance what lies up to `value` mm behind it. TechDraw draws
+    everything behind its cut: the lines that lie deeper are switched off
+    (drawing_depth.py)."""
+    from . import drawing_depth
+
+    if mode not in DEPTH_MODES:
+        raise DrawingError("Choose Full, Slice or Distance.")
+    if mode == "Distance" and value <= 0:
+        raise DrawingError("Type how far behind the cut the section shows (more than 0 mm).")
+    if section.TypeId == COMPLEX and mode != "Full":
+        raise DrawingError(
+            "Section depth works with a straight cut line: this section's line has bends."
+        )
+    _add(
+        section, "App::PropertyString", "SciForgeDepth", json.dumps({"mode": mode, "value": value})
+    )
+    drawing_depth.refresh(section, force=True)
+    return section
+
+
+def refresh_depth(view):
+    """A Slice / Distance section follows the design: the lines beyond its depth are
+    worked out again when its lines or the parts changed. True when it changed."""
+    if not is_section(view):
+        return False
+    from . import drawing_depth
+
+    return drawing_depth.refresh(view)
 
 
 def _hatch(section):
@@ -890,6 +1090,49 @@ def detail_caption(detail):
     return "DETAIL %s (%s)" % (detail.Reference, core.format_scale(scale_of(detail)))
 
 
+def default_caption(view):
+    """What a view's label says unless a person typed another text: SECTION A-A, DETAIL
+    B (2:1), or the view's name."""
+    if is_section(view):
+        return section_caption(view.SectionSymbol)
+    if view.TypeId == DETAIL:
+        return detail_caption(view)
+    return view.Label
+
+
+def view_label(view):
+    return _get(view, "SciForgeViewLabel", "") or default_caption(view)
+
+
+def label_shown(view):
+    """Fusion shows the labels of section and detail views, not of the others, until a
+    person changes that."""
+    if "SciForgeLabelShown" in view.PropertiesList:
+        return bool(view.SciForgeLabelShown)
+    return is_section(view) or view.TypeId == DETAIL
+
+
+def set_view_label(view, text=None, shown=None):
+    """Edit a view's label (Fusion's View Label): its text and whether it shows."""
+    if text is not None:
+        text = text.strip()
+        _add(
+            view,
+            "App::PropertyString",
+            "SciForgeViewLabel",
+            "" if text == default_caption(view) else text,
+        )
+    if shown is not None:
+        _add(view, "App::PropertyBool", "SciForgeLabelShown", bool(shown))
+    apply_caption(view)
+
+
+def apply_caption(view):
+    want = view_label(view) if label_shown(view) else ""
+    if _get(view, "Caption", None) != want:
+        view.Caption = want
+
+
 def section_line_of(section):
     try:
         p1, p2, side = json.loads(section.SciForgeLine[0])
@@ -906,7 +1149,7 @@ def add_detail(parent, centre, radius, position, label=None, scale=None):
         raise DrawingError("Make the circle bigger: drag away from its centre.")
     label = label or core.next_label(used_labels(page))
     detail = doc.addObject(DETAIL, "Detail")
-    detail.Source = list(parent.Source)
+    detail.Source = _view_sources(parent)
     detail.Direction = parent.Direction
     detail.XDirection = parent.XDirection
     detail.AnchorPoint = V(centre[0], centre[1], 0)
@@ -921,7 +1164,7 @@ def add_detail(parent, centre, radius, position, label=None, scale=None):
     _mark(detail, "DetailView")
     _style(detail, style_of(parent), tangent_of(parent))
     detail.Label = detail_caption(detail)
-    detail.Caption = detail.Label
+    apply_caption(detail)
     return detail
 
 
@@ -941,50 +1184,18 @@ def add_break(view, a, b, gap=None):
         raise DrawingError("Click two different points along the view to break it.")
     # TechDraw's break object: a sketch with two lines across the view at the break's
     # ends, in the view's own plane (an edge object failed in the GUI: "TopoDS::Edge")
-    import Sketcher  # noqa: F401
-    import Part
-
-    axes = axes_of(view)
-    centre = centre_of(view)
     half_w, half_h = view_extent(view)
     s = scale_of(view) or 1.0
     reach = (max(half_w, half_h) / s) + 5.0
-    xa, ya, da = axes
-    matrix = App.Matrix(
-        xa[0],
-        ya[0],
-        da[0],
-        centre[0],
-        xa[1],
-        ya[1],
-        da[1],
-        centre[1],
-        xa[2],
-        ya[2],
-        da[2],
-        centre[2],
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-    )
-    marker = doc.addObject("Sketcher::SketchObject", "DrawingBreak")
-    marker.Placement = App.Placement(matrix)
+    segments = []
     for end in (a, b):
         if horizontal:
-            p, q = V(end[0], -reach, 0), V(end[0], reach, 0)
+            segments.append(((end[0], -reach), (end[0], reach)))
         else:
-            p, q = V(-reach, end[1], 0), V(reach, end[1], 0)
-        marker.addGeometry(Part.LineSegment(p, q))
-    marker.Visibility = False
-    try:
-        if marker.ViewObject is not None:
-            marker.ViewObject.Visibility = False
-    except Exception:
-        pass
-    _mark(marker, "DrawingBreak")
+            segments.append(((-reach, end[1]), (reach, end[1])))
+    marker = _plane_sketch(view, "DrawingBreak", segments, "DrawingBreak")
     broken = doc.addObject(BROKEN, "BrokenView")
-    broken.Source = list(view.Source)
+    broken.Source = _view_sources(view)
     broken.Breaks = [marker]
     broken.Direction = view.Direction
     broken.XDirection = view.XDirection
@@ -1121,6 +1332,12 @@ def dimension_value(dim):
 
 
 def dimension_text(dim):
+    if _get(dim, "SciForgeDimSettings", ""):
+        from . import drawing_annot
+
+        text = drawing_annot.dimension_one_line(dim)
+        if text:
+            return text
     value = dimension_value(dim)
     if value is None:
         return ""
@@ -1272,6 +1489,307 @@ def add_centerline(view, first, second):
     return tag
 
 
+# ------------------------------------------------------------------ automatic centre marks
+AUTO_KINDS = ("holes", "extrudes", "cuts")
+
+
+def auto_mark_settings(view):
+    """Fusion's Automated Center Marks and Center Lines of a view: which round features
+    get them (Holes, Round Extrudes, Round Cuts)."""
+    try:
+        data = json.loads(_get(view, "SciForgeAutoMarks", "") or "{}")
+    except ValueError:
+        data = {}
+    return {k: bool(data.get(k)) for k in AUTO_KINDS}
+
+
+def set_auto_marks(view, settings):
+    data = {k: bool(settings.get(k)) for k in AUTO_KINDS}
+    _add(view, "App::PropertyString", "SciForgeAutoMarks", json.dumps(data, sort_keys=True))
+    return refresh_auto_marks(view, force=True)
+
+
+def has_breakout(view):
+    """True when a view has a Breakout Section View (drawing_breakout.py)."""
+    return bool(_get(view, "SciForgeBreakout", ""))
+
+
+def _view_sources(view):
+    """The parts a view shows (a breakout's trimmed copy stands for its parts)."""
+    cut = [s for s in (_get(view, "SciForgeCutSources", []) or []) if alive(s)]
+    if cut:
+        return cut
+    return [s for s in getattr(view, "Source", []) if alive(s) and kind(s) != "DrawingDepth"]
+
+
+def round_features(view):
+    """[(kind, axis point, axis direction, radius, (t0, t1))] of the full round faces of
+    the parts a view shows: holes and round cuts are inner cylinders, round extrudes
+    outer ones (a fillet is only part of a round and is left out)."""
+    import Part
+
+    from . import bodies
+
+    groups = {}
+    for src in _view_sources(view):
+        try:
+            shape = bodies.global_shape(src)
+        except Exception:
+            continue
+        for face in shape.Faces:
+            surface = face.Surface
+            if not isinstance(surface, Part.Cylinder):
+                continue
+            axis = V(surface.Axis)
+            axis.normalize()
+            centre = V(surface.Center)
+            radius = surface.Radius
+            u0, u1, v0, v1 = face.ParameterRange
+            span = abs(u1 - u0)
+            # convex or concave: the face's outward normal points away from the axis on a
+            # boss, towards it in a hole (normalAt already points out of the solid)
+            u, v = (u0 + u1) / 2.0, (v0 + v1) / 2.0
+            point = face.valueAt(u, v)
+            normal = face.normalAt(u, v)
+            radial = point - centre
+            radial = radial - axis * radial.dot(axis)
+            inner = normal.dot(radial) < 0
+            # one round, possibly in several faces: the same axis line and radius
+            base = centre - axis * centre.dot(axis)
+            key = (
+                round(abs(axis.x), 4),
+                round(abs(axis.y), 4),
+                round(abs(axis.z), 4),
+                round(base.x, 3),
+                round(base.y, 3),
+                round(base.z, 3),
+                round(radius, 4),
+                inner,
+            )
+            ts = [(vx.Point - centre).dot(axis) for vx in face.Vertexes]
+            entry = groups.setdefault(key, [0.0, centre, axis, radius, [], inner])
+            entry[0] += span
+            entry[4] += ts
+    found = []
+    for total, centre, axis, radius, ts, inner in groups.values():
+        if total < math.radians(300.0) or not ts:
+            continue
+        found.append(("hole" if inner else "extrude", centre, axis, radius, (min(ts), max(ts))))
+    return found
+
+
+def auto_mark_geometry(view, settings=None):
+    """{"marks": [[cx, cy, r]], "lines": [[x1, y1, x2, y2]]} (view coordinates) of the
+    automatic centre marks (rounds seen end on) and centre lines (rounds seen from the
+    side) of a view."""
+    settings = settings or auto_mark_settings(view)
+    want_inner = settings.get("holes") or settings.get("cuts")
+    want_outer = settings.get("extrudes")
+    marks, lines = [], []
+    if not (want_inner or want_outer):
+        return {"marks": marks, "lines": lines}
+    axes = axes_of(view)
+    d = axes[2]
+    centre = centre_of(view)
+    s = scale_of(view) or 1.0
+    for feature, point, axis, radius, (t0, t1) in round_features(view):
+        if feature == "hole" and not want_inner:
+            continue
+        if feature == "extrude" and not want_outer:
+            continue
+        along = abs(axis.x * d[0] + axis.y * d[1] + axis.z * d[2])
+        if along > 0.9999:
+            u, v = core.to_view(axes, centre, (point.x, point.y, point.z))
+            mark = [round(u, 6), round(v, 6), round(radius, 6)]
+            if mark not in marks:
+                marks.append(mark)
+        elif along < 1e-4:
+            reach = CENTER_EXTENSION / s
+            a = point + axis * (t0 - reach)
+            b = point + axis * (t1 + reach)
+            ua = core.to_view(axes, centre, (a.x, a.y, a.z))
+            ub = core.to_view(axes, centre, (b.x, b.y, b.z))
+            line = [round(ua[0], 6), round(ua[1], 6), round(ub[0], 6), round(ub[1], 6)]
+            if line not in lines and [line[2], line[3], line[0], line[1]] not in lines:
+                lines.append(line)
+    return {"marks": marks, "lines": lines}
+
+
+def auto_marks_of(view):
+    try:
+        return json.loads(_get(view, "SciForgeAutoGeometry", "") or "{}")
+    except ValueError:
+        return {}
+
+
+def refresh_auto_marks(view, force=False):
+    """Make the automatic centre marks and lines again when the design changed them."""
+    if "SciForgeAutoMarks" not in view.PropertiesList and not force:
+        return False
+    if not has_geometry(view):
+        return False
+    geometry = auto_mark_geometry(view)
+    old = auto_marks_of(view)
+    if (
+        not force
+        and old.get("marks", []) == geometry["marks"]
+        and old.get("lines", []) == geometry["lines"]
+    ):
+        return False
+    for tag in list(_get(view, "SciForgeAutoTags", []) or []):
+        try:
+            view.removeCosmeticEdge(tag)
+        except Exception:
+            pass
+    tags = []
+    s = scale_of(view) or 1.0
+    for cx, cy, r in geometry["marks"]:
+        reach = r + CENTER_EXTENSION / s
+        tags.append(
+            view.makeCosmeticLine(V(cx - reach, cy, 0), V(cx + reach, cy, 0), LINE_DASHDOT, 0.18)
+        )
+        tags.append(
+            view.makeCosmeticLine(V(cx, cy - reach, 0), V(cx, cy + reach, 0), LINE_DASHDOT, 0.18)
+        )
+    for x1, y1, x2, y2 in geometry["lines"]:
+        tags.append(view.makeCosmeticLine(V(x1, y1, 0), V(x2, y2, 0), LINE_DASHDOT, 0.18))
+    _add(view, "App::PropertyStringList", "SciForgeAutoTags", tags)
+    _add(view, "App::PropertyString", "SciForgeAutoGeometry", json.dumps(geometry, sort_keys=True))
+    try:
+        view.recompute()
+    except Exception as exc:
+        warn("centre marks of %s: %s" % (view.Label, exc))
+    return True
+
+
+# ------------------------------------------------------------------ edge extensions
+def _intersection(a, b):
+    """Where two lines (each ((x1, y1), (x2, y2))) meet, or None when parallel."""
+    (x1, y1), (x2, y2) = a
+    (x3, y3), (x4, y4) = b
+    den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if abs(den) < 1e-12:
+        return None
+    t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+    return x1 + t * (x2 - x1), y1 + t * (y2 - y1)
+
+
+def extensions_of(view):
+    try:
+        return [json.loads(t) for t in _get(view, "SciForgeExtensions", []) or []]
+    except ValueError:
+        return []
+
+
+def _save_extensions(view, items):
+    _add(
+        view,
+        "App::PropertyStringList",
+        "SciForgeExtensions",
+        [json.dumps(i, sort_keys=True) for i in items],
+    )
+
+
+def _extension_cosmetics(view, item):
+    """Draw an edge extension: thin lines from both edges' nearer ends to where they
+    meet and a point there (to dimension to)."""
+    a, b = item["a"], item["b"]
+    la = ((a[0], a[1]), (a[2], a[3]))
+    lb = ((b[0], b[1]), (b[2], b[3]))
+    point = _intersection(la, lb)
+    if point is None:
+        return None
+    tags = []
+    for line in (la, lb):
+        near = min(line, key=lambda p: math.hypot(p[0] - point[0], p[1] - point[1]))
+        if math.hypot(near[0] - point[0], near[1] - point[1]) > 1e-6:
+            tags.append(
+                view.makeCosmeticLine(V(near[0], near[1], 0), V(point[0], point[1], 0), 1, 0.13)
+            )
+    vertex = view.makeCosmeticVertex(V(point[0], point[1], 0))
+    return {
+        "a": a,
+        "b": b,
+        "edges": item.get("edges", []),
+        "tags": tags,
+        "vertex": vertex,
+        "point": [point[0], point[1]],
+    }
+
+
+def _remove_extension(view, item):
+    for tag in item.get("tags", []):
+        try:
+            view.removeCosmeticEdge(tag)
+        except Exception:
+            pass
+    if item.get("vertex"):
+        try:
+            view.removeCosmeticVertex(item["vertex"])
+        except Exception:
+            pass
+
+
+def add_edge_extension(view, first, second):
+    """Fusion's Edge Extension: two straight edges extended to where they would meet
+    (a filleted or chamfered corner's sharp corner), with a point there."""
+    a, b = edge_info(view, first), edge_info(view, second)
+    if not a or not b or a["kind"] != "line" or b["kind"] != "line":
+        raise DrawingError("Click two straight edges.")
+    sig_a = [a["p1"][0], a["p1"][1], a["p2"][0], a["p2"][1]]
+    sig_b = [b["p1"][0], b["p1"][1], b["p2"][0], b["p2"][1]]
+    if _intersection((a["p1"], a["p2"]), (b["p1"], b["p2"])) is None:
+        raise DrawingError(
+            "These edges are parallel: they never meet. Click two edges at an angle."
+        )
+    if not has_geometry(view):
+        raise DrawingError("The view is still being drawn: try again in a moment.")
+    item = _extension_cosmetics(view, {"a": sig_a, "b": sig_b, "edges": [first, second]})
+    items = extensions_of(view)
+    items.append(item)
+    _save_extensions(view, items)
+    return item
+
+
+def refresh_extensions(view):
+    """Edge extensions follow their edges after the design changed."""
+    items = extensions_of(view)
+    if not items or not has_geometry(view):
+        return False
+    from . import drawing_annot
+
+    elems = None
+    changed = False
+    keep = []
+    for item in items:
+        if elems is None:
+            elems = drawing_annot.elements(view)
+        moved = False
+        sigs = []
+        for key in ("a", "b"):
+            anchor = {"ref": "?", "kind": "line", "sig": item[key], "t": 0.5}
+            new, did = drawing_annot.resolve_anchor(anchor, elems)
+            moved |= did
+            sigs.append(new["sig"])
+        if not moved:
+            keep.append(item)
+            continue
+        _remove_extension(view, item)
+        made = _extension_cosmetics(
+            view, {"a": sigs[0], "b": sigs[1], "edges": item.get("edges", [])}
+        )
+        if made is not None:
+            keep.append(made)
+        changed = True
+    if changed:
+        _save_extensions(view, keep)
+        try:
+            view.recompute()
+        except Exception as exc:
+            warn("edge extensions of %s: %s" % (view.Label, exc))
+    return changed
+
+
 # ------------------------------------------------------------------ text, balloons, tables
 def add_text(page, lines, position, size=3.5, width=None):
     doc = page.Document
@@ -1327,7 +1845,7 @@ def parts_list_of(page):
 
 
 def parts_rows_for(view):
-    sources = [s for s in getattr(view, "Source", []) if alive(s)]
+    sources = _view_sources(view)
     comps = components_of(sources)
     rows = core.parts_rows(comps)
     by_key = {}
@@ -1506,7 +2024,7 @@ def _sight_hit(view, bodies, local_point, tolerance=0.05):
 def component_at(view, local_point, sources=None):
     """The component (or root body) a picked point of a view belongs to: the body nearest
     to the viewer along the sight line through it (where two touch, the one in front)."""
-    hit = _sight_hit(view, sources or [s for s in view.Source if alive(s)], local_point)
+    hit = _sight_hit(view, sources or _view_sources(view), local_point)
     return hit[0] if hit is not None else None
 
 
@@ -1532,30 +2050,12 @@ def schema_length_unit():
 
 
 def refresh_dimensions(page):
-    """A drawing in other units than FreeCAD's current ones writes its dimensions itself
-    (TechDraw formats in the current units only): the text follows each value."""
-    units = units_of(page)
-    native = schema_length_unit() == units
-    changed = False
-    for dim in annotations(page):
-        if dim.TypeId != DIMENSION:
-            continue
-        angular = dim.Type in ("Angle", "Angle3Pt")
-        if native or angular:
-            if dim.Arbitrary and _get(dim, "SciForgeOwnText", False):
-                dim.Arbitrary = False
-                dim.FormatSpec = core.dimension_format(units, standard_of(page), dim.Type)
-                changed = True
-            continue
-        text = dimension_text(dim)
-        if not text:
-            continue
-        if not dim.Arbitrary or dim.FormatSpec != text:
-            dim.Arbitrary = True
-            dim.FormatSpec = text
-            _add(dim, "App::PropertyBool", "SciForgeOwnText", True)
-            changed = True
-    return changed
+    """Every dimension's text from its settings (drawing_annot.apply_dimension_text): a
+    drawing in other units than FreeCAD's current ones, or a dimension with a tolerance
+    or other text, writes its text itself and follows each value."""
+    from . import drawing_annot
+
+    return drawing_annot.refresh_dimension_texts(page)
 
 
 def follow_assembly(page):
@@ -1575,9 +2075,17 @@ def follow_assembly(page):
     page.SciForgeSources = wanted
     changed = []
     for view in all_views(page):
-        current = sorted(s.Name for s in view.Source if alive(s))
+        current = sorted(s.Name for s in _view_sources(view))
         if current == old_names or not current:
-            view.Source = list(wanted)
+            if has_breakout(view):
+                from . import drawing_breakout
+
+                drawing_breakout.set_sources(view, wanted)  # its trimmed copy follows
+            elif any(kind(s) == "DrawingDepth" for s in view.Source):
+                # (an isometric view showing its parent's breakout)
+                _add(view, "App::PropertyLinkListGlobal", "SciForgeCutSources", list(wanted))
+            else:
+                view.Source = list(wanted)
             changed.append(view)
     for view in sorted(changed, key=lambda v: v.ID):
         try:
@@ -1604,6 +2112,16 @@ def refresh(page):
         changed |= refresh_dimensions(page)
     except Exception as exc:
         warn("dimensions: %s" % exc)
+    for view in all_views(page):
+        try:
+            if has_breakout(view):
+                from . import drawing_breakout
+
+                changed |= drawing_breakout.refresh(view)
+            else:
+                changed |= refresh_depth(view)
+        except Exception as exc:
+            warn("section depth / breakout of %s: %s" % (view.Label, exc))
     table = parts_list_of(page)
     if table is not None:
         try:
@@ -1615,6 +2133,20 @@ def refresh(page):
             changed |= follow_center_marks(view)
         except Exception as exc:
             warn("centre marks of %s: %s" % (view.Label, exc))
+        try:
+            changed |= refresh_auto_marks(view)
+        except Exception as exc:
+            warn("automatic centre marks of %s: %s" % (view.Label, exc))
+        try:
+            changed |= refresh_extensions(view)
+        except Exception as exc:
+            warn("edge extensions of %s: %s" % (view.Label, exc))
+    try:
+        from . import drawing_annot
+
+        changed |= drawing_annot.follow(page, geometry=True)
+    except Exception as exc:
+        warn("annotations: %s" % exc)
     return changed
 
 
@@ -1632,9 +2164,9 @@ def dependents(obj):
         seen.add(current.Name)
         found.append(current)
         for user in getattr(current, "InList", []):
-            if user.TypeId in (DIMENSION, BALLOON, SECTION, DETAIL, BROKEN):
+            if user.TypeId in (DIMENSION, BALLOON, SECTION, DETAIL, BROKEN, COMPLEX):
                 todo.append(user)
-            elif user.TypeId == SYMBOL and kind(user) == "PartsList":
+            elif user.TypeId == SYMBOL and kind(user) in ("PartsList", "DrawingAnnotation"):
                 todo.append(user)
             elif is_view(user) and same(_get(user, "SciForgeParent", None), current):
                 todo.append(user)
@@ -1663,6 +2195,14 @@ def delete_objects(doc, objects):
             for marker in obj.Breaks:
                 if marker.Name not in names:
                     names.append(marker.Name)
+        # a section's cut line (several segments) and a breakout's trimmed copy go with it
+        if obj is not None and is_view(obj):
+            for helper in (
+                _get(obj, "CuttingToolWireObject", None),
+                _get(obj, "SciForgeDepthClip", None),
+            ):
+                if alive(helper) and helper.Name not in names:
+                    names.append(helper.Name)
     rank = {DIMENSION: 0, BALLOON: 0, SYMBOL: 0, ANNOTATION: 0}
     order = [doc.getObject(n) for n in names if doc.getObject(n) is not None]
     order.sort(key=lambda o: (rank.get(o.TypeId, 1), -o.ID))
@@ -1753,6 +2293,10 @@ def export_dxf(page, path):
                     dxf.text(x, top - i * size * 1.5, size, line, "TEXT", "center")
             elif obj.TypeId == BALLOON:
                 _dxf_balloon(dxf, obj)
+            elif kind(obj) == "DrawingAnnotation":
+                from . import drawing_annot
+
+                drawing_annot.to_dxf(dxf, obj)
             elif kind(obj) == "PartsList":
                 layout, corner = table_layout_of(obj)
                 for x1, y1, x2, y2, _w in layout["lines"]:
@@ -1834,33 +2378,60 @@ def _dxf_view(dxf, view):
         reach = mark["r"] + CENTER_EXTENSION / (s or 1.0)
         marks.append(((s * (cx - reach), s * cy), (s * (cx + reach), s * cy)))
         marks.append(((s * cx, s * (cy - reach)), (s * cx, s * (cy + reach))))
+    auto = auto_marks_of(view)
+    for cx, cy, r in auto.get("marks", []):
+        reach = r + CENTER_EXTENSION / (s or 1.0)
+        marks.append(((s * (cx - reach), s * cy), (s * (cx + reach), s * cy)))
+        marks.append(((s * cx, s * (cy - reach)), (s * cx, s * (cy + reach))))
+    for x1, y1, x2, y2 in auto.get("lines", []):
+        marks.append(((s * x1, s * y1), (s * x2, s * y2)))
     for p, q in marks:
         dxf.line(ox + p[0], oy + p[1], ox + q[0], oy + q[1], "CENTER")
+    for item in extensions_of(view):
+        point = item.get("point")
+        for key in ("a", "b"):
+            sig = item.get(key) or []
+            if point and len(sig) == 4:
+                ends = ((sig[0], sig[1]), (sig[2], sig[3]))
+                near = min(ends, key=lambda e: math.hypot(e[0] - point[0], e[1] - point[1]))
+                a = local_to_page(view, near)
+                b = local_to_page(view, point)
+                dxf.line(a[0], a[1], b[0], b[1], "VISIBLE")
+    hatch = []
+    if has_breakout(view):
+        from . import drawing_breakout
+
+        for x1, y1, x2, y2 in drawing_breakout.hatch_of(view):
+            hatch.append(((s * x1, s * y1), (s * x2, s * y2)))
+    from . import drawing_depth
+
+    def deeper(edge):
+        return is_section(view) and drawing_depth.is_hidden(view, edge, s)
+
     try:
         visible = view.getVisibleEdges(True)
     except Exception:
         visible = []
     for edge in visible:
-        if _same_segment(edge, marks):
+        if _same_segment(edge, marks) or _same_segment(edge, hatch) or deeper(edge):
             continue
         _dxf_edge(dxf, edge, ox, oy, "VISIBLE")
+    for p, q in hatch:
+        dxf.line(ox + p[0], oy + p[1], ox + q[0], oy + q[1], "HATCH")
     if _get(view, "HardHidden", False):
         try:
             for edge in view.getHiddenEdges(True):
-                _dxf_edge(dxf, edge, ox, oy, "HIDDEN")
+                if not deeper(edge):
+                    _dxf_edge(dxf, edge, ox, oy, "HIDDEN")
         except Exception:
             pass
-    label = ""
-    if view.TypeId == SECTION:
-        label = "SECTION %s-%s" % (view.SectionSymbol, view.SectionSymbol)
-    elif view.TypeId == DETAIL:
-        label = "DETAIL %s (%s)" % (view.Reference, core.format_scale(s))
+    label = _get(view, "Caption", "") or ""
     if label:
         half_w, half_h = view_extent(view)
         dxf.text(ox, oy - half_h - 7.0, 3.5, label, "TEXT", "center")
-    if view.TypeId == SECTION:
+    if is_section(view):
         _dxf_section_line(dxf, view)
-        if _get(view, "CutSurfaceDisplay", "") != "Hide":
+        if _get(view, "CutSurfaceDisplay", "") != "Hide" and view.TypeId == SECTION:
             try:
                 for a, b in section_hatch(view):
                     dxf.line(ox + a[0], oy + a[1], ox + b[0], oy + b[1], "HATCH")
@@ -1880,7 +2451,11 @@ def section_faces(section):
     its centre; the faces lie in a plane square to the view's direction)."""
     import Part
 
-    shapes = [s.Shape for s in section.Source if alive(s) and not s.Shape.isNull()]
+    # (TechDraw cuts what the parent view shows)
+    parent = _get(section, "BaseView", None)
+    sources = [s for s in getattr(parent, "Source", []) if alive(s)] if alive(parent) else []
+    sources = sources or [s for s in section.Source if alive(s)]
+    shapes = [s.Shape for s in sources if not s.Shape.isNull()]
     if not shapes:
         return []
     normal = section.SectionNormal
@@ -1921,9 +2496,13 @@ def _dxf_section_line(dxf, section):
     if not alive(parent) or line is None:
         return
     p1, p2, _side = line
-    a = local_to_page(parent, p1)
-    b = local_to_page(parent, p2)
-    dxf.line(a[0], a[1], b[0], b[1], "CENTER")
+    pts = section_points(section) or [p1, p2]
+    for q1, q2 in zip(pts, pts[1:]):
+        qa = local_to_page(parent, q1)
+        qb = local_to_page(parent, q2)
+        dxf.line(qa[0], qa[1], qb[0], qb[1], "CENTER")
+    a = local_to_page(parent, pts[0])
+    b = local_to_page(parent, pts[-1])
     info = core.section_line(p1, p2, _side, page_of(section).ProjectionType)
     if info is None:
         return
@@ -1958,9 +2537,9 @@ def _dxf_dimension(dxf, dim):
     lx, ly = ox + _value(dim.X), oy + _value(dim.Y)
     layer = "DIMENSIONS"
     if dim.Type in core.LINEAR_TYPES:
-        p, q = dim.getLinearPoints()
-        a = (ox + p.x, oy + p.y)
-        b = (ox + q.x, oy + q.y)
+        p, q = dim.getLinearPoints()  # (y down, from the view's centre)
+        a = (ox + p.x, oy - p.y)
+        b = (ox + q.x, oy - q.y)
         if dim.Type == "DistanceX":
             a2, b2 = (a[0], ly), (b[0], ly)
         elif dim.Type == "DistanceY":

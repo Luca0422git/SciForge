@@ -352,16 +352,24 @@ def _open_drawing(page):
 
 def _delete_drawings(doc, names):
     """Delete whole drawings (their views, dimensions and sheet), one undo step."""
-    from . import drawing, drawing_ui
+    from . import drawing, drawing_sheets, drawing_ui
 
     tab = drawing_ui.active_tab()
+    # every sheet of each drawing (drawing_sheets.py)
+    pages = []
     for name in names:
+        page = doc.getObject(name)
+        if page is not None:
+            for sheet in drawing_sheets.sheets(page):
+                if sheet.Name not in pages:
+                    pages.append(sheet.Name)
+    for name in pages:
         page = doc.getObject(name)
         if page is not None:
             drawing_ui.close_tab(page)
     doc.openTransaction("Delete Drawing")
     try:
-        for name in names:
+        for name in pages:
             page = doc.getObject(name)
             if page is not None:
                 drawing.delete_drawing(page)

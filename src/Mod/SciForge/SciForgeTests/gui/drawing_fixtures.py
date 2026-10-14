@@ -71,3 +71,48 @@ def assembly(doc):
     post_body.Tip = post
     doc.recompute()
     return (plate_part, plate_body), (post_part, post_body)
+
+
+PLATE = (80.0, 50.0, 10.0)
+PLATE_HOLES = ((20.0, 15.0), (60.0, 35.0))  # centres, radius 5 (holes 10 mm across)
+PLATE_HOLE_R = 5.0
+PLATE_FILLET = 8.0  # the corner at (80, 50) is rounded
+
+
+def plate(doc):
+    """An 80 x 50 x 10 plate with two 10 mm holes through it at (20, 15) and (60, 35) and
+    its corner at (80, 50) rounded (R8); the corner at (0, 0) stays sharp (an ordinate
+    origin). For the drawing2_* scenarios. Returns the body."""
+    body = doc.addObject("PartDesign::Body", "Body")
+    body.Label = "Body1"
+    box = body.newObject("PartDesign::AdditiveBox", "Box")
+    box.Length, box.Width, box.Height = PLATE
+    steps = [box]
+    for i, (x, y) in enumerate(PLATE_HOLES, start=1):
+        hole = body.newObject("PartDesign::SubtractiveCylinder", "Hole%d" % i)
+        hole.Radius = PLATE_HOLE_R
+        hole.Height = PLATE[2]
+        hole.Placement.Base = V(x, y, 0)
+        steps.append(hole)
+    doc.recompute()
+    last = steps[-1]
+    names = []
+    for i, edge in enumerate(last.Shape.Edges, start=1):
+        a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+        at_corner = abs(a.x - PLATE[0]) < 1e-6 and abs(a.y - PLATE[1]) < 1e-6
+        upright = abs(b.x - a.x) < 1e-6 and abs(b.y - a.y) < 1e-6 and abs(b.z - a.z) > 1
+        if at_corner and upright:
+            names.append("Edge%d" % i)
+    fillet = body.newObject("PartDesign::Fillet", "Fillet")
+    fillet.Base = (last, names)
+    fillet.Radius = PLATE_FILLET
+    body.Tip = fillet
+    doc.recompute()
+    try:
+        if App.GuiUp:
+            for step in steps:
+                step.ViewObject.Visibility = False
+            fillet.ViewObject.Visibility = True
+    except Exception:
+        pass
+    return body

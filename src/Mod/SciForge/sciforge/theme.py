@@ -194,6 +194,9 @@ VIEWER_SETTINGS = [
     # groups of jointed parts held while solving). FreeCAD's own solve on every recompute
     # knows neither and would move a nested component to the wrong place.
     ("User parameter:BaseApp/Preferences/Mod/Assembly", "Bool", "SolveOnRecompute", False),
+    # A dimension's tolerances (drawing_annot.py) at 0.7 of its text, not half: Fusion
+    # writes them nearly as large as the value, so they stay readable on paper.
+    ("User parameter:BaseApp/Preferences/Mod/TechDraw/Dimensions", "Float", "TolSizeAdjust", 0.7),
 ]
 
 _saved_qss = None
@@ -222,6 +225,8 @@ def _decode(kind, text):
         return text == "1"
     if kind in ("Int", "Unsigned"):
         return int(text)
+    if kind == "Float":
+        return float(text)
     return text
 
 
