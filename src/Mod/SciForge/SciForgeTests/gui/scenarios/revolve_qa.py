@@ -11,7 +11,8 @@ Path 1, beginner: Revolve in an empty design says what is missing (no dialog, no
         click on the background change nothing. Click the Z axis: a cylinder (New Body).
         Enter over the 3D view finishes it (Fusion: Enter is OK). One undo step.
 Path 2, wrong order: a sketch with two areas (nothing is taken by itself). Click the axis
-        first, then both areas, then one of them again (it is dropped), OK.
+        first, then the far area (a New Body: it does not touch the shaft), then the near one
+        (both join), then the far one again (it is dropped), OK.
 Path 3, Esc in the middle of picking: Ctrl+Z, Revolve, click an area, Esc: nothing changes,
         nothing stays selected, no undo step is left open; Ctrl+Y still brings the undone
         revolve back (the Redo list survives a dialog closed without a change).
@@ -77,6 +78,15 @@ def formula(p, key):
 
 def vol():
     return h.solid_volume()
+
+
+def total():
+    """Volume of every body (a revolve away from the part is a body of its own)."""
+    return sum(
+        o.Shape.Volume
+        for o in doc().Objects
+        if o.TypeId == "PartDesign::Body" and not o.Shape.isNull() and o.Shape.Solids
+    )
 
 
 def body_shown():
@@ -311,8 +321,11 @@ def p2_far():
     s["far"] = ri.pappus(far, *Z_AXIS)
     h.check("P2 the far area is picked", len(p.profiles) == 1, p.profiles)
     want = s["v1"] + s["far"]
-    h.check("P2 a ring away from the shaft (Join)", near(vol(), want), (vol(), want))
-    h.check("P2 Join", p.operation.currentText() == "Join", p.operation.currentText())
+    # Fusion: a revolve that does not touch the part is a New Body (the ring is not joined).
+    h.check("P2 a ring away from the shaft", near(total(), want), (total(), want))
+    h.check(
+        "P2 it is a New Body", p.operation.currentText() == "New Body", p.operation.currentText()
+    )
     region_click(s["sk2"], _near_area)
 
 

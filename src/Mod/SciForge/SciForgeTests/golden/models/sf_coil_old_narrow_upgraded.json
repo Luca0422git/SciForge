@@ -1,0 +1,42 @@
+{
+  "id": "sf_coil_old_narrow_upgraded",
+  "title": "A narrowing coil saved by SciForge before the 2026-10-11 fixes (its mirror image) is rebuilt right when the file is opened",
+  "tags": [
+    "coil",
+    "reopen",
+    "upgrade"
+  ],
+  "steps": [
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "diameter": 20,
+      "type": "rev_height",
+      "revolutions": 4,
+      "height": 20,
+      "section": "circular",
+      "section_position": "inside",
+      "section_size": 2,
+      "plane": "XY",
+      "angle": -10,
+      "x": 3,
+      "y": -2
+    },
+    {
+      "op": "age",
+      "target": "c1",
+      "comment": "as saved before the fixes: FreeCAD's helix with the negative angle, the mirror image below the plane"
+    },
+    {
+      "op": "reopen",
+      "comment": "opening the file rebuilds the coil with today's code (a log line says so)"
+    }
+  ],
+  "expect": {
+    "volume": 571.3893132919486,
+    "rel_tol": 0.0001,
+    "solids": 1,
+    "note": "The same coil as sf_coil_taper_narrow once rebuilt on opening: Circle d2 inside d20: its centre at r 9 on the plane, 9 - 20 tan 10 at the top; Pappus with the mean radius 9 - 10 tan 10: V = pi x 2 pi x 4 x (9 - 10 tan 10). FreeCAD's helix only widens away from its section (a negative angle gave the mirror image below the plane): SciForge sweeps it from the narrow end. The helix is an approximation, hence rel_tol 1e-4.",
+    "source": "analytic"
+  }
+}

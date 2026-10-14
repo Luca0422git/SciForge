@@ -275,13 +275,13 @@ def p3_all():
 # -- Path 4: Play, then E straight away -------------------------------------------------------
 def p4_play():
     t.playback("play")
-    s["play_volume"] = t.volume()  # Play starts from the first step
+    s["play_volume"] = t.volume()  # Play starts from the beginning (an empty design)
     h.press("e")
 
 
 def p4_after():
     h.check("E opened Extrude during playback", xpanel() is not None)
-    s["play_tip"] = h.body().Tip.Name
+    s["play_tip"] = getattr(h.body().Tip, "Name", None)  # None: Play starts empty
 
 
 p4_after.wait_ms = 1500  # playback would have moved on by now
@@ -290,8 +290,8 @@ p4_after.wait_ms = 1500  # playback would have moved on by now
 def p4_still():
     h.check(
         "playback stopped: the design does not change under the dialog",
-        h.body().Tip.Name == s.get("play_tip"),
-        (h.body().Tip.Name, s.get("play_tip")),
+        getattr(h.body().Tip, "Name", None) == s.get("play_tip"),
+        (getattr(h.body().Tip, "Name", None), s.get("play_tip")),
     )
     h.task_button("Cancel")
 

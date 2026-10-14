@@ -18,7 +18,7 @@ timeline to edit it again.
 
 | Fusion | SciForge |
 |---|---|
-| Type Single Path / Path + Guide Rail / Path + Guide Surface | Single Path and Path + Guide Rail. Path + Guide Surface is listed but greyed, with the reason as its tooltip |
+| Type Single Path / Path + Guide Rail / Path + Guide Surface | Same (Path + Guide Surface since 2026-10-13: see below) |
 | Profile: a sketch area or a flat face of the part | Same. Click inside a sketch area (the preview face lights up) or on a flat face. With nothing selected, a sketch that has a single area is taken by itself |
 | Path: sketch curves or edges of the part; Chain Selection takes the curves joined smoothly | Same. A joint where three or more curves meet stops the chain |
 | The profile may sit anywhere on the path; the sweep starts there | Same. With the profile at an end, Distance (0 to 1) is how far along the path it goes. With the profile inside the path you get Distance One and Distance Two, one for each way |
@@ -27,7 +27,7 @@ timeline to edit it again.
 | Taper Angle | Same. A side of the profile at distance R from the path tilts by the angle, so the end section is scaled by 1 + L·tan(angle)/R |
 | Twist Angle | Same. A straight path uses an exact helix guide. A curved path uses a guide built from rotation-minimizing frames. Twist is greyed under Parallel |
 | Guide Rail with Profile Scaling Scale / Stretch / None | Same: the profile grows evenly with the rail, only towards the rail, or not at all (the rail only turns it) |
-| Operation Join / Cut / Intersect / New Body | Same. A new sweep that runs mostly into material starts as Cut, and the first solid is a New Body. A Cut or Intersect that misses the part is explained |
+| Operation Join / Cut / Intersect / New Body / New Component | Same. A new sweep that runs mostly into material starts as Cut, and the first solid is a New Body. A Cut or Intersect that misses the part is explained. New Component: `parity/components.md` |
 | Edit from the timeline | Same |
 
 What is built: FreeCAD's own `PartDesign::AdditivePipe` / `SubtractivePipe` when it gives
@@ -41,7 +41,9 @@ switches between the two as needed; the step keeps its place and name, and the s
 on it (a sketch on its end face, a Press Pull, a fillet) are moved onto the new step.
 
 A sweep or loft that does not touch the part becomes a New Body by itself (Fusion makes a new
-body for it). A path lying in the profile's own plane is refused with the reason.
+body for it), and so does one with Join picked by hand (2026-10-13: Fusion never leaves a
+second piece in the body; sources in `parity/revolve.md`, "A Join that touches nothing").
+A path lying in the profile's own plane is refused with the reason.
 
 ## Loft (CREATE > Loft)
 
@@ -53,7 +55,8 @@ body for it). A path lying in the profile's own plane is refused with the reason
 | Chain Selection for rails and centerline | Same |
 | Closed (the last profile lofts back to the first) | Same. With only two profiles the dialog says why it cannot close |
 | Tangent Edges Merge | Shown but greyed; see the gaps below |
-| Operation Join / Cut / Intersect / New Body | Same, with the automatic choice and the miss check used by Sweep |
+| End conditions of the first and the last profile: a sketch profile Connected / Direction (Takeoff Weight, Takeoff Angle), an edge or face of a body Connected (G0) / Tangent (G1) / Curvature (G2) (Tangency Weight), a point Sharp / Point Tangent (a dome; Tangency Weight) | Same choices (rows First Profile / Last Profile under the list; Fusion puts them in the list). Not with rails, a centerline or Closed: greyed with the reason (Fusion users report Direction has no effect with rails). See "End conditions" below |
+| Operation Join / Cut / Intersect / New Body / New Component | Same, with the automatic choice and the miss check used by Sweep |
 | Edit from the timeline | Same |
 
 What is built: FreeCAD's `PartDesign::AdditiveLoft` / `SubtractiveLoft` when every profile is a
@@ -110,7 +113,7 @@ Seven scenarios from the first pass, real input only: `sweep_loft_sweep`, `sweep
 the command, Cancel and Esc, editing from the timeline, undo and redo, and a second use. Each
 volume is checked against a hand-derived formula.
 
-There are also 36 golden models: `sf_sweep_*` (14), `sf_loft_*` (9), `sf_rib_*` (6) and
+There are also 42 golden models: `sf_sweep_*` (15), `sf_loft_*` (14), `sf_rib_*` (6) and
 `sf_web_*` (7). Their ops are `sf_curves`, `sf_sweep(_edit)`, `sf_loft(_edit)` and
 `sf_rib(_edit)` in `golden/sweep_loft_ops.py`. Every expected value is analytic and its
 formula is in the model's note.
@@ -120,9 +123,18 @@ formula is in the model's note.
   "Keep"). A merged side is one smooth B-spline face, and OpenCASCADE's volume of such a face
   came out up to 10 % wrong here: a slot lofted to the same slot gave 7551 instead of
   8356 mm³, while the meshed shape gave 8356. Inspect and the mass would then be wrong.
-- **Path + Guide Surface (Sweep).** Listed but greyed: not built yet.
-- **Loft end conditions** (Free / Direction / Tangent / Curvature / Point Tangent, with
-  weights and takeoff angles) are not offered. Every profile is Free.
+- **Path + Guide Surface (Sweep)** keeps the profile's angle to the surface by the faces'
+  normal at the nearest point of the path (Fusion's exact rule is not documented); a path far
+  from the surface still uses the nearest faces. Two Sides is not offered for this type.
+- **Loft end conditions** with rails or a centerline, or on a closed loft, are not made
+  (greyed). The weights and the takeoff angle take plain numbers, not parameters. How long
+  the end derivative is for a weight (weight x the distance to the next profile), the sign
+  of the takeoff angle (positive opens the loft out) and Point Tangent's scale are
+  SciForge's guesses at Fusion's rule. Values are typed; Fusion also has a drag arrow.
+- **Volumes of round lofts.** OpenCASCADE measures the volume of B-spline faces up to about
+  1 % wrong (a cylinder lofted between two spline circles: +0.9 %; its mesh is right). A
+  plain loft between circles stays exact (OpenCASCADE makes a cone); with end conditions the
+  sides are splines, so Inspect's volume of such a loft can be off by that much.
 - **Loft rails.** Rails need profiles in parallel planes, and no holes or points among the
   profiles. A rail loft is close to Fusion's but not exact: the sections are fitted to the
   rails at 8 places between each pair of profiles. The golden tolerance is 2e-3.
@@ -130,9 +142,48 @@ formula is in the model's note.
 - **Distance boxes** (Sweep) take plain numbers, not parameters or formulas.
 - **Centerline loft** may show a seam line on its sides.
 - **Web One Side** works for lines and arcs. Other curves (splines) are Symmetric only.
-- **Operation New Component** is out of scope (SciForge has no components yet).
 - **Profile Scaling default.** The default is "Scale"; Luca should confirm that this matches
   his Fusion.
+
+## Path + Guide Surface (2026-10-13, gaps work)
+
+Sources: **Autodesk** Sweep reference / Sweep a surface body (SLD-REF-SWEEP, SFC-SWEEP, search
+excerpts): Type Single Path, Path + Guide Rail, Path + Guide Surface; "for a Path + Guide
+Surface sweep, select a guide surface"; its only setting is Distance. **Autodesk** API
+(SweepFeatureInput.orientation): the orientation setting is ignored when a guide rail or a
+guide surface is given. **Guess**: the surface's normal turns the profile (it keeps the angle
+it has to the surface at the start).
+
+SciForge: Type Path + Guide Surface, a Guide Surface box that takes faces of the part (click a
+picked face again to drop it), Distance and Operation; no taper, twist or orientation, like
+Fusion. Built as SciForge's sweep with an auxiliary spine: a curve beside the path along the
+faces' normal, so OpenCASCADE turns the profile with it. A thin strip swept along the slanted
+ellipse of a cut cylinder stays on the cylinder (19.5 .. 20.6 from its axis; a Single Path sweep
+turns it out to 17.3 .. 22.7). Golden `sf_sweep_guide_surface` (new op `expect_radius`),
+scenario `gaps_sweep_guide_surface.py` (pick, edit, undo / redo).
+
+## End conditions (2026-10-13, gaps work)
+
+Sources: **Autodesk** Loft reference (search excerpts, GUID-EC6CECCD..., SLD-LOFT-SOLID): "select
+an end condition or continuity for the first and last profiles"; Direction "applies an angle
+measured off the sketch plane ... available when the Loft profile is a 2D sketch", Takeoff
+Weight "the amount of influence the takeoff angle has along the Loft path", Takeoff Angle "the
+start angle of the transition from the profile"; Tangent (G1) / Curvature (G2) "available when
+the Loft profile is the edge or face of a body"; Point Tangent "applies tangency at the point to
+create a dome shape", Tangency Weight for Tangent, Smooth and Point Tangent. **Forum**
+("Can't make loft to have free continuity", "Loft ending angle"): a sketch profile only offers
+Connected and Direction; with rails Direction has no visible effect. **Guess**: defaults
+weight 1, angle 0; positive angles open the loft out; the free other end has no bend.
+
+How SciForge makes it (`loft_ends.py`, math in `loft_ends_core.py`, unit tested): OpenCASCADE
+lofts through the profiles; each side face's control points at the profiles are kept and every
+column is interpolated again by a cubic with the end derivative the condition asks for
+(Direction: the profile's normal tilted by the angle; Tangent: along the faces next to the
+picked face, square to its edge, averaged at corners so the sides stay closed; Curvature: also
+their bend across the edge; Point Tangent: flat over the point, toward the axis), weight x the
+distance to the next profile long. Round profiles are made polynomial within 1e-7 mm first.
+Golden models `sf_loft_ends_*` (5, analytic: Hermite cubics), scenario `gaps_loft_ends.py`
+(Tangent + Direction, an edit to weight 2 with undo / redo, a Point Tangent dome).
 
 ## Value boxes and typing over the view (2026-10-13)
 

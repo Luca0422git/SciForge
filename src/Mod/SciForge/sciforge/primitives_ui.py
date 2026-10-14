@@ -8,7 +8,8 @@
    centre and then a point on the circle, Sphere the centre.
 3. The part appears with blue handles: drag the height arrow (Box, Cylinder), the size
    arrows, or type exact values in the dialog. Dragging into the part switches the
-   operation to Cut, like Fusion, unless you picked one yourself.
+   operation to Cut, like Fusion, unless you picked one yourself. Operation Join / Cut /
+   Intersect / New Body / New Component; a Join that touches nothing is a New Body.
 
 OK keeps it (one undo step), Cancel or Esc removes it, Enter is OK. Problems are said in
 the dialog, which then stays open. Double-click the step in the timeline to edit it.
@@ -34,6 +35,7 @@ OPERATION_LABELS = [
     ("Cut", "cut"),
     ("Intersect", "intersect"),
     ("New Body", "new_body"),
+    ("New Component", "new_component"),
 ]
 POSITION_LABELS = [("Inside", "inside"), ("On Center", "center"), ("Outside", "outside")]
 ACTIVE_STYLE = "QPushButton { background: #1f6fbf; color: white; border: 1px solid #5aa0e6; }"
@@ -1611,7 +1613,9 @@ class PlacedPanel(Panel):
         body = primitives.owner_body(feature)
         if body is not None and body is not commands.active_body():
             try:
-                Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
+                from . import components
+
+                components.activate_body(body)  # and its (new) component
             except Exception as exc:
                 warn("could not activate %s: %s" % (body.Label, exc))
         log("%s done" % self.title)

@@ -8,7 +8,9 @@ Extrude, Revolve, Mirror and the patterns take it like an origin plane or axis.
 
 How each one is attached:
   Offset Plane (geometry of its own body): FreeCAD's FlatFace on the face or plane, the
-    distance in AttachmentOffset (a formula goes on that offset as an expression).
+    distance in AttachmentOffset (a formula goes on that offset as an expression). With
+    Fusion's Extent "To Object" (a second pick, a corner or a point) the plane goes through
+    that point and follows it (the helper below).
   Everything else (and an Offset Plane on another body's face): FreeCAD's attacher has no
     mode for a midplane, a plane at an angle about an edge, a point where three planes
     meet..., and its edge modes print warnings for straight edges. A hidden helper
@@ -61,8 +63,10 @@ LOST = "Lost what it was built on (deleted or changed). Edit it and pick again."
 WARNING = "SciForgeWarning"  # the timeline shows this text as the step's warning
 
 
-def _inp(name, kinds, optional=False, hint=""):
-    return {"name": name, "kinds": set(kinds), "optional": optional, "hint": hint}
+def _inp(name, kinds, optional=False, hint="", when=None):
+    """One selection box. `when`: the box is there only with that Extent (Offset Plane's
+    "object"); then it must be picked."""
+    return {"name": name, "kinds": set(kinds), "optional": optional, "hint": hint, "when": when}
 
 
 # key -> spec. "type": the datum made; "inputs": the selection boxes in order;
@@ -71,9 +75,19 @@ SPECS = {
     "OffsetPlane": {
         "label": "Offset Plane",
         "type": "PartDesign::Plane",
-        "inputs": [_inp("Plane", {"plane"}, hint="a flat face or a plane")],
+        "inputs": [
+            _inp("Plane", {"plane"}, hint="a flat face or a plane"),
+            _inp(
+                "Object",
+                {"point"},
+                optional=True,
+                hint="a corner, a sketch point or a point the plane goes through",
+                when="object",
+            ),
+        ],
         "value": "distance",
         "default": 10.0,
+        "extents": (("Distance", "distance"), ("To Object", "object")),
     },
     "PlaneAtAngle": {
         "label": "Plane at Angle",
@@ -692,9 +706,19 @@ def compute(key, refs, points=None, values=None):
 
 def _c_OffsetPlane(refs, points, values, spec):
     origin, normal = plane_of(refs[0])
-    d = float(values.get("distance", spec.get("default", 0.0)))
+    if len(refs) > 1 and refs[1] is not None:
+        # Extent To Object: through the picked point (Fusion's "offset through point").
+        d = (point_of(refs[1]) - origin).dot(normal)
+    else:
+        d = float(values.get("distance", spec.get("default", 0.0)))
     base = frame(origin, normal)
     return frame(origin + normal * d, normal, base.Rotation.multVec(V(1, 0, 0)))
+
+
+def offset_extent(refs):
+    """Offset Plane's Extent for these picks: "object" with a point picked, else
+    "distance"."""
+    return "object" if len(refs) > 1 and refs[1] is not None else "distance"
 
 
 def angle_line(ref):
@@ -1002,6 +1026,17 @@ class ConstructionFrame:
         stays where it was and the construction shows a warning in the timeline, like a
         Fusion construction that lost its references. It never fails: a failed helper
         stopped its whole body from recomputing, and the part vanished from the view."""
+        from . import curves
+
+        try:
+            # A face, edge or corner FreeCAD lost after an earlier edit is found again where
+            # it was (the remember-element approach of Sweep and Loft).
+            if curves.refind(obj, ("Refs",)):
+                _relink_datum(obj)
+        except Exception as exc:
+            from . import warn
+
+            warn("construction %s: %s" % (obj.Label, exc))
         refs = helper_refs(obj)
         try:
             if len(refs) < len(obj.HasPoint) or any(not alive(r[0]) for r in refs):
@@ -1019,6 +1054,10 @@ class ConstructionFrame:
         report_problem(obj, "")
         if not obj.Placement.isSame(place, 1e-12):
             obj.Placement = place
+        try:
+            curves.remember(obj, ("Refs",))
+        except Exception:
+            pass
 
     def dumps(self):
         return None
@@ -1028,6 +1067,16 @@ class ConstructionFrame:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _relink_datum(helper):
+    """The datum's own SciForgeRefs (what the timeline shows it is built on) follow the
+    helper's picks found again."""
+    for datum in helper.InList:
+        if PROP_REFS in getattr(datum, "PropertiesList", []):
+            refs = helper_refs(helper)
+            if not _same_refs(expand(getattr(datum, PROP_REFS)), refs):
+                setattr(datum, PROP_REFS, _link_list(refs))
 
 
 def _output(obj, prop):
@@ -1134,8 +1183,8 @@ def target_body(refs, fallback=None):
 
 def _native(key, body, refs):
     """Offset Plane on geometry of its own body: FreeCAD's FlatFace does exactly that."""
-    if key != "OffsetPlane" or not refs:
-        return False
+    if key != "OffsetPlane" or not refs or len(refs) > 1:
+        return False  # To Object follows its point: the helper works it out
     obj = refs[0][0]
     return owner_body(obj) is body
 

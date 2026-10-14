@@ -71,7 +71,7 @@ corner used as the point follows edits of earlier steps.
 | Non uniform scale of round faces | Exact shape, but the faces become NURBS: FreeCAD then measures their volume only to about 1 % and Refine cannot merge flat NURBS faces |
 | Shell / Draft / Scale over several bodies in one step | One body per step (Fusion allows several) |
 | Per-face wall thickness (outline 7.6 mentions it) | Not in Fusion's Shell dialog; OpenCASCADE supports it but FreeCAD exposes no Python call |
-| A corner whose name FreeCAD loses (a Pad's corner after its length changes) | The corner with the same number is used: right as long as the part's topology does not change |
+| A corner whose name FreeCAD loses (a Pad's corner after its length changes) | Found again where it was relative to the part's bounding box (`picks.py`, 2026-10-14; before: the corner with the same number, right only while the topology stays) |
 | A face of a later step that moved for good (a wall made thicker) | Found again by where it is (same kind, facing the same way, nearest): right for the usual edits; FreeCAD has no history of SciForge's own features' faces to follow instead |
 
 ## Value boxes and typing over the view (2026-10-13)

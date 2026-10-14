@@ -112,7 +112,9 @@ def run_model(model, sciforge_build=False):
         "steps": [],
     }
     doc = App.newDocument("golden_" + model["id"])
+    names = [doc.Name]  # a "reopen" step opens the saved file as another document
     start = time.time()
+    builder = None
     try:
         builder = Builder(doc)
         for index, step in enumerate(model["steps"]):
@@ -136,7 +138,13 @@ def run_model(model, sciforge_build=False):
         result["status"] = "error"
     finally:
         result["seconds"] = round(time.time() - start, 3)
-        App.closeDocument(doc.Name)
+        try:
+            names.append(builder.doc.Name)
+        except Exception:
+            pass
+        for name in set(names):
+            if name in App.listDocuments():
+                App.closeDocument(name)
 
     reason = model.get("xfail")
     if not reason and model.get("upstream_bug") and not sciforge_build:

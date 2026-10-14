@@ -4,7 +4,9 @@
 Profile: click inside closed sketch areas (shaded blue, as for Extrude) or on flat faces of
 the part. Path: click sketch lines or edges of the part; with Chain Selection on (Fusion's
 default) one click takes every curve joined to it smoothly. Guide Rail (Type Path + Guide
-Rail): click the Guide Rail box, then the rail's curves. A click on a picked curve or area
+Rail): click the Guide Rail box, then the rail's curves. Guide Surface (Type Path + Guide
+Surface): click the Guide Surface box, then faces of the part; the profile keeps its angle to
+them along the path (only Distance applies, like Fusion's). A click on a picked curve or area
 drops it again. Whatever is selected before Sweep starts is taken (areas and faces as the
 profile, curves as the path), and the single area of the newest sketch is taken by itself.
 
@@ -30,7 +32,7 @@ safe = curve_pick.safe("sweep")
 TYPE_LABELS = [
     ("Single Path", "single"),
     ("Path + Guide Rail", "rail"),
-    ("Path + Guide Surface", "surface", False, "Not in SciForge yet: sweeping against a surface"),
+    ("Path + Guide Surface", "surface"),
 ]
 ORIENTATION_LABELS = [("Perpendicular", "perpendicular"), ("Parallel", "parallel")]
 SCALING_LABELS = [("Scale", "scale"), ("Stretch", "stretch"), ("None", "none")]
@@ -127,6 +129,7 @@ class SweepPanel(Panel):
         self.profiles = []
         self.path = []
         self.rail = []
+        self.surface = []  # Path + Guide Surface: faces of the part
         self.options = dict(sweep.DEFAULTS)
         self.user_picked_operation = feature is not None
         self.error = ""
@@ -144,6 +147,8 @@ class SweepPanel(Panel):
             try:
                 self.profiles, self.path, self.rail, read = sweep.read(feature)
                 self.options.update(read)
+                if self.options.get("type") == "surface":
+                    self.surface, self.rail = self.rail, []
                 self.profiles = extrude.expand_whole(self.profiles)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
@@ -190,6 +195,7 @@ class SweepPanel(Panel):
             "profiles": SelectionField(self, "profiles", "Select profile"),
             "path": SelectionField(self, "path", "Select path"),
             "rail": SelectionField(self, "rail", "Select guide rail"),
+            "surface": SelectionField(self, "surface", "Select guide surface"),
         }
         for name, field in self.fields.items():
             field.button.setObjectName("SciForgeSweep_" + name)
@@ -202,6 +208,8 @@ class SweepPanel(Panel):
         form.addRow("", self.chain)
         self.rail_label = QtWidgets.QLabel("Guide Rail")
         form.addRow(self.rail_label, self.fields["rail"].widget)
+        self.surface_label = QtWidgets.QLabel("Guide Surface")
+        form.addRow(self.surface_label, self.fields["surface"].widget)
         self.hint = QtWidgets.QLabel(
             "Click inside sketch areas (shaded blue) or on flat faces for the profile, then "
             "click the path's curves."
@@ -264,23 +272,28 @@ class SweepPanel(Panel):
         self._update_visibility()
 
     def _update_visibility(self):
-        rail = self.type.currentData() == "rail"
-        two = self.layout_info is not None and self.layout_info.two_sides and not rail
+        kind = self.type.currentData()
+        rail = kind == "rail"
+        surface = kind == "surface"
+        single = kind == "single"
+        two = self.layout_info is not None and self.layout_info.two_sides and single
         parallel = self.orientation.currentData() == "parallel"
         self.distance_label.setText("Distance One" if two else "Distance")
         for widget, show in (
             (self.rail_label, rail),
             (self.fields["rail"].widget, rail),
+            (self.surface_label, surface),
+            (self.fields["surface"].widget, surface),
             (self.distance2_label, two),
             (self.distance2, two),
-            (self.taper_label, not rail),
-            (self.taper.widget, not rail),
-            (self.twist_label, not rail),
-            (self.twist.widget, not rail),
+            (self.taper_label, single),
+            (self.taper.widget, single),
+            (self.twist_label, single),
+            (self.twist.widget, single),
             (self.scaling_label, rail),
             (self.scaling, rail),
-            (self.orientation_label, not rail),
-            (self.orientation, not rail),
+            (self.orientation_label, single),
+            (self.orientation, single),
         ):
             widget.setVisible(show)
         self.twist.widget.setEnabled(not parallel)
@@ -314,10 +327,20 @@ class SweepPanel(Panel):
             self.profiles = []
         elif name == "path":
             self.path = []
+        elif name == "surface":
+            self.surface = []
         else:
             self.rail = []
         self._picks_changed()
         self.activate(name)
+
+    def _guide(self):
+        """What follows the path besides the profile: the guide rail's curves, or the guide
+        surface's faces (sweep.py takes either in its rail_refs)."""
+        kind = self.type.currentData()
+        if kind == "surface":
+            return self.surface
+        return self.rail if kind == "rail" else []
 
     # -- start ---------------------------------------------------------------------------------------
     def _start(self):
@@ -350,6 +373,8 @@ class SweepPanel(Panel):
             self.activate("path")
         elif self.type.currentData() == "rail" and not self.rail:
             self.activate("rail")
+        elif self.type.currentData() == "surface" and not self.surface:
+            self.activate("surface")
         else:
             self.activate("path")
 
@@ -432,6 +457,13 @@ class SweepPanel(Panel):
             warn("sweep pick: %s" % exc)
 
     def _picked(self, obj, short):
+        if self.active == "surface" and short.startswith("Face") and not extrude.is_sketch(obj):
+            ref = curve_pick.base_element(self._base_feature(), obj, short)
+            if ref is None:
+                self.message.setText("⚠ That face belongs to this sweep itself.")
+                return
+            self._toggle_surface(ref)
+            return
         if curves.is_curve_pick(obj, short):
             ref = (obj, short)
             if not extrude.is_sketch(obj):
@@ -472,6 +504,15 @@ class SweepPanel(Panel):
         if self.profiles and not self.path:
             self.activate("path")
 
+    def _toggle_surface(self, ref):
+        keys = [(o.Name, s) for o, s in self.surface]
+        if (ref[0].Name, ref[1]) in keys:
+            self.surface = [r for r in self.surface if (r[0].Name, r[1]) != (ref[0].Name, ref[1])]
+        else:
+            self.surface = self.surface + [ref]
+        self.activate("surface")
+        self._picks_changed()
+
     def _toggle_curve(self, box, ref):
         refs = list(self.path if box == "path" else self.rail)
         names = [ref[1]]
@@ -497,6 +538,10 @@ class SweepPanel(Panel):
         self.fields["profiles"].set_text("%d selected" % count if count else "")
         self.fields["path"].set_text(curves.label(self.path))
         self.fields["rail"].set_text(curves.label(self.rail))
+        count = len(self.surface)
+        self.fields["surface"].set_text(
+            "" if not count else ("1 face" if count == 1 else "%d faces" % count)
+        )
         if self.picker is not None:
             self.picker.set_selected(
                 [extrude.key(p) for p in self.profiles if extrude.is_sketch(p[0])]
@@ -562,6 +607,8 @@ class SweepPanel(Panel):
             return "Pick the path: click a sketch line or an edge of the part."
         if self.type.currentData() == "rail" and not self.rail:
             return "Pick the guide rail: click the Guide Rail box, then a line or an edge."
+        if self.type.currentData() == "surface" and not self.surface:
+            return "Pick the guide surface: click the Guide Surface box, then faces of the part."
         return ""
 
     def _picks_changed(self):
@@ -601,7 +648,9 @@ class SweepPanel(Panel):
             return
         if self.type.currentData() == "rail" and not self.rail and self.path:
             self.activate("rail")
-        elif self.type.currentData() == "single" and self.active == "rail":
+        elif self.type.currentData() == "surface" and not self.surface and self.path:
+            self.activate("surface")
+        elif self.active in ("rail", "surface") and self.active != self.type.currentData():
             self.activate("path")
         self._picks_changed()  # a guide rail still to pick takes the preview away
 
@@ -635,7 +684,7 @@ class SweepPanel(Panel):
         else:
             try:
                 wanted = sweep.auto_operation(
-                    shape, self.profiles, self.path, self.rail, self.options
+                    shape, self.profiles, self.path, self._guide(), self.options
                 )
             except Exception:
                 return
@@ -677,7 +726,7 @@ class SweepPanel(Panel):
             self.target = sweep.build(
                 self.profiles,
                 self.path,
-                self.rail,
+                self._guide(),
                 self.options,
                 feature=self.target,
                 hide=False,
@@ -713,7 +762,7 @@ class SweepPanel(Panel):
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             return "There is no part to %s yet." % operation
         try:
-            tool = sweep.tool_shape(self.profiles, self.path, self.rail, self.options)
+            tool = sweep.tool_shape(self.profiles, self.path, self._guide(), self.options)
             inside = curves.to_global(base.Shape, base).common(tool).Volume
         except Exception:
             return ""

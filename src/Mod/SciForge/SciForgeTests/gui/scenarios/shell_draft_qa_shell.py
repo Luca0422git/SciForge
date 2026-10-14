@@ -340,7 +340,14 @@ def p4_dragged_in():
         ("too thick" in msg(p) or "cannot be made" in msg(p)) and "thickest" in msg(p),
         msg(p),
     )
-    h.check("P4 the last good preview stays", sd.close(h.solid_volume(), s["thin"]))
+    # The preview follows the drag while the wall fits (like Fusion), so the last good one is
+    # a wall between the thin one and the thickest that fits (about 9.99 mm here).
+    v = h.solid_volume()
+    h.check(
+        "P4 the last good preview stays (a wall that fits)",
+        s["thin"] - 1e-6 <= v <= sd.open_top(10.0) + 1e-6,
+        (v, s["thin"], sd.open_top(10.0)),
+    )
     h.check("P4 nothing in the Report view", not sd.report_errors(), sd.report_errors())
 
 

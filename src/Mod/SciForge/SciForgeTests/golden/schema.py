@@ -53,6 +53,9 @@ STEP_KEYS = {
             "extent2",
             "taper2",
             "to2",
+            # Thin Extrude (sciforge/extrude.py, extrude_prism.py)
+            "thin",
+            "curves",
         },
     ),
     "revolve": ({"id", "profile", "axis"}, {"angle", "operation", "comment"}),
@@ -84,7 +87,11 @@ STEP_KEYS = {
     "unsuppress": ({"target"}, {"comment"}),
     "delete": ({"target"}, {"comment"}),
     "move": ({"target"}, {"before", "after", "comment"}),
-    "roll": (set(), {"after", "end", "comment"}),
+    "roll": (set(), {"after", "end", "start", "comment"}),
+    # File > Save, close, open again (only what is saved in the file is left).
+    "reopen": (set(), {"comment"}),
+    # Test setup: a coil / pipe as saved by SciForge before the primitives QA fixes.
+    "age": ({"target"}, {"comment"}),
 }
 
 # Fusion-style Fillet / Chamfer (sciforge/blend.py, the same code as the F and Chamfer dialogs):
@@ -216,6 +223,21 @@ def _check_extrude(where, step, seen):
     for name in step.get("more_profiles", []):
         if seen.get(name) != "sketch":
             _fail(where, "'more_profiles' must name earlier sketch steps, got %r" % name)
+    thin = step.get("thin")
+    if thin is not None:
+        if not isinstance(thin, dict) or set(thin) - {
+            "location",
+            "thickness",
+            "location2",
+            "thickness2",
+        }:
+            _fail(where, "'thin' is {location, thickness, location2, thickness2}")
+        for key in ("location", "location2"):
+            if thin.get(key, "side1") not in ("side1", "center", "side2"):
+                _fail(where, "'thin.%s' must be side1, center or side2" % key)
+        for key in ("thickness", "thickness2"):
+            if key in thin:
+                _check_number(where + ".thin." + key, thin[key], positive=True)
     regions = step.get("regions")
     if regions is not None:
         if "profile" not in step or not isinstance(regions, list) or not regions:
@@ -282,8 +304,13 @@ def validate(model):
             if plane not in PLANES:
                 _fail(here, "'plane' must be one of %s" % (PLANES,))
             _check_geometry(here, step["geometry"])
-        if op == "extrude" and ("profile" in step) == ("face" in step):
+        if op == "extrude" and "curves" not in step and ("profile" in step) == ("face" in step):
             _fail(here, "extrude needs exactly one of 'profile' (a sketch) or 'face' (a selector)")
+        if op == "extrude" and "curves" in step:
+            if "thin" not in step:
+                _fail(here, "'curves' are the profile of a thin extrude only (add 'thin')")
+            if "face" in step or ("profile" in step and "regions" not in step):
+                _fail(here, "'curves' go alone, or with 'profile' + 'regions' (areas)")
         if op == "revolve" or (op == "extrude" and "profile" in step):
             if seen.get(step["profile"]) != "sketch":
                 _fail(here, "'profile' must name an earlier sketch step, got %r" % step["profile"])
@@ -339,8 +366,9 @@ def validate(model):
             refs = [k for k in ("before", "after") if k in step]
             if len(refs) != 1 or step[refs[0]] not in seen:
                 _fail(here, "move needs one of 'before'/'after' naming an earlier step")
-        if op == "roll" and ("after" in step) == bool(step.get("end")):
-            _fail(here, "roll needs 'after' (a step id) or \"end\": true")
+        ends = ["after" in step, bool(step.get("end")), bool(step.get("start"))]
+        if op == "roll" and ends.count(True) != 1:
+            _fail(here, 'roll needs "after" (a step id), "end": true or "start": true')
         if op == "roll" and "after" in step and step["after"] not in seen:
             _fail(here, "'after' names unknown step %r" % step["after"])
 
@@ -912,8 +940,9 @@ STEP_KEYS["sf_coil"] = ({"id"}, {"plane", "expressions", "comment"} | _COIL_OPTI
 STEP_KEYS["sf_path_sketch"] = ({"id", "segments"}, {"plane", "comment"})
 STEP_KEYS["sf_pipe"] = ({"id", "path"}, {"chain", "expressions", "comment"} | _PIPE_OPTIONS)
 STEP_KEYS["sf_primitive_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["expect_component"] = ({"step"}, {"comment"})
 PRIMITIVE_KINDS = ("box", "cylinder", "sphere", "torus")
-PRIMITIVE_OPERATIONS = ("auto",) + OPERATIONS
+PRIMITIVE_OPERATIONS = ("auto",) + OPERATIONS + ("new_component",)
 
 
 def _check_primitive_plane(here, step):
@@ -1021,6 +1050,8 @@ def _check_primitive_steps(model):
             if not isinstance(step["set"], dict) or not step["set"]:
                 _fail(here, "'set' is a non-empty object of options")
             _check_primitive_values(here, step["set"], allowed)
+        if op == "expect_component" and step["step"] not in seen:
+            _fail(here, "'step' names unknown step %r" % step["step"])
         if "id" in step:
             seen[step["id"]] = op
 
@@ -1044,6 +1075,7 @@ STEP_KEYS["sf_sweep"] = (
         "regions",
         "face",
         "rail",
+        "surface",
         "type",
         "distance",
         "distance2",
@@ -1056,6 +1088,7 @@ STEP_KEYS["sf_sweep"] = (
     },
 )
 STEP_KEYS["sf_sweep_edit"] = ({"target", "set"}, {"comment"})
+STEP_KEYS["expect_radius"] = ({"step", "max"}, {"min", "comment"})
 SWEEP_SET = {
     "type",
     "distance",
@@ -1067,7 +1100,7 @@ SWEEP_SET = {
     "operation",
 }
 SWEEP_CHOICES = {
-    "type": ("single", "rail"),
+    "type": ("single", "rail", "surface"),
     "orientation": ("perpendicular", "parallel"),
     "scaling": ("scale", "stretch", "none"),
     "operation": ("auto", "join", "cut", "intersect", "new_body"),
@@ -1129,6 +1162,10 @@ def _check_sweep_loft_steps(model):
             if step.get("type") == "rail" and "rail" not in step:
                 _fail(here, "type 'rail' needs a 'rail'")
             _check_sweep_options(here, step)
+            if ("surface" in step) != (step.get("type") == "surface"):
+                _fail(here, "type 'surface' goes with a 'surface': {'faces': selector}")
+            if "surface" in step and set(step["surface"]) != {"faces"}:
+                _fail(here, "'surface' is {'faces': selector}")
         if op == "sf_sweep_edit":
             if seen.get(step["target"]) != "sf_sweep":
                 _fail(here, "'target' must name an earlier sf_sweep step")
@@ -1161,12 +1198,20 @@ def _check_sweep_loft_steps(model):
             seen[step["id"]] = op
 
 
+LOFT_END_KEYS = {
+    "start_condition",
+    "start_weight",
+    "start_angle",
+    "end_condition",
+    "end_weight",
+    "end_angle",
+}
 STEP_KEYS["sf_loft"] = (
     {"id", "profiles"},
-    {"rails", "centerline", "guide", "closed", "operation", "comment"},
+    {"rails", "centerline", "guide", "closed", "operation", "comment"} | LOFT_END_KEYS,
 )
 STEP_KEYS["sf_loft_edit"] = ({"target", "set"}, {"comment"})
-LOFT_SET = {"guide", "closed", "operation"}
+LOFT_SET = {"guide", "closed", "operation"} | LOFT_END_KEYS
 STEP_KEYS["sf_rib"] = (
     {"id", "curves"},
     {
@@ -1185,6 +1230,9 @@ STEP_KEYS["sf_rib_edit"] = ({"target", "set"}, {"comment"})
 RIB_SET = {"thickness", "thickness_side", "flip_side", "depth_type", "depth", "flip", "extend"}
 
 
+LOFT_CONDITIONS = ("free", "direction", "tangent", "curvature", "point_tangent")
+
+
 def _check_loft_options(here, options):
     if options.get("guide", "rails") not in ("rails", "centerline"):
         _fail(here, "'guide' must be rails or centerline")
@@ -1192,6 +1240,13 @@ def _check_loft_options(here, options):
         _fail(here, "'operation' must be one of %s" % (SWEEP_CHOICES["operation"],))
     if "closed" in options and not isinstance(options["closed"], bool):
         _fail(here, "'closed' is true or false")
+    for end in ("start", "end"):
+        condition = options.get(end + "_condition", "free")
+        if condition not in LOFT_CONDITIONS:
+            _fail(here, "'%s_condition' must be one of %s" % (end, LOFT_CONDITIONS))
+        for name in ("_weight", "_angle"):
+            if end + name in options:
+                _check_number(here, options[end + name], positive=name == "_weight")
 
 
 def _check_loft_step(here, step, seen):

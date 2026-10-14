@@ -52,6 +52,9 @@ _EDIT_PROPS = {
 
 class Builder:
     def __init__(self, doc):
+        from sciforge import picks
+
+        picks.install()  # what the GUI runs: picked edges / faces kept when names get lost
         self.doc = doc
         self.body = doc.addObject("PartDesign::Body", "Body")
         self.objects = {}  # step id -> FreeCAD object
@@ -169,6 +172,27 @@ class Builder:
             options["start_object"] = self._extrude_ref(step, step["start_from"])
         if "bodies" in step:  # the dialog's "Bodies to Cut" row (golden/extrude_bodies_ops.py)
             options["bodies"] = self._extrude_bodies(step)
+        if "thin" in step:  # Fusion's Thin Extrude: a wall along the profile
+            thin = step["thin"]
+            options.update(
+                thin=True,
+                wall_location=thin.get("location", "side1"),
+                wall_thickness=thin.get("thickness", 1.0),
+                wall_location2=thin.get("location2", thin.get("location", "side1")),
+                wall_thickness2=thin.get("thickness2", thin.get("thickness", 1.0)),
+            )
+        if "curves" in step:  # a thin extrude's open profile: sketch curves
+            from .sweep_loft_ops import curves_of
+
+            curves = curves_of(self, step["curves"], "extrude %r" % step["id"])
+            if "profile" in step and "regions" in step:
+                sketch = self.objects[step["profile"]]
+                curves += [self._region(step, [sketch], p) for p in step["regions"]]
+            try:
+                feature = extrude.make(self.body, curves, options, step["id"])
+            except extrude.ExtrudeError as exc:
+                raise BuildError("extrude %r: %s" % (step["id"], exc))
+            return self._extruded(step, feature)
         if "face" in step:  # Fusion: pick a flat face of the part as the profile
             tip = self.body.Tip
             names = selectors.select(tip.Shape, step["face"], "faces")
@@ -188,6 +212,11 @@ class Builder:
             feature = extrude.make(self.body, profile, options, step["id"])
         except extrude.ExtrudeError as exc:
             raise BuildError("extrude %r: %s" % (step["id"], exc))
+        return self._extruded(step, feature)
+
+    def _extruded(self, step, feature):
+        from sciforge import extrude
+
         self.objects[step["id"]] = feature
         self.ops[step["id"]] = "extrude"
         body = extrude.owner_body(feature)
@@ -218,6 +247,10 @@ class Builder:
             return (self._origin(_PLANE_ROLE[spec["plane"]]), "")
         if "face" in spec:
             tip = self._tip()
+            if "of" in spec:  # a face of another body: the one a step made
+                from sciforge import extrude
+
+                tip = extrude.owner_body(self.objects[spec["of"]]).Tip
             names = selectors.select(tip.Shape, spec["face"], "faces")
             if len(names) != 1:
                 raise BuildError("extrude %r: the face selector must pick one face" % step["id"])
@@ -477,11 +510,73 @@ class Builder:
         except timeline_ops.TimelineError as exc:
             raise BuildError("move %r: %s" % (step["target"], exc))
 
+    def op_reopen(self, step):
+        """Save the design, close it and open the file again (what was only in memory is
+        gone; what the steps keep in the file must do)."""
+        import os
+        import tempfile
+
+        names = {key: obj.Name for key, obj in self.objects.items()}
+        body = self.body.Name
+        folder = tempfile.mkdtemp(prefix="sciforge_golden_")
+        path = os.path.join(folder, self.doc.Name + ".FCStd")
+        self.doc.saveAs(path)
+        App.closeDocument(self.doc.Name)
+        self.doc = App.openDocument(path)
+        self.doc.recompute()
+        self.body = self.doc.getObject(body)
+        self.objects = {key: self.doc.getObject(name) for key, name in names.items()}
+        from sciforge import upgrade
+
+        # What the GUI does once a file is open: steps of an older SciForge are rebuilt.
+        for new in upgrade.after_open(self.doc):
+            for key, name in names.items():
+                if self.doc.getObject(name) is None and new.Label == key:
+                    self.objects[key] = new  # rebuilt as another object (same label)
+        try:
+            os.remove(path)
+            os.rmdir(folder)
+        except OSError:
+            pass
+
+    def op_age(self, step):
+        """Test setup: make a coil or pipe look as saved by SciForge before the primitives QA
+        fixes of 2026-10-11 (its old shape, its section without what the fixes added)."""
+        from sciforge import coil, pipe, primitives
+
+        feature = self.objects[step["target"]]
+        if coil.is_coil(feature):
+            _ref, options = coil.read(feature)
+            meta = primitives.load_meta(feature, coil.META)
+            section = self.doc.getObject(meta["helpers"][-1])
+            section.Taper = 0.0  # no narrowing at the far end: the old section
+            _turns, height, _pitch = coil.resolved(options)
+            feature.Angle = float(options["angle"])  # the old helix: a negative angle as is
+            feature.Reversed = height < 0
+            section.touch()
+            self.doc.recompute()
+            section.removeProperty("Taper")  # what the fixes added
+        elif pipe.is_pipe(feature):
+            meta = primitives.load_meta(feature, pipe.META)
+            helpers = [self.doc.getObject(n) for n in meta["helpers"]]
+            spine = [h for h in helpers if h is not None and h.Name.startswith("PipePath")][0]
+            section = [h for h in helpers if h is not None and h is not spine][0]
+            section.Path = spine  # the old link to the path object, no edges of its own
+            section.Edges = []
+            self.doc.recompute()
+        else:
+            raise BuildError("age %r: only a coil or a pipe" % step["target"])
+
     def op_roll(self, step):
-        """Drag the history marker after a step (or to the end)."""
+        """Drag the history marker after a step (or to the end, or to the start)."""
         from sciforge import timeline_core, timeline_ops
 
         tl = timeline_ops.timeline(self.doc)
+        if step.get("start"):
+            # Fusion's Move to Beginning: before every step, an empty design.
+            tips, before = timeline_core.marker_for_slot(tl, 0)
+            timeline_ops.roll(self.doc, tips, before=before)
+            return
         if step.get("end"):
             tips = timeline_core.tips_for_count(tl, len(tl.items))
         else:

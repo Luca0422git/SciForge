@@ -144,7 +144,7 @@ class SweepLoftSchemaTests(unittest.TestCase):
                 with open(path, encoding="utf-8") as handle:
                     schema.validate(json.load(handle))
         self.assertEqual(
-            counts, {"sf_sweep_": 14, "sf_loft_": 9, "sf_rib_": 6, "sf_web_": 7}, counts
+            counts, {"sf_sweep_": 15, "sf_loft_": 14, "sf_rib_": 6, "sf_web_": 7}, counts
         )
 
 

@@ -58,11 +58,11 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | Fusion option | Why not yet |
 |---|---|
 | Compute Option Optimized / Adjust | Copies are identical (FreeCAD repeats the feature's tool). Shown greyed |
-| Pattern Type Components | SciForge has no components yet |
+| Pattern Type Components | Not built yet (components exist since 2026-10-13) |
 | Faces: copies "heal" into different surroundings | The closed faces are copied as they are (a hole copied into a thicker area stays as deep as the original). Faces that do not close up with one face around each opening (a fillet's face) are refused with the reason |
 | A pattern of bodies whose references lie in another body with a moved placement | The references are read in the copied body's coordinates |
 | Pattern on Path: an explicit start point | The copies start at the point of the path nearest to the objects |
-| Timeline icon of Pattern on Path | Shown with the generic icon and the name "Pattern On Path" (the timeline module has no entry for it yet) |
+| Timeline icon of Pattern on Path | Named "Pattern on Path", shown with the Rectangular Pattern's icon (there is no icon of its own yet) |
 | Patterning a pattern step alone | Repeats the step's copies, not the original it copies (as Fusion's pattern feature stands for its copies); pick the original step too for whole rows |
 
 ## Tests

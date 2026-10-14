@@ -86,6 +86,24 @@ Unavailable items are greyed out. Separators group related commands.
 - Timeline: no drag-to-reorder, suppress or groups yet.
 - Menu icons are 16 px (Fusion about 20 px); COMMENTS panel and "Unsaved" banner not done.
 
+## Value fields: a formula of the wrong kind (2026-10-14, gaps work)
+
+Fusion's formulas carry units and a field takes only its own kind: a length parameter typed
+into an angle field (or an angle into a distance, a length into a count) is an error, and a
+formula without a unit counts in the field's unit. Sources: **Autodesk** API "Understanding
+Units in Fusion" (expressions carry units and must match what the value expects); **Forum**
+(Autodesk's community manager: "Fusion's equation is indeed unit sensitive", the usual fix for
+a unitless field is to divide by 1 mm). **Guess**: the wording of the message.
+
+SciForge took the bare number before: "gap" (12 mm) typed as a draft angle made a 12 degree
+draft. Now every field fed by `preview.FormulaInput` (Extrude's distances, tapers and wall
+thicknesses, Revolve's angles, the patterns' distances, angle and quantities, Draft, Shell,
+Press Pull, Section, Pipe, Scale, Construct, Thread, Hole, the primitives) refuses it in the
+dialog like a typo: "'gap' is a length, not an angle. Type an angle, for example 30.", and the
+preview keeps the last good value (`extrude.check_kind`; Construct's OK waits, tested).
+"gap / 1 mm" (no unit) is 12 degrees.
+Fillet / Chamfer already refused it (`blend_field`). Scenario `gaps_formula_units.py`.
+
 ## ViewCube (2026-10-12)
 
 SciForge draws its own cube (`viewcube.py`: shape and camera maths, no Qt; `viewcube_ui.py`:

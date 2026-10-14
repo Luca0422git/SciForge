@@ -23,13 +23,15 @@ Options (dict, see DEFAULTS), lengths in mm:
             torus_diameter   thickness of the ring
             position         inside | center | outside: where the ring's section sits
                              against that circle (inside: tangent from the inside...)
-  all       operation   join | cut | intersect | new_body
+  all       operation   join | cut | intersect | new_body | new_component
             expressions {field: formula} typed in the dialog (parameters)
 
 What is built:
   join / new_body   PartDesign::Additive<Kind> attached to the plane (FlatFace) with the
                     position in AttachmentOffset; new_body puts it in a new body (the first
-                    solid of an empty body already is a new body)
+                    solid of an empty body already is a new body), new_component in a new
+                    body inside a new component; a Join that touches nothing makes a new
+                    body (Fusion never leaves a separate piece in a body)
   cut               PartDesign::Subtractive<Kind>
   intersect         SciForge's PrimitiveFeature (the body keeps what lies inside)
 Changing the operation swaps the step for one of the other kind at the same place in the
@@ -311,6 +313,28 @@ def auto_operation(base_shape, tool):
     return core.operation_for(True, inside, tool.Volume - inside, gap)
 
 
+def made_operation(meta):
+    """The operation an adding step (not a cut or an intersect) was made with: Join, or
+    New Body / New Component when it made its own body (component)."""
+    saved = meta.get("options", {}).get("operation")
+    return saved if saved in ("new_body", "new_component") else "join"
+
+
+def joins_nothing(src, feature, tool):
+    """True when a Join of `tool` (global) would not even touch `src`'s solid: Fusion then
+    makes a new body (it never leaves a separate piece in a body)."""
+    if src is None or tool is None:
+        return False
+    before = feature if feature is not None and owner_body(feature) is src else None
+    base = base_shape(src, before=before)
+    if base is None:
+        return False  # the first solid of a body is a new body already
+    try:
+        return auto_operation(base, tool) == "new_body"
+    except Exception:
+        return False
+
+
 def base_shape(body, before=None):
     """The body's solid the new step builds on (global coordinates), or None."""
     if body is None:
@@ -519,7 +543,13 @@ def insert_helper(body, feature, type_id, name, role):
     return obj
 
 
-def new_body(src):
+def new_body(src, component=False):
+    """A new body beside `src` (New Body), or a new body inside a new component under the
+    active component (New Component, Fusion's fifth operation)."""
+    if component:
+        from . import components
+
+        return components.body_for_new(src, True)
     from . import bodies
 
     return bodies.new_body(src.Document, like=src)
@@ -538,6 +568,9 @@ def remove_step(feature, keep_body=True, prop=META):
     if not keep_body and body is not None and meta.get("created_body") == body.Name:
         rest = [o for o in body.Group if o.TypeId != "App::Origin" and not is_origin(o)]
         if not rest:
+            from . import components
+
+            container = components.container_of(body)
             try:
                 body.removeObjectsFromDocument()
             except Exception:
@@ -546,6 +579,7 @@ def remove_step(feature, keep_body=True, prop=META):
                 doc.removeObject(body.Name)
             except Exception:
                 pass
+            components.drop_if_empty(container)  # a New Component that failed or went
 
 
 def is_origin(obj):
@@ -558,9 +592,16 @@ def structure(feature, src, operation, prop=META):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
-    if operation == "new_body":
+    if created is not None:
+        from .components_core import same_new
+
+        if not same_new(made_operation(meta), operation):
+            created = None  # New Body <-> New Component: the result moves (made again)
+    if operation in ("new_body", "new_component"):
         if created is not None:
             return created, created
+        if operation == "new_component":
+            return None, None  # always a new component with a new body in it
         if feature is not None and owner_body(feature) is src and not has_solid(src, feature):
             return src, None  # the first solid of a body already is a new body
         if feature is None and not has_solid(src):
@@ -596,7 +637,7 @@ def build_step(feature, src, operation, type_id, name, update, setup_new=None, p
                 "instead." % (feature.Label, ", ".join(o.Label for o in blocking))
             )
     if target is None:
-        target = created = new_body(src)
+        target = created = new_body(src, component=operation == "new_component")
     before = feature if (feature is not None and owner_body(feature) is target) else None
     was_tip = before is not None and target.Tip is before
     new = insert(target, type_id, name, before)
@@ -863,6 +904,13 @@ def build(kind, ref, options, feature=None, name=None):
             "That face belongs to this %s itself. Pick a face that was there before it."
             % TITLES[kind].lower()
         )
+    if options["operation"] == "join":
+        try:
+            tool = tool_shape(kind, ref, options)
+        except Exception:
+            tool = None
+        if joins_nothing(src, feature, tool):
+            options = dict(options, operation="new_body")  # Fusion: a new body, not a lump
     operation = options["operation"]
     tid = type_id(kind, operation)
 
@@ -1065,9 +1113,7 @@ def read(feature):
     elif feature.TypeId.startswith("PartDesign::Subtractive"):
         options["operation"] = "cut"
     else:
-        options["operation"] = (
-            "new_body" if meta.get("options", {}).get("operation") == "new_body" else "join"
-        )
+        options["operation"] = made_operation(meta)
     sign = -1.0 if float(options.get("height", 1.0) or 1.0) < 0 else 1.0
     if kind == "box":
         options["length"] = feature.Length.Value

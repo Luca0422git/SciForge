@@ -1,0 +1,74 @@
+{
+  "id": "extrude_thin_tube",
+  "title": "Thin Extrude of a rectangle on a plate: a 2 mm wall inside the outline (Side 1), 10 high, joined",
+  "tags": [
+    "extrude",
+    "thin"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "rim"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "thin": {
+        "location": "side1",
+        "thickness": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8640,
+    "faces": 11,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "Plate 40x30x5 = 6000. Side 1 puts the wall inside the outline: 40x30 minus 36x26 = 264 mm^2, 10 high = 2640. Faces: bottom, 4 outer sides (plate and wall merged), the wall's top ring, 4 inner walls, the floor inside = 11."
+  }
+}

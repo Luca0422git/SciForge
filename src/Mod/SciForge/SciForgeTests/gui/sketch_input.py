@@ -337,11 +337,14 @@ def browser_double_click(text):
     if tree is None:
         h.check("Browser exists", False)
         return False
-    items = tree.findItems(text, QtCore.Qt.MatchExactly | QtCore.Qt.MatchRecursive, 1)
-    if not items:
+    # The row shows the timeline's name ("Sketch 2"); row() also knows FreeCAD's label.
+    item = tree.row(text) if hasattr(tree, "row") else None
+    if item is None:
+        items = tree.findItems(text, QtCore.Qt.MatchExactly | QtCore.Qt.MatchRecursive, 1)
+        item = items[0] if items else None
+    if item is None:
         h.check("Browser row %r exists" % text, False)
         return False
-    item = items[0]
     tree.scrollToItem(item)
     rect = tree.visualItemRect(item)
     pos = QtCore.QPoint(rect.left() + 60, rect.center().y())

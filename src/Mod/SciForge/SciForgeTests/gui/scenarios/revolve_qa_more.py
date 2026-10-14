@@ -19,6 +19,7 @@ Path 14, the timeline marker rolled back: drag the marker before Revolve 2, revo
          both are in the part.
 Path 15, a construction line drawn in the profile's own sketch (X, then L) as the axis:
          it is drawn dashed to click; Symmetric with "45 deg" typed (a unit in the field).
+         The ring does not touch the part: a New Body (Fusion's rule for a Join apart).
 Path 16, editing: clear the axis with its x, OK: the dialog stays open and says why; Esc:
          the revolve is unchanged.
 """
@@ -76,6 +77,15 @@ def esc():
 
 def vol():
     return h.solid_volume()
+
+
+def total():
+    """Volume of every body (a revolve that does not touch the part is a New Body)."""
+    return sum(
+        o.Shape.Volume
+        for o in App.ActiveDocument.Objects
+        if o.TypeId == "PartDesign::Body" and not o.Shape.isNull() and o.Shape.Solids
+    )
 
 
 def main_vol():
@@ -429,7 +439,9 @@ def p13_menu():
     menu = open_menu()
     if menu is None:
         return
-    h.check("P13 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text())
+    h.check(
+        "P13 the right slot (3 o'clock) is OK", menu.slots[2].text() == "OK", menu.slots[2].text()
+    )
     w.click(menu.slots[2])
 
 
@@ -622,7 +634,8 @@ def p15_symmetric():
         p.axis and (p.axis[0].Name, p.axis[1]),
     )
     want = s["v14"] + s["ring5"]
-    h.check("P15 a full ring", near(vol(), want), (vol(), want))
+    # The ring does not touch the part: a New Body (Fusion), so every body is counted.
+    h.check("P15 a full ring", near(total(), want), (total(), want))
     b.choose(p.direction, "Symmetric")
     ui.type_into(p.angle.widget, "45 deg")
 
@@ -631,7 +644,7 @@ def p15_typed():
     p = panel()
     h.check("P15 '45 deg' is 45", p is not None and near(p.angle.value(), 45.0), p.angle.value())
     want = s["v14"] + s["ring5"] / 4.0
-    h.check("P15 symmetric 45 each way: a quarter ring", near(vol(), want), (vol(), want))
+    h.check("P15 symmetric 45 each way: a quarter ring", near(total(), want), (total(), want))
     h.check("P15 no warning", "⚠" not in msg(), msg())
     h.shot("p15-construction")
     h.task_button("OK")
@@ -639,8 +652,8 @@ def p15_typed():
 
 def p15_done():
     want = s["v14"] + s["ring5"] / 4.0
-    h.check("P15 kept", not dialog_open() and near(vol(), want), (vol(), want))
-    s["v15"] = vol()
+    h.check("P15 kept", not dialog_open() and near(total(), want), (total(), want))
+    s["v15"] = total()
 
 
 # == Path 16: editing, the axis cleared, OK refused, Esc ===========================================
@@ -674,7 +687,7 @@ def p16_refused():
 
 def p16_esc():
     h.check("P16 Esc closes", not dialog_open())
-    h.check("P16 the revolve is unchanged", near(vol(), s["v15"]), (vol(), s["v15"]))
+    h.check("P16 the revolve is unchanged", near(total(), s["v15"]), (total(), s["v15"]))
     h.check("P16 nothing broken", not invalid(), invalid())
     h.check("P16 the part is shown", ri.shown(h.body()))
     h.shot("p16-end")
@@ -700,7 +713,7 @@ def p16_first_cut_refused():
 
 def p16_first_esc():
     h.check("P16 Esc closes", not dialog_open())
-    h.check("P16 the part is unchanged", near(vol(), s["v15"]), (vol(), s["v15"]))
+    h.check("P16 the part is unchanged", near(total(), s["v15"]), (total(), s["v15"]))
     h.check(
         "P16 the first revolve is a Revolution again",
         ri.revolves()[0].TypeId == "PartDesign::Revolution",

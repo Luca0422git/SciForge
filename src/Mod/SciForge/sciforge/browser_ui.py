@@ -151,6 +151,7 @@ def _objects(doc):
             rows.append(row)
         except Exception:
             continue
+    _timeline_names(doc, rows)
     return rows
 
 
@@ -197,6 +198,20 @@ def _mesh_note(obj):
         return mesh.browser_note(obj)
     except Exception:
         return None
+
+
+def _timeline_names(doc, rows):
+    """Sketches and construction are called what the timeline calls them ("Sketch 2",
+    "Plane 1"), like Fusion, where both show one name; FreeCAD's labels ("Sketch001") are
+    kept for looking rows up."""
+    try:
+        kinds = core.SKETCH_TYPES | core.CONSTRUCTION_TYPES
+        names = ops.display_names(doc, [o for o in doc.Objects if o.TypeId in kinds])
+        for row in rows:
+            if row["name"] in names:
+                row["display"] = names[row["name"]]
+    except Exception as exc:
+        _remember("info", "browser: FreeCAD's names shown: %s" % exc)
 
 
 def _origin_of(feature):
@@ -604,10 +619,11 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         return [i.text(1) for i in self._items()]
 
     def row(self, label):
-        """The row whose name is ``label`` (tests and Find)."""
+        """The row whose name is ``label``: the name it shows or FreeCAD's label (tests
+        and Find)."""
         for item in self._items():
             node = item.data(1, ROLE_NODE)
-            if node["label"] == label or item.text(1) == label:
+            if label in (node["label"], item.text(1), node.get("object_label")):
                 return item
         return None
 
@@ -943,7 +959,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                     _rename_mesh_body(self._doc, obj, text)
             else:
                 obj = self._object(node)
-                if obj is not None and text != obj.Label:
+                if obj is not None and text not in (obj.Label, node["label"]):
                     ops.rename(self._doc, obj.Name, text)
         except Exception as exc:
             warn("browser rename: %s" % exc)

@@ -10,8 +10,8 @@ Part: box 40 x 30 x 10 from the origin (real input).
      x = 50, z = 0.
   5. A 3 x 10 rectangle sketched on XY (x 55..58, y 0..10), revolved a full turn about
      Axis1 (clicked in the 3D view): a ring with radii 5 and 8, 10 long:
-     pi (64 - 25) * 10 = 390 pi. It does not touch the box (x >= 42), so Join keeps it as
-     a second lump of the body.
+     pi (64 - 25) * 10 = 390 pi. It does not touch the box (x >= 42), so the Join makes it a
+     body of its own (Fusion: a Join that touches nothing is a New Body).
   6. Plane1 edited from the timeline to 20 (x = 60): the boss now ends at x = 60 (180 pi)
      and Axis1 moves with the plane, so the ring has radii 2 and 5: pi (25 - 4) * 10 =
      210 pi. Undo / redo.
@@ -64,6 +64,15 @@ def on_line(datum, point, direction, tol=1e-6):
 
 def plane_x(datum):
     return datum.getGlobalPlacement().Base.x if datum is not None else None
+
+
+def total():
+    """Every shown body together: the ring touches nothing, so it is a body of its own."""
+    found = 0.0
+    for body in App.ActiveDocument.findObjects("PartDesign::Body"):
+        if body.ViewObject.Visibility and not body.Shape.isNull():
+            found += body.Shape.Volume
+    return found
 
 
 # -- 1. the circle on the right face -------------------------------------------------------
@@ -257,9 +266,9 @@ def ring_made_preview():
         (p.axis, p.message.text()),
     )
     h.check(
-        "a full turn about Axis1: + 390 pi (a second lump)",
-        s.close(h.solid_volume(), BOX + 480 * PI),
-        (h.solid_volume(), p.message.text()),
+        "a full turn about Axis1: + 390 pi (a body of its own: it touches nothing)",
+        s.close(total(), BOX + 480 * PI),
+        (total(), p.message.text()),
     )
     h.check("no error shown", p.message.text() == "", p.message.text())
     h.shot("2-revolve-about-axis1")
@@ -268,7 +277,7 @@ def ring_made_preview():
 
 def ring_kept():
     h.check("dialog closed", not Gui.Control.activeDialog())
-    h.check("ring kept", s.close(h.solid_volume(), BOX + 480 * PI), h.solid_volume())
+    h.check("ring kept", s.close(total(), BOX + 480 * PI), total())
     s.no_popups("Revolve about Axis1")
 
 
@@ -301,8 +310,8 @@ def followed():
     )
     h.check(
         "boss to x = 60 (180 pi), ring radii 2 and 5 (210 pi)",
-        s.close(h.solid_volume(), BOX + 390 * PI),
-        h.solid_volume(),
+        s.close(total(), BOX + 390 * PI),
+        total(),
     )
     bad = [o.Label for o in App.ActiveDocument.Objects if "Invalid" in o.State]
     h.check("nothing broken", not bad, bad)
@@ -315,13 +324,13 @@ def undo_edit():
 
 def edit_undone():
     h.check("Undo: Plane1 at x = 50", s.close(plane_x(obj("plane")), 50.0))
-    h.check("Undo: volumes back", s.close(h.solid_volume(), BOX + 480 * PI), h.solid_volume())
+    h.check("Undo: volumes back", s.close(total(), BOX + 480 * PI), total())
     s.redo()
 
 
 def edit_redone():
     h.check("Redo: Plane1 at x = 60", s.close(plane_x(obj("plane")), 60.0))
-    h.check("Redo: volumes again", s.close(h.solid_volume(), BOX + 390 * PI), h.solid_volume())
+    h.check("Redo: volumes again", s.close(total(), BOX + 390 * PI), total())
 
 
 def the_end():

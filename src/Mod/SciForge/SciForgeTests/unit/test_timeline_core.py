@@ -220,8 +220,22 @@ class MarkerTests(unittest.TestCase):
         self.assertEqual(core.tips_for_item(tl, 2), {"Body": "Pad"})
         self.assertIsNone(core.tips_for_item(tl, 4))  # already there
 
-    def test_drop_before_everything_snaps_after_first_solid(self):
-        self.assertEqual(core.tips_for_slot(build(), 0), {"Body": "Pad"})
+    def test_drop_before_everything_empties_the_design(self):
+        # Fusion's timeline rolled to the beginning: no body has a Tip.
+        self.assertEqual(core.tips_for_slot(build(), 0), {"Body": None})
+        self.assertEqual(core.tips_for_slot(build(), 1), {"Body": None})
+        self.assertEqual(core.tips_for_slot(build(), 2), {"Body": "Pad"})
+
+    def test_marker_before_every_step(self):
+        tl = build(tip=None)
+        self.assertEqual(tl.marker, 1)  # before the first solid step
+        self.assertEqual(tl.find("Sketch").state, "done")
+        self.assertEqual(tl.find("Pad").state, "rolled_back")
+        self.assertEqual(core.active_count(tl), 0)
+        self.assertIsNone(core.tips_for_slot(tl, 1))  # already there
+        noted = core.build(one_body(), {"Body": None}, "Sketch")
+        self.assertEqual((noted.marker, noted.before), (0, "Sketch"))
+        self.assertEqual(noted.find("Sketch").state, "rolled_back")
 
     def test_drop_at_end_rolls_forward(self):
         self.assertEqual(core.tips_for_slot(build(tip="Pad"), 5), {"Body": "Fillet"})
@@ -232,7 +246,7 @@ class MarkerTests(unittest.TestCase):
     def test_steps_skip_sketches(self):
         tl = build()
         self.assertEqual(core.tips_for_step(tl, "prev"), {"Body": "Pad001"})
-        self.assertEqual(core.tips_for_step(tl, "start"), {"Body": "Pad"})
+        self.assertEqual(core.tips_for_step(tl, "start"), {"Body": None})
         self.assertIsNone(core.tips_for_step(tl, "next"))
         self.assertIsNone(core.tips_for_step(tl, "end"))
 
@@ -243,9 +257,13 @@ class MarkerTests(unittest.TestCase):
         self.assertEqual(core.tips_for_step(tl, "end"), {"Body": "Fillet"})
         self.assertTrue(core.can_roll_forward(tl))
 
-    def test_nothing_before_the_first_solid(self):
-        self.assertIsNone(core.tips_for_step(build(tip="Pad"), "prev"))
-        self.assertIsNone(core.tips_for_step(build(tip="Pad"), "start"))
+    def test_back_to_the_beginning(self):
+        self.assertEqual(core.tips_for_step(build(tip="Pad"), "prev"), {"Body": None})
+        self.assertEqual(core.tips_for_step(build(tip="Pad"), "start"), {"Body": None})
+        empty = build(tip=None)
+        self.assertIsNone(core.tips_for_step(empty, "prev"))
+        self.assertIsNone(core.tips_for_step(empty, "start"))
+        self.assertEqual(core.tips_for_step(empty, "next"), {"Body": "Pad"})
 
     def test_marker_before_a_sketch(self):
         """Fusion: the marker may stand before a sketch that follows the last active
@@ -278,13 +296,70 @@ class MarkerTests(unittest.TestCase):
         self.assertEqual(core.marker_for_slot(rolled, 2), (None, "Sketch001"))
         noted = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
         self.assertEqual(core.marker_for_slot(noted, 3), (None, None))
-        # Before the first solid still snaps after it (FreeCAD needs a Tip).
-        self.assertEqual(core.marker_for_slot(build(), 0), ({"Body": "Pad"}, None))
+        # Before the first solid: no Tip; before the very first step: a note too.
+        self.assertEqual(core.marker_for_slot(build(), 0), ({"Body": None}, "Sketch"))
+        self.assertEqual(core.marker_for_slot(build(), 1), ({"Body": None}, None))
+        empty = core.build(one_body(), {"Body": None})
+        self.assertEqual(core.marker_for_slot(empty, 0), (None, "Sketch"))
 
     def test_marker_note_changes_the_signature(self):
         a = core.build(one_body(), {"Body": "Pad"})
         b = core.build(one_body(), {"Body": "Pad"}, "Sketch001")
         self.assertNotEqual(core.signature(a), core.signature(b))
+
+
+class DisplayNamesTests(unittest.TestCase):
+    def test_same_names_as_the_timeline(self):
+        rows = one_body() + [feat("Plane", PLANE, 6), feat("Mine", SKETCH, 7, label="Holes")]
+        names = core.display_names([r for r in rows if r["type_id"] in (SKETCH, PLANE)])
+        tl = core.build(rows, {"Body": "Fillet"})
+        for name, shown in names.items():
+            self.assertEqual(shown, tl.find(name).display)
+        self.assertEqual(names["Sketch001"], "Sketch 2")
+        self.assertEqual(names["Plane"], "Plane 1")
+        self.assertEqual(names["Mine"], "Holes")
+
+
+class PlaceAtMarkerTests(unittest.TestCase):
+    """A new step goes in at the marker (FreeCAD's Body.addObject puts it before the
+    next solid after the Tip, at the end without a Tip)."""
+
+    OLD = ["Sketch", "Pad", "Sketch001", "Pad001"]
+    SOLIDS = {"Pad", "Pad001", "New"}
+
+    def place(self, new, tip, note=""):
+        return core.place_at_marker(self.OLD, new, tip, note, self.SOLIDS)
+
+    def test_no_tip_goes_before_the_first_solid(self):
+        self.assertEqual(
+            self.place(self.OLD + ["New"], None), ["Sketch", "New", "Pad", "Sketch001", "Pad001"]
+        )
+
+    def test_no_tip_and_the_marker_before_the_first_sketch(self):
+        self.assertEqual(
+            self.place(self.OLD + ["New"], None, "Sketch"),
+            ["New", "Sketch", "Pad", "Sketch001", "Pad001"],
+        )
+
+    def test_marker_before_a_sketch_after_the_tip(self):
+        new = ["Sketch", "Pad", "Sketch001", "New", "Pad001"]  # FreeCAD: before Pad001
+        self.assertEqual(
+            self.place(new, "Pad", "Sketch001"), ["Sketch", "Pad", "New", "Sketch001", "Pad001"]
+        )
+        self.assertIsNone(self.place(new, "Pad"))  # no note: already at the marker
+
+    def test_at_the_end_nothing_changes(self):
+        self.assertIsNone(self.place(self.OLD + ["New"], "Pad001"))
+
+    def test_placed_on_purpose_is_left_alone(self):
+        # SciForge's own insertObject (a helper just before its feature, a move).
+        self.assertIsNone(self.place(["Sketch", "New", "Pad", "Sketch001", "Pad001"], None))
+        self.assertIsNone(self.place(["New"] + self.OLD, "Pad"))
+        self.assertIsNone(self.place(self.OLD, None))  # nothing new
+        self.assertIsNone(self.place(self.OLD + ["New"], "Gone"))  # a Tip not in the body
+
+    def test_a_body_without_solids(self):
+        self.assertIsNone(core.place_at_marker(["Sketch"], ["Sketch", "New"], None, "", set()))
 
 
 class MoveTests(unittest.TestCase):

@@ -1,0 +1,172 @@
+{
+  "id": "sf_join_away_new_body",
+  "title": "Join away from the part makes a new body (Extrude, Box, Coil, Pipe), never a second lump",
+  "tags": [
+    "join",
+    "new-body",
+    "extrude",
+    "primitive",
+    "coil",
+    "pipe",
+    "bodies"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            70,
+            15,
+            5
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "join",
+      "comment": "Join picked, no bodies list (a script, an old step): the circle is 25 away"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 12000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 785.3981633974483,
+          "solids": 1
+        }
+      },
+      "comment": "the post is a body of its own: pi 5^2 10"
+    },
+    {
+      "op": "use_body",
+      "step": "e1",
+      "comment": "back to the block's body"
+    },
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "x": -30,
+      "y": 0,
+      "length": 10,
+      "width": 10,
+      "height": 10,
+      "operation": "join"
+    },
+    {
+      "op": "use_body",
+      "step": "e1"
+    },
+    {
+      "op": "sf_coil",
+      "id": "c1",
+      "plane": "XY",
+      "x": 20,
+      "y": -40,
+      "diameter": 20,
+      "revolutions": 4,
+      "height": 20,
+      "section_size": 2,
+      "operation": "join"
+    },
+    {
+      "op": "use_body",
+      "step": "e1"
+    },
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "line": [
+            [
+              0,
+              -60
+            ],
+            [
+              30,
+              -60
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "section_size": 2,
+      "operation": "join"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 12000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 785.3981633974483,
+          "solids": 1
+        },
+        "b1": {
+          "volume": 1000,
+          "solids": 1
+        },
+        "c1": {
+          "solids": 1,
+          "valid": true
+        },
+        "pp": {
+          "volume": 94.24777960769379,
+          "solids": 1
+        }
+      },
+      "comment": "each Join that touches nothing made its own body; the block is as it was"
+    }
+  ],
+  "expect": {
+    "volume": 94.24777960769379,
+    "solids": 1,
+    "source": "analytic",
+    "note": "The last step's body: the pipe d2 along the 30 long line, pi 1^2 30. Fusion: a Join that touches no body makes a new body (Autodesk forum 'Join produces New Body')."
+  }
+}

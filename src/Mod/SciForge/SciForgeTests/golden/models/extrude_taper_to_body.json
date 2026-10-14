@@ -1,0 +1,103 @@
+{
+  "id": "extrude_taper_to_body",
+  "title": "Tapered column To Object a whole other body (its bottom 30 up), widening 5 degrees, joined to the plate",
+  "tags": [
+    "extrude",
+    "to-object",
+    "taper",
+    "bodies"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "rect": [
+            -10,
+            -10,
+            50,
+            40
+          ],
+          "name": "lid"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "use_body",
+      "step": "e1"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "rect": [
+            10,
+            10,
+            30,
+            20
+          ],
+          "name": "column"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e3",
+      "profile": "s3",
+      "extent": "to_object",
+      "to": {
+        "step": "e2"
+      },
+      "taper": 5
+    }
+  ],
+  "expect": {
+    "volume": 12799.87632122675,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      30
+    ],
+    "source": "analytic",
+    "note": "Plate 40x30x5 = 6000. The column ends where it meets the other body (its bottom at z = 30), 25 high, widening by d = 25 tan 5 deg = 2.187217 per side: V = 25/6 (200 + 4 (20+d)(10+d) + (20+2d)(10+2d)) = 6799.8763. FreeCAD's Pad cannot taper up to a body; SciForge's own extrude builds it."
+  }
+}

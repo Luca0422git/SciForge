@@ -12,10 +12,10 @@ P5. A 40 x 30 x 10 block (Create Sketch, rectangle, E). Top face selected, Cylin
     the pull and the boss on it follow. Ctrl+Z. Box 1 edited again, its Plane box clicked,
     the block's top clicked (the box made that face smaller): taken, nothing moves; Esc.
 P6. Problems said in the dialog, never in the Report view: a Box away from the part
-    (New Body by itself) switched to Cut (it touches nothing), Join (two separate pieces
-    in one body), Intersect (nothing in common): each said, OK waits; New Body: fine; Esc
-    leaves nothing. A Box round the whole part switched to Cut: it would take everything,
-    said, OK waits; Esc.
+    (New Body by itself) switched to Cut (it touches nothing: said, OK waits), Join (Fusion
+    makes it a body of its own, no message), Intersect (nothing in common: said, OK
+    waits); New Body: fine; Esc leaves nothing. A Box round the whole part switched to
+    Cut: it would take everything, said, OK waits; Esc.
 P7. Picks in the wrong order: Box, an edge of the part clicked (not a plane; the XY
     square lies behind it): said, still waiting; the side of the boss (curved): said;
     then the block's top: placing. Esc.
@@ -427,13 +427,15 @@ p6_cut_waits.wait_ms = 1500
 
 def p6_join_said():
     p = pi.panel("BoxPanel")
-    h.check("P6 two separate pieces in one body is said", "separate" in msg(p), msg(p))
-    h.task_button("OK")
+    # Fusion: a Join that touches no body makes a new body (never a separate piece).
+    h.check("P6 a Join away from the part: no message", msg(p) == "", msg(p))
+    h.check("P6 it is a body of its own", len(pi.bodies()) == 2, [o.Name for o in pi.bodies()])
+    h.check("P6 the box joins nothing: 1000 more", near(vol(), s["vol"] + 1000.0), vol())
 
 
 def p6_join_waits():
     p = pi.panel("BoxPanel")
-    h.check("P6 OK waits", p is not None)
+    h.check("P6 the dialog is still open", p is not None)
     if p is not None:
         ui.choose(p.operation, "Intersect")
 

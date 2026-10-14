@@ -105,7 +105,7 @@ callers (dialogs, browser) wrap the rest in their own transaction.
 | Isolate / Unisolate | `SciForge_Isolate`, `SciForge_Unisolate` (command search and the browser's menus). |
 | Create Components from Bodies (right-click a body) | `SciForge_ComponentsFromBodies` and the browser's body menu. |
 | Drag a body into a component | `SciForge_MoveToComponent` (a small dialog: what moves, Into) and the browser's drag or submenu. |
-| Extrude / Revolve / Sweep / Loft: Operation New Component | The fifth operation in the four dialogs: a new component (Component N, under the active component) with Body1 holding the result; the sketch stays in its own body (Fusion: the sketch stays, people drag it in if they want); the new component becomes active (guess). Editing the step keeps the same component and body; Operation reads New Component. Cancel (or a failed preview) removes the component again. |
+| Extrude / Revolve / Sweep / Loft, Box / Cylinder / Sphere / Torus / Coil / Pipe: Operation New Component | The fifth operation in these dialogs (the primitives since 2026-10-13: **Autodesk** SLD-BOX-SOLID / SLD-CREATE-SOLID-PRIMITIVE list it for Box and the other solid primitives): a new component (Component N, under the active component) with Body1 holding the result; the sketch stays in its own body (Fusion: the sketch stays, people drag it in if they want); the new component becomes active (guess). Editing the step keeps the same component and body; Operation reads New Component. Cancel (or a failed preview) removes the component again. Switching between New Body and New Component in the dialog (or in an edit) moves the result: out of the component (which goes), or into a new one. |
 
 ## Timeline
 

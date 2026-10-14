@@ -138,6 +138,9 @@ class FormulaInput:
       panel.formula_typed(key, text, value)   a formula, already evaluated (field shows value)
       panel.formula_cleared(key)              a plain number typed: no formula any more
       panel.formula_failed(key, message)      no value (a typo, wrong units...)
+
+    A formula of another kind than the field (a length in an angle field) is no value, like
+    in Fusion: the field's ``unit`` ("mm", "deg", "" for a number) says what it takes.
     """
 
     def __init__(self, panel, key, field):
@@ -146,6 +149,7 @@ class FormulaInput:
         self.panel = panel
         self.key = key
         self.field = field
+        self.unit = getattr(field, "unit", None)
         self.raw = None
         edit = field.widget.findChild(QtWidgets.QLineEdit)
         if edit is not None:
@@ -178,7 +182,7 @@ class FormulaInput:
                 panel.formula_cleared(self.key)
                 return True
             try:
-                value = extrude.evaluate(panel.doc, text)
+                value = extrude.evaluate(panel.doc, text, self.unit)
             except extrude.ExtrudeError as exc:
                 panel.formula_failed(self.key, str(exc))
                 return False
@@ -204,7 +208,7 @@ class FormulaInput:
                 panel.formula_cleared(self.key)
                 return
             try:
-                value = extrude.evaluate(panel.doc, text)
+                value = extrude.evaluate(panel.doc, text, self.unit)
             except extrude.ExtrudeError as exc:
                 panel.formula_failed(self.key, str(exc))
                 return

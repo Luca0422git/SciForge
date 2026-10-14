@@ -15,7 +15,7 @@ Options (dict, see DEFAULTS):
                 and pipe sections are measured that way)
   hollow        True: a tube with walls `thickness` thick
   thickness     the wall of a hollow pipe
-  operation     join | cut | intersect | new_body
+  operation     join | cut | intersect | new_body | new_component
 
 What is built: PartDesign::AdditivePipe (join, new body) or SubtractivePipe (cut), or
 SciForge's PipeFeature (intersect), sweeping SciForge's own section along SciForge's own
@@ -412,6 +412,10 @@ class PipeSection:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        if obj.Path is not None:  # saved before the QA fixes (upgrade.py)
+            from . import upgrade
+
+            upgrade.mark(obj, "pipe")
 
     def execute(self, obj):
         import Part
@@ -608,6 +612,13 @@ def build(path, options, feature=None, name="Pipe", body=None):
         raise PrimitiveError("The path must belong to a body. Use Create Sketch first.")
     if feature is not None and any(obj is feature for obj, _ in path):
         raise PrimitiveError("The pipe cannot follow its own edges. Pick other edges.")
+    if options["operation"] == "join":
+        try:
+            tool = tool_shape(path, options)
+        except Exception:
+            tool = None
+        if primitives.joins_nothing(src, feature, tool):
+            options = dict(options, operation="new_body")  # Fusion: a new body, not a lump
     operation = options["operation"]
     # SciForge's own step does every operation: a pipe that is one stays one (swapping
     # the step for another kind is refused once later steps use it).
@@ -745,7 +756,7 @@ def read(feature):
         options["operation"] = "cut"
     else:
         saved = meta.get("options", {}).get("operation")
-        options["operation"] = "new_body" if saved == "new_body" else "join"
+        options["operation"] = saved if saved in ("new_body", "new_component") else "join"
     # The values as they are now (a parameter may drive them), not as last typed.
     section = None
     for name in meta.get("helpers", []):

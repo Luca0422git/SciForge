@@ -1,0 +1,84 @@
+{
+  "id": "sf_pipe_old_upgraded",
+  "title": "A pipe saved by SciForge before the 2026-10-11 fixes (its section linked to the path object) is rebuilt when the file is opened and stays the same",
+  "tags": [
+    "pipe",
+    "reopen",
+    "upgrade"
+  ],
+  "steps": [
+    {
+      "op": "sf_path_sketch",
+      "id": "p",
+      "plane": "XY",
+      "segments": [
+        {
+          "line": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ]
+        },
+        {
+          "arc": [
+            20,
+            10,
+            10,
+            -90,
+            0
+          ]
+        },
+        {
+          "line": [
+            [
+              30,
+              10
+            ],
+            [
+              30,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_pipe",
+      "id": "pp",
+      "path": {
+        "sketch": "p",
+        "edge": 1
+      },
+      "section_size": 2
+    },
+    {
+      "op": "age",
+      "target": "pp",
+      "comment": "as saved before the fixes: the section reads the path object"
+    },
+    {
+      "op": "reopen"
+    }
+  ],
+  "expect": {
+    "volume": 175.01172814903853,
+    "area": 356.30664160525663,
+    "faces": 5,
+    "bbox": [
+      0,
+      -1,
+      -1,
+      31,
+      30,
+      1
+    ],
+    "note": "Rebuilt on opening (the section now reads the path's edges), the same tube: L = 20 + pi 10/2 + 20. A tube r1 round a gently bent path: V = pi r^2 L, side 2 pi r L, plus the 2 end discs; faces: 2 cylinders + a torus part + 2 discs.",
+    "solids": 1,
+    "source": "analytic"
+  }
+}

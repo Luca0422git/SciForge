@@ -220,6 +220,10 @@ def relink_users(old, new):
 # and a lost one is found again there (the same kind of curve or surface, facing the same
 # way, nearest to where it was).
 MEMORY = "SciForgeLinkMemory"
+# A lost element found again may have turned a little (a taper added to the extrude under it
+# tilts its side faces and edges): up to this much, nearest first.
+SAME_WAY = math.cos(math.radians(30.0))
+FAR = 0.25  # farther than this (a quarter of the part's size) is no longer the same element
 
 
 def _record(element):
@@ -244,9 +248,11 @@ def _record(element):
                 rec["r"] = curve.Radius
             return rec
         rec["t"] = element.Surface.TypeId
+        if rec["t"] != "Part::GeomPlane" and _flat(element):
+            rec["t"] = "Part::GeomPlane"  # a tapered extrude's flat sides are B-splines
         rec["c"] = list(element.CenterOfMass)
         rec["s"] = element.Area
-        if element.Surface.TypeId == "Part::GeomPlane":
+        if rec["t"] == "Part::GeomPlane":
             u0, u1, v0, v1 = element.ParameterRange
             n = element.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
             if n.Length > TOL:
@@ -257,25 +263,59 @@ def _record(element):
     return rec
 
 
+def _flat(face):
+    try:
+        return face.findPlane() is not None
+    except Exception:
+        return False
+
+
 def _same_way(a, b, kind, surface):
     dot = App.Vector(*a).dot(App.Vector(*b))
     if kind == "Face" and surface == "Part::GeomPlane":
-        return dot > 1.0 - 1e-6  # a flat face keeps facing the same way
-    return abs(dot) > 1.0 - 1e-6
+        return dot > SAME_WAY  # a flat face keeps facing (about) the same way
+    return abs(dot) > SAME_WAY
+
+
+def _box(shape):
+    b = shape.BoundBox
+    return [b.XMin, b.YMin, b.ZMin, b.XMax, b.YMax, b.ZMax]
+
+
+def _where(point, box):
+    """`point` relative to the part's bounding box (0 .. 1 along each side it spans): the
+    corner of a box made taller is still its top corner, where the old place is half way
+    between the old top and bottom corners."""
+    out = []
+    for i, v in enumerate((point.x, point.y, point.z)):
+        lo, hi = box[i], box[i + 3]
+        out.append((v - lo) / (hi - lo) if hi - lo > TOL else 0.0)
+    return App.Vector(*out)
 
 
 def _find_again(shape, rec):
-    """Name ("Edge3") of the element of `shape` that is most likely `rec`'s, or None."""
+    """Name ("Edge3") of the element of `shape` that is most likely `rec`'s, or None. Nearest
+    first: relative to the part's bounding box when the record has the box it was taken in
+    (the part may have grown), else in place."""
     kind = rec.get("k")
     pool = {"Edge": shape.Edges, "Face": shape.Faces, "Vertex": shape.Vertexes}.get(kind)
     if not pool or "c" not in rec:
         return None
     centre = App.Vector(*rec["c"])
+    old_box = rec.get("b")
+    new_box = _box(shape) if old_box else None
+
+    def gap(point):
+        far = (point - centre).Length
+        if not old_box:
+            return far
+        return (_where(point, new_box) - _where(centre, old_box)).Length + 1e-6 * far
+
     best = None
     for i, other in enumerate(pool, start=1):
         try:
             if kind == "Vertex":
-                distance = (other.Point - centre).Length
+                distance = gap(other.Point)
             else:
                 there = _record(other)
                 if there.get("t") != rec.get("t"):
@@ -295,11 +335,13 @@ def _find_again(shape, rec):
                 size = rec.get("s", 0.0)
                 if size > TOL and not 0.2 <= there.get("s", 0.0) / size <= 5.0:
                     continue
-                distance = (App.Vector(*there["c"]) - centre).Length
+                distance = gap(App.Vector(*there["c"]))
         except Exception:
             continue
         if best is None or distance < best[0] - 1e-9:
             best = (distance, i)
+    if best is not None and old_box and best[0] > FAR:
+        return None  # nothing like it near where it was: rather red than another element
     return "%s%d" % (kind, best[1]) if best is not None else None
 
 
@@ -321,8 +363,9 @@ def _items(value):
     return out
 
 
-def remember(feature, props):
-    """Store where the part elements linked by `props` are now (after a good compute)."""
+def remember(feature, props, memory=MEMORY):
+    """Store where the part elements linked by `props` are now (after a good compute), in the
+    hidden property `memory` (saved with the file)."""
     import json
 
     data = {}
@@ -336,26 +379,29 @@ def remember(feature, props):
                 if not short or sub.startswith("?"):
                     continue
                 try:
-                    rows.append([linked.Name, short, _record(linked.Shape.getElement(short))])
+                    rec = _record(linked.Shape.getElement(short))
+                    rec["b"] = _box(linked.Shape)
+                    rows.append([linked.Name, short, rec])
                 except Exception:
                     continue
         if rows:
             data[prop] = rows
     text = json.dumps(data, sort_keys=True)
-    if MEMORY not in feature.PropertiesList:
+    if memory not in feature.PropertiesList:
         # hidden, output, no recompute: writing it from execute() changes nothing else
-        feature.addProperty("App::PropertyString", MEMORY, "SciForge", "Picked elements", 28)
-    if getattr(feature, MEMORY) != text:
-        setattr(feature, MEMORY, text)
+        feature.addProperty("App::PropertyString", memory, "SciForge", "Picked elements", 28)
+    if getattr(feature, memory) != text:
+        setattr(feature, memory, text)
 
 
-def refind(feature, props):
+def refind(feature, props, memory=MEMORY):
     """Point the links of `props` whose part element FreeCAD lost at the element found again
-    where it was. Returns {(object name, old name): new name} for the links changed."""
+    where it was (remembered in the property `memory`). Returns {(object name, old name): new
+    name} for the links changed."""
     import json
 
     try:
-        memory = json.loads(getattr(feature, MEMORY, "") or "{}")
+        memory = json.loads(getattr(feature, memory, "") or "{}")
     except Exception:
         return {}
     changed = {}
@@ -374,6 +420,14 @@ def refind(feature, props):
                 lost = bool(short) and (sub.startswith("?") or not _exists(linked, short))
                 if lost and linked is not None and not is_sketch(linked):
                     rec = next((r for n, s, r in rows if n == linked.Name and s == short), None)
+                    if rec is None:
+                        # The step it was picked on was rebuilt as a new object (an extrude
+                        # made thin): the link moved there with the old name.
+                        doc = feature.Document
+                        rec = next(
+                            (r for n, s, r in rows if s == short and doc.getObject(n) is None),
+                            None,
+                        )
                     found = _find_again(linked.Shape, rec) if rec else None
                     if found is not None:
                         renames[(linked.Name, short)] = found

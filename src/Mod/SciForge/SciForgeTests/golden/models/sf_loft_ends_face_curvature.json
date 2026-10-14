@@ -1,0 +1,77 @@
+{
+  "id": "sf_loft_ends_face_curvature",
+  "title": "Loft from a block's top face (Curvature G2) to a square 20 above",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "end-conditions",
+    "face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -10,
+            -10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            -5,
+            5,
+            5
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "face": {
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          }
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "start_condition": "curvature"
+    }
+  ],
+  "expect": {
+    "volume": 10024.603174603175,
+    "solids": 1,
+    "valid": true,
+    "rel_tol": 1e-05,
+    "source": "analytic",
+    "note": "Flat walls: G2 also asks for no bend at the start. A C2 cubic with a knot at v = 1/2: g = 4/3 v^3 - 8/3 (v - 1/2)^3+, z = 20 v, L = 20 - 10 g; 4000 + 20 integral L^2 dv. OpenCASCADE's volume of the two-span side is 7e-7 off."
+  }
+}

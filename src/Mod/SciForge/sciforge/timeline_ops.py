@@ -277,6 +277,10 @@ _guard = {"observer": None}
 
 
 def install_guard(defer=None):
+    from . import picks
+
+    install_marker_inserts()
+    picks.install()  # picked edges / faces kept when FreeCAD loses their names
     if _guard["observer"] is None:
         _guard["observer"] = RecomputeGuard(defer)
         App.addDocumentObserver(_guard["observer"])
@@ -294,6 +298,101 @@ def remove_guard():
             pass
         for q in list(observer._active.values()):
             q.__exit__(None, None, None)
+
+
+# -- a new step goes in at the history marker -----------------------------------------
+class MarkerInserts:
+    """Document observer: Fusion adds a new step at the history marker. FreeCAD's
+    Body.addObject puts it right before the next solid step after the body's Tip, or at
+    the end of a body without a Tip, so with the marker before the first solid step the
+    new step landed after every rolled-back step (built on all of them), and with the
+    marker standing before a sketch it landed after that sketch (hidden by the marker).
+    The step is moved to the marker (timeline_core.place_at_marker) the moment FreeCAD
+    puts it in the body: PartDesign links its base right after that, from the body's
+    order, so its base is right from the first preview on. FreeCAD takes the move as part
+    of the same Group change (one undo step, no second notification)."""
+
+    def __init__(self):
+        self._fresh = set()  # (document, object): made and not yet in a body
+        self._before = {}  # (document, body): its steps before a Group change
+
+    @staticmethod
+    def _busy(doc):
+        try:
+            return bool(doc.Restoring or doc.Transacting)  # opening a file, undo / redo
+        except Exception:
+            return True
+
+    def slotCreatedObject(self, obj):
+        try:
+            doc = obj.Document
+            if not self._busy(doc):
+                self._fresh.add((doc.Name, obj.Name))
+        except Exception:
+            pass
+
+    def slotDeletedObject(self, obj):
+        try:
+            self._fresh.discard((obj.Document.Name, obj.Name))
+        except Exception:
+            pass
+
+    def slotRecomputedDocument(self, doc):
+        try:
+            self._fresh = {k for k in self._fresh if k[0] != doc.Name}
+        except Exception:
+            pass
+
+    def slotDeletedDocument(self, doc):
+        self.slotRecomputedDocument(doc)
+
+    def slotBeforeChangeObject(self, obj, prop):
+        if prop != "Group" or not self._fresh:
+            return
+        try:
+            if obj.TypeId == "PartDesign::Body":
+                self._before[(obj.Document.Name, obj.Name)] = [o.Name for o in obj.Group]
+        except Exception:
+            pass
+
+    def slotChangedObject(self, obj, prop):
+        if prop != "Group" or not self._before:
+            return
+        try:
+            doc = obj.Document
+            old = self._before.pop((doc.Name, obj.Name), None)
+            if old is None or self._busy(doc):
+                return
+            group = list(obj.Group)
+            new = [o.Name for o in group]
+            added = [n for n in new if n not in old]
+            if len(added) != 1 or (doc.Name, added[0]) not in self._fresh:
+                return
+            self._fresh.discard((doc.Name, added[0]))
+            tip = getattr(obj, "Tip", None)
+            solids = {o.Name for o in group if _is_solid_step(o)}
+            order = core.place_at_marker(
+                old, new, tip.Name if tip is not None else None, marker_note(doc), solids
+            )
+            if order is None:
+                return
+            by_name = {o.Name: o for o in group}
+            obj.Group = [by_name[n] for n in order]
+        except Exception as exc:
+            from . import _remember
+
+            _remember("info", "timeline: a new step stayed where FreeCAD put it: %s" % exc)
+
+
+_inserts = {"observer": None}
+
+
+def install_marker_inserts():
+    """Watch for new steps (GUI start, and before the marker is first moved, so the
+    golden-model builder gets it too). Installed once."""
+    if _inserts["observer"] is None:
+        _inserts["observer"] = MarkerInserts()
+        App.addDocumentObserver(_inserts["observer"])
 
 
 # -- reading the document ------------------------------------------------------------
@@ -512,6 +611,29 @@ def _key(obj):
     if isinstance(rank, float) and rank > 0:
         return rank
     return float(obj.ID)
+
+
+def display_names(doc, objs):
+    """{name: what the timeline calls it ("Sketch 2", "Plane 1", or the name the user
+    gave it)} for those of ``objs`` that are timeline steps: Fusion's browser and timeline
+    show one name. Pass every object of the kinds wanted (steps are numbered per kind)."""
+    rows = []
+    for obj in objs:
+        try:
+            if not _is_step(obj):
+                continue
+            rows.append(
+                {
+                    "name": obj.Name,
+                    "label": obj.Label,
+                    "type_id": type_key(obj),
+                    "key": _key(obj),
+                    "created": float(obj.ID),
+                }
+            )
+        except Exception:
+            continue
+    return core.display_names(rows)
 
 
 def snapshot(doc, deps=True):
@@ -772,6 +894,7 @@ def _label(doc, name):
 def roll(doc, tips, title="Roll History Marker", before=None):
     """Set the bodies' Tips (the history marker), one undo step; ``before``: the step
     right after the marker when it stands before a sketch/plane."""
+    install_marker_inserts()
     if not tips:
         if (before or "") == marker_note(doc):
             return False
@@ -802,6 +925,7 @@ def current_tips(doc):
 def set_marker_untracked(doc, tips, before=None):
     """Move the marker without an undo step: Fusion rolls to a step while it is edited
     and back afterwards, and neither is something to undo (the edit itself is)."""
+    install_marker_inserts()
     _set_marker_note(doc, before)
     if not tips:
         show_marker_state(doc)
@@ -810,6 +934,21 @@ def set_marker_untracked(doc, tips, before=None):
         _set_tips(doc, tips)
     recompute(doc)
     return True
+
+
+def _picks_paused(fn):
+    """The operation decides which steps break and keeps their references itself:
+    picks.Keeper must not point a step at another edge meanwhile."""
+    import functools
+
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        from . import picks
+
+        with picks.paused():
+            return fn(*args, **kwargs)
+
+    return run
 
 
 # -- suppress --------------------------------------------------------------------------
@@ -932,6 +1071,7 @@ def _names(names):
     return [names] if isinstance(names, str) else list(names)
 
 
+@_picks_paused
 def suppress(doc, names):
     """Suppress steps and, like Fusion, the steps that depend on them, as one undo
     step. Returns the names suppressed with them."""
@@ -979,6 +1119,7 @@ def suppress(doc, names):
     return sorted(group - set(names))
 
 
+@_picks_paused
 def unsuppress(doc, names):
     """Turn suppressed steps back on, with the steps that went off with them."""
     names = [n for n in _names(names) if doc.getObject(n) is not None]
@@ -1039,6 +1180,7 @@ def _attached_to(obj, gone):
     return any(o.Name in gone for o in _objects_in(support))
 
 
+@_picks_paused
 def delete(doc, names):
     """Delete steps, one undo step. Later steps keep working where possible: the
     body's history is re-linked around the gap, a sketch that sat on a deleted face
@@ -1244,6 +1386,7 @@ def plan(doc, name, slot):
     return core.plan_move(timeline(doc), name, slot)
 
 
+@_picks_paused
 def move(doc, name, slot):
     """Move a step to ``slot`` of the timeline. Raises TimelineError with the reason
     (like Fusion's red marker) when the move is impossible or would break a step. A

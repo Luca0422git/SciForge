@@ -1,0 +1,117 @@
+{
+  "id": "tl_roll_to_start",
+  "title": "Roll the history marker to the very start (an empty design), add a plate there, roll to the end",
+  "tags": [
+    "timeline",
+    "rollback",
+    "insert"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "roll",
+      "start": true
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "offset": -5,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e3",
+      "profile": "s3",
+      "distance": 5
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 6000,
+        "bbox": [
+          0,
+          0,
+          -5,
+          40,
+          30,
+          0
+        ],
+        "source": "analytic",
+        "note": "Only the plate: it went in at the marker, before every other step (FreeCAD alone puts it at the end, built on the whole part)"
+      }
+    },
+    {
+      "op": "roll",
+      "end": true
+    }
+  ],
+  "expect": {
+    "volume": 18392.699081698724,
+    "solids": 1,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      -5,
+      40,
+      30,
+      15
+    ],
+    "source": "analytic",
+    "note": "The plate is the first step, the box joins onto it and the boss on top: 40*30*15 + pi*5^2*5; faces: the block's 6 (one block: the plate and the box merge) + the boss side and top"
+  }
+}

@@ -7,9 +7,13 @@ Profiles (what is swept), a list of (object, sub-element), as for Extrude and Re
   (sketch, "")                the whole sketch
   (feature, "Face6")          a flat face of a body
 Path and guide rail: lists of curve references (sketch or part edges, see curves.py).
+Path + Guide Surface passes the guide surface's faces of the part, (feature, "FaceN"),
+where the guide rail goes (rail_refs).
 
 Options (dict, see DEFAULTS):
-  type         single | rail          Fusion's Single Path / Path + Guide Rail
+  type         single | rail | surface   Fusion's Single Path / Path + Guide Rail /
+               Path + Guide Surface (the profile keeps its angle to the surface's faces: the
+               surface's normal turns it; only Distance applies, like Fusion's)
   distance     0..1   how far along the path the sweep goes from the profile (side one,
                        towards the path's end; the whole path when the profile is at an end)
   distance2    0..1   side two, when the profile sits inside the path (single path only)
@@ -39,7 +43,7 @@ import FreeCAD as App
 
 from . import curves, extrude
 
-TYPES = ("single", "rail")
+TYPES = ("single", "rail", "surface")
 ORIENTATIONS = ("perpendicular", "parallel")
 SCALINGS = ("scale", "stretch", "none")
 OPERATIONS = ("join", "cut", "intersect", "new_body", "new_component")
@@ -274,7 +278,9 @@ def _solid(shape):
     solids = list(shape.Solids) if shape.ShapeType != "Solid" else [shape]
     if not solids:
         try:
-            solids = [Part.Solid(Part.Shell(shape.Faces))]
+            # makeShell / makeSolid: FreeCAD 1.1's Part.Solid() constructor lets its error
+            # pass every except clause.
+            solids = [Part.makeSolid(Part.makeShell(shape.Faces))]
         except Exception:
             raise SweepError("The sweep does not close into a solid. Check the profile.")
     solid = solids[0]
@@ -450,12 +456,15 @@ def _straight_pair(path, rail):
     return path.is_straight() and rail.is_straight()
 
 
-def _sweep_side(faces, spine, options, turn, rail=None):
+def _sweep_side(faces, spine, options, turn, rail=None, surface=None):
     """Solid of one side: `spine` starts at the profile."""
     orientation = options["orientation"]
     aux = None
     sections_for = None
-    if rail is not None:
+    if surface is not None:
+        size = max(1.0, max(f.BoundBox.DiagonalLength for f in faces))
+        aux = _surface_aux(spine, surface, size)
+    elif rail is not None:
         aux = rail.wire()
         if options["scaling"] != "none":
             count = 2 if _straight_pair(spine, rail) else STATIONS
@@ -501,7 +510,10 @@ def tool_shape(profiles, path_refs, rail_refs, options):
     _check_crossing(path, s_p, faces)
     layout = Plan(path, s_p, options)
     rail = None
-    if not single(options):
+    surface = None
+    if options["type"] == "surface":
+        surface = guide_faces(rail_refs)
+    elif not single(options):
         if not curves.normalize(rail_refs):
             raise SweepError("Select a guide rail: click a sketch line or an edge of the part.")
         try:
@@ -516,14 +528,66 @@ def tool_shape(profiles, path_refs, rail_refs, options):
     if not layout.two_sides or not split:
         spine = layout.whole() if layout.two_sides else layout.side_paths()[0][0]
         rail_part = _rail_part(rail, path, layout, spine) if rail is not None else None
-        return _sweep_side(faces, spine, options, turn, rail_part)
+        return _sweep_side(faces, spine, options, turn, rail_part, surface)
     total = layout.side1 + layout.side2
     pieces = []
     for spine, sign in layout.side_paths():
         part_turn = turn * spine.length / total
         rail_part = _rail_part(rail, path, layout, spine, sign) if rail is not None else None
-        pieces.append(_sweep_side(faces, spine, options, part_turn, rail_part))
+        pieces.append(_sweep_side(faces, spine, options, part_turn, rail_part, surface))
     return _fuse(pieces)
+
+
+def guide_faces(refs):
+    """The guide surface's faces (global), from (feature, "FaceN") picks."""
+    found = []
+    for obj, sub in refs or []:
+        if obj is None or not str(sub).startswith("Face"):
+            continue
+        try:
+            found.append(curves.to_global(obj.Shape.getElement(sub), obj))
+        except Exception:
+            raise SweepError("A face of the guide surface is gone. Pick the surface again.")
+    if not found:
+        raise SweepError("Select a guide surface: click the Guide Surface box, then a face.")
+    return found
+
+
+def _surface_aux(spine, guide, size):
+    """Path + Guide Surface: a guide curve `size` off the path along the surface's normal
+    (square to the path). OpenCASCADE's auxiliary-spine sweep turns the profile with it, so
+    the profile keeps the angle it has to the surface at the start."""
+    import Part
+
+    count = max(48, 24 * len(spine.edges))
+    points, params = [], []
+    for s, x, t in spine.samples(count):
+        n = _surface_normal(guide, x)
+        n = n - t * n.dot(t)
+        if n.Length < 1e-9:
+            raise SweepError(
+                "The path runs square into the guide surface. The path must run along it."
+            )
+        n.normalize()
+        points.append(x + n * size)
+        params.append(s / spine.length)
+    curve = Part.BSplineCurve()
+    curve.interpolate(Points=points, Parameters=params)
+    return Part.Wire(curve.toShape())
+
+
+def _surface_normal(guide, point):
+    """The normal (out of the part) of the guide face nearest `point`."""
+    import Part
+
+    best = None
+    for face in guide:
+        dist, pairs, _info = face.distToShape(Part.Vertex(point))
+        if best is None or dist < best[0]:
+            best = (dist, face, pairs[0][0])
+    _dist, face, near = best
+    u, v = face.Surface.parameter(near)
+    return face.normalAt(u, v)
 
 
 def _rail_part(rail, path, layout, spine, sign=1.0):
@@ -626,7 +690,11 @@ class SweepFeature:
         if add("App::PropertyEnumeration", "Operation", "Join, cut or intersect"):
             obj.Operation = ["Join", "Cut", "Intersect"]
         if add("App::PropertyEnumeration", "SweepType", "Single path or path + guide rail"):
-            obj.SweepType = ["Single Path", "Path + Guide Rail"]
+            obj.SweepType = list(TYPE_NAMES.values())
+        elif "Path + Guide Surface" not in obj.getEnumerationsOfProperty("SweepType"):
+            kept = obj.SweepType
+            obj.SweepType = list(TYPE_NAMES.values())  # a sweep from before guide surfaces
+            obj.SweepType = kept
         if add("App::PropertyFloatConstraint", "Distance", "Share of the path (side one)"):
             obj.Distance = (1.0, 0.0, 1.0, 0.05)
         if add("App::PropertyFloatConstraint", "Distance2", "Share of the path (side two)"):
@@ -704,6 +772,11 @@ class SweepFeature:
 
 
 LINKS = ("Profiles", "Path", "GuideRail")
+TYPE_NAMES = {
+    "single": "Single Path",
+    "rail": "Path + Guide Rail",
+    "surface": "Path + Guide Surface",
+}
 
 
 def _links(value):
@@ -718,7 +791,7 @@ def _links(value):
 
 def fp_options(obj):
     return {
-        "type": "single" if obj.SweepType == "Single Path" else "rail",
+        "type": {name: key for key, name in TYPE_NAMES.items()}.get(obj.SweepType, "single"),
         "operation": obj.Operation.lower(),
         "distance": float(obj.Distance),
         "distance2": float(obj.Distance2),
@@ -812,6 +885,31 @@ def _source_body(profiles):
     return body
 
 
+def apart(base, tool):
+    """True when the tool solid does not even touch the part (both global): no shared
+    volume and a gap between them. Errors count as touching (the Join stays a Join)."""
+    try:
+        if base.common(tool).Volume > 1e-9:
+            return False
+        return base.distToShape(tool)[0] > 1e-6
+    except Exception:
+        return False
+
+
+def base_global(body, feature=None):
+    """The solid `body` has where `feature` goes (before it, or at the end), in global
+    coordinates; None when the body has no solid there yet."""
+    if body is None:
+        return None
+    before = feature if feature is not None and owner_body(feature) is body else None
+    tip = before.BaseFeature if before is not None else body.Tip
+    if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
+        return None
+    shape = tip.Shape.copy()
+    shape.Placement = body.getGlobalPlacement().multiply(shape.Placement)
+    return shape
+
+
 def _target(feature, profiles, options):
     """(target body or None for 'make a new one', source body)."""
     src = _source_body(profiles)
@@ -819,6 +917,11 @@ def _target(feature, profiles, options):
     created = None
     if feature is not None and meta.get("created_body"):
         created = feature.Document.getObject(meta["created_body"])
+    if created is not None:
+        from .components_core import same_new
+
+        if not same_new(meta.get("operation"), options["operation"]):
+            created = None  # New Body <-> New Component: the result moves (made again)
     if options["operation"] in ("new_body", "new_component"):
         if created is not None:
             return created, src
@@ -857,7 +960,12 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
     path_refs = curves.normalize(path_refs)
     rail_refs = curves.normalize(rail_refs) if not single(options) else []
     # Fails early with the reason (no path, path in pieces, ...): nothing is built then.
-    tool_shape(profiles, path_refs, rail_refs, options)
+    tool = tool_shape(profiles, path_refs, rail_refs, options)
+    if options["operation"] == "join":
+        # Fusion: a Join that does not touch the part makes a new body (never a lump).
+        base = base_global(_source_body(profiles), feature)
+        if base is not None and apart(base, tool):
+            options = dict(options, operation="new_body")
     target, src = _target(feature, profiles, options)
     two = _two_sides(profiles, path_refs, options)
     native = native_type(profiles, path_refs, options, target, two) if target else None
@@ -934,7 +1042,7 @@ def _update(feature, profiles, path_refs, rail_refs, options, hide=True):
         operation = {"cut": "Cut", "intersect": "Intersect"}.get(options["operation"], "Join")
         if feature.Operation != operation:
             feature.Operation = operation
-        sweep_type = "Single Path" if single(options) else "Path + Guide Rail"
+        sweep_type = TYPE_NAMES[options["type"]]
         if feature.SweepType != sweep_type:
             feature.SweepType = sweep_type
         feature.Distance = max(0.0, min(1.0, options["distance"]))

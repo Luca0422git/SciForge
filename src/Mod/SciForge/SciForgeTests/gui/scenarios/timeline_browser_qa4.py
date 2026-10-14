@@ -359,12 +359,18 @@ def p24_many_steps():
         sk.recompute()
         extrude.make(body, sk, {"distance": 3.0})
     App.ActiveDocument.recompute()
+    # Off the box, each post is a body of its own (Fusion: a Join that touches nothing).
     s["posts"] = 30 * 4.0 * math.pi * 3.0
     s["top"] = top.Name
     h.fit()
 
 
 P24 = boss_steps("p24", V(30, 25, 10), V(32, 25, 10), 3, 4)
+
+
+def total():
+    """Volume of every body (the posts are bodies of their own)."""
+    return sum(t.volume(o) for o in App.ActiveDocument.Objects if o.TypeId == "PartDesign::Body")
 
 
 def in_view(widget):
@@ -396,8 +402,8 @@ def p24_in_view():
     h.check("the new extrude's icon is in view", in_view(tl._buttons[-1]), view_info())
     h.check(
         "everything",
-        t.near(t.volume(), BOX + BOSS + s["posts"] + SMALL),
-        (t.volume(), BOX + BOSS + s["posts"] + SMALL),
+        t.near(total(), BOX + BOSS + s["posts"] + SMALL),
+        (total(), BOX + BOSS + s["posts"] + SMALL),
     )
     h.shot("3-long")
 
@@ -439,7 +445,7 @@ def p24_rolled():
 
 
 def p24_end():
-    h.check("Go to end", t.near(t.volume(), BOX + BOSS + s["posts"] + SMALL), t.volume())
+    h.check("Go to end", t.near(total(), BOX + BOSS + s["posts"] + SMALL), total())
     h.check("the marker is in view at the end", in_view(t.tl().marker()), view_info())
     t.no_popups("the end")
     h.shot("4-end")

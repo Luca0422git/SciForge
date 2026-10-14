@@ -29,7 +29,6 @@ from . import bodies
 from .extrude import (
     FOLLOWER_ROLE,
     INTERSECT_TYPE,
-    PLANE_TYPES,
     ROLE,
     TOL,
     ExtrudeError,
@@ -379,6 +378,17 @@ def _inner_points(prism, faces, normal, limit=12):
     return found
 
 
+def _starts(profiles, options):
+    """The faces the extrusion starts from (global): the profile, or a thin extrude's walls
+    (the hollow inside a thin wall is no part of the extrusion)."""
+    from .extrude import section_faces
+
+    try:
+        return section_faces(profiles, options)
+    except ExtrudeError:
+        return []
+
+
 def _holds_any(shape, points):
     """True when one of `points` lies strictly inside the solid `shape`."""
     box = shape.BoundBox
@@ -465,14 +475,17 @@ def _surface_kind(face):
 
 def tool_prism(profiles, options, reach=()):
     """The solid the extrusion sweeps, in design coordinates (no boolean with any body).
-    "All" goes past everything in `reach`. Raises ExtrudeError when it cannot be built
-    here (an extrusion up to a whole body: FreeCAD's Pad measures that itself)."""
+    "All" goes past everything in `reach`; To Object ends at a plane, a face or a body the
+    way SciForge's own extrude feature ends there. Raises ExtrudeError when it cannot be
+    built here."""
     from . import extrude_prism
+    from .extrude import global_wires, thin_spec
 
     profiles = normalize(profiles)
     options = options_with_defaults(options)
     faces = global_faces(profiles)
-    if not faces:
+    wires = global_wires(profiles) if options["thin"] else []
+    if not faces and not wires:
         raise ExtrudeError("The profile has no closed area to extrude.")
     normal = profile_normal(profiles)
     sign = _sign1(profiles, options)
@@ -487,10 +500,7 @@ def tool_prism(profiles, options, reach=()):
         ref = options.get(key)
         if options[extent] != "to_object" or not ref:
             return None
-        obj, sub = ref
-        if not sub and obj.TypeId not in PLANE_TYPES:
-            raise ExtrudeError("An extrusion up to a whole body is measured by FreeCAD's Pad.")
-        return _ref_global(ref)
+        return _ref_global(ref)  # a plane, a face, or a whole body's solid
 
     spec = {
         "side_type": {"one_side": "One side", "two_sides": "Two sides", "symmetric": "Symmetric"}[
@@ -508,9 +518,10 @@ def tool_prism(profiles, options, reach=()):
         "target2": (
             target("extent_object2", "extent2") if options["direction"] == "two_sides" else None
         ),
+        "thin": thin_spec(options),
     }
     try:
-        return extrude_prism.build(faces, normal, spec, reach=list(reach))
+        return extrude_prism.build(faces, normal, spec, reach=list(reach), wires=wires)
     except extrude_prism.PrismError as exc:
         raise ExtrudeError(str(exc))
 
@@ -558,7 +569,9 @@ def in_the_way(profiles, options, lead=None):
                 continue  # apart
             if gap >= THIN:
                 if inner is None:
-                    inner = _inner_points(prism, global_faces(profiles), profile_normal(profiles))
+                    inner = _inner_points(
+                        prism, _starts(profiles, options), profile_normal(profiles)
+                    )
                 if _holds_any(shape, inner):
                     through.append(body)  # a point inside both: no boolean needed
                     touching.append(body)
@@ -593,7 +606,7 @@ def starts_in_material(profiles, options, lead=None):
         normal = profile_normal(profiles)
         offset = start_offset_of(profiles, options)
         pieces, points = [], []
-        for face in global_faces(profiles):
+        for face in _starts(profiles, options):
             face = face.copy()
             if abs(offset) > TOL:
                 face.translate(normal * offset)

@@ -92,8 +92,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion behaviour | Why not (yet) |
 |---|---|
-| Combine "New Component" | SciForge has no components; New Body is offered instead |
-| Used-up tool bodies disappear from the browser | they stay listed with their eye off (the browser belongs to the timeline/browser module) |
+| Combine "New Component" | Not built yet (components exist since 2026-10-13; New Body is offered); belongs to the Combine dialog's owner |
 | Split Body with several tools at once | one tool: a plane, a face, a body or a sketch curve |
 | Move: Set Pivot, Move Object Components / Faces | not built yet (Faces: Press Pull moves faces); Free Move turns about the middle of the bodies |
 | The timeline's and the browser's own Delete re-route dependants like SciForge's Delete | they belong to the timeline/browser module; they delete the bodies a Split Body or a copy made (bodies_gui.Watch), and flag what breaks |

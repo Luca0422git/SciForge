@@ -6,18 +6,22 @@ blue), flat faces of the part, or a sketch point (only first or last: a dome or 
 are listed in that order; move one up or down or take it out with the buttons next to the
 list, or click it again in the 3D view. Guide Type Rails: click the Rails box, then curves
 the side must run along; Centerline: one curve the profiles stay square to. Closed lofts the
-last profile back to the first. Lofting into material switches to Cut, unless you picked the
-operation yourself. Problems are shown in the dialog, which then stays open.
+last profile back to the first. First Profile / Last Profile set how the loft leaves the first
+profile and meets the last (Fusion's end conditions): a sketch profile Connected or Direction
+(Takeoff Weight, Takeoff Angle), a face of the part Connected (G0), Tangent (G1) or Curvature
+(G2), a point Sharp or Point Tangent (a dome), with a Tangency Weight. Lofting into material
+switches to Cut, unless you picked the operation yourself. Problems are shown in the dialog,
+which then stays open.
 """
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, curve_pick, curves, extrude, log, loft, preview, profile_pick
-from . import ui_icon_path, warn
+from . import commands, curve_pick, curves, extrude, log, loft, loft_ends_core, preview
+from . import profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .hole_common import SelectionField
-from .taskui import Panel
+from .taskui import DistanceField, Panel
 
 safe = curve_pick.safe("loft")
 
@@ -29,6 +33,8 @@ OPERATION_LABELS = [
     ("New Body", "new_body"),
     ("New Component", "new_component"),
 ]
+END_TITLES = (("start", "First Profile"), ("end", "Last Profile"))
+ENDS_GAP = "SciForge makes end conditions on an open loft without rails or a centerline."
 MERGE_GAP = (
     "Not in SciForge yet: the loft keeps one side face per profile curve (Fusion's Keep). "
     "The geometry kernel measures merged smooth sides wrongly, so they are not made."
@@ -196,6 +202,27 @@ class LoftPanel(Panel):
         self.merge.setEnabled(False)
         self.merge.setToolTip(MERGE_GAP)
         form.addRow("", self.merge)
+        self.ends = {}
+        for end, title in END_TITLES:
+            row = {"kind": None}
+            row["combo"] = QtWidgets.QComboBox()
+            row["combo"].setObjectName("SciForgeLoft_%s_condition" % end)
+            row["label"] = QtWidgets.QLabel(title)
+            row["weight"] = DistanceField(
+                self.options[end + "_weight"], unit="", on_change=self._end_value_changed
+            )
+            row["weight"].widget.setObjectName("SciForgeLoft_%s_weight" % end)
+            row["weight_label"] = QtWidgets.QLabel("Takeoff Weight")
+            row["angle"] = DistanceField(
+                self.options[end + "_angle"], unit="deg", on_change=self._end_value_changed
+            )
+            row["angle"].widget.setObjectName("SciForgeLoft_%s_angle" % end)
+            row["angle_label"] = QtWidgets.QLabel("Takeoff Angle")
+            form.addRow(row["label"], row["combo"])
+            form.addRow(row["weight_label"], row["weight"].widget)
+            form.addRow(row["angle_label"], row["angle"].widget)
+            row["combo"].activated.connect(self._end_picked)
+            self.ends[end] = row
         self.operation = curve_pick.combo(OPERATION_LABELS, self.options["operation"])
         self.operation.setObjectName("SciForgeLoft_operation")
         form.addRow("Operation", self.operation)
@@ -216,6 +243,9 @@ class LoftPanel(Panel):
             curve_pick.set_combo(self.operation, self.options["operation"])
             self.closed.setChecked(self.options["closed"])
             self.chain.setChecked(self.options["chain"])
+            for end, row in self.ends.items():
+                row["weight"].set_value(self.options[end + "_weight"])
+                row["angle"].set_value(self.options[end + "_angle"])
         finally:
             self._quiet = False
         self._update_visibility()
@@ -229,12 +259,89 @@ class LoftPanel(Panel):
             (self.fields["centerline"].widget, not rails),
         ):
             widget.setVisible(show)
+        self._update_ends()
+
+    # -- end conditions (first / last profile) ------------------------------------------------
+    def _end_kind(self, end):
+        if len(self.profiles) < 2:
+            return None
+        obj, sub = self.profiles[0] if end == "start" else self.profiles[-1]
+        if sub.startswith("Vertex"):
+            return "point"
+        return "sketch" if extrude.is_sketch(obj) else "face"
+
+    def _ends_possible(self):
+        """End conditions need an open loft without rails or a centerline (SciForge)."""
+        if self.closed.isChecked():
+            return False
+        if self.guide.currentData() == "rails":
+            return not self.rails
+        return not self.centerline
+
+    def _update_ends(self):
+        """Each end's choices follow its profile (sketch / face / point); the weight and the
+        angle show for the conditions that use them."""
+        possible = self._ends_possible()
+        for end, row in self.ends.items():
+            kind = self._end_kind(end)
+            combo = row["combo"]
+            if kind != row["kind"]:
+                row["kind"] = kind
+                self._quiet = True
+                try:
+                    combo.clear()
+                    for label, key in loft_ends_core.LABELS.get(kind, []):
+                        combo.addItem(label, key)
+                finally:
+                    self._quiet = False
+            wanted = self.options.get(end + "_condition", "free")
+            if kind is None or wanted not in loft_ends_core.allowed(kind):
+                wanted = "free"
+                self.options[end + "_condition"] = "free"
+            self._quiet = True
+            try:
+                curve_pick.set_combo(combo, wanted)
+            finally:
+                self._quiet = False
+            shown = kind is not None and not self.closed.isChecked()
+            row["label"].setVisible(shown)
+            combo.setVisible(shown)
+            combo.setEnabled(possible)
+            combo.setToolTip("" if possible else ENDS_GAP)
+            condition = combo.currentData() if possible else "free"
+            row["weight_label"].setText(
+                "Takeoff Weight" if condition == "direction" else "Tangency Weight"
+            )
+            for widget in (row["weight_label"], row["weight"].widget):
+                widget.setVisible(shown and condition not in (None, "free"))
+            for widget in (row["angle_label"], row["angle"].widget):
+                widget.setVisible(shown and condition == "direction")
+
+    @safe
+    def _end_picked(self, _index):
+        if self._quiet:
+            return
+        for end, row in self.ends.items():
+            self.options[end + "_condition"] = row["combo"].currentData() or "free"
+        self._changed()
+
+    @safe
+    def _end_value_changed(self, _value):
+        if self._quiet:
+            return
+        self._changed()
 
     def _collect(self):
         self.options["guide"] = self.guide.currentData()
         self.options["closed"] = bool(self.closed.isChecked())
         self.options["operation"] = self.operation.currentData()
         self.options["chain"] = bool(self.chain.isChecked())
+        possible = self._ends_possible()
+        for end, row in self.ends.items():
+            condition = row["combo"].currentData() if row["kind"] is not None else None
+            self.options[end + "_condition"] = (condition or "free") if possible else "free"
+            self.options[end + "_weight"] = float(row["weight"].value())
+            self.options[end + "_angle"] = float(row["angle"].value())
 
     # -- selection boxes -------------------------------------------------------------------------
     def activate(self, name):

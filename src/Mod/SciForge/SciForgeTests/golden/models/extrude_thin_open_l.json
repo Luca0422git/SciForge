@@ -1,0 +1,59 @@
+{
+  "id": "extrude_thin_open_l",
+  "title": "Thin Extrude of an open L of two sketch lines: a 2 mm wall on the curve's left (Side 1), 10 high",
+  "tags": [
+    "extrude",
+    "thin",
+    "open-profile"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ],
+            [
+              20,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "curves": "p1",
+      "distance": 10,
+      "thin": {
+        "location": "side1",
+        "thickness": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 560,
+    "faces": 8,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      20,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "The first line runs +X, so its left (seen from +Z) is +Y: the wall lies inside the L. Area 20x2 + 10x2 - 2x2 (the corner counted once) = 56 mm^2, 10 high = 560. An L prism: 6 sides + top + bottom = 8 faces."
+  }
+}

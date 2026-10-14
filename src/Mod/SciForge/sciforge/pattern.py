@@ -1553,7 +1553,7 @@ def face_tool(shape, faces):
     try:
         shell = Part.Shell(picked + patches)
         shell.sewShape()  # the patches get their own copies of the boundary edges
-        solid = Part.Solid(shell)
+        solid = Part.makeSolid(shell)  # Part.Solid()'s error passes every except clause
         if solid.Volume < 0:
             solid.reverse()
     except Exception:
