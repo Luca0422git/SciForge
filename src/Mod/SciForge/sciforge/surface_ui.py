@@ -81,25 +81,45 @@ def _smooth(a, b, edge):
 
 def free_chain(obj, sub, tangent=True):
     """Names of the free (boundary) edges of `obj`'s surface joined to edge `sub` (through
-    smooth joints only with tangent=True): Chain Selection along a surface's boundary."""
+    smooth joints only with tangent=True): Chain Selection along a surface's boundary.
+    None when `sub` is not on the boundary."""
     from . import surface_geom as g
 
     try:
         shape = obj.Shape
         free = g.free_edges(shape)
-        names = []
+        boundary = {}
         for i, e in enumerate(shape.Edges, 1):
             if any(e.isSame(f) for f in free):
-                names.append("Edge%d" % i)
+                boundary[i] = e
+        start = int(sub[4:])
     except Exception:
         return [sub]
-    if sub not in names:
-        return [sub]
-    chained = curves.chain(obj, sub, tangent=tangent)
-    # the chain may run along inner edges (between two faces): keep the boundary only,
-    # connected to the clicked one
-    keep = [n for n in chained if n in names]
-    return keep or [sub]
+    if start not in boundary:
+        return None  # not on the boundary: the caller chains it another way
+    # Only the boundary counts: the inner edges meeting it at a corner (a tube's seams)
+    # neither stop nor join the chain.
+    ends = {i: curves._ends(e) for i, e in boundary.items()}
+    taken = {start}
+    todo = [start]
+    while todo:
+        i = todo.pop()
+        for point, leaving in ends[i]:
+            meeting = []
+            for j, pair in ends.items():
+                if j == i:
+                    continue
+                for p, d in pair:
+                    if (p - point).Length < 1e-6:
+                        meeting.append((j, d))
+            if len(meeting) != 1:
+                continue  # an open end or a branch
+            j, d = meeting[0]
+            if j in taken or (tangent and not curves._tangent(leaving, d)):
+                continue
+            taken.add(j)
+            todo.append(j)
+    return ["Edge%d" % i for i in sorted(taken)]
 
 
 # -- the dialog base ----------------------------------------------------------------------------
@@ -114,7 +134,9 @@ class SurfacePanel(BodyPanel):
     boxes = ()
     single = ()  # boxes that hold one pick (a new pick replaces it)
     chain_boxes = ()  # boxes Chain Selection works in
-    chain_tangent = True
+    # Chain Selection on a profile or boundary takes every curve connected to the clicked
+    # one (a rectangle's four sides); on a path, edges and faces only what joins smoothly.
+    tangent_boxes = ("path", "edges")
     chain_label = "Chain Selection"
     default_box = None  # the value box a number typed over the view goes to
     needs_pick = (core.NeedsPick,)
@@ -554,6 +576,9 @@ class SurfacePanel(BodyPanel):
         allowed = [words[a] for a in accepts if a in words]
         return "%s takes %s." % (label, ", ".join(dict.fromkeys(allowed)))
 
+    def tangent_chain(self, name):
+        return name in self.tangent_boxes
+
     def expand(self, name, ref):
         """A click with Chain Selection on: the picks it stands for."""
         obj, sub = ref
@@ -562,11 +587,11 @@ class SurfacePanel(BodyPanel):
         try:
             if sub.startswith("Edge"):
                 if curves.is_sketch(obj):
-                    names = curves.chain(obj, sub, tangent=self.chain_tangent)
+                    names = curves.chain(obj, sub, tangent=self.tangent_chain(name))
                 else:
-                    names = free_chain(obj, sub, tangent=self.chain_tangent)
-                    if names == [sub]:
-                        names = curves.chain(obj, sub, tangent=self.chain_tangent)
+                    names = free_chain(obj, sub, tangent=self.tangent_chain(name))
+                    if names is None:
+                        names = curves.chain(obj, sub, tangent=self.tangent_chain(name))
                 return [(obj, n) for n in names]
             if sub.startswith("Face"):
                 return [(obj, n) for n in tangent_faces(obj, sub)]
@@ -947,6 +972,12 @@ class SurfacePanel(BodyPanel):
         if body is None:
             return
         try:
+            # PlanePicker frames the planes when the body has no solid (a new design); a
+            # surface body has none either, and the view must stay where the user put it
+            camera = self.view.getCamera()
+        except Exception:
+            camera = None
+        try:
             self.planes = PlanePicker(
                 self.view,
                 body,
@@ -954,6 +985,11 @@ class SurfacePanel(BodyPanel):
             )
         except Exception as exc:
             warn("%s planes unavailable: %s" % (self.title, exc))
+        if camera is not None and self._has_shape():
+            try:
+                self.view.setCamera(camera)
+            except Exception:
+                pass
 
     def _plane_clicked(self, plane):
         if self._closed or self.active is None:
@@ -1001,6 +1037,13 @@ class SurfacePanel(BodyPanel):
             self.take(self.active, ref)
             if self.axes is not None:
                 self.axes.set_picked(ref)
+
+    def _has_shape(self):
+        """True when the design shows something (then the camera is the user's)."""
+        try:
+            return any(not b.Shape.isNull() and b.Shape.Faces for b in bodies.list_bodies(self.doc))
+        except Exception:
+            return False
 
     def _some_body(self):
         body = None
@@ -1417,7 +1460,6 @@ class PatchPanel(SurfacePanel):
         ("interior", "Interior Rails / Points", "refs2", ("curve", "point"), "Select"),
     )
     chain_boxes = ("boundary",)
-    chain_tangent = False
     chain_label = "Enable Chaining"
 
     def build_rows(self):
@@ -1875,7 +1917,7 @@ class ReverseNormalPanel(SurfacePanel):
 class TrimPanel(SurfacePanel):
     kind = "trim"
     boxes = (
-        ("tool", "Trimming Tool", "refs", ("sketch_curve", "plane", "body"), "Select a tool"),
+        ("tool", "Trimming Tool", "refs", ("sketch_curve", "body", "plane"), "Select a tool"),
         ("cells", "Remove", "cells", (), "Click pieces to remove"),
     )
     single = ("tool",)
@@ -2022,18 +2064,21 @@ class TrimPanel(SurfacePanel):
             return []
         for body in candidates:
             try:
-                for cell in g.cells_for_trim(shapes[body.Name], cutter):
-                    cells.append(dict(cell, body=body.Name))
+                found = g.cells_for_trim(shapes[body.Name], cutter)
             except Exception as exc:
                 warn("trim cells: %s" % exc)
+                continue
+            if len(found) > 1:  # a body the tool only touches has nothing to pick
+                cells.extend(dict(cell, body=body.Name) for cell in found)
         if tool_body is not None and surface.is_surface_body(tool_body) and shapes:
             try:
                 own = bodies.global_shape(self._base_of(tool_body))
-                for cell in g.cells_for_trim(own, g.compound(list(shapes.values()))):
-                    cells.append(dict(cell, body=tool_body.Name))
+                found = g.cells_for_trim(own, g.compound(list(shapes.values())))
+                if len(found) > 1:
+                    cells.extend(dict(cell, body=tool_body.Name) for cell in found)
             except Exception as exc:
                 warn("trim cells: %s" % exc)
-        if len(cells) < 2:
+        if not cells:
             self.cells_note.setText(
                 "⚠ The tool does not cut any surface into pieces. Pick a tool that crosses a "
                 "surface body."
@@ -2100,7 +2145,7 @@ def _union(shapes):
 class BoundaryFillPanel(SurfacePanel):
     kind = "boundary_fill"
     boxes = (
-        ("tools", "Tools", "refs", ("plane", "body"), "Select tools"),
+        ("tools", "Tools", "refs", ("body", "plane"), "Select tools"),
         ("cells", "Cells", "cells", (), "Select cells"),
     )
 

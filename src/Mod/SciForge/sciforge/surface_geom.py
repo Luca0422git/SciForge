@@ -22,6 +22,7 @@ from .surface_core import NeedsPick, SurfaceError
 TOL = 1e-6
 SAME = 1e-4  # mm: two points closer than this are one point
 SAMPLES = 32  # points per curve where a ruled / extended edge is fitted
+TANGENCY_TOLERANCE = math.radians(2.0)  # a Tangent / Curvature patch may be off by this
 
 
 # -- small helpers -------------------------------------------------------------------------------
@@ -616,7 +617,36 @@ def patch(boundary, continuity="connected", interior=(), points=()):
     return surface_result(compound(faces))
 
 
+_G2 = {}
+
+
+def g2_available():
+    """True when FreeCAD hands Curvature (G2) continuity to OpenCASCADE: stock FreeCAD
+    1.1.4 turns its order 2 into C1, which OpenCASCADE's filling ignores (the patch stays
+    flat); SciForge's core patch #14 fixes that and also takes 3 for G2, which is how its
+    presence is told here."""
+    if "ok" not in _G2:
+        try:
+            mk = Part.BRepOffsetAPI.MakeFilling()
+            edge = Part.LineSegment(App.Vector(0, 0, 0), App.Vector(1, 0, 0)).toShape()
+            mk.add(edge, Part.makePlane(1, 1), 3, True)
+            _G2["ok"] = True
+        except Exception:
+            _G2["ok"] = False
+    return _G2["ok"]
+
+
+def _occ_order(order):
+    return 3 if order >= 2 else order
+
+
 def _fill(wire, boundary, order, interior, points):
+    if order >= 2 and any(f is not None for _e, f in boundary) and not g2_available():
+        raise SurfaceError(
+            "Curvature continuity needs SciForge's next full build: FreeCAD 1.1.4 passes it "
+            "to OpenCASCADE as a setting OpenCASCADE ignores (core patch #14 fixes it). Use "
+            "Continuity Tangent for now."
+        )
     mk = Part.BRepOffsetAPI.MakeFilling()
     for edge in wire.OrderedEdges:
         support = None
@@ -625,7 +655,7 @@ def _fill(wire, boundary, order, interior, points):
                 support = f
                 break
         if support is not None and order > 0:
-            mk.add(edge, support, order, True)
+            mk.add(edge, support, _occ_order(order), True)
         else:
             mk.add(edge, 0, True)
     for edge in interior:
@@ -646,7 +676,39 @@ def _fill(wire, boundary, order, interior, points):
     face = shape.Faces[0] if shape.Faces else None
     if face is None or not face.isValid():
         raise SurfaceError("The patch came out broken. Try Continuity Connected.")
+    if order > 0 and any(f is not None for _e, f in boundary):
+        # OpenCASCADE's patch bends a flat sheet along its normal: it cannot turn to meet
+        # walls that rise square to it (a cylinder's rim), and then silently stays flat.
+        # Fusion would make a dome; SciForge says so instead of faking tangency.
+        off = _tangency_off(face, boundary)
+        if off > TANGENCY_TOLERANCE:
+            raise SurfaceError(
+                "Tangent continuity cannot be reached along these edges (off by %.0f degrees): "
+                "OpenCASCADE's patch cannot turn to meet walls this steep. Use Continuity "
+                "Connected, or patch an opening whose walls slope less." % math.degrees(off)
+            )
     return face
+
+
+def _tangency_off(face, boundary):
+    """The biggest angle (radians) between the patch and the faces it should be tangent
+    to, measured along the boundary (OpenCASCADE's own G1Error() reads 0 for curvature
+    constraints even when the patch stays flat)."""
+    worst = 0.0
+    for edge, support in boundary:
+        if support is None:
+            continue
+        for i in range(1, 6):
+            u = edge.FirstParameter + (edge.LastParameter - edge.FirstParameter) * i / 6.0
+            p = edge.valueAt(u)
+            try:
+                a = face.normalAt(*face.Surface.parameter(p))
+                b = support.normalAt(*support.Surface.parameter(p))
+                dot = min(1.0, abs(a.dot(b)) / max(a.Length * b.Length, 1e-12))
+                worst = max(worst, math.acos(dot))
+            except Exception:
+                continue
+    return worst
 
 
 # -- CREATE: Ruled ---------------------------------------------------------------------------------

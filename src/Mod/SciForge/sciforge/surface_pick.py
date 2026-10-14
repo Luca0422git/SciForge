@@ -12,7 +12,6 @@ Mouse events come through FreeCAD's view.addEventCallback (safe; feature guide r
 work is deferred with Qt timers (rule 2), and no FreeCAD-owned Coin node is kept.
 """
 
-import math
 import time
 
 import FreeCAD as App
@@ -191,8 +190,6 @@ class CellPicker:
     "shown" (see-through grey), "chosen" (blue) or "removed" (red); the hovered cell is
     drawn light blue. on_click(index) is called (from a Qt timer) for a click on a cell."""
 
-    PIXELS = 5.0  # a press that moves more than this is a drag, not a click
-
     def __init__(self, view, on_click, blocked=None):
         self.view = view
         self.on_click = on_click
@@ -203,7 +200,6 @@ class CellPicker:
         self.states = []
         self.hovered = None
         self.last_click = 0.0
-        self._press = None
         self._last_move = 0.0
         self._pending_move = None
         self._timer = QtCore.QTimer()
@@ -259,16 +255,17 @@ class CellPicker:
             if info.get("Button") != "BUTTON1":
                 return
             position = info["Position"]
-            if info.get("State") == "DOWN":
-                self._press = (float(position[0]), float(position[1]))
+            # The press picks, as the origin planes and axes of the other SciForge dialogs
+            # do: FreeCAD does not always pass the release on (drag_guard.py).
+            if info.get("State") != "DOWN":
                 return
-            press, self._press = self._press, None
-            if press is None:
-                return
-            if math.hypot(float(position[0]) - press[0], float(position[1]) - press[1]) > (
-                self.PIXELS
-            ):
-                return  # a drag (the view turned, a handle moved)
+            try:
+                from . import handles3d
+
+                if handles3d.dragging():
+                    return  # a handle took this press
+            except Exception:
+                pass
             if self.blocked is not None and self.blocked(position):
                 return
             index = self.cell_at(position)
