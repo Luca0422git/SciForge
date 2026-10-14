@@ -179,6 +179,7 @@ class PickPanel(Panel):
         self.body = None
         self.base = None
         self.target = None
+        self.members = []  # other bodies of a multi-body step (Member), modify-2
         self.editing = False
         self.error = None
         self.view = None
@@ -394,18 +395,92 @@ class PickPanel(Panel):
             if on != self._ghost:
                 self._ghost = on
                 self._sync()  # the highlight follows the shape that is displayed now
+            self.show_members()
         except Exception as exc:
             warn("%s preview display: %s" % (self.title, exc))
 
     def restore_display(self):
         """Undo the look changes and show what the body's Visibility properties say."""
         self._looks.restore()
-        for obj in self._features():
+        features = list(self._features())
+        for member in getattr(self, "members", []):
+            features += _body_features(member.body)
+        for obj in features:
             try:
                 obj.ViewObject.makeTemporaryVisible(bool(obj.ViewObject.Visibility))
             except Exception:
                 pass
         self._ghost = False
+
+    # -- other bodies in the same step (modify-2) ----------------------------------------
+    # Fusion's Shell, Draft and Scale take several bodies in one step. The dialog's own
+    # step lives in self.body; each other body picked is a Member with its own base (the
+    # step it builds on), picks and preview step (a hidden follower, modify_bodies.py).
+    def member(self, body):
+        for item in getattr(self, "members", []):
+            if item.body is body:
+                return item
+        return None
+
+    def add_member(self, body, base):
+        if not hasattr(self, "members"):
+            self.members = []
+        found = self.member(body)
+        if found is None:
+            found = Member(body, base)
+            self.members.append(found)
+            self.show_member(found)
+        return found
+
+    def drop_member(self, body):
+        found = self.member(body)
+        if found is None:
+            return
+        self.members.remove(found)
+        for obj in _body_features(body):
+            try:
+                obj.ViewObject.makeTemporaryVisible(bool(obj.ViewObject.Visibility))
+            except Exception:
+                pass
+
+    def show_member(self, member):
+        """The member body drawn as the dialog's own: its base, with the preview see-through
+        around it once there is one."""
+        try:
+            for obj in _body_features(member.body):
+                if obj is not member.base:
+                    obj.ViewObject.makeTemporaryVisible(False)
+            if alive(member.base):
+                member.base.ViewObject.makeTemporaryVisible(True)
+            target = member.target
+            if not self._ghost and alive(target) and target.ViewObject is not None:
+                target.ViewObject.makeTemporaryVisible(False)
+            if self._ghost and alive(target) and target.ViewObject is not None:
+                target.ViewObject.makeTemporaryVisible(True)
+                if not self._looks.done("preview:" + target.Name):
+                    root = target.ViewObject.RootNode
+                    for node in nodes(root, "SoPickStyle"):
+                        self._looks.set(node, "style", node.UNPICKABLE)
+                    for node in nodes(root, "SoPolygonOffset"):
+                        self._looks.set(node, "factor", 3.0)
+                        self._looks.set(node, "units", 8.0)
+                if not self._looks.done("ghost:" + member.base.Name):
+                    for node in nodes(member.base.ViewObject.RootNode, "SoMaterial"):
+                        if node.getName().getString() == "ShapeMaterial":
+                            self._looks.set(node, "transparency", GHOST / 100.0)
+        except Exception as exc:
+            warn("%s: other body display: %s" % (self.title, exc))
+
+    def show_members(self):
+        for member in getattr(self, "members", []):
+            self.show_member(member)
+
+    def member_of_object(self, obj):
+        """The member whose base `obj` is, or None."""
+        for member in getattr(self, "members", []):
+            if member.base is obj:
+                return member
+        return None
 
     def switch_body(self, body, base):
         """Work on another body (the first pick was on it)."""
@@ -545,6 +620,29 @@ class PickPanel(Panel):
         except Exception as exc:
             warn("%s could not restore the view: %s" % (self.title, exc))
         super().cleanup()
+
+
+class Member:
+    """Another body in a multi-body step: its base (the step it builds on), the faces picked
+    on it, whether the whole body is picked, and its preview step (a follower)."""
+
+    def __init__(self, body, base):
+        self.body = body
+        self.base = base
+        self.picked = []
+        self.whole = False
+        self.target = None
+        self.chains = {}
+
+
+def _body_features(body):
+    if body is None or not alive(body):
+        return []
+    return [
+        o
+        for o in body.Group
+        if o.isDerivedFrom("PartDesign::Feature") and getattr(o, "ViewObject", None)
+    ]
 
 
 class Arrow(handles3d.LinearHandle):

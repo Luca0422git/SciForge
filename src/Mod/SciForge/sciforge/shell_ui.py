@@ -19,7 +19,8 @@ do (hollow body, Both): see shelling.py. Double-click the step in the timeline t
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, hole_common, log, pickpanel, preview, shelling, ui_icon_path, warn
+from . import bodies, commands, hole_common, log, modify_bodies, pickpanel, preview, shelling
+from . import ui_icon_path, warn
 from .compat import QtWidgets
 from .taskui import DistanceField, ValueBoxes
 
@@ -114,6 +115,12 @@ class ShellPanel(pickpanel.PickPanel):
             self.whole = not names
             self.options.update(options)
             self.formulas.update({k: v for k, v in formulas.items() if v})
+            for follower in modify_bodies.followers_of(feature):  # the other bodies (Fusion)
+                member = self.add_member(bodies.body_of(follower), follower.BaseFeature)
+                link = follower.Faces
+                member.picked = [s.lstrip("?") for s in (link[1] if link else []) if s]
+                member.whole = not member.picked
+                member.target = follower
         else:
             self.body, self.base = start_body(body)
         self._build()
@@ -217,12 +224,54 @@ class ShellPanel(pickpanel.PickPanel):
 
     def shown(self):
         names = self.names()
-        return [(self.base, names)] if names and self.base is not None else []
+        entries = [(self.base, names)] if names and self.base is not None else []
+        for member in self.members:
+            member_names = self.member_names(member)
+            if member_names and member.base is not None:
+                entries.append((member.base, member_names))
+        return entries
+
+    # -- other bodies (Fusion's Shell takes faces or bodies of several bodies) ----------------
+    def member_chain(self, member, name):
+        if not self.tangent.isChecked():
+            return [name]
+        if name not in member.chains:
+            try:
+                member.chains[name] = shelling.tangent_faces(member.base.Shape, [name])
+            except Exception:
+                member.chains[name] = [name]
+        return member.chains[name]
+
+    def member_names(self, member):
+        if member.whole:
+            return []
+        found = []
+        for pick in member.picked:
+            for name in self.member_chain(member, pick):
+                if name not in found:
+                    found.append(name)
+        return found
+
+    def _joinable(self, obj):
+        """(body, base) of another body `obj` (or a face's step) belongs to, when the dialog
+        already has picks: it joins the same Shell step (Fusion)."""
+        if not self.has_picks() and not self.members:
+            return None
+        body = obj if obj.TypeId == "PartDesign::Body" else shelling.owner_body(obj)
+        if body is None or body is self.body:
+            return None
+        member = self.member(body)
+        if member is not None:
+            return body, member.base
+        base = modify_bodies.base_for(self.target, body)
+        if base is None or base.Shape.isNull() or not base.Shape.Solids:
+            return None
+        return body, base
 
     def _other_body_solid(self, obj):
         """(body, base) when `obj` belongs to another body with a solid, and the dialog may
         still move there (nothing picked yet, not editing)."""
-        if self.editing or self.has_picks():
+        if self.editing or self.has_picks() or self.members:
             return None
         body = obj if obj.TypeId == "PartDesign::Body" else shelling.owner_body(obj)
         if body is None or body is self.body:
@@ -237,22 +286,31 @@ class ShellPanel(pickpanel.PickPanel):
             return False
         if not short:
             return obj.TypeId == "PartDesign::Body" and (
-                obj is self.body or self._other_body_solid(obj) is not None
+                obj is self.body
+                or self._other_body_solid(obj) is not None
+                or self._joinable(obj) is not None
             )
         if not short.startswith("Face"):
             return False
         if obj.Name == self.base.Name:
             return True
+        if self.member_of_object(obj) is not None:
+            return True
         if shelling.owner_body(obj) is self.body:
             return False  # an older step of this body (a click in the timeline roll-back)
         follow = self._other_body_solid(obj)
-        return follow is not None and obj is follow[1]
+        if follow is not None:
+            return obj is follow[1]
+        join = self._joinable(obj)
+        return join is not None and obj is join[1]
 
     def picks_changed(self, added, dropped):
         changed = False
         for obj, short, _point in dropped:
             if short.startswith("Face") and obj is self.base:
                 changed = self._drop(short) or changed
+            elif short.startswith("Face") and self.member_of_object(obj) is not None:
+                changed = self._drop_member_face(self.member_of_object(obj), short) or changed
         for obj, short, _point in added:
             if not short:
                 if obj.TypeId == "PartDesign::Body":
@@ -266,13 +324,20 @@ class ShellPanel(pickpanel.PickPanel):
     def _add_face(self, obj, short):
         if self.base is None:
             return False
-        if obj is not self.base:
+        member = self.member_of_object(obj)
+        if obj is not self.base and member is None:
             follow = self._other_body_solid(obj)
+            join = self._joinable(obj) if follow is None else None
             if follow is not None:
                 self.switch_body(*follow)
                 pickpanel.activate(follow[0])
                 self._chains = {}
+            elif join is not None:
+                member = self.add_member(*join)
+                return self._add_member_face(member, obj, short)
             name = pickpanel.match_face(self.base, obj, short)
+        elif member is not None:
+            return self._add_member_face(member, obj, short)
         else:
             name = short
         if not name or not shelling.removable(self.base.Shape, name):
@@ -284,6 +349,23 @@ class ShellPanel(pickpanel.PickPanel):
         self.picked.append(name)
         return True
 
+    def _add_member_face(self, member, obj, short):
+        name = pickpanel.match_face(member.base, obj, short) if obj is not member.base else short
+        if not name or not shelling.removable(member.base.Shape, name):
+            return False
+        member.whole = False
+        if name in member.picked or name in self.member_names(member):
+            return False
+        member.picked.append(name)
+        return True
+
+    def _drop_member_face(self, member, name):
+        before = len(member.picked)
+        member.picked = [p for p in member.picked if name not in self.member_chain(member, p)]
+        if not member.picked and not member.whole:
+            self.drop_member(member.body)
+        return len(member.picked) != before
+
     def _drop(self, name):
         before = len(self.picked)
         self.picked = [p for p in self.picked if name not in self.chain(p)]
@@ -291,6 +373,16 @@ class ShellPanel(pickpanel.PickPanel):
 
     def _pick_body(self, obj):
         if obj is not self.body:
+            member = self.member(obj)
+            if member is not None:  # a picked body clicked again in the browser: dropped
+                self.drop_member(obj)
+                return True
+            join = self._joinable(obj)
+            if join is not None:
+                member = self.add_member(*join)
+                member.whole = True
+                member.picked = []
+                return True
             follow = self._other_body_solid(obj)
             if follow is None:
                 self.help.setText("This shell belongs to %s." % self.body.Label)
@@ -308,9 +400,11 @@ class ShellPanel(pickpanel.PickPanel):
         self.selection.set_active(True)
 
     def clear_field(self, name):
-        if self.has_picks():
+        if self.has_picks() or self.members:
             self.picked = []
             self.whole = False
+            for member in list(self.members):
+                self.drop_member(member.body)
             self._sync()
             self._picks_updated()
 
@@ -320,13 +414,22 @@ class ShellPanel(pickpanel.PickPanel):
         else:
             count = len(self.names())
             text = "%d face%s" % (count, "" if count == 1 else "s") if count else ""
+        if self.members:
+            text = "%s + %d other bod%s" % (
+                text or "0 faces",
+                len(self.members),
+                "y" if len(self.members) == 1 else "ies",
+            )
         self.selection.set_text(text)
         if self.whole:
             self.help.setText("The body becomes hollow. Click a face to take it away instead.")
         elif not self.picked:
             self.help.setText(PICK_HELP)
         else:
-            self.help.setText("Click more faces to take away, or a picked one to drop it.")
+            self.help.setText(
+                "Click more faces to take away (also of other bodies), or a picked one to "
+                "drop it."
+            )
         self._update_arrows()
         if schedule:
             self.schedule()
@@ -496,6 +599,11 @@ class ShellPanel(pickpanel.PickPanel):
             return
         try:
             shelling.trial(self.base.Shape, names, self.options)
+            for member in self.members:
+                try:
+                    shelling.trial(member.base.Shape, self.member_names(member), self.options)
+                except shelling.ShellError as exc:
+                    raise shelling.ShellError("%s: %s" % (member.body.Label, exc))
         except shelling.ShellError as exc:
             self.error = str(exc)
             self.show_status()
@@ -512,10 +620,26 @@ class ShellPanel(pickpanel.PickPanel):
                 self._looks.restore()  # the old preview's look; the new one gets its own
                 self._ghost = False
                 self.target = new
+        self._sync_members()
         self.quiet_recompute()
         self.follow_later()
         self.show_preview(True)
         self.show_status()
+
+    def _sync_members(self):
+        """The other bodies' follower steps match the members (made, updated, removed)."""
+        try:
+            followers = modify_bodies.sync(
+                self.target,
+                [(m.body, self.member_names(m)) for m in self.members],
+                modify_bodies.ShellFollower,
+                "Shell",
+            )
+        except modify_bodies.FollowerError as exc:
+            self.error = str(exc)
+            return
+        for member, follower in zip(self.members, followers):
+            member.target = follower
 
     def _compute_hint(self):
         try:
@@ -555,11 +679,26 @@ class ShellPanel(pickpanel.PickPanel):
         if text:
             self.say("⚠ " + shelling.friendly(text))
             return
+        for member in self.members:
+            text = preview.failure(member.target) if member.target is not None else ""
+            if text:
+                self.say("⚠ %s: %s" % (member.body.Label, shelling.friendly(text)))
+                return
         broken = self.later_broken()
         if broken:
             self.say("⚠ Later steps no longer work: %s" % ", ".join(broken))
             return
         self.say("")
+
+    def members_failed(self):
+        for member in self.members:
+            obj = member.target
+            if obj is None:
+                return True
+            state = list(getattr(obj, "State", []))
+            if "Invalid" in state or "Error" in state:
+                return True
+        return False
 
     # -- OK / Cancel ------------------------------------------------------------------------
     def accept(self):
@@ -581,6 +720,9 @@ class ShellPanel(pickpanel.PickPanel):
                 return False
             state = list(obj.State)
             if "Invalid" in state or "Error" in state or not obj.Shape.isValid():
+                self.show_status()
+                return False
+            if self.members_failed():
                 self.show_status()
                 return False
             return self.finish_ok()

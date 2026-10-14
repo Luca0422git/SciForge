@@ -27,7 +27,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, drag_guard, handles3d, increments, move, profile_pick, ui_icon_path, warn
+from . import bodies, drag_guard, handles3d, increments, move, move_face, profile_pick
+from . import ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField
@@ -381,16 +382,21 @@ class MovePanel(BodyPanel):
     needs_pick = (move.NeedsPick,)
 
     def __init__(self, doc, feature=None):
-        self.options = move.with_defaults({})
+        self.options = move.with_defaults({"move_object": "bodies", "faces": None})
         self.steps = []
         if feature is not None:
             try:
-                self.options, self.steps = move.read(feature)
+                if move_face.is_move_face(feature):
+                    self.options, self.steps = move_face.read(feature), [feature]
+                else:
+                    self.options, self.steps = move.read(feature)
+                    self.options["move_object"] = "bodies"
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self.triad = None
         self.turn_handle = None
         self.axis_picker = None
+        self.marks = None  # the picked faces, shaded (Move Object Faces)
         self._overlay_time = 0.0
         self._drag_start = None
         super().__init__(doc, "Move" if feature is None else "Edit Move", feature is not None)
@@ -409,7 +415,10 @@ class MovePanel(BodyPanel):
     # -- form ----------------------------------------------------------------------------------------
     def build_form(self):
         self.move_object, _ = self.combo(
-            "Move Object", [("Bodies", "bodies")], "bodies", lambda: None
+            "Move Object",
+            [("Bodies", "bodies"), ("Faces", "faces")],
+            self.options.get("move_object", "bodies"),
+            self._object_changed,
         )
         self.selection_box("objects", "Objects")
         self.move_type, _ = self.combo(
@@ -491,11 +500,48 @@ class MovePanel(BodyPanel):
         )
         for field, caption in zip(self.position_fields, self.position_captions):
             self.show_row(field.widget, caption, kind == "point_to_position")
+        # Create Copy makes new bodies: it is for Bodies only (faces are moved in their body)
+        self.copy.setVisible(not self._faces_mode())
+        caption = self.layout.labelForField(self.copy)
+        if caption is not None:
+            caption.setVisible(not self._faces_mode())
+
+    def _faces_mode(self):
+        return self.options.get("move_object") == "faces"
+
+    def _object_changed(self):
+        """Fusion clears the objects when the Move Object type changes."""
+        self.options["move_object"] = self.move_object.currentData()
+        if not self.editing:
+            for step in self.steps:
+                if bodies.alive(step):
+                    (move_face.remove if move_face.is_move_face(step) else move.remove)(step)
+            self.steps = []
+            self.target = None
+        self.options["bodies"] = []
+        self.options["faces"] = None
+        self.options["pivot"] = None
+        if self._faces_mode():
+            self.options["copy"] = False
+            self.copy.setChecked(False)
+        self._update_visibility()
+        self._show_picks()
+        self.activate("objects")
+        self._make_handles()
+        self.changed()
 
     def _show_picks(self):
         from . import bodies_gui
 
-        self.fields["objects"].set_text(bodies_gui.body_text(self.options["bodies"]))
+        if self._faces_mode():
+            faces = self.options.get("faces")
+            count = len(faces[1]) if faces else 0
+            self.fields["objects"].set_text(
+                "%d face%s" % (count, "" if count == 1 else "s") if count else ""
+            )
+            self._show_marks()
+        else:
+            self.fields["objects"].set_text(bodies_gui.body_text(self.options["bodies"]))
         self.fields["axis"].set_text(self.options["axis_label"] if self.options["axis_dir"] else "")
         self.fields["from_point"].set_text(
             self.options["from_label"] if self.options["from_point"] else ""
@@ -519,7 +565,7 @@ class MovePanel(BodyPanel):
         self._update_visibility()
         # With no body picked yet the Objects box keeps the clicks: the first click must pick
         # the body to move, not be taken as an axis or a point (then nothing could move).
-        if not self.options["bodies"] or not self._next_box():
+        if not self._has_objects() or not self._next_box():
             if self.active not in self._boxes():
                 self.activate("objects")
         else:
@@ -556,6 +602,7 @@ class MovePanel(BodyPanel):
     def cleared(self, name):
         if name == "objects":
             self.options["bodies"] = []
+            self.options["faces"] = None
         elif name == "axis":
             self.options["axis_point"] = self.options["axis_dir"] = None
             self.options["axis_label"] = ""
@@ -571,6 +618,9 @@ class MovePanel(BodyPanel):
     # -- clicks ----------------------------------------------------------------------------------------
     def picked(self, obj, short, point):
         if self._handles_busy() or time.time() - self._overlay_time < OVERLAY_CLICK_S:
+            return
+        if self.active == "objects" and self._faces_mode():
+            self._face_picked(obj, short)
             return
         if self.active == "objects":
             body = bodies.body_of(obj)
@@ -641,8 +691,117 @@ class MovePanel(BodyPanel):
         # not -34.99999999999999)
         return App.Vector(*[round(c, 9) + 0.0 for c in found])
 
+    # -- Move Object Faces (modify-2) --------------------------------------------------------
+    def _has_objects(self):
+        if self._faces_mode():
+            faces = self.options.get("faces")
+            return bool(faces and faces[1])
+        return bool(self.options["bodies"])
+
+    def _first_body(self):
+        if self._faces_mode():
+            faces = self.options.get("faces")
+            return bodies.body_of(faces[0]) if faces else None
+        return (self.options["bodies"] or [None])[0]
+
+    def _face_base(self, body):
+        """The step the moved faces are on: the step before this Move, else the body's end."""
+        for step in self.steps:
+            if bodies.alive(step) and move_face.is_move_face(step) and bodies.body_of(step) is body:
+                return step.BaseFeature
+        return body.Tip
+
+    def _face_picked(self, obj, short):
+        """Fusion's Move Object Faces: a click on a face picks it (again: drops it). The faces
+        are those of one body, as it is before this Move."""
+        if not short.startswith("Face"):
+            self.message.setText("Move Object is Faces: click faces of a body.")
+            return
+        body = bodies.body_of(obj)
+        if body is None:
+            return
+        faces = self.options.get("faces")
+        if faces and bodies.body_of(faces[0]) is not body:
+            self.message.setText(
+                "Move the faces of one body at a time (they are on %s)."
+                % bodies.body_of(faces[0]).Label
+            )
+            return
+        base = self._face_base(body)
+        if base is None or base.Shape.isNull():
+            return
+        name = self._base_face(obj, short, base)
+        if name is None:
+            self.message.setText("That face is not on the part before this Move.")
+            return
+        names = list(faces[1]) if faces else []
+        if name in names:
+            names.remove(name)
+        else:
+            names.append(name)
+        self.options["faces"] = (base, names) if names else None
+        self.message.setText("")
+        first = len(names) == 1 and name in names
+        self._new_pivot()
+        self._show_picks()
+        if first and self._next_box():
+            self.activate(self._next_box())
+        self._make_handles()
+        self.changed()
+
+    def _base_face(self, obj, short, base):
+        """The name on `base` of the face `short` of `obj` clicked in the view (the preview
+        shows the moved faces: a moved face is found back where it was)."""
+        if obj is base:
+            return short
+        try:
+            face = obj.Shape.getElement(short)
+        except Exception:
+            return None
+        found = move_face._face_at(base.Shape, move_face._inner_point(face))
+        if found is None:
+            for step in self.steps:
+                if bodies.alive(step) and move_face.is_move_face(step) and step is obj:
+                    body = bodies.body_of(step)
+                    place = body.getGlobalPlacement()
+                    back = place.inverse().multiply(step.Movement.inverse()).multiply(place)
+                    moved = face.copy()
+                    moved.transformShape(back.toMatrix(), True)
+                    found = move_face._face_at(base.Shape, move_face._inner_point(moved))
+        if found is None:
+            return None
+        for i, candidate in enumerate(base.Shape.Faces, start=1):
+            if candidate.isSame(found):
+                return "Face%d" % i
+        return None
+
+    def _show_marks(self):
+        try:
+            if self.marks is None:
+                from .pattern_ui import Marks
+
+                self.marks = Marks(self.view)
+            faces = self.options.get("faces")
+            shapes = []
+            if faces and self._faces_mode():
+                base, names = faces
+                body = bodies.body_of(base)
+                place = body.getGlobalPlacement() if body is not None else App.Placement()
+                for name in names:
+                    try:
+                        face = base.Shape.getElement(name).copy()
+                        face.transformShape(place.toMatrix(), True)
+                        shapes.append(face)
+                    except Exception:
+                        continue
+            self.marks.show(faces=shapes)
+        except Exception as exc:
+            warn("Move: picked faces not shown: %s" % exc)
+
     def _step_of(self, body):
         for step in self.steps:
+            if move_face.is_move_face(step):
+                continue  # a Move of faces: points on the rest of the part did not move
             if bodies.alive(step) and move.moved_body(step) is body and not move.is_copy(step):
                 return step
         return None
@@ -666,7 +825,7 @@ class MovePanel(BodyPanel):
 
     def _update_axis_picker(self):
         wants = self.active == "axis" and not self._closed
-        body = (self.options["bodies"] or [None])[0] or bodies.find_body(self.doc)
+        body = self._first_body() or bodies.find_body(self.doc)
         if wants and self.axis_picker is None and body is not None:
             try:
                 from .pattern_ui import AxisPicker
@@ -696,7 +855,24 @@ class MovePanel(BodyPanel):
 
     # -- pivot and handles ------------------------------------------------------------------------------
     def _unmoved(self):
-        """The bodies' solids as they are before this move (design coordinates)."""
+        """The bodies' solids as they are before this move (design coordinates); the picked
+        faces for Move Object Faces."""
+        if self._faces_mode():
+            faces = self.options.get("faces")
+            if not faces:
+                return []
+            base, names = faces
+            body = bodies.body_of(base)
+            place = body.getGlobalPlacement() if body is not None else App.Placement()
+            found = []
+            for name in names:
+                try:
+                    face = base.Shape.getElement(name).copy()
+                    face.transformShape(place.toMatrix(), True)
+                    found.append(face)
+                except Exception:
+                    continue
+            return found
         shapes = []
         for body in self.options["bodies"]:
             step = self._step_of(body)
@@ -738,7 +914,7 @@ class MovePanel(BodyPanel):
 
     def _make_handles(self):
         self.remove_handles(keep_picker=True)
-        if self._closed or not self.options["bodies"]:
+        if self._closed or not self._has_objects():
             return
         kind = self.options["move_type"]
         try:
@@ -823,6 +999,12 @@ class MovePanel(BodyPanel):
         self.changed()
 
     def remove_handles(self, keep_picker=False):
+        if not keep_picker and self.marks is not None:
+            try:
+                self.marks.remove()
+            except Exception:
+                pass
+            self.marks = None
         for name in ("triad", "turn_handle") + (() if keep_picker else ("axis_picker",)):
             handle = getattr(self, name, None)
             if handle is not None:
@@ -834,6 +1016,9 @@ class MovePanel(BodyPanel):
 
     # -- preview --------------------------------------------------------------------------------------
     def apply(self):
+        if self._faces_mode():
+            self._apply_faces()
+            return
         if not self.options["bodies"]:
             if self.steps and not self.editing:
                 for step in self.steps:
@@ -853,6 +1038,27 @@ class MovePanel(BodyPanel):
         self.steps = move.build(self.options, self.steps)
         self.target = self.steps[0] if self.steps else None
 
+    def _apply_faces(self):
+        """Move Object Faces: one Move step (move_face.py) in the faces' body."""
+
+        def drop():
+            if self.steps and not self.editing:
+                for step in self.steps:
+                    if bodies.alive(step):
+                        move_face.remove(step)
+                self.steps = []
+                self.target = None
+
+        try:
+            move_face.check(self.options)
+        except move.NeedsPick:
+            drop()
+            raise
+        current = self.steps[0] if self.steps and bodies.alive(self.steps[0]) else None
+        step = move_face.build(self.options, current)
+        self.steps = [step]
+        self.target = step
+
     def after_recompute(self):
         for step in self.steps:
             if not bodies.alive(step):
@@ -866,7 +1072,9 @@ class MovePanel(BodyPanel):
         return [s for s in self.steps if bodies.alive(s)]
 
     def can_finish(self):
-        if not self.options["bodies"]:
+        if self._faces_mode() and not self._has_objects():
+            return "Select the faces to move."
+        if not self._faces_mode() and not self.options["bodies"]:
             return "Select the bodies to move."
         try:
             move.transform(self.options)
@@ -972,4 +1180,4 @@ def edit(feature):
 
 
 COMMANDS = {"SciForge_Move": MoveCommand}
-EDITORS = {"SciForge::MoveCopy": edit}
+EDITORS = {"SciForge::MoveCopy": edit, "SciForge::" + move_face.SCIFORGE_TYPE: edit}

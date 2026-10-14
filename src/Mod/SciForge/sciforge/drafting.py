@@ -196,14 +196,16 @@ def undrafted(base_shape, result_shape, names):
 
 
 # -- the angle handle --------------------------------------------------------------------
-def handle_frame(shape, plane_ref, names, options):
+def handle_frame(shape, plane_ref, names, options, point0=None):
     """Where the angle handle goes: (pivot point, turning axis, zero direction) in the
     body's coordinates, or None. The handle turns about the line where the first drafted
-    face meets the fixed plane (turning toward axis x zero is a positive angle)."""
+    face meets the fixed plane (turning toward axis x zero is a positive angle). `point0`: a
+    point of the hinge when it is not the plane's (a Parting Line)."""
     if plane_ref is None or not names:
         return None
     try:
-        point0, _axis, _out = plane_frame(plane_ref)
+        if point0 is None:
+            point0, _axis, _out = plane_frame(plane_ref)
         pull = pull_direction(plane_ref, bool(options.get("flip")))
         face = shape.getElement(names[0])
     except Exception:
@@ -813,8 +815,7 @@ def _scratch(shape, points, hinge, pull, angle):
     import FreeCAD as App
 
     names = _faces_at(shape, points)
-    active = App.ActiveDocument.Name if App.ActiveDocument is not None else None
-    doc = App.newDocument("SciForgeScratch", "scratch", True, True)
+    doc = _scratch_document()
     try:
         holder = doc.addObject("Part::Feature", "Solid")
         holder.Shape = shape
@@ -841,11 +842,7 @@ def _scratch(shape, points, hinge, pull, angle):
         out = draft.Shape.copy()
         status = draft.getStatusString() if ("Invalid" in state or "Error" in state) else ""
     finally:
-        try:
-            App.closeDocument(doc.Name)
-        except Exception:
-            pass
-        _restore_active(active)
+        _release_scratch(doc)
     if status or out.isNull() or not out.Solids or not out.isValid():
         raise DraftError(friendly(status))
     if abs(out.Volume - shape.Volume) < 1e-9:
@@ -854,6 +851,97 @@ def _scratch(shape, points, hinge, pull, angle):
             "pick other faces."
         )
     return out
+
+
+# The throw-away document is kept and reused. In the GUI, closing a document ends the undo
+# step that is open (FreeCAD 1.1): a Draft preview inside a dialog cut the dialog's undo step
+# in two, the rest of the preview went unrecorded and Ctrl+Z after OK left the drafted shape
+# behind. It is closed later, when no undo step is open, nothing is selected and no dialog
+# is open (closing a document also clears FreeCAD's selection).
+_SCRATCH = {"name": None, "waiting": False}
+
+
+def _scratch_document():
+    import FreeCAD as App
+
+    name = _SCRATCH["name"]
+    if name and name in App.listDocuments():
+        return App.getDocument(name)
+    active = App.ActiveDocument.Name if App.ActiveDocument is not None else None
+    doc = App.newDocument("SciForgeScratch", "scratch", True, True)
+    try:
+        doc.UndoMode = 0
+    except Exception:
+        pass
+    _SCRATCH["name"] = doc.Name
+    _restore_active(active)
+    return doc
+
+
+def _release_scratch(doc):
+    """Empty the throw-away document; close it now without a GUI, later with one."""
+    import FreeCAD as App
+
+    for _attempt in range(3):
+        names = [o.Name for o in doc.Objects]
+        if not names:
+            break
+        for name in reversed(names):
+            try:
+                if doc.getObject(name) is not None:
+                    doc.removeObject(name)
+            except Exception:
+                pass
+    if not App.GuiUp:
+        _close_scratch()
+        return
+    if not _SCRATCH["waiting"]:
+        _SCRATCH["waiting"] = True
+        _close_later()
+
+
+def _close_later(delay=1500):
+    try:
+        from PySide import QtCore
+
+        QtCore.QTimer.singleShot(delay, _try_close)
+    except Exception:
+        _SCRATCH["waiting"] = False
+
+
+def _try_close():
+    import FreeCAD as App
+
+    try:
+        busy = App.getActiveTransaction() is not None or any(
+            getattr(d, "Recomputing", False) for d in App.listDocuments().values()
+        )
+        if not busy:
+            import FreeCADGui as Gui
+
+            busy = bool(Gui.Control.activeDialog()) or bool(Gui.Selection.getCompleteSelection())
+        if busy:
+            _close_later(3000)
+            return
+        _SCRATCH["waiting"] = False
+        _close_scratch()
+    except Exception:
+        _SCRATCH["waiting"] = False
+
+
+def _close_scratch():
+    import FreeCAD as App
+
+    name = _SCRATCH["name"]
+    _SCRATCH["name"] = None
+    if not name or name not in App.listDocuments():
+        return
+    active = App.ActiveDocument.Name if App.ActiveDocument is not None else None
+    try:
+        App.closeDocument(name)
+    except Exception:
+        pass
+    _restore_active(active)
 
 
 def _restore_active(name):
