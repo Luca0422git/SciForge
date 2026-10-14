@@ -1,0 +1,95 @@
+{
+  "id": "fillet2_full_round_rib",
+  "title": "Full Round Fillet: the end of a 4 mm rib becomes a half round (r 2)",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2",
+    "full_round"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              22
+            ],
+            [
+              18,
+              22
+            ],
+            [
+              18,
+              0
+            ],
+            [
+              22,
+              0
+            ],
+            [
+              22,
+              22
+            ],
+            [
+              40,
+              22
+            ],
+            [
+              40,
+              30
+            ],
+            [
+              0,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "full_round",
+      "id": "fr1",
+      "faces": [
+        {
+          "type": "plane",
+          "normal": [
+            0,
+            -1,
+            0
+          ],
+          "at": {
+            "axis": "y",
+            "value": "min"
+          },
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 4062.8318530717956,
+    "faces": 10,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "T of a 40x8 bar and a 4x22 rib, 10 high: 4080. The rib's end face (4 wide) becomes a half cylinder r 2: removes 10 (4*2 - pi 2^2 / 2). Faces: 10 (the end face replaced by the round)."
+  }
+}

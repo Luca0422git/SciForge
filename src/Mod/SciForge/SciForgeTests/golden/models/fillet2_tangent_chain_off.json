@@ -1,0 +1,77 @@
+{
+  "id": "fillet2_tangent_chain_off",
+  "title": "Fillet dialog: Tangent Chain off, r 1 on one straight top edge of a slot (the arcs stay sharp)",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "slot": [
+            10,
+            15,
+            30,
+            15,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "f1",
+      "tangent_chain": false,
+      "sets": [
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 1
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 2781.106126665397,
+    "faces": 9,
+    "solids": 1,
+    "bbox": [
+      5,
+      10,
+      0,
+      35,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Slot 20 x 10 with half circles r 5: 2000 + 250 pi; only the 20 mm straight edge is rounded: 20 r^2 (1 - pi/4). 6 slot faces + the round + its two flat end caps."
+  }
+}

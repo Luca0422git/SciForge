@@ -736,3 +736,4 @@ from . import extrude_bodies_ops  # noqa: E402,F401  (extrudes through several b
 from . import emboss_ops  # noqa: E402,F401  (registers op_emboss)
 from . import direct_ops  # noqa: E402,F401  (history on/off and the Modify tools)
 from . import surface_ops  # noqa: E402,F401  (registers op_sf_surface, op_sf_surface_edit)
+from . import fillet2_ops  # noqa: E402,F401  (radius sets, rule, full round: fillet_sets.py)

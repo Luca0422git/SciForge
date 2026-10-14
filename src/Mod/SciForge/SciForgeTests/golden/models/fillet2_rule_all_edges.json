@@ -1,0 +1,57 @@
+{
+  "id": "fillet2_rule_all_edges",
+  "title": "Rule Fillet: All Edges of the extrude, r 1 (every edge of the box)",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2",
+    "rule"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "rule_fillet",
+      "id": "r1",
+      "radius": 1,
+      "features": [
+        "e1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 11932.666646570431,
+    "faces": 26,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "Box with every edge rounded = Minkowski sum: (a-2r)(b-2r)(c-2r) + 2r[(a-2r)(b-2r) + (b-2r)(c-2r) + (a-2r)(c-2r)] + pi r^2 [(a-2r)+(b-2r)+(c-2r)] + 4/3 pi r^3. 6 faces + 12 rounds + 8 corner spheres."
+  }
+}
