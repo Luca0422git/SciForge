@@ -8,11 +8,12 @@ The step's settings ("spec") are a plain dict, saved as JSON on the step:
 
   kind          "fillet" | "chamfer"
   mode          "fillet" | "rule" | "full_round"      (Fusion's Type; chamfer: "fillet")
-  tangent_chain True: edges tangent to a picked edge are rounded with it (Fusion's default)
   corner        "rolling_ball" (fillet) | "chamfer" (chamfer)
   sets          one dict per row of Fusion's selection box (its "+" adds one):
       fillet     {"count", "radius_type": constant|chord|variable, "radius", "chord",
-                  "start", "end", "points": [[position 0..1, radius], ...]}
+                  "start", "end", "points": [[position 0..1, radius], ...],
+                  "tangent_chain": True: edges tangent to a picked edge are rounded with
+                  it (Fusion's default; a setting of each set, as in Fusion's API)}
       chamfer    {"count", "chamfer_type": equal|two|angle, "distance", "distance2",
                   "angle", "flip"}
       full_round {"count": 3}  (side face, centre face, side face)
@@ -215,6 +216,7 @@ def new_set(kind="fillet", mode="fillet", like=None):
             "start": 1.0,
             "end": 1.0,
             "points": [],
+            "tangent_chain": True,
         }
     if like:
         for key, value in like.items():
@@ -227,7 +229,6 @@ def default_spec(kind="fillet"):
     return {
         "kind": kind,
         "mode": "fillet",
-        "tangent_chain": True,
         "corner": "chamfer" if kind == "chamfer" else "rolling_ball",
         "sets": [new_set(kind)],
         "rule": "all",
@@ -288,14 +289,17 @@ def needs_step(spec, groups=None):
         if groups is not None:
             return len([g for g in groups if g]) > 1
         return len(spec.get("sets", [])) > 1
-    if spec.get("mode", "fillet") != "fillet" or not spec.get("tangent_chain", True):
+    if spec.get("mode", "fillet") != "fillet":
         return True
     rows = spec.get("sets", [])
     if groups is not None:
         rows = [row for row, group in zip(rows, groups) if group]
     if len(rows) > 1:
         return True
-    return any(row.get("radius_type", "constant") != "constant" for row in rows)
+    return any(
+        row.get("radius_type", "constant") != "constant" or not row.get("tangent_chain", True)
+        for row in rows
+    )
 
 
 def dumps(spec):

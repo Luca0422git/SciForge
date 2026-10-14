@@ -1585,6 +1585,7 @@ FILLET2_ROW = {
     "distance2",
     "angle",
     "flip",
+    "tangent_chain",
     "comment",
 }
 STEP_KEYS["fillet_sets"] = ({"id", "sets"}, {"kind", "tangent_chain", "comment"})

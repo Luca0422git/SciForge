@@ -559,7 +559,7 @@ class BlendPanel(Panel):
         self.help.setStyleSheet("color: #9aa4b1;")
         self.layout.addRow(self.help)
         self.chain = QtWidgets.QCheckBox()
-        self.chain.setChecked(bool(self.spec.get("tangent_chain", True)))
+        self.chain.setChecked(True)
         self.chain.setToolTip(
             "On: edges tangent to a picked edge are rounded with it. Off: only the picked "
             "edges (the round stops where a tangent edge begins)."
@@ -938,17 +938,27 @@ class BlendPanel(Panel):
             return False
         return self.info.pickable(name)
 
-    def _display_of(self, ref):
-        if ref.startswith("Edge") and self.spec.get("tangent_chain", True):
+    def _row_chained(self, row):
+        """Tangent Chain of set `row` (a setting of each set; always on for a chamfer and
+        Rule Fillet)."""
+        if self.kind != "fillet" or self.mode != "fillet" or row is None:
+            return True
+        rows = self.spec["sets"]
+        return bool(rows[row].get("tangent_chain", True)) if row < len(rows) else True
+
+    def _display_of(self, ref, chained=True):
+        if ref.startswith("Edge") and chained:
             return self.info.chain(ref)
         return [ref]
 
     def _display_set(self):
         names = []
-        lists = list(self.groups) + ([self.refs2] if self.mode == "rule" else [])
-        for refs in lists:
+        lists = [(i, g) for i, g in enumerate(self.groups)]
+        if self.mode == "rule":
+            lists.append((None, self.refs2))
+        for row, refs in lists:
             for ref in refs:
-                for name in self._display_of(ref):
+                for name in self._display_of(ref, self._row_chained(row)):
                     if name not in names:
                         names.append(name)
         return names
@@ -1052,7 +1062,8 @@ class BlendPanel(Panel):
                     self.groups[i] = []
                     changed = True
                 continue
-            kept = [r for r in group if name not in self._display_of(r)]
+            chained = self._row_chained(i)
+            kept = [r for r in group if name not in self._display_of(r, chained)]
             if len(kept) != len(group):
                 self.groups[i] = kept
                 changed = True
@@ -1135,7 +1146,7 @@ class BlendPanel(Panel):
         return row
 
     def _chained(self):
-        return bool(self.spec.get("tangent_chain", True))
+        return self._row_chained(self.active)
 
     def _variable_chain(self):
         try:
@@ -1778,7 +1789,9 @@ class BlendPanel(Panel):
     # -- shared handlers ------------------------------------------------------------------
     def _chain_toggled(self, on):
         try:
-            self.spec["tangent_chain"] = bool(on)
+            if self.mode == "fillet":
+                self.options["tangent_chain"] = bool(on)
+            self._refresh_rows()
             self._sync()
             self._refs_changed()
         except Exception as exc:
@@ -1937,7 +1950,7 @@ class FilletPanel(BlendPanel):
             box.setChecked(bool(self.spec.get(key, True)))
             box.blockSignals(False)
         self.chain.blockSignals(True)
-        self.chain.setChecked(bool(self.spec.get("tangent_chain", True)))
+        self.chain.setChecked(self._chained())
         self.chain.blockSignals(False)
         self._rebuild_points()
         self._update_visible()

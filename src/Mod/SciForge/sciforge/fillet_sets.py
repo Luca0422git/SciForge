@@ -309,33 +309,57 @@ def _expand(info, refs, chain=True):
     return out
 
 
-def _fillet_items(info, row, refs, taken):
-    """[(edge index, r1, r2)] of a Constant or Chord Length row: its picked edges and the
-    edges tangent to them (OpenCASCADE rounds those too; Tangent Chain off puts them back
-    afterwards, _local), each with its radius at its first and last vertex."""
+def _edge_item(info, row, name):
+    """(edge index, r1, r2) of edge `name` in a Constant or Chord Length row: its radius at its
+    first and last vertex."""
     rtype = row.get("radius_type", "constant")
-    names = [n for n in _expand(info, refs) if n not in taken]
-    if not names:
-        return []
     if rtype == "constant":
         r = float(row.get("radius", 1.0))
         if r <= 0:
             raise core.SetError("The radius must be more than 0 mm.")
-        return [(_index(n), r, r) for n in names]
+        return _index(name), r, r
     if rtype == "chord":
         chord = float(row.get("chord", 1.0))
-        items = []
-        for n in names:
-            edge = blend.element(info.shape, n)
-            ends = []
-            for t in (edge.FirstParameter, edge.LastParameter):
-                found = turn_at(info, n, t)
-                if found is None:
-                    raise core.SetError("An edge of this set has no corner to round.")
-                ends.append(core.chord_radius(chord, found[0]))
-            items.append((_index(n), ends[0], ends[1]))
-        return items
+        edge = blend.element(info.shape, name)
+        ends = []
+        for t in (edge.FirstParameter, edge.LastParameter):
+            found = turn_at(info, name, t)
+            if found is None:
+                raise core.SetError("An edge of this set has no corner to round.")
+            ends.append(core.chord_radius(chord, found[0]))
+        return _index(name), ends[0], ends[1]
     raise core.SetError("unknown radius type %r" % (rtype,))
+
+
+def _claims(info, rows, groups, taken):
+    """[(edge name, row index, wanted)] of the Constant / Chord Length rows: first every
+    picked edge (each to its own set), then the edges tangent to them: those of a set with
+    Tangent Chain on are rounded with it (wanted), those of a set with it off only get a
+    size for OpenCASCADE (which rounds the whole chain) and are put back afterwards
+    (_local). An edge goes to the first set that claims it."""
+    claimed, out = set(taken), []
+
+    def claim(name, i, wanted):
+        if name not in claimed:
+            claimed.add(name)
+            out.append((name, i, wanted))
+
+    usable = [
+        (i, row, refs)
+        for i, (row, refs) in enumerate(zip(rows, groups))
+        if refs and row.get("radius_type") != "variable"
+    ]
+    for i, _row, refs in usable:
+        for name in blend.blended_edges(info, refs):
+            claim(name, i, True)
+    for chained in (True, False):
+        for i, row, refs in usable:
+            if bool(row.get("tangent_chain", True)) != chained:
+                continue
+            for name in blend.blended_edges(info, refs):
+                for member in info.chain(name):
+                    claim(member, i, chained)
+    return out
 
 
 def variable_plan(info, row, refs, chain=True):
@@ -459,10 +483,10 @@ def _round_fillet_rows(shape, spec, groups):
     radius points first)."""
     info = blend.ShapeInfo(shape)
     rows = spec.get("sets", [])
-    chain = bool(spec.get("tangent_chain", True))
     cut_points, variable, taken = [], [], set()
     for row, refs in zip(rows, groups):
         if refs and row.get("radius_type") == "variable":
+            chain = bool(row.get("tangent_chain", True))
             points, plan, rest = variable_plan(info, row, refs, chain)
             cut_points.extend(points)
             variable.append((plan, rest))
@@ -483,19 +507,13 @@ def _round_fillet_rows(shape, spec, groups):
         return (found, b, a) if flipped else (found, a, b)
 
     items, chains, wanted = [], [], []
-    for row, refs in zip(rows, groups):
-        if not refs or row.get("radius_type") == "variable":
-            continue
-        picked = set(blend.blended_edges(info, refs))
-        for index, a, b in _fillet_items(info, row, refs, taken):
-            name = "Edge%d" % index
-            taken.add(name)
-            index, a, b = on_work(index, a, b)
-            items.append((index, a, b))
-            edge = work.Edges[index - 1]
-            chains.append(edge)
-            if name in picked:
-                wanted.append(edge)
+    for name, i, keep in _claims(info, rows, groups, taken):
+        index, a, b = on_work(*_edge_item(info, rows[i], name))
+        items.append((index, a, b))
+        edge = work.Edges[index - 1]
+        chains.append(edge)
+        if keep:
+            wanted.append(edge)
     for plan, rest in variable:
         for pieces, picked in ((plan, True), (rest, False)):
             for start, end, middle, r0, r1 in pieces:
@@ -507,7 +525,7 @@ def _round_fillet_rows(shape, spec, groups):
                 if picked:
                     wanted.append(work.Edges[index - 1])
     result = kernel("fillet", work, items, tag=shape.Tag)
-    if not spec.get("tangent_chain", True):
+    if any(refs and not row.get("tangent_chain", True) for row, refs in zip(rows, groups)):
         try:
             result = _local(work, result, wanted, chains)
         except core.SetError:
@@ -1187,6 +1205,44 @@ def replace(old, build):
     old.Document.removeObject(old.Name)
     body.Tip = new if (was_tip or tip is None) else tip
     return new, expressions
+
+
+# -- Press Pull on a face of the step -----------------------------------------------------------
+def size_of_face(step, face):
+    """(size property, label for the box) of the set whose round / bevel `face` is (Press
+    Pull on a fillet face edits that fillet's size, in Fusion), or (None, None) when that
+    set has no single size (Variable, Full Round)."""
+    try:
+        spec = read_spec(step)
+        if spec.get("mode") == "full_round" or face is None:
+            return None, None
+        if spec.get("mode") == "rule":
+            return "Size1", "Fillet radius"
+        base = step.BaseFeature
+        info = blend.ShapeInfo(base.Shape)
+        groups = core.split_refs(spec, _subs(step.Picks))
+        best = None
+        for i, (row, refs) in enumerate(zip(spec["sets"], groups)):
+            for name in _expand(info, refs):
+                edge = blend.element(info.shape, name)
+                if edge is None:
+                    continue
+                d = edge.distToShape(face)[0]
+                if best is None or d < best[0]:
+                    best = (d, i)
+        if best is None:
+            return None, None
+        row = spec["sets"][best[1]]
+        number = best[1] + 1
+        if spec.get("kind") == "chamfer":
+            return "Size%d" % number, "Chamfer distance (set %d)" % number
+        if row.get("radius_type") == "variable":
+            return None, None
+        if row.get("radius_type") == "chord":
+            return "Size%d" % number, "Chord length (set %d)" % number
+        return "Size%d" % number, "Fillet radius (set %d)" % number
+    except Exception:
+        return None, None
 
 
 # -- handles of the dialog -------------------------------------------------------------------

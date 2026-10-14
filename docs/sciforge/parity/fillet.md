@@ -89,6 +89,10 @@ How it is built:
   edits, and FreeCAD still notices when a later step's edge is really gone (picks.py then
   finds it again by geometry).
 
+Press Pull (Q) on a round of SciForge's step edits the size of the set that made it (the box
+says "Fillet radius (set 2)"; Chord Length and Rule Fillet too), as Press Pull edits a fillet
+in Fusion (scenario `fillet2_edit_later`).
+
 Dialog details: the current set's row is highlighted, its boxes show its values; clicking a
 row, dragging a set's arrow or typing in a set's value box makes that set the current one.
 Picks of every set stay highlighted; clicking one drops it from its set. Type changes start
@@ -163,8 +167,8 @@ FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
 | Radius Type: Asymmetric | Kernel. No two-distance (conic) fillet in `BRepFilletAPI_MakeFillet` |
 | Chamfer Corner Type: Miter, Blend | Kernel. `BRepFilletAPI_MakeChamfer` closes a corner where chamfers meet with one flat face only (three chamfers at a box corner: one triangle, measured) |
 | Full Round of a curved rib, or a centre face with tangent faces | Not built: SciForge's full round takes a flat centre face between two flat parallel walls (a straight rib or wall). Others are refused with the reason |
+| Press Pull on a variable round or a full round | It has no single size to edit: Press Pull pushes that face like any other |
 | Radius points driven by a formula | A radius point's position and radius are plain numbers (a formula typed in is worked out once); each set's size does follow a formula |
-| Press Pull on a face of SciForge's fillet step | Press Pull edits the radius of FreeCAD's own fillet (one set); on SciForge's step it offsets the face like any other |
 | Window (drag-box) selection of edges inside the dialog | Not handled specially yet |
 | A formula shown *inside* the value box | FreeCAD's number box can only show the number: the formula is listed under the boxes (as in Extrude) |
 | Edges of several bodies in one fillet | One step belongs to one body: edges of another body are not picked (they do not light up) |

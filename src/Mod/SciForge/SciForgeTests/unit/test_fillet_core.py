@@ -2,6 +2,7 @@
 """The maths of Fusion's Fillet options in sciforge/fillet_core.py: Chord Length, the
 Variable radius law and how an edge chain is cut at its radius points, Rule Fillet's
 rounds / fillets, Distance and Angle as two distances, Full Round, and the settings."""
+
 import math
 import os
 import sys
@@ -165,7 +166,7 @@ class SpecTests(unittest.TestCase):
         spec["sets"][0]["radius_type"] = "chord"
         self.assertTrue(core.needs_step(spec, [["Edge1"]]))
         spec = core.default_spec("fillet")
-        spec["tangent_chain"] = False
+        spec["sets"][0]["tangent_chain"] = False
         self.assertTrue(core.needs_step(spec, [["Edge1"]]))
         spec = core.default_spec("fillet")
         spec["mode"] = "rule"
@@ -182,7 +183,7 @@ class SpecTests(unittest.TestCase):
         self.assertEqual(back["sets"][0]["chamfer_type"], "angle")
         old = core.loads('{"kind": "fillet", "sets": [{"count": 2}]}')
         self.assertEqual(old["sets"][0]["radius_type"], "constant")
-        self.assertTrue(old["tangent_chain"])
+        self.assertTrue(old["sets"][0]["tangent_chain"])
         self.assertEqual(core.loads("not json")["kind"], "fillet")
 
     def test_check_spec(self):

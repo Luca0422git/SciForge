@@ -2,10 +2,13 @@
 """A plain fillet with a chamfer after it is edited from the timeline to hold a second radius
 set: the fillet step becomes SciForge's own in the same place of the timeline, and the
 chamfer after it keeps its edge. Ctrl+Z gives the plain fillet back (one undo step), Ctrl+Y
-the two sets again. Only real input.
+the two sets again. Then Press Pull (Q) on set 2's round edits set 2's radius, as Press
+Pull edits a fillet in Fusion. Only real input.
 
 Volumes: a round of radius r on a 40 mm box edge removes 40 r^2 (1 - pi/4); a 1 mm chamfer
 on a 30 mm edge removes 30 / 2."""
+
+import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -124,6 +127,45 @@ def undone():
 
 def redone():
     h.check("Ctrl+Y: the two sets again", b.close(h.solid_volume(), s["v"]), h.solid_volume())
+    h.click_empty()
+    h.press("q")
+
+
+def round_face():
+    h.fit()
+    r = 2.0  # set 2's round on the back top edge, half way round
+    c = math.cos(math.radians(45))
+    h.click(V(20, 30 - r + r * c, 10 - r + r * c))
+
+
+def press_pull_edit():
+    from sciforge import presspull_ui
+
+    p = presspull_ui.PressPullPanel.last
+    ok = p is not None and not p._closed and p.mode == "edit_blend"
+    h.check("Press Pull on set 2's round edits it", ok, p and (p.mode, p.message.text()))
+    if ok:
+        h.check("the box says which size", "set 2" in p.field_label.text(), p.field_label.text())
+        b.type_into(p.field.widget, "3")
+
+
+def press_pull_ok():
+    v = h.solid_volume()
+    expect = b.BOX - 40 * b.spandrel(1) - 40 * b.spandrel(3) - CHAMFER
+    h.check("set 2 is now r 3 (preview)", b.close(v, expect), (v, expect))
+    h.task_button("OK")
+
+
+def end():
+    v = h.solid_volume()
+    expect = b.BOX - 40 * b.spandrel(1) - 40 * b.spandrel(3) - CHAMFER
+    h.check("kept", b.close(v, expect), (v, expect))
+    steps = f2.steps()
+    h.check(
+        "still one fillet step and the chamfer, nothing added",
+        len(steps) == 2 and abs(f2.spec_of(steps[0])["sets"][1]["radius"] - 3) < 1e-9,
+        steps and f2.spec_of(steps[0])["sets"],
+    )
     h.check("no kernel errors", not f2.report_errors(), f2.report_errors())
     h.check("dialog closed", not Gui.Control.activeDialog())
 
@@ -146,5 +188,9 @@ h.run(
         after_ok,
         undone,
         redone,
+        round_face,
+        press_pull_edit,
+        press_pull_ok,
+        end,
     ],
 )

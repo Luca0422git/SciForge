@@ -4,7 +4,7 @@
 builder.Builder when builder.py is imported.
 
   {"op": "fillet_sets", "id": "f1", "kind": "fillet" | "chamfer", "tangent_chain": true,
-   "sets": [{"edges": sel, "faces": sel, "features": [step ids],
+   "sets": [{"edges": sel, "faces": sel, "features": [step ids], "tangent_chain": false,
              "radius": 1, "radius_type": "constant" | "chord" | "variable", "chord": 3,
              "start": 1, "end": 1.5, "points": [[0.5, 3]]}, ...]}
       Fusion's selection sets: one row each, one step. Chamfer rows take "chamfer_type"
@@ -37,6 +37,7 @@ ROW_KEYS = (
     "distance2",
     "angle",
     "flip",
+    "tangent_chain",
 )
 
 
@@ -78,11 +79,12 @@ def op_fillet_sets(self, step):
     base = self._tip()
     info = blend.ShapeInfo(base.Shape)
     spec = core.default_spec(kind)
-    spec["tangent_chain"] = bool(step.get("tangent_chain", True))
     spec["sets"] = []
     groups = []
     for item in step["sets"]:
         row = core.new_set(kind)
+        if kind == "fillet":  # the step's Tangent Chain, unless the set says otherwise
+            row["tangent_chain"] = bool(step.get("tangent_chain", True))
         for key in ROW_KEYS:
             if key in item and key in row:
                 row[key] = item[key]

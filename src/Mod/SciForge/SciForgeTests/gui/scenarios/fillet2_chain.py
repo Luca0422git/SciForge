@@ -157,7 +157,7 @@ def after_ok():
     steps = f2.steps()
     h.check(
         "the step keeps Tangent Chain off",
-        len(steps) == 1 and f2.spec_of(steps[0])["tangent_chain"] is False,
+        len(steps) == 1 and f2.spec_of(steps[0])["sets"][0]["tangent_chain"] is False,
         steps and f2.spec_of(steps[0]),
     )
     s["v"] = v
