@@ -725,9 +725,9 @@ def followers(doc, names):
 
 def _follower_problem(obj):
     try:
-        from . import extrude, extrude_bodies
+        from . import extrude_bodies
 
-        if extrude.is_extrude(obj):
+        if extrude_bodies.lead_kind(obj):  # an extrude, revolve, sweep or loft
             return extrude_bodies.follower_problem(obj)
     except Exception:
         pass

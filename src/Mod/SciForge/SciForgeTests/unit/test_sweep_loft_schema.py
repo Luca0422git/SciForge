@@ -143,8 +143,10 @@ class SweepLoftSchemaTests(unittest.TestCase):
             for path in paths:
                 with open(path, encoding="utf-8") as handle:
                     schema.validate(json.load(handle))
+        # wave 4: sweep joining two bodies, two sweeps driven by parameters, a loft cutting
+        # two bodies
         self.assertEqual(
-            counts, {"sf_sweep_": 15, "sf_loft_": 14, "sf_rib_": 6, "sf_web_": 7}, counts
+            counts, {"sf_sweep_": 18, "sf_loft_": 15, "sf_rib_": 6, "sf_web_": 7}, counts
         )
 
 

@@ -14,6 +14,25 @@ last good preview: nothing goes to the Report view and no pop-up appears. Cancel
 Ctrl+Z leave the part as it was, and OK is one undo step. Double-click the step in the
 timeline to edit it again.
 
+## Wave 4: Objects To Cut for Sweep and Loft, Sweep values as formulas (branch `sf/modeling-2`, 2026-10-14)
+
+Sources: no Autodesk page found that names Objects To Cut for Sweep or Loft (the help's
+"Solids from sketches" covers them only briefly); the brief asks for it and Extrude and
+Revolve have it (Autodesk "Revolve a solid body": "Objects to Cut: Check or uncheck objects
+to cut"), so the rows below are **Guess** following SciForge's Extrude
+(`parity/extrude-presspull.md`, R8). Every Fusion value field takes a parameter or a formula
+(**Autodesk** parameters help).
+
+| Fusion (source) | SciForge |
+|---|---|
+| Sweep and Loft: a Join, Cut or Intersect acts on every body the solid passes through (Join: also touches); the dialog lists them and one can be left out (Guess) | Same row and clicks as Extrude and Revolve: "Bodies to Cut / Join / Intersect", "N bodies", click the row then a body; one timeline step with hidden follower steps; a Join merges the bodies; while the dialog is open a merged body stays visible so it can still be clicked away; a Cut shows its solid in red |
+| Sweep's Distance, Distance Two, Taper Angle and Twist Angle take a parameter or a formula (Autodesk) | Same: "share", "share / 2", "lean": the formula goes on the sweep as an expression and is listed under the fields; the sweep follows the parameter later; a plain number typed over it, or the blue ball dragged, drops the formula. A sweep with a formula is always SciForge's own sweep (FreeCAD's Pipe has no Distance property to carry it) |
+
+Tests: scenarios `modeling2_bodies` (a sweep joining two plates across a gap, a loft cutting
+them, Esc) and `modeling2_sweep_formula` (Distance and Taper as formulas, a parameter changed
+later, edit, undo / redo, save / reopen); goldens `sf_sweep_join_two_bodies`,
+`sf_loft_cut_two_bodies`, `sf_sweep_distance_parameter`, `sf_sweep_taper_parameter`.
+
 ## Sweep (CREATE > Sweep)
 
 | Fusion | SciForge |
@@ -139,7 +158,8 @@ formula is in the model's note.
   profiles. A rail loft is close to Fusion's but not exact: the sections are fitted to the
   rails at 8 places between each pair of profiles. The golden tolerance is 2e-3.
 - **Twist** works with Orientation Perpendicular only (it is greyed under Parallel).
-- **Distance boxes** (Sweep) take plain numbers, not parameters or formulas.
+- **Objects To Cut** (Sweep, Loft): as for Revolve, editing an older step does not roll the
+  timeline back, so a body a later Join merged away cannot be clicked in the row.
 - **Centerline loft** may show a seam line on its sides.
 - **Web One Side** works for lines and arcs. Other curves (splines) are Symmetric only.
 - **Profile Scaling default.** The default is "Scale"; Luca should confirm that this matches

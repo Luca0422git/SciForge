@@ -6,6 +6,27 @@ negative taper narrows) and everyday Fusion behaviour. Implemented in
 `profile_pick.py` picking, `presspull_core.py` geometry, `presspull_ui.py` dialog, `preview.py`
 dialog helpers). Status: **built and tested with real clicks, not yet signed off by Luca**.
 
+## Wave 4: To Object's Extend and Offset, a Start Object that follows (branch `sf/modeling-2`, 2026-10-14)
+
+Sources: **Autodesk** Extrude reference, through search excerpts: To Object ends at "a body,
+face, or plane"; "Extend (To Object extent type only) determines how the end of the extrusion
+meets the selected object"; Start Object "starts extrusion from a face or plane that you
+select"; the Extend labels To Selected Face, To Adjacent Faces, To Body, Through Body are
+Fusion's dialog words (help "Extrude a solid body"). **Forum**: "Very Buggy Extrude From Object
+To Object" (defect FUS-116774). **Guess**: rows marked so.
+
+| Fusion (source) | SciForge |
+|---|---|
+| To Object a face, **Extend**: To Selected Face (the face's surface extended) or To Adjacent Faces (the face and its neighbours as they are) (Autodesk) | Same choice in an Extend row, for side one and side two. To Selected Face as before. To Adjacent Faces: the extrusion ends on the face and on the faces that share an edge with it (a column partly over a slope ends on the slope there) (golden `extrude_to_adjacent_faces`) |
+| To Object a body: To Body or Through Body (Autodesk) | To Body: up to where the extrusion first meets the body (as before); Through Body: on through the body to its far side (golden `extrude_through_body`) |
+| To Object a plane: no Extend choice (Guess: a plane is endless) | Same: the row hides |
+| **Offset** from the object (Autodesk) | An Offset field for each side with To Object (it takes formulas): the end moves that far past the object, a negative value stops short of it (golden `extrude_to_object_offset`) |
+| **Start: Object** follows when the object moves (Guess: Fusion is parametric there too) | A hidden helper measures the start offset from the profile to the object at every recompute, so the extrusion moves with the face or plane when an earlier step changes (golden `extrude_start_object_follows`) |
+
+Tests: scenario `modeling2_extrude` (To Adjacent Faces and To Selected Face measured, edit
+from the timeline, undo / redo, Esc, a plane with Offset -5, save / reopen); the goldens above
+and `extrude_to_selected_face_extended`.
+
 ## Extrude
 
 | Fusion | SciForge |
@@ -105,11 +126,13 @@ sketches, a profile in another body) a hidden SubShapeBinder carries it into the
 - Thin Extrude, New Component and tapers with every extent are built (sections above). Thin
   Extrude's defaults (1 mm, the side an open curve's Side 1 is, sharp outer corners) are
   guesses to check in Fusion.
-- **To Object options**: Fusion's Extend choice (To Selected Face / To Adjacent Faces, To Body /
-  Through Body) and its Offset from the object are not offered; SciForge ends on the picked
-  face extended (or where the extrusion first meets a body).
-- **Start: Object** works with flat faces/planes parallel to the profile; the offset is measured
-  when you press OK (moving the start face later does not move the extrusion; edit it and OK).
+- **To Object options** (2026-10-14): Extend and Offset are built (section at the top). Found
+  on the way, not fixed: a Cut To Object a face that FreeCAD makes as its own Pocket, with the
+  profile partly inside the material, also cut away material above the profile plane (900
+  instead of 720 mm^3 in the scenario's first try, where the pocket's square overlapped the
+  column extruded before it); the scenario's pocket was moved off the column.
+- **Start: Object** works with flat faces/planes parallel to the profile (it follows them since
+  2026-10-14).
 - Several disjoint profiles in one extrude give one body with several solids, as in Fusion
   (FreeCAD 1.1's bodies allow it). A Join that touches no body at all is made as a New Body
   (also from scripts and old steps that have no bodies list; 2026-10-13, sources in

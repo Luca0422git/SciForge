@@ -14,6 +14,11 @@ step in the timeline. SciForge builds that from PartDesign pieces:
                                     other bodies into the lead's body; they are then used up
                                     (hidden), like Combine's tool bodies
 
+Revolve, Sweep and Loft act on several bodies the same way (wave 4; Fusion's "Objects To
+Cut"): their feature is the lead, the followers take the lead's solid from lead_tool() and
+their bodies list sits in their own meta (SciForgeRevolve / SciForgeSweep / SciForgeLoft);
+participants_of() is their bodies_in_way() list.
+
 The list of bodies is the lead's "bodies" (SciForgeExtrude JSON): what the dialog's "Bodies
 to Cut" row showed when OK was pressed. touched_bodies() finds the bodies in the way;
 starts_in_material() is Fusion's automatic Cut. The timeline side (Tips, suppress, delete,
@@ -34,10 +39,9 @@ from .extrude import (
     ExtrudeError,
     _mark,
     _ref_global,
-    _save_meta,
     _sign1,
+    extend_of,
     global_faces,
-    load_meta,
     normalize,
     options_with_defaults,
     owner_body,
@@ -89,10 +93,138 @@ def lead_of(follower):
     return lead if lead is not None and _alive(lead) else None
 
 
+# -- the kinds of steps that act on several bodies ----------------------------------------
+def lead_kind(obj):
+    """Which SciForge step `obj` is when it can act on several bodies: "extrude", "revolve",
+    "sweep", "loft", or "" for anything else."""
+    if obj is None:
+        return ""
+    from . import extrude, loft, revolve, sweep
+
+    try:
+        if revolve.is_revolve(obj):
+            return "revolve"
+        if sweep.is_sweep(obj):
+            return "sweep"
+        if loft.is_loft(obj):
+            return "loft"
+        if extrude.is_extrude(obj):
+            return "extrude"
+    except Exception:
+        return ""
+    return ""
+
+
+def _kind_module(obj):
+    from . import extrude, loft, revolve, sweep
+
+    return {"revolve": revolve, "sweep": sweep, "loft": loft}.get(lead_kind(obj), extrude)
+
+
+def lead_meta(lead):
+    return _kind_module(lead).load_meta(lead)
+
+
+def _lead_save(lead, meta):
+    _kind_module(lead)._save_meta(lead, meta)
+
+
+def lead_operation(lead):
+    """join | cut | intersect | new_body ... of a lead step."""
+    kind = lead_kind(lead)
+    if kind == "revolve":
+        from . import revolve
+
+        return revolve.read(lead)[2]["operation"]
+    if kind in ("sweep", "loft"):
+        return _kind_module(lead).read(lead)[-1]["operation"]
+    return read(lead)[1]["operation"]
+
+
+def lead_tool(lead):
+    """The solid a Revolve, Sweep or Loft lead adds or takes away, in design coordinates:
+    FreeCAD's own tool solid (AddSubShape) when the lead is a PartDesign Revolution, Groove,
+    Pipe or Loft, else the module's tool_shape from what the step was made with."""
+    if "AddSubShape" in lead.PropertiesList:
+        try:
+            sub = lead.AddSubShape
+        except Exception:
+            sub = None
+        if sub is not None and not sub.isNull() and sub.Solids:
+            out = bodies.baked(sub)
+            body = owner_body(lead)
+            if body is not None:
+                place = body.getGlobalPlacement()
+                if not place.isIdentity():
+                    out.transformShape(place.toMatrix(), True)
+            return out
+    kind = lead_kind(lead)
+    module = _kind_module(lead)
+    if kind == "revolve":
+        profiles, axis, options = module.read(lead)
+        return module.tool_shape(profiles, axis, options)
+    if kind == "sweep":
+        profiles, path, rail, options = module.read(lead)
+        return module.tool_shape(profiles, path, rail, options)
+    if kind == "loft":
+        profiles, rails, centerline, options = module.read(lead)
+        return module.tool_shape(profiles, rails, centerline, options)
+    raise ExtrudeError("%s cannot act on other bodies." % lead.Label)
+
+
+def bodies_in_way(doc, tool, lead=None):
+    """([bodies the solid `tool` (design coordinates) passes through], [bodies it passes
+    through or only touches face to face]), oldest first, each body as it was before `lead`
+    (the step being previewed or edited): the bodies a Revolve, Sweep or Loft acts on by
+    itself, like Extrude's in_the_way."""
+    if tool is None or tool.isNull() or not tool.Solids:
+        return [], []
+    candidates = candidate_bodies(doc, lead)
+    enough = max(VOLUME_TOL, tool.Volume * 1e-6)
+    through, touching = [], []
+    for body, shape in candidates:
+        try:
+            shared = _shared_volume(shape, tool)
+            if shared is None:
+                continue
+            if shared > enough:
+                through.append(body)
+                touching.append(body)
+            elif shared > VOLUME_TOL or _face_contact(shape, tool):
+                touching.append(body)
+        except Exception:
+            continue
+    return through, touching
+
+
+def participants_of(feature, doc, options, tool_fn):
+    """The bodies a Revolve, Sweep or Loft acts on, oldest first, from options["bodies"]: a
+    list (the dialog's row), "auto" (every body the solid passes through; a Join also those
+    it touches; tool_fn() gives the solid) or None (an existing step keeps its saved list;
+    without one: None = the profile's body only, as before)."""
+    op = options["operation"]
+    if op not in ("join", "cut", "intersect"):
+        return None
+    wanted = options.get("bodies")
+    if wanted is None and feature is not None:
+        wanted = stored_bodies(feature)
+    if wanted is None:
+        return None
+    if isinstance(wanted, str):
+        found = bodies_in_way(doc, tool_fn(), lead=feature)
+        wanted = found[1] if op == "join" else found[0]
+    result = []
+    for body in wanted:
+        if _alive(body) and body.TypeId == "PartDesign::Body" and body not in result:
+            result.append(body)
+    return sorted(result, key=lambda b: b.ID)
+
+
 def stored_bodies(feature):
-    """The bodies an existing extrude acts on (its "Bodies to Cut" list), or None for an
-    extrude made before extrudes could act on several bodies (it acts on its own body)."""
-    names = load_meta(feature).get("bodies") if feature is not None else None
+    """The bodies an existing extrude (revolve, sweep, loft) acts on (its "Bodies to Cut"
+    list), or None for a step made before it could act on several bodies (it acts on its
+    own body)."""
+    names = lead_meta(feature).get("bodies") if feature is not None else None
     if names is None:
         return None
     doc = feature.Document
@@ -149,7 +281,18 @@ def participants_for(feature, profiles, options):
     return sorted(result, key=lambda b: b.ID)
 
 
-def nothing_touched(options):
+def nothing_touched(options, what="extrusion"):
+    if what != "extrusion":
+        # a revolve, sweep or loft
+        if options["operation"] == "intersect":
+            return (
+                "The %s does not go through any body, so Intersect would leave nothing. "
+                "Change the profile or the operation." % what
+            )
+        return (
+            "The %s does not go through any body, so it cuts nothing. Change the profile, "
+            "or use Join or New Body." % what
+        )
     if options["operation"] == "intersect":
         return (
             "The extrusion does not go through any body, so Intersect would leave nothing. "
@@ -200,6 +343,37 @@ def place_in(body, lead, times=None, at_marker=True, skip=()):
         if at_marker and obj is tip:
             break
     return found
+
+
+def insert_point(body, after, lead, times=None):
+    """The object of `body` that a step moving there right after its solid step `after`
+    (from place_in) goes in behind: past the sketches and planes that come before `lead` in
+    the timeline too. The timeline keeps each body's own order, so a step put in ahead of an
+    older sketch of that body would jump ahead of that sketch (and of the steps of other
+    bodies made in between) in the timeline."""
+    if after is None or lead is None:
+        return after
+    if times is None:
+        times = step_times(lead.Document)
+    at = times.get(lead.Name)
+    if at is None:
+        return after
+    group = list(body.Group)
+    try:
+        start = group.index(after)
+    except ValueError:
+        return after
+    point = after
+    for obj in group[start + 1 :]:
+        if obj is lead or "BaseFeature" in obj.PropertiesList:
+            break  # never past a solid step (place_in chose the last one before the lead)
+        t = times.get(obj.Name)
+        if t is None:
+            continue  # a helper: it goes with the step after it
+        if t >= at:
+            break
+        point = obj
+    return point
 
 
 def before_shape(body, lead=None, times=None):
@@ -496,10 +670,15 @@ def tool_prism(profiles, options, reach=()):
         length = abs(distance)
     kind = {"distance": "Length", "all": "ThroughAll", "to_object": "UpToFace"}
 
-    def target(key, extent):
+    def target(key, extent, side):
         ref = options.get(key)
         if options[extent] != "to_object" or not ref:
             return None
+        if extend_of(options, side) == "adjacent" and ref[1].startswith("Face"):
+            # the face and its neighbours, in design coordinates
+            from .extrude import _side_target, _to_global
+
+            return _to_global(_side_target(ref[0].Shape, ref[1], "adjacent"), ref[0])
         return _ref_global(ref)  # a plane, a face, or a whole body's solid
 
     spec = {
@@ -511,13 +690,17 @@ def tool_prism(profiles, options, reach=()):
         "type": kind[options["extent"]],
         "length": length,
         "taper": float(options["taper"]),
-        "target": target("extent_object", "extent"),
+        "target": target("extent_object", "extent", 1),
+        "extend": extend_of(options, 1),
+        "offset": float(options.get("object_offset") or 0.0),
         "type2": kind[options["extent2"]],
         "length2": abs(float(options["distance2"])),
         "taper2": float(options["taper2"]),
         "target2": (
-            target("extent_object2", "extent2") if options["direction"] == "two_sides" else None
+            target("extent_object2", "extent2", 2) if options["direction"] == "two_sides" else None
         ),
+        "extend2": extend_of(options, 2),
+        "offset2": float(options.get("object_offset2") or 0.0),
         "thin": thin_spec(options),
     }
     try:
@@ -628,7 +811,9 @@ def follower_tool(lead, reach=None):
     """The lead's extrusion as a solid in design coordinates, for its followers: FreeCAD's
     own tool solid (AddSubShape) when the lead has one, else built again with `reach` (the
     follower's body) as the end of "All": PartDesign sizes All from the lead's body only,
-    which stopped short of a body further away."""
+    which stopped short of a body further away. A Revolve, Sweep or Loft lead: lead_tool."""
+    if lead_kind(lead) in ("revolve", "sweep", "loft"):
+        return lead_tool(lead)
     profiles, options = read(lead)
     options = options_with_defaults(dict(options, bodies=None))
     sides = [options["extent"]]
@@ -882,15 +1067,26 @@ def merge_tip(lead):
             return
 
 
+def ends_body(body, step):
+    """True when `step` is its body's end: the Tip, or followed only by its own Join's merge
+    (an edited step rebuilt as another kind must become the end again)."""
+    tip = getattr(body, "Tip", None) if body is not None else None
+    if tip is None or step is None:
+        return False
+    if tip is step:
+        return True
+    return is_merge(tip) and tip in followers_of(step)
+
+
 def _save_bodies(lead, participants):
-    meta = load_meta(lead)
+    meta = lead_meta(lead)
     if participants is None:
         if "bodies" not in meta:
             return
         meta.pop("bodies")
     else:
         meta["bodies"] = [b.Name for b in participants]
-    _save_meta(lead, meta)
+    _lead_save(lead, meta)
 
 
 def sync_followers(lead, participants, options, old=None):
@@ -968,7 +1164,7 @@ def preview_cuts(lead):
     if lead is None or not _alive(lead):
         return found
     try:
-        cut = read(lead)[1]["operation"] == "cut"
+        cut = lead_operation(lead) == "cut"
     except Exception:
         cut = False
     if not cut:

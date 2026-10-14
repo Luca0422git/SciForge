@@ -72,7 +72,7 @@
     }
   ],
   "expect": {
-    "volume": 11537.3344857616,
+    "volume": 11526.667903847374,
     "bbox": [
       0,
       0,
@@ -83,6 +83,6 @@
     ],
     "solids": 1,
     "source": "analytic",
-    "note": "two d5 holes, each threaded M6x1 over 10 mm: V = 12000 - 2 (pi 2.5^2 10 + 10 * 3.498321627)"
+    "note": "a modeled thread lies in the middle of its class's tolerance zone (ISO 965-1, thread_tables.class_zone): two d5 holes, each threaded M6x1 6H over 10 mm: V = 12000 - 2 (pi 2.5^2 10 + 10 * thread_core.removed_area(3.036528, 1, True, 2.5, 2.516234) = 4.031650723)"
   }
 }

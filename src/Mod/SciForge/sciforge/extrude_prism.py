@@ -11,7 +11,10 @@ Pad's, so switching an extrude between Join, Cut and Intersect keeps the same sh
   - symmetric: the distance is the whole length, half on each side;
   - "to object": up to a flat face or plane (extended), a curved face (its whole surface)
     or a body (where the extrusion first meets it), like Fusion's To Object; a taper ends
-    there too (Fusion tapers every extent).
+    there too (Fusion tapers every extent). Fusion's Extend choices: To Adjacent Faces ends
+    on the face and its neighbours as they are (a compound of faces, never extended),
+    Through Body goes on through the body to where it leaves it; an offset moves the end
+    that far along the extrusion (past the object; negative: short of it).
 
 Thin extrude (Fusion's Extrude type "Thin Extrude"): a wall of a given thickness along the
 profile's outline instead of the filled profile. Closed profiles (sketch areas, flat faces)
@@ -22,6 +25,7 @@ seen from the sketch's normal), "side2" (the other side) or "center" (half on ea
 A taper tilts the wall and keeps its thickness (positive: towards side two, i.e. outward
 for a closed profile).
 """
+
 import math
 
 import FreeCAD as App
@@ -454,9 +458,11 @@ def _surface_shape(face, size):
     return face  # a free-form face ends the extrusion where it is
 
 
-def _to_shape(sections, direction, target, run_hint, taper, reach):
+def _to_shape(sections, direction, target, run_hint, taper, reach, through=False):
     """The prism up to a curved face or a whole body: a long prism, split by the target,
-    keeping the pieces that hold the profile. Raises when part of the profile misses it."""
+    keeping the pieces that hold the profile. Raises when part of the profile misses it.
+    through: Fusion's Through Body, the prism goes on through the body to where it leaves
+    it (with any gap inside the body on the way)."""
     import BOPTools.SplitAPI as split_api
 
     starts = _section_faces(sections)
@@ -469,8 +475,27 @@ def _to_shape(sections, direction, target, run_hint, taper, reach):
         trimmed = prism.cut(target)
         pieces = trimmed.Solids
         kept = _keep_start(pieces, points, what)
+        if through:
+            inside = prism.common(target).Solids
+            if not inside:
+                raise PrismError(
+                    "The extrusion does not reach the body in this direction. Pick another "
+                    "object or flip."
+                )
+            # gaps inside the body on the way: pieces that do not run on to the far end
+            gaps = [
+                p
+                for p in pieces
+                if not any(p.isInside(q, 1e-6, True) for q in points)
+                and farthest([p], origin, direction) < run * 0.98
+            ]
+            kept = kept.fuse(inside + gaps)
+            try:
+                kept = kept.removeSplitter()
+            except Exception:
+                pass
     else:
-        what = "the face"
+        what = "the face" if len(target.Faces) == 1 else "the face and the faces next to it"
         tool = _surface_shape(target.Faces[0], run * 2.0) if len(target.Faces) == 1 else target
         try:
             pieces = split_api.slice(prism, [tool], "Split").Solids
@@ -486,10 +511,15 @@ def _to_shape(sections, direction, target, run_hint, taper, reach):
     return kept
 
 
-def side(faces, direction, method, length, taper, target=None, reach=()):
+def side(faces, direction, method, length, taper, target=None, reach=(), extend="", offset=0.0):
     """The prism of one side: method "Length" | "ThroughAll" | "UpToFace" | "UpToLast".
-    `faces`: the profile faces, or the Walls of a thin extrude (thin_walls)."""
+    `faces`: the profile faces, or the Walls of a thin extrude (thin_walls). UpToFace:
+    `extend` "adjacent" (target is the face and its neighbours: never extended) or
+    "through" (a body: on through it); `offset` moves the end along the extrusion."""
     direction = App.Vector(direction).normalize()
+    if method == "UpToFace" and target is not None and abs(float(offset)) > TOL:
+        target = target.copy()
+        target.translate(direction * float(offset))
     flat = _section_faces(faces)
     start = flat[0].CenterOfMass
     if method == "Length":
@@ -506,7 +536,9 @@ def side(faces, direction, method, length, taper, target=None, reach=()):
     elif method == "UpToFace":
         if target is None:
             raise PrismError("Pick the face or plane the extrusion goes to.")
-        if _plane_of(target) is None:
+        if extend == "through" and target.Solids:
+            return _to_shape(faces, direction, target, length, taper, reach, through=True)
+        if extend == "adjacent" or _plane_of(target) is None:
             return _to_shape(faces, direction, target, length, taper, reach)
         run, exact = _run_to_plane(flat, direction, target)
     else:
@@ -556,9 +588,10 @@ def _moved(shapes, vec):
 
 def build(faces, normal, spec, reach=(), wires=()):
     """The full prism. spec keys: side_type ("One side" | "Two sides" | "Symmetric"),
-    reversed, start_offset, type, length, taper, target, type2, length2, taper2, target2,
-    and for a thin extrude "thin": {"location", "thickness", "location2", "thickness2"}
-    (`wires`: the open curves of a thin extrude's profile)."""
+    reversed, start_offset, type, length, taper, target, extend, offset, type2, length2,
+    taper2, target2, extend2, offset2, and for a thin extrude "thin": {"location",
+    "thickness", "location2", "thickness2"} (`wires`: the open curves of a thin extrude's
+    profile)."""
     normal = App.Vector(normal).normalize()
     offset = float(spec.get("start_offset", 0.0))
     wires = list(wires or [])
@@ -604,6 +637,8 @@ def build(faces, normal, spec, reach=(), wires=()):
                 spec.get("taper", 0.0),
                 spec.get("target"),
                 reach,
+                spec.get("extend", ""),
+                spec.get("offset", 0.0),
             )
         )
         if side_type == "Two sides":
@@ -616,6 +651,8 @@ def build(faces, normal, spec, reach=(), wires=()):
                     spec.get("taper2", 0.0),
                     spec.get("target2"),
                     reach,
+                    spec.get("extend2", ""),
+                    spec.get("offset2", 0.0),
                 )
             )
     prism = parts[0] if len(parts) == 1 else parts[0].fuse(parts[1:])

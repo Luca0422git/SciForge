@@ -1,0 +1,79 @@
+{
+  "id": "thread_shaft_modeled_6e",
+  "title": "Modeled M6x1 thread of class 6e on a d6 shaft (the class moves it in)",
+  "tags": [
+    "thread",
+    "modeled",
+    "class"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            20,
+            15,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 12
+    },
+    {
+      "op": "thread",
+      "id": "t1",
+      "faces": {
+        "type": "cylinder",
+        "radius": 3,
+        "count": 1
+      },
+      "modeled": true,
+      "thread_class": "6e"
+    }
+  ],
+  "expect": {
+    "volume": 12263.29886666273,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      22
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "ISO 965-1 6e for M6x1: es = -(50 + 11) um, Td2(6) = 90 P^0.4 d^0.1, Td(6) = 180 P^(2/3) - 3.15/sqrt(P); the profile moves in by (es - Td2/2)/2 = -0.058173, the shaft is turned to the middle of the major diameter's zone (r 2.925288); every slice loses thread_core.removed_area(2.941827, 1, False, 3, 2.925288) = 6.332761660; times 12"
+  }
+}

@@ -405,6 +405,10 @@ _HOLE_OPTION_KEYS = {
     "size",
     "designation",
     "fit",
+    "fastener",
+    "fastener_head",
+    "taper_kind",
+    "taper_size",
     "thread_class",
     "direction",
     "modeled",
@@ -1186,6 +1190,13 @@ def _check_sweep_loft_steps(model):
                 _fail(here, "type 'surface' goes with a 'surface': {'faces': selector}")
             if "surface" in step and set(step["surface"]) != {"faces"}:
                 _fail(here, "'surface' is {'faces': selector}")
+        if op == "sf_sweep" and "expressions" in step:
+            formulas = step["expressions"]
+            if not isinstance(formulas, dict) or any(
+                k not in ("distance", "distance2", "taper", "twist") or not isinstance(v, str)
+                for k, v in formulas.items()
+            ):
+                _fail(here, "'expressions' is {field: formula} (distance, distance2, taper, twist)")
         if op == "sf_sweep_edit":
             if seen.get(step["target"]) != "sf_sweep":
                 _fail(here, "'target' must name an earlier sf_sweep step")
@@ -1369,6 +1380,13 @@ def validate(model):  # noqa: F811  (adds the body_material checks)
 
 # -- Extrude through several bodies (golden/extrude_bodies_ops.py; sciforge/extrude.py) ----------
 STEP_KEYS["extrude"][1].add("bodies")
+# To Object's Extend choice (face / adjacent / body / through) and Offset, per side
+STEP_KEYS["extrude"][1].update({"extend", "extend2", "object_offset", "object_offset2"})
+# Objects To Cut for Revolve, Sweep and Loft ("auto" or step ids, as for Extrude)
+for _op in ("sf_revolve", "sf_sweep", "sf_loft"):
+    STEP_KEYS[_op][1].add("bodies")
+# A sweep's value fields take a parameter or a formula: {"distance": "share", ...}
+STEP_KEYS["sf_sweep"][1].add("expressions")
 STEP_KEYS["use_body"] = ({"step"}, {"comment"})
 STEP_KEYS["expect_bodies"] = (set(), {"bodies", "used_up", "followers", "steps", "comment"})
 STEP_KEYS["reopen_check"] = ({"bodies"}, {"comment"})

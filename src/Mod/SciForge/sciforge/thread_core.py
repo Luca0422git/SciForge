@@ -21,6 +21,7 @@ cross section across the axis has the same area, so the material it removes is
 
 where w(r) is the groove's width along the axis at radius r (only where there was material).
 """
+
 import math
 
 TAN30 = math.tan(math.radians(30.0))
@@ -80,28 +81,41 @@ def _integral_rw(major_radius, pitch, internal, a, b):
     return f(b) - f(a)
 
 
-def removed_area(major_radius, pitch, internal, face_radius):
+def removed_area(major_radius, pitch, internal, face_radius, limit=None):
     """Area of one cross section (across the axis) of the material a modeled thread removes
     from a cylinder of radius `face_radius`: a shaft (external) or a hole (internal). A shaft
     wider than the thread is first turned down to the major diameter, a hole narrower than
     the thread's minor diameter is first bored up to it (that is what Fusion's modeled thread
-    does: the thread has its standard size whatever the cylinder was)."""
+    does: the thread has its standard size whatever the cylinder was). `limit`: the radius
+    the shaft is turned to / the hole bored to (default: the profile's own major radius /
+    minor radius; a tolerance class sets them, see class_radii)."""
     h = fundamental_height(pitch)
     r = float(major_radius)
     face = float(face_radius)
     two_pi_over_p = 2.0 * math.pi / pitch
     if internal:
-        minor = r - 5.0 * h / 8.0
+        minor = r - 5.0 * h / 8.0 if limit is None else float(limit)
         bore = math.pi * (minor**2 - face**2) if face < minor else 0.0
-        start = max(face, minor) if bore else face
+        start = max(face, minor)
         return bore + two_pi_over_p * _integral_rw(r, pitch, True, start, r)
-    turn = math.pi * (face**2 - r**2) if face > r else 0.0
-    end = min(face, r) if turn else face
+    outer = r if limit is None else float(limit)
+    turn = math.pi * (face**2 - outer**2) if face > outer else 0.0
+    end = min(face, outer)
     return turn + two_pi_over_p * _integral_rw(r, pitch, False, 0.0, end)
 
 
-def removed_volume(major_radius, pitch, internal, face_radius, length):
-    return removed_area(major_radius, pitch, internal, face_radius) * float(length)
+def removed_volume(major_radius, pitch, internal, face_radius, length, limit=None):
+    return removed_area(major_radius, pitch, internal, face_radius, limit) * float(length)
+
+
+def class_radii(diameter, internal, zone):
+    """(profile major radius, turned / bored radius) of a modeled thread whose tolerance
+    class puts it where `zone` says (thread_tables.class_zone): the profile moves out by
+    half the zone's shift; a shaft is turned to the middle of the class's major diameter,
+    a hole bored to the middle of its minor diameter."""
+    radius = (float(diameter) + zone["shift"]) / 2.0
+    limit = zone["minor"] / 2.0 if internal else zone["major"] / 2.0
+    return radius, limit
 
 
 def span(face_start, face_end, full_length=True, length=0.0, offset=0.0, from_end=False):
@@ -138,3 +152,13 @@ def helix_points(radius, pitch, z0, z1, per_turn=24, left_hand=False, phase=0.0)
         angle = phase + sign * 2.0 * math.pi * (z - z0) / pitch
         points.append((radius * math.cos(angle), radius * math.sin(angle), z))
     return points
+
+
+def class_removed_volume(designation, thread_class, internal, face_radius, length):
+    """removed_volume for a modeled thread of a tolerance class (thread_tables.class_zone):
+    what SciForge's Thread cuts, worked out by hand (tests compare with it)."""
+    from . import thread_tables
+
+    zone = thread_tables.class_zone(designation, thread_class, internal)
+    radius, limit = class_radii(designation.diameter, internal, zone)
+    return removed_volume(radius, designation.pitch, internal, face_radius, length, limit)

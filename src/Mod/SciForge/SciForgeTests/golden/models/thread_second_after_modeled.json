@@ -88,7 +88,7 @@
     }
   ],
   "expect": {
-    "volume": 12888.884653017984,
+    "volume": 12882.967628656228,
     "bbox": [
       0,
       0,
@@ -99,6 +99,6 @@
     ],
     "solids": 1,
     "source": "analytic",
-    "note": "the first thread cut for real (M10x1.5, 4 long): the boss's face the second thread sat on is split, FreeCAD loses its name, and the second (cosmetic) thread finds its cylinder again by place instead of failing; V = 12000 + pi 25 12 - 4 * 13.398285765 (thread_core.removed_volume(5, 1.5, False, 5, 4))"
+    "note": "the first thread cut for real (M10x1.5 6g, 4 long; a modeled thread lies in the middle of its class's tolerance zone (ISO 965-1, thread_tables.class_zone): thread_core.removed_area(4.951705, 1.5, False, 5, 4.925926) = 14.877541855): the boss's face the second thread sat on is split, FreeCAD loses its name, and the second (cosmetic) thread finds its cylinder again by place instead of failing; V = 12000 + pi 25 12 - 4 * that"
   }
 }

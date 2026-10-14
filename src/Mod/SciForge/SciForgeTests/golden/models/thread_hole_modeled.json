@@ -64,7 +64,7 @@
     }
   ],
   "expect": {
-    "volume": 11768.6672428808,
+    "volume": 11763.333951923687,
     "bbox": [
       0,
       0,
@@ -75,6 +75,6 @@
     ],
     "solids": 1,
     "source": "analytic",
-    "note": "the d5 hole is M6's tap drill, so the thread is M6x1; the inside groove is P/8 wide at R = 3 and widens 2 tan 30 per mm inward; slice loss beyond the hole (2 pi / P) * int_2.5^3 r w(r) dr = 3.498321627; times 10 mm"
+    "note": "a modeled thread lies in the middle of its class's tolerance zone (ISO 965-1, thread_tables.class_zone): the d5 hole is M6's tap drill, so the thread is M6x1 6H: it is bored to the middle of the minor diameter's zone and the groove moved out; slice loss beyond the hole thread_core.removed_area(3.036528, 1, True, 2.5, 2.516234) = 4.031650723; V = 12000 - pi 2.5^2 10 - 10 * that"
   }
 }

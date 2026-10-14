@@ -25,6 +25,10 @@ Options (dict, see DEFAULTS):
   scaling      scale | stretch | none     Path + Guide Rail: the profile grows with the rail
                evenly, only towards the rail, or not at all (the rail only turns it)
   operation    join | cut | intersect | new_body
+  expressions  {"distance": formula, ...}: values typed as a parameter or a formula ("share",
+               "share / 2"; Distance and Distance Two are plain numbers, Taper and Twist
+               angles); they become expressions on the sweep, so the sweep follows the
+               parameter later (Fusion: every value field takes a formula)
 
 What is built:
   FreeCAD's own AdditivePipe / SubtractivePipe whenever it builds exactly the same thing
@@ -58,6 +62,7 @@ DEFAULTS = {
     "orientation": "perpendicular",
     "scaling": "scale",
     "chain": True,
+    "bodies": None,  # Objects To Cut: a list, "auto", None (as for Extrude and Revolve)
 }
 
 META = "SciForgeSweep"
@@ -95,7 +100,70 @@ def options_with_defaults(options):
     for name in ("distance", "distance2", "taper", "twist"):
         merged[name] = float(merged[name])
     merged["chain"] = bool(merged["chain"])
+    merged["expressions"] = {
+        k: str(v).strip()
+        for k, v in dict(merged.get("expressions") or {}).items()
+        if k in FORMULAS and v and str(v).strip()
+    }
     return merged
+
+
+# -- formulas ------------------------------------------------------------------------------------
+# field -> (property of SciForge's sweep, the field's unit for extrude.evaluate, its name)
+FORMULAS = {
+    "distance": ("Distance", "", "Distance"),
+    "distance2": ("Distance2", "", "Distance Two"),
+    "taper": ("TaperAngle", "deg", "Taper Angle"),
+    "twist": ("TwistAngle", "deg", "Twist Angle"),
+}
+
+
+def _formula_used(key, options):
+    """Taper and Twist apply to a single-path sweep only, Twist not with Parallel (their
+    fields are hidden or greyed then): a formula left in them is not used."""
+    if key in ("taper", "twist") and options["type"] != "single":
+        return False
+    return not (key == "twist" and options["orientation"] == "parallel")
+
+
+def evaluate_formulas(doc, options):
+    """options with each value typed as a formula worked out now (the preview and the
+    checks use it; the formula itself goes on the sweep as an expression)."""
+    typed = options.get("expressions") or {}
+    if not typed:
+        return options
+    options = dict(options)
+    typed = {k: v for k, v in typed.items() if _formula_used(k, options)}
+    options["expressions"] = typed
+    for key, text in typed.items():
+        prop, unit, words = FORMULAS[key]
+        try:
+            options[key] = extrude.evaluate(doc, text, unit)
+        except extrude.ExtrudeError as exc:
+            raise SweepError("%s: %s" % (words, exc))
+    return options
+
+
+def _apply_expressions(feature, options):
+    """Formulas typed in the dialog become expressions on SciForge's sweep; a value typed
+    as a plain number (or dragged) removes the formula again."""
+    from . import preview
+
+    typed = options.get("expressions") or {}
+    for key, (prop, _unit, _words) in FORMULAS.items():
+        preview.set_formula(feature, prop, typed.get(key, ""))
+
+
+def formulas_of(feature):
+    """{"distance": formula, ...} driving an existing sweep (bare parameter names)."""
+    from . import preview
+
+    found = {}
+    for key, (prop, _unit, _words) in FORMULAS.items():
+        text = preview.formula_of(feature, prop)
+        if text:
+            found[key] = text
+    return found
 
 
 def check_options(options):
@@ -855,6 +923,8 @@ def native_type(profiles, path_refs, options, body, two_sides):
         return None
     if abs(options["taper"]) > 1e-9 or abs(options["twist"]) > 1e-9:
         return None
+    if options.get("expressions"):
+        return None  # a value that follows a parameter needs SciForge's sweep's property
     if abs(options["distance"] - 1.0) > 1e-9:
         return None
     if two_sides and abs(options["distance2"] - 1.0) > 1e-9:
@@ -910,7 +980,7 @@ def base_global(body, feature=None):
     return shape
 
 
-def _target(feature, profiles, options):
+def _target(feature, profiles, options, participants=None):
     """(target body or None for 'make a new one', source body)."""
     src = _source_body(profiles)
     meta = load_meta(feature) if feature is not None else {}
@@ -932,6 +1002,10 @@ def _target(feature, profiles, options):
         if feature is None and not _has_solid(src):
             return src, src
         return None, src
+    if participants:
+        from .extrude_bodies import lead_body
+
+        return lead_body(src, participants), src  # Objects To Cut: one of them leads
     return src, src
 
 
@@ -956,17 +1030,33 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
     (the dialog hides them on OK, like Fusion)."""
     profiles = check_profiles(profiles)
     options = options_with_defaults(options)
+    options = evaluate_formulas(profiles[0][0].Document, options)
     check_options(options)
     path_refs = curves.normalize(path_refs)
     rail_refs = curves.normalize(rail_refs) if not single(options) else []
+    from .extrude_bodies import (
+        _show_only_tip,
+        ends_body,
+        merge_tip,
+        nothing_touched,
+        participants_of,
+        sync_followers,
+    )
+
     # Fails early with the reason (no path, path in pieces, ...): nothing is built then.
     tool = tool_shape(profiles, path_refs, rail_refs, options)
-    if options["operation"] == "join":
+    participants = participants_of(feature, profiles[0][0].Document, options, lambda: tool)
+    if participants is not None and not participants:
+        if options["operation"] != "join":
+            raise SweepError(nothing_touched(options, "sweep"))
+        options = dict(options, operation="new_body")  # a Join touching nothing
+        participants = None
+    elif participants is None and options["operation"] == "join":
         # Fusion: a Join that does not touch the part makes a new body (never a lump).
         base = base_global(_source_body(profiles), feature)
         if base is not None and apart(base, tool):
             options = dict(options, operation="new_body")
-    target, src = _target(feature, profiles, options)
+    target, src = _target(feature, profiles, options, participants)
     two = _two_sides(profiles, path_refs, options)
     native = native_type(profiles, path_refs, options, target, two) if target else None
     type_id = native or FP_TYPE
@@ -974,6 +1064,9 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
         same = feature.TypeId == type_id and (type_id != FP_TYPE or is_own(feature))
         if owner_body(feature) is target and same:
             _update(feature, profiles, path_refs, rail_refs, options, hide)
+            sync_followers(feature, participants, options)
+            if participants is not None:
+                _show_only_tip(target)
             return feature
         # Rebuilt in its own body, later steps are moved onto the new step (relink_users
         # below); only a move to another body cannot take them along.
@@ -991,8 +1084,8 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
     elif old_meta.get("created_body") == target.Name:
         created = target
     before = feature if (feature is not None and owner_body(feature) is target) else None
-    was_tip = before is not None and target.Tip is before
-    new = _insert(target, type_id, name, before)
+    was_tip = before is not None and ends_body(target, before)
+    new, after = _insert_lead(target, type_id, name, before, feature, created)
     if type_id == FP_TYPE:
         SweepFeature(new)
         _attach_view_provider(new)
@@ -1002,6 +1095,8 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
     except Exception:
         _remove(new, keep_body=created is None or before is not None)
         raise
+    # The other bodies' steps follow the new lead (before the old one goes, with its links).
+    sync_followers(new, participants, options, old=feature)
     if before is not None and curves.computed(new):
         curves.relink_users(feature, new)
     if feature is not None:
@@ -1011,9 +1106,40 @@ def build(profiles, path_refs, rail_refs, options, name="Sweep", feature=None, h
         new.Label = label
         if old_body is not None and old_body is not target:
             extrude.show_tip(old_body)
-    if before is None or was_tip:
-        target.Tip = new
+    _set_tip(target, new, before, after, was_tip)
+    merge_tip(new)
+    if participants is not None:
+        _show_only_tip(target)  # a removed merge or old step left the body's end hidden
     return new
+
+
+def _insert_lead(target, type_id, name, before, feature, created):
+    """(the new step, the step it went after or None): an edited step that moves to another
+    body (Objects To Cut) goes in at its own place in time there, not at that body's end."""
+    after = None
+    if feature is not None and before is None and created is None:
+        from .extrude_bodies import insert_point, place_in
+
+        after = place_in(target, feature)
+        if after is target.Tip:
+            after = None
+    if after is not None:
+        new = target.Document.addObject(type_id, name)
+        target.insertObject(new, insert_point(target, after, feature), True)
+    else:
+        new = _insert(target, type_id, name, before)
+    if feature is not None:
+        extrude._keep_timeline_place(new, feature)
+    return new, after
+
+
+def _set_tip(target, new, before, after, was_tip):
+    if (before is None and after is None) or was_tip:
+        target.Tip = new
+    elif after is not None:
+        from .extrude_bodies import _show_only_tip
+
+        _show_only_tip(target)
 
 
 def _update(feature, profiles, path_refs, rail_refs, options, hide=True):
@@ -1056,6 +1182,7 @@ def _update(feature, profiles, path_refs, rail_refs, options, hide=True):
         if feature.ProfileScaling != scaling:
             feature.ProfileScaling = scaling
         feature.Refine = True
+        _apply_expressions(feature, options)
     meta = load_meta(feature)
     meta.update(
         {
@@ -1106,10 +1233,14 @@ def _delete(obj):
 
 
 def _remove(feature, keep_body=True):
+    from .extrude_bodies import followers_of, remove_follower
+
     meta = load_meta(feature)
     doc = feature.Document
     body = owner_body(feature)
     was_tip = body is not None and body.Tip is feature
+    for follower in followers_of(feature):  # its steps in other bodies go too
+        remove_follower(follower)
     _delete(feature)
     if not keep_body and body is not None and meta.get("created_body") == body.Name:
         rest = [o for o in body.Group if o.TypeId != "App::Origin"]
@@ -1139,6 +1270,12 @@ def update(feature, profiles=None, path_refs=None, rail_refs=None, options=None)
     old_profiles, old_path, old_rail, old_options = read(feature)
     merged = dict(old_options)
     merged.update(options or {})
+    if options and "expressions" not in options:
+        # A plain value given for a field that followed a formula: the value wins (as a
+        # number typed over a formula in the dialog).
+        merged["expressions"] = {
+            k: v for k, v in (old_options.get("expressions") or {}).items() if k not in options
+        }
     return build(
         normalize(profiles) if profiles is not None else old_profiles,
         path_refs if path_refs is not None else old_path,
@@ -1165,6 +1302,8 @@ def read(feature):
         profiles = _links(feature.Profiles)
         path_refs = _links(feature.Path)
         rail_refs = _links(feature.GuideRail)
+        options["bodies"] = _stored_bodies(feature)
+        options["expressions"] = formulas_of(feature)
         return profiles, path_refs, rail_refs, options_with_defaults(options)
     made = meta.get("operation")
     options["operation"] = (
@@ -1190,4 +1329,11 @@ def read(feature):
         obj, subs = feature.Spine[0], list(feature.Spine[1] or [])
         if obj is not None:
             path_refs = curves.normalize([(obj, s) for s in subs] if subs else [(obj, "")])
+    options["bodies"] = _stored_bodies(feature)
     return profiles, path_refs, [], options_with_defaults(options)
+
+
+def _stored_bodies(feature):
+    from .extrude_bodies import stored_bodies
+
+    return stored_bodies(feature)

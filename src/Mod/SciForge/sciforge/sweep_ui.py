@@ -21,8 +21,8 @@ the dialog, which then stays open.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, curve_pick, curves, extrude, log, preview, profile_pick, sweep
-from . import ui_icon_path, warn
+from . import bodies_row_ui, commands, curve_pick, curves, extrude, log, preview
+from . import profile_pick, sweep, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .hole_common import SelectionField
 from .taskui import DistanceField, Panel
@@ -143,9 +143,11 @@ class SweepPanel(Panel):
         self.layout_info = None
         self._quiet = False
         self._shown = []
+        stored = None
         if feature is not None:
             try:
                 self.profiles, self.path, self.rail, read = sweep.read(feature)
+                stored = read.pop("bodies", None)
                 self.options.update(read)
                 if self.options.get("type") == "surface":
                     self.surface, self.rail = self.rail, []
@@ -153,13 +155,18 @@ class SweepPanel(Panel):
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
             self._show_sketches()
+        self.options["bodies"] = None  # the Objects To Cut row says it at each build
         self._build_form()
+        if feature is not None:
+            self.bodies_row.read(stored, feature)
         self._show_options()
         self._watch()
         if feature is not None:
             self._refresh_picks()
             self._update_layout()
             self._make_handles()
+            self._test_bodies()  # the row starts from the bodies it was saved with
+            self._show_bodies_row()
         else:
             self._start()
 
@@ -217,12 +224,12 @@ class SweepPanel(Panel):
         self.hint.setWordWrap(True)
         form.addRow(self.hint)
         self.distance_label = QtWidgets.QLabel("Distance")
-        self.distance = curve_pick.RatioBox(self.options["distance"])
+        self.distance = curve_pick.RatioBox(self.options["distance"], formulas=True)
         self.distance.setObjectName("SciForgeSweep_distance")
         self.distance.setToolTip("How far along the path: 1 is the whole path")
         form.addRow(self.distance_label, self.distance)
         self.distance2_label = QtWidgets.QLabel("Distance Two")
-        self.distance2 = curve_pick.RatioBox(self.options["distance2"])
+        self.distance2 = curve_pick.RatioBox(self.options["distance2"], formulas=True)
         self.distance2.setObjectName("SciForgeSweep_distance2")
         form.addRow(self.distance2_label, self.distance2)
         self.taper = DistanceField(self.options["taper"], unit="deg", on_change=self._value_typed)
@@ -244,7 +251,33 @@ class SweepPanel(Panel):
         self.operation = curve_pick.combo(OPERATION_LABELS, self.options["operation"])
         self.operation.setObjectName("SciForgeSweep_operation")
         form.addRow("Operation", self.operation)
+        # Fusion's Objects To Cut: the bodies a Join / Cut / Intersect acts on
+        self.fields["bodies"] = SelectionField(self, "bodies", "No bodies")
+        self.fields["bodies"].button.setObjectName("SciForgeSweep_bodies")
+        self.fields["bodies"].clear.setObjectName("SciForgeSweep_clear_bodies")
+        self.bodies_row = bodies_row_ui.BodiesRow(self, form, self.fields["bodies"], "sweep")
+        self.formulas = QtWidgets.QLabel("")  # values that follow a parameter
+        self.formulas.setWordWrap(True)
+        self.formulas.setStyleSheet("color: #b8c7d9;")
+        form.addRow(self.formulas)
         self.finish_layout()
+        # Fusion takes a parameter or a formula in every value field ("share", "share / 2").
+        self.formula_error = ""
+        self.formula_inputs = [
+            preview.FormulaInput(self, "distance", curve_pick.RatioField(self.distance)),
+            preview.FormulaInput(self, "distance2", curve_pick.RatioField(self.distance2)),
+            preview.FormulaInput(self, "taper", self.taper),
+            preview.FormulaInput(self, "twist", self.twist),
+        ]
+        for key, widget in (
+            ("distance", self.distance),
+            ("distance2", self.distance2),
+            ("taper", self.taper.widget),
+            ("twist", self.twist.widget),
+        ):
+            edit = widget.findChild(QtWidgets.QLineEdit)
+            if edit is not None:
+                edit.textEdited.connect(lambda text, key=key: self._text_edited(key, text))
         lines = self.message.fontMetrics().lineSpacing()
         self.message.setMinimumHeight(lines * 3 + 4)
         self.type.currentIndexChanged.connect(self._kind_changed)
@@ -270,6 +303,7 @@ class SweepPanel(Panel):
         finally:
             self._quiet = False
         self._update_visibility()
+        self.show_formulas()
 
     def _update_visibility(self):
         kind = self.type.currentData()
@@ -313,16 +347,95 @@ class SweepPanel(Panel):
         self.options["twist"] = 0.0 if self.options["orientation"] == "parallel" else twist
         self.options["chain"] = bool(self.chain.isChecked())
 
+    # -- formulas (preview.FormulaInput calls formula_typed / _cleared / _failed) -----------------
+    def show_formulas(self):
+        """Fusion shows the formula in the field; the number boxes cannot, so the values that
+        follow a parameter are listed under the fields."""
+        try:
+            shown = {
+                "distance": True,
+                "distance2": not self.distance2.isHidden(),
+                "taper": not self.taper.widget.isHidden(),
+                "twist": not self.twist.widget.isHidden(),
+            }
+            rows = [
+                "%s = %s" % (sweep.FORMULAS[k][2], v)
+                for k, v in sorted((self.options.get("expressions") or {}).items())
+                if v and shown.get(k, False)
+            ]
+            self.formulas.setText("\n".join(rows))
+            self.formulas.setVisible(bool(rows))
+        except Exception as exc:
+            warn("sweep formulas: %s" % exc)
+
+    def drop_formula(self, key, update=True):
+        """A plain number typed or a handle dragged: the value no longer follows a formula."""
+        self.formula_error = ""
+        if self.options.setdefault("expressions", {}).pop(key, None) is not None:
+            self.show_formulas()
+            if update:
+                self._changed()
+
+    def formula_typed(self, key, text, value):
+        self.formula_error = ""
+        self.options.setdefault("expressions", {})[key] = text
+        self.show_formulas()
+        self._sync_handles()
+        self._changed()
+
+    def formula_cleared(self, key):
+        self.drop_formula(key)
+
+    def formula_failed(self, key, text):
+        # Kept until the field gets a value again (a preview rebuild must not wipe it).
+        self.formula_error = text
+        self.message.setText("⚠ " + text)
+
+    def _text_edited(self, key, text):
+        """A plain number typed over a formula wins at once: the preview and OK use it
+        without waiting for the field to be left."""
+        try:
+            from . import parameters
+
+            if self._closed or not text.strip() or not parameters.is_plain_number(text):
+                return
+            self.drop_formula(key, update=False)
+        except Exception as exc:
+            warn("sweep field: %s" % exc)
+
     # -- selection boxes -------------------------------------------------------------------------
     def activate(self, name):
         self.active = name
         self._show_active()
+        self._show_bodies_row()
+
+    def _test_bodies(self):
+        """The Objects To Cut row: which bodies the sweep's solid is in."""
+        if self.options.get("operation") in ("join", "cut", "intersect"):
+            self.bodies_row.update(
+                lambda: sweep.tool_shape(self.profiles, self.path, self._guide(), self.options),
+                self.target,
+            )
+
+    def _show_bodies_row(self):
+        if getattr(self, "bodies_row", None) is None:
+            return
+        self.bodies_row.show(
+            self.options.get("operation"),
+            self.active == "bodies",
+            bool(self.profiles) and bool(self.path),
+        )
 
     def _show_active(self):
         for name, field in self.fields.items():
             field.set_active(name == self.active)
 
     def clear_field(self, name):
+        if name == "bodies":
+            self.bodies_row.clear_all(self.options.get("operation"))
+            self.activate("bodies")
+            self._changed()
+            return
         if name == "profiles":
             self.profiles = []
         elif name == "path":
@@ -408,7 +521,10 @@ class SweepPanel(Panel):
             warn("sweep: profile shading unavailable: %s" % exc)
 
     def _not_an_area(self, position):
-        """A press that is meant for a handle or a curve, not the area around it."""
+        """A press that is meant for a handle or a curve, not the area around it (or one
+        that picks a body for the Objects To Cut row)."""
+        if self.active == "bodies":
+            return True
         if any(handle.hit(position) for handle in self.handles.values()):
             return True
         return curve_pick.line_under_mouse(self.doc, position)
@@ -451,6 +567,12 @@ class SweepPanel(Panel):
                 return  # the click went to a handle
             if self.picker is not None and self.picker.clicked_region_recently():
                 return  # the click picked an area (FreeCAD selected what is under it)
+            if self.active == "bodies":
+                said = self.bodies_row.picked(picks[-1][0], self.options.get("operation"))
+                self.message.setText(said)
+                if not said:
+                    self._changed()
+                return
             for obj, short in picks:
                 self._picked(obj, short)
         except Exception as exc:
@@ -696,6 +818,7 @@ class SweepPanel(Panel):
 
     def _changed(self, new_geometry=False):
         self._update_visibility()
+        self.show_formulas()  # a field hidden now (Distance Two) lists no formula
         self._collect()
         self._auto_operation()
         self.dirty = True
@@ -723,21 +846,27 @@ class SweepPanel(Panel):
             return
         try:
             before = self.target
+            operation = self.options["operation"]
+            self._test_bodies()
+            options = dict(self.options, bodies=self.bodies_row.for_build(operation))
             self.target = sweep.build(
                 self.profiles,
                 self.path,
                 self._guide(),
-                self.options,
+                options,
                 feature=self.target,
                 hide=False,
             )
             self.error = self._misses()
             if before is None or self.target is not before:
                 self._geometry_changed = True
-        except (sweep.SweepError, curves.CurveError) as exc:
+        except (sweep.SweepError, curves.CurveError, ValueError) as exc:
             self.error = str(exc)
         except Exception as exc:
             self.error = "This sweep cannot be built: %s" % exc
+        self.bodies_row.built(self.target)
+        self.bodies_row.show_cut(self.options["operation"], bool(self.error))
+        self._show_bodies_row()
         if self.error and self.target is not None:
             actual = self._feature_operation()
             if actual != self.options["operation"]:
@@ -758,6 +887,10 @@ class SweepPanel(Panel):
         operation = self.options["operation"]
         if operation not in ("cut", "intersect"):
             return ""
+        if self.bodies_row.touched(operation):
+            return ""  # it goes through bodies (Objects To Cut lists them)
+        if self.bodies_row.problem:
+            return self.bodies_row.problem
         base = self._base_feature()
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             return "There is no part to %s yet." % operation
@@ -782,6 +915,9 @@ class SweepPanel(Panel):
         return self.target
 
     def show_status(self):
+        if self.formula_error:
+            self.message.setText("⚠ " + self.formula_error)
+            return
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
@@ -860,6 +996,7 @@ class SweepPanel(Panel):
     @safe
     def _dragged(self, name, value):
         value = round(max(0.0, min(1.0, value)), 3)
+        self.drop_formula(name, update=False)  # a dragged value is a plain number again
         box = self.distance if name == "distance" else self.distance2
         self._quiet = True
         try:
@@ -941,6 +1078,7 @@ class SweepPanel(Panel):
     def cleanup(self):
         self._closed = True
         self._unwatch()
+        self.bodies_row.cleanup()
         for guard in (self.escape, self.undo_guard, self.enter):
             try:
                 guard.remove()

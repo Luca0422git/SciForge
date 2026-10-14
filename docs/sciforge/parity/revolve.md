@@ -7,6 +7,22 @@ dialog, the clickable axes and planes, the angle handles, the command) and
 and `PartDesign::Groove` with Refine on, plus SciForge's own Intersect feature). Status:
 **first pass plus one QA round (branch `sf/revolve-qa`), not yet signed off**.
 
+## Wave 4: Objects To Cut (branch `sf/modeling-2`, 2026-10-14)
+
+Sources: **Autodesk** help "Revolve a solid body" (search excerpts): under Cut and under
+Intersect, "Objects to Cut: Check or uncheck objects to cut"; the Revolve reference lists the
+same setting. A Join acting on several bodies, the row's look, the clicks and the red preview
+follow SciForge's Extrude (`parity/extrude-presspull.md`, Luca's R8) (**Guess** for Revolve).
+
+| Fusion (source) | SciForge |
+|---|---|
+| A Cut or Intersect revolve acts on the bodies checked in Objects to Cut (Autodesk); a Join on the bodies it touches (Guess, as SciForge's Extrude) | Same row as Extrude's: "Bodies to Cut / Join / Intersect" with "N bodies" and the names. Click the row, then a body, to leave it out or take it back; while the row takes the clicks the listed bodies show as see-through blue copies. One timeline step; the other bodies get hidden follower steps; a Join merges the bodies it touches into one. Leaving out the sketch's own body moves the revolve into another body, at its own place in time there. An empty row is refused with the reason and OK waits |
+| A Cut shows the material it takes away in red while the dialog is open (Autodesk, as Extrude) | Same: the revolve's solid in see-through red |
+
+Tests: scenario `modeling2_bodies` (a revolve cutting two plates, leave out / take back, an
+empty row refused, edit from the timeline, undo / redo, save / reopen); goldens
+`sf_revolve_cut_two_bodies`, `sf_revolve_cut_other_body`.
+
 ## What the user does (and what SciForge does)
 
 | Fusion | SciForge |
@@ -28,7 +44,8 @@ and `PartDesign::Groove` with Refine on, plus SciForge's own Intersect feature).
 
 | Fusion option | Why not yet |
 |---|---|
-| **Objects To Cut** (choose which bodies a Cut touches) | A Cut acts on the profile's body only |
+| Editing an older revolve shows the bodies as they are now | Fusion rolls the timeline back to the step being edited; SciForge edits in place, so a body a later Join merged away cannot be clicked in the Objects To Cut row (its merged body is clicked instead) |
+| The Objects To Cut list checked again when an earlier step changes | As for Extrude: the list is the one saved with the step |
 | Revolving open curves into a surface (SURFACE tab) | Only closed profiles (solids) |
 
 ## A Join that touches nothing (2026-10-13, gaps work)

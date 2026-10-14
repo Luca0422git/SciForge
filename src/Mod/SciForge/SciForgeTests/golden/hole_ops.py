@@ -17,8 +17,11 @@ builder.Builder when builder.py is imported.
       "hole_type": "simple" | "counterbore" | "countersink", "diameter",
       "cbore_diameter", "cbore_depth", "csink_diameter", "csink_angle",
       "drill_point": "flat" | "angle", "drill_angle",
-      "tap_type": "simple" | "clearance" | "tapped", "standard": "iso" | "ansi",
+      "tap_type": "simple" | "clearance" | "tapped" | "taper", "standard": "iso" | "ansi",
       "size", "designation" (e.g. "M6x1", "1/4-20 UNC"), "fit": "close" | "normal" | "loose",
+      "fastener" (clearance: "socket_head" | "hex_head" | "countersunk"), "fastener_head"
+      (true: the counterbore / countersink sized for that fastener's head, as the dialog
+      fills it in), "taper_kind": "npt" | "bspt", "taper_size" (e.g. "1/8"),
       "thread_class", "direction": "right" | "left", "modeled", "full_tap", "tap_depth", "flip"
 
   {"op": "thread", "id": "t1", "faces": <face selector of cylinders>, "modeled": true,
@@ -52,6 +55,9 @@ HOLE_OPTIONS = (
     "size",
     "designation",
     "fit",
+    "fastener",
+    "taper_kind",
+    "taper_size",
     "thread_class",
     "direction",
     "modeled",
@@ -76,7 +82,12 @@ _EDIT_PROPS["thread"] = {"length": "Length", "offset": "Offset", "modeled": "Mod
 
 
 def _hole_options(builder, step):
+    from sciforge import hole
+
     options = {k: step[k] for k in HOLE_OPTIONS if k in step}
+    if step.get("fastener_head"):
+        # the dialog fills the counterbore / countersink in from the fastener's head
+        options = hole.with_fastener_head(options)
     if "to" in step:
         spec = step["to"]
         if "plane" in spec:

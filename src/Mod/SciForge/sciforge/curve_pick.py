@@ -12,6 +12,7 @@
 Mouse events come through FreeCAD's view.addEventCallback (safe), work is done from Qt
 timers (feature guide rules 1 and 2), and nothing here keeps a FreeCAD-owned Coin node.
 """
+
 import functools
 import math
 import time
@@ -469,10 +470,13 @@ class PathHandle:
 # -- a 0..1 number box ------------------------------------------------------------------------------
 class RatioBox(QtWidgets.QDoubleSpinBox):
     """Fusion's Distance box of a sweep: a share of the path from 0 to 1. A decimal comma
-    or point both work (Fusion reads either); the value counts when typing is finished."""
+    or point both work (Fusion reads either); the value counts when typing is finished.
+    formulas=True: a parameter or a formula can be typed too ("share", "share / 2"); the
+    dialog reads it through RatioField and preview.FormulaInput."""
 
-    def __init__(self, value=1.0, parent=None):
+    def __init__(self, value=1.0, parent=None, formulas=False):
         super().__init__(parent)
+        self.formulas = formulas
         self.setDecimals(3)
         self.setRange(0.0, 1.0)
         self.setSingleStep(0.05)
@@ -481,6 +485,10 @@ class RatioBox(QtWidgets.QDoubleSpinBox):
         self.setValue(float(value))
 
     def validate(self, text, pos):
+        if self.formulas and any(c.isalpha() or c in "()*/+_=" for c in text):
+            # A formula is being typed: let it be (FormulaInput reads it when typing ends;
+            # the box itself keeps its last number).
+            return (QtGui.QValidator.Intermediate, text, pos)
         return super().validate(text.replace(",", "."), pos)
 
     def valueFromText(self, text):
@@ -488,6 +496,37 @@ class RatioBox(QtWidgets.QDoubleSpinBox):
             return float(text.replace(",", ".").strip() or 0.0)
         except ValueError:
             return self.value()
+
+
+class RatioField:
+    """A RatioBox seen as a taskui.DistanceField by preview.FormulaInput: a plain number
+    (unit ""), parse / take / set_value."""
+
+    unit = ""
+
+    def __init__(self, box):
+        self.widget = box
+
+    def parse(self, text):
+        try:
+            return float((text or "").strip().replace(",", "."))
+        except ValueError:
+            raise ValueError("'%s' is not a value. Type a number from 0 to 1." % text)
+
+    def value(self):
+        return self.widget.value()
+
+    def take(self, value):
+        """Show `value` and tell the dialog (valueChanged), as if typed in the box."""
+        self.widget.setValue(float(value))
+
+    def set_value(self, value):
+        """Show `value` without telling the dialog."""
+        self.widget.blockSignals(True)
+        try:
+            self.widget.setValue(float(value))
+        finally:
+            self.widget.blockSignals(False)
 
 
 def checkbox(text, checked):

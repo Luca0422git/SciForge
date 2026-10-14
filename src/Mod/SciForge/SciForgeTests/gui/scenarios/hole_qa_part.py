@@ -19,6 +19,7 @@ Path 15, Thread the boss (CREATE > Thread), Modeled; then make the boss taller (
 Volumes by hand: box 40 x 30 x h, boss d12 x 8 (pi 36 * 8), a through hole d removes
 pi d^2/4 * (its length in material); hole_steps / thread_core have the formulas.
 """
+
 import math
 
 import FreeCAD as App
@@ -379,7 +380,11 @@ p15_ok.wait_ms = 2500
 def removed(length):
     from sciforge import thread_core
 
-    return thread_core.removed_volume(BOSS_R, 1.75, False, BOSS_R, length)
+    from sciforge import thread_tables
+
+    # a modeled thread lies in the middle of its class's zone (6g on a shaft)
+    d = thread_tables.find("iso", "M12x1.75")
+    return thread_core.class_removed_volume(d, "6g", False, BOSS_R, length)
 
 
 def p15_done():

@@ -1,0 +1,74 @@
+{
+  "id": "hole_clearance_socket_cbore",
+  "title": "Clearance hole for an M6 socket head cap screw: counterbore from the head",
+  "tags": [
+    "hole",
+    "clearance",
+    "fastener",
+    "counterbore"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "extent": "all",
+      "tap_type": "clearance",
+      "standard": "iso",
+      "size": "6",
+      "designation": "M6x1",
+      "fit": "normal",
+      "hole_type": "counterbore",
+      "fastener": "socket_head",
+      "fastener_head": true
+    }
+  ],
+  "expect": {
+    "volume": 11268.624663873683,
+    "faces": 9,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "ISO 273 medium for M6: 6.6; ISO 4762 head in DIN 974-1's counterbore 11 x 6.4: V = 12000 - pi 3.3^2 3.6 - pi 5.5^2 6.4"
+  }
+}

@@ -14,6 +14,7 @@ Hand-derived volumes: a modeled thread removes, per mm of length, the cross-sect
 groove is P/4 wide at the root (R - 5H/8) and opens at 60 degrees; the shaft is the major
 diameter. Cosmetic threads remove nothing.
 """
+
 import math
 
 import FreeCAD as App
@@ -35,7 +36,11 @@ SIDE = V(20 + 3 * math.cos(math.radians(-45)), 15 + 3 * math.sin(math.radians(-4
 def removed(length, pitch=1.0):
     from sciforge import thread_core
 
-    return thread_core.removed_volume(3.0, pitch, False, 3.0, length)
+    from sciforge import thread_tables
+
+    # a modeled thread lies in the middle of its class's zone (6g here)
+    d = thread_tables.find("iso", "M6x%s" % thread_tables._trim(pitch))
+    return thread_core.class_removed_volume(d, "6g", False, 3.0, length)
 
 
 def drawn():

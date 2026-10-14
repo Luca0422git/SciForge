@@ -50,6 +50,14 @@ DIRECTION_LABELS = [
 ]
 EXTENT_LABELS = [("Distance", "distance"), ("To Object", "to_object"), ("All", "all")]
 MEASUREMENT_LABELS = [("Half Length", "half"), ("Whole Length", "whole")]
+# To Object's Extend choices (Fusion: a face is extended or followed onto its neighbours; a
+# body is reached or gone through).
+EXTEND_LABELS = {
+    "face": "To Selected Face",
+    "adjacent": "To Adjacent Faces",
+    "body": "To Body",
+    "through": "Through Body",
+}
 OPERATION_LABELS = [
     ("Join", "join"),
     ("Cut", "cut"),
@@ -574,6 +582,22 @@ class ExtrudePanel(Panel):
         form.addRow(self.distance_label, self.distance.widget)
         self.extent_object_label = QtWidgets.QLabel("Object")
         form.addRow(self.extent_object_label, self.fields["extent_object"].widget)
+        self.extend = QtWidgets.QComboBox()
+        self.extend.setToolTip(
+            "To Selected Face: the face's surface, extended. To Adjacent Faces: the face and "
+            "the faces next to it, as they are. To Body / Through Body: where the extrusion "
+            "meets the body, or where it leaves it."
+        )
+        self.extend_label = QtWidgets.QLabel("Extend")
+        form.addRow(self.extend_label, self.extend)
+        self.object_offset = DistanceField(
+            self.options.get("object_offset", 0.0), on_change=self._typed
+        )
+        self.object_offset.widget.setToolTip(
+            "How far past the object the extrusion ends (negative: short of it)"
+        )
+        self.object_offset_label = QtWidgets.QLabel("Offset")
+        form.addRow(self.object_offset_label, self.object_offset.widget)
         self.flip = QtWidgets.QPushButton("Flip")
         self.flip.setCheckable(True)
         self.flip.setToolTip("Go the other way")
@@ -602,6 +626,16 @@ class ExtrudePanel(Panel):
         form.addRow(self.distance2_label, self.distance2.widget)
         self.extent_object2_label = QtWidgets.QLabel("Object")
         form.addRow(self.extent_object2_label, self.fields["extent_object2"].widget)
+        self.extend2 = QtWidgets.QComboBox()
+        self.extend2.setToolTip(self.extend.toolTip())
+        self.extend2_label = QtWidgets.QLabel("Extend")
+        form.addRow(self.extend2_label, self.extend2)
+        self.object_offset2 = DistanceField(
+            self.options.get("object_offset2", 0.0), on_change=self._typed
+        )
+        self.object_offset2.widget.setToolTip(self.object_offset.widget.toolTip())
+        self.object_offset2_label = QtWidgets.QLabel("Offset")
+        form.addRow(self.object_offset2_label, self.object_offset2.widget)
         self.taper2 = DistanceField(self.options["taper2"], unit="deg", on_change=self._typed)
         self.taper2_label = QtWidgets.QLabel("Taper Angle")
         form.addRow(self.taper2_label, self.taper2.widget)
@@ -633,6 +667,8 @@ class ExtrudePanel(Panel):
                 ("taper2", self.taper2),
                 ("wall_thickness", self.wall_thickness),
                 ("wall_thickness2", self.wall_thickness2),
+                ("object_offset", self.object_offset),
+                ("object_offset2", self.object_offset2),
             )
         ]
         for box in (
@@ -643,6 +679,8 @@ class ExtrudePanel(Panel):
             self.measurement,
             self.wall_location,
             self.wall_location2,
+            self.extend,
+            self.extend2,
         ):
             box.currentIndexChanged.connect(self._typed)
         self.kind.currentIndexChanged.connect(self._kind_changed)
@@ -673,6 +711,9 @@ class ExtrudePanel(Panel):
             _set_combo(self.wall_location2, self.options["wall_location2"])
             self.wall_thickness.set_value(self.options["wall_thickness"])
             self.wall_thickness2.set_value(self.options["wall_thickness2"])
+            self.object_offset.set_value(self.options.get("object_offset", 0.0))
+            self.object_offset2.set_value(self.options.get("object_offset2", 0.0))
+            self._refresh_extend()
             self.flip.setChecked(bool(self.options.get("flip")))
             for name in ("start_object", "extent_object", "extent_object2"):
                 self.fields[name].set_text(_ref_text(self.options.get(name)))
@@ -721,8 +762,20 @@ class ExtrudePanel(Panel):
             (self.extent_object2_label, two and extent2 == "to_object"),
             (self.taper2.widget, two),
             (self.taper2_label, two),
+            (self.object_offset.widget, extent == "to_object"),
+            (self.object_offset_label, extent == "to_object"),
+            (self.object_offset2.widget, two and extent2 == "to_object"),
+            (self.object_offset2_label, two and extent2 == "to_object"),
         ):
             widget.setVisible(show)
+        self._refresh_extend()
+        for box, label, shown in (
+            (self.extend, self.extend_label, extent == "to_object"),
+            (self.extend2, self.extend2_label, two and extent2 == "to_object"),
+        ):
+            visible = shown and box.count() > 0
+            box.setVisible(visible)
+            label.setVisible(visible)
         # Fusion: a symmetric extrude goes a distance or through all, never to an object.
         model = self.extent.model()
         to_object = self.extent.findData("to_object")
@@ -752,11 +805,41 @@ class ExtrudePanel(Panel):
         self.options["wall_location2"] = self.wall_location2.currentData()
         self.options["wall_thickness"] = self.wall_thickness.value()
         self.options["wall_thickness2"] = self.wall_thickness2.value()
+        self.options["object_offset"] = self.object_offset.value()
+        self.options["object_offset2"] = self.object_offset2.value()
+        if self.extend.count():
+            self.options["extend"] = self.extend.currentData() or ""
+        if self.extend2.count():
+            self.options["extend2"] = self.extend2.currentData() or ""
         if self.options["direction"] == "symmetric" and self.options["extent"] == "to_object":
             self.options["extent"] = "distance"
             self._quiet = True
             _set_combo(self.extent, "distance")
             self._quiet = False
+
+    def _refresh_extend(self):
+        """Each side's Extend choices follow what its object is (a face or a body; a plane
+        has none), keeping the choice made when it still applies."""
+        for box, key, ref_key in (
+            (self.extend, "extend", "extent_object"),
+            (self.extend2, "extend2", "extent_object2"),
+        ):
+            choices = extrude.extend_choices(self.options.get(ref_key))
+            have = [box.itemData(i) for i in range(box.count())]
+            wanted = self.options.get(key) or ""
+            if wanted not in choices:
+                wanted = choices[0] if choices else ""
+            if have == choices:
+                continue  # the same object kind: the choice shown stays (the user's)
+            box.blockSignals(True)
+            try:
+                box.clear()
+                for choice in choices:
+                    box.addItem(EXTEND_LABELS[choice], choice)
+                if choices:
+                    _set_combo(box, wanted)
+            finally:
+                box.blockSignals(False)
 
     # -- formulas ----------------------------------------------------------------------------
     FORMULA_NAMES = {
@@ -766,6 +849,8 @@ class ExtrudePanel(Panel):
         "taper2": "Taper Angle (side two)",
         "wall_thickness": "Wall Thickness",
         "wall_thickness2": "Wall Thickness (side two)",
+        "object_offset": "Offset",
+        "object_offset2": "Offset (side two)",
     }
 
     def show_formulas(self):
@@ -1394,6 +1479,8 @@ class ExtrudePanel(Panel):
             extent=options["extent2"],
             taper=options["taper2"],
             extent_object=options.get("extent_object2"),
+            extend=options.get("extend2", ""),
+            object_offset=options.get("object_offset2", 0.0),
             flip=False,
             wall_location=options["wall_location2"],
             wall_thickness=options["wall_thickness2"],
@@ -1541,6 +1628,10 @@ class ExtrudePanel(Panel):
             "wall_thickness",
             "wall_location2",
             "wall_thickness2",
+            "extend",
+            "extend2",
+            "object_offset",
+            "object_offset2",
         )
         picked = [self.options.get(k) for k in ("start_object", "extent_object", "extent_object2")]
         refs = tuple((ref[0].Name, ref[1]) if ref else None for ref in picked)

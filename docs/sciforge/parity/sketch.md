@@ -4,6 +4,29 @@ Source: Fusion's documented behaviour and everyday use. Not yet checked against 
 screen captures (outline 2.4). Implemented in `src/Mod/SciForge/sciforge/sketch_*.py` on top of
 FreeCAD 1.1.4's Sketcher. Status: **first pass + QA pass, not yet signed off**.
 
+## Wave 4: sketch Chamfer, the fillet radius, typed line angles (branch `sf/modeling-2`, 2026-10-14)
+
+Researched before building. Autodesk's hosts cannot be opened from the sandbox, so the
+**Autodesk** rows come from web-search excerpts of the Fusion help pages "Add chamfers to
+sketch geometry" and "Create lines in a sketch". **Forum**: Autodesk Community threads
+"Sketching a line an controlling it's angle", "Constrain angle of one sketch line to another"
+and "Sketching angles question". **Guess**: no source found; SciForge's choice, to be checked
+in Luca's Fusion.
+
+| Fusion (source) | SciForge |
+|---|---|
+| SKETCH > MODIFY > Chamfer, with a type: Equal distance, Distance and angle, Two distances (Autodesk) | SciForge's own tool (`sketch_chamfer_tool.py`, the maths in `sketch_chamfer_core.py`): while it runs a "Chamfer Type" box sits at the top left of the 3D view; the last type is remembered (Guess) |
+| Pick the corner: the two lines, or the point where they meet (Autodesk) | Click a point where exactly two lines meet, or click the two lines on the parts that stay (lines that do not touch are cut back to where their extensions cross). Lines or a corner point selected before the command count. Parallel lines, a point where more lines meet, an arc: refused with the reason beside the pointer |
+| Drag, or type the values; Enter (Autodesk) | The pointer gives the size as it moves (Equal distance: the chamfer runs through the pointer). Value boxes beside the corner: D (Equal distance), D and A (Distance and angle; A starts at the angle that cuts both lines back equally, 45 degrees in a square corner), D1 and D2 (Two distances, D1 on the first line picked). Tab moves between them, Enter makes the chamfer, the tool waits for the next corner, Esc ends it. A chamfer longer than a line is refused with the reason |
+| The values stay as sketch dimensions (Autodesk; their exact form: Guess) | FreeCAD's sketch chamfer trims the lines and keeps the old corner as a construction point (the constraints that were on the corner move to it); the values become dimensions from that point: the distance to the chamfer's end on each line, and for Distance and angle the angle between the first line and the chamfer. Equal distance: the second distance is an expression of the first (fx), so a new value in the first moves both. One undo step per chamfer |
+| Sketch Fillet: pick a corner or two curves, type the radius (Autodesk) | Unchanged, now checked by a scenario: FreeCAD's fillet, then the radius box opens on a new Radius dimension |
+| A typed line angle is measured from the sketch's X axis (its positive side), not from the previous line: to get an angle between two lines users add an angular dimension afterwards, or type 180 minus the angle when the line before is level (Forum, three threads; no Autodesk page found that says otherwise) | Same: FreeCAD's line tool measures the typed angle anticlockwise from the X axis, its value box shows that angle with an arc from the X axis, and the typed angle becomes an Angle dimension from the X axis. Checked with a chain whose second line is typed at 135 degrees |
+
+Tests: scenario `modeling2_sketch` (the three types with their dimensions, a refused chamfer,
+the command without a sketch, undo / redo, the fillet radius, two typed line angles, the plate
+extruded, save / reopen with the fx dimension still following), unit tests
+`test_sketch_chamfer_core.py`.
+
 ## What the user does (and what SciForge does)
 
 | Fusion | SciForge |
@@ -167,7 +190,7 @@ choice, to be checked in Luca's Fusion.
 | Fit Point / Control Point Spline | Click points; Enter or the check commits the spline; Esc cancels the spline in progress (Autodesk; Forum) | Right click or Esc commits; SciForge's Enter ("complete the tool") dropped the spline. FreeCAD's command runner also closes the spline tool's undo step right after the tool starts, so the points clicked were in no undo step (Ctrl+Z after a spline undid the step before it) | Enter and OK in the right-click menu make the spline and end the tool; Esc cancels the spline in progress (nothing of it stays); the finished spline is one Ctrl+Z (SciForge reopens the step at the first click) |
 | Point | Click points; repeats (Autodesk) | Same | Unchanged |
 | Fillet | Pick a corner or two curves, type the radius (Autodesk) | Radius from the mouse | Unchanged (SciForge already opens the radius box) |
-| Chamfer | Pick a corner or two lines, drag or type the distance; Equal distance / Distance and angle / Two distances (Autodesk) | Distance from the mouse, no dimension | Gap (see Known gaps) |
+| Chamfer | Pick a corner or two lines, drag or type the distance; Equal distance / Distance and angle / Two distances (Autodesk) | Distance from the mouse, no dimension | SciForge's Chamfer (2026-10-14, section at the top) |
 | Trim | Hover shows the piece, a click deletes it back to the nearest intersections, **press and drag across several pieces trims each one**, a curve with no intersection is deleted (Autodesk) | Click trims; no drag | SciForge's Trim (T): a click trims as FreeCAD's trim does, a press-drag trims every piece the pointer crosses (one undo step) |
 | Extend | Hover previews, **one click** extends to the nearest (extended) intersection; nothing in range: nothing happens (Autodesk) | Two steps: click the curve, then drag its end and click again | SciForge's Extend: hover preview, one click extends the clicked end to the nearest curve it meets; the end gets a point-on-curve constraint |
 | Break | Click a curve: it is broken at the intersections nearest to the click into 2 or 3 pieces, joined by constraints (Autodesk API breakCurve; Autodesk help) | FreeCAD's Split: the curve is split at the clicked point | SciForge's Break: at the nearest intersections on each side of the click (2 or 3 pieces, coincident joints; a circle becomes two arcs joined at both cuts); a curve with no intersection says so |
@@ -185,10 +208,10 @@ SciForge's Trim and P SciForge's Project (`config.PREFERRED`).
 | Fusion | Why not yet |
 |---|---|
 | Shift to force a midpoint; guides for the arc's end-angle click and the slot's width click | Not built (`sketch_infer.py`) |
-| Angle typed relative to the previous line | FreeCAD's angle field is measured from the X axis |
+| A typed line angle measured from the previous line, if a newer Fusion does that (the forum threads found are from 2016 to 2020 and say: from the X axis) | SciForge measures it from the X axis, as those threads describe |
 | Fusion's floating green check near the pointer while drawing a line | Not built; OK is in the right-click menu, Enter and a double-click on the end point end the line |
 | Text, 3D Sketch | Not built on `sf/sketch-tools` (Text is another branch's) |
-| Chamfer's three types (equal distance, distance and angle, two distances) and a typed distance | FreeCAD's chamfer: one distance, from the mouse, no dimension |
+| Chamfer: a drag arrow on the corner, a chamfer between a line and an arc | The pointer gives the size as it moves (no arrow to drag); lines only |
 | Project to Surface: the projected curves in the sketch, listed in the browser and the timeline | FreeCAD sketches are flat: the curves are a "Projected Curves" object next to the sketch, not listed in SciForge's browser or timeline yet (click it in the 3D view to select or delete it) |
 | Conic: dragging the rho handle of a finished conic, rho shown as rho | After the click the curve keeps FreeCAD's Weight constraint (w = rho / (1 - rho)) on the apex pole; its pole circles show while the sketch is open |
 | Curvature (G2) between a spline and an arc, circle or other spline | FreeCAD's solver has no curvature constraint: those get Tangent (G1) and a note; G2 only with a line |

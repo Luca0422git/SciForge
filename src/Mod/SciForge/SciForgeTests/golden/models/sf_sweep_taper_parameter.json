@@ -1,0 +1,83 @@
+{
+  "id": "sf_sweep_taper_parameter",
+  "title": "Sweep Taper Angle and Distance typed as formulas (lean, reach / 2)",
+  "tags": [
+    "sweep",
+    "fusion-sweep",
+    "parameters"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "lean",
+      "value": 4,
+      "unit": "deg"
+    },
+    {
+      "op": "parameter",
+      "name": "reach",
+      "value": 1,
+      "unit": ""
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sweep",
+      "id": "w1",
+      "profile": "s1",
+      "path": "p1",
+      "expressions": {
+        "taper": "lean",
+        "distance": "reach / 2"
+      }
+    },
+    {
+      "op": "parameter",
+      "name": "lean",
+      "value": 10
+    }
+  ],
+  "expect": {
+    "volume": 1094.9305698333926,
+    "area": 597.4969637690328,
+    "faces": 3,
+    "bbox": [
+      -6.76326980708465,
+      -6.76326980708465,
+      0,
+      6.76326980708465,
+      6.76326980708465,
+      10.0
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Distance reach / 2 = 0.5 of the 20 mm path = 10 mm; Taper follows lean, changed from 4 to 10 degrees afterwards: R = 5 + 10 tan 10. V = pi h (r^2 + r R + R^2) / 3, A = pi (r + R) s + pi r^2 + pi R^2 with s = sqrt(h^2 + (R - r)^2)."
+  }
+}

@@ -111,6 +111,8 @@ def op_sf_revolve(self, step):
     profiles = _profiles(self, step)
     axis = _axis(self, step)
     options = {k: step[k] for k in OPTION_KEYS if k in step}
+    if "bodies" in step:  # Objects To Cut: "auto" or step ids (as for Extrude)
+        options["bodies"] = self._extrude_bodies(step)
     if "to" in step:
         from .inspect_ops import _ref
 

@@ -61,7 +61,7 @@
     }
   ],
   "expect": {
-    "volume": 12275.486448576952,
+    "volume": 12266.78739700922,
     "bbox": [
       0,
       0,
@@ -72,6 +72,6 @@
     ],
     "solids": 1,
     "source": "analytic",
-    "note": "ISO 68-1 outside groove (P 1, H = sqrt3/2): P/4 wide at the root R - 5H/8, opening at 60 deg to 7P/8 at R = 3. Every slice across the axis loses (2 pi / P) * int r w(r) dr = 5.317129834; times 12 mm"
+    "note": "a modeled thread lies in the middle of its class's tolerance zone (ISO 965-1, thread_tables.class_zone): M6x1 6g on the d6 boss, every slice across the axis loses thread_core.removed_area(2.959327, 1, False, 3, 2.942788) = 6.042050798; times 12 mm"
   }
 }
