@@ -25,9 +25,12 @@ def find_body():
     if doc is None:
         return None
     body = active_body()
+    later = None
     if body is not None and not _is_surface_body(body):
-        components.sync_part_slot(body)  # the active body's component is the active one
-        return body
+        if not not_made_yet(body):
+            components.sync_part_slot(body)  # the active body's component is the active one
+            return body
+        later = body  # used only when no body of its component exists at the marker
     component = components.active_component(doc)
     candidates = []
     preferred = components.preferred_body(doc, component)
@@ -51,10 +54,30 @@ def find_body():
     # A surface body never takes new sketches and solid features (Fusion has no such
     # thing: a solid extrude never joins a surface): they go to another body, or a new one.
     candidates = [b for b in candidates if not _is_surface_body(b)]
+    # Fusion: a body whose steps all lie after the history marker does not exist there yet,
+    # so a sketch made at the marker goes to a body that does (a Revolve or Join drawn
+    # against the part then joins it, not the later body).
+    made = [b for b in candidates if not not_made_yet(b)]
+    if made:
+        candidates = made
+    elif later is not None:
+        candidates = [later]
     if not candidates:
         return None
     components.activate_body(candidates[0])
     return candidates[0]
+
+
+def not_made_yet(body):
+    """True for a body that has solid steps but whose Tip is none of them: the history
+    marker stands before its first step (timeline_ops.roll), so at the marker it does not
+    exist. A new, empty body is made already (it takes the work it was made for)."""
+    try:
+        if body.Tip is not None:
+            return False
+        return any(o.isDerivedFrom("PartDesign::Feature") for o in body.Group)
+    except Exception:
+        return False
 
 
 def _is_surface_body(body):

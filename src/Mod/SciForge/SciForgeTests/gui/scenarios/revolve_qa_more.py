@@ -23,6 +23,7 @@ Path 15, a construction line drawn in the profile's own sketch (X, then L) as th
 Path 16, editing: clear the axis with its x, OK: the dialog stays open and says why; Esc:
          the revolve is unchanged.
 """
+
 import math
 
 import FreeCAD as App
@@ -353,7 +354,7 @@ def open_menu():
 def p13_sketch():
     App.setActiveDocument(s["doc"])
     h.check("P13 in the first design", doc().Name == s["doc"])
-    s["v13"] = vol()
+    s["v13"] = total()
     h.fit()
     h.click_empty()
     h.ribbon("Create Sketch")
@@ -402,8 +403,12 @@ def p13_axis():
 def p13_cut():
     p = panel()
     h.check("P13 a preview", p is not None and p.target is not None, msg())
+    # The ring does not touch the shaft: Fusion offers New Body (a Join there would make a
+    # separate body all the same).
     h.check(
-        "P13 a ring beside the shaft: Join", p is not None and p.operation.currentText() == "Join"
+        "P13 a ring beside the shaft: New Body",
+        p is not None and p.operation.currentText() == "New Body",
+        p and p.operation.currentText(),
     )
     if p is not None:
         b.choose(p.operation, "Cut")
@@ -448,8 +453,8 @@ def p13_menu():
 def p13_done():
     h.check("P13 OK from the marking menu closes the dialog", not dialog_open())
     want = s["v13"] + s["ring"]
-    h.check("P13 the ring is kept", near(vol(), want), (vol(), want))
-    s["v13"] = vol()
+    h.check("P13 the ring is kept (a body of its own)", near(total(), want), (total(), want))
+    s["v13"] = total()
 
 
 # == Path 14: the timeline marker rolled back ======================================================
@@ -461,7 +466,7 @@ def p14_roll():
 
 def p14_rolled():
     want = SHAFT
-    h.check("P14 rolled back: only the shaft", near(vol(), want), (vol(), want))
+    h.check("P14 rolled back: only the shaft", near(total(), want), (total(), want))
     h.fit()
     h.click_empty()
     h.ribbon("Create Sketch")
@@ -511,7 +516,7 @@ def p14_ok():
     p = panel()
     h.check("P14 Join on top", p is not None and p.operation.currentText() == "Join")
     want = SHAFT + s["top"]
-    h.check("P14 preview at the marker", near(vol(), want), (vol(), want))
+    h.check("P14 preview at the marker", near(total(), want), (total(), want))
     h.task_button("OK")
 
 
@@ -531,9 +536,9 @@ def p14_to_end():
 
 def p14_end():
     want = s["v13"] + s["top"]
-    h.check("P14 rolled to the end: everything", near(vol(), want), (vol(), want))
+    h.check("P14 rolled to the end: everything", near(total(), want), (total(), want))
     h.check("P14 nothing broken", not invalid(), invalid())
-    s["v14"] = vol()
+    s["v14"] = total()
 
 
 # == Path 15: a construction line of the profile's own sketch, Symmetric, a unit typed ==========

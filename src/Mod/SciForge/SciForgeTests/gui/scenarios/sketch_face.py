@@ -31,6 +31,16 @@ s = {}
 BOSS = math.pi * 5.0**2 * 10.0
 
 
+def one_mm_grid():
+    """Grid Settings > Minor Subdivisions 10: the clicks below land on whole millimetres
+    (the default 5 subdivisions snap to 2 mm, between which 15 falls), as a person who
+    wants a 1 mm grid sets it."""
+    from sciforge import grid_ui
+
+    grid_ui.put("Subdivisions", 10)
+    grid_ui.apply_subdivisions()
+
+
 def new_design():
     Gui.activateWorkbench("SciForgeWorkbench")
     App.newDocument("SketchFace")
@@ -252,6 +262,7 @@ h.run(
     "sketch_face",
     si.watched(
         [
+            one_mm_grid,
             new_design,
             create_sketch,
             pick_xy_plane,

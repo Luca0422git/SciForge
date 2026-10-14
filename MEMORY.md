@@ -3437,6 +3437,27 @@ per merged push).
   by `src/Mod/SciForge/CMakeLists.txt`; the test fixtures folder is installed whole.
 - Test checks on clicked positions allow a pixel (CI's window differs by one pixel).
 
+**CI #116 / gaps-merge lessons (2026-10-14):**
+- A step must never run while a document recomputes. A long recompute runs Qt's event loop
+  nested, a harness step can fire inside it, and FreeCAD's progress handling then swallows
+  the step's mouse and key input (revolve_qa_part's drop-down got no events). `harness.run`'s
+  `next_step` now waits (100 ms at a time, up to 20 s) while any document is `Recomputing`;
+  `harness.idle_step()` is still there for a wait inside a step list.
+- The grid's minor lines default to 5 subdivisions (Fusion's 2 mm minor grid on a 10 mm major
+  grid); FreeCAD's own default is 10. A scenario that clicks on 1 mm points sets 10 first
+  (`grid_ui.put("Subdivisions", 10); grid_ui.apply_subdivisions()`, as sketch_face does).
+- DXF coordinates are written with a few decimals: compare slopes and angles with a tolerance
+  scaled to the line's length, never exactly (drawing_export's hatching, CI only).
+- A Join whose profile touches nothing makes a New Body (Fusion; sf/gaps): tests that counted
+  one body's volume count the total (`revolve_qa_more` P13/P14).
+- A body whose steps all lie after the history marker does not exist at the marker
+  (Fusion). `commands.find_body()` (behind Create Sketch and every command that needs a body)
+  passes over such a body, even the active one, for a body of the component that exists
+  there; only when none does is the active body kept. Found by revolve_qa_more P14: after a
+  New Body revolve became active, a sketch at a rolled-back marker went into it and its
+  Revolve could not Join the shaft. Revolve, Sweep and Loft still act on the sketch's own
+  body only (Extrude alone has multi-body participants, R8).
+
 **Merged after the handoff was written:** `sf/direct` (dd13dfffaf: Capture Design History
 on/off, base features, Replace/Split Face, Silhouette Split, Align, Remove, Offset Face);
 `sf/mesh` (731890bcfa: the MESH tab); `bodies.global_shape` now includes the component's

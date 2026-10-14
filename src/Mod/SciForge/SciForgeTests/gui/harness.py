@@ -542,6 +542,13 @@ def idle_step(name="wait_idle", tries=40):
     return step
 
 
+def _recomputing():
+    try:
+        return any(getattr(d, "Recomputing", False) for d in App.listDocuments().values())
+    except Exception:
+        return False
+
+
 def add_steps(steps):
     """Append steps while running (e.g. one per command found at start-up)."""
     state["queue"].extend(steps)
@@ -589,6 +596,15 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
         if not queue:
             _finish()
             return
+        # A long recompute keeps the GUI alive by running Qt's event loop from inside it,
+        # so this timer can fire in the middle of it; FreeCAD's progress handling then
+        # throws away every click and key the step sends (a drop-down that would not open,
+        # a typed value lost). Wait until the document is done (at most 20 s).
+        if _recomputing() and state.get("waited", 0) < 200:
+            state["waited"] = state.get("waited", 0) + 1
+            QtCore.QTimer.singleShot(100, next_step)
+            return
+        state["waited"] = 0
         step = queue.pop(0)
         # Progress on stdout and a partial result: a crash still shows where it happened.
         print("[SciForge] %s step: %s" % (state["name"], step.__name__), flush=True)

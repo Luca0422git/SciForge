@@ -276,10 +276,14 @@ def b_written():
     ]
     h.check("the centre mark: two lines across the hole", len(crossing) == 2, len(crossing))
     hatch = on(entities, "LINE", "HATCH")
-    slopes = {
-        round((num(e, 21) - num(e, 20)) / ((num(e, 11) - num(e, 10)) or 1e-9), 6) for e in hatch
-    }
-    h.check("the hatching: 45 degree lines", len(hatch) >= 8 and slopes == {1.0}, slopes)
+
+    def off_45(e):
+        # the DXF keeps a few decimals: a short line's slope is 0.999999 (CI #116)
+        dx, dy = num(e, 11) - num(e, 10), num(e, 21) - num(e, 20)
+        return abs(dy - dx) > 1e-5 + 1e-4 * math.hypot(dx, dy)
+
+    wrong = [(num(e, 10), num(e, 20), num(e, 11), num(e, 21)) for e in hatch if off_45(e)]
+    h.check("the hatching: 45 degree lines", len(hatch) >= 8 and not wrong, (len(hatch), wrong[:3]))
     x, y = drawing.view_position(state["section"])  # (lined up with the base view)
     inside = all(
         x - 10 - 1e-6 <= num(e, k) <= x + 10 + 1e-6

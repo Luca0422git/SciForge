@@ -68,6 +68,7 @@ def put(name, value):
 def reset():
     for name, value in DEFAULTS.items():
         put(name, value)
+    apply_subdivisions()  # FreeCAD's own sketch grid setting follows (read at start-up)
     increments.reset()
     _STATE["locked_step"] = None
     redraw_all()
@@ -250,6 +251,12 @@ def apply_to_sketch(sketch):
             vp.GridSize = spacing
     except Exception as exc:
         warn("sketch grid: %s" % exc)
+
+
+def apply_subdivisions():
+    """Minor Subdivisions onto FreeCAD's sketch grid setting now (every sketch opened
+    after this, and the open one when it redraws)."""
+    _subdivisions()
 
 
 def _subdivisions():
