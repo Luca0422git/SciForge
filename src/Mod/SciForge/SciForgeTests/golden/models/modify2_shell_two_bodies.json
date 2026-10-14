@@ -1,0 +1,109 @@
+{
+  "id": "modify2_shell_two_bodies",
+  "title": "Two boxes shelled in one step: the first opened at the top, the second hollow",
+  "tags": [
+    "shell",
+    "multi-body",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            30,
+            0,
+            50,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_shell_bodies",
+      "id": "sh",
+      "inside": 1,
+      "bodies": [
+        {
+          "body": "e1",
+          "faces": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "body": "e2"
+        }
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 1084,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 1408,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 2492,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Box 1 (20x20x10) loses its top face and keeps a 1 mm wall inside: 4000 - 18*18*9 = 1084. Box 2 (picked as a body) becomes hollow with a 1 mm wall all round: 4000 - 18*18*8 = 1408. One Shell step; the second body gets its hidden follower step."
+  }
+}

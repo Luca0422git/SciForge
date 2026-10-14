@@ -1,0 +1,84 @@
+{
+  "id": "modify2_move_face_hole",
+  "title": "A hole through the box moved 28 mm along X, so it breaks out of the right side",
+  "tags": [
+    "move",
+    "faces",
+    "hole",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            3
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "h1",
+      "profile": "s2",
+      "distance": 10,
+      "flip": true,
+      "operation": "cut"
+    },
+    {
+      "op": "move_face",
+      "id": "m1",
+      "faces": {
+        "type": "cylinder",
+        "count": 1
+      },
+      "move": [
+        28,
+        0,
+        0
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 7748.231481978037,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "The hole's wall closes up with the top and bottom into the hole (a cylinder r 3): it is filled where it was and cut at x = 38, crossing the right face (x = 40) by 1 mm less than its radius: removed = 10 * (pi*9 - (9 acos(2/3) - 2 sqrt 5)). Faces: the box's 6, the right face cut in two (+1) and the notch's wall (+1)."
+  }
+}

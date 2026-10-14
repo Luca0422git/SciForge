@@ -752,3 +752,4 @@ from . import direct_ops  # noqa: E402,F401  (history on/off and the Modify tool
 from . import surface_ops  # noqa: E402,F401  (registers op_sf_surface, op_sf_surface_edit)
 from . import fillet2_ops  # noqa: E402,F401  (radius sets, rule, full round: fillet_sets.py)
 from . import component_ops  # noqa: E402,F401  (whole components: move, paste, patterns)
+from . import modify2_ops  # noqa: E402,F401  (Modify part 2: compute option, draft, ...)

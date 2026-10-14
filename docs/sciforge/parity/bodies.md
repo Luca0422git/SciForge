@@ -30,6 +30,28 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | Physical Material | the body's FreeCAD `ShapeMaterial` (FreeCAD's material library), on every step of the body |
 | Appearance | stored in the design (a hidden JSON property of the body), so it is saved and undone with Ctrl+Z; put on every step's view after each recompute and undo |
 
+## Behaviour spec: Move Object Faces (modify-2, 2026-10-14)
+
+Sources (A = Autodesk help; F = Autodesk Community forum; G = guess, to be checked against
+Fusion):
+
+1. Autodesk help, "Move/Copy" (`SLD-MOVE-COPY-GEOMETRY`): Move Object Bodies / Components /
+   Faces / Sketch Objects (https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/SLD-MOVE-COPY-GEOMETRY.htm).
+2. Autodesk blog, "Timeline edits in Fusion" and "QUICK TIP: Edit Imported Geometry with Direct
+   Editing" (moving faces of a body as a direct edit that is a timeline step)
+   (https://www.autodesk.com/products/fusion-360/blog/timeline-edits-in-fusion/,
+   https://www.autodesk.com/products/fusion-360/blog/quick-tip-edit-imported-geometry-direct-editing/).
+3. Autodesk Community, "Edit Feature in Timeline does not work for Move"
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/edit-feature-in-timeline-does-not-work-for-move/m-p/7706360).
+
+| # | Fusion | SciForge | Source |
+|---|---|---|---|
+| F1 | Move Object Faces: pick faces of a body, move them with the manipulator or typed values; the faces next to them stretch along, the body stays one solid | Same: Move Object Bodies / Faces; with Faces, click faces of one body (again: drop it); Free Move, Translate, Rotate, Point to Point and Point to Position work as for bodies; the manipulator starts at the middle of the picked faces | A (1, 2) |
+| F2 | Changing Move Object clears the selection | Same | G |
+| F3 | Create Copy is for bodies (and components) | Hidden for Faces | G |
+| F4 | A Move of faces is a "Move" step in the timeline, double-click edits it | Same: a Move step in the faces' body (`move_face.py`): a feature closed by the faces (a boss, a hole) is moved whole; a flat face is replaced onto its moved plane (Replace Face's code); a face moved within its own plane changes nothing | A (1), F (3) |
+| F5 | A move that cannot be made (the part would come apart) | The dialog says why, OK waits | G |
+
 ## What the user does (and what SciForge does)
 
 ### Combine (MODIFY > Combine)
@@ -58,7 +80,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion | SciForge |
 |---|---|
-| Move Object Bodies / Components / Faces / Sketch Objects | Bodies and Components (components-2: the dialog switches to the components one, `parity/components.md`; a component selected first opens it directly); M in an open sketch moves sketch curves (the sketch's own Move/Copy). Faces: modify-2 |
+| Move Object Bodies / Components / Faces / Sketch Objects | Bodies, Components and Faces. Components (components-2) switches to the components dialog (`parity/components.md`; a component selected first opens it directly); Faces (modify-2, F1-F5 above) moves picked faces of one body as a Move Face step. M in an open sketch moves sketch curves (the sketch's own Move/Copy) |
 | Move Type Free Move: manipulator with arrows and rotation handles; X/Y/Z Distance, X/Y/Z Angle | same: three arrows (X red, Y green, Z blue) and three curved turn handles at the middle of the bodies, drawn on top of the part; turns are about X, then Y, then Z through that middle **(assumed order)** |
 | Translate: X/Y/Z Distance, arrows | same |
 | Set Pivot (Free Move): press it, click geometry to snap the manipulator to it or type where it goes, the check (Done) to finish; turns are about the pivot from then on (**Autodesk**, *Move or copy geometry*: "Click Set Pivot to adjust the pivot point of the manipulator. In the canvas, hover over the geometry you want to snap to, then click to place the pivot point, or enter exact values in the dialog"; **Forum**, *Rotating Assemblies?*: "it is a toggle", click the green check when done) | same (components-2): Set Pivot and ✓ Done buttons; while it is on the arrows move only the manipulator (no turn handles), a click takes the corner / edge middle / circle centre / face centre under the pointer, Pivot X / Y / Z show and take its place; nothing that was moved moves (the distances are adjusted, `components_core.pivot_shift`); Done goes back to moving |
@@ -93,7 +115,8 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 
 | Fusion behaviour | Why not (yet) |
 |---|---|
-| Move: Move Object Faces | not built here (modify-2's area; Press Pull moves faces). Set Pivot only re-places the pivot; Fusion's manipulator can also be turned while setting it (its axes then follow): SciForge's axes stay the design's X / Y / Z |
+| Set Pivot turning the manipulator | Set Pivot only re-places the pivot; Fusion's manipulator can also be turned while setting it (its axes then follow): SciForge's axes stay the design's X / Y / Z |
+| Move Object Faces of several bodies at once | the faces of one body per Move (the dialog says so when a face of another body is clicked) |
 | The timeline's and the browser's own Delete re-route dependants like SciForge's Delete | they belong to the timeline/browser module; they delete the bodies a Split Body or a copy made (bodies_gui.Watch), and flag what breaks |
 | Rolling the timeline marker back before a Create Copy hides the copy | the copy's step sits outside the bodies, so the marker does not hide it (a body copy inside a component sits in that component since components-2, so it is placed right in a moved component) |
 | Physical material shown in the browser | the browser module shows no material; the Physical Material dialog lists them ("In This Design") with each body's mass |

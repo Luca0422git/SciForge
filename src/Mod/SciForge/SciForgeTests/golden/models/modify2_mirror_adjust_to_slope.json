@@ -1,0 +1,101 @@
+{
+  "id": "modify2_mirror_adjust_to_slope",
+  "title": "Wedge, a hole cut from below up to the sloped top, mirrored about YZ with Compute Option Adjust",
+  "tags": [
+    "mirror",
+    "compute-option",
+    "adjust",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              -30,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              -30,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            -20,
+            0,
+            3
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "type": "plane",
+          "at": {
+            "axis": "z",
+            "value": "max"
+          },
+          "count": 1
+        }
+      }
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "features": [
+        "e2"
+      ],
+      "plane": "YZ",
+      "compute": "adjust"
+    }
+  ],
+  "expect": {
+    "volume": 17151.769983530758,
+    "faces": 8,
+    "bbox": [
+      -30,
+      -10,
+      0,
+      30,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "Wedge: XZ profile (-30,0)-(30,0)-(30,20)-(-30,10), 20 wide: V = 900*20 = 18000; its top is z = 15 + x/6. The hole r 3 at x = -20 goes up to the slope (z 35/3); Adjust builds the mirrored copy again at x = 20, where it goes up to the slope too (z 55/3): removed = 9 pi (35/3 + 55/3) = 270 pi (Identical would stop the copy at 35/3, under the slope). Faces: the wedge's 6 + 2 hole walls."
+  }
+}

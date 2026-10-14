@@ -1,0 +1,72 @@
+{
+  "id": "modify2_move_face_tilt",
+  "title": "The box's right face turned 10 deg about its top edge (Move, Rotate)",
+  "tags": [
+    "move",
+    "faces",
+    "rotate",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_face",
+      "id": "m1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          1,
+          0,
+          0
+        ]
+      },
+      "rotate": {
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "angle": 10,
+        "center": [
+          40,
+          0,
+          10
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7823.673019291535,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Turning the right face (x = 40) 10 deg about the Y axis through its top edge leans its bottom in to x = 40 - 10 tan 10: a wedge 10 * 10 tan 10 / 2 * 20 is cut away."
+  }
+}

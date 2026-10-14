@@ -1,0 +1,61 @@
+{
+  "id": "modify2_presspull_modify_extrude",
+  "title": "Press Pull, Offset Type Modify Existing Feature: the box's top pulled 5 mm makes the extrude 15 long",
+  "tags": [
+    "press-pull",
+    "offset-type",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "press_pull_type",
+      "id": "pp",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "distance": 5,
+      "offset_type": "modify"
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      15
+    ],
+    "source": "analytic",
+    "note": "The top face is the end of the extrude: Modify Existing Feature changes the extrude's distance from 10 to 15 (no new step): 40*20*15."
+  }
+}

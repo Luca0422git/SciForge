@@ -1,0 +1,97 @@
+{
+  "id": "modify2_replace_face_cone",
+  "title": "A box's top face replaced onto the face of a cone (another body)",
+  "tags": [
+    "replace-face",
+    "cone",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              0,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_revolve",
+      "id": "r1",
+      "profile": "s2",
+      "axis": "Z",
+      "operation": "new_body"
+    },
+    {
+      "op": "replace_face",
+      "id": "rf",
+      "of": "e1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "target": {
+        "face": {
+          "type": "cone",
+          "count": 1
+        },
+        "of": "r1"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8939.21713414315,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      30
+    ],
+    "source": "analytic",
+    "note": "The cone (apex z = 30, 45 deg) is z = 30 - r. The box 20x20 (centred, z 0..10) gets the cone as its top: V = integral over the square of (30 - r) = 30*400 - (4 a^3/3)(sqrt 2 + asinh 1), a = 10."
+  }
+}

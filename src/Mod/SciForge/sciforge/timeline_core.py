@@ -206,6 +206,8 @@ KIND_BY_SCIFORGE_TYPE = {
     "Remove": "remove",
     "Align": "align",
     "SilhouetteSplit": "silhouette_split",
+    "MoveFace": "move",  # Move/Copy of faces (modify-2, move_face.py)
+    "SketchScale": "scale",  # Scale of sketches (modify-2, scale.py)
 }
 
 # The SURFACE tools' steps (names and icons live in surface_core.py, also pure Python).

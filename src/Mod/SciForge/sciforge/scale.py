@@ -363,7 +363,7 @@ def owner_body(obj):
 def remove(feature):
     from . import shelling
 
-    shelling.remove(feature)
+    shelling.remove(feature)  # with its steps in other bodies (modify_bodies)
 
 
 def handle_spots(shape, point, options):
@@ -421,3 +421,243 @@ def handle_spots(shape, point, options):
             }
         )
     return spots
+
+
+# -- several bodies in one step (modify-2) -------------------------------------------------
+def spec_of(lead, target=None):
+    """(point, factors) of a Scale step in `target`'s body coordinates: a follower in
+    another body (modify_bodies.ScaleFollower) scales about the same point of the design."""
+    from . import modify_bodies
+
+    base, point_ref, options, _formulas = read(lead)
+    if point_ref is not None and point_ref[1] and base is not None and point_ref[0] is not base:
+        point_ref = (base, point_ref[1])  # the vertex of the step before (it may have moved)
+    point = point_of(point_ref)
+    factors = factors_of(options)
+    check_factors(factors, bool(options.get("uniform", True)))
+    if target is not None:
+        point = modify_bodies.point_between(point, lead, target)
+    return point, factors
+
+
+# -- sketches (Fusion scales a sketch picked in the browser) --------------------------------
+# Fusion's Scale takes sketches too (select the sketch in the browser; uniform only: "if the
+# scaling is non-uniform, this collection cannot contain sketches", Fusion API). SciForge
+# scales the sketch's curves in place about the point (dimensions grow with them, so the
+# sketch stays fully defined) and records a "Scale" step (SketchScaleFeature) that keeps the
+# factor: editing it scales the sketch again by the change, deleting it scales the sketch
+# back. Everything made from the sketch follows, as after a sketch edit.
+SKETCH_KIND = "SketchScale"
+SKETCH_TYPE = "App::FeaturePython"
+DIMENSIONS = ("Distance", "DistanceX", "DistanceY", "Radius", "Diameter")
+
+
+def is_sketch(obj):
+    try:
+        return obj is not None and obj.TypeId == "Sketcher::SketchObject"
+    except Exception:
+        return False
+
+
+def is_sketch_scale(obj):
+    return obj is not None and getattr(obj, "SciForgeType", "") == SKETCH_KIND
+
+
+def sketch_point(sketch, point=None):
+    """A point (design coordinates, or None for the sketch's origin) in the sketch's own
+    2D coordinates (on its plane)."""
+    if point is None:
+        return App.Vector(0, 0, 0)
+    local = sketch.getGlobalPlacement().inverse().multVec(App.Vector(point))
+    return App.Vector(local.x, local.y, 0)
+
+
+def _expression_bound(sketch, index, name):
+    try:
+        for path, _expr in sketch.ExpressionEngine:
+            if path == ".Constraints[%d]" % index:
+                return True
+            if name and path == ".Constraints.%s" % name:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def scale_sketch(sketch, factor, center=None):
+    """Scale every curve of `sketch` by `factor` about `center` (sketch coordinates, None
+    the sketch origin); its dimensions are scaled with it. Returns the names of dimensions
+    that follow a parameter (they keep their value)."""
+    factor = float(factor)
+    check_factors((factor, factor, factor), True)
+    center = App.Vector(center) if center is not None else App.Vector(0, 0, 0)
+    geometry = []
+    for geo in sketch.Geometry:
+        copy = geo.copy()
+        copy.scale(center, factor)
+        geometry.append(copy)
+    dims = []
+    kept = []
+    for i, con in enumerate(sketch.Constraints):
+        if con.Type in DIMENSIONS and con.Driving:
+            if _expression_bound(sketch, i, con.Name):
+                kept.append(con.Name or "#%d" % (i + 1))
+                continue
+            dims.append((i, con.Value))
+    # The curves first, then each dimension: FreeCAD solves after every new value, and
+    # with the curves already scaled each solve only confirms them (setting the curves
+    # with the dimensions as references and solving moved the corners half way).
+    sketch.Geometry = geometry
+    for i, value in dims:
+        sketch.setDatum(i, App.Units.Quantity(value * factor, App.Units.Unit("mm")))
+    try:
+        sketch.solve()
+    except Exception:
+        pass
+    return kept
+
+
+class SketchScaleFeature:
+    """The "Scale" step of sketches scaled with Modify > Scale. It does nothing on a
+    recompute: the curves were scaled when it was made or edited. Saved documents store
+    "sciforge.scale.SketchScaleFeature": keep the name and the properties."""
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.ensure_properties(obj)
+
+    @staticmethod
+    def ensure_properties(obj):
+        def add(kind, name, doc, mode=0):
+            if name not in obj.PropertiesList:
+                obj.addProperty(kind, name, "Scale", doc, mode)
+                return True
+            return False
+
+        add("App::PropertyLinkList", "Sketches", "The sketches scaled")
+        if add("App::PropertyFloat", "Factor", "Scale factor"):
+            obj.Factor = 1.0
+        if add("App::PropertyFloat", "Applied", "The factor the sketches are scaled by now", 4):
+            obj.Applied = 1.0
+        add("App::PropertyVector", "Center", "The point scaled about (design coordinates)")
+        if add("App::PropertyBool", "AtOrigin", "Scaled about each sketch's origin"):
+            obj.AtOrigin = True
+        add("App::PropertyString", "PointLabel", "What the point is (shown in the dialog)")
+        if "SciForgeType" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", "SciForgeType", "Base", "", 4)
+            obj.SciForgeType = SKETCH_KIND
+
+    def onDocumentRestored(self, obj):
+        self.ensure_properties(obj)
+
+    def execute(self, obj):
+        return None
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def _center_of(record, sketch):
+    if bool(record.AtOrigin):
+        return App.Vector(0, 0, 0)
+    return sketch_point(sketch, record.Center)
+
+
+def make_sketch_scale(doc, sketches, factor, point=None, label="", name="Scale"):
+    """Scale `sketches` by `factor` about `point` (design coordinates; None: each sketch's
+    origin) and record it as a Scale step. Returns (step, dimensions that kept their value)."""
+    sketches = [s for s in sketches if is_sketch(s)]
+    if not sketches:
+        raise ScaleError("Pick the sketches to scale.")
+    factor = float(factor)
+    check_factors((factor, factor, factor), True)
+    record = doc.addObject(SKETCH_TYPE, name)
+    SketchScaleFeature(record)
+    record.Sketches = sketches
+    record.Factor = factor
+    record.AtOrigin = point is None
+    record.Center = App.Vector(point) if point is not None else App.Vector()
+    record.PointLabel = label or ""
+    kept = []
+    for sketch in sketches:
+        kept += scale_sketch(sketch, factor, _center_of(record, sketch))
+    record.Applied = factor
+    _attach_sketch_view_provider(record)
+    return record, kept
+
+
+def edit_sketch_scale(record, factor, point=None, label=None, move_point=False):
+    """Change a sketch Scale step: the sketches are scaled back and by the new factor (about
+    the new point when move_point)."""
+    factor = float(factor)
+    check_factors((factor, factor, factor), True)
+    applied = float(record.Applied) or 1.0
+    kept = []
+    for sketch in list(record.Sketches):
+        if is_sketch(sketch):
+            scale_sketch(sketch, 1.0 / applied, _center_of(record, sketch))
+    record.Applied = 1.0
+    if move_point:
+        record.AtOrigin = point is None
+        record.Center = App.Vector(point) if point is not None else App.Vector()
+        if label is not None:
+            record.PointLabel = label
+    for sketch in list(record.Sketches):
+        if is_sketch(sketch):
+            kept += scale_sketch(sketch, factor, _center_of(record, sketch))
+    record.Factor = factor
+    record.Applied = factor
+    return kept
+
+
+def unscale_sketches(record):
+    """The sketches back to their size before the step (it is being deleted)."""
+    applied = float(getattr(record, "Applied", 1.0)) or 1.0
+    if abs(applied - 1.0) < 1e-12:
+        return
+    for sketch in list(getattr(record, "Sketches", []) or []):
+        if is_sketch(sketch):
+            scale_sketch(sketch, 1.0 / applied, _center_of(record, sketch))
+    record.Applied = 1.0
+
+
+class SketchScaleWatch:
+    """Deleting a sketch Scale step (timeline, browser) scales its sketches back, in the same
+    undo step (an undo / redo puts the curves back by itself)."""
+
+    def slotDeletedObject(self, obj):
+        try:
+            if not is_sketch_scale(obj):
+                return
+            doc = obj.Document
+            if getattr(doc, "Transacting", False) or getattr(doc, "Restoring", False):
+                return
+            unscale_sketches(obj)
+        except Exception:
+            pass
+
+
+_WATCH = {"observer": None}
+
+
+def install_sketch_watch():
+    if _WATCH["observer"] is None:
+        _WATCH["observer"] = SketchScaleWatch()
+        App.addDocumentObserver(_WATCH["observer"])
+
+
+def _attach_sketch_view_provider(obj):
+    try:
+        if not App.GuiUp or obj.ViewObject is None:
+            return
+        from .scale_ui import ViewProviderSketchScale
+
+        ViewProviderSketchScale(obj.ViewObject)
+    except Exception:
+        pass

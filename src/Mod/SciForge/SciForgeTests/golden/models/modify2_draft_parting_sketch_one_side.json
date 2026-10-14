@@ -1,0 +1,125 @@
+{
+  "id": "modify2_draft_parting_sketch_one_side",
+  "title": "The same box, Parting Line a sketch line at z = 0 on the XZ plane, One Side 5 deg",
+  "tags": [
+    "draft",
+    "parting-line",
+    "one-side",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 12,
+      "direction": "two_sides",
+      "distance2": 8
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            -15,
+            -20,
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "use_body",
+      "step": "e1"
+    },
+    {
+      "op": "sf_draft2",
+      "id": "d1",
+      "faces": {
+        "any_of": [
+          {
+            "type": "plane",
+            "normal": [
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              -1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              -1,
+              0
+            ]
+          }
+        ],
+        "count": 4
+      },
+      "draft_type": "parting",
+      "plane": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "parting": {
+        "sketch": "s2"
+      },
+      "sides": "one",
+      "angle": 5
+    }
+  ],
+  "expect": {
+    "volume": 7513.7007275204305,
+    "faces": 10,
+    "bbox": [
+      -10,
+      -10,
+      -8,
+      10,
+      10,
+      12
+    ],
+    "source": "analytic",
+    "note": "The sketch line (z = 0, drawn on XZ) is carried through the part along the sketch's normal: the front and back faces split along it, the left and right ones too (the line's sheet runs through them). One Side: only the pieces on the pull side (+Z, out of the top face) lean in, by 5 deg over 12 mm; the lower 8 mm stay straight: V = frustum(20, 12, 5) + 20*20*8. Faces: top, bottom, 4 drafted, 4 straight."
+  }
+}

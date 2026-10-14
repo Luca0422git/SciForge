@@ -1747,3 +1747,6 @@ def validate(model):  # noqa: F811  (adds the component checks, components-2)
     _validate_before_components(model)
     _check_component_steps(model)
     return model
+
+
+from . import modify2_schema  # noqa: E402,F401  (Modify part 2 steps; it wraps validate)

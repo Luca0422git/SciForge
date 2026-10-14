@@ -1,0 +1,74 @@
+{
+  "id": "modify2_move_face_edit",
+  "title": "The same move of the top face, edited to 3 mm down",
+  "tags": [
+    "move",
+    "faces",
+    "edit",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_face",
+      "id": "m1",
+      "faces": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "move": [
+        0,
+        0,
+        5
+      ]
+    },
+    {
+      "op": "move_face_edit",
+      "target": "m1",
+      "move": [
+        0,
+        0,
+        -3
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 5600,
+    "faces": 6,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      7
+    ],
+    "source": "analytic",
+    "note": "Edited: the top face 3 mm down instead: 40*20*7."
+  }
+}

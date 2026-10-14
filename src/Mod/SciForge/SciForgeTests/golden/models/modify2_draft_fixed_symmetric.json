@@ -1,0 +1,91 @@
+{
+  "id": "modify2_draft_fixed_symmetric",
+  "title": "The same box, its sides drafted Symmetric by 4 deg about the XY plane",
+  "tags": [
+    "draft",
+    "symmetric",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sf_draft2",
+      "id": "d1",
+      "faces": {
+        "any_of": [
+          {
+            "type": "plane",
+            "normal": [
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              -1,
+              0,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              -1,
+              0
+            ]
+          }
+        ],
+        "count": 4
+      },
+      "plane": "XY",
+      "sides": "symmetric",
+      "angle": 4
+    }
+  ],
+  "expect": {
+    "volume": 7453.624861861472,
+    "faces": 10,
+    "bbox": [
+      -10,
+      -10,
+      -10,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "Symmetric: both halves narrow by 4 deg away from z = 0. V = 2 * frustum(20, h 10, 4 deg) = 2 * 10/3 (400 + A2 + sqrt(400 A2)), A2 = (20 - 20 tan 4)^2."
+  }
+}

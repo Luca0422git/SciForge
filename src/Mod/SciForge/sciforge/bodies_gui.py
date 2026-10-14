@@ -34,6 +34,7 @@ ICONS = {
     "FilletSets": "fillet",
     "ChamferSets": "chamfer",
     "SilhouetteSplit": "silhouette_split",
+    "MoveFace": "move",  # Move/Copy of faces (modify-2, move_face.py)
 }
 
 
@@ -199,7 +200,9 @@ def _leads_followers(obj):
 
         if getattr(obj.Document, "Transacting", False):
             return False  # an undo / redo takes the followers along itself
-        return bool(extrude_bodies.followers_of(obj))
+        from . import modify_bodies
+
+        return bool(extrude_bodies.followers_of(obj)) or bool(modify_bodies.followers_of(obj))
     except Exception:
         return False
 

@@ -1,0 +1,99 @@
+{
+  "id": "modify2_move_face_boss_down",
+  "title": "A boss r3 x 5 on top of the box, its faces moved 2 mm down",
+  "tags": [
+    "move",
+    "faces",
+    "boss",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            3
+          ],
+          "name": "boss"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "b1",
+      "profile": "s2",
+      "distance": 5
+    },
+    {
+      "op": "move_face",
+      "id": "m1",
+      "faces": {
+        "any_of": [
+          {
+            "type": "cylinder",
+            "count": 1
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "at": {
+              "axis": "z",
+              "value": "max"
+            },
+            "count": 1
+          }
+        ]
+      },
+      "move": [
+        0,
+        0,
+        -2
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 8084.823001646924,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      20,
+      13
+    ],
+    "source": "analytic",
+    "note": "The boss's side and top close up into the boss: cut away, then joined 2 mm lower (z 8..13): 3 mm stand above the box. V = 8000 + pi*9*3."
+  }
+}

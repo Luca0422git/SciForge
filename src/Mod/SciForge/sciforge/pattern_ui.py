@@ -41,7 +41,13 @@ DIRECTION_TYPES = [("One Direction", "one"), ("Symmetric", "symmetric")]
 CIRCULAR_TYPES = [("Full", "full"), ("Angle", "angle"), ("Symmetric", "symmetric")]
 ORIENTATIONS = [("Identical", "identical"), ("Path Direction", "path")]
 OPERATIONS = [("Join", "join"), ("New Body", "new_body")]
-COMPUTE = [("Identical", "identical"), ("Optimized", "optimized"), ("Adjust", "adjust")]
+COMPUTE = [("Optimized", "optimized"), ("Identical", "identical"), ("Adjust", "adjust")]
+COMPUTE_TIPS = {
+    "optimized": "Identical copies, fastest",
+    "identical": "Identical copies of the feature's result",
+    "adjust": "Every copy computed again where it lands (an extrude To Object ends on the "
+    "object at every copy); slowest",
+}
 AXES = ("X_Axis", "Y_Axis", "Z_Axis")
 AXIS_COLORS = {
     "X_Axis": (0.92, 0.30, 0.30),
@@ -695,14 +701,11 @@ class PatternPanel(Panel):
         self.objects_label.setStyleSheet("color: #b8c7d9;")
         form.addRow(self.objects_label)
         self._kind_fields()
-        self.compute = _combo(
-            COMPUTE,
-            "identical",
-            disabled={
-                "optimized": "Not available in SciForge yet: copies are identical.",
-                "adjust": "Not available in SciForge yet: copies are identical.",
-            },
-        )
+        self.compute = _combo(COMPUTE, self.options.get("compute", "optimized"))
+        for i in range(self.compute.count()):
+            tip = COMPUTE_TIPS.get(self.compute.itemData(i), "")
+            self.compute.setItemData(i, tip, QtCore.Qt.ToolTipRole)
+        self.compute.currentIndexChanged.connect(self._typed)
         self.compute_label = QtWidgets.QLabel("Compute Option")
         form.addRow(self.compute_label, self.compute)
         self.info = QtWidgets.QLabel("")  # what the dialog waits for (not a problem)
@@ -793,6 +796,16 @@ class PatternPanel(Panel):
             self.circular_type.currentIndexChanged.connect(self._circular_type_changed)
         elif self.kind == "path":
             self._selection("path", "Select", "Path")
+            self.start_point = QtWidgets.QDoubleSpinBox()
+            self.start_point.setRange(0.0, 1.0)
+            self.start_point.setDecimals(3)
+            self.start_point.setSingleStep(0.05)
+            self.start_point.setToolTip(
+                "Where along the path the distance is counted from: 0 is the path's start, 1 "
+                "its end (it starts at the point nearest the objects)"
+            )
+            self.start_point.valueChanged.connect(self._start_point_typed)
+            form.addRow("Start Point", self.start_point)
             self.distance_field = DistanceField(
                 self.options["distance"], on_change=self._distance_typed
             )
@@ -832,6 +845,8 @@ class PatternPanel(Panel):
                     common.set_combo(box, self.options[name])
             if getattr(self, "circular_type", None) is not None:
                 common.set_combo(self.circular_type, self.options["circular_type"])
+            common.set_combo(self.compute, self.options.get("compute", "optimized"))
+            self._show_start_point()
             if getattr(self, "suppression", None) is not None:
                 self.suppression.blockSignals(True)
                 self.suppression.setChecked(bool(self.options.get("suppressed")))
@@ -876,6 +891,7 @@ class PatternPanel(Panel):
                 options[name] = box.currentData()
         if getattr(self, "circular_type", None) is not None:
             options["circular_type"] = self.circular_type.currentData()
+        options["compute"] = self.compute.currentData() or "optimized"
         for name in ("quantity", "quantity2"):
             spin = getattr(self, name, None)
             if spin is not None:
@@ -1622,6 +1638,36 @@ class PatternPanel(Panel):
         except Exception as exc:
             warn("%s suppression dots unavailable: %s" % (self.title, exc))
 
+    def _start_point_typed(self, value):
+        """Fusion's Start Point: a typed share of the path fixes where it starts."""
+        if self._quiet or self._closed:
+            return
+        self.options["start_point"] = round(float(value), 4)
+        self._changed(new_geometry=True)
+
+    def _show_start_point(self):
+        """The Start Point box shows the stored share, else where the pattern starts by
+        itself (the point of the path nearest the objects)."""
+        box = getattr(self, "start_point", None)
+        if box is None:
+            return
+        value = self.options.get("start_point")
+        if value is None:
+            try:
+                value = pattern.auto_start_point(self.options)
+            except Exception:
+                value = None
+        if value is None:
+            return
+        was = self._quiet
+        self._quiet = True
+        try:
+            box.blockSignals(True)
+            box.setValue(float(value))
+        finally:
+            box.blockSignals(False)
+            self._quiet = was
+
     def _circular_type_changed(self, *_):
         if self._quiet:
             return
@@ -1734,6 +1780,7 @@ class PatternPanel(Panel):
             preview.recompute(self.doc)
             self.show_status()
             self._refresh()
+            self._show_start_point()
             if self._geometry_changed or self._handles_stale():
                 self._geometry_changed = False
                 self._make_handles()
@@ -1828,9 +1875,11 @@ class PatternPanel(Panel):
     def _ref_text(ref, titles):
         """A picked reference as the user knows it: "X Axis", "Edge of Extrude 1"."""
         text = pattern.ref_label(ref)
-        if not ref or not ref[1] or not pattern.alive(ref[0]):
+        if not ref or not pattern.alive(ref[0]):
             return text
         title = titles.get(ref[0].Name)
+        if not ref[1]:
+            return title or text  # a whole sketch as the path: "Sketch 3", as in the browser
         if title:
             return "%s of %s" % (ref[1].rstrip("0123456789") or ref[1], title)
         return text

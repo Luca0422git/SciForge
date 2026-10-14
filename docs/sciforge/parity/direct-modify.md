@@ -95,6 +95,24 @@ checked in Luca's Fusion).
 | R3 | The target must fully cross the region being extended or trimmed, else it fails. | Autodesk (7), Forum (7) |
 | R4 | A Replace Face item in the timeline, editable; live preview. | Autodesk (7) (feature object), Guess (preview) |
 
+### Press Pull Offset Type, Replace Face onto any surface (modify-2, 2026-10-14)
+
+Sources: (5) above; Autodesk help, Press Pull reference (`SLD-REF-PRESS-PULL`: a face is
+offset or moved, a sketch profile extruded; Press Pull can turn into Extrude); Autodesk blog
+"QUICK TIP: Press Pull" and "QUICK TIP: Offset Face Control"
+(https://www.autodesk.com/products/fusion-360/blog/quick-tip-press-pull/,
+https://www.autodesk.com/products/fusion-360/blog/quick-tip-control-offset-faces/); Autodesk
+Community "Can't modify from existing radius with press pull"
+(https://forums.autodesk.com/t5/fusion-support-forum/can-t-modify-from-existing-radius-with-press-pull/td-p/8858232).
+
+| # | Fusion | SciForge | Source |
+|---|---|---|---|
+| O1 | Press Pull on faces has an Offset Type: Automatic (the default), Modify Existing Feature, New Offset | Same three, Automatic chosen (hidden for Offset Face, which always adds its step, and when editing a Press Pull step) | Autodesk (5), Forum (5) |
+| O2 | Modify Existing Feature: the feature that made the face changes, no new timeline item | The end face of an extrude (one side, Distance) makes that extrude longer or shorter; a face an earlier Press Pull / Offset Face put there changes that step's distance; the dialog names the step that changes. A face no feature can change that way (a side face, a fillet's face, faces of two features) is refused with the reason and "use New Offset"; a distance that follows a parameter is refused too (change the parameter) | Autodesk (5), Forum (5) |
+| O3 | New Offset: always a new Offset Face / Press Pull item | Same (a Press Pull step; a fillet's face is offset, not given another radius) | Autodesk (5) |
+| O4 | Automatic: Fusion edits the feature that made the face when it can (a fillet's radius, a base feature), else adds an offset | As before modify-2: a fillet's or chamfer's face changes its size, inside an open base feature the change is baked into it, every other face gets a Press Pull step. Whether Automatic also lengthens an extrude when its end face is pulled is not settled by the sources (Modify Existing Feature does it) | Autodesk (5), Guess (extrude end) |
+| Q1 | Replace Face onto a curved target (a cone, a torus, a free-form surface face) | Any surface OpenCASCADE gives: the target is extended a quarter of its size beyond its edges (a cone not past its apex) so it crosses the faces' way; its inner side is found by sweeping it backward along the replaced faces' direction. Flat, cylinder and ball targets keep their exact rule. A target that still does not cross the faces' way is refused with the reason | Autodesk (7) |
+
 ### Split Face (SOLID > MODIFY)
 
 | # | Fusion | Source |
@@ -184,6 +202,7 @@ body's **first step**:
 | B1, B2, B4: Create Base Feature, edits not recorded one by one, Finish Base Feature, one timeline item | CREATE > Create Base Feature opens a bar over the view ("Finish Base Feature" button, also in the CREATE menu). Bodies made while it is open belong to it: whatever is done to them (sketches, extrudes, Press Pull, Delete, fillets...) is baked into their base feature at each OK, their sketches leave the timeline. Finish closes it |
 | B5: edit the base feature later | double-click "Base Feature N" in the timeline: the marker rolls back to it, the bar says what is edited, edits on its bodies are baked into it (no new step), Finish puts the marker back where it was and the later steps rebuild on the edited solid |
 | B6: Press Pull (Automatic) on a face of a base feature edits it | in a parametric design Press Pull adds a Press Pull step after the base feature (Fusion's "New Offset"); inside an open base feature it is baked into it |
+| O1-O4: Press Pull Offset Type | Automatic / Modify Existing Feature / New Offset in the Press Pull dialog (`offset_type.py`) |
 | P2: Modify > Offset Face, an Offset Face item, double-click to edit | same (Press Pull's faces mode without its fillet / sketch-area modes); the step is titled "Offset Face N" |
 | P4, P5: Delete on faces heals; refused when the neighbours cannot close the gap | same (OpenCASCADE's `BRepAlgoAPI_Defeaturing`); the refusal says why and what to do instead, next to the pointer, nothing changes |
 | R1-R4: Replace Face | Source Faces (one body), Tangent Chain (on by default), Target (a face of any body, an origin square, a construction plane); live preview; a "Replace Face N" step, editable. The target must lie across the faces' way, else the reason is said in the dialog and OK keeps it open. A step sees the design as it is at its place in the timeline: editing the target's own earlier step moves the replaced faces with it |
@@ -201,7 +220,7 @@ Scenarios (real mouse and keyboard in FreeCAD 1.1.4 under xvfb): `direct_history
 (origin plane, then a Press Pull on one half, Closest Point, Extend), Silhouette Split (faces,
 solid, edited back), Align (faces facing, Flip + Angle), Remove, history off / on with a Press
 Pull after it. Unit tests: `test_direct_core.py`, `test_align_core.py`,
-`test_direct_schema.py`.
+`test_direct_schema.py`. modify-2: scenario `modify2_presspull_type` (Modify Existing Feature on an extrude's end, undo / redo, New Offset, Modify Existing on that offset, a side face refused); golden models `modify2_presspull_modify_extrude`, `modify2_presspull_modify_pocket`, `modify2_presspull_modify_offset`, `modify2_presspull_new_offset`, `modify2_replace_face_cone`.
 
 ## Known gaps (never faked: listed here)
 
@@ -209,10 +228,11 @@ Pull after it. Unit tests: `test_direct_core.py`, `test_align_core.py`,
 |---|---|---|
 | Capture Design History makes one Base Feature for all bodies | one "Base Feature" item per body (they share an id, editing one opens a session for that body) | FreeCAD's base is a step of each body; one item for several bodies needs the timeline module to group items by id |
 | Fusion keeps "pseudo features" (extrude, fillet, hole) in the browser of a direct design, editable for fillets / chamfers / holes | not built: the features are baked away; sketches stay | nothing of a baked feature is left to edit; would need a recognizer of fillets / holes in a plain solid |
-| Press Pull's Offset Type (Automatic / Edit Feature / New Offset) | no Offset Type choice: on an extrude's face Press Pull edits the extrude (the presspull module), on a base feature's face it adds a Press Pull step (New Offset), inside an open base feature it is baked into it | a third option would change the Press Pull dialog shared with the extrude area |
+| Press Pull Modify Existing Feature on a base feature's face, a revolve's or a sweep's face, a hole's wall | refused with the reason (use New Offset): only an extrude's end and an earlier Press Pull's faces are changed in place | each kind of feature needs its own rule for which value moves the face; base features would need the bake of an open base feature |
+| Press Pull Automatic on an extrude's end face | adds a Press Pull step (Modify Existing Feature lengthens the extrude) | the sources do not settle what Fusion's Automatic does there; 32 Press Pull scenarios rely on the step |
 | B3: an open base feature refuses bodies made before it | they can be changed; those changes are recorded as normal steps (with their own timeline items), not baked into the base feature | refusing would block Luca's common case (pull a face of another body while a base feature is open) without a gain; documented here |
 | a base feature open while the design is saved | saving keeps the marker where the session put it; reopening shows the design rolled back to the base feature, without the session (double-click the base feature and Finish, or drag the marker to the end) | the session lives in memory, not in the file |
-| Replace Face onto any curved target | flat faces / planes, and round targets that are a cylinder or a ball; other curved targets are refused with the reason | the inner side of a free-form surface is not well defined in OpenCASCADE without a closed solid; cylinders and balls are |
+| Replace Face onto a curved target that ends before the faces' way | the target is extended by a quarter of its size; farther than that is refused with the reason | OpenCASCADE extends a free-form surface only approximately; a big extension of a NURBS face can turn back on itself |
 | faces split by Split Face stay split whatever comes later | they stay split until a later step that tidies faces (Refine: an Extrude join, a Press Pull of the neighbour) merges faces lying in one plane again | FreeCAD's `removeSplitter` merges coplanar faces; SciForge's steps refine like Fusion's |
 | Split Shelled Body on a closed shelled body: the parting surface between inner and outer outline | a non-flat outline is swept along the view direction to make the parting surface; inner outlines hidden behind the outer surface are not used | OpenCASCADE's outline (`HLRBRep`, `reflectLines` "OutLine") gives the visible outline only |
 | Silhouette Split along a direction where the outline is only existing edges (a box seen along its diagonal) | refused with the reason | the outline then is the box's own edges: nothing to split |

@@ -7,6 +7,56 @@ against Luca's own screen captures (outline 2.4). Implemented in
 `scale.py` + `scale_ui.py`, with the shared dialog base `pickpanel.py` and `follow.py` (later
 steps keep their faces). Status: **first pass + QA pass (2026-10-11), not yet signed off**.
 
+## Behaviour spec: Parting Line, Two Side / Symmetric, several bodies, sketches (modify-2, 2026-10-14)
+
+Sources (A = Autodesk help or API reference; F = Autodesk Community forum; G = guess, to be
+checked against Fusion):
+
+1. Autodesk help, Draft reference (`SLD-REF-DRAFT`)
+   (https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/SLD-REF-DRAFT.htm): Type Fixed
+   Plane / Parting Line; Parting Line: Fix Parting Line with Draft Sides One Side / Two Side /
+   Symmetric (Angle 1, Angle 2), Move Parting Line with Direction Angle Above / Below / Both
+   and Fixed Edges.
+2. Fusion API, `DraftFeatureInput` (`setSingleAngle`, `setTwoAngles`, `isTangentChain`,
+   `isDirectionFlipped`; symmetric: "the faces are split along the parting plane and drafted
+   independently using the same angle")
+   (https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_DraftFeatureInput.htm),
+   `PartingLineTypes`
+   (https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_PartingLineTypes.htm).
+3. Autodesk Community, "Closed parting line generation discussion"
+   (https://forums.autodesk.com/t5/fusion-360-feedback-hub/closed-parting-line-generation-discussion/td-p/9067940).
+4. Autodesk help, "Scale components, bodies, or sketches"
+   (https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/GUID-D3F6F79B-1498-48B3-B98C-7D57B620005A.htm)
+   and the Scale reference (`SLD-REF-SCALE`); Fusion API `ScaleFeatureInput`
+   (non-uniform scale is not allowed when sketches are among the input entities)
+   (https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/ScaleFeatureInput.htm).
+5. Autodesk Community, "Scale an entire sketch?" (an Autodesk team member: select the sketch
+   node in the browser as the object, a default point is given, Point select picks another)
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/scale-an-entire-sketch/m-p/9486135);
+   "Non uniform scale missing"
+   (https://forums.autodesk.com/t5/fusion-support/non-uniform-scale-missing/td-p/9331453).
+6. Autodesk help, Shell reference (Faces/Body selection) and the Fusion part-modelling course
+   (https://app.learn-one.autodesk.com/learn/ondemand/curated/part-modeling-fusion-360/1LuvJoGK6tGIzuv0tQrbBz);
+   Autodesk Community "Hollowing / Shell a complex Body"
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/hollowing-shell-a-complex-body/m-p/10835233).
+
+| # | Fusion | SciForge | Source |
+|---|---|---|---|
+| D1 | Draft Type: Fixed Plane or Parting Line | Same (a Type drop-down at the top) | A (1) |
+| D2 | Parting Line: Pull Direction (a plane or flat face), Parting Tool (a plane, a flat face, edges, sketch curves), Faces | Same three boxes, in that order: after the pull direction the Parting Tool box takes the clicks, then the Faces box. A construction plane's or an origin plane's browser row works as the parting tool | A (1, 2) |
+| D3 | Fix Parting Line: the faces turn about the parting line, which stays where it is | Same: each picked face is split at the parting line; every piece turns about where it meets the line | A (1) |
+| D4 | Move Parting Line (the line moves, Angle Above / Below / Both, Fixed Edges) | Listed but greyed, with the reason in its tooltip (the draft would have to add a step face where the line moved: OpenCASCADE's draft cannot) | A (1); limit: kernel |
+| D5 | Draft Sides One Side: only the pull side of the parting line is drafted | Same | A (1) |
+| D6 | Two Side: both sides, Angle 1 on the pull side, Angle 2 on the other, each leaning away from the line | Same (Angle 1 / Angle 2 fields; Angle 2 shows only for Two Side) | A (1, 2) |
+| D7 | Symmetric: both sides, one angle | Same | A (1, 2) |
+| D8 | Draft Sides also for Fixed Plane (the plane splits the faces) | Same: Two Side / Symmetric on a Fixed Plane split the faces at the plane | A (2) |
+| D9 | OK without a parting tool | Refused, the dialog says the parting tool is missing | G |
+| D10 | One Draft over faces of several bodies | Same: a face of another body joins the step; that body gets a hidden step (the Draft's follower) that drafts its faces with the same pull direction, parting tool and angles; undo, the timeline's Delete, suppress and the marker treat them as one step | G (Fusion features act on several bodies) |
+| S1 | Shell: faces of several bodies (or several bodies) in one Shell | Same: clicking a face of another body adds that body to the step (its own hidden step, same thicknesses and type); clicking its last face again drops it. The selection box says "N faces + K other bodies" | G (6) |
+| S2 | Scale: several bodies in the Entities box | Same: every clicked body is scaled by the same factor about the same point (one step, hidden steps in the other bodies). After the first body the Point box takes the next click (as before); click the Entities box again to add bodies | A (4) |
+| S3 | Scale: a sketch (its browser row, or the sketch selected before Scale) | Same: the sketch's curves are scaled about the point (the sketch's own origin until a point is picked) in its own plane; its driving dimensions are scaled with it, a dimension that follows a parameter keeps its value (the dialog says which). The step is a "Scale" item in the timeline; editing it scales from the sketch as drawn; deleting it puts the sketch back | A (4), F (5); point default G |
+| S4 | Scale Type Non Uniform with a sketch | Refused with the reason (Fusion scales sketches uniformly) | A (4) |
+
 ## Shell (MODIFY > Shell)
 
 | Fusion | SciForge |
@@ -32,7 +82,7 @@ FreeCAD's Thickness copies the part unchanged when no face is taken away and has
 thickness. Editing switches between the two when needed; the step keeps its place and name and
 later steps move over to the new one.
 
-## Draft (MODIFY > Draft), type Fixed Plane
+## Draft (MODIFY > Draft), type Fixed Plane (Parting Line: D1-D10 above)
 
 | Fusion | SciForge |
 |---|---|
@@ -45,7 +95,13 @@ later steps move over to the new one.
 | Edit from the timeline, Cancel, Esc, Ctrl+Z | Same |
 
 Built on FreeCAD's `PartDesign::Draft` (NeutralPlane = the picked plane, PullDirection empty,
-Reversed worked out from the pull direction).
+Reversed worked out from the pull direction). Parting Line, Two Side and Symmetric are
+SciForge's `DraftFeature` (`PartDesign::FeaturePython`, `drafting.py`): the picked faces are
+split at the parting line (`generalFuse` with the plane or the parting curves swept along the
+pull direction), and every group of pieces that turns about the same line is drafted by
+FreeCAD's own Draft in a hidden throw-away document. Changing the Type or Draft Sides in an
+edit switches between the two features; later steps and the hidden steps in other bodies
+move over.
 
 ## Scale (MODIFY > Scale)
 
@@ -66,10 +122,15 @@ corner used as the point follows edits of earlier steps.
 
 | Fusion | Why not yet |
 |---|---|
-| Draft type Parting Line, Draft Sides Two Sides / Symmetric | They split faces at a line; FreeCAD's Draft cannot. Shown greyed with the reason |
-| Scale of sketches and components | SciForge scales bodies (the step lives in a body's timeline) |
+| Draft Move Parting Line (Angle Above / Below / Both, Fixed Edges) | Greyed with the reason: the parting line moving needs a new step face along it, which OpenCASCADE's draft (BRepOffsetAPI_DraftAngle) does not make |
+| Draft Parting Line that bends inside one face (a 3D curve, or a stepped line crossing one face) | Each piece of a face turns about one line (its longest edge on the parting line); a parting line that is not flat where it meets a face is refused with the reason |
+| Draft, Shell, Scale handles for the new options | Angle 2 has no handle of its own (typed in its field); the Angle handle drives Angle 1 |
+| Scale of components | Belongs to the components area (components-2) |
+| Rolling the history marker back before a sketch's Scale step | The sketch stays scaled (the step changed the sketch itself; Undo or deleting the step puts it back) |
+| A sketch's Scale default point | The sketch's own origin (Fusion gives "a default point", not documented which) |
+| Scale of a sketch with projected (external) curves | Its own curves and dimensions scale; constraints to projected curves keep those points on them (the projections follow the part, not the scale) |
 | Non uniform scale of round faces | Exact shape, but the faces become NURBS: FreeCAD then measures their volume only to about 1 % and Refine cannot merge flat NURBS faces |
-| Shell / Draft / Scale over several bodies in one step | One body per step (Fusion allows several) |
+| Sharp shell walls on some parts (a narrow slot open at the side of the part) | OpenCASCADE's sharp (intersection) walls give up where rounded ones work: the dialog says so and suggests Shell Type Rounded (before modify-2 it said "too thick") |
 | Per-face wall thickness (outline 7.6 mentions it) | Not in Fusion's Shell dialog; OpenCASCADE supports it but FreeCAD exposes no Python call |
 | A corner whose name FreeCAD loses (a Pad's corner after its length changes) | Found again where it was relative to the part's bounding box (`picks.py`, 2026-10-14; before: the corner with the same number, right only while the topology stays) |
 | A face of a later step that moved for good (a wall made thicker) | Found again by where it is (same kind, facing the same way, nearest): right for the usual edits; FreeCAD has no history of SciForge's own features' faces to follow instead |

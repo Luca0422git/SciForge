@@ -110,6 +110,7 @@ is undone or rolled back; the icon follows.
 | Stitch | Surface bodies; Tolerance (default 1.0 mm, forum); a closed result becomes a solid | Same; the open edges left are drawn red and counted, "Closed" when it makes a solid; a solid picked is refused ("Unstitch it first") | A, F (1.0 mm) |
 | Unstitch | Faces or bodies; Chain Selection (on: every face joined to the clicked one) | Same: each face becomes a surface body | A, F |
 | Reverse Normal | Surface bodies: every face turned over | Same, a short arrow shows which way each surface faces; a solid is refused (its faces always point out) | A |
+| Replace Face, Split Face (SURFACE > MODIFY too) | Faces of solids; the target or tool may be a surface body | Same commands as on the SOLID tab (`direct-modify.md`); since modify-2 Replace Face takes any target surface, a surface body's face included | A |
 | Delete | | FreeCAD's / SciForge's Delete, as before | |
 
 ## Known gaps
@@ -127,5 +128,4 @@ is undone or rolled back; the icon follows.
 | Extend Edge Alignment Align Edges | Not built (greyed); Natural on a free-form face falls back to a tangent band |
 | Stitch: edges within tolerance shown green | SciForge shows the edges left open (red) |
 | Boundary Fill from planes alone | Fusion is reported to need at least one body (**F**); SciForge accepts planes alone |
-| Split Face / Replace Face on the SURFACE tab | The commands come from the direct-modeling branch (`SciForge_SplitFace`, `SciForge_ReplaceFace`), not on this branch: add them to `SURFACE_MODIFY` after the merge |
 | The design's first sketch body | A new design's first sketch lives in a body (FreeCAD needs one); when the first thing made from it is a surface, that body stays in the browser with only the sketch in it. Fusion keeps sketches outside bodies |

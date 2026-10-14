@@ -15,7 +15,9 @@ outside the part, and cut back to it where it lies inside; the steps the column'
 next to sloped neighbours are healed by OpenCASCADE's defeaturing, which extends those
 neighbours (the same healing as Press Pull, presspull_core). Flat targets are taken as their
 whole plane, round and spherical ones as the whole cylinder / sphere (Fusion requires the
-target to cross the whole region; SciForge extends it). Other curved targets are refused.
+target to cross the whole region; SciForge extends it). Any other surface (a cone, a torus,
+a free-form face) is taken as the face a quarter bigger where its surface goes on; the part
+side is everything behind it along the faces' way, so it must cross that whole way.
 
 What is built: a "Replace Face" step (SciForgeType "ReplaceFace", ReplaceFaceFeature) at the
 history marker of the body: editable later, rebuilt when earlier steps change; the target
@@ -112,16 +114,78 @@ def target_surface(target, around, size):
     if kind == "Sphere":
         surf = target.Surface
         return Part.makeSphere(surf.Radius, App.Vector(surf.Center)).Faces[0]
-    raise ReplaceFaceError(
-        "Replace Face can move faces onto a flat face, a plane, a round (cylindrical) or a "
-        "spherical face. Pick one of those as the target."
-    )
+    return _extended(target)
 
 
-def _inner_region(target, kind, point_in, size, around):
+# Any other surface (a cone, a torus, a free-form face of a loft or a patch...) is taken as
+# the face itself, a little beyond its edges where its surface goes on (modify-2): the part
+# side of it is everything behind it along the way the faces move, which needs the target to
+# cross the whole way of the faces (Fusion's rule too: "the target must fully cross the
+# region being extended or trimmed").
+EXTEND_SHARE = 0.25
+
+
+def _extended(face):
+    """The face's own surface over its parameter range made a quarter bigger on every side
+    where the surface allows it (a periodic direction is kept whole)."""
+    surface = face.Surface
+    u0, u1, v0, v1 = face.ParameterRange
+    try:
+        su0, su1, sv0, sv1 = surface.bounds()
+    except Exception:
+        su0, su1, sv0, sv1 = u0, u1, v0, v1
+    du, dv = (u1 - u0) * EXTEND_SHARE, (v1 - v0) * EXTEND_SHARE
+
+    def clamp(lo, hi, a, b):
+        return max(lo, a), min(hi, b)
+
+    try:
+        if getattr(surface, "isUPeriodic", lambda: False)():
+            u0, u1 = su0, su1
+        else:
+            u0, u1 = clamp(su0, su1, u0 - du, u1 + du)
+        if getattr(surface, "isVPeriodic", lambda: False)():
+            v0, v1 = sv0, sv1
+        else:
+            v0, v1 = clamp(sv0, sv1, v0 - dv, v1 + dv)
+        if type(surface).__name__ == "Cone":
+            # never past the apex (the surface goes on as the other half of a double cone)
+            import math
+
+            sin_a = math.sin(surface.SemiAngle)
+            if abs(sin_a) > 1e-12:
+                apex = -surface.Radius / sin_a
+                lo, hi = face.ParameterRange[2:]
+                if apex <= lo + 1e-9:
+                    v0 = max(v0, apex)
+                elif apex >= hi - 1e-9:
+                    v1 = min(v1, apex)
+        out = surface.toShape(u0, u1, v0, v1)
+        if out.isValid() and out.Area > TOL:
+            return out
+    except Exception:
+        pass
+    return face.copy()
+
+
+def _inner_region(target, kind, point_in, size, around, direction=None):
     """The solid on the part's side of the extended target (the side ``point_in`` is on)."""
     import Part
 
+    if kind not in ("Plane", "Cylinder", "Sphere") and direction is not None:
+        # Any other surface: everything behind it along the way the faces move.
+        try:
+            region = target.extrude(direction * (-4.0 * size))
+            if region.isNull() or not region.Solids:
+                raise ValueError("no solid")
+            if region.Volume < 0:
+                region.reverse()
+            return region
+        except Exception as exc:
+            raise ReplaceFaceError(
+                "The target surface cannot be used here (%s). Pick a target that lies "
+                "straight across the faces' way." % (str(exc) or "OpenCASCADE")
+            )
     if kind == "Plane":
         normal = pp.face_normal(target)
         if (point_in - target.CenterOfMass).dot(normal) < 0:
@@ -175,7 +239,7 @@ def replace(base, sources, target, refine=True, report=None):
             "can be moved straight onto."
         )
     meet = center + direction * t
-    region = _inner_region(surface, kind, meet - direction * 0.01, size, base)
+    region = _inner_region(surface, kind, meet - direction * 0.01, size, base, direction)
     columns_out, columns_in = [], []
     for face in faces:
         columns_out.append(face.extrude(direction * size))

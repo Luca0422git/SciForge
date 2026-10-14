@@ -1,0 +1,97 @@
+{
+  "id": "modify2_scale_two_bodies",
+  "title": "Two cubes scaled x2 about the origin in one step",
+  "tags": [
+    "scale",
+    "multi-body",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            20,
+            0,
+            30,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_scale_bodies",
+      "id": "sc",
+      "bodies": [
+        "e1",
+        "e2"
+      ],
+      "factor": 2
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 8000,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 8000,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 16000,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      20,
+      20
+    ],
+    "source": "analytic",
+    "note": "Both 10 mm cubes doubled about the design origin: 20 mm cubes at x 0..20 and 40..60 (the second was at x 20..30). One Scale step, a follower in the second body."
+  }
+}

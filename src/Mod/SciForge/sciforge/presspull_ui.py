@@ -15,10 +15,12 @@ Nothing selected: the dialog opens and waits. Click more faces (or edges) to add
 click a picked one again to drop it. Tangent Chain also picks the faces that continue
 a picked face smoothly (a filleted run). Problems are shown in the dialog.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, cut_preview, log, preview, presspull, presspull_core as core, taskui
+from . import commands, cut_preview, log, offset_type, preview, presspull
+from . import presspull_core as core, taskui
 from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
@@ -173,6 +175,22 @@ class PressPullPanel(Panel):
         self.tangent.setChecked(False)
         self.tangent.setToolTip("Also pick the faces that continue a picked face smoothly")
         self.layout.addRow(self.tangent)
+        # Fusion's Offset Type (faces): Automatic, Modify Existing Feature, New Offset
+        self.offset_type = QtWidgets.QComboBox()
+        for key in offset_type.TYPES:
+            self.offset_type.addItem(offset_type.LABELS[key], key)
+            self.offset_type.setItemData(
+                self.offset_type.count() - 1, offset_type.TIPS[key], QtCore.Qt.ToolTipRole
+            )
+        self.offset_type_label = QtWidgets.QLabel("Offset Type")
+        self.layout.addRow(self.offset_type_label, self.offset_type)
+        self._modify = None  # (feature, property, sign, value before) for Modify Existing
+        if self.faces_only or feature is not None:
+            # Offset Face always adds its step; an existing Press Pull step is a New Offset
+            self.offset_type.setCurrentIndex(offset_type.TYPES.index("new"))
+            self.offset_type.setVisible(False)
+            self.offset_type_label.setVisible(False)
+        self.offset_type.currentIndexChanged.connect(self._offset_type_changed)
         self.field_label = QtWidgets.QLabel("Distance")
         self.field = DistanceField(0.0, on_change=self._typed)
         self.layout.addRow(self.field_label, self.field.widget)
@@ -361,7 +379,12 @@ class PressPullPanel(Panel):
             face = obj.Shape.getElement(short)
         except Exception:
             return
-        if self.mode is None and not self.faces_only and core.is_round_blend(face):
+        if (
+            self.mode is None
+            and not self.faces_only
+            and self.offset_kind() != "new"
+            and core.is_round_blend(face)
+        ):
             blend = core.owning_fillet(self.body, face, sciforge=True)
             if blend is not None and self._start_blend_edit(blend, face):
                 return
@@ -425,6 +448,9 @@ class PressPullPanel(Panel):
             self.mode = None
             self.what.setText(self.hint)
             return
+        if self.mode == "faces" and self.offset_kind() == "modify":
+            self._update_modify()
+            return
         if self.mode == "faces":
             if self.target is None:
                 self.target = presspull.make(
@@ -454,6 +480,9 @@ class PressPullPanel(Panel):
         self.schedule()
 
     def _remove_target(self):
+        if self._modify is not None:
+            self._end_modify()
+            return
         if self.target is None or self.editing:
             return
         target, self.target = self.target, None
@@ -598,7 +627,11 @@ class PressPullPanel(Panel):
     def _typed(self, value):
         if self.target is None:
             return
-        if self.mode == "faces":
+        if self._modify is not None:
+            self._apply_modify(value)
+            if self.dragger:
+                self.dragger.set_distance(value)
+        elif self.mode == "faces":
             self.target.Distance = value
             if self.dragger:
                 self.dragger.set_distance(value)
@@ -649,8 +682,8 @@ class PressPullPanel(Panel):
 
     def _apply_formula(self):
         prop = self._value_property()
-        if self.target is None or prop is None:
-            return
+        if self.target is None or prop is None or self._modify is not None:
+            return  # Modify Existing: the value is how far the extrude's end moves
         try:
             preview.set_formula(self.target, prop, self.formula)
         except Exception as exc:
@@ -710,6 +743,9 @@ class PressPullPanel(Panel):
         if self.formula_error:  # stays until the field gets a value again
             self.message.setText("⚠ " + self.formula_error)
             return
+        if self.error:
+            self.message.setText("⚠ " + self.error)
+            return
         text = preview.failure(self.target)
         if text:
             self.message.setText("⚠ " + text)
@@ -724,6 +760,9 @@ class PressPullPanel(Panel):
             self._timer.stop()
             self._recompute()
         if self.target is None:
+            if self.error:
+                self.message.setText("⚠ " + self.error)
+                return False
             self.message.setText("⚠ Nothing selected yet: click faces or edges of the part.")
             return False
         if self.formula_error:  # Enter right after a typo: Fusion keeps the dialog open
@@ -770,6 +809,105 @@ class PressPullPanel(Panel):
             except Exception:
                 pass
         self._adopted = []
+
+    # -- Offset Type: Modify Existing Feature (offset_type.py) -------------------------------
+    def offset_kind(self):
+        return self.offset_type.currentData() or "automatic"
+
+    def _offset_type_changed(self, *_):
+        try:
+            if self._closed or self.mode != "faces" or not self.names:
+                return
+            self.error = ""
+            if self.offset_kind() == "modify":
+                if self._modify is None:
+                    self._drop_step()
+                    self._update_modify()
+            else:
+                if self._modify is not None:
+                    self._end_modify()
+                    self._selection_updated()
+        except Exception as exc:
+            warn("press pull offset type: %s" % exc)
+
+    def _drop_step(self):
+        """The Press Pull step made so far goes (Modify Existing changes the extrude)."""
+        if self.target is None or self.editing or self._modify is not None:
+            return
+        target, self.target = self.target, None
+        self._remove_dragger()
+        try:
+            body = target.getParentGeoFeatureGroup()
+            if body is not None:
+                body.removeObject(target)
+                if self.base is not None:
+                    body.Tip = self.base
+            self.doc.removeObject(target.Name)
+            from . import extrude
+
+            extrude.show_tip(body)
+        except Exception as exc:
+            warn("press pull: could not remove the preview: %s" % exc)
+
+    def _update_modify(self):
+        """Faces picked with Modify Existing Feature: find the extrude, move its end."""
+        self.error = ""
+        try:
+            feature, prop, sign = offset_type.modify_target(self.body, self.base, self.names)
+        except offset_type.OffsetTypeError as exc:
+            if self._modify is not None:
+                self._end_modify()
+            self.error = str(exc)
+            self.what.setText("Modify Existing Feature")
+            self.show_status()
+            return
+        if self._modify is None or self._modify[0] is not feature:
+            if self._modify is not None:
+                self._end_modify()
+            start = getattr(feature, prop).Value
+            self._modify = (feature, prop, sign, start)
+            self.target = feature
+        self._describe()
+        try:
+            from . import timeline_ops
+
+            title = timeline_ops.display_names(self.doc, self.doc.Objects).get(feature.Name)
+        except Exception:
+            title = None
+        self.what.setText(
+            "%d face(s): %s changes, no new step. Drag the arrow or type a distance."
+            % (len(self.names), title or feature.Label)
+        )
+        self._make_dragger()
+        self._apply_modify(self.field.value())
+
+    def _apply_modify(self, value):
+        feature, prop, sign, start = self._modify
+        try:
+            offset_type.apply(feature, prop, start, sign, value)
+            self.error = ""
+        except offset_type.OffsetTypeError as exc:
+            self.error = str(exc)
+            self.show_status()
+            return
+        self.schedule()
+
+    def _end_modify(self):
+        """The extrude back to its length before the dialog (the faces were dropped or the
+        Offset Type changed)."""
+        modify, self._modify = self._modify, None
+        if modify is None:
+            return
+        feature, prop, _sign, start = modify
+        try:
+            if abs(getattr(feature, prop).Value - start) > 1e-12:
+                setattr(feature, prop, start)
+        except Exception as exc:
+            warn("press pull: %s" % exc)
+        if self.target is feature:
+            self.target = None
+        self._remove_dragger()
+        self.schedule()
 
     def cleanup(self):
         self._unwatch()

@@ -1,0 +1,103 @@
+{
+  "id": "modify2_pattern_adjust_to_slope",
+  "title": "Wedge, a hole cut from below up to the sloped top, repeated 3 times with Compute Option Adjust",
+  "tags": [
+    "pattern",
+    "compute-option",
+    "adjust",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              60,
+              0
+            ],
+            [
+              60,
+              20
+            ],
+            [
+              0,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            10,
+            0,
+            3
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "operation": "cut",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "type": "plane",
+          "at": {
+            "axis": "z",
+            "value": "max"
+          },
+          "count": 1
+        }
+      }
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "features": [
+        "e2"
+      ],
+      "direction": "X",
+      "quantity": 3,
+      "distance": 40,
+      "compute": "adjust"
+    }
+  ],
+  "expect": {
+    "volume": 16727.65486704782,
+    "faces": 9,
+    "bbox": [
+      0,
+      -10,
+      0,
+      60,
+      10,
+      20
+    ],
+    "source": "analytic",
+    "note": "Wedge: XZ profile (0,0)-(60,0)-(60,20)-(0,10), 20 wide: V = 900*20 = 18000; its top is the plane z = 10 + x/6. Adjust: every hole (r 3 at x = 10, 30, 50) is cut from z = 0 up to the slope where it lands, so each goes through the part: removed = pi*9*(z(10) + z(30) + z(50)) = pi*9*(35/3 + 15 + 55/3) = 405 pi (a cylinder cut by a slanted plane holds its area times the height at its centre). V = 18000 - 405 pi. Faces: the wedge's 6 + 3 hole walls = 9."
+  }
+}
