@@ -52,6 +52,15 @@ def _joints():
     return joints
 
 
+def _is_surface_body(body):
+    try:
+        from . import surface
+
+        return surface.is_surface_body(body)
+    except Exception:
+        return False
+
+
 def _grounded_names(doc):
     try:
         return {g.ObjectToGround.Name for g in _joints().grounds(doc) if g.ObjectToGround}
@@ -110,6 +119,8 @@ def _objects(doc):
                 "grounded": obj.Name in grounded,
             }
             _joint_row(row, obj)
+            if obj.TypeId in core.BODY_TYPES and _is_surface_body(obj):
+                row["surface"] = True  # the surface icon (surface.py)
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
                     row["suppressed"] = True  # off, not broken: greyed, like Fusion

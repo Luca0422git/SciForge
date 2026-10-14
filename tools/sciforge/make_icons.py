@@ -1709,6 +1709,160 @@ def _():
     return circle(24, 24, 14, "none", "#7d8593", 2.4) + line(14, 34, 34, 14, "#7d8593", 2.4)
 
 
+# ---- surface tools (SURFACE tab, surface_ui.py) ----------------------------------------
+# A surface is drawn as a thin curved sheet: a light front and a darker back edge, so it
+# never reads as a solid block.
+def _sheet(x0, y0, x1, y1, lift=8, depth=10, color=BLUE, opacity=None):
+    """A curved sheet from (x0, y0) to (x1, y1) bulging up by `lift`, `depth` deep."""
+    mx, my = (x0 + x1) / 2.0, (y0 + y1) / 2.0 - lift
+    extra = 'fill-opacity="%.2f"' % opacity if opacity is not None else ""
+    d = "M%.1f %.1f Q%.1f %.1f %.1f %.1f L%.1f %.1f Q%.1f %.1f %.1f %.1f Z" % (
+        x0,
+        y0,
+        mx,
+        my,
+        x1,
+        y1,
+        x1 - depth * 0.5,
+        y1 - depth,
+        mx - depth * 0.5,
+        my - depth,
+        x0 - depth * 0.5,
+        y0 - depth,
+    )
+    edge = "M%.1f %.1f Q%.1f %.1f %.1f %.1f" % (x0, y0, mx, my, x1, y1)
+    return path(d, "none", 0, color[1], extra) + path(edge, color[2], 1.6)
+
+
+@icon("surface_body")
+def _():
+    return _sheet(12, 34, 40, 34, 10, 14)
+
+
+@icon("surface_extrude")
+def _():
+    return (
+        poly([(8, 38), (30, 38), (30, 16), (8, 16)], BLUE[1], 'fill-opacity="0.85"')
+        + line(8, 38, 30, 38, ORANGE, 2.4)
+        + line(8, 16, 30, 16, BLUE[2], 1.6)
+        + arrow(38, 36, 38, 10, WHITE, 2.2)
+    )
+
+
+@icon("surface_revolve")
+def _():
+    return (
+        path("M10 34 Q24 22 38 34 L38 18 Q24 6 10 18 Z", "none", 0, BLUE[1])
+        + path("M10 34 Q24 22 38 34", BLUE[2], 1.6)
+        + line(10, 18, 10, 34, ORANGE, 2.4)
+        + path("M12 42 Q24 48 36 42", WHITE, 2)
+        + poly([(36, 42), (30, 41), (34, 46)], WHITE)
+    )
+
+
+@icon("surface_sweep")
+def _():
+    return (
+        path("M8 38 C10 24 22 28 24 12 L32 14 C30 30 18 26 16 40 Z", "none", 0, BLUE[1])
+        + line(8, 38, 16, 40, ORANGE, 2.4)
+        + path("M12 39 C14 26 26 28 28 13", STROKE, 1.4, extra='stroke-dasharray="3 2"')
+    )
+
+
+@icon("surface_loft")
+def _():
+    return (
+        poly([(8, 36), (14, 12), (36, 10), (34, 38)], BLUE[1], 'fill-opacity="0.9"')
+        + line(8, 36, 34, 38, ORANGE, 2.4)
+        + line(14, 12, 36, 10, ORANGE, 2.4)
+    )
+
+
+@icon("patch")
+def _():
+    return (
+        path("M10 30 Q12 14 24 12 Q38 12 38 28 Q36 40 24 40 Q10 40 10 30 Z", "none", 0, BLUE[1])
+        + path(
+            "M10 30 Q12 14 24 12 Q38 12 38 28 Q36 40 24 40 Q10 40 10 30 Z",
+            ORANGE,
+            2.2,
+        )
+        + path("M16 30 Q24 22 32 28", BLUE[0], 1.4)
+    )
+
+
+@icon("ruled")
+def _():
+    return (
+        poly([(8, 34), (28, 34), (40, 18), (20, 18)], BLUE[1], 'fill-opacity="0.85"')
+        + poly([(8, 34), (28, 34), (28, 40), (8, 40)], GREY[1])
+        + line(8, 34, 28, 34, ORANGE, 2.6)
+    )
+
+
+@icon("surface_offset")
+def _():
+    return _sheet(10, 40, 38, 40, 10, 10) + path(
+        "M12 24 Q24 10 36 24", STROKE, 1.6, extra='stroke-dasharray="3 2"'
+    )
+
+
+@icon("trim")
+def _():
+    return (
+        poly([(8, 38), (24, 38), (24, 14), (8, 14)], BLUE[1])
+        + poly([(24, 38), (40, 38), (40, 14), (24, 14)], RED, 'fill-opacity="0.55"')
+        + line(24, 8, 24, 44, WHITE, 2.2)
+    )
+
+
+@icon("untrim")
+def _():
+    return (
+        poly([(8, 38), (40, 38), (40, 12), (8, 12)], BLUE[1])
+        + circle(24, 25, 7, "none", BLUE[0], 1.6)
+        + path("M17 25 A7 7 0 0 1 31 25", WHITE, 1.6, extra='stroke-dasharray="2.5 2"')
+    )
+
+
+@icon("surface_extend")
+def _():
+    return (
+        poly([(8, 38), (26, 38), (26, 14), (8, 14)], BLUE[1])
+        + poly([(26, 38), (36, 38), (36, 14), (26, 14)], BLUE[0], 'fill-opacity="0.5"')
+        + line(26, 14, 26, 38, ORANGE, 2.2)
+        + arrow(28, 26, 42, 26, WHITE, 2.0, 5)
+    )
+
+
+@icon("stitch")
+def _():
+    zig = "M24 10 L20 15 L28 20 L20 25 L28 30 L20 35 L24 40"
+    return (
+        poly([(6, 38), (24, 40), (24, 10), (8, 12)], BLUE[1])
+        + poly([(24, 40), (42, 38), (40, 12), (24, 10)], BLUE[2])
+        + path(zig, WHITE, 1.8)
+    )
+
+
+@icon("unstitch")
+def _():
+    return (
+        poly([(6, 38), (20, 40), (20, 10), (8, 12)], BLUE[1])
+        + poly([(28, 40), (42, 38), (40, 12), (28, 10)], BLUE[2])
+        + line(24, 8, 24, 42, STROKE, 1.4, 'stroke-dasharray="3 2"')
+    )
+
+
+@icon("reverse_normal")
+def _():
+    return (
+        _sheet(10, 32, 38, 32, 8, 10)
+        + arrow(24, 22, 24, 6, WHITE, 2.0, 5)
+        + arrow(24, 30, 24, 44, ORANGE, 2.0, 5)
+    )
+
+
 # Icons kept exactly as drawn (main() empties the folder first, so they live here too).
 # palette_check: the tick of a ticked check box (theme.py, sketch_palette.py), 14 px.
 RAW = {

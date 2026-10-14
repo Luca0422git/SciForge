@@ -236,7 +236,9 @@ def create_sketch(body, target):
     from . import components, timeline_ops
 
     owner = timeline_ops.body_of(target[0])
-    if owner is not None and owner is not body:
+    # A face of a surface body (SURFACE tools, surface.py) hosts the sketch but not its
+    # solid features: the sketch stays in `body`, attached across to the face.
+    if owner is not None and owner is not body and not _surface_body(owner):
         body = owner
         try:
             components.activate_body(body)  # and its component
@@ -260,6 +262,15 @@ def create_sketch(body, target):
         raise
     doc.commitTransaction()
     return sketch
+
+
+def _surface_body(body):
+    try:
+        from . import surface
+
+        return surface.is_surface_body(body)
+    except Exception:
+        return False
 
 
 def _earliest(target):
