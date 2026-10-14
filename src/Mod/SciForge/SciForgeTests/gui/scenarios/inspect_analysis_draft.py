@@ -78,10 +78,7 @@ def range_set():
     d = draft()
     h.check("Draft Angle start 10", d is not None and abs(d.DraftStart.Value - 10) < 1e-9)
     h.check("Draft Angle stop 60", d is not None and abs(d.DraftStop.Value - 60) < 1e-9)
-    st["no_zone"] = a.colors()
-    h.check(
-        "no yellow without Tolerance Zone", a.share(st["no_zone"], "yellow") < 0.01, st["no_zone"]
-    )
+    st["no_zone"] = a.colors()  # the in-between band: a blend from red to green
     a.tick(a.panel().field("ToleranceZone"), True)
 
 
@@ -89,7 +86,12 @@ def zone():
     d = draft()
     h.check("Tolerance Zone on", d is not None and d.ToleranceZone)
     counts = a.colors()
-    h.check("the rounds' in-between band is yellow", a.share(counts, "yellow") > 0.03, counts)
+    before = a.share(st["no_zone"], "yellow")
+    h.check(
+        "the rounds' in-between band turns yellow",
+        a.share(counts, "yellow") > 2 * before + 0.02,
+        (counts, st["no_zone"]),
+    )
     h.shot("2-tolerance")
     a.tick(a.panel().field("ToleranceZone"), False)
     s.type_into(a.panel().field("DraftStart"), "1")

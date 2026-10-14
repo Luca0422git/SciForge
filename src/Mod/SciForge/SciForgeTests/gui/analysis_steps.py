@@ -189,28 +189,30 @@ def part_rect(obj=None, margin=0):
 
 
 def classify(r, g, b_):
-    """A rough name for a screen colour."""
+    """A rough name for a screen colour (by hue; lit colours vary in brightness)."""
+    import colorsys
+
     if abs(r - 42) <= 4 and abs(g - 42) <= 4 and abs(b_ - 42) <= 4:
         return "background"
-    if r < 40 and g < 40 and b_ < 40:
+    hue, sat, val = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b_ / 255.0)
+    if val < 0.16:
         return "black"
-    if r > 215 and g > 215 and b_ > 215:
+    if val > 0.92 and sat < 0.1:
         return "white"
-    if max(r, g, b_) - min(r, g, b_) < 18:
+    if sat < 0.18:
         return "grey"
-    if r > 170 and g < 110 and b_ < 110:
+    deg = hue * 360.0
+    if deg < 14 or deg >= 330:
         return "red"
-    if r > 170 and g > 140 and b_ < 110:
-        return "yellow"
-    if r > 170 and 90 <= g <= 160 and b_ < 90:
+    if deg < 40:
         return "orange"
-    if g > 120 and r < 140 and b_ < 140 and g > r + 20 and g > b_ + 20:
+    if deg < 70:
+        return "yellow"
+    if deg < 170:
         return "green"
-    if b_ > 150 and r < 140 and b_ > r + 40:
+    if deg < 255:
         return "blue"
-    if r > 120 and b_ > 150 and g < 120:
-        return "violet"
-    return "other"
+    return "violet"
 
 
 def colors(rect=None, step=3):
