@@ -31,8 +31,9 @@ The full behaviour spec with sources is at the top of `docs/sciforge/parity/fill
 7. SciForge's own step `PartDesign::FeaturePython` (SciForgeType `FilletSets` /
    `ChamferSets`, `sciforge/fillet_sets.py`) for everything a FreeCAD Fillet / Chamfer cannot
    hold; a one-set constant fillet stays FreeCAD's (Press Pull and the parameters table keep
-   working). The dialog swaps one for the other in the same timeline place inside its undo
-   step; later steps stay on their edges (`blend.References` now also tracks SciForge's
+   working). The dialog turns FreeCAD's step into SciForge's the moment an option needs it,
+   in the same timeline place and inside its undo step (a SciForge step made simple again
+   stays SciForge's); later steps stay on their edges (`blend.References` now also tracks SciForge's
    step's `Picks`). Each set's size is a property (`Size1`, `SizeB1`, `Angle1`...) so formulas
    drive it; the parameters table lists the ones in use.
 8. **Press Pull** (Q) on a round of SciForge's step edits the size of the set that made it

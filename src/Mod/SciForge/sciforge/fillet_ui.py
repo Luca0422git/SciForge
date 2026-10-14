@@ -21,7 +21,7 @@ Length / Variable with radius points) and Tangent Chain on/off; the Chamfer dial
 chamfer sets. A plain fillet / chamfer (one row, one constant size, Tangent Chain on) is
 FreeCAD's PartDesign::Fillet / Chamfer (refined), so Press Pull's fillet editing
 (presspull_core.owning_fillet) keeps working on it; anything more is SciForge's own step
-(fillet_sets.py), and the dialog swaps one for the other the moment it is needed.
+(fillet_sets.py): the dialog turns FreeCAD's step into SciForge's the moment it is needed.
 """
 
 import contextlib

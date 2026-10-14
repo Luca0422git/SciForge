@@ -1175,18 +1175,7 @@ def read(obj):
     )
 
 
-# -- FreeCAD's fillet becomes this step (and the other way) ------------------------------------
-def spec_from_native(feature):
-    """The settings of a FreeCAD Fillet / Chamfer, as one row."""
-    kind = blend.kind_of(feature)
-    spec = core.default_spec(kind)
-    row = spec["sets"][0]
-    row.update(blend.read(feature))
-    _base, refs = blend.refs_of(feature)
-    row["count"] = len(refs)
-    return spec
-
-
+# -- FreeCAD's fillet becomes this step ------------------------------------------------------
 def replace(old, build):
     """Put a new step in the place of `old` in its body (the dialog's step turning from
     FreeCAD's Fillet into SciForge's, when a second set or another type is chosen):
