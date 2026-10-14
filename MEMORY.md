@@ -3474,8 +3474,12 @@ Compute All, Capture Image; the harness also resets the Preferences).
 surface, Offset Plane to object, timeline start, timeline names in the browser, formula units,
 lost picks kept, old coils/pipes upgraded). **Every builder of the plan is merged.**
 
-**Builders:** none running. Every area of the plan is merged. Briefs for relaunching an area
-are in `docs/sciforge/dev/briefs/` (area brief + `common.md`).
+**Builders (wave 4, launched 2026-10-14 ~07:00 UTC from 7282c76096):** every area of the
+first plan is merged; the gaps the parity docs still list are surveyed in
+`docs/sciforge/dev/remaining-gaps.md`. Six builders work in worktrees on `sf/drawings-2`,
+`sf/fillet-2`, `sf/components-2`, `sf/joints-2`, `sf/modeling-2`, `sf/modify-2` (briefs
+`docs/sciforge/dev/briefs/<area>.md` + `common.md`; session logs in
+`docs/sciforge/sessions/<area>.md`). Merge each with the merge routine below as it reports.
 
 **Merge trap (2026-10-14):** when two branches append blocks that end with the same lines
 (the golden `schema.py` `validate` wrappers), git's conflict hunk leaves the shared tail
