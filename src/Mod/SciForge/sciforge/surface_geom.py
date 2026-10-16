@@ -301,6 +301,26 @@ def _open_count(shape):
         return 0
 
 
+def stitched_edges(shapes, result, limit=400):
+    """Stitch: the open edges of the surfaces `shapes` that `result` (their stitch) closed,
+    the ones Fusion draws green. An edge counts as closed when its middle lies on none of
+    the edges the result leaves open. At most `limit` edges are looked at (a preview)."""
+    still = free_edges(result)
+    left = compound(still) if still else None
+    found = []
+    for shape in shapes:
+        for edge in free_edges(shape):
+            if len(found) >= limit:
+                return found
+            try:
+                mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+                if left is None or left.distToShape(Part.Vertex(mid))[0] > 1e-3:
+                    found.append(edge)
+            except Exception:
+                continue
+    return found
+
+
 def shells_or_faces(shape):
     """The connected pieces of a surface: its shells, plus faces in no shell."""
     pieces = list(shape.Shells)

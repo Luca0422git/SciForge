@@ -2116,6 +2116,7 @@ class StitchPanel(SurfacePanel):
         self.open_label.setWordWrap(True)
         self.open_label.setObjectName("SciForgeSurface_open_edges")
         self.layout.addRow(self.open_label)
+        self.stitched = []  # the open edges the stitch closes (drawn green)
         self.add_operation()
 
     def missing(self):
@@ -2186,22 +2187,45 @@ class StitchPanel(SurfacePanel):
         step = self.step if self.step is not None and _alive(self.step) else None
         if step is None or step.Shape.isNull() or "Invalid" in step.State:
             self.open_label.setText("")
+            self.stitched = []
             if self.overlay is not None:
                 self.overlay.clear("open")
+                self.overlay.clear("stitched")
             return
         shape = bodies.global_shape(step)
         free = g.free_edges(shape)
+        # Fusion draws the edges the stitch closes green and the ones left open red
+        self.stitched = self._stitched_edges(step, shape)
         if shape.Solids:
-            self.open_label.setText("Closed: the stitched surfaces make a solid body.")
+            self.open_label.setText(
+                "Closed: the stitched surfaces make a solid body (stitched edges drawn green)."
+            )
             self.open_label.setStyleSheet("color: #7fd38f;")
         else:
             self.open_label.setText(
-                "%s left open (drawn red). Raise the tolerance to close gaps up to it."
-                % core.count_label(len(free), "edge")
+                "%s left open (drawn red), the stitched ones drawn green. Raise the tolerance "
+                "to close gaps up to it." % core.count_label(len(free), "edge")
             )
             self.open_label.setStyleSheet("color: #ff8a80;")
         if self.overlay is not None:
             self.overlay.show("open", [g.compound(free)] if free else [], RED, 0.0, 4.0)
+            stitched = [g.compound(self.stitched)] if self.stitched else []
+            self.overlay.show("stitched", stitched, GREEN, 0.0, 4.0)
+
+    def _stitched_edges(self, step, shape):
+        """The open edges of the picked surfaces that the stitch closed."""
+        from . import surface_geom as g
+
+        try:
+            own = bodies.body_of(step)
+            inputs = [surface._base(step)]
+            for body, _sub in self.picks.get("bodies") or []:
+                if body is not own and _alive(body):
+                    inputs.append(surface.whole_shape(body))
+            return g.stitched_edges(inputs, shape)
+        except Exception as exc:
+            warn("stitch stitched edges: %s" % exc)
+            return []
 
 
 # -- MODIFY: Unstitch ------------------------------------------------------------------------------
