@@ -43,6 +43,7 @@ KINDS = {
     "torus": ("Torus", "torus"),
     "coil": ("Coil", "coil"),
     "pipe": ("Pipe", "pipe"),
+    "gear": ("Gear", "gear"),
     "primitive": ("Primitive", "box"),
     "pattern_rect": ("Rectangular Pattern", "pattern_rect"),
     "pattern_circ": ("Circular Pattern", "pattern_circ"),

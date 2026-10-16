@@ -729,7 +729,7 @@ def set_support(obj, support):
         obj.MapMode = "FlatFace"
 
 
-HELPER_ROLES = ("PrimitivePlane", "CoilSection", "PipePath", "PipeSection")
+HELPER_ROLES = ("PrimitivePlane", "CoilSection", "PipePath", "PipeSection", "GearProfile")
 
 
 def drop_orphans(doc):

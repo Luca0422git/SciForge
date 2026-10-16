@@ -1,0 +1,37 @@
+{
+  "id": "sf_gear_spur_basic",
+  "title": "Spur gear on XY: module 2, 24 teeth, 20 degrees, root fillet 0.5, 10 thick, 10 mm bore",
+  "tags": [
+    "gear",
+    "spur"
+  ],
+  "steps": [
+    {
+      "op": "sf_gear",
+      "id": "g1",
+      "plane": "XY",
+      "type": "spur",
+      "module": 2,
+      "teeth": 24,
+      "pressure_angle": 20,
+      "fillet": 0.5,
+      "thickness": 10,
+      "hole": 10
+    }
+  ],
+  "expect": {
+    "volume": 16993.535427592553,
+    "bbox": [
+      -26,
+      -26,
+      0,
+      26,
+      26,
+      10
+    ],
+    "abs_tol": 0.005,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "bbox: outside diameter m(z+2) = 52; 24 teeth put a tooth tip on +-x and +-y; the involute's Bezier approximation (FreeCAD's fcgear) ends 0.001 mm beyond the tip circle, hence abs_tol 0.005. Volume: FreeCAD 1.1.4's Pad of the outline; gear_core.area() (Green's theorem on the same lines, arcs and Beziers) times 10 agrees to 1e-11, but that is the same outline, so the source stays baseline."
+  }
+}

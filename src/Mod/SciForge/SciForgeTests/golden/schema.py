@@ -1770,3 +1770,4 @@ def validate(model):  # noqa: F811  (adds the component checks, components-2)
 
 
 from . import modify2_schema  # noqa: E402,F401  (Modify part 2 steps; it wraps validate)
+from . import gear_schema  # noqa: E402,F401  (Gear steps; it wraps validate)

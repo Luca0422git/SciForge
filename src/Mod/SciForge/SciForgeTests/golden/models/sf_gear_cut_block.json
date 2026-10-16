@@ -1,0 +1,58 @@
+{
+  "id": "sf_gear_cut_block",
+  "title": "Gear cut 4 mm deep into the top of a 60 x 60 x 10 block (module 1.5, 16 teeth, no bore)",
+  "tags": [
+    "gear",
+    "cut"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "x": -30,
+      "y": -30,
+      "length": 60,
+      "width": 60,
+      "height": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_gear",
+      "id": "g1",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "x": 30,
+      "y": 30,
+      "module": 1.5,
+      "teeth": 16,
+      "fillet": 0.3,
+      "hole": 0,
+      "thickness": -4,
+      "operation": "cut"
+    }
+  ],
+  "expect": {
+    "volume": 34246.27758037516,
+    "bbox": [
+      -30,
+      -30,
+      0,
+      30,
+      30,
+      10
+    ],
+    "abs_tol": 0.0001,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "36000 less the gear's outline area x 4 (the Pocket goes into the block: a negative thickness, like Fusion). x, y are on the top face's own frame, whose origin is the box's first corner (-30, -30): 30, 30 is the middle. Volume: FreeCAD 1.1.4 baseline."
+  }
+}

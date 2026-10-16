@@ -1,0 +1,36 @@
+{
+  "id": "sf_gear_rack",
+  "title": "Rack on XY: module 2, 10 teeth, 20 degrees, root fillet 0.5, 5 mm under the root, 6 thick",
+  "tags": [
+    "gear",
+    "rack"
+  ],
+  "steps": [
+    {
+      "op": "sf_gear",
+      "id": "g1",
+      "plane": "XY",
+      "type": "rack",
+      "module": 2,
+      "teeth": 10,
+      "fillet": 0.5,
+      "rack_height": 5,
+      "thickness": 6
+    }
+  ],
+  "expect": {
+    "volume": 2785.0018592494084,
+    "bbox": [
+      -31.41592653589793,
+      -7.5,
+      0,
+      31.41592653589793,
+      2,
+      6
+    ],
+    "abs_tol": 0.0001,
+    "solids": 1,
+    "source": "analytic",
+    "note": "p = pi m = 2 pi; length 10 p = 20 pi centred on the click. Area: strip under the root 20 pi x 5 = 100 pi; each tooth above the root line s(ha + hf) - tan20 (ha^2 - hf^2) with s = p/2 = pi, ha = 2, hf = 2.5: 4.5 pi + 2.25 tan20; 20 root fillets r = 0.5 in corners of 110 deg: each adds r t - r^2 phi / 2 with t = r / tan55, phi = 70 deg. Total 464.16697654 x 6 = 2785.00185925. bbox y: root -2.5 less 5 = -7.5, tips +2."
+  }
+}

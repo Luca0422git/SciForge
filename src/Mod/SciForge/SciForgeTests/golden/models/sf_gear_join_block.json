@@ -1,0 +1,58 @@
+{
+  "id": "sf_gear_join_block",
+  "title": "Gear joined onto the top of a 60 x 60 x 10 block, 5 mm up (module 1.5, 16 teeth, 6 mm bore)",
+  "tags": [
+    "gear",
+    "join"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "b1",
+      "kind": "box",
+      "plane": "XY",
+      "x": -30,
+      "y": -30,
+      "length": 60,
+      "width": 60,
+      "height": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_gear",
+      "id": "g1",
+      "plane": {
+        "face": {
+          "normal": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "x": 30,
+      "y": 30,
+      "module": 1.5,
+      "teeth": 16,
+      "fillet": 0.3,
+      "hole": 6,
+      "thickness": 5,
+      "operation": "join"
+    }
+  ],
+  "expect": {
+    "volume": 38050.78135511943,
+    "bbox": [
+      -30,
+      -30,
+      0,
+      30,
+      30,
+      15
+    ],
+    "abs_tol": 0.0001,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "36000 plus the gear's outline area x 5 (the bore only goes through the gear: the block under it stays). x, y on the top face's frame (origin at the block's corner): 30, 30 is its middle. Volume: FreeCAD 1.1.4 baseline."
+  }
+}

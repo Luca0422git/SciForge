@@ -384,6 +384,18 @@ def _():
     return out
 
 
+@icon("gear")
+def _():
+    # A spur gear seen from the front: ten trapezoid teeth round a ring, a dark bore.
+    points = []
+    teeth = 10
+    for k in range(teeth):
+        a = 2 * math.pi * k / teeth
+        for da, r in ((-0.20, 13.0), (-0.11, 19.0), (0.11, 19.0), (0.20, 13.0)):
+            points.append((24 + r * math.cos(a + da), 24 + r * math.sin(a + da)))
+    return poly(points, BLUE[1]) + circle(24, 24, 9.5, BLUE[0]) + circle(24, 24, 4.5, DARK)
+
+
 @icon("pipe")
 def _():
     return (
