@@ -16,6 +16,11 @@ the taper angle. Dragging into the part switches to Cut, as Fusion does, unless 
 picked the operation yourself; a cut shows in red while the dialog is open. A new
 extrude starts at 0 and shows nothing until you drag or type; the profile's sketch stays
 in view until OK. Problems are shown in the dialog, which then stays open.
+
+With a profile picked, a click on a face out of the profile's plane ends the extrusion
+there (Luca; Fusion): a parallel face, a corner or a parallel plane sets the distance, a
+curved or tilted face is To Object; dragging the arrow over such a face or corner snaps to
+it (extrude_to_face_core.py, extrude_to_face.py).
 """
 
 import math
@@ -25,12 +30,15 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_pick, taskui
-from . import bodies, extrude_bodies, text, ui_icon_path, warn
+from . import bodies, extrude_bodies, extrude_to_face, text, ui_icon_path, warn
 from . import extrude_bodies_core as bodies_core
+from . import extrude_to_face_core as to_face
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, BoxCarrier, DistanceField, Panel, ValueBoxes
 
-ZERO_HINT = "Drag the arrow or type a distance."
+ZERO_HINT = "Drag the arrow, type a distance, or click a face to extrude up to it."
+# Seconds after an arrow drag is let go during which a selection is the release's, no click.
+RELEASE_IS_NO_CLICK = 0.4
 SOLID_HINT = (
     "Click inside sketch areas (shaded blue) or on flat faces.\n"
     "Click a picked one again to drop it."
@@ -518,6 +526,13 @@ class ExtrudePanel(Panel):
         self.value_boxes = ValueBoxes(self, default="distance")
         self.cut_view = None  # the red cut preview (cut_preview.CutPreview)
         self.bodies_view = None  # the listed bodies in blue while the row is active
+        # A click on a face elsewhere ends the extrusion there (Fusion; Luca): what the
+        # dialog says about it (key, value, words), where the mouse is over the 3D view (a
+        # dragged arrow snaps to the face or point under it) and the mark on that face.
+        self.note = None
+        self._mouse = None
+        self._mouse_filter = None
+        self.snap_mark = None
         self._init_bodies()
         if feature is not None:
             try:
@@ -955,6 +970,36 @@ class ExtrudePanel(Panel):
         self.observer = Observer()
         Gui.Selection.addObserver(self.observer)
         self._make_picker()
+        self._track_mouse()
+
+    def _track_mouse(self):
+        """Remember where the mouse is over the 3D view: a dragged arrow snaps to the face or
+        point under it (Fusion). An event filter on the view's widget that only reads the
+        position (the event goes on to FreeCAD unchanged)."""
+        panel = self
+        kinds = (
+            QtCore.QEvent.MouseMove,
+            QtCore.QEvent.MouseButtonPress,
+            QtCore.QEvent.MouseButtonRelease,
+        )
+
+        class MouseFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                try:
+                    if event.type() in kinds:
+                        where = event.position() if hasattr(event, "position") else event.pos()
+                        panel._mouse = QtCore.QPoint(int(where.x()), int(where.y()))
+                except Exception:
+                    pass
+                return False
+
+        try:
+            gl = taskui.view_widget()
+            if gl is not None:
+                self._mouse_filter = (gl, MouseFilter())
+                gl.installEventFilter(self._mouse_filter[1])
+        except Exception as exc:
+            warn("extrude: mouse tracking unavailable: %s" % exc)
 
     def _make_picker(self):
         """The shaded sketch areas to click (and, for a thin extrude, the sketch curves)."""
@@ -1002,6 +1047,13 @@ class ExtrudePanel(Panel):
         if self.picker is not None:
             self.picker.remove()
             self.picker = None
+        tracked, self._mouse_filter = self._mouse_filter, None
+        if tracked is not None:
+            try:
+                tracked[0].removeEventFilter(tracked[1])
+            except Exception:
+                pass  # the view closed with its document
+        self._clear_snap_mark()
 
     # -- picks ------------------------------------------------------------------------------
     def _region_clicked(self, sketch, sub):
@@ -1068,19 +1120,19 @@ class ExtrudePanel(Panel):
             return
         try:
             # Only this design's objects: a click in another open document is not a pick.
-            picks = [pk for pk in profile_pick.picks() if pk[0].Document.Name == self.doc.Name]
+            picks = [pk for pk in _picks_with_points() if pk[0].Document.Name == self.doc.Name]
             if not picks:
                 return
             Gui.Selection.clearSelection()
             if taskui.box_click_taken():
                 return  # the click that left an arrow's value box: not a pick
             recent = self.picker is not None and self.picker.clicked_region_recently()
-            for obj, short in picks:
-                self._picked(obj, short, recent)
+            for obj, short, point in picks:
+                self._picked(obj, short, recent, point)
         except Exception as exc:
             warn("extrude pick: %s" % exc)
 
-    def _picked(self, obj, short, region_clicked):
+    def _picked(self, obj, short, region_clicked, point=None):
         if self.active == "bodies":
             self._body_picked(obj)
             return
@@ -1093,11 +1145,22 @@ class ExtrudePanel(Panel):
                 if short.startswith("InternalFace") and not region_clicked:
                     self._toggle((obj, short))
                 return  # sketch lines: the shaded areas are the profiles
-            if region_clicked or not short.startswith("Face"):
+            if region_clicked:
+                return
+            # Fusion: the profiles lie in one plane, so with one picked, a click on a face
+            # elsewhere (a vertex, a plane) says where the extrusion ends (Luca's request).
+            # A face in a profile's plane is a profile pick, as before.
+            if self.profiles and self._end_at(obj, short, point):
+                return
+            if not short.startswith("Face"):
                 return
             ref = self._base_face(obj, short)
+            if ref is None and self._ours(obj):
+                # A face of the part that the preview changed (a Join next to it): where it
+                # was clicked it is still that face of the part.
+                ref = extrude_to_face.base_face_at(self._base_feature(), point)
             if ref is None:
-                picked = self._picked_face_moved(obj, short)
+                picked = self._picked_face_moved(obj, short, point)
                 if picked is not None:
                     self._toggle(picked)  # the end of the preview: the face it came from
                     return
@@ -1164,15 +1227,21 @@ class ExtrudePanel(Panel):
         name = profile_pick.face_name_in(base, face)
         return (base, name) if name else None
 
-    def _picked_face_moved(self, obj, short):
+    def _picked_face_moved(self, obj, short, clicked=None):
         """The picked profile (a face or a sketch area) whose extruded end was clicked: the
         preview covers the profile, so clicking "it" again lands on the end of the preview
-        (Fusion's preview cannot be picked; the click goes to the profile)."""
+        (Fusion's preview cannot be picked; the click goes to the profile). `clicked`: the
+        point clicked on that face (else a point inside it): an end that merged with a face
+        of the part (a Join flush with it) is the profile's only where it covers it."""
         face = profile_pick.global_face(obj, short)
         if face is None or face.Surface.TypeId != "Part::GeomPlane":
             return None
         normal = extrude.face_normal(face)
         point = extrude.interior_point(face)
+        if clicked is not None:
+            on_face = App.Vector(clicked)
+            on_face = on_face - normal * (on_face - point).dot(normal)  # onto the plane
+            point = on_face
         for ref in self.profiles:
             try:
                 starts = extrude.global_faces([ref])
@@ -1188,6 +1257,279 @@ class ExtrudePanel(Panel):
                 if profile_pick.inside(start, point - axis * shift):
                     return ref
         return None
+
+    # -- a click on a face elsewhere: the extrusion ends there ---------------------------------
+    # Luca: "when extruding, clicking on a face should bring that extrusion to the same height
+    # as that face". Fusion's profiles lie in one plane, so once one is picked a click on a
+    # face out of that plane is no profile: a flat face parallel to the profile (or a vertex,
+    # or a parallel plane) sets the distance to the exact number that ends the extrusion
+    # there, Extent staying Distance (Fusion: not parametric); a curved or tilted face is To
+    # Object with that face. Dragging an arrow over a parallel face or a vertex snaps to it.
+    # The rules and words are in extrude_to_face_core.py (parity/extrude-presspull.md).
+    def _end_at(self, obj, short, point=None):
+        """A click with a profile picked: True when it set where the extrusion ends (or said
+        why it cannot end there); False when it is a profile pick as before (a face in a
+        profile's plane, the preview's own end) or nothing at all (an edge, a body)."""
+        if time.time() - getattr(self, "_released_at", 0.0) < RELEASE_IS_NO_CLICK:
+            # A selection made by the release of an arrow drag over a face is no click: the
+            # drag itself already snapped (or not) to what was under the mouse.
+            return True
+        try:
+            found = self._end_target(obj, short, point)
+        except extrude.ExtrudeError:
+            return False
+        if found is None:
+            return False
+        target, level, kind, what, ref = found
+        decision = to_face.plan(kind, level, self.options, what)
+        action = decision["action"]
+        if action == "refuse":
+            self.message.setText("⚠ " + decision["message"])
+            return True
+        if action == "distance":
+            self._end_distance(decision["key"], decision["value"], decision["note"])
+        else:
+            self._end_object(decision["side"], ref, decision["note"])
+        return True
+
+    def _ours(self, obj):
+        """True for the extrude's own preview (its feature, helpers and followers)."""
+        if extrude_bodies.is_follower(obj) or extrude.is_helper(obj):
+            return True
+        return self.target is not None and obj is self.target
+
+    def _end_target(self, obj, short, point=None):
+        """(target, level, kind, what, reference) for something clicked or under the mouse
+        once a profile is picked, or None when the extrusion is not to end there: a face or
+        point in a profile's plane (a profile pick, as before), the preview's own faces and
+        corners, an edge, a body, a sketch. `level` is the target's signed height from where
+        the extrusion starts, along the profile's normal (extrude_to_face_core.plan)."""
+        if obj is None or extrude.is_sketch(obj) or text.is_text(obj):
+            return None
+        if obj.TypeId in extrude.PLANE_TYPES:
+            ref = (obj, "")
+        elif short.startswith("Face"):
+            ref = self._base_face(obj, short)
+            if ref is None and self._ours(obj):
+                # A face of the preview that merged with the part's (a Join flush with it):
+                # where it was clicked, it is still that face of the part.
+                ref = extrude_to_face.base_face_at(self._base_feature(), point)
+            if ref is None:
+                return None
+        elif short.startswith("Vertex"):
+            if self._ours(obj) and not self._base_has_vertex(obj, short):
+                return None  # a corner of the preview itself
+            ref = (obj, short)
+        else:
+            return None
+        target = extrude_to_face.target(ref[0], ref[1], point)
+        if target is None:
+            return None
+        normal, first, levels = self._profile_frame()
+        kind = to_face.kind_of(target["shape"], target["normal"], normal)
+        here = to_face.height(target["point"], first, normal)
+        if kind == "height" and to_face.in_profile_plane(here, levels):
+            return None  # in a profile's plane: a profile pick (a face), or nothing
+        level = here - self._start_level()
+        return target, level, kind, to_face.what_of(target["shape"], kind), ref
+
+    def _profile_frame(self):
+        """(normal, a point inside the first profile, the height of each profile's plane),
+        kept for the picked profiles: a dragged arrow asks at every step, and finding a point
+        inside a ring-shaped profile takes a while."""
+        key = tuple(extrude.key(p) for p in self.profiles)
+        cached = getattr(self, "_frame_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        normal = extrude.profile_normal(self.profiles)
+        first = extrude.profile_point(self.profiles)
+        levels = []
+        for profile in self.profiles:
+            try:
+                levels.append(to_face.height(extrude.profile_point([profile]), first, normal))
+            except extrude.ExtrudeError:
+                continue
+        self._frame_cache = (key, (normal, first, levels))
+        return normal, first, levels
+
+    def _base_has_vertex(self, obj, short):
+        """True when the vertex of the preview is also a corner of the part before it."""
+        point = extrude_to_face.vertex_point(obj, short)
+        base = self._base_feature()
+        if point is None or base is None or base.Shape.isNull():
+            return False
+        shape = extrude._to_global(base.Shape, base)
+        return any((App.Vector(v.Point) - point).Length < 1e-6 for v in shape.Vertexes)
+
+    def _start_level(self):
+        """Where the extrusion starts, above the profile's plane (a start offset or object)."""
+        if self.options.get("start", "profile") == "profile":
+            return 0.0
+        try:
+            return float(extrude.start_offset_of(self.profiles, self.options))
+        except extrude.ExtrudeError:
+            return 0.0
+
+    def _end_distance(self, key, value, note):
+        """Set a side's distance so the extrusion ends at the clicked face (the exact number,
+        Extent Distance), the arrow with it, and say so in the dialog."""
+        field = self.distance if key == "distance" else self.distance2
+        combo = self.extent if key == "distance" else self.extent2
+        self.drop_formula(key)
+        new_extent = combo.currentData() != "distance"
+        self._quiet = True
+        try:
+            if new_extent:
+                _set_combo(combo, "distance")
+            field.set_value(value)
+        finally:
+            self._quiet = False
+        arrow = self.draggers.get(key)
+        if arrow is not None and not _is_dragging(arrow):
+            arrow.set_distance(self._arrow_value(value) if key == "distance" else value)
+        self.note = (key, float(value), note)
+        log("extrude: %s" % note)
+        self._changed(new_geometry=new_extent)
+        self.info.setText(note)  # at once; show_status says it again after the rebuild
+
+    def _end_object(self, side, ref, note):
+        """End a side on the clicked face with Fusion's To Object (a curved or tilted face, or
+        a new object for a side that is To Object already)."""
+        suffix = "" if side == 1 else "2"
+        combo = self.extent if side == 1 else self.extent2
+        self._quiet = True
+        try:
+            _set_combo(combo, "to_object")
+        finally:
+            self._quiet = False
+        self.options["extent_object" + suffix] = ref
+        self.fields["extent_object" + suffix].set_text(_ref_text(ref))
+        self.note = ("extent_object" + suffix, ref, note)
+        log("extrude: %s" % note)
+        self._changed(new_geometry=True)
+        self.info.setText(note)
+
+    def _note_text(self):
+        """What the last click on a face did, while it still holds (a value typed or dragged
+        since, or another extent chosen, drops it)."""
+        note = self.note
+        if not note:
+            return ""
+        key, value, words = note
+        side_two = key in ("distance2", "extent_object2")
+        extent = self.options.get("extent2" if side_two else "extent")
+        if side_two and self.options.get("direction") != "two_sides":
+            holds = False
+        elif key in ("distance", "distance2"):
+            holds = extent == "distance" and abs(float(self.options.get(key, 0.0)) - value) < 1e-9
+        else:
+            have = self.options.get(key)
+            holds = (
+                extent == "to_object"
+                and have is not None
+                and extrude.key(have) == extrude.key(value)
+            )
+        if not holds:
+            self.note = None
+            return ""
+        return words
+
+    # -- a dragged arrow snaps to a face or point under the mouse --------------------------------
+    def _drag_snap(self, key):
+        """(dialog value, words) the arrow `key` snaps to while it is dragged with the mouse
+        over a flat face parallel to the profile or a vertex (Fusion), or None. The face (or
+        point) shows marked while the button is held; letting go there keeps the value. A
+        press on the arrow let go without moving it is no drag: it snaps to nothing."""
+        arrow = self.draggers.get(key)
+        held = arrow is not None and arrow.box_active()
+        letting_go = arrow is not None and not held and getattr(arrow, "_was_active", False)
+        moved = getattr(self, "_drag_moved", None)
+        if moved is None:
+            moved = self._drag_moved = set()
+        if letting_go:
+            # The release runs the arrow's on_drag and on_release in one go: one answer.
+            cached = getattr(self, "_release_snap", None)
+            if cached is not None and cached[0] == key and time.time() - cached[1] < 0.1:
+                return cached[2]
+            self._released_at = time.time()
+            was_moved = key in moved
+            moved.discard(key)
+            result = self._snap_now(key, held=False) if was_moved else None
+            self._clear_snap_mark()
+            self._release_snap = (key, time.time(), result)
+            return result
+        if not held:
+            self._clear_snap_mark()
+            return None
+        moved.add(key)
+        return self._snap_now(key, held=True)
+
+    def _snap_now(self, key, held):
+        if self._mouse is None or not self.profiles:
+            self._clear_snap_mark()
+            return None
+        try:
+            found = self._snap_under_mouse(key)
+        except extrude.ExtrudeError:
+            found = None  # (the profile is being changed: no height to snap to now)
+        except Exception as exc:
+            warn("extrude snap: %s" % exc)
+            found = None
+        if found is None:
+            self._clear_snap_mark()
+            return None
+        value, words, mark_key, mark = found
+        if held:
+            self._show_snap_mark(mark_key, mark)
+        return value, words
+
+    def _snap_under_mouse(self, key):
+        gl = taskui.view_widget()
+        view = self._view()
+        if gl is None or view is None:
+            return None
+        ratio = gl.devicePixelRatioF() or 1.0
+        pixel = (self._mouse.x() * ratio, (gl.height() - self._mouse.y()) * ratio)
+        try:
+            near = view.getPoint(int(pixel[0]), int(pixel[1]))
+            scale = taskui.mm_per_pixel(view, near)
+        except Exception:
+            scale = 0.1
+        hits = extrude_to_face.hits_at(view, pixel, scale)
+        # At the front-most spot, a corner first (Fusion snaps to points too), else the face.
+        hits = [h for h in hits if h[1].startswith("Vertex")] + [
+            h for h in hits if h[1].startswith("Face")
+        ]
+        if not hits:
+            return None
+        obj, short, point = hits[0]
+        found = self._end_target(obj, short, point)
+        if found is None:
+            return None
+        target, level, kind, what, ref = found
+        if kind != "height" or target["shape"] not in ("flat", "vertex"):
+            return None  # only a parallel face or a point gives the arrow a height
+        direction = self.direction.currentData()
+        measurement = self.measurement.currentData()
+        value = to_face.drag_value(key, level, direction, measurement)
+        if value is None:
+            return None
+        words = to_face.snap_note(key, value, direction, measurement, what)
+        if target["shape"] == "vertex":
+            mark = extrude_to_face.point_mark(target["point"], scale)
+        else:
+            mark = target["shape_obj"]
+        return value, words, (extrude.key(ref), round(value, 6)), mark
+
+    def _show_snap_mark(self, key, shape):
+        if self.snap_mark is None:
+            self.snap_mark = extrude_to_face.SnapHighlight(self._view())
+        self.snap_mark.show(key, shape)
+
+    def _clear_snap_mark(self):
+        mark = getattr(self, "snap_mark", None)
+        if mark is not None:
+            mark.clear()
 
     def _source_body(self):
         if self.profiles:
@@ -1317,26 +1659,52 @@ class ExtrudePanel(Panel):
 
     def _dragged(self, value):
         self.drop_formula("distance")
-        value = round(value, 2)
-        if self.direction.currentData() == "symmetric":
-            value = abs(value)
-            if self.measurement.currentData() == "whole":
-                value *= 2.0
-        self._quiet = True
-        try:
-            self.distance.set_value(value)
-        finally:
-            self._quiet = False
-        self._changed()
+        snap = self._drag_snap("distance")  # over a parallel face or a point: its height
+        if snap is not None:
+            value = snap[0]
+        else:
+            value = round(value, 2)
+            if self.direction.currentData() == "symmetric":
+                value = abs(value)
+                if self.measurement.currentData() == "whole":
+                    value *= 2.0
+        if self._snapped("distance", self.distance, value, snap):
+            self._changed()
+        self._show_note()
 
     def _dragged2(self, value):
         self.drop_formula("distance2")
+        snap = self._drag_snap("distance2")
+        value = snap[0] if snap is not None else round(max(value, 0.0), 2)
+        if self._snapped("distance2", self.distance2, value, snap):
+            self._changed()
+        self._show_note()
+
+    def _show_note(self):
+        """The words of a snap at once (show_status says them again after the rebuild,
+        which takes a while on a detailed part or when the extrude turns into a cut)."""
+        if not getattr(self, "waiting", ""):
+            self.info.setText(self._note_text())
+
+    def _snapped(self, key, field, value, snap):
+        """Put a dragged value into its field. A snap's words show while it holds, and once
+        the arrow is let go on a face it is put where the extrusion ends (while the button
+        is held it follows the mouse: Coin's own drag). False when nothing changed (the
+        mouse moving on over the face it snapped to: no preview to rebuild)."""
+        arrow = self.draggers.get(key)
+        held = arrow is not None and arrow.box_active()
+        same = abs(field.value() - value) < 1e-12
         self._quiet = True
         try:
-            self.distance2.set_value(round(max(value, 0.0), 2))
+            field.set_value(value)
         finally:
             self._quiet = False
-        self._changed()
+        if snap is not None:
+            self.note = (key, float(value), snap[1])
+            if arrow is not None and not held:
+                arrow.set_distance(self._arrow_value(value) if key == "distance" else value)
+                log("extrude: %s" % snap[1])
+        return not (same and held and snap is not None)
 
     def _offset_dragged(self, value):
         self._quiet = True
@@ -1556,7 +1924,7 @@ class ExtrudePanel(Panel):
     def show_status(self):
         self._update_bodies_row()
         waiting = getattr(self, "waiting", "")
-        self.info.setText(waiting)
+        self.info.setText(waiting or self._note_text())
         if self.formula_error:
             self.message.setText("⚠ " + self.formula_error)
             return
@@ -2282,6 +2650,27 @@ def _plain(text):
         if needle.lower() in (text or "").lower():
             return said
     return text
+
+
+def _picks_with_points():
+    """[(object, short element name, clicked point or None)] of the current selection, like
+    profile_pick.picks() (a face picked on a Body is its Tip's), with the 3D point each
+    element was clicked at (design coordinates)."""
+    found = []
+    for sel in Gui.Selection.getSelectionEx():
+        names = list(sel.SubElementNames) or [""]
+        try:
+            points = list(sel.PickedPoints or [])
+        except Exception:
+            points = []
+        for i, name in enumerate(names):
+            obj, short = profile_pick.resolve(sel.Object, name)
+            if obj is not None:
+                point = App.Vector(points[i]) if i < len(points) and name else None
+                if point is not None and point.Length == 0.0:
+                    point = None  # FreeCAD's "no point" (picked in the browser, a box)
+                found.append((obj, short, point))
+    return found
 
 
 def _is_dragging(handle):

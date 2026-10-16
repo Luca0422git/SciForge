@@ -1,0 +1,76 @@
+{
+  "id": "extrude_to_cylinder_face",
+  "title": "Extrude a rectangle as a new body up To Object the round face of a cylinder in another body above it (a click on a curved face while extruding)",
+  "tags": [
+    "extrude",
+    "to-object"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "circle": [
+            15,
+            40,
+            30
+          ],
+          "name": "bar"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "direction": "symmetric",
+      "distance": 100
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            10
+          ],
+          "name": "post"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "operation": "new_body",
+      "extent": "to_object",
+      "to": {
+        "face": {
+          "type": "cylinder",
+          "count": 1
+        },
+        "of": "e1"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4753.098722674886,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      10,
+      14.01923788646684
+    ],
+    "source": "analytic",
+    "note": "The new body is the post alone. Cylinder R30 along X through (y 15, z 40) in the first body; the post 40 x 10 rises to its underside z(y) = 40 - sqrt(900 - (y - 15)^2): 40 * int_0^10 z dy = 40 * (400 - 281.1725319) = 4753.0987 (int sqrt(r^2-u^2) du = (u sqrt(r^2-u^2) + r^2 asin(u/r))/2), highest at y 0 (z 40 - sqrt(675)). FreeCAD's Pad 'up to face' on a curved face of another body started the post part way up; SciForge's own extrude feature builds it."
+  }
+}

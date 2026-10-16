@@ -10,7 +10,10 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   line angle from the X axis matches Fusion's forum answers.) No 3D Sketch. Project to Surface
   curves sit outside the sketch (not in the browser or timeline). Chamfer lines only.
 - **extrude-presspull.md**: (To Object extend options, Offset and a following Start: Object by
-  sf/modeling-2.) Move, Scale and Draft handles have no value box.
+  sf/modeling-2; a clicked face or corner sets the height, and a held arrow snaps to it, by
+  sf/fix-extrude-to-face.) Move, Scale and Draft handles have no value box. Press Pull on a
+  face (an offset) does not snap to a clicked face; no snapping to edges or sketch points
+  while dragging.
 - **fillet.md**: (sf/fillet-2 built radius sets, Chord Length, Variable, Tangent Chain off,
   Rule and Full Round fillets.) Left: G2, Setback, Asymmetric (kernel); Full Round only on a
   straight rib between parallel walls; radius points take plain numbers.
