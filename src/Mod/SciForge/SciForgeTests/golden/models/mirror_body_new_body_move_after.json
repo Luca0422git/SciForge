@@ -1,0 +1,74 @@
+{
+  "id": "mirror_body_new_body_move_after",
+  "title": "A body mirrored across YZ as a New Body, then the original moved 20 up: the mirrored body stays",
+  "tags": [
+    "mirror",
+    "bodies",
+    "new-body",
+    "move",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "body": true,
+      "plane": "YZ",
+      "operation": "new_body"
+    },
+    {
+      "op": "move_bodies",
+      "id": "mv1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "translate",
+      "dz": 20
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "m1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 24000,
+    "area": 7600,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      -40,
+      0,
+      0,
+      40,
+      30,
+      30
+    ],
+    "source": "analytic",
+    "note": "The original moved to z 20..30; its mirror image stays at x -40..0, z 0..10 (SciForge before 2026-10-16 moved it too). V = 2*40*30*10; A = 2*(2*1200 + 2*400 + 2*300)."
+  }
+}

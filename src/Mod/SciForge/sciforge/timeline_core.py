@@ -903,6 +903,30 @@ def _keys_for(new_items, moved=None):
     return changed
 
 
+@dataclass(frozen=True)
+class _Row:
+    name: str
+    body: object
+    key: float
+
+
+def keys_to_go_before(rows, name, before):
+    """Creation-order keys that put step ``name`` right before step ``before`` in merge()'s
+    row, everything else in the same order (``rows``: build()'s input dicts, with name, body
+    and key). {} when it is before it already or either is unknown. Used when a step is added
+    while the history marker stands right before a step outside the bodies: by its creation
+    order the new step would come after that step (Fusion adds it at the marker)."""
+    merged = merge(rows)
+    names = [r["name"] for r in merged]
+    if name not in names or before not in names or names.index(name) < names.index(before):
+        return {}
+    others = [r for r in merged if r["name"] != name]
+    at = [r["name"] for r in others].index(before)
+    wanted = others[:at] + [merged[names.index(name)]] + others[at:]
+    items = [_Row(r["name"], r.get("body"), float(r.get("key", 0))) for r in wanted]
+    return _keys_for(items, name)
+
+
 def rebased(old_timeline, plan):
     """Solid steps whose previous solid in their body changes with the move: their
     edges/faces must still exist on the new base."""

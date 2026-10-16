@@ -545,5 +545,46 @@ class ShownWhileSketchingTests(unittest.TestCase):
         self.assertIsNone(core.shown_while_sketching([], 3))
 
 
+class StepAtMarkerBeforeRootStepTests(unittest.TestCase):
+    """A step added to a body while the marker stands right before a pattern of bodies (a
+    step outside the bodies) goes in before that pattern (fix-pattern-bodies, 2026-10-16)."""
+
+    def rows(self):
+        # Body: Sketch, Pad, then (added at the marker) Sketch2, Pad2, then the older Move;
+        # the pattern of the body was made between Pad and the Move.
+        return [
+            feat("Sketch", SKETCH, 1),
+            feat("Pad", PAD, 2),
+            feat("Sketch2", SKETCH, 9),
+            feat("Pad2", PAD, 10),
+            feat("Move", "SciForge::MoveCopy", 6),
+            feat("Pattern", "SciForge::RectangularPattern", 4, body=None, rolls=True),
+        ]
+
+    def test_by_creation_order_it_lands_after_the_pattern(self):
+        names = [r["name"] for r in core.merge(self.rows())]
+        self.assertLess(names.index("Pattern"), names.index("Sketch2"))
+
+    def test_keys_put_it_right_before_the_pattern(self):
+        rows = self.rows()
+        keys = core.keys_to_go_before(rows, "Sketch2", "Pattern")
+        self.assertTrue(keys)
+        rows = [dict(r, key=keys.get(r["name"], r["key"])) for r in rows]
+        keys = core.keys_to_go_before(rows, "Pad2", "Pattern")
+        rows = [dict(r, key=keys.get(r["name"], r["key"])) for r in rows]
+        names = [r["name"] for r in core.merge(rows)]
+        self.assertEqual(names, ["Sketch", "Pad", "Sketch2", "Pad2", "Pattern", "Move"])
+        tl = core.build(rows, {"Body": "Pad2"}, marker_before="Pattern")
+        state = {i.name: i.state for i in tl.items}
+        self.assertEqual(state["Pad2"], "done")
+        self.assertEqual(state["Pattern"], "rolled_back")  # the marker is still before it
+        self.assertEqual(state["Move"], "rolled_back")
+
+    def test_nothing_to_do_when_it_is_before_already(self):
+        rows = self.rows()
+        self.assertEqual(core.keys_to_go_before(rows, "Pad", "Pattern"), {})
+        self.assertEqual(core.keys_to_go_before(rows, "Nope", "Pattern"), {})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,8 @@ Path 15, a Faces pattern of a hole's wall, then the hole made shallower from the
 Path 16, a fillet's round face alone as Faces: the dialog says why it cannot be repeated in
          plain words (before: "<unknown exception data>", OpenCASCADE's own text). Cancel.
 Path 17, a pattern of the body (new bodies), then the copied body deleted in the browser:
-         the pattern step says in plain words why it cannot be computed (before: a Python
+         the copies stay and the pattern step says in plain words why it keeps them, as a
+         warning, not red (before 2026-10-16 it failed; earlier still: a Python
          AttributeError from the copies); Ctrl+Z brings the body back and the step is fine.
 
 Hand-derived: box 40 x 30 x 10 = 12000; boss r 4 x 4 = 64 pi; hole r 1.5 through the boss
@@ -341,8 +342,13 @@ def p17_said():
     h.check("the pattern step is still there", len(steps) == 1, steps)
     if steps:
         kind, why = timeline_ops.problem(steps[0])
-        h.check("it shows why", kind == "error" and "was deleted" in why, (kind, why))
+        h.check(
+            "it says why, as a warning (the copies stay)",
+            kind == "warning" and "was deleted" in why,
+            (kind, why),
+        )
         h.check("no Python jargon", "Error" not in why and "NoneType" not in why, why)
+        h.check("the copy body stays", len(ps.bodies()) == 1, [x.Label for x in ps.bodies()])
     h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
 
 

@@ -1,0 +1,78 @@
+{
+  "id": "pattern_bodies_move_original_after",
+  "title": "A body patterned along X (Spacing 50, Quantity 3), then the original moved 20 up: the copies stay",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "bodies",
+    "new-body",
+    "move",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "body": true,
+      "direction": "X",
+      "quantity": 3,
+      "distance": 50,
+      "distribution": "spacing"
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "translate",
+      "dz": 20,
+      "comment": "a step of the original after the pattern: Fusion copies the body as it stands at the pattern"
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "e1",
+        "p1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 36000,
+    "area": 11400,
+    "faces": 18,
+    "solids": 3,
+    "bbox": [
+      0,
+      0,
+      0,
+      140,
+      30,
+      30
+    ],
+    "source": "analytic",
+    "note": "The original moved to z 20..30; the copies stay at x 50..90 and 100..140, z 0..10 (SciForge before 2026-10-16 moved them too: bbox z 20..30). V = 3*40*30*10; A = 3*(2*1200 + 2*400 + 2*300)."
+  }
+}

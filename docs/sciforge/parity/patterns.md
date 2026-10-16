@@ -43,13 +43,69 @@ to be checked against Fusion):
 | P4 | Distance Type Extent / Spacing, Orientation Identical / Path Direction, Suppression on Pattern on Path | Already there (Distribution Extent / Spacing, Orientation, Suppression dots) | A (4) |
 | M1 | A pattern of an extrude that cut several bodies | Fusion repeats the extrude's change in every body it changed: the pattern step lives in the extrude's own body and gets a hidden step in every other body the extrude changed (like the extrude's own hidden steps); undo, the timeline's Delete, suppress and the history marker treat them as one step | G (follows from Fusion's one-feature-many-bodies extrude) |
 
+## Behaviour spec: patterns and mirrors of bodies in the timeline (fix-pattern-bodies, 2026-10-16)
+
+Luca's report (CI #117 quick update): "using rectangular/circular pattern completely breaks all
+bodies. the original object in the pattern can not be edited and if deleted, it breaks
+everything else. it cant even be moved without breaking everything. any movements or edits to
+the original will also happen to the other bodies." / "mirror has the same issues".
+Root cause: the pattern step linked the source *body* and copied its current shape (its Tip),
+so every later step of the original (a Move, a hole) reached the copies; a Combine of a copy
+into the original made a dependency cycle ("The graph must be a DAG"); deleting the original
+made the step fail (red).
+
+Sources (A = Autodesk help, blog, support article or API reference; F = Autodesk Community
+forum; G = guess, to be checked against Fusion):
+
+6. Fusion API, `RectangularPatternFeature.bodies`: the pattern's "result bodies"; for a valid
+   list "roll the timeline to immediately after the base feature node", as later operations
+   can change them (https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/RectangularPatternFeature_bodies.htm).
+7. Fusion API, `CopyPasteBody.sourceBody`: a parametric copy's source list can come back empty
+   or short when a source body "has been deleted or consumed by some other operation" (the
+   copy stays) (https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/CopyPasteBody_sourceBody.htm).
+8. Autodesk blog, "Editing Features in the Fusion Timeline to Modify Your Design: A Beginner's
+   Guide (Part 4)": editing a step recomputes the steps after it
+   (https://www.autodesk.com/products/fusion-360/blog/editing-features-in-the-fusion-timeline-to-modify-your-design-a-beginners-guide-part-4/).
+9. Autodesk Community, "What is the difference between Delete and Remove a Component or Body?":
+   Delete takes away the feature(s) that created the body ("hard delete"); Remove adds a
+   timeline entry from which on it is gone ("soft delete"); for a referenced body use Remove
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/what-is-the-difference-between-delete-and-remove-a-component-or/td-p/6246554).
+10. Autodesk support, "'Deletion warning...' and reference failures when deleting a component
+   in a Fusion model": deleting what later features reference gives a deletion warning and
+   then timeline warnings / reference failures, "expected behavior" for parametric modeling
+   (https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Deletion-warning-and-reference-failures-when-deleting-a-component-in-a-Fusion-360-model.html).
+11. Autodesk Community, "Can't delete bodies because of 'references' in the timeline?" (use
+   Remove for a referenced body)
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/can-t-delete-bodies-because-of-references-in-the-timeline-help/td-p/6714471).
+12. Autodesk Community, "Unable to delete part of pattern-generated bodies": Delete on one of a
+   pattern's bodies deletes the whole pattern; Remove takes just that body
+   (https://forums.autodesk.com/t5/fusion-design-validate-document/unable-to-delete-part-of-pattern-generated-bodies/td-p/9706609).
+13. Autodesk Community, "Circular Pattern of Features": copied bodies are independent of the
+   original (unlike components); timeline order matters
+   (https://forums.autodesk.com/t5/fusion-360-support/circular-pattern-of-features/m-p/11232316).
+
+| # | Fusion | SciForge | Source |
+|---|---|---|---|
+| B1 | A pattern / mirror (New Body) of a body copies the body as it stands at the pattern's place in the timeline | The step links the body's last solid step before it in the timeline order (`pattern.wanted_source`), never the body; the copies are that solid in the body's coordinates then | A (6), F (13) |
+| B2 | Steps of the original made after the pattern (Move, a hole, a fillet) do not change the copies | Same | A (6), F (13) |
+| B3 | Editing a step of the original before the pattern (from the timeline) updates the copies | Same | A (8) |
+| B4 | Each copy is a body of its own: it can be moved, get features, be combined (also into the original) | Same; a Combine of a copy into the original no longer makes a dependency cycle | F (13), G |
+| B5 | A step added at the history marker while it stands before the pattern is part of what is copied | Same: the new step goes in before the pattern in the timeline (`timeline_ops.rank_before_marker_step`, also before a component step) | A (8), G |
+| B6 | The pattern dragged along the timeline copies the body as it is at its new place; it cannot go before the body's first step | Same (the refusal names the step it needs) | G |
+| B7 | History marker before the pattern: its bodies do not exist yet | The step rolls back (greyed) and its copies are hidden; rolling forward shows them | A (6), G |
+| B8 | Delete on the original after the pattern | The copies stay as they are; the pattern step shows a warning (yellow, not red: nothing after it fails) saying the copies keep their shape; Undo brings everything back. Fusion: Delete takes the creating features away after a deletion warning, and later features then show warnings / reference failures; what it then shows for a pattern's copies is not documented | A (7, 10), F (9, 11), G (copies kept: Luca's ask) |
+| B9 | Remove (MODIFY > Remove) of the original after the pattern | The original is gone from that step on; the copies are unchanged (they copy it as it was) | F (9) |
+| B10 | An old design (saved before this fix) | Opened the new way: while the file is read each pattern of bodies is linked to its body's step before it, and once it is open the copies are computed again (a log line says so); the moved copies go back where the pattern put them | G |
+| B11 | A body in a moved (turned) component, patterned along its own axes | The copies land beside it in the same component (the solid is taken in design coordinates with the component's placement; before, a turned component put the copy elsewhere) | G |
+| B12 | A copy is picked like any body, also after the design is opened again | Same (before, FreeCAD showed the copies' hidden copy features on opening and a click picked those: Move could not take a copy) | G |
+
 ## What gets built
 
 | Pattern Type | Built as |
 |---|---|
 | Features | FreeCAD's `PartDesign::LinearPattern` / `PolarPattern` / `Mirrored` (Direction 2 is LinearPattern's second direction). FreeCAD 1.1 also repeats dress-up features (fillets, chamfers). Pattern on Path and features FreeCAD cannot repeat use SciForge's `PatternFeature` (`PartDesign::FeaturePython`): the feature's tool, or the difference it made, copied |
 | Faces | `PatternFeature`: the picked faces are closed into a solid with the faces around them (a hole's wall gives the hole's cylinder, a boss's side and top give the boss); the solid is cut (a hollow) or joined (material) at every copy |
-| Bodies | Rectangular / Circular / Path: **one new body per copy**, like Fusion (a top-level step + one small copy feature per new body, which follows the source body). Mirror: Operation **New Body** (the same) or **Join** (`Mirrored` in "Whole shape" mode inside the body) |
+| Bodies | Rectangular / Circular / Path: **one new body per copy**, like Fusion (a top-level step + one small copy feature per new body). The step copies the source body as it stands right before it in the timeline (B1-B10 above: it links that step, `Source`, and keeps the body's name in `SourceBody`). Mirror: Operation **New Body** (the same) or **Join** (`Mirrored` in "Whole shape" mode inside the body) |
 
 Every feature carries `SciForgeType`, so the timeline shows Fusion's step name and a
 double-click opens SciForge's dialog (also on plain FreeCAD patterns from older files).
@@ -88,7 +144,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | Picked features and bodies are shaded in the view | Same (blue), also when they are picked in the timeline |
 | Changing a pattern keeps what was built on it (a sketch on its top face, a fillet on its edges, a Press Pull of its face) | Same. When a change needs the other kind of feature (FreeCAD's pattern cannot leave a copy out, follow a parameter in its count or repeat faces) SciForge rebuilds the step and moves every link to it over to the new step, each face / edge found again by where it is |
 | Deleting the feature a pattern repeats | The pattern adds nothing and shows a warning in the timeline (FreeCAD kept the copies of the deleted hole and froze the steps after it); edit it to pick others. Undo brings everything back |
-| Deleting the body a pattern of bodies copies | The step shows why it cannot be computed; the copies keep their shape |
+| Deleting the body a pattern of bodies copies | The copies keep their shape; the step shows a warning saying why (B8; before 2026-10-16 it failed, red) |
 
 ## Known gaps (never faked: shown greyed with the reason, or listed here)
 
@@ -101,6 +157,9 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
 | Optimized faster than Identical | Both are FreeCAD's pattern of the feature's tool: the same result at the same speed |
 | Faces: copies "heal" into different surroundings | The closed faces are copied as they are (a hole copied into a thicker area stays as deep as the original). Faces that do not close up with one face around each opening (a fillet's face) are refused with the reason |
 | A pattern of bodies whose references lie in another body with a moved placement | The references are read in the copied body's coordinates |
+| Delete on one copy of a pattern of bodies (Fusion: deletes the whole pattern, source 12; Remove takes one) | SciForge deletes that copy only; a later edit of the pattern does not make it again (its hidden copy step stays). Not changed by the 2026-10-16 fix |
+| Editing a pattern of bodies shows the body as it is now, not as it was at the pattern (Fusion rolls the design back to the step being edited) | An edge a later step made or moved is refused with the reason ("That was made after this pattern..."); origin axes and planes always work |
+| Undo of a history-marker roll that stood right before a step outside the bodies (a pattern of bodies, a component) | The marker comes back after that step: the "marker before" note is kept in the document's Meta, which FreeCAD's undo does not restore (all such steps, not only patterns) |
 | Pattern on Path: Start Point dragged along the path in the view | Typed in its field only (no handle on the path yet) |
 | Timeline icon of Pattern on Path | Named "Pattern on Path", shown with the Rectangular Pattern's icon (there is no icon of its own yet) |
 | Patterning a pattern step alone | Repeats the step's copies, not the original it copies (as Fusion's pattern feature stands for its copies); pick the original step too for whole rows |
@@ -132,6 +191,16 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
   `pattern_quantity_parameter`, `pattern_rect_features_any_order`,
   `pattern_edit_keeps_later_fillet`.
 - Unit tests: `SciForgeTests/unit/test_pattern_core.py`.
+- fix-pattern-bodies (2026-10-16): scenarios `fixpattern_rect.py`, `fixpattern_circ.py`,
+  `fixpattern_mirror.py`, `fixpattern_path.py` (steps in `gui/fixpattern_steps.py`: the
+  original moved after the pattern, a hole cut in it after the pattern, its Extrude 1 edited
+  from the timeline, the original deleted, undo / redo, save and reopen; rectangular: a copy
+  moved on its own), `fixpattern_marker.py` (a Combine of the copy into the original, the
+  marker before the pattern, a boss added there, rolled forward), `fixpattern_old_file.py`
+  (`fixtures/pattern_bodies_v1.FCStd`, saved by the old code, opened and upgraded). Golden
+  models `pattern_bodies_move_original_after`, `mirror_body_new_body_move_after`,
+  `pattern_bodies_in_moved_component` (all three fail on the old code). Unit:
+  `test_timeline_core.StepAtMarkerBeforeRootStepTests`.
 - modify-2 (2026-10-14): scenarios `modify2_pattern_adjust.py` (a wedge, a hole cut up To Object its slope, three copies: Optimized leaves them blind under the slope, Adjust takes each up to the slope where it lands, each copy measured; edit, Cancel, undo, save/reopen), `modify2_pattern_path.py` (an L path, Start Point 0.25 moves the copy, Start Point 1 refused, edit), `modify2_bodies.py` (the pattern of a cut through two bodies cuts both, undo, edit, save/reopen, timeline Delete). Golden models `modify2_pattern_adjust_to_slope`, `modify2_pattern_identical_to_slope`, `modify2_pattern_path_start_point`, `modify2_pattern_path_auto_start`, `modify2_pattern_multibody_cut`.
 
 ## Lessons for other dialogs

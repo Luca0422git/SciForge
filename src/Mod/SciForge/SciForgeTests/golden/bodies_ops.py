@@ -30,7 +30,8 @@ Bodies are named by a step that made them (its body): "e1" is the body of extrud
   {"op": "body_tool_edit", "target": "c1", "set": {option: value}}
       Double-click the step in the timeline and change its fields (same option names).
 
-  {"op": "measure_bodies", "steps": ["e1", "e2"]}  measure these bodies from now on
+  {"op": "measure_bodies", "steps": ["e1", "e2"]}  measure these bodies from now on (a
+      pattern of bodies, "p1": the new bodies it made)
 
   {"op": "delete_bodies", "steps": ["e2"]}
       Delete (Del) on bodies (picked in the browser); what used them keeps working.
@@ -280,7 +281,21 @@ def _alive(obj):
 
 
 def op_measure_bodies(self, step):
-    _measure(self, [_body(self, s) for s in step["steps"]])
+    found = []
+    for name in step["steps"]:
+        found += _bodies_of(self, name)
+    _measure(self, found)
+
+
+def _bodies_of(builder, step_id):
+    """The body a step is in; for a pattern of bodies (or a mirror with New Body): the new
+    bodies it made."""
+    from sciforge import pattern
+
+    obj = builder.objects.get(step_id)
+    if obj is not None and pattern.is_body_pattern(obj):
+        return pattern.copy_bodies(obj)
+    return [_body(builder, step_id)]
 
 
 _previous_shape = Builder.shape

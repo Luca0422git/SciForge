@@ -1,0 +1,91 @@
+{
+  "id": "pattern_bodies_in_moved_component",
+  "title": "A body in a component turned 90 degrees and moved 100 along X, patterned along its own X: the copy lands beside it",
+  "tags": [
+    "pattern",
+    "rectangular",
+    "bodies",
+    "new-body",
+    "components",
+    "fusion-dialog"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "components_from_bodies",
+      "id": "k1",
+      "bodies": [
+        "e1"
+      ],
+      "label": "Block"
+    },
+    {
+      "op": "component_move",
+      "id": "m1",
+      "components": [
+        "k1"
+      ],
+      "move_type": "free",
+      "dx": 100,
+      "rz": 90,
+      "pivot": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "p1",
+      "body": true,
+      "direction": "X",
+      "quantity": 2,
+      "distance": 50,
+      "distribution": "spacing",
+      "comment": "the body's own X axis: the design's Y after the component's turn"
+    },
+    {
+      "op": "measure_components",
+      "steps": [
+        "k1"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 24000,
+    "area": 7600,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      70,
+      0,
+      0,
+      100,
+      90,
+      10
+    ],
+    "source": "analytic",
+    "note": "The component turns the box (0..40 x 0..30) to x -30..0, y 0..40 and moves it to x 70..100; the copy 50 along the body's X (the design's Y): y 50..90. SciForge before 2026-10-16 put the copy at x 0..40 in design coordinates (the component's placement was counted wrong)."
+  }
+}

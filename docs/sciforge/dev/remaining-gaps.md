@@ -24,7 +24,11 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 - **hole-thread.md**: (NPT / BSPT, fastener clearance, thread class, curved faces by
   sf/modeling-2.) Taper threads are cosmetic only; three screw types in the tables.
 - **patterns.md**: (Components by sf/components-2; Compute Option Adjust and the Path start
-  point by sf/modify-2.) Left: Mirror of components; Adjust only re-runs extrudes.
+  point by sf/modify-2; body patterns and mirrors copy the body as it is at the pattern, roll
+  back with the marker and survive the original's deletion, by sf/fix-pattern-bodies.) Left:
+  Mirror of components; Adjust only re-runs extrudes; Delete on one copy deletes only that
+  copy (Fusion deletes the whole pattern); editing a pattern does not roll the design back to
+  it; undo of a marker roll before a step outside the bodies leaves the marker after it.
 - **joints.md**: (sf/joints-2 built Component Drag, position modes, Motion Link, Contact Sets,
   Motion Study, nested components, no auto-ground.) Left: a drag pulls one joint at a time (no
   whole-mechanism drag solver), no contact during Animate, no Motion Study graph, no Lock
