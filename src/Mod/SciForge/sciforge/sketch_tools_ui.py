@@ -79,6 +79,11 @@ class SketchLine(_SketchCommand):
         if session is None:
             Gui.runCommand("Sketcher_CreateLine")
             return
+        from . import sketch3d_ui
+
+        if sketch3d_ui.is_on(session):  # 3D Sketch in the palette: a line in 3D
+            sketch3d_ui.run_line(session)
+            return
         # Fusion's Line keeps going from the last point and takes typed values: FreeCAD's
         # line tool (length/angle fields) joined end to end by sketch_line.LineChain.
         session.line.start()

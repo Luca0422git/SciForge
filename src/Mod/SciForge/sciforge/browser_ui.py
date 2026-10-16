@@ -138,6 +138,14 @@ def _objects(doc):
                 "grounded": obj.Name in grounded,
             }
             _joint_row(row, obj)
+            try:
+                from . import sketch_companions
+
+                sketch = sketch_companions.owner(obj)
+                if sketch is not None:  # listed under its sketch (Project to Surface, 3D)
+                    row["owner_sketch"] = sketch.Name
+            except Exception:
+                pass
             if obj.TypeId in core.MESH_TYPES:
                 note = _mesh_note(obj)  # Fusion's warning beside a mesh body that is not closed
                 if note:
@@ -1125,7 +1133,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         plain = [
             n["object"]
             for n in nodes
-            if n["kind"] in ("mesh_body", "canvas", "contact_set", "motion_study")
+            if n["kind"] in ("mesh_body", "canvas", "contact_set", "motion_study", "sketch_curves")
         ]
         drawings = [n["object"] for n in nodes if n["kind"] == "drawing"]
         Gui.Selection.clearSelection()

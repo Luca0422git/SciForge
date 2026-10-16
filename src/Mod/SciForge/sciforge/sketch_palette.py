@@ -119,13 +119,21 @@ class Palette(QtWidgets.QFrame):
             form.addRow(text, box)
             self.boxes[key] = box
 
-        sketch3d = QtWidgets.QCheckBox()
-        sketch3d.setEnabled(False)
-        sketch3d.setToolTip(
-            "Not available: FreeCAD sketches are flat. Use Project / Include to bring "
-            "edges of the part into the sketch."
+        # Fusion's 3D Sketch: Line and Fit Point Spline draw in 3D (sketch3d_ui.py)
+        from . import sketch3d_ui
+
+        tip = (
+            "Draw lines and splines in 3D: the manipulator's planes choose the plane the "
+            "next point goes on; a click on a 3D point shows arrows to move it"
         )
-        form.addRow("3D Sketch", sketch3d)
+        self.sketch3d = QtWidgets.QCheckBox()
+        self.sketch3d.setObjectName("SciForgePalette_sketch3d")
+        self.sketch3d.setChecked(sketch3d_ui.is_on(session))
+        self.sketch3d.setToolTip(tip)
+        self.sketch3d.toggled.connect(self._sketch3d)
+        label3d = QtWidgets.QLabel("3D Sketch")
+        label3d.setToolTip(tip)
+        form.addRow(label3d, self.sketch3d)
         outer.addWidget(self.body)
 
         self.finish = QtWidgets.QPushButton("Finish Sketch")
@@ -193,6 +201,15 @@ class Palette(QtWidgets.QFrame):
             sketch_mode.set_option(key, on)
         except Exception as exc:
             warn("sketch palette: %s" % exc)
+        self._view_focus()
+
+    def _sketch3d(self, on):
+        try:
+            from . import sketch3d_ui
+
+            sketch3d_ui.set_on(self.session, on)
+        except Exception as exc:
+            warn("3D Sketch: %s" % exc)
         self._view_focus()
 
     def _view_focus(self):

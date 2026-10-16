@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The Fusion-style browser's structure. Runs without FreeCAD."""
+
 import os
 import sys
 import unittest
@@ -49,6 +50,50 @@ class BrowserTests(unittest.TestCase):
             self.labels(self.tree()),
             ["Document Settings", "Named Views", "Origin", "Bodies", "Sketches", "Construction"],
         )
+
+    def test_sketch_curves_are_listed_under_their_sketch(self):
+        objects = OBJECTS + [
+            obj(
+                "Curves3D",
+                "Part::FeaturePython",
+                True,
+                None,
+                label="3D Curves",
+                sciforge_type="Sketch3DCurves",
+                owner_sketch="Sketch",
+            ),
+            obj(
+                "ProjectedCurves",
+                "Part::FeaturePython",
+                True,
+                None,
+                label="Projected Curves",
+                sciforge_type="ProjectedCurves",
+                owner_sketch="Sketch",
+            ),
+        ]
+        sketches = self.folder(self.tree(objects), "Sketches")
+        self.assertEqual(self.labels(sketches), ["Sketch"])
+        sketch = sketches["children"][0]
+        self.assertEqual(self.labels(sketch), ["3D Curves", "Projected Curves"])
+        icons = [c["icon"] for c in sketch["children"]]
+        self.assertEqual(icons, ["sk_spline", "sk_project"])
+        self.assertEqual(sketch["children"][0]["kind"], "sketch_curves")
+
+    def test_sketch_curves_without_their_sketch_still_show(self):
+        objects = [
+            obj(
+                "Curves3D",
+                "Part::FeaturePython",
+                True,
+                None,
+                label="3D Curves",
+                sciforge_type="Sketch3DCurves",
+                owner_sketch="Elsewhere",
+            ),
+        ]
+        sketches = self.folder(self.tree(objects), "Sketches")
+        self.assertEqual(self.labels(sketches), ["3D Curves"])
 
     def test_features_are_not_listed(self):
         names = [n["object"] for n in core.walk(self.tree())]

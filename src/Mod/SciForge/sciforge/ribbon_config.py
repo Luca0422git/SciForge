@@ -742,7 +742,11 @@ SKETCH_CREATE = group(
         sub(
             "Spline",
             [
-                item("Fit Point Spline", "Sketcher_CreateBSplineByInterpolation", "sk_spline"),
+                item(
+                    "Fit Point Spline",
+                    ("SciForge_SketchFitSpline", "Sketcher_CreateBSplineByInterpolation"),
+                    "sk_spline",
+                ),
                 item("Control Point Spline", "Sketcher_CreateBSpline", "sk_spline"),
             ],
             "sk_spline",

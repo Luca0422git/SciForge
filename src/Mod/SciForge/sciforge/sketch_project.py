@@ -3,9 +3,11 @@
 faces of a body, as 3D curves.
 
 Fusion keeps the projected curves in the active sketch (its sketches can hold 3D
-curves). FreeCAD's sketches are flat, so SciForge keeps them in an object of their own
-next to the sketch, "Projected Curves", that follows its faces and curves when they
-change (a parametric feature: SciForge's FeaturePython, recomputed with the design).
+curves). FreeCAD's sketches are flat, so SciForge keeps them in an object of their own,
+"Projected Curves", that follows its faces and curves when they change (a parametric
+feature: SciForge's FeaturePython, recomputed with the design) and belongs to the sketch
+(sketch_companions.py): listed under it in the browser, shown and hidden with it, part
+of its timeline step, deleted with it.
 
 Projection types (Fusion's): Closest Point puts every point of a curve on the nearest
 point of the faces; Along Vector shoots the curves along a direction (the sketch's
@@ -173,6 +175,7 @@ class ProjectedCurves:
 
     def onDocumentRestored(self, obj):
         self.setup(obj)
+        _upgrade(obj)
 
     def dumps(self):
         return None
@@ -210,6 +213,22 @@ class ViewProjectedCurves:
         return None
 
 
+def _upgrade(obj):
+    """Projected Curves saved before they belonged to their sketch (sketch-2): the sketch
+    whose curves they project becomes their owner."""
+    from . import sketch_companions
+
+    try:
+        if sketch_companions.is_companion(obj):
+            return
+        for linked, _subs in obj.Curves:
+            if linked is not None and linked.TypeId == "Sketcher::SketchObject":
+                sketch_companions.adopt(obj, linked, "ProjectedCurves")
+                return
+    except Exception as exc:
+        warn("Project to Surface: %s" % exc)
+
+
 def make(sketch, faces, curves, kind=TYPES[0], direction=None):
     """Add a "Projected Curves" object for the open sketch: `faces` and `curves` are
     [(object, [sub names])]. The object goes into the sketch's component. Returns it;
@@ -224,6 +243,9 @@ def make(sketch, faces, curves, kind=TYPES[0], direction=None):
     doc = sketch.Document
     obj = doc.addObject("Part::FeaturePython", "ProjectedCurves")
     ProjectedCurves(obj)
+    from . import sketch_companions
+
+    sketch_companions.adopt(obj, sketch, "ProjectedCurves")  # part of the sketch (Fusion)
     if App.GuiUp:
         try:
             ViewProjectedCurves(obj.ViewObject)

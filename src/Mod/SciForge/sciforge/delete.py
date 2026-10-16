@@ -311,9 +311,13 @@ def delete_steps(doc, steps):
     for step in list(steps):  # a Derive's sketches and planes go with it (bodies: extra_steps)
         if derive.is_derive(step):
             steps += [o for o in derive.result_steps(step) if o not in steps]
+    from . import sketch_companions
+
     for step in list(steps):  # a sketch's texts go with it (in the same undo step)
         if step.TypeId == "Sketcher::SketchObject":
             steps += [t for t in sketch_text.texts_of(step) if t not in steps]
+            # its Project to Surface / 3D curves too (sketch-2)
+            steps += [c for c in sketch_companions.companions(step) if c not in steps]
     gone = {s.Name for s in steps}
     extra = extra_steps(steps)
     for body in extra:

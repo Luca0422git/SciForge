@@ -294,7 +294,7 @@ class Preview:
             _set(coords, lines, drawn[name])
         self.point_coords.point.setNum(0)
         if drawn["points"]:
-            pts = [(p[0], p[1], 0.0) for p in drawn["points"]]
+            pts = [(p[0], p[1], p[2] if len(p) > 2 else 0.0) for p in drawn["points"]]
             self.point_coords.point.setValues(0, len(pts), pts)
         self._drawn = drawn
         self._attach()
@@ -323,7 +323,7 @@ def _set(coords, lineset, polylines):
     for poly in polylines:
         if len(poly) < 2:
             continue
-        points += [(p[0], p[1], 0.0) for p in poly]
+        points += [(p[0], p[1], p[2] if len(p) > 2 else 0.0) for p in poly]  # (3D Sketch)
         counts.append(len(poly))
     coords.point.setNum(0)
     lineset.numVertices.setNum(0)

@@ -1587,7 +1587,8 @@ def profile_sketch(obj):
 
 # Helpers that read their step instead of being read by it (a mesh Separate's bodies): they
 # go when their step goes.
-GOES_WITH_STEP = ("MeshPiece",)
+# (SketchCurves: a sketch's Projected Curves and 3D curves, sketch_companions.py)
+GOES_WITH_STEP = ("MeshPiece", "SketchCurves")
 
 
 def _helpers_of(doc, names, gone):

@@ -278,6 +278,12 @@ def enable():
         sketch_area_pick.enable()
     except Exception as exc:
         warn("sketch areas: %s" % exc)
+    try:
+        from . import sketch_companions
+
+        sketch_companions.enable()  # Project to Surface / 3D curves go with their sketch
+    except Exception as exc:
+        warn("sketch curves: %s" % exc)
     sketch = editing_sketch()
     if sketch is not None:
         _start(sketch)
@@ -294,6 +300,12 @@ def disable():
         sketch_area_pick.disable()
     except Exception as exc:
         warn("sketch areas: %s" % exc)
+    try:
+        from . import sketch_companions
+
+        sketch_companions.disable()
+    except Exception as exc:
+        warn("sketch curves: %s" % exc)
     for key, remove in (
         ("observer", Gui.removeDocumentObserver),
         ("app_observer", App.removeDocumentObserver),
@@ -763,6 +775,7 @@ class SketchSession:
 
         self.line = LineChain(self)
         self.tool = None  # SciForge's own drawing tool while one runs (sketch_draw.py)
+        self.sketch3d = None  # Fusion's 3D Sketch (sketch3d_ui.Layer) once it is used
         self.infer = None
         try:
             from .sketch_infer import Inference
@@ -802,6 +815,13 @@ class SketchSession:
                 self.apply_option(name)
         self._palette_tries = 0
         normal_mode()
+        try:
+            from . import sketch3d_ui
+
+            if sketch3d_ui.starts_on(sketch):  # a sketch with 3D curves opens in 3D
+                sketch3d_ui.layer(self).set_on(True, quiet=True)
+        except Exception as exc:
+            warn("3D Sketch: %s" % exc)
         QtCore.QTimer.singleShot(0, self._add_palette)
         self._refreshed()
 
@@ -1420,7 +1440,10 @@ class SketchSession:
             pass
         self.close_editor(commit=True)
         remove_stray_editors(self.gl)
-        for part in (self.polygon, self.areas, self.shading, self.display, self.fixed):
+        parts = [self.polygon, self.areas, self.shading, self.display, self.fixed]
+        if self.sketch3d is not None:
+            parts.append(self.sketch3d)
+        for part in parts:
             try:
                 part.remove()
             except Exception as exc:
