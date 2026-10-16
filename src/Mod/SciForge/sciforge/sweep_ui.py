@@ -93,7 +93,7 @@ def newest_single_region(body):
         if not extrude.is_sketch(obj) or obj.Name in used:
             continue
         try:
-            found = extrude.regions(obj)
+            found = extrude.profile_regions(obj)
         except Exception:
             return None
         if not found:

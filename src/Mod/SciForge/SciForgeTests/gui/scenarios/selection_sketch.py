@@ -143,9 +143,10 @@ def d_body_check():
     sketch_picks = [
         s for s in Gui.Selection.getSelectionEx() if sk is not None and s.ObjectName == sk.Name
     ]
+    # (4 drawn and the top face's 4 edges, projected by Auto project: sketch curves too)
     h.check(
-        "D ... and the sketch's 4 curves (fully inside the window)",
-        len(sketch_picks) == 1 and len(sketch_picks[0].SubElementNames) == 4,
+        "D ... and the sketch's 8 curves (fully inside the window)",
+        len(sketch_picks) == 1 and len(sketch_picks[0].SubElementNames) == 8,
         [(s.ObjectName, s.SubElementNames) for s in sketch_picks],
     )
     h.click_empty()

@@ -662,6 +662,13 @@ def check_lid(stage, what):
 def lid_sketch():
     look("iso")
     Gui.Selection.clearSelection()
+    # The lid's rectangle is drawn over the rim's rounded outline. With the rim's edges
+    # projected (Auto project) FreeCAD 1.1.4 makes no area where a projected corner arc
+    # meets a drawn line tangent in its middle (its WireJoiner; docs/sciforge/parity/
+    # sketch.md, Known gaps): this lid is drawn without them, as in Fusion's default.
+    App.ParamGet("User parameter:BaseApp/Preferences/Mod/SciForge/SketchInference").SetBool(
+        "AutoProject", False
+    )
     h.ribbon("Create Sketch")
 
 

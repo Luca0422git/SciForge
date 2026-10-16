@@ -6,9 +6,10 @@ later (the part must follow, with no error anywhere).
 2. Create Sketch, click the top face: the sketch sits on it, the camera looks at it.
    C: a circle r 5, then E straight from the sketch (Fusion: E finishes the sketch
    and starts Extrude with it), OK: a boss on top.
-3. Create Sketch on the top face again. P: click an edge of the part and the top face:
-   they are projected (purple) and form profiles. Finish Sketch (the step that
-   used to fail).
+3. Create Sketch on the top face again: the face's sides are projected (purple) by
+   Auto project and form profiles. P: click an edge of the part (in already: nothing
+   added) and the top face (only the boss's circle is added; FreeCAD alone would fail on
+   a face already linked). Finish Sketch (the step that used to fail).
 4. Double-click the first sketch in the browser, D on the 40 line, type 50, Finish:
    block and boss update, sketches on the face follow.
 
@@ -182,6 +183,9 @@ def project_key():
     s["sk3"] = h.in_sketch()
     h.check("third sketch on the face", s["sk3"] is not None)
     s["ext"] = len(s["sk3"].ExternalGeo) if s["sk3"] is not None else 0
+    # Auto project (on by default): the face's four sides are in (from the block's step,
+    # the earliest with that face: the boss's circle came later)
+    h.check("the face's edges are projected already (Auto project)", s["ext"] - 2 == 4, s["ext"])
     h.press("p")
 
 
@@ -196,7 +200,9 @@ def project_face():
 def projected():
     sk = s["sk3"]
     added = len(sk.ExternalGeo) - s["ext"]
-    h.check("P projected the edge and the face's edges", added >= 2, added)
+    # (before Auto project: P projected them all; now the edge is there already and the
+    # face brings only what is missing: the boss's circle)
+    h.check("P on the projected edge adds nothing, on the face only the circle", added == 1, added)
     from sciforge import sketch_mode
 
     h.check(

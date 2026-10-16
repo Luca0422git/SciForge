@@ -105,8 +105,23 @@ class Builder:
 
     def op_sketch(self, step):
         sketch = self.body.newObject("Sketcher::SketchObject", step["id"])
-        sketch.AttachmentSupport = (self._origin(_PLANE_ROLE[step["plane"]]), [""])
+        if "face" in step:  # Create Sketch on a flat face of the part as it is now
+            tip = self._tip()
+            names = selectors.select(tip.Shape, step["face"], "faces")
+            if len(names) != 1:
+                raise BuildError("sketch %r: 'face' must select one face" % step["id"])
+            sketch.AttachmentSupport = [(tip, names[0])]
+        else:
+            sketch.AttachmentSupport = (self._origin(_PLANE_ROLE[step["plane"]]), [""])
         sketch.MapMode = "FlatFace"
+        if step.get("auto_project"):  # the face's edges projected (sciforge/sketch_auto_project)
+            from sciforge import sketch_auto_project
+
+            self.doc.recompute()
+            target = sketch.AttachmentSupport[0]
+            target = (target[0], target[1][0])
+            if not sketch_auto_project.auto_project(sketch, target):
+                raise BuildError("sketch %r: the face's edges were not projected" % step["id"])
         if step.get("offset"):
             sketch.AttachmentOffset = App.Placement(
                 App.Vector(0, 0, step["offset"]), App.Rotation()

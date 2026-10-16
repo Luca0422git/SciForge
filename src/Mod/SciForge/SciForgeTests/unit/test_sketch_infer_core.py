@@ -441,3 +441,257 @@ class TangentArc(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SnapPoints(unittest.TestCase):
+    """Fusion: ends, middles (the triangle), centres; SciForge adds circle quadrants and
+    crossings. The sketch's own curves and the projected ones (geo -3, -4...) alike."""
+
+    def kinds(self, points):
+        return sorted((s.kind, tuple(round(c, 9) for c in s.point)) for s in points)
+
+    def test_a_line_has_two_ends_and_a_middle(self):
+        pts = core.snap_points([("line", 0, (0.0, 0.0), (10.0, 4.0))])
+        self.assertEqual(
+            self.kinds(pts),
+            [(core.END, (0.0, 0.0)), (core.END, (10.0, 4.0)), (core.MIDDLE, (5.0, 2.0))],
+        )
+        ends = {s.key for s in pts if s.kind == core.END}
+        self.assertEqual(ends, {(0, 1), (0, 2)})
+        middle = [s for s in pts if s.kind == core.MIDDLE][0]
+        self.assertEqual((middle.key, middle.geo), (None, 0))
+
+    def test_a_projected_line_snaps_the_same(self):
+        pts = core.snap_points([("line", -3, (0.0, 0.0), (40.0, 0.0))])
+        self.assertIn((core.MIDDLE, (20.0, 0.0)), self.kinds(pts))
+        self.assertEqual({s.key for s in pts if s.kind == core.END}, {(-3, 1), (-3, 2)})
+
+    def test_a_circle_has_its_centre_and_four_quadrants(self):
+        pts = core.snap_points([("circle", 2, (1.0, 1.0), 5.0)])
+        self.assertEqual(
+            self.kinds(pts),
+            [
+                (core.CENTRE, (1.0, 1.0)),
+                (core.QUADRANT, (-4.0, 1.0)),
+                (core.QUADRANT, (1.0, -4.0)),
+                (core.QUADRANT, (1.0, 6.0)),
+                (core.QUADRANT, (6.0, 1.0)),
+            ],
+        )
+        self.assertEqual([s.key for s in pts if s.kind == core.CENTRE], [(2, 3)])
+
+    def test_an_arc_has_ends_centre_middle_and_the_quadrants_on_it(self):
+        # a quarter-and-a-bit from 30 to 150 degrees round (0, 0), r 10: 90 degrees is
+        # its middle (not a second point), no other quadrant lies on it
+        r = 10.0
+        start = (r * math.cos(math.radians(30)), r * math.sin(math.radians(30)))
+        end = (r * math.cos(math.radians(150)), r * math.sin(math.radians(150)))
+        pts = core.snap_points([("arc", 1, (0.0, 0.0), r, start, end, (0.0, r))])
+        kinds = sorted(s.kind for s in pts)
+        self.assertEqual(kinds, sorted([core.END, core.END, core.CENTRE, core.MIDDLE]))
+
+    def test_the_quadrants_of_a_long_arc(self):
+        # from -60 to 240 degrees counterclockwise: 0, 90 and 180 lie on it, 270 not
+        r = 4.0
+        a0, a1 = math.radians(-60), math.radians(240)
+        start = (r * math.cos(a0), r * math.sin(a0))
+        end = (r * math.cos(a1), r * math.sin(a1))
+        mid = (r * math.cos(math.radians(90)), r * math.sin(math.radians(90)))
+        pts = core.snap_points([("arc", 1, (0.0, 0.0), r, start, end, mid)])
+        quads = sorted(tuple(round(c, 9) for c in s.point) for s in pts if s.kind == core.QUADRANT)
+        self.assertEqual(quads, [(-4.0, 0.0), (4.0, 0.0)])  # 90 is the middle already
+
+    def test_an_arc_running_the_other_way_round(self):
+        # the same ends, through 270 degrees (the long way): 0, 180 and 270 on it
+        r = 4.0
+        start = (r * math.cos(math.radians(240)), r * math.sin(math.radians(240)))
+        end = (r * math.cos(math.radians(-60)), r * math.sin(math.radians(-60)))
+        self.assertTrue(
+            core.on_arc(math.radians(270), math.radians(240), math.radians(-60), math.radians(270))
+        )
+        self.assertFalse(
+            core.on_arc(math.radians(90), math.radians(240), math.radians(-60), math.radians(270))
+        )
+        pts = core.snap_points([("arc", 1, (0.0, 0.0), r, start, end, (0.0, -r))])
+        quads = [s for s in pts if s.kind == core.QUADRANT]
+        self.assertEqual(quads, [])  # 270 is its middle; 0 and 180 are not on the short way
+
+    def test_points_ellipses_conic_arcs_and_splines(self):
+        pts = core.snap_points(
+            [
+                ("point", 0, (3.0, 3.0)),
+                ("ellipse", 1, (0.0, 0.0)),
+                ("conic_arc", 2, (5.0, 5.0), (6.0, 5.0), (5.0, 7.0)),
+                ("spline", 3, (0.0, 9.0), (9.0, 9.0)),
+            ]
+        )
+        keys = sorted(s.key for s in pts)
+        self.assertEqual(keys, [(0, 1), (1, 3), (2, 1), (2, 2), (2, 3), (3, 1), (3, 2)])
+
+    def test_the_nearest_within_the_radius(self):
+        pts = core.snap_points([("line", 0, (0.0, 0.0), (10.0, 0.0))])
+        self.assertEqual(core.nearest_snap((4.6, 0.3), pts, 1.0).kind, core.MIDDLE)
+        self.assertEqual(core.nearest_snap((9.5, 0.2), pts, 1.0).key, (0, 2))
+        self.assertIsNone(core.nearest_snap((7.5, 0.0), pts, 1.0))
+
+    def test_a_sketch_corner_on_a_projected_corner_is_the_sketch_point(self):
+        pts = core.snap_points(
+            [("line", -3, (0.0, 0.0), (40.0, 0.0)), ("line", 4, (0.0, 0.0), (0.0, 10.0))]
+        )
+        hit = core.nearest_snap((0.2, 0.1), pts, 1.0)
+        self.assertEqual(hit.key, (4, 1))
+
+    def test_an_end_beats_a_middle_on_the_same_spot(self):
+        pts = core.snap_points(
+            [("line", 0, (0.0, 0.0), (10.0, 0.0)), ("line", 1, (5.0, 0.0), (5.0, 5.0))]
+        )
+        hit = core.nearest_snap((5.1, 0.1), pts, 1.0)
+        self.assertEqual((hit.kind, hit.key), (core.END, (1, 1)))
+
+    def test_snap_result(self):
+        s = core.SnapPoint(core.QUADRANT, (5.0, 0.0), geo=2)
+        r = core.snap_result(s, (1.0, 1.0))
+        self.assertEqual((r.point, r.snap, r.start, r.kind), ((5.0, 0.0), s, (1.0, 1.0), None))
+
+
+class Crossings(unittest.TestCase):
+    def test_two_lines_crossing_near_the_pointer(self):
+        items = [("line", 0, (0.0, 0.0), (10.0, 10.0)), ("line", -3, (0.0, 10.0), (10.0, 0.0))]
+        found = core.crossings((5.2, 4.9), items, 1.0)
+        self.assertEqual(len(found), 1)
+        self.assertEqual((found[0].kind, found[0].geo, found[0].other), (core.CROSSING, 0, -3))
+        self.assertAlmostEqual(found[0].point[0], 5.0)
+        self.assertAlmostEqual(found[0].point[1], 5.0)
+
+    def test_far_from_the_pointer_nothing(self):
+        items = [("line", 0, (0.0, 0.0), (10.0, 10.0)), ("line", 1, (0.0, 10.0), (10.0, 0.0))]
+        self.assertEqual(core.crossings((8.0, 8.0), items, 1.0), [])
+
+    def test_lines_meeting_at_their_ends_are_end_points_not_crossings(self):
+        items = [("line", 0, (0.0, 0.0), (10.0, 0.0)), ("line", 1, (10.0, 0.0), (10.0, 5.0))]
+        self.assertEqual(core.crossings((10.0, 0.2), items, 1.0), [])
+
+    def test_a_line_through_a_circle(self):
+        items = [("line", 0, (-10.0, 0.0), (10.0, 0.0)), ("circle", 1, (0.0, 0.0), 5.0)]
+        found = core.crossings((4.8, 0.3), items, 1.0)
+        self.assertEqual(len(found), 1)
+        self.assertAlmostEqual(found[0].point[0], 5.0)
+
+    def test_two_circles(self):
+        items = [("circle", 0, (0.0, 0.0), 5.0), ("circle", 1, (6.0, 0.0), 5.0)]
+        found = core.crossings((3.0, 4.0), items, 0.5)
+        self.assertEqual(len(found), 1)
+        self.assertAlmostEqual(found[0].point[0], 3.0)
+        self.assertAlmostEqual(found[0].point[1], 4.0)
+
+    def test_an_arc_crossing_only_where_the_arc_is(self):
+        r = 5.0
+        arc = ("arc", 1, (0.0, 0.0), r, (r, 0.0), (-r, 0.0), (0.0, r))  # the upper half
+        line = ("line", 0, (0.0, -10.0), (0.0, 10.0))
+        self.assertEqual(len(core.crossings((0.2, 4.9), [line, arc], 1.0)), 1)
+        self.assertEqual(core.crossings((0.2, -4.9), [line, arc], 1.0), [])
+
+
+class SnapAfterTheClick(unittest.TestCase):
+    def test_a_snap_point_is_placed_exactly(self):
+        r = core.snap_result(core.SnapPoint(core.END, (10.0, 0.0), (-3, 2)))
+        self.assertEqual(core.exact_point(r, (10.1, -0.1), PX), (10.0, 0.0))
+
+    def test_placed_elsewhere_nothing(self):
+        r = core.snap_result(core.SnapPoint(core.END, (10.0, 0.0), (-3, 2)))
+        self.assertIsNone(core.exact_point(r, (11.0, 0.0), PX))
+
+    def test_freecads_grid_is_off_for_a_snap(self):
+        r = core.snap_result(core.SnapPoint(core.QUADRANT, (5.0, 0.0), geo=1))
+        self.assertTrue(core.grid_off(r, 1.0, PX))
+
+
+class Diagonal(unittest.TestCase):
+    """45 / 135 / 225 / 315 degrees (beyond Fusion: Luca's wish; always on, Ctrl frees)."""
+
+    def test_3_degrees_off_45_snaps_to_45(self):
+        start = (0.0, 0.0)
+        raw = rot((40.0, 0.0), 48.0)
+        r = run(raw, start=start)
+        self.assertEqual(r.kind, core.DIAGONAL)
+        self.assertAlmostEqual(math.degrees(math.atan2(r.point[1], r.point[0])), 45.0)
+
+    def test_all_four_diagonals(self):
+        for deg in (135.0, 225.0, 315.0):
+            r = run(rot((40.0, 0.0), deg + 2.5), start=(0.0, 0.0))
+            self.assertEqual(r.kind, core.DIAGONAL, deg)
+            ang = math.degrees(math.atan2(r.direction[1], r.direction[0])) % 360.0
+            self.assertAlmostEqual(ang, deg)
+
+    def test_beyond_the_tolerance_stays_free(self):
+        self.assertIsNone(run(rot((40.0, 0.0), 51.0), start=(0.0, 0.0)))
+
+    def test_its_own_tolerance_and_off(self):
+        raw = rot((40.0, 0.0), 51.0)
+        self.assertEqual(run(raw, start=(0.0, 0.0), diag_deg=7.0).kind, core.DIAGONAL)
+        self.assertIsNone(run(rot((40.0, 0.0), 46.0), start=(0.0, 0.0), diag_deg=0.0))
+
+    def test_level_and_upright_come_first(self):
+        self.assertEqual(run(rot((40.0, 0.0), 3.0), start=(0.0, 0.0)).kind, core.HORIZONTAL)
+
+    def test_the_grid_is_off_for_a_diagonal(self):
+        r = run(rot((40.0, 0.0), 44.0), start=(0.0, 0.0), grid=1.0)
+        self.assertTrue(core.grid_off(r, 1.0, PX))
+
+    def test_placed_exactly_on_the_diagonal_after_the_click(self):
+        r = run(rot((40.0, 0.0), 44.0), start=(0.0, 0.0))
+        placed = (r.point[0] + 0.05, r.point[1] - 0.05)
+        p = core.exact_point(r, placed, PX)
+        self.assertAlmostEqual(p[0], p[1])
+
+    def test_meets_a_guide(self):
+        a = ((3, 2), (20.0, 50.0))
+        r = run(rot((30.0, 0.0), 46.0), start=(0.0, 0.0), acquired=[a])
+        self.assertEqual(r.kind, core.DIAGONAL)
+        self.assertAlmostEqual(r.point[0], 20.0)
+        self.assertAlmostEqual(r.point[1], 20.0)
+        self.assertEqual([g.axis for g in r.guides], [core.SAME_X])
+
+    def test_the_angle_constraint_value(self):
+        self.assertAlmostEqual(core.diagonal_angle((1.0, 1.0)), math.pi / 4)
+        self.assertAlmostEqual(core.diagonal_angle((-1.0, 1.02)), 3 * math.pi / 4)
+        self.assertAlmostEqual(core.diagonal_angle((-1.0, -1.0)), -3 * math.pi / 4)
+        self.assertAlmostEqual(core.diagonal_angle((1.0, -0.98)), -math.pi / 4)
+
+
+class Glyphs(unittest.TestCase):
+    def test_the_midpoint_triangle(self):
+        (tri,) = core.mid_mark((5.0, 5.0), 1.0)
+        self.assertEqual(len(tri), 4)  # three corners, closed
+        self.assertEqual(tri[0], tri[-1])
+        xs = sorted(p[0] for p in tri[:3])
+        self.assertAlmostEqual(xs[1], 5.0)  # the apex above the middle
+
+    def test_end_square_quadrant_diamond_crossing_x_centre_circle(self):
+        self.assertEqual(len(core.end_mark((0.0, 0.0), 1.0)[0]), 5)
+        diamond = core.quadrant_mark((0.0, 0.0), 1.0)[0]
+        self.assertIn((1.0, 0.0), diamond)
+        self.assertIn((0.0, 1.0), diamond)
+        self.assertEqual(len(core.crossing_mark((0.0, 0.0), 1.0)), 2)
+        ring, dot = core.centre_mark((0.0, 0.0), 1.0)
+        self.assertAlmostEqual(core.length(ring[3]), 0.9)
+        self.assertLess(max(abs(c) for p in dot for c in p), 0.2)
+
+    def test_snap_mark_picks_the_glyph_of_its_kind(self):
+        for kind, draw in core.GLYPHS.items():
+            s = core.SnapPoint(kind, (1.0, 2.0))
+            self.assertEqual(core.snap_mark(s, 0.5), draw((1.0, 2.0), 0.5))
+
+    def test_the_45_glyph_is_an_arc_and_the_digits(self):
+        strokes = core.diagonal_mark((0.0, 0.0), (10.0, 10.0), 1.0)
+        arc = strokes[0]
+        self.assertAlmostEqual(arc[0][1], 0.0)  # from level ...
+        self.assertAlmostEqual(
+            math.degrees(math.atan2(arc[-1][1], arc[-1][0])), 45.0
+        )  # to the line
+        # "4" has four strokes and "5" five
+        self.assertEqual(len(strokes) - 1, 4 + 5)
+
+    def test_digit_strokes(self):
+        self.assertEqual(len(core.digit_strokes("8", (0.0, 0.0), 1.0)), 7)
+        self.assertEqual(core.digit_strokes("1", (0.0, 0.0), 1.0)[0], [(1.0, 2.0), (1.0, 1.0)])

@@ -139,7 +139,11 @@ def finish():
 def finished():
     sk = s["sk"]
     h.check("left the sketch", h.in_sketch() is None)
-    faces = 0 if sk.InternalShape.isNull() else len(sk.InternalShape.Faces)
+    from sciforge import extrude
+
+    # (its areas as profiles: the face around A and B, which only the face's own projected
+    # edges bound (Auto project), is the face's, not a profile)
+    faces = len(extrude.profile_regions(sk))
     h.check("the finished sketch stays visible with its two areas",
             sk.ViewObject.Visibility and faces == 2, (sk.ViewObject.Visibility, faces))
     s["A"], s["B"] = area_name(A, sk), area_name(B, sk)

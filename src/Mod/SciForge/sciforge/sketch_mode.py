@@ -156,6 +156,13 @@ ENTER_FINISHES = {
     "SciForge_PolygonCircumscribed",
     "SciForge_PolygonInscribed",
 }
+# FreeCAD's Project tool, started by SciForge's P / Include 3D Geometry or FreeCAD's own
+PROJECT_COMMANDS = (
+    "SciForge_SketchProject",
+    "SciForge_SketchInclude3D",
+    "Sketcher_Projection",
+    "Sketcher_External",
+)
 # FreeCAD's spline tools (Fusion's Fit Point / Control Point Spline) and the undo step
 # their points are kept in while a spline is drawn.
 SPLINE_COMMANDS = (
@@ -1116,6 +1123,54 @@ class SketchSession:
         except Exception:
             return False
 
+    def projection_refused(self, pos):
+        """FreeCAD's Project tool (P) runs and the press at widget pixel `pos` is on a
+        face or edge of the part whose edges the sketch has already (Auto project put the
+        face's edges in, sketch_auto_project): FreeCAD would fail on the same face ("Link
+        to Face5 already exists") or double the curves. True when the click is taken here:
+        nothing new (a note beside the pointer), or only the edges still missing are
+        projected (a face with a hole drilled after Auto project took it)."""
+        from . import recent, sketch_auto_project
+
+        last = recent.last()
+        if last is None or last[0] not in PROJECT_COMMANDS or not self.tool_running():
+            return False
+        try:
+            ratio = self.gl.devicePixelRatioF()
+            info = self.view.getObjectInfo((pos.x() * ratio, (self.gl.height() - pos.y()) * ratio))
+            if not info or not info.get("Component"):
+                return False
+            obj = self.doc.getObject(info.get("Object", ""))
+            sub = info["Component"].rsplit(".", 1)[-1]
+            if obj is None or obj is self.sketch:
+                return False
+            missing, have = sketch_auto_project.missing_edges(self.sketch, obj, sub)
+            if not have:
+                return False  # nothing of it in the sketch: FreeCAD's tool projects it
+        except Exception as exc:
+            warn("project: %s" % exc)
+            return False
+        from . import commands
+
+        if not missing:
+            commands.tell("Project: %s is in the sketch already (projected)." % sub)
+            log("project: %s.%s is projected already; click ignored" % (obj.Label, sub))
+            return True
+        sketch = self.sketch
+
+        def add():
+            try:
+                count = sketch_auto_project.add_edges(sketch, obj, missing)
+                log(
+                    "project: %d curve(s) of %s.%s added (the rest was projected already)"
+                    % (count, obj.Label, sub)
+                )
+            except Exception as exc:
+                warn("project: %s" % exc)
+
+        QtCore.QTimer.singleShot(0, add)
+        return True
+
     def open_spline_step(self):
         """FreeCAD's spline tool adds a point (or control circle) to the sketch at each
         click, meant to be kept in its undo step "Add Sketch B-Spline"; but FreeCAD's
@@ -1556,6 +1611,7 @@ class _ViewFilter(QtCore.QObject):
         super().__init__()
         self.session = session
         self.right_pressed = None
+        self.refused_release = False  # the release of a refused Project click
 
     def eventFilter(self, obj, event):
         try:
@@ -1597,6 +1653,17 @@ class _ViewFilter(QtCore.QObject):
                     # FreeCAD must not get this second press as another click there.
                     QtCore.QTimer.singleShot(0, session.line.break_chain)
                     return True
+            if kind in _PRESSES and event.button() == QtCore.Qt.LeftButton:
+                if session.projection_refused(event.position().toPoint()):
+                    self.refused_release = True
+                    return True
+            if (
+                kind == QtCore.QEvent.MouseButtonRelease
+                and event.button() == QtCore.Qt.LeftButton
+                and self.refused_release
+            ):
+                self.refused_release = False
+                return True
             if kind == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton:
                 session.open_spline_step()  # (FreeCAD's spline tool: the points' undo step)
             # Fusion's inference (sketch_infer.py) may hand FreeCAD a copy of the event
@@ -1657,6 +1724,7 @@ class _ViewFilter(QtCore.QObject):
         return False
 
 
+_PRESSES = (QtCore.QEvent.MouseButtonPress, QtCore.QEvent.MouseButtonDblClick)
 _REDRAWS = (
     QtCore.QEvent.MouseMove,
     QtCore.QEvent.MouseButtonPress,
@@ -2268,7 +2336,8 @@ class ProfileShading:
         placement = sketch.getGlobalPlacement()
         self.transform.translation.setValue(*placement.Base)
         self.transform.rotation.setValue(*placement.Rotation.Q)
-        faces = sketch_regions.sketch_regions(sketch)
+        # (the area only the face's projected edges bound is the face's: not shaded)
+        faces = sketch_regions.profile_regions(sketch)
         self.count = len(faces)
         points, index = [], []
         self.shaded = []  # (face, [(x, y)], triangles) per area: what can be picked

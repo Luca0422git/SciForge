@@ -223,6 +223,72 @@ def regions(sketch):
     return found
 
 
+_FACE_AREAS = {}  # (document, sketch) -> (shape stamp, {"InternalFaceN"})
+
+
+def face_areas(sketch):
+    """{"InternalFaceN"} of the sketch's areas that only its projected edges bound (the
+    face it lies on, sketch_regions.face_areas): they are left to the face."""
+    try:
+        if sketch.InternalShape.isNull():
+            return set()
+        key = (sketch.Document.Name, sketch.Name)
+        stamp = (_stamp(sketch), sketch.InternalShape.hashCode())
+        cached = _FACE_AREAS.get(key)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        from . import sketch_regions
+
+        faces = list(sketch.InternalShape.Faces)
+        found = {"InternalFace%d" % (i + 1) for i in sketch_regions.face_areas(sketch, faces)}
+        _FACE_AREAS[key] = (stamp, found)
+        return found
+    except Exception:
+        return set()
+
+
+def profile_regions(sketch):
+    """regions() without the areas only the face's projected edges bound (face_areas):
+    the profiles a click or an automatic pick offers."""
+    own = face_areas(sketch)
+    return [(sub, face) for sub, face in regions(sketch) if sub not in own]
+
+
+def taken_by_itself(sketch):
+    """The areas ("InternalFaceN") Extrude / Revolve take by themselves from a sketch, or
+    []: its one area; with the face's edges projected (Auto project), the areas inside the
+    one area the sketch's own curves close (a rectangle drawn from a face's edge, a disc
+    on a face, a rectangle over a rim split by its inner edges: what was drawn, as without
+    the projected edges), else its one area that is a profile (profile_regions)."""
+    named = regions(sketch)
+    if len(named) > 1:
+        from . import sketch_regions
+
+        local = list(sketch.InternalShape.Faces)
+        drawn = sketch_regions.drawn_regions(sketch, local) if len(local) == len(named) else []
+        if drawn:
+            return [named[i][0] for i in drawn]
+        named = profile_regions(sketch)
+    return [named[0][0]] if len(named) == 1 else []
+
+
+def lost_area(sketch):
+    """How much area (mm^2) the sketch's curves close that FreeCAD's own areas
+    ("InternalFaceN") leave out: FreeCAD 1.1.4 makes no area where an arc ends tangent on
+    the middle of a line (a rectangle drawn over a projected rounded outline), while the
+    sketch's shading (sketch_regions) shows it. 0.0 when they agree or on any doubt."""
+    try:
+        from . import sketch_regions
+
+        if not sketch.MakeInternals or sketch.InternalShape.isNull():
+            return 0.0
+        made = sum(f.Area for f in sketch.InternalShape.Faces)
+        closed = sum(f.Area for f in sketch_regions.sketch_regions(sketch))
+        return max(0.0, closed - made) if closed - made > 1e-6 * max(1.0, closed) else 0.0
+    except Exception:
+        return 0.0
+
+
 def normalize(profile):
     """Profiles in the list form [(obj, sub), ...] from the forms callers use."""
     if profile is None:

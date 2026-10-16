@@ -198,7 +198,13 @@ class ProfilePicker:
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
         self.root.addChild(pick)
+        # drawn a hair in front of the part's faces: FreeCAD pushes those back with the
+        # default offset (factor 1, units 1); the same push here made the shaded areas of
+        # a sketch on a face fight the face for the same pixels (Luca: "Faces that are
+        # sketched on have z-fighting")
         offset = coin.SoPolygonOffset()
+        offset.factor.setValue(-1.0)
+        offset.units.setValue(-1.0)
         self.root.addChild(offset)
         self.face_root = coin.SoSeparator()  # picked body faces
         self.root.addChild(self.face_root)
@@ -215,6 +221,10 @@ class ProfilePicker:
             except Exception as exc:
                 warn("no profile for %s: %s" % (sketch.Label, exc))
                 continue
+            # the areas only the face's projected edges bound are the face's (Auto
+            # project): a click there takes the face (extrude.face_areas)
+            own = extrude.face_areas(sketch)
+            found = [(sub, face) for sub, face in found if sub not in own]
             for sub, face in found:
                 self.regions.append((sketch, sub, face, self._add_face(face, self.root)))
             if on_curve is not None and _visible(sketch):
