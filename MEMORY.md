@@ -4,9 +4,10 @@ This file is the project's memory across work sessions. **Read it first, every s
 `docs/sciforge/feature-outline.md` (the spec). Update it at the end of every session: what was
 done, what was learned, what is next. Newest session goes at the top of the log.
 
-**Start here (2026-10-16):** search this file for "HANDOFF 2026-10-16 evening": it says where the
-work stopped (CI #136: one red scenario in shard 3, `inspect_analysis_curvature`) and what to do
-first. Then report to Luca with the quick update of the first green CI.
+**Start here (2026-10-17):** read the newest session log ("Luca's improvement list").
+Every item of Luca's list (IMPROVEMENTS_AND_STUFF_TO_FIX.txt, 18 fixes + 3 additions) is
+built and merged; what is left is in that log's "Open" list. Luca wants ONE complete update
+per list, delivered directly (a zip of the module, see the log), not gated on CI.
 
 **Work branch: `develop` (Luca, 2026-10-16).** Every session commits and pushes to `develop`,
 whatever branch name the session was given (Claude Code makes up names like
@@ -1368,6 +1369,69 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Luca's improvement list (branch `develop`, 2026-10-16/17)
+
+Luca tested the CI #131 quick update and sent IMPROVEMENTS_AND_STUFF_TO_FIX.txt: 18 fixes, then
+3 additions (text on a face, start in SciForge, a gear tool). Plan:
+/root/.claude/plans/fancy-hugging-horizon.md (F1-F18, A1-A3). His answers: gears = spur +
+internal + rack; angle snap = always on at 0/45/90..., Ctrl = free.
+
+#### Built (all merged)
+- F1-F4 (me): Construct / Section / COM / surface analysis previews follow a drag live
+  (`schedule()` calls `taskui.Panel.schedule`); Press Pull marked work in progress (warning
+  badge on the icon, note in the dialog and tooltip); Hole on a freeform face says it is a
+  limit (`hole.on_freeform_face`); closing a drawing no longer crashes (`drawing_ui`
+  `_CloseWatch` / `_DocWatch`, shiboken validity checks). Scenarios construct_live,
+  limits_notes, drawing_close.
+- F5-F10 (builder sf/sketch-3): see `docs/sciforge/sessions/sketch-3.md`. Auto project of the
+  face's edges (Preferences > Design > Sketch, default on; the face's own area stays the face,
+  hidden property `SciForgeAutoProjected`), one snapping engine (`sketch_infer_core.snap_points`,
+  SnapPixels 8), 45-degree line snaps, glyphs at the cursor, profiles against projected edges,
+  z-fighting offsets. Root cause of "slightly off the corner": FreeCAD's PickRadius counts device
+  pixels (3.3 logical px at 150 %).
+- F11-F14 (builder sf/view-3): see `docs/sciforge/sessions/view-3.md`. Origin planes
+  red/green/blue, labelled, 0.6 x the parts (`origin_look.py`); angle snap + protractor
+  (`angle_snap_core.py`, `protractor.py`) on every turn handle; Align snap dots; Body priority
+  hover inside tools. Scenario clicks on squares go through `SciForgeTests/gui/plane_input.py`.
+- F16-F18 (me): Change Keyboard Shortcut / Pin to Toolbar ("..." on every drop-down row,
+  `command_options.py`, `shortcuts_core.py`, `ribbon_pins.py`), Preferences > Keyboard
+  Shortcuts, Reset All Toolbar Customization; document tabs at the top (`doc_tabs.py` mirrors
+  FreeCAD's hidden MDI tab bar, found by its name "mdiAreaTabBar").
+- A1 SOLID > CREATE > Text (`text_ui.FaceTextCommand`, `sketch_ui.start(then=...)`); A2 start
+  in SciForge (`start_in.py`, from InitGui; Preferences > General > Start in SciForge); A3 Gear
+  (builder sf/gear-1, `gear_core.py` / `gear.py` / `gear_ui.py`, `docs/sciforge/sessions/gear.md`).
+- Merge fixes (me): PlanePicker keeps view-3's face rule (`_not_behind`) and the CI #141 edge
+  rule (`_on_square` or `_face_in_front`); Revolve takes a part edge a few px from the press as
+  the axis (`_edge_near`, Auto project put an area beside the edge).
+
+#### FreeCAD facts learned
+- FreeCAD runs every InitGui.py, then reads General/AutoloadModule (StartupProcess.cpp), then
+  restores the window layout; switching SciForge on before the window is shown: nothing counts
+  as visible (use `isHidden`), and FreeCAD sizes its right overlay panel from the window's
+  minimum size and keeps it for good (`BaseApp/MainWindow/DockWindows/OverlayRight` Width;
+  setting Width alone makes FreeCAD read an unset `Widgets` as "", set "Tasks," too).
+- In Qt 6 a QTest click is delivered through the window: a widget on top of that pixel takes it.
+- `findChildren(QTabBar, "", FindDirectChildrenOnly)` finds nothing in this PySide; use the name.
+
+#### CI #141-#144 and the lesson (Luca was right to be angry)
+Red runs #141-#143 were mostly the tests, not SciForge: the Fillet dialog sat ~10 px from the
+7th edge of inspect_analysis_curvature (wider on GitHub's fonts: the test now pans its part
+away); a harness change of mine (pan when a dialog is near, skip "covered" pixels) broke
+sweep_loft_qa_web and pi5_case; pi5_case clicked four hole points in one step (now one per
+step, each checked). One real regression: my Pi 5 plane rule blocked XZ behind a loft edge
+(sweep_loft_loft). Rules from this: never push before the whole set of affected scenarios has
+finished locally; bisect a CI failure to a commit before changing anything; a fix to the test
+harness changes every scenario, so prefer a fix in the one scenario; Luca's updates are not
+held back by test robustness work (build the zip directly: `git archive HEAD src/Mod/SciForge`
++ build_info.py + tools/sciforge/install_update.* + docs/sciforge/quick-update.md as README).
+
+#### Open
+- Full local regression of the integrated code (3 shards) was running at the end; its result
+  decides the final fixes before Luca's complete update.
+- FreeCAD limit (C++): a sketch area is lost where an arc ends tangent on a line's middle
+  (rounded outline + a rectangle over it); Extrude says so.
+- Sketch Rotate keeps FreeCAD's Ctrl snapping; Pin to Shortcuts not built.
 
 ### Session log: Raspberry Pi 5 case from scratch (branch `develop`, 2026-10-16)
 
