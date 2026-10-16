@@ -578,6 +578,14 @@ def _start(sketch):
     if not _state["on"]:
         return
     try:
+        from . import sketch_ui
+
+        # the design as it is at the sketch's place, never the step it hangs on (a sketch
+        # opened by FreeCAD's own commands still had "Show support" on)
+        sketch_ui.show_design_at(sketch)
+    except Exception as exc:
+        warn("sketch mode: %s" % exc)
+    try:
         repark_keys()
     except Exception as exc:
         warn("sketch keys: %s" % exc)

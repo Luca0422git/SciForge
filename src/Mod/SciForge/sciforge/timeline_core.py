@@ -726,6 +726,23 @@ def can_roll_forward(timeline):
     return not timeline.at_end
 
 
+def shown_while_sketching(chain, at):
+    """The step whose solid a body shows while a sketch of it is open. Fusion shows the
+    design as it is at the sketch's place in the timeline: the end for a new sketch (every
+    edit made so far), the steps before it for a sketch edited from the timeline. ``chain``:
+    the body's history from its Tip back, [(name, timeline index or None, uses_sketch)];
+    ``at``: the sketch's timeline index (None: not in the timeline, only what uses the
+    sketch is left out). The newest step that does not use the sketch and comes before
+    it; None when no solid exists there yet (the body shows nothing)."""
+    for name, index, uses_sketch in chain:
+        if uses_sketch:
+            continue
+        if at is not None and index is not None and index > at:
+            continue
+        return name
+    return None
+
+
 def place_at_marker(old, new, tip, note, solids):
     """Where a new step goes in its body: Fusion adds it at the history marker.
 

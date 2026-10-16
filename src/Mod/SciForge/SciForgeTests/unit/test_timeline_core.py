@@ -514,5 +514,36 @@ class ComponentStepTests(unittest.TestCase):
         self.assertEqual(state["Fillet"], "done")
 
 
+class ShownWhileSketchingTests(unittest.TestCase):
+    """What a body shows while one of its sketches is open (Luca: a sketch on an edited
+    face showed the part as it was before the edits)."""
+
+    def test_new_sketch_shows_the_end(self):
+        # Pad, Fillet; a new sketch (index 3) on a face Pad made: the fillet stays shown
+        chain = [("Fillet", 2, False), ("Pad", 1, False)]
+        self.assertEqual(core.shown_while_sketching(chain, 3), "Fillet")
+
+    def test_edited_sketch_rolls_back_to_its_place(self):
+        # ... Fillet (2), the sketch (3), its boss (4), a chamfer after (5): editing the
+        # sketch shows the fillet, not the boss nor what came after it
+        chain = [("Chamfer", 5, True), ("Boss", 4, True), ("Fillet", 2, False), ("Pad", 1, False)]
+        self.assertEqual(core.shown_while_sketching(chain, 3), "Fillet")
+
+    def test_later_step_that_does_not_use_the_sketch(self):
+        # a step made after the sketch is not there yet at the sketch's place
+        chain = [("Fillet2", 4, False), ("Fillet", 2, False), ("Pad", 1, False)]
+        self.assertEqual(core.shown_while_sketching(chain, 3), "Fillet")
+
+    def test_first_sketch_shows_nothing(self):
+        chain = [("Fillet", 3, True), ("Pad", 2, True)]
+        self.assertIsNone(core.shown_while_sketching(chain, 1))
+
+    def test_not_in_the_timeline(self):
+        # no place known: only the steps that use the sketch are left out
+        chain = [("Boss", None, True), ("Fillet", None, False)]
+        self.assertEqual(core.shown_while_sketching(chain, None), "Fillet")
+        self.assertIsNone(core.shown_while_sketching([], 3))
+
+
 if __name__ == "__main__":
     unittest.main()
