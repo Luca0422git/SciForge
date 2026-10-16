@@ -205,7 +205,14 @@ class Triad(BoxCarrier):
         tip (anchored at its middle), or a turn handle's arc (anchored at its ball)."""
         if not self.in_use:
             raise ValueError("no handle in use yet")
-        kind, index = self.in_use
+        return self._part(self.in_use)
+
+    def box_active(self):
+        return bool(self._drag)
+
+    def _part(self, handle):
+        """(anchor, tail, tip, radius) of one of the triad's handles (see box_geometry)."""
+        kind, index = handle
         if kind == "move":
             tail = self.center + AXES[index] * (0.15 * self.size)
             tip = self.tip(index)
@@ -215,11 +222,22 @@ class Triad(BoxCarrier):
             self.ball_point(index),
             self.center + points[0],
             self.center + points[-1],
-            (0.07 * self.size),
+            0.07 * self.size,
         )
 
-    def box_active(self):
-        return bool(self._drag)
+    def box_avoid(self):
+        """The box never covers the triad's other arrows, arcs and balls (they stay
+        grabbable, and the mouse over them moves the box to them)."""
+        parts = []
+        for kind in ("move", "turn") if self.turns else ("move",):
+            for index in range(3):
+                if (kind, index) == self.in_use:
+                    continue
+                parts.append(self._part((kind, index)))
+                if kind == "turn":
+                    ball = self.ball_point(index)
+                    parts.append((ball, ball, ball, 0.1 * self.size))
+        return parts
 
     def use(self, handle):
         """Make `handle` ((kind, index)) the one the value box sits beside."""
