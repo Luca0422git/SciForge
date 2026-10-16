@@ -53,10 +53,18 @@ def volume(document=None):
 
 
 def link_volume(document):
+    """The volume an inserted design brings in: its linked component's copies (Insert
+    Design since exchange-2), or the plain links of older designs."""
+    from sciforge import design_insert
+
     total = 0.0
     for obj in document.Objects:
         if obj.TypeId == "App::Link" and not obj.Shape.isNull():
             total += obj.Shape.Volume
+    for comp in design_insert.linked_components(document):
+        for feature in design_insert.copy_features(comp):
+            if not feature.Shape.isNull():
+                total += feature.Shape.Volume
     return total
 
 

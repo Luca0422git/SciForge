@@ -2507,13 +2507,29 @@ def _saved_date(path):
     return date
 
 
+def _linked_copies(doc):
+    """The copies inside `doc`'s linked components (Insert Design since exchange-2:
+    design_insert.LinkedCopy, an XLink to a body of the other design)."""
+    try:
+        from . import design_insert
+
+        return [
+            f
+            for comp in design_insert.linked_components(doc)
+            for f in design_insert.copy_features(comp)
+        ]
+    except Exception as exc:
+        warn("linked components: %s" % exc)
+        return []
+
+
 def linked_documents(doc):
-    """The other designs `doc` inserts (Insert Design's links), as open documents."""
+    """The other designs `doc` inserts (Insert Design's linked components, and the plain
+    links older designs hold), as open documents."""
     found = []
-    for obj in doc.Objects:
-        if obj.TypeId != "App::Link":
-            continue
-        target = getattr(obj, "LinkedObject", None)
+    targets = [getattr(o, "LinkedObject", None) for o in doc.Objects if o.TypeId == "App::Link"]
+    targets += [getattr(f, "Source", None) for f in _linked_copies(doc)]
+    for target in targets:
         other = getattr(target, "Document", None)
         if other is None or other is doc or other in found:
             continue
@@ -2583,6 +2599,10 @@ def get_latest(doc, kinds=("link", "derive")):
                 if other is None:
                     continue
                 other.restore()  # read from its file again; the links follow it
+                for feature in _linked_copies(doc):
+                    # a linked component's copies only rebuild when touched
+                    if getattr(getattr(feature, "Source", None), "Document", None) is other:
+                        feature.touch()
                 count += 1
                 log("got the latest %s" % other.FileName)
             elif kind == "derive":
