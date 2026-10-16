@@ -201,7 +201,7 @@ def _origin_planes_class():
     part under the mouse always takes the click, and otherwise the nearest of a square and
     whatever else is there (a construction plane) does."""
     from .profile_pick import ray_plane
-    from .sketch_ui import HOVER, IDLE, PlanePicker
+    from .sketch_ui import PlanePicker
 
     class OriginPlanes(PlanePicker):
         def front_plane_at(self, position):
@@ -240,14 +240,7 @@ def _origin_planes_class():
         def _moved(self, info):
             try:
                 role = self.front_plane_at(info["Position"])
-                material = self.materials.get(role)
-                if material is not self.hovered:
-                    for m, look in ((self.hovered, IDLE), (material, HOVER)):
-                        if m is not None:
-                            m.diffuseColor.setValue(*look[0])
-                            m.emissiveColor.setValue(*[c * 0.5 for c in look[0]])
-                            m.transparency.setValue(look[1])
-                    self.hovered = material
+                self.light(role)
             except Exception as exc:
                 warn("plane hover: %s" % exc)
 

@@ -350,9 +350,9 @@ h.run(
     "direct_base_feature",
     t.watched(
         [s.new_design("BaseFeature")]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
         + [a_create, a_open]
-        + s.box_steps("plate", (60, 0, 100, 30), 10, V(12, -8, 0), new_body=True)
+        + s.box_steps("plate", (60, 0, 100, 30), 10, V(6, -6, 0), new_body=True)
         + [b_plate_made]
         + ps.make_cut("hole", (80, 15), 4, 10)
         + [

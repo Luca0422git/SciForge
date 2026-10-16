@@ -37,6 +37,7 @@ import Sketcher
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import modify2_steps as m
 from SciForgeTests.gui import pattern_steps as ps
 
@@ -91,7 +92,7 @@ def new_design():
 
 
 def pick_xz():
-    h.click(V(6, 0, 5))  # the XZ square
+    pl.click_square("XZ_Plane")  # where the square shows (was 6, 0, 5)
 
 
 def draw_wedge():

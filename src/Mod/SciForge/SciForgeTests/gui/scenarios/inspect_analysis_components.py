@@ -16,6 +16,7 @@ from SciForgeTests.gui import analysis_steps as a
 from SciForgeTests.gui import arrow_input as ai
 from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 
 V = App.Vector
@@ -40,7 +41,7 @@ def sketch_1():
 
 
 def plane_1():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def rect_1():
@@ -81,7 +82,7 @@ def sketch_2():
 
 
 def plane_2():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def rect_2():

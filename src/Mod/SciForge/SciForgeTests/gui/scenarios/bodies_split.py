@@ -26,6 +26,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import widget_input as wi
 
 V = App.Vector
@@ -70,7 +71,7 @@ def a_click_yz():
         h.check("Body1 picked", p.options["body"] is body1(), p.options)
         h.check("tool box waits", p.active == "tool", p.active)
         h.check("origin squares drawn", p.plane_picker is not None)
-    h.click(V(0, -24, 20))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, -24, 20)
 
 
 def a_preview():
@@ -138,7 +139,7 @@ def b_click_xz():
     p = s.panel()
     if p is not None:
         h.check("clicking the box shows the squares", p.plane_picker is not None)
-    h.click(V(15, 0, 18))
+    pl.click_square("XZ_Plane")  # where the square shows (was 15, 0, 18)
 
 
 def b_preview():
@@ -173,7 +174,7 @@ def c_click_body():
 
 
 def c_click_xy():
-    h.click(V(18, -24, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 18, -24, 0)
 
 
 def c_reason():
@@ -392,7 +393,7 @@ h.run(
         e_closed,
         s.new_design("SplitLine"),
     ]
-    + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [
         f_sketch,
         f_click_top,

@@ -64,8 +64,9 @@ Unavailable items are greyed out. Separators group related commands.
 - Browser with Fusion's structure (browser_ui.py), marking menu (marking_menu.py), Press Pull,
   Extrude, Change Parameters, Construct presets, draggable timeline marker, ViewCube colours,
   3D Print.
-- Create Sketch: big origin plane squares light up under the mouse; click one or a flat face and
-  the sketch opens (sketch_ui.py). No attachment pop-ups.
+- Create Sketch: origin plane squares (coloured by axis and labelled since view-3) light up
+  under the mouse; click one or a flat face and the sketch opens (sketch_ui.py). No
+  attachment pop-ups.
 - Extrude: closed sketch profiles are shaded and light up under the mouse; click inside one, or
   click a flat face of the part. Blue drag arrow.
 - Starting a command finishes the one in progress (as in Fusion) instead of doing nothing.
@@ -86,6 +87,19 @@ Unavailable items are greyed out. Separators group related commands.
 - (Timeline: drag-to-reorder, suppress and groups are built, groups dragged as a whole since
   polish-2: `parity/timeline-browser.md`.)
 - Menu icons are 16 px (Fusion about 20 px); COMMENTS panel and "Unsaved" banner not done.
+
+## Origin planes, axes and turn handles (view-3, 2026-10-16)
+
+Luca's reports after the CI #131 quick update:
+- "the yellow axis selector is ugly, unruly, too big, gets in the way, and you can't tell
+  which face is the x y or z. none of them are labeled. give it the red green blue of all the
+  rest of the axis and make it smaller. and label them."
+
+| Behaviour | Source | SciForge |
+|---|---|---|
+| Origin planes in the axis colours: a plane in the colour of the axis it faces (XY blue, XZ green, YZ red), see-through, brighter with a thicker outline under the mouse, a label "XY" / "XZ" / "YZ" at the corner away from the part | Luca (Fusion draws its origin planes in one colour and unlabelled: beyond Fusion) | `origin_look.py` (colours, sizes, labels; unit `test_origin_look`), used by Create Sketch's `PlanePicker` and every tool that reuses it (Construct, Section, Draft, Insert, the patterns' Mirror Plane, Align / Split / Silhouette / Replace Face, the primitives, the surfaces) and by the Mesh plane cut's squares. Scenario `view_origin_planes` |
+| Smaller squares | Luca | 0.6 x the part's largest side (was 1.3 x), at least 20 mm; 100 mm in an empty design (the view is framed on them). The primitives size them from the whole design with the same rule. A click on a square is matched to the drawn square only. Create Sketch (and the tools sharing its picker): a square drawn in front of the part takes the click where it is drawn; a face lying in the square's plane keeps it (a tie within 1 % of the square's size is the part's). With the old rule (any face under the mouse took the click) a smaller square standing in front of a thin plate centred on the origin could not be clicked at all. **Guess**: Fusion picks what is in front |
+| Origin axes labelled X / Y / Z in red / green / blue | Luca | Revolve's and Construct's axis lines (`revolve_ui.AxisPicker`) and the patterns' (`pattern_ui.AxisPicker`) carry a label on their + half; the patterns use the shared colours |
 
 ## Value fields: a formula of the wrong kind (2026-10-14, gaps work)
 

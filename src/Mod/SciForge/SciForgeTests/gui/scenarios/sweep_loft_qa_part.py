@@ -30,6 +30,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import sweep_loft_steps as st
 
@@ -76,7 +77,7 @@ def new_design():
 
 
 def c_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def c_key():
@@ -128,7 +129,7 @@ def p_sketch():
 def p_xz():
     # left of the axis, where no part lies behind the XZ square (Create Sketch leaves a
     # click with a face of the part under the mouse to that face)
-    h.click(V(-12, 0, 12))
+    pl.click_square("XZ_Plane")  # where the square shows (was -12, 0, 12)
 
 
 def p_key():

@@ -224,7 +224,7 @@ def f_sketch_xz():
 
 
 def f_click_xz():
-    h.click(V(-10, 0, 18))
+    h.click(V(5, 0, 8))  # above the part (z 0..5) inside the 20 mm XZ square
 
 
 def f_insert_in_sketch():

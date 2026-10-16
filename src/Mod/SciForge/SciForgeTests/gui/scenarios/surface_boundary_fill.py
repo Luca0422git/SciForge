@@ -22,6 +22,7 @@ from PySide import QtCore, QtWidgets
 from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import surface_steps as st
 
 V = App.Vector
@@ -228,7 +229,7 @@ def click_cone():
 
 
 def click_xy():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def tools_picked():

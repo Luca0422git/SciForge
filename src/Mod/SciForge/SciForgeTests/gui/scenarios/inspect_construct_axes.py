@@ -116,13 +116,13 @@ def planes_check():
 
 def origin_xy():
     h.fit()
-    h.click(V(20, -10, 0))
+    h.click(V(6, -6, 0))
 
 
 def origin_xz():
     p = s.construct_panel()
     h.check("XY square taken", p is not None and "XY" in s.box_value(p, 0), p and s.box_value(p, 0))
-    h.click(V(20, 0, -12))
+    h.click(V(8, 0, -8))
 
 
 def origin_check():
@@ -267,7 +267,7 @@ def edge_plane_edge():
 
 
 def edge_plane_xy():
-    h.click(V(20, -10, 0))
+    h.click(V(6, -6, 0))
 
 
 def edge_plane_check():

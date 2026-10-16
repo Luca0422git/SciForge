@@ -20,6 +20,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import widget_input as w
 
@@ -202,7 +203,7 @@ def sketch_below():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))  # the XY square in front of the part, nothing else in the way
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def point_below():

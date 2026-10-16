@@ -23,6 +23,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -69,7 +70,7 @@ def new_design():
 
 
 def pick_xz():
-    h.click(V(15, 0, 12))
+    pl.click_square("XZ_Plane")  # where the square shows (was 15, 0, 12)
 
 
 def draw_trapezoid():

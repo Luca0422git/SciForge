@@ -23,6 +23,7 @@ from PySide import QtCore
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as tl
 
 V = App.Vector
@@ -130,7 +131,7 @@ def plate_sketch():
 
 
 def plate_pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def plate_draw():
@@ -292,7 +293,7 @@ def x3_sketch():
 
 def x3_pick_xz():
     h.fit()
-    h.click(V(-25, 0, 22))  # the XZ square left of the plate
+    pl.click_square("XZ_Plane")  # where the square shows (was -25, 0, 22)
 
 
 def x3_draw():

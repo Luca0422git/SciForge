@@ -31,6 +31,7 @@ from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import revolve_input as ri
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
@@ -141,7 +142,7 @@ def new_design():
 
 
 def block_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def block_rect():
@@ -184,7 +185,7 @@ def p23_sketch():
 
 
 def p23_plane():
-    h.click(V(-15, 0, 15))  # the XZ square left of the block (no part behind it)
+    pl.click_square("XZ_Plane")  # where the square shows (was -15, 0, 15)
 
 
 def p23_rect():
@@ -367,7 +368,7 @@ def p25_sketch():
 
 
 def p25_plane():
-    h.click(V(-15, 0, 15))  # the XZ square left of the block again
+    pl.click_square("XZ_Plane")  # where the square shows (was -15, 0, 15)
 
 
 def p25_rect():

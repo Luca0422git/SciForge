@@ -33,6 +33,7 @@ from PySide6 import QtTest
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -135,7 +136,7 @@ def p1_nothing_left():
 
 
 def p1_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
 def p1_corner_again():
@@ -372,7 +373,7 @@ def p3_new():
 
 
 def p3_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
 def p3_c1():
@@ -460,7 +461,7 @@ def p4_sphere():
 
 
 def p4_plane():
-    h.click(V(30, -30, 0))  # the XY square, beside the box
+    pl.click_square("XY_Plane")  # where the square shows (was 30, -30, 0)
 
 
 def p4_centre():

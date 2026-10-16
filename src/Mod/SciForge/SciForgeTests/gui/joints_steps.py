@@ -42,8 +42,8 @@ def box_is(name, box, expect, tol=1e-6):
 def two_boxes(prefix=""):
     """Steps that make the plate and the block (Create Sketch, rectangle, E...)."""
     # the XY square is clicked just in front of the plate, where no body covers it
-    steps = s.box_steps(prefix + "plate", PLATE, PLATE_HEIGHT, V(12, -8, 0))
-    steps += s.box_steps(prefix + "block", BLOCK, BLOCK_HEIGHT, V(12, -8, 0), new_body=True)
+    steps = s.box_steps(prefix + "plate", PLATE, PLATE_HEIGHT, V(6, -6, 0))
+    steps += s.box_steps(prefix + "block", BLOCK, BLOCK_HEIGHT, V(6, -6, 0), new_body=True)
     return steps
 
 

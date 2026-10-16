@@ -22,6 +22,7 @@ from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 
 V = App.Vector
@@ -48,7 +49,7 @@ def a_sketch():
 
 
 def a_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def a_draw():
@@ -240,7 +241,7 @@ h.run(
     "components_extrude",
     t.watched(
         [new_design]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
         + [
             a_sketch,
             a_plane,

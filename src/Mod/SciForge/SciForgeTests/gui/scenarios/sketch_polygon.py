@@ -19,6 +19,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
@@ -36,7 +37,7 @@ def create_sketch():
 
 
 def pick_xy_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def open_circumscribed():

@@ -31,6 +31,7 @@ from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as t
 
@@ -90,7 +91,7 @@ def j1_sketch():
 
 
 def j1_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def j1_draw():
@@ -180,7 +181,7 @@ def j2_sketch():
 
 def j2_plane():
     h.fit()
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def j2_draw():
@@ -456,7 +457,7 @@ h.run(
     "gaps_join_new_body",
     t.watched(
         [s.new_design("GapsJoinNewBody")]
-        + s.box_steps("block", (0, 0, 40, 30), 10, V(12, -8, 0))
+        + s.box_steps("block", (0, 0, 40, 30), 10, V(6, -6, 0))
         + [
             block_made,
             j1_sketch,

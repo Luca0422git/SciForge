@@ -472,7 +472,9 @@ WALLS = {
     # wall: (rows, how to look at it, a point of the wall face no opening takes)
     "front": (FRONT, "iso", V(70, 0, 18)),
     "right": (RIGHT, "iso", V(L, 31, 3)),
-    "left": (LEFT, (1, 1, -1), V(0, 10, 15)),
+    # (far along the wall: nearer the front, the XZ origin square stands in front of it
+    # from this side, and a square in front of the part takes the click)
+    "left": (LEFT, (1, 1, -1), V(0, 50, 15)),
 }
 
 

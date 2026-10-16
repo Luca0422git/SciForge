@@ -89,7 +89,7 @@ def waits():
 
 def click_xz():
     h.fit()
-    h.click(V(20, 0, -12))
+    h.click(V(8, 0, -8))
 
 
 def cut_at_xz():
@@ -282,7 +282,7 @@ def angle_start():
 
 def angle_pick():
     h.fit()
-    h.click(V(20, 0, -12))
+    h.click(V(8, 0, -8))
 
 
 def angle_90():
@@ -328,7 +328,7 @@ def esc_start():
 
 def esc_pick():
     h.fit()
-    h.click(V(20, 0, -12))
+    h.click(V(8, 0, -8))
 
 
 def esc_press():

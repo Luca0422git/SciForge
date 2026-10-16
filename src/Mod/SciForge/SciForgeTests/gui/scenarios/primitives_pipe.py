@@ -33,6 +33,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import primitive_input as pi
 
@@ -76,7 +77,7 @@ def create_sketch():
 
 
 def pick_xy():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
 def draw_path():
@@ -317,7 +318,7 @@ def box_start():
 
 
 def box_plane():
-    h.click(V(5, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def box_corner():

@@ -33,6 +33,7 @@ from PySide6 import QtTest
 from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import bodies_steps as bs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as ins
 from SciForgeTests.gui import shell_draft_steps as sd
 
@@ -41,7 +42,6 @@ s = {}
 BOX = 12000.0
 TOP = V(20, 15, 10)
 FRONT = V(20, 0, 5)
-XY_SQUARE = V(12, -8, 0)
 
 
 def panel():
@@ -357,7 +357,7 @@ def e_draft():
 
 def e_xy():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def e_front():

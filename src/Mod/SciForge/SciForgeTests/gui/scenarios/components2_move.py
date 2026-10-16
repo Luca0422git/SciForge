@@ -411,8 +411,8 @@ h.run(
     "components2_move",
     t.watched(
         [new_design]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
-        + s.box_steps("free", (60, 0, 100, 30), 10, V(12, -8, 0), new_body=True)
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
+        + s.box_steps("free", (60, 0, 100, 30), 10, V(6, -6, 0), new_body=True)
         + [
             setup_component,
             setup_rename,

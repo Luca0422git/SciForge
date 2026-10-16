@@ -213,7 +213,7 @@ h.run(
     "direct_commands",
     t.watched(
         [s.new_design("DirectCommands")]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
         + [
             history_off,
             remove_history,
@@ -228,7 +228,7 @@ h.run(
             a_redo,
             a_redone,
         ]
-        + s.box_steps("plate", (60, 0, 100, 30), 15, V(12, -8, 0), new_body=True)
+        + s.box_steps("plate", (60, 0, 100, 30), 15, V(6, -6, 0), new_body=True)
         + [
             b_plate,
             c_start,

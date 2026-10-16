@@ -194,7 +194,7 @@ def axis_click_xy():
         p is not None and "Plane1" in s.box_value(p, 0),
         p and s.box_value(p, 0),
     )
-    h.click(V(20, -10, 0))
+    h.click(V(6, -6, 0))
 
 
 def axis_preview():

@@ -18,6 +18,7 @@ from PySide import QtCore, QtWidgets
 from SciForgeTests.gui import analysis_steps as a
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import nav_input as n
 from SciForgeTests.gui import viewcube_input as vc
 
@@ -41,7 +42,7 @@ def sketch():
 
 
 def plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def circle():

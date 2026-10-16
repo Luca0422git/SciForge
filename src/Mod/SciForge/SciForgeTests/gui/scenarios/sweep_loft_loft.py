@@ -27,6 +27,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sweep_loft_steps as st
 
 V = App.Vector
@@ -49,7 +50,7 @@ def new_design():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw_square():
@@ -336,7 +337,7 @@ def cancelled():
 
 # -- second use: a cone to a point ----------------------------------------------------------------
 def pick_xz():
-    h.click(V(-17, 0, 12))
+    pl.click_square("XZ_Plane")  # where the square shows (was -17, 0, 12)
 
 
 def draw_point():

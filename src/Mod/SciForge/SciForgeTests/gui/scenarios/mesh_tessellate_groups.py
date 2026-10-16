@@ -418,7 +418,7 @@ def g_done():
 h.run(
     "mesh_tessellate_groups",
     [i.new_design("MeshTessellate")]
-    + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [b_open, b_waits, b_taken, b_preview, b_custom, b_done]
     + [c_undo, c_check_undo, c_redo, c_check_redo]
     + m.insert_file(inside_out_file())

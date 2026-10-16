@@ -45,6 +45,7 @@ from PySide import QtCore
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 
 V = App.Vector
@@ -570,7 +571,7 @@ def m_sketch():
 
 
 def m_pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def m_draw():
@@ -1039,8 +1040,8 @@ def r_undone():
 h.run(
     "bodies_qa_2",
     [s.new_design("QA_Multi")]
-    + s.box_steps("multi_body1", (0, 0, 20, 20), 10, V(12, -8, 0))
-    + s.box_steps("multi_body2", (40, 0, 60, 20), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("multi_body1", (0, 0, 20, 20), 10, V(6, -6, 0))
+    + s.box_steps("multi_body2", (40, 0, 60, 20), 10, V(6, -6, 0), new_body=True)
     + [
         i_open,
         i_body1,
@@ -1064,7 +1065,7 @@ h.run(
         i_followed,
     ]
     + [s.new_design("QA_Part")]
-    + s.box_steps("part_box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("part_box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + ps.make_boss("part_boss", (8, 8), 3, 5, V(30, 20, 10))
     + ps.make_cut("part_hole", (20, 15), 5, 10.0)
     + [
@@ -1098,9 +1099,9 @@ h.run(
         p_seam_nothing_moved,
     ]
     + [s.new_design("QA_Three")]
-    + s.box_steps("three_body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-    + s.box_steps("three_body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
-    + s.box_steps("three_body3", (10, 20, 20, 50), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("three_body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+    + s.box_steps("three_body2", (30, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
+    + s.box_steps("three_body3", (10, 20, 20, 50), 10, V(6, -6, 0), new_body=True)
     + [
         k_open,
         k_target,
@@ -1121,7 +1122,7 @@ h.run(
         k_intersect_cancelled,
     ]
     + [s.new_design("QA_Rotate")]
-    + s.box_steps("rotate_box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("rotate_box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [
         l_open,
         l_body,
@@ -1133,8 +1134,8 @@ h.run(
         l_done,
     ]
     + [s.new_design("QA_Reopen")]
-    + s.box_steps("reopen_body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-    + s.box_steps("reopen_body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("reopen_body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+    + s.box_steps("reopen_body2", (30, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
     + [
         m_open,
         m_target,
@@ -1157,7 +1158,7 @@ h.run(
         n_undone,
     ]
     + [s.new_design("QA_Plane")]
-    + s.box_steps("plane_box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("plane_box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [
         o_offset_plane,
         o_top_face,
@@ -1173,7 +1174,7 @@ h.run(
         o_undone,
     ]
     + [s.new_design("QA_FaceLook")]
-    + s.box_steps("look_box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("look_box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [
         q_open_look,
         q_faces_blue,
@@ -1189,8 +1190,8 @@ h.run(
         q_undone,
     ]
     + [s.new_design("QA_PressPull")]
-    + s.box_steps("pp_body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-    + s.box_steps("pp_body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("pp_body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+    + s.box_steps("pp_body2", (30, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
     + [
         r_combine,
         r_target,

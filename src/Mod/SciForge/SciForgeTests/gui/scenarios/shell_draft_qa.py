@@ -22,6 +22,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import shell_draft_steps as sd
 from SciForgeTests.gui import widget_input as w
 
@@ -30,7 +31,6 @@ s = {}
 R, L, W, H = 5.0, 40.0, 30.0, 10.0
 TOP = V(20, 15, 10)
 FRONT = V(20, 0, 5)
-XY_SQUARE = V(12, -8, 0)
 B2_TOP = V(70, 10, 20)
 B2_FRONT = V(70, 0, 10)
 B2_RIGHT = V(80, 10, 10)
@@ -108,7 +108,7 @@ def draft():
 
 def draft_plane():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def draft_front():

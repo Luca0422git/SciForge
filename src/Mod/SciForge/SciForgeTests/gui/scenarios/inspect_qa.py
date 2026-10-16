@@ -35,13 +35,13 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import timeline_input as ti
 
 V = App.Vector
 st = {}
 TOP = V(20, 15, 10)
-XY_SQUARE = V(12, -8, 0)
 FRONT_TOP_EDGE = V(20, 0, 10)
 
 
@@ -232,7 +232,7 @@ def c_start():
 
 def c_square_first():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def c_square_taken():

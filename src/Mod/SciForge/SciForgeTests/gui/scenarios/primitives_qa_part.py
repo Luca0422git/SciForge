@@ -32,6 +32,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as ti
 
@@ -378,7 +379,7 @@ def p6_box():
 
 
 def p6_plane():
-    h.click(V(40, -30, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def p6_c1():
@@ -481,7 +482,7 @@ def p6_esc():
 
 
 def p6_all_plane():
-    h.click(V(40, -30, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def p6_all_c1():

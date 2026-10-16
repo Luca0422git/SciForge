@@ -15,6 +15,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import sketch_input as si
 
@@ -132,7 +133,7 @@ def block_sketch():
 
 
 def block_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def block_draw():

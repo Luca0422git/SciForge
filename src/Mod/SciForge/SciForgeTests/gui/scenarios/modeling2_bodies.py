@@ -32,6 +32,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import sweep_loft_steps as st
 from SciForgeTests.gui import widget_input as w
@@ -94,7 +95,7 @@ def new_design():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw_plate1():
@@ -142,7 +143,7 @@ def sketch2():
 
 def pick_xy_free():
     h.fit()
-    h.click(V(-15, -20, 0))  # the XY square, left of the plate
+    pl.click_square("XY_Plane")  # where the square shows (was -15, -20, 0)
 
 
 def draw_plate2():
@@ -175,7 +176,7 @@ def rod_sketch():
 
 def rod_pick_xy():
     h.fit()
-    h.click(V(-15, -20, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was -15, -20, 0)
 
 
 def draw_rod():
@@ -378,7 +379,7 @@ def path_sketch():
 
 def path_xz():
     h.fit()
-    h.click(V(-10, 0, 18))  # the XZ square, above and left of the first plate
+    pl.click_square("XZ_Plane")  # where the square shows (was -10, 0, 18)
 
 
 def draw_path():
@@ -459,7 +460,7 @@ def low_sketch():
 
 def low_xy():
     h.fit()
-    h.click(V(-15, -20, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was -15, -20, 0)
 
 
 def draw_low():

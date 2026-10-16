@@ -40,6 +40,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 
 V = App.Vector
@@ -527,7 +528,7 @@ def path_sketch_steps():
         h.ribbon("Create Sketch")
 
     def click_xy():
-        h.click(V(12, -8, 0))
+        pl.click_square("XY_Plane")  # where the XY square shows
 
     def line():
         import Part

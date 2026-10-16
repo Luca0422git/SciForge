@@ -77,7 +77,7 @@ def planes_shown():
 
 
 def click_yz():
-    h.click(V(0, -24, 20))
+    h.click(V(0, -8, -8))  # the YZ square below the plate (24 mm squares)
 
 
 def mirrored_yz():
@@ -131,7 +131,7 @@ def edit_open():
 
 def click_xz():
     h.fit()
-    h.click(V(24, 0, 20))
+    h.click(V(-6, 0, 11))  # the XZ square standing above the plate
 
 
 def mirrored_xz():
@@ -270,7 +270,7 @@ def cancel_box():
 
 def cancel_plane():
     h.fit()
-    h.click(V(0, -24, 20))
+    h.click(V(0, -8, -8))  # the YZ square below the plate (24 mm squares)
 
 
 def cancel_now():

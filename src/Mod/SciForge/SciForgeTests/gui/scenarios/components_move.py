@@ -346,8 +346,8 @@ h.run(
     "components_move",
     t.watched(
         [new_design]
-        + s.box_steps("body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-        + s.box_steps("body2", (60, 0, 100, 30), 10, V(12, -8, 0), new_body=True)
+        + s.box_steps("body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+        + s.box_steps("body2", (60, 0, 100, 30), 10, V(6, -6, 0), new_body=True)
         + [
             bodies_made,
             a_ribbon,

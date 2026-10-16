@@ -35,6 +35,7 @@ import FreeCADGui as Gui
 from PySide import QtCore
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
@@ -133,7 +134,7 @@ def create_sketch():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def reference_lines():
@@ -757,7 +758,7 @@ def f_create():
 
 
 def f_pick_xz():
-    h.click(V(10, 0, 18))  # the XZ square, in front of the others from this side
+    pl.click_square("XZ_Plane")  # where the square shows (was 10, 0, 18)
 
 
 def f_reference():

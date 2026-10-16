@@ -26,6 +26,7 @@ import FreeCAD as App
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import direct_steps as d
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import timeline_input as t
@@ -62,7 +63,7 @@ def sphere_start():
 def sphere_plane():
     p = pi.panel("SpherePanel")
     h.check("Sphere waits for a plane", p is not None and p.state == "plane")
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
 def sphere_centre():
@@ -128,7 +129,7 @@ def a_refused():
 
 # -- B ------------------------------------------------------------------------------------------
 def b_click_xy():
-    h.click(V(12, 12, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, 12, 0)
 
 
 def b_click_ball():

@@ -17,6 +17,7 @@ from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import fillet2_steps as f2
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 
 V = App.Vector
@@ -43,7 +44,7 @@ def sketch2():
 
 
 def plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw():

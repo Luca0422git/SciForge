@@ -35,6 +35,7 @@ from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import revolve_input as ri
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
@@ -124,7 +125,7 @@ def new_design():
 
 
 def shaft_plane():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def shaft_rect():
@@ -173,7 +174,7 @@ def sketch2():
 
 
 def sketch2_plane():
-    h.click(V(11, 0, -9))  # the XZ square beside the shaft
+    pl.click_square("XZ_Plane")  # where the square shows (was 11, 0, -9)
 
 
 def sketch2_rect():
@@ -243,7 +244,7 @@ def p12_other():
 
 
 def p12_other_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def p12_other_rect():
@@ -362,7 +363,7 @@ def p13_sketch():
 
 def p13_plane():
     h.fit()
-    h.click(V(14, 0, -14))  # the XZ square below and beside the part
+    pl.click_square("XZ_Plane")  # where the square shows (was 14, 0, -14)
 
 
 def p13_rect():
@@ -474,7 +475,7 @@ def p14_rolled():
 
 def p14_plane():
     h.fit()
-    h.click(V(11, 0, -9))  # the XZ square beside the shaft (the squares fit the shaft now)
+    pl.click_square("XZ_Plane")  # where the square shows (was 11, 0, -9)
 
 
 def p14_rect():
@@ -550,7 +551,7 @@ def p15_sketch():
 
 def p15_plane():
     h.fit()
-    h.click(V(16, 0, -18))  # the XZ square, below and beside the part
+    pl.click_square("XZ_Plane")  # where the square shows (was 16, 0, -18)
 
 
 def p15_rect():

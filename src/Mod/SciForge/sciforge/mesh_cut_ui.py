@@ -12,7 +12,8 @@ holding where the plane cuts the mesh. Spec: docs/sciforge/parity/mesh.md."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, commands, handles3d, insert_ui, log, mesh, mesh_ui, taskui, warn
+from . import bodies, commands, handles3d, insert_ui, log, mesh, mesh_ui, origin_look, taskui
+from . import warn
 from . import mesh_core as core
 from .compat import QtCore
 
@@ -23,8 +24,6 @@ ORIGIN_PLANES = {
     "XZ": (V(0, -1, 0), V(1, 0, 0)),
     "YZ": (V(1, 0, 0), V(0, 1, 0)),
 }
-IDLE = ((0.55, 0.62, 0.70), 0.75)
-HOVER = ((0.45, 0.70, 1.00), 0.55)
 CUT_LOOK = ((0.30, 0.62, 0.95), 0.70)
 
 
@@ -45,6 +44,7 @@ class OriginSquares:
         self.size = float(size)
         self.on_pick = on_pick
         self.materials = {}
+        self.looks = {}
         self.hovered = None
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
@@ -76,25 +76,11 @@ class OriginSquares:
         return u * a * h + v * b * h
 
     def _square(self, coin, role):
-        sep = coin.SoSeparator()
-        material = coin.SoMaterial()
-        material.diffuseColor.setValue(*IDLE[0])
-        material.emissiveColor.setValue(*[c * 0.5 for c in IDLE[0]])
-        material.transparency.setValue(IDLE[1])
+        """A square coloured and labelled like Create Sketch's (origin_look)."""
         corners = self.corners(role)
-        coords = coin.SoCoordinate3()
-        coords.point.setValues(0, 4, [(p.x, p.y, p.z) for p in corners])
-        faces = coin.SoFaceSet()
-        faces.numVertices.setValue(4)
-        line_coords = coin.SoCoordinate3()
-        loop = corners + [corners[0]]
-        line_coords.point.setValues(0, 5, [(p.x, p.y, p.z) for p in loop])
-        outline = coin.SoLineSet()
-        outline.numVertices.setValue(5)
-        for node in (material, coords, faces, line_coords, outline):
-            sep.addChild(node)
-        self.root.addChild(sep)
-        return material
+        spot = corners[2] * origin_look.LABEL_INSET
+        self.looks[role] = origin_look.SquareLook(coin, self.root, role, corners, spot)
+        return self.looks[role].material
 
     def role_at(self, position):
         from .profile_pick import ray_plane
@@ -119,11 +105,9 @@ class OriginSquares:
         try:
             role = self.role_at(info["Position"])
             if role != self.hovered:
-                for name, look in ((self.hovered, IDLE), (role, HOVER)):
-                    material = self.materials.get(name)
-                    if material is not None:
-                        material.diffuseColor.setValue(*look[0])
-                        material.transparency.setValue(look[1])
+                for name, lit in ((self.hovered, False), (role, True)):
+                    if name in self.looks:
+                        self.looks[name].paint(lit)
                 self.hovered = role
         except Exception as exc:
             warn("origin planes: %s" % exc)
@@ -236,7 +220,9 @@ class PlaneRows:
     def show_squares(self, on):
         if on and self.squares is None and self.view is not None:
             try:
-                self.squares = OriginSquares(self.view, self.body_size() * 1.3, self._square_picked)
+                self.squares = OriginSquares(
+                    self.view, origin_look.square_size(self.body_size()), self._square_picked
+                )
             except Exception as exc:
                 warn("origin planes: %s" % exc)
         elif not on and self.squares is not None:

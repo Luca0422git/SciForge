@@ -23,6 +23,7 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as bs
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
@@ -69,7 +70,7 @@ def p_sketch():
 
 
 def p_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def p_line():
@@ -309,7 +310,7 @@ def q_escaped():
 
 STEPS = (
     b.box_steps("InspectQA5")
-    + bs.box_steps("b2", (30, 20, 50, 40), 5, V(12, -8, 0), new_body=True)
+    + bs.box_steps("b2", (30, 20, 50, 40), 5, V(6, -6, 0), new_body=True)
     + [p_sketch, p_xy, p_line, p_finish, p_plane, p_click_line, p_half, p_quarter, p_kept]
     + [p_click_plane, p_on_plane, p_finish2, p_edit, p_edit_dialog, p_edit_ok, p_moved]
     + [m_in_sketch, m_press_i, m_started_with_it, m_escaped, m_finished]

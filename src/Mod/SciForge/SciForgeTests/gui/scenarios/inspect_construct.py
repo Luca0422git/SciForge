@@ -251,9 +251,10 @@ def origin_square_start():
 
 def click_xz_square():
     """The XZ square at y = 0 below the part: from the iso view nothing else is in front
-    of (20, 0, -12) (the XY square ends at x = 26, the YZ square is behind)."""
+    of (8, 0, -8) (the line of sight meets z = 0 at x = 16, beyond the XY square's 12; the
+    YZ square is behind). The squares are 0.6 x the part (24 mm)."""
     h.fit()
-    h.click(V(20, 0, -12))
+    h.click(V(8, 0, -8))
 
 
 def offset_from_xz():

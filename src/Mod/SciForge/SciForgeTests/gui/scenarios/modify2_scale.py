@@ -27,6 +27,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import modify2_steps as m
 from SciForgeTests.gui import shell_draft_steps as sd
 from SciForgeTests.gui import timeline_input as ti
@@ -78,7 +79,7 @@ def second_sketch():
 
 
 def second_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def second_draw():
@@ -126,7 +127,7 @@ def free_sketch():
 
 
 def free_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def free_draw():

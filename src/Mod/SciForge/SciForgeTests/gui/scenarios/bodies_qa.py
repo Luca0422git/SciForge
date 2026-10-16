@@ -45,6 +45,7 @@ from PySide6 import QtTest
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 state = {}
@@ -270,7 +271,7 @@ def a_sketch():
 
 
 def a_pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def a_draw():
@@ -874,7 +875,7 @@ def f_split_body():
 
 
 def f_split_xz():
-    h.click(V(-10, 0, 18))  # the XZ square above the part
+    pl.click_square("XZ_Plane")  # where the square shows (was -10, 0, 18)
 
 
 def f_split_ok():
@@ -1044,7 +1045,7 @@ def f_edit_split_tool():
 
 
 def f_edit_split_yz():
-    h.click(V(0, -17, 15))  # the YZ square (39 wide: 1.3 x the 30 mm body)
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, -17, 15)
 
 
 def f_edit_split_ok():
@@ -1366,7 +1367,7 @@ def h_split_body():
 
 
 def h_split_yz():
-    h.click(V(0, -24, 20))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, -24, 20)
 
 
 def h_split_ok():
@@ -1393,8 +1394,8 @@ def h_split_material():
 h.run(
     "bodies_qa",
     [s.new_design("QA_Combine")]
-    + s.box_steps("body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-    + s.box_steps("body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+    + s.box_steps("body2", (30, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
     + [
         a_open,
         a_ok_nothing,
@@ -1460,7 +1461,7 @@ h.run(
         c_undone,
     ]
     + [s.new_design("QA_Move")]
-    + s.box_steps("move_box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("move_box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [
         d_open,
         d_body,
@@ -1551,8 +1552,8 @@ h.run(
         f_undone,
     ]
     + [s.new_design("QA_Delete")]
-    + s.box_steps("delete_body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-    + s.box_steps("delete_body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("delete_body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+    + s.box_steps("delete_body2", (30, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
     + [
         g_combine_open,
         g_target,

@@ -40,6 +40,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as ti
 
@@ -107,7 +108,7 @@ def new_design():
 
 
 def m1_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def m1_centre():
@@ -364,7 +365,7 @@ def m1_widened():
 
 # == M2: a ring groove in a block =================================================================
 def m2_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def m2_corner1():

@@ -288,8 +288,8 @@ h.run(
     "direct_components",
     t.watched(
         [s.new_design("DirectComponents")]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
-        + s.box_steps("plate", (60, 0, 100, 30), 10, V(12, -8, 0), new_body=True)
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
+        + s.box_steps("plate", (60, 0, 100, 30), 10, V(6, -6, 0), new_body=True)
         + [
             names,
             to_component,

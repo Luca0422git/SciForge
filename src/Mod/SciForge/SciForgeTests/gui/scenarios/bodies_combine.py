@@ -357,8 +357,8 @@ def f_cancelled():
 h.run(
     "bodies_combine",
     [s.new_design("Combine")]
-    + s.box_steps("body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-    + s.box_steps("body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+    + s.box_steps("body2", (30, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
     + [
         a_open_nothing_selected,
         a_dialog_waits,

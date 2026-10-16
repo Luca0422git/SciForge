@@ -353,9 +353,9 @@ def m5_reopened():
 
 
 steps = [s.new_design("JointsModes")]
-steps += s.box_steps("plate", j.PLATE, j.PLATE_HEIGHT, V(12, -8, 0))
+steps += s.box_steps("plate", j.PLATE, j.PLATE_HEIGHT, V(6, -6, 0))
 steps += [fillet_open, fillet_edge, fillet_radius, fillet_ok, fillet_done]
-steps += s.box_steps("block", j.BLOCK, j.BLOCK_HEIGHT, V(12, -8, 0), new_body=True)
+steps += s.box_steps("block", j.BLOCK, j.BLOCK_HEIGHT, V(6, -6, 0), new_body=True)
 steps += [m1_open, m1_mode, m1_waits_plane1, m1_refused, m1_plane2, m1_snap, m1_hover]
 steps += [m1_placed, m1_ok, m1_done]
 steps += [j.pick_pair("m2")[0], j.pick_pair("m2")[1]]

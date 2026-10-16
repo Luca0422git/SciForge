@@ -19,6 +19,7 @@ from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import revolve_input as ri
@@ -153,7 +154,7 @@ def box_start():
 
 
 def box_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
 def box_first_corner():
