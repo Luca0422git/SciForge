@@ -100,9 +100,15 @@ def part_steps():
         )
         h.fit()
 
+    def make_room():
+        # like a person: slide the part away from the Fillet dialog on the right. The 7th
+        # edge lay about 10 px from the dialog's border, and on GitHub's runner (other
+        # fonts, a wider dialog) the click went to the dialog: six edges taken (CI #136-141)
+        h.pan(-150, 0)
+
     edges = [edge_step(p) for p in a.TOP_EDGES + UPRIGHT]
     return (
-        [fillet]
+        [fillet, make_room]
         + edges
         + [radius, ok, rounded, on_top, circle, finish, extrude, depth, cut_ok, holed]
     )

@@ -148,7 +148,6 @@ def move(pos):
 
 
 AIM = 6  # click_edge looks this many pixels around the point for the edge
-CLEAR = 24  # uncover keeps a target this far from a dialog (it may still grow a little)
 
 
 def covered(pos):
@@ -173,28 +172,16 @@ def pan(dx, dy):
     QtWidgets.QApplication.processEvents()
 
 
-def covered_near(pos, reach=AIM):
-    """The widget over the 3D view anywhere within `reach` pixels of `pos` (click_edge aims
-    up to that far from the point), or None."""
-    for dx in (-reach, 0, reach):
-        for dy in (-reach, 0, reach):
-            top = covered(QtCore.QPoint(pos.x() + dx, pos.y() + dy))
-            if top is not None:
-                return top
-    return None
-
-
-def uncover(point, clear=0):
+def uncover(point):
     """Like a person whose target is under the command dialog: pan the view until the 3D
     point is clear of it (the dialog's width depends on the machine's fonts; on GitHub's
-    runner it covered a box corner the local run could click). The pixels around the
-    point count too for an edge click (clear = CLEAR): click_edge aims up to AIM pixels
-    away, and the dialog can grow a little when its preview finishes; with the 7th edge of
-    a Fillet about 10 px from the dialog's border the click went to the dialog on GitHub's
-    runner (CI #141, inspect_analysis_curvature). True when it panned."""
+    runner it covered a box corner the local run could click). Only a covered point pans:
+    a pan changes the view for the rest of the scenario (CI #142: panning when a dialog was
+    merely near moved later clicks of sweep_loft_qa_web and pi5_case). True when it
+    panned."""
     widget = gl_widget()
     pos = screen_point(point)
-    if not covered_near(pos, clear):
+    if not covered(pos):
         return False
     margin = 30
     for step in range(1, 40):
@@ -202,7 +189,7 @@ def uncover(point, clear=0):
             target = QtCore.QPoint(pos.x() + dx * 25 * step, pos.y() + dy * 25 * step)
             inside = margin < target.x() < widget.width() - margin
             inside = inside and margin < target.y() < widget.height() - margin
-            if inside and not covered_near(target, clear):
+            if inside and not covered(target):
                 pan(target.x() - pos.x(), target.y() - pos.y())
                 print(
                     "[SciForge] %s: %s was under %s; panned the view %+d, %+d px"
@@ -265,7 +252,7 @@ def click_edge(point, modifiers=QtCore.Qt.NoModifier):
     differently (the CI's software OpenGL picked the face next to an outline edge), so,
     like a person aiming until the edge lights up, try the pixels around the point and
     click the nearest one where an edge is under the mouse."""
-    uncover(point, CLEAR)
+    uncover(point)
     widget = gl_widget()
     ratio = widget.devicePixelRatioF()
     centre = screen_point(point)
@@ -276,8 +263,6 @@ def click_edge(point, modifiers=QtCore.Qt.NoModifier):
                 if max(abs(dx), abs(dy)) != radius:
                     continue
                 qx, qy = centre.x() + dx, centre.y() + dy
-                if covered(QtCore.QPoint(qx, qy)):
-                    continue  # a person never clicks through the dialog
                 info = view().getObjectInfo((qx * ratio, (widget.height() - qy) * ratio))
                 if info and str(info.get("Component", "")).startswith("Edge"):
                     best = QtCore.QPoint(qx, qy)
