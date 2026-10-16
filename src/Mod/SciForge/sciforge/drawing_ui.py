@@ -520,6 +520,7 @@ class PageInput(QtCore.QObject):
         self.page = None
         self.handler = None
         self.last = None  # last page point the mouse was at
+        self.close_watch = None  # _CloseWatch on the drawing's tab window
 
     def attach(self, gv, page):
         if self.gv is gv:
@@ -534,12 +535,27 @@ class PageInput(QtCore.QObject):
             gv.installEventFilter(self)
         except RuntimeError:
             self.gv = None
+            return
+        # Leave the sheet's widgets BEFORE they are deleted. Qt sends a deleted widget one
+        # last event through its filters, and PySide reaching into the half-deleted widget
+        # crashed the program when a drawing's tab was closed (Luca, 2026-10-16; scenario
+        # drawing_close: a SIGSEGV in ~QGVPage -> sendThroughObjectEventFilters). The tab's
+        # window gets its Close event first (x, Ctrl+W); closing the whole design is
+        # announced to the Gui document observers before its views go (_DocWatch).
+        window = _tab_window(gv)
+        if window is not None:
+            self.close_watch = _CloseWatch(self, window)
+        _DocWatch.ensure()
 
     def detach(self):
+        watch, self.close_watch = self.close_watch, None
+        if watch is not None:
+            watch.remove()
         if self.gv is not None:
             try:
-                self.gv.viewport().removeEventFilter(self)
-                self.gv.removeEventFilter(self)
+                if _alive_widget(self.gv):
+                    self.gv.viewport().removeEventFilter(self)
+                    self.gv.removeEventFilter(self)
             except RuntimeError:
                 pass
         self.gv = None
@@ -604,6 +620,95 @@ class PageInput(QtCore.QObject):
                     return True
                 return default_key(self.page, event.key())
         return False
+
+
+def _alive_widget(widget):
+    """False for a widget whose C++ side is gone (shiboken), True when unsure."""
+    try:
+        import shiboken6
+
+        return bool(shiboken6.isValid(widget))
+    except Exception:
+        return widget is not None
+
+
+def _tab_window(widget):
+    """The MDI sub-window (the drawing's tab) holding `widget`, or None."""
+    try:
+        w = widget
+        while w is not None:
+            if isinstance(w, QtWidgets.QMdiSubWindow):
+                return w
+            w = w.parentWidget()
+    except RuntimeError:
+        pass
+    return None
+
+
+class _CloseWatch(QtCore.QObject):
+    """Takes SciForge's filters off a drawing's widgets when its tab is closed, before Qt
+    deletes them, and then itself (a Python filter on a widget being deleted crashes)."""
+
+    def __init__(self, page_input, window):
+        super().__init__()
+        self.page_input = page_input
+        self.window = window
+        window.installEventFilter(self)
+
+    def remove(self):
+        window, self.window = self.window, None
+        if window is not None:
+            try:
+                if _alive_widget(window):
+                    window.removeEventFilter(self)
+            except RuntimeError:
+                pass
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QtCore.QEvent.Close and obj is self.window:
+                log("drawing tab closing: drawing input detached")
+                self.page_input.detach()  # also removes this watch
+                # The close can still be refused (a question answered No): the tab that stays
+                # gets its input back at the next window change (sync_mode).
+                _later(sync_mode, ms=0)
+        except Exception as exc:
+            warn("drawing close: %s" % exc)
+        return False
+
+
+class _DocWatch:
+    """A Gui document observer: closing a design deletes its drawing tabs without a Close
+    event, but the observers hear of it first: detach then."""
+
+    observer = None
+
+    @classmethod
+    def ensure(cls):
+        if cls.observer is not None:
+            return
+        try:
+            cls.observer = cls()
+            Gui.addDocumentObserver(cls.observer)
+        except Exception as exc:
+            cls.observer = None
+            warn("drawing close watch unavailable: %s" % exc)
+
+    def slotDeletedDocument(self, gdoc):
+        try:
+            name = gdoc.Document.Name
+            inp = STATE.get("input")
+            if inp is None or inp.gv is None:
+                return
+            try:
+                same = inp.page is None or inp.page.Document.Name == name
+            except Exception:
+                same = True  # its page is already gone: leave its widgets
+            if same:
+                log("design %s closing: drawing input detached" % name)
+                inp.detach()
+        except Exception as exc:
+            warn("drawing close watch: %s" % exc)
 
 
 def default_double_click(page, point):

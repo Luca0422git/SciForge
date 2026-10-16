@@ -164,6 +164,18 @@ wording, artwork or templates is copied (the title block is SciForge's own drawi
 
 ## FreeCAD / TechDraw facts this relies on
 
+- **A Python event filter on a TechDraw view must go before the view is deleted** (crash
+  found by Luca, 2026-10-16: closing a drawing closed the whole program). Closing a
+  drawing's tab deletes `MDIViewPage` and its `QGVPage`; `~QWidget` sends one last event
+  through the widget's own event filters, and PySide wrapping the half-deleted widget for
+  SciForge's `PageInput.eventFilter` segfaults (`QObject::property` in
+  `PySide::getWrapperForQObject`). Nothing in the Python filter can guard it: it never
+  runs. `PageInput` now watches the tab's `QMdiSubWindow` for its Close event (x, Window >
+  Close) and a Gui document observer for `slotDeletedDocument` (closing the design deletes
+  its tabs without a Close event), and takes its filters off first. Scenario
+  `drawing_close` (x with the Base View dialog open, x after a view, Window > Close, the
+  design closed with the drawing current).
+
 Part 2 (2026-10-14):
 
 - `DrawView.findParentPage()` crashes FreeCAD (a segfault in TechDraw) for a view that
