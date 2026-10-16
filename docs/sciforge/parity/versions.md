@@ -99,6 +99,7 @@ Where the versions live:
 | Double-click a folder opens it; double-click a design opens it. | Same; a design already open comes to the front instead. |
 | New Folder above the panel. | **New Folder** in the panel's toolbar (and the right-click menu): "New Folder", "New Folder 2", ... |
 | Right-click a design: Open, Version History, Insert into Current Design, Rename, Move, Copy, Delete. | Open, Version History, Insert into Current Design, Rename, Delete (to the project's `.sciforge-trash` folder, after a question), Show in Folder. Move / Copy: not built (do it in the file manager; the panel refreshes). |
+| Upload a file (a STEP from a supplier) into the project; it becomes a design (exchange-2) | **Upload** in the panel's toolbar copies a STEP / IGES file into the folder shown; the card shows its file name ("robot.step"); double-click opens it as a new design with its components; right-click: Open, Insert into Current Design (one component, then the Move dialog), Delete, Show in Folder (parity/insert-export.md, Part 2). |
 | Grid / list view in the panel's settings. | A toggle button. |
 
 The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` backups.
@@ -107,7 +108,7 @@ The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` ba
 
 | Fusion | SciForge |
 |---|---|
-| Insert into Current Design (Data Panel right-click, Insert menu): the other design comes in as a component that follows the original. | **Insert Component** (INSERT, the application menu, the Data Panel's right-click): the other design's bodies come in as links (`App::Link`) that follow the file. The design must be saved first (the link is stored relative to this file): an unsaved design gets the Save dialog and the insert goes on after it. |
+| Insert into Current Design (Data Panel right-click, Insert menu): "the design is inserted as an external component and the Initial Position dialog displays"; "An Insert feature displays in the Timeline"; right-click > Break Link makes it "a stand-alone part" (**Autodesk** help "Insert designs", blog on Break Link). | **Insert Component** (INSERT, the application menu, the Data Panel's right-click): one component named after the other design ("Wheel", a second one "Wheel (2)") in the active component, a step in the timeline; its bodies are copies of the other design's bodies (`design_insert.LinkedCopy`, an `App::PropertyXLink` to each) that follow the other design's saved file; then the Move dialog places it (Esc leaves it at the origin). Right-click the component > **Break Link**: the other design's bodies are copied in with every feature (their steps join the timeline), one undo step. The design must be saved first (the link is stored relative to this file): an unsaved design gets the Save dialog and the insert goes on after it (exchange-2; before, each body came in as an `App::Link` at the root). |
 | References live in the cloud. | FreeCAD stores the linked file by its path relative to the design (`file="Wheel.FCStd"`), and resolves it from the design's folder, so the project folder can move as a whole (a NAS folder, another drive letter) and the links hold. A linked design that is not found is said in words when the design opens. |
 
 ## Known gaps and guesses (to check in real Fusion)
@@ -119,8 +120,10 @@ The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` ba
 - Milestone, Automatic version on close, Move / Copy in the Data Panel, the Out-of-Date icon
   (SciForge names the tab "<Name> v2" instead) are not built.
 - Compare is SciForge's own addition (Fusion has none).
-- Fusion inserts a whole design as one component; SciForge links each body (components are
-  plan item "Components").
+- An inserted design comes in as one component (exchange-2), but its own components come
+  in flat (its bodies in that one component); the copies follow the other design when this
+  design opens (no out-of-date icon, no Get Latest command); a linked copy can be edited in
+  this design (Fusion keeps it locked until Break Link).
 - Fusion's recovery copies are kept in Autodesk's CrashRecovery folder and offered even for
   designs closed without saving in some reports; SciForge drops the copy when a design is
   closed on purpose (Discard) and when it is saved.
