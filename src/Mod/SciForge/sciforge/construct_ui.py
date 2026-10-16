@@ -1152,7 +1152,10 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
     def schedule(self):
         if not self._closed:
             self._show_formulas()  # every change of a value comes through here
-            self._timer.start()
+            # The shared pace (taskui.Panel.schedule): restarting the one-shot timer on every
+            # 30 ms poll of a dragged arrow put the plane off until the mouse stopped (Luca:
+            # "construction planes don't update in real time").
+            super().schedule()
 
     def _preview(self):
         self._apply_now()

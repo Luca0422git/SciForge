@@ -1333,7 +1333,7 @@ class AnalysisPanel(bodypick.Tones, pickpanel.PickPanel):
     # -- the analysis --------------------------------------------------------------------------
     def schedule(self):
         if not self._closed:
-            self._timer.start()
+            super().schedule()  # the shared pace: a drag shows its result while it moves
 
     def _preview(self):
         self._apply_now()
