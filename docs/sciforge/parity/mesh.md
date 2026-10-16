@@ -2,16 +2,60 @@
 
 Repair (and Make Closed Mesh), Remesh, Reduce, Smooth, Shell, Plane Cut, Separate, Combine,
 Reverse Normal, Erase and Fill, Delete Faces, Generate Face Groups, Tessellate, Create Mesh
-Section Sketch. Insert Mesh and Convert Mesh are in `parity/insert-export.md`. Copied behaviour
-only, never Fusion's assets, wording or code. Status: **built and tested with real clicks (8
-scenarios, 510 checks), not yet signed off by Luca.**
+Section Sketch; since wave 5 (branch `sf/mesh-inspect-2`) also Direct Edit, Create Face Group,
+Combine Face Groups, Smooth on face groups and mesh steps that roll back with the history
+marker. Insert Mesh and Convert Mesh are in `parity/insert-export.md`. Copied behaviour only,
+never Fusion's assets, wording or code. Status: **built and tested with real clicks (8 + 4
+scenarios, 510 + 310 checks), not yet signed off by Luca.**
 
 Every row says where its behaviour comes from:
 
 - **Autodesk**: Autodesk's own help page, blog or API reference (read through search summaries
-  on 2026-10-13; the help site itself is not reachable from the build sandbox).
+  on 2026-10-13 and 2026-10-16; the help site itself is not reachable from the build sandbox).
 - **Forum**: an Autodesk community forum answer (a user or an Autodesk employee).
 - **Guess**: nothing found; SciForge's choice, to confirm in real Fusion.
+
+## Wave 5: Direct Edit, face groups, the history marker (behaviour spec, 2026-10-16)
+
+Sources read (search excerpts): help "Edit a mesh body directly" (MESH-DIRECT-EDIT.htm), "Mesh
+Selection Palette reference" (MESH-SELECTION-PALETTE.htm), "Create a face group from faces on
+a mesh body" (MESH-CREATE-FACE-GROUP.htm), "Combine face groups on a mesh body"
+(MESH-COMBINE-FACE-GROUPS.htm), "Reverse normal direction of faces", "Smooth a mesh body",
+the Fusion keyboard shortcut guide (Direct Mesh Editing table), the blog "Mastering Mesh
+Conversion" (face groups), Autodesk Community threads "How do we edit individual face groups
+on a mesh?" (2025) and "Can't select faces on mesh body", the Autodesk Learn lesson "Generate
+and edit face groups on a mesh body".
+
+| Fusion | SciForge | Source |
+|---|---|---|
+| MODIFY > Direct Edit on a mesh body opens the Direct Mesh Editing environment (its own toolbar tab) | MESH > MODIFY > Direct Edit opens one dialog: the palette and the tools (no contextual tab: see gaps) | Autodesk |
+| Direct Edit adds a mesh base feature to the timeline; the changes inside it are not separate features | one timeline step "Mesh Base Feature 1"; its edits are listed in the dialog, the timeline shows the one step | Autodesk |
+| A copy of the mesh is the body after the base feature | the step is the body (same name), the step before it is used up, as every MESH step | Autodesk |
+| The base feature keeps the mesh as edited | the step keeps its edits (one per line, the picked faces by their centres) and plays them again on the body as the step before leaves it, so an earlier change still reaches it (a picked face that is gone is reported: "N picked faces are gone") | deliberate difference (never loses a later edit of an earlier step); Guess |
+| Edit Feature on the base feature (timeline or browser) re-enters Direct Edit | double-click the step in the timeline (or the body in the browser): the dialog opens with its edits listed | Autodesk |
+| Finish Direct Editing (toolbar or palette) leaves the environment | Finish Direct Edit button (or OK, Enter); Cancel / Esc leave the body as it was; one undo step | Autodesk; Guess (Esc) |
+| Finish with no edit | refused: "No edit yet: pick faces and Delete, Move, Smooth... them (or Cancel)" | Guess |
+| The Mesh Selection Palette opens set to Paint | Selection: Paint (default), Window, Free Form | Autodesk |
+| Paint: a brush whose size scales with the body | Brush Size (mm), 5 % of the body's size at first; a click or a drag paints the faces joined to the face under the pointer within the brush | Autodesk (brush); Guess (5 %, mm field instead of a slider) |
+| Window and Free Form selection | Window: a box (left to right: faces wholly inside; right to left: faces it touches, as SciForge's box selection); Free Form: draw round the faces | Autodesk (types); Guess (crossing rule) |
+| Filter Faces or Face Groups | Select: Faces / Face Groups (a pick takes whole face groups) | Autodesk |
+| Select Back Faces (off: a face is taken only from its front) | same, off at first; off, a box or lasso takes only faces turned towards you and not hidden by the body | Autodesk; Guess (hidden faces left out) |
+| Grow (Shift+Up), Shrink (Shift+Down), Invert (Alt+N), Expand To Face Group (Alt+G), Expand To Connected (Alt+C) | same buttons and keys (Grow / Shrink by one ring of faces sharing a corner) | Autodesk |
+| Clicking empty canvas clears the selection | same (Clear button too); Ctrl takes faces off | Autodesk (clear); Guess (Ctrl) |
+| Delete removes the picked faces | Delete (Del) | Autodesk |
+| Erase and Fill (Direct Edit only) | Erase and Fill with Type Uniform / Minimal and Density, on the picked faces | Autodesk |
+| Create Face Group: faces picked (joined or not) become one face group | Create Face Group: the picked faces become one new face group, shown in its colour | Autodesk |
+| Reverse Normal of single faces in Direct Edit | Reverse Normal of the picked faces | Autodesk |
+| Faces moved in Direct Edit (Move/Copy on the selected faces) | Move: an arrow on the picked faces, Direction Normal (their mean normal) / X / Y / Z and a Distance (typed or dragged, value box beside the arrow); the faces around stretch; Apply Move makes it an edit | Forum / tutorial (moving selected faces); Guess (arrow instead of Fusion's triad) |
+| Smooth (selected faces or face groups) | Smooth of the picked faces with Smoothness (0..1, 0.02): their rim stays where it is | Autodesk (Smooth takes face groups); Guess (Laplace with a fixed rim for a region) |
+| Undo inside the environment | Remove Last Edit takes the last edit back (Ctrl+Z cancels the whole dialog, as every SciForge dialog) | Guess |
+| In parametric mode face groups are the smallest pick; single faces need Direct Edit | same: MODIFY tools pick whole bodies or face groups | Forum |
+| PREPARE > Create Face Group (with the palette) | PREPARE > Create Face Group: also a timeline step of its own with the brush (as SciForge's Erase and Fill), besides the edit inside Direct Edit | Autodesk (in Direct Edit); deliberate (a step of its own) |
+| PREPARE > Combine Face Groups: two or more face groups that share an edge become one; a timeline feature | same: click the groups (a click on a picked one drops it); groups that do not touch are refused: "These face groups do not touch: Combine Face Groups joins face groups that share an edge"; "Combine Face Groups 1" | Autodesk |
+| Smooth of a mesh body or of face groups (MODIFY > Smooth) | Smooth has a Face Groups box (when the body has face groups): only those groups are smoothed, their rim stays | Autodesk |
+| Features after the timeline marker are rolled back; a new feature goes in at the marker | every mesh step (Insert Mesh, Tessellate, Repair ... Direct Edit) rolls back: hidden, not in the browser, using nothing up, so the body shows as the step before it left it; a mesh step made there goes in at the marker and the body's later steps build on it; a design of mesh bodies only can have its marker anywhere | Autodesk (timeline) |
+
+## Sources
 
 ## Sources
 
@@ -47,11 +91,16 @@ Every row says where its behaviour comes from:
 | `mesh_ui.py` | Repair / Make Closed Mesh, Remesh, Reduce, Smooth, Shell, Reverse Normal, Separate, Combine, Generate Face Groups, Tessellate dialogs and commands |
 | `mesh_cut_ui.py` | Plane Cut and Create Mesh Section Sketch (origin squares, the plane's arrow and turn handles, Distance / X Angle / Y Angle) |
 | `mesh_pick_ui.py` | Erase and Fill and Delete Faces (the Faces box, Brush Size, marks on the picked faces) |
-| shared files | `timeline_core.py` (step kinds and icons), `timeline_ops.py` (step names, rename, pieces go with their step), `browser_core.py` / `browser_ui.py` (mesh steps in Bodies, the warning, right-click Repair, rename and delete of a mesh body's history), `insert.py` (a mesh step is a mesh body), `export.py` / `export_ui.py` (3D Print, Export, Export Everything take mesh bodies), `bodies.py` / `commands.py` (a body used up by a mesh step, a Tessellated solid, is no longer the active body nor picked for new work), `ribbon_config.py`, `tools/sciforge/make_icons.py` (14 icons) |
+| `mesh_edit_core.py` (wave 5) | no FreeCAD, no Qt (unit tested, `test_mesh_edit_core.py`): Direct Edit's edits as text and how they are played again (delete, erase and fill, create face group, reverse, move, smooth a region with its rim fixed), the palette's Grow / Shrink / Invert / Expand To Face Group / Connected, faces facing the eye, faces inside a box or lasso, Combine Face Groups' "do they touch" rule, rims of gaps whose faces disagree on their winding |
+| `mesh_direct_ui.py` (wave 5) | MODIFY > Direct Edit: the palette and the tools in one dialog; SciForge's own mouse handling on the 3D view while it picks faces (paint strokes, window box, free form lasso: rays through the body, FreeCAD's selection is not used), the environment's keys, the Move arrow with its value box, the list of edits |
+| `mesh_groups_ui.py` (wave 5) | PREPARE > Create Face Group (brush) and Combine Face Groups (click the groups) |
+| shared files | `timeline_core.py` (step kinds and icons), `timeline_ops.py` (step names, rename, pieces go with their step), `browser_core.py` / `browser_ui.py` (mesh steps in Bodies, the warning, right-click Repair, rename and delete of a mesh body's history), `insert.py` (a mesh step is a mesh body), `export.py` / `export_ui.py` (3D Print, Export, Export Everything take mesh bodies), `bodies.py` / `commands.py` (a body used up by a mesh step, a Tessellated solid, is no longer the active body nor picked for new work), `ribbon_config.py`, `tools/sciforge/make_icons.py` (14 icons; wave 5: 3 more) |
+| shared files, wave 5 | `timeline_ops.py` (`is_mesh_step`, mesh steps roll back: `follow_mesh_steps` from `show_marker_state` and `settle`, flag `SciForgeRolledBack`), `timeline_core.py` (the marker without solid steps, the new kinds), `bodies.py` (`is_active_step`: a rolled-back step outside the bodies uses nothing up), `browser_ui.py` (rolled-back mesh steps are not listed), `insert.py` (Insert Mesh at a rolled-back marker goes in there), `mesh_ui.py` (`body_end`, a new step at the marker becomes what the later steps read, Smooth's Face Groups box) |
 
-The ribbon: CREATE Insert Mesh, Tessellate, Create Mesh Section Sketch; PREPARE Generate Face
-Groups, Repair; MODIFY Remesh, Reduce, Plane Cut, Shell, Smooth, Combine, Separate, Reverse
-Normal, Erase and Fill, Delete Faces, Make Closed Mesh; CONVERT Convert Mesh.
+The ribbon: CREATE Insert Mesh, Tessellate, Create Mesh Section Sketch; PREPARE Create Face
+Group, Generate Face Groups, Combine Face Groups, Repair; MODIFY Remesh, Reduce, Plane Cut,
+Shell, Smooth, Combine, Separate, Reverse Normal, Direct Edit, Erase and Fill, Delete Faces,
+Make Closed Mesh; CONVERT Convert Mesh.
 
 ## What the user does (and what SciForge does)
 
@@ -88,7 +137,7 @@ values; a step that cannot be done says why in the dialog and OK waits.
 | Reduce: Target Tolerance (default) / Proportion / Face Count; Reduce Type Adaptive / Uniform (not for Tolerance); Preview | same rows; Tolerance starts at 0.05 mm (Fusion's API starts at 0, which reduces nothing), Proportion at 50 %, Face Count at half the body's faces; Face Count gives exactly that many faces | Autodesk (rows); Guess (the starting values) |
 | Reduce asks for more faces than the body has | refused: "ask for fewer"; OK waits | Guess |
 | Smooth: Smoothness 0..1 (0.02), Preview | same; rounds of Taubin smoothing (keeps the volume, unlike plain averaging): 0.02 = 2 rounds, 1 = 60 | Autodesk (rows); Guess (the mapping) |
-| Smooth / Remesh / Reduce on face groups only | the whole body only | gap |
+| Smooth / Remesh / Reduce on face groups only | Smooth: a Face Groups box (wave 5); Remesh and Reduce: the whole body only | Autodesk; gap (Remesh, Reduce) |
 | Shell: Thickness, Preview | same; Thickness starts at 2 mm; the inside wall is the surface moved in by exactly the thickness (corners too), facing in; a wall that does not fit is refused with the most that fits ("under 2.50 mm"), one whose inside would cross itself too | Autodesk (rows); Guess (2 mm) |
 
 ### Plane Cut (MODIFY)
@@ -117,15 +166,15 @@ values; a step that cannot be done says why in the dialog and OK waits.
 | Fusion | SciForge | Source |
 |---|---|---|
 | Reverse Normal of the whole body or of face groups | same: without face groups every face turns at once; with face groups the Face Groups box waits for clicks ("All faces" when none picked) | Autodesk |
-| Single faces (Direct Edit) | not built (see Direct Edit) | gap |
+| Single faces (Direct Edit) | Direct Edit > Reverse Normal of the picked faces (wave 5) | Autodesk |
 | Generate Face Groups: Fast (Angle Threshold 25 deg, Minimum Face Group Size 0.02) / Accurate (Boundary Tolerance 0.001), Preview | same rows and defaults; Fast grows groups across edges that bend less than the angle and folds groups smaller than the minimum into a neighbour; Accurate takes FreeCAD's plane / cylinder / sphere fitting first; each group drawn in its own colour; the dialog counts them | Autodesk |
-| Create Face Group, Combine Face Groups | not built | gap |
+| Create Face Group, Combine Face Groups | built (wave 5, see the spec at the top) | Autodesk |
 
 ### Erase and Fill, Delete Faces (Fusion: Direct Edit)
 
 | Fusion | SciForge | Source |
 |---|---|---|
-| Inside Direct Edit (a mesh base feature, not in the parametric history) | MODIFY > Erase and Fill and Delete Faces are ordinary timeline steps (editable, one undo step) | Autodesk; deliberate difference (SciForge has no Direct Edit environment) |
+| Inside Direct Edit (a mesh base feature, not in the parametric history) | in Direct Edit (wave 5), and also MODIFY > Erase and Fill and Delete Faces as ordinary timeline steps of their own (editable, one undo step), as before | Autodesk; deliberate (the steps of their own stay) |
 | Faces picked with a paint brush (Mesh Selection Palette) | a click takes the faces within Brush Size around the clicked one (joined to it); Ctrl+click takes them off; Clear Faces; the picked faces are marked; picks are kept by their centres, so an edit earlier in the history keeps them where they still exist | Autodesk (brush); Guess (keys) |
 | Erase and Fill Type Uniform (Density) / Minimal | same; only the holes the erase made are filled (holes the body had stay) | Autodesk |
 | Delete: the faces removed, the hole stays | same (the browser then flags the hole; Repair or Erase and Fill close it) | Autodesk |
@@ -154,13 +203,18 @@ values; a step that cannot be done says why in the dialog and OK waits.
 
 | Fusion behaviour | Why not (yet) |
 |---|---|
-| Direct Edit environment (mesh base feature, Mesh Selection Palette, single-face Reverse Normal, rim double-click) | a whole environment; Erase and Fill and Delete Faces are timeline steps instead |
-| Create Face Group, Combine Face Groups; Remesh / Reduce / Smooth / Separate on picked face groups only (except Separate's Select Face Groups and Reverse Normal) | face group picking exists only where listed above |
+| Direct Edit's own toolbar tab (the Direct Mesh Editing contextual tab) | the palette and the tools are one dialog; the ribbon keeps its tabs |
+| Fusion's frozen mesh base feature | SciForge plays the edits again on the body as the step before leaves it (an earlier change reaches the Direct Edit; picks that are gone are reported) |
+| Move with Fusion's Move/Copy triad (rotate, free move) | an arrow along the faces' normal or an axis, a Distance; no rotation |
+| Undo of single edits inside Direct Edit with Ctrl+Z | Remove Last Edit; Ctrl+Z cancels the dialog as in every SciForge dialog |
+| A hole's rim double-clicked to take the whole rim | not built (Expand To Connected / Grow help) |
+| Remesh / Reduce / Separate on picked face groups (Separate's Select Face Groups, Reverse Normal and Smooth have them) | FreeCAD's remesh and decimation work on whole meshes |
+| Display Mesh Face Groups (Shift+F) on / off | face groups are always drawn in their colours |
+| Playback buttons over mesh steps (Previous / Next) | they step over the solid steps only; dragging the marker and Roll History Marker Here reach every mesh step |
 | Repair's OneTouchFix and the detailed analysis (thresholds, before / after table) | the dialog lists the problems before and after in one line each |
 | The warning icon as a button that opens Repair | right-click > Repair instead |
 | Rebuild types Adaptive and Adaptive Preserve Sharp Edges (newer Fusion API) | the four of the help page only |
 | Tessellate's Aspect Ratio and Create Quads; Combine's New Component | FreeCAD's mesher has no aspect setting and no quads; no components here |
 | Fusion's mesh-section curve and Fit Curves to Mesh Section | plain fixed lines instead |
-| Mesh steps rolling back with the timeline marker | mesh bodies sit outside PartDesign bodies (as Insert Mesh already did) |
 | Remesh / Reduce / Smooth results equal to Fusion's | different algorithms (FreeCAD's decimation and Taubin smoothing, SciForge's voxel rebuild); the rows, ranges and defaults are Fusion's, the faces they make are not |
 | Big meshes | the voxel rebuild and the section are pure Python: a 500 000-face body takes seconds to minutes; the dialogs' Preview stays off until ticked (Fusion's way too) |

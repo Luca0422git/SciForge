@@ -17,7 +17,30 @@ save / reopen, deleted references, Measure in a sketch, materials, another comma
 a dialog open, parameters and typos in value boxes, handles let go over the part and the face
 picked again, the timeline marker rolled back, a body made after a section, three bodies in
 Interference, the x of a selection box, Ctrl+Z / Ctrl+Y); 8 golden models `inspect_*.json`;
-unit tests `test_inspect_core.py`.
+unit tests `test_inspect_core.py`. Wave 5: `meshinspect2_inspect.py` (Create Bodies with the
+volume checked, undo / redo, the Component filter between two components and its refusal,
+Include Sharp Curves, Zebra on a mesh body).
+
+## Wave 5 (branch `sf/mesh-inspect-2`, 2026-10-16): behaviour spec and sources
+
+Sources (search excerpts; help.autodesk.com and forums.autodesk.com are not reachable from
+the sandbox): Autodesk API `InterferenceResults.createBodies(allBodies)` and
+`InterferenceResult.isCreateBody` ("creates bodies that represent the interference volumes",
+"not supported in parametric modeling"), the API sample "Interference API Sample", help
+"Detect interferences and coincident faces" (SLD-INTERFERENCE: the Interference Results
+dialog lists groups of components or bodies with their volume), Autodesk Community "using
+interference to create new bodies" and "Interference Behaviour"; for Measure the Selection
+Filter list already noted below (Face/Edge/Vertex, Body, Component).
+
+| Fusion | SciForge | Source |
+|---|---|---|
+| Each interference result can become a body (`isCreateBody`), or all of them (`createBodies(True)`) | the results table has a Create Body tick per overlap; "Create Bodies From Interferences" ticks them all; OK makes each ticked overlap a new body ("Body4"...) holding exactly the shared volume, in the same undo step as the analysis | Autodesk (API); Guess (the tick column and its name) |
+| Interference bodies are made in direct modeling only (the API refuses in a parametric design) | made in both: a body without history (one Base Feature step in the timeline), not linked to the bodies it came from | deliberate difference (Luca models parametrically); Guess |
+| Touching bodies (Include Coincident Faces) have no volume | their rows have no Create Body tick | Guess (nothing to make) |
+| Interference of bodies in moved components | compared where they show (the component's placement counts; Center of Mass too) | Autodesk (obvious: Fusion measures the assembly as shown) |
+| Measure's Selection Filter Component: a pick takes the whole component | a click on any body of a component picks the component: its Volume and Area (all its bodies, those of components inside it too), and between two components the minimum Distance, Delta X / Y / Z | Autodesk (the filter); Guess (what a component shows) |
+| A body that is in no component (at the top of the design) with the Component filter | refused in the dialog: "Body2 is not in a component (it is at the top of the design): pick a component's body, or use the Body filter" | Guess |
+| Inside a sketch | the Component filter goes back to Face/Edge/Vertex and says Measure picks the sketch's curves and points there | Guess |
 
 ## CONSTRUCT (planes, axes, points)
 
@@ -72,7 +95,7 @@ scenario `gaps_offset_plane_to.py`.
 | Fusion | SciForge |
 |---|---|
 | Click one or two things: face, edge, vertex, body | Same. A third click starts a new measure (Selection 1 = the new pick). |
-| Selection Filter: Face/Edge/Vertex, Body, Component | Same list; Component is greyed (no components yet). |
+| Selection Filter: Face/Edge/Vertex, Body, Component | Same list; Component picks whole components (wave 5, see above). |
 | Precision list | Same steps 0 .. 0.1234567; default 0.123. |
 | Results: Distance (minimum), Angle, Delta X / Y / Z, Area, Length, Volume, Position, Radius/Diameter | Same. Distance is the true minimum between the two (OpenCASCADE `distToShape`; endless planes and axes measured as such). Angles between lines/planes are shown 0..90 deg. |
 | Show Snap Points (start, end, middle, centre) | Same: dots on the edge/face under the mouse; clicking one measures that point. |
@@ -112,6 +135,7 @@ scenario `gaps_offset_plane_to.py`.
 | Pick 2+ bodies, Compute, list of interfering pairs with volumes | Same: a table (#, Body 1, Body 2, Volume); overlaps drawn red on top of the part. |
 | Include Coincident Faces | Same: touching bodies are listed with volume 0 and their shared faces drawn orange. |
 | Stored in the Analysis folder | Same (`Interference1`), results kept and shown again when edited. |
+| Create bodies of the interferences | Create Body ticks and Create Bodies From Interferences (wave 5, see above). |
 
 ## Assumptions to confirm with Luca
 
@@ -137,6 +161,7 @@ scenario `gaps_offset_plane_to.py`.
 - Measure inside a sketch measures the sketch's own curves and points (lines, circles,
   their ends, the sketch origin and axes, projected curves); Show Snap Points inside a sketch
   is not covered by a scenario yet.
-- Measure: Component filter greyed (no components yet); selection boxes show what was picked
-  in words rather than "1 selected".
-- Interference: "Create bodies from interferences" is not built.
+- Measure: selection boxes show what was picked in words rather than "1 selected"; a click on
+  a component already picked does not drop it (a face of it is no new pick).
+- Interference: its bodies are frozen copies of the overlap (Fusion's are too, in direct
+  modeling); they do not follow later changes of the bodies they came from.

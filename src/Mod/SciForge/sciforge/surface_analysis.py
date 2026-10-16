@@ -210,6 +210,11 @@ class SurfaceAnalysis:
         try:
             if not targets(obj):
                 problem = GONE[picks(obj.SciForgeType)]
+                if any(is_mesh_owner(o) and _mesh_end(o) is None for o, _s in obj.Targets or []):
+                    problem = (
+                        "Its mesh body does not exist at the history marker (the marker stands "
+                        "before it): roll the marker forward to see the analysis."
+                    )
             elif has_direction(obj.SciForgeType):
                 vector = pull_vector(obj)
                 if (obj.PullVector - vector).Length > 1e-12:
