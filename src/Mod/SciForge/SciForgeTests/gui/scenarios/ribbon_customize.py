@@ -178,8 +178,14 @@ def right_click(widget, option, pos=None):
     return h.check("right-click > %s" % option, done.get("ok"), done)
 
 
+ANSWER = {"pending": False}
+
+
 def answer_question(button_text):
-    """Click a button of the question box that is about to open (QMessageBox)."""
+    """Click a button of the question box that is about to open (QMessageBox). The box
+    opens after the menu click, once the step is over: wait_answer() holds the next step
+    until it was answered (under load the check ran before the answer: Yes never came)."""
+    ANSWER["pending"] = True
 
     def click(tries=0):
         box = QtWidgets.QApplication.activeModalWidget()
@@ -187,11 +193,24 @@ def answer_question(button_text):
             for button in box.buttons():
                 if button.text().replace("&", "") == button_text:
                     button.click()
+                    ANSWER["pending"] = False
                     return
-        if tries < 30:
+        if tries < 100:
             QtCore.QTimer.singleShot(150, lambda: click(tries + 1))
+        else:
+            ANSWER["pending"] = False
+            h.check("the question box opened", False)
 
     QtCore.QTimer.singleShot(300, click)
+
+
+def wait_answer():
+    """Comes back every 250 ms until the question box was answered."""
+    if ANSWER["pending"]:
+        h.state["queue"].insert(0, wait_answer)
+
+
+wait_answer.wait_ms = 250
 
 
 def key_dialog():
@@ -509,8 +528,10 @@ h.run(
         b_unpinned,
         c_pin_by_right_click,
         c_reset_no,
+        wait_answer,
         c_kept,
         c_reset_yes,
+        wait_answer,
         c_reset,
         d_open_dialog,
         d_dialog,
