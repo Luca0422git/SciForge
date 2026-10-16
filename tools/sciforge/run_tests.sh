@@ -169,6 +169,20 @@ run_scenarios() {
         [ $(((index - 1) % SHARD_COUNT + 1)) -ne "${SHARD_INDEX}" ] && continue
         # --scenario a,b,c: those, in name order, sharing one profile (as a CI shard does)
         [ -n "${SCENARIO:-}" ] && [[ ",${SCENARIO}," != *",${name},"* ]] && continue
+        # Each scenario starts from FreeCAD's own window layout: one left behind in the shared
+        # profile (CI #135: with the Data Panel docked, the next scenario's browser came out
+        # wider and FreeCAD sent a press on a browser row to the 3D view) is not this one's.
+        if [ -f "${PROFILE}/user.cfg" ]; then
+            python3 - "${PROFILE}/user.cfg" <<'PYEOF' || true
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+clean = re.sub(r'\s*<FCText Name="MainWindowState"[^>]*>[^<]*</FCText>', "", text)
+clean = re.sub(r'\s*<FCText Name="MainWindowState"[^>]*/>', "", clean)
+if clean != text:
+    open(path, "w", encoding="utf-8").write(clean)
+PYEOF
+        fi
         # Through the launcher: a scenario that does not even load fails at once
         # instead of leaving FreeCAD open until the timeout.
         SCIFORGE_SCENARIO="${name}" SCIFORGE_SCENARIO_FILE="${file}" SCIFORGE_SMOKE_OUT="${OUT}" \
