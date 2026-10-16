@@ -20,6 +20,10 @@ P5  An IGES file (written by SciForge's IGES export of two boxes): the solids as
 P6  A SAT file: refused, the message says FreeCAD cannot read ACIS and to save STEP; no
     design is made.
 P7  A broken STEP file: refused with the reason; no design is left behind.
+P8  The Data Panel: Upload robot.step (it is copied into the project folder and listed as
+    "robot.step"); double-click it: a new design with the robot's components; right-click
+    it > Insert into Current Design: the robot comes in as one component "robot" (the
+    Move dialog opens; Esc).
 """
 
 import os
@@ -256,6 +260,101 @@ def p7_check():
     h.new_errors()
 
 
+# -- P8 ----------------------------------------------------------------------------------------
+FILES = "User parameter:BaseApp/Preferences/Mod/SciForge/Files"
+
+
+def p8_upload():
+    import tempfile
+
+    from sciforge import versions_ui
+
+    s["project"] = tempfile.mkdtemp(prefix="sciforge-exchange2-project-")
+    App.ParamGet(FILES).SetString("ProjectFolder", s["project"])
+    versions_ui.show_panel()
+    versions_ui.UPLOAD_PICKER = lambda: s["robot"]
+
+
+p8_upload.wait_ms = 1500
+
+
+def p8_click_upload():
+    from SciForgeTests.gui import versions_input as vi
+
+    panel = vi.data_panel()
+    h.check("P8 the Data Panel is shown", panel is not None)
+    if panel is not None:
+        h.check("P8 on the project folder", panel.folder == s["project"], panel.folder)
+    h.check("P8 the Upload button", vi.panel_button("Upload"))
+
+
+p8_click_upload.wait_ms = 1500
+
+
+def p8_open():
+    from SciForgeTests.gui import versions_input as vi
+
+    copied = os.path.join(s["project"], "robot.step")
+    h.check("P8 the file was copied into the project", os.path.isfile(copied))
+    lst = vi.panel_list()
+    texts = [lst.item(k).text() for k in range(lst.count())] if lst is not None else []
+    h.check(
+        "P8 the Data Panel lists robot.step", any(t.startswith("robot.step") for t in texts), texts
+    )
+    s["docs"] = set(App.listDocuments())
+    vi.panel_double_click("robot.step")
+
+
+p8_open.wait_ms = 2500
+
+
+def p8_opened():
+    new = set(App.listDocuments()) - s["docs"]
+    h.check("P8 double-click opened it as a new design", len(new) == 1, new)
+    h.check("P8 with the robot's components", "Wheel:2" in x.labels(), x.labels())
+    from SciForgeTests.gui import versions_input as vi
+    from SciForgeTests.gui import widget_input as w
+
+    lst = vi.panel_list()
+    for k in range(lst.count() if lst is not None else 0):
+        item = lst.item(k)
+        if item.text().startswith("robot.step"):
+            ok = w.right_click(
+                lst.viewport(), lst.visualItemRect(item).center(), "Insert into Current Design"
+            )
+            h.check("P8 Data Panel menu > Insert into Current Design", ok)
+
+
+p8_opened.wait_ms = 2500
+
+
+def p8_check():
+    robot = x.comp("robot")
+    h.check("P8 the robot came in as one component", robot is not None, x.labels())
+    drives = [c for c in x.comps() if c.Label == "Drive"]
+    h.check(
+        "P8 with its own Drive inside",
+        robot is not None and any(x.parent_label(c) == "robot" for c in drives),
+        [(c.Label, x.parent_label(c)) for c in drives],
+    )
+    h.press(QtCore.Qt.Key_Escape)
+
+
+p8_check.wait_ms = 1000
+
+
+def p8_done():
+    from sciforge import taskui, versions_ui
+
+    h.check("P8 Esc closed the Move dialog", taskui.current() is None)
+    versions_ui.UPLOAD_PICKER = None
+    versions_ui.hide_panel()
+    App.ParamGet(FILES).RemString("ProjectFolder")
+    import shutil
+
+    shutil.rmtree(s["project"], ignore_errors=True)
+
+
 def cleanup():
     for name in list(App.listDocuments()):
         try:
@@ -283,6 +382,12 @@ h.run(
         p6_sat,
         p6_check,
         p7_check,
+        p8_upload,
+        p8_click_upload,
+        p8_open,
+        p8_opened,
+        p8_check,
+        p8_done,
         cleanup,
     ],
 )

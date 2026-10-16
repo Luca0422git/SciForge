@@ -64,6 +64,15 @@ def is_design(path):
     return path.lower().endswith(DESIGN_SUFFIX.lower())
 
 
+# STEP / IGES files in a project folder (uploaded): the Data Panel lists them; opening one
+# makes a new design of it with its components (exchange_ui.open_file).
+CAD_SUFFIXES = (".step", ".stp", ".iges", ".igs")
+
+
+def is_cad_file(path):
+    return path.lower().endswith(CAD_SUFFIXES)
+
+
 _BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
@@ -895,17 +904,19 @@ def list_folder(folder):
             if name in HIDDEN_FOLDERS or name.startswith(".") or name.endswith(VERSIONS_SUFFIX):
                 continue
             folders.append({"name": name, "path": full})
-        elif is_design(name):
+        elif is_design(name) or is_cad_file(name):
             try:
                 stat = os.stat(full)
             except OSError:
                 continue
+            cad = is_cad_file(name)
             designs.append(
                 {
-                    "name": design_name(name),
+                    "name": name if cad else design_name(name),
                     "path": full,
                     "size": stat.st_size,
                     "modified": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(stat.st_mtime)),
+                    "cad": cad,
                 }
             )
     return folders, designs
