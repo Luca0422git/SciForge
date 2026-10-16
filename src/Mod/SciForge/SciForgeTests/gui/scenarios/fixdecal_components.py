@@ -15,6 +15,10 @@ K4 The cylinder made a component, a decal laid on its side inside it; Component 
    view, a drag on the cylinder): the wrapped decal goes with it, wrapped round it.
 K5 The box body dragged in the browser onto the cylinder's component: its decal goes along
    (in that component now) and stays on the box's top where it is in the design.
+K6 Can's row, Ctrl+C, Ctrl+V: a linked copy Can:2, Move opens on it, X Distance 60, OK: both
+   pictures are drawn on the copy too (a decal belongs to its component). Move the copy
+   (its row, M, Y Distance 30): the pictures go with it at once; Esc: back with it. Its eye
+   off: the copy's pictures go; on: back.
 """
 
 import FreeCAD as App
@@ -321,6 +325,131 @@ def k5_check():
     h.shot("K5-row")
 
 
+# -- K6 ----------------------------------------------------------------------------------------
+def can_copy():
+    return c.part("Can:2")
+
+
+def copies_on(tag, part):
+    """Checks: each decal is drawn once more, on the copy `part`'s bodies."""
+    shape = c.shape(part)
+    for obj in (f.flat(), f.wrapped()):
+        if obj is None:
+            h.check("%s: the decals are there" % tag, False)
+            continue
+        drawn = f.copy_points(obj)
+        h.check(
+            "%s: %s drawn once on the copy" % (tag, obj.Label),
+            obj.ViewObject.Proxy.copies_drawn() == 1 and len(drawn) == 1,
+            (obj.ViewObject.Proxy.copies_drawn(), len(drawn)),
+        )
+        gap = f.gap_to(shape, drawn[0]) if drawn else None
+        h.check(
+            "%s: %s on the copy's faces" % (tag, obj.Label), gap is not None and gap < 0.06, gap
+        )
+
+
+def k6_select():
+    st["k6"] = f.snapshot(f.flat())
+    h.click_empty()
+    t.click_row("Can")
+
+
+k6_select.wait_ms = 800
+
+
+def k6_copy():
+    h.press(QtCore.Qt.Key_C, QtCore.Qt.ControlModifier)
+
+
+def k6_paste():
+    h.press(QtCore.Qt.Key_V, QtCore.Qt.ControlModifier)
+
+
+k6_paste.wait_ms = 2000
+
+
+def k6_move():
+    p = c.component_panel()
+    copy = can_copy()
+    if h.check("K6 Move opens on the pasted Can:2", p is not None and copy is not None, c.labels()):
+        c.type_value(p, "dx", "60")
+
+
+k6_move.wait_ms = 1500
+
+
+def k6_ok():
+    h.task_button("OK")
+
+
+k6_ok.wait_ms = 1500
+
+
+def k6_check():
+    copy = can_copy()
+    if not h.check("K6 Can:2 is there", copy is not None, c.labels()):
+        return
+    copies_on("K6", copy)
+    f.follows("K6 the original's decal did not move", f.flat(), st["k6"], App.Placement())
+    h.shot("K6-copy")
+    h.click_empty()
+    t.click_row("Can:2")
+
+
+k6_check.wait_ms = 800
+
+
+def k6_press_m():
+    h.press("m")
+
+
+k6_press_m.wait_ms = 1500
+
+
+def k6_move_copy():
+    p = c.component_panel()
+    copy = can_copy()
+    if h.check("K6 Move on Can:2", p is not None and p.options.get("components") == [copy], p):
+        c.type_value(p, "dy", "30")
+
+
+k6_move_copy.wait_ms = 1500
+
+
+def k6_moved():
+    copies_on("K6 moved", can_copy())
+    h.press(QtCore.Qt.Key_Escape)  # Esc puts the copy back where it was
+
+
+k6_moved.wait_ms = 1500
+
+
+def k6_back():
+    copies_on("K6 Esc: back", can_copy())
+    t.click_eye("Can:2")
+
+
+k6_back.wait_ms = 1200
+
+
+def k6_hidden():
+    for obj in (f.flat(), f.wrapped()):
+        h.check(
+            "K6 the copy hidden: %s not drawn on it" % obj.Label,
+            obj.ViewObject.Proxy.copies_drawn() == 0,
+            obj.ViewObject.Proxy.copies_drawn(),
+        )
+    t.click_eye("Can:2")
+
+
+k6_hidden.wait_ms = 1200
+
+
+def k6_shown():
+    copies_on("K6 shown again", can_copy())
+
+
 def cleanup():
     f.forget_picture()
     for name in list(App.listDocuments()):
@@ -360,6 +489,18 @@ h.run(
         k4_check,
         k5_drag_row,
         k5_check,
+        k6_select,
+        k6_copy,
+        k6_paste,
+        k6_move,
+        k6_ok,
+        k6_check,
+        k6_press_m,
+        k6_move_copy,
+        k6_moved,
+        k6_back,
+        k6_hidden,
+        k6_shown,
         cleanup,
     ],
 )

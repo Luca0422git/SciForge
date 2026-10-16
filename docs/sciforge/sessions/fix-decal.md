@@ -61,6 +61,12 @@ map, a link to "Face6" becomes "?Face6" (probed).
 - Edit Decal: **Select Face** (any face, of any body: `decal.relay`), and when the face is
   gone the dialog says so and waits for a click on a face. The red step's message says so.
 - Old designs: `onDocumentRestored` remembers the face as saved and the body's placement.
+- Copies of a component (Copy / Paste, Move's Create Copy, component patterns: instances.py
+  repeats the bodies' solids in copy bodies) now show its decals too: the view provider
+  shares the picture's Coin nodes under one more transform per copy body
+  (`decal.copy_places`: the copy's placement times its source component's inverse, or the
+  pattern's move), re-placed when an instance moves, is shown / hidden, made or deleted,
+  or a pattern changes.
 - `decal_core.upright_hint(normal, up, right)`: the picture's up in a turned component.
 - Found on the way: **Press Pull at distance 0 dropped a primitive's placement**
   (`presspull_core.press_pull` returned `base.copy()`, and the feature's Shape takes the
@@ -97,8 +103,8 @@ map, a link to "Face6" becomes "?Face6" (probed).
 
 ## Gaps
 
-- Instances (Copy / Paste, Create Copy of a component, component patterns) show only the
-  source's decals (see the parity doc's gaps).
+- A component's copies (instances) show its decals, but the browser lists the decal under
+  the original only.
 - Fusion keeps its own face names; SciForge follows what it remembers of the face's shape
   and place, so a face rebuilt so that it both changes shape and moves in one step may not
   be found (the step goes red; Edit Decal > Select Face puts it back).

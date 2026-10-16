@@ -158,6 +158,46 @@ def drawn_points(obj):
         return []
 
 
+def copy_points(obj):
+    """[[points]] of each copy of the picture drawn on an instance of its component, in design
+    coordinates (every path to the shared coordinates node after the first one)."""
+    from pivy import coin
+
+    out = []
+    try:
+        node = obj.ViewObject.Proxy.coords
+        coords = node.point.getValues()
+        view = Gui.ActiveDocument.ActiveView
+        search = coin.SoSearchAction()
+        search.setNode(node)
+        search.setInterest(coin.SoSearchAction.ALL)
+        search.apply(view.getSceneGraph())
+        paths = search.getPaths()
+        region = view.getViewer().getSoRenderManager().getViewportRegion()
+        for k in range(1, paths.getLength()):
+            action = coin.SoGetMatrixAction(region)
+            action.apply(paths[k])
+            matrix = action.getMatrix()
+            points = []
+            for c in coords:
+                p = matrix.multVecMatrix(c)
+                points.append(V(p[0], p[1], p[2]))
+            out.append(points)
+    except Exception as exc:
+        h.check("copies readable", False, repr(exc))
+    return out
+
+
+def gap_to(shape, points):
+    """How far the points lie from `shape`, at most (mm); None without points."""
+    import Part
+
+    if not points or shape is None or shape.isNull():
+        return None
+    step = max(1, len(points) // 40)
+    return max(shape.distToShape(Part.Vertex(p))[0] for p in points[::step])
+
+
 def centre(obj):
     """The decal's middle in design coordinates."""
     from sciforge import decal

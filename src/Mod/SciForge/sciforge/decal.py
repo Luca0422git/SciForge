@@ -161,8 +161,7 @@ def drawn_place(obj):
     body = obj.Body
     if body is None or not bodies.alive(body):
         return App.Placement()
-    then = getattr(obj, "BodyPlace", None)  # None: an old decal not brought up to date yet
-    place = body.Placement.multiply(then.inverse()) if then is not None else App.Placement()
+    place = drawn_place_in_home(obj)
     own = components.container_of(obj)
     home = components.container_of(body)
     if own is not home:
@@ -170,6 +169,69 @@ def drawn_place(obj):
         end = own.getGlobalPlacement() if own is not None else App.Placement()
         place = end.inverse().multiply(start).multiply(place)
     return place
+
+
+def copy_places(obj):
+    """Where the decal is drawn again: on each copy of its body in an instance of its
+    component (Copy / Paste, Move's Create Copy, a component pattern: instances.py), as
+    placements in the coordinates it is drawn in. A decal belongs to its component, so every
+    occurrence of the component shows it."""
+    from . import components, instances
+
+    body = obj.Body
+    if body is None or not bodies.alive(body):
+        return []
+    own = components.container_of(obj)
+    home = components.container_of(body)
+    to_own = own.getGlobalPlacement().inverse() if own is not None else App.Placement()
+    start = home.getGlobalPlacement() if home is not None else App.Placement()
+    start = start.multiply(drawn_place_in_home(obj))
+    places = []
+    for feature in body.InList:
+        try:
+            if not instances.is_copy_feature(feature) or feature.Source is not body:
+                continue
+            copy = instances.copy_body(feature)
+            if copy is None or not _shown(copy):
+                continue
+            pattern = feature.Pattern
+            if pattern is not None:  # the copy is the source's solid moved by the pattern
+                moves = list(getattr(pattern, "Moves", []) or [])
+                if feature.Index >= len(moves):
+                    continue
+                world = moves[feature.Index]
+            else:  # the source's solid in its component, put where the copy's component is
+                root = feature.Root
+                back = root.getGlobalPlacement().inverse() if root is not None else None
+                world = copy.getGlobalPlacement()
+                if back is not None:
+                    world = world.multiply(back)
+            places.append(to_own.multiply(world).multiply(start))
+        except Exception:
+            continue
+    return places
+
+
+def _shown(obj):
+    """The object and every component it is in are shown."""
+    from . import components
+
+    current = obj
+    while current is not None:
+        if not getattr(current, "Visibility", True):
+            return False
+        current = components.container_of(current)
+    return True
+
+
+def drawn_place_in_home(obj):
+    """How the decal's coordinates lie in its body's component's: the way the body moved
+    by its own placement since the decal was computed."""
+    body = obj.Body
+    then = getattr(obj, "BodyPlace", None)
+    if body is None or then is None:
+        return App.Placement()
+    return body.Placement.multiply(then.inverse())
 
 
 def global_place(obj):

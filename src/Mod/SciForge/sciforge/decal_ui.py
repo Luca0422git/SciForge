@@ -84,11 +84,6 @@ class ViewProviderDecal:
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
         self.root.addChild(pick)
-        # The mesh lies where the body was when it was computed: drawn moved the way the body
-        # moved by its own placement since (decal.drawn_place), so a joint or a drag that
-        # moves a body without recomputing it carries the picture along at once.
-        self.transform = coin.SoTransform()
-        self.root.addChild(self.transform)
         offset = coin.SoPolygonOffset()  # in front of the face it lies on
         offset.factor = -2.0
         offset.units = -2.0
@@ -96,38 +91,67 @@ class ViewProviderDecal:
         hints = coin.SoShapeHints()
         hints.vertexOrdering = coin.SoShapeHints.UNKNOWN_ORDERING
         self.root.addChild(hints)
+        # The picture itself (shared: drawn again on every copy of the body's component).
+        self.shape = coin.SoGroup()
         self.material = coin.SoMaterial()
         self.material.diffuseColor.setValue(1.0, 1.0, 1.0)
-        self.root.addChild(self.material)
+        self.shape.addChild(self.material)
         self.texture_group = coin.SoGroup()
-        self.root.addChild(self.texture_group)
+        self.shape.addChild(self.texture_group)
         self.uv = coin.SoTextureCoordinate2()
-        self.root.addChild(self.uv)
+        self.shape.addChild(self.uv)
         binding = coin.SoTextureCoordinateBinding()
         binding.value = coin.SoTextureCoordinateBinding.PER_VERTEX_INDEXED
-        self.root.addChild(binding)
+        self.shape.addChild(binding)
         self.normals = coin.SoNormal()
-        self.root.addChild(self.normals)
+        self.shape.addChild(self.normals)
         nbind = coin.SoNormalBinding()
         nbind.value = coin.SoNormalBinding.PER_VERTEX_INDEXED
-        self.root.addChild(nbind)
+        self.shape.addChild(nbind)
         self.coords = coin.SoCoordinate3()
-        self.root.addChild(self.coords)
+        self.shape.addChild(self.coords)
         self.faces = coin.SoIndexedFaceSet()
-        self.root.addChild(self.faces)
+        self.shape.addChild(self.faces)
+        # The mesh lies where the body was when it was computed: drawn moved the way the body
+        # moved by its own placement since (decal.drawn_place), so a joint or a drag that
+        # moves a body without recomputing it carries the picture along at once.
+        main = coin.SoSeparator()
+        self.transform = coin.SoTransform()
+        main.addChild(self.transform)
+        main.addChild(self.shape)
+        self.root.addChild(main)
+        # The copies of the body in instances of its component (Copy / Paste, Create Copy, a
+        # component pattern): the same picture where each copy is (decal.copy_places).
+        self.copies = coin.SoGroup()
+        self.root.addChild(self.copies)
         self._image = None
         vobj.addDisplayMode(self.root, "Decal")
         self._update(vobj.Object)
 
     def place(self, obj=None):
-        """Put the drawing where the decal's body is now (its placement)."""
+        """Put the drawing where the decal's body is now (its placement), and on the copies
+        of the body in instances of its component."""
+        from pivy import coin
+
         obj = obj if obj is not None else self.Object
         try:
-            plc = decal.drawn_place(obj)
-            self.transform.translation.setValue(tuple(plc.Base))
-            self.transform.rotation.setValue(tuple(plc.Rotation.Q))
+            _set_transform(self.transform, decal.drawn_place(obj))
+            places = decal.copy_places(obj)
+            while self.copies.getNumChildren() > len(places):
+                self.copies.removeChild(self.copies.getNumChildren() - 1)
+            while self.copies.getNumChildren() < len(places):
+                copy = coin.SoSeparator()
+                copy.addChild(coin.SoTransform())
+                copy.addChild(self.shape)
+                self.copies.addChild(copy)
+            for i, plc in enumerate(places):
+                _set_transform(self.copies.getChild(i).getChild(0), plc)
         except Exception as exc:
             warn("decal drawing: %s" % exc)
+
+    def copies_drawn(self):
+        """How many copies of the picture are drawn besides it (for the tests)."""
+        return self.copies.getNumChildren()
 
     def _update(self, obj):
         from pivy import coin
@@ -205,6 +229,11 @@ class ViewProviderDecal:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _set_transform(node, plc):
+    node.translation.setValue(tuple(plc.Base))
+    node.rotation.setValue(tuple(plc.Rotation.Q))
 
 
 def attach_view(obj):
@@ -687,14 +716,27 @@ class _Watch:
             warn("decals: %s" % exc)
 
     def slotChangedObject(self, obj, prop):
-        """A body or component moved (a joint, Component Drag, a component Move, an undo):
-        the decals on it are drawn where it is now, at once."""
-        if prop not in ("Placement", "Group"):
+        """A body or component moved (a joint, Component Drag, a component Move, an undo),
+        shown or hidden, an instance's copy made or a pattern changed: the decals are drawn
+        where their bodies and the copies are now, at once."""
+        if prop not in ("Placement", "Group", "Visibility", "Moves", "Shape"):
             return
         try:
-            if obj.TypeId not in ("PartDesign::Body", "App::Part"):
+            if prop == "Shape":
+                if bodies.kind(obj) != "InstanceCopy":
+                    return
+            elif prop != "Moves" and obj.TypeId not in ("PartDesign::Body", "App::Part"):
                 return
             place_drawings(obj.Document)
+        except Exception as exc:
+            warn("decals: %s" % exc)
+
+    def slotDeletedObject(self, obj):
+        """An instance deleted: its copies of the pictures go (once it is gone)."""
+        try:
+            if obj.TypeId == "App::Part" or bodies.kind(obj) == "InstanceCopy":
+                name = obj.Document.Name
+                QtCore.QTimer.singleShot(0, lambda: _place_later(name))
         except Exception as exc:
             warn("decals: %s" % exc)
 
@@ -706,6 +748,14 @@ class _Watch:
 
     def slotRedoDocument(self, doc):
         self._later(doc)
+
+
+def _place_later(name):
+    try:
+        if name in App.listDocuments():
+            place_drawings(App.getDocument(name))
+    except Exception as exc:
+        warn("decals: %s" % exc)
 
 
 def place_drawings(doc):
