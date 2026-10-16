@@ -4,6 +4,7 @@ part covers (the squares are 0.6 x the part since view-3, so a fixed point besid
 can miss them). Kept outside scenarios/ because every file there is run as a scenario."""
 
 import FreeCAD as App
+from PySide import QtWidgets
 
 from SciForgeTests.gui import harness as h
 
@@ -32,7 +33,7 @@ def square_point(role="XY_Plane", picker_=None):
     if p is None:
         return None
     base, _normal, u, v = p._frame(role)
-    half = p.size / 2.0
+    half = p.half_of(role)
     pa, pb = PREFER.get(role, (0.5, 0.5))
     steps = [i / 10.0 for i in range(-9, 10)]
     spots = sorted(
@@ -51,8 +52,15 @@ def square_point(role="XY_Plane", picker_=None):
         if h.covered(qt):
             continue
         x, y = float(pixel[0]), float(pixel[1])
-        around = [(x, y)] + [(x + dx, y + dy) for dx, dy in ((5, 0), (-5, 0), (0, 5), (0, -5))]
-        if all(_takes(p, (int(round(a)), int(round(b))), role) for a, b in around):
+        around = [(x + dx, y + dy) for dx in (-4, -2, 0, 2, 4) for dy in (-4, -2, 0, 2, 4)]
+        around += [(x + 8, y), (x - 8, y), (x, y + 8), (x, y - 8)]
+        if not all(_takes(p, (int(round(a)), int(round(b))), role) for a, b in around):
+            continue
+        # what is drawn can change under the mouse (a sketch's shaded area steps back and
+        # shows a face lying in the plane): look again with the mouse there
+        h.move(qt)
+        QtWidgets.QApplication.processEvents()
+        if all(_takes(p, (int(round(a)), int(round(b))), role) for a, b in around[:25]):
             return App.Vector(point)  # well inside what the square takes, not at an edge
     return None
 

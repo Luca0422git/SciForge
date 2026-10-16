@@ -25,6 +25,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 
 V = App.Vector
@@ -77,7 +78,7 @@ def planes_shown():
 
 
 def click_yz():
-    h.click(V(0, -8, -8))  # the YZ square below the plate (24 mm squares)
+    pl.click_square("YZ_Plane")  # where the YZ square shows
 
 
 def mirrored_yz():
@@ -131,7 +132,7 @@ def edit_open():
 
 def click_xz():
     h.fit()
-    h.click(V(-6, 0, 11))  # the XZ square standing above the plate
+    pl.click_square("XZ_Plane")  # where the XZ square shows
 
 
 def mirrored_xz():
@@ -270,7 +271,7 @@ def cancel_box():
 
 def cancel_plane():
     h.fit()
-    h.click(V(0, -8, -8))  # the YZ square below the plate (24 mm squares)
+    pl.click_square("YZ_Plane")  # where the YZ square shows
 
 
 def cancel_now():

@@ -703,9 +703,9 @@ def base_face_holding(base, face_global):
         return None
 
 
-def design_extent(body):
-    """Largest side of the box round the visible bodies of the design, along `body`'s axes
-    (0 for an empty design)."""
+def design_box(body):
+    """(xmin, xmax, ymin, ymax, zmin, zmax) round the visible bodies of the design, along
+    `body`'s axes (None for an empty design)."""
     inverse = body.getGlobalPlacement().inverse()
     low, high = None, None
     for obj in body.Document.Objects:
@@ -727,9 +727,8 @@ def design_extent(body):
         except Exception:
             continue
     if low is None:
-        return 0.0
-    size = high - low
-    return max(size.x, size.y, size.z)
+        return None
+    return (low.x, high.x, low.y, high.y, low.z, high.z)
 
 
 def design_plane_picker(view, body, on_pick):
@@ -737,7 +736,8 @@ def design_plane_picker(view, body, on_pick):
     design: the picker sizes them from the active body alone, so after a small second body
     (a cylinder beside the part) they shrank to 20 mm round the origin and a click on the
     plane beside the part hit nothing (found by the primitives QA). Same rule as the
-    picker's (origin_look.square_size: about 0.6 x the design; Luca found 1.3 x too big)."""
+    picker's (origin_look.square_size_for: about 0.6 x the design, sticking out of a part
+    that covers the origin; Luca found 1.3 x too big)."""
     from . import origin_look, sketch_ui
 
     class DesignPlanes(sketch_ui.PlanePicker):
@@ -751,11 +751,12 @@ def design_plane_picker(view, body, on_pick):
 
     picker = DesignPlanes(view, body, on_pick)
     try:
-        extent = design_extent(body)
-        if extent > 0.0:
-            size = origin_look.square_size(extent)
-            if size > picker.size + 1e-6:
-                picker.resize(size)
+        box = design_box(body)
+        if box is not None:
+            sizes = origin_look.square_sizes_for(box)
+            grown = {k: max(v, picker.sizes.get(k, 0.0)) for k, v in sizes.items()}
+            if grown != picker.sizes:
+                picker.resize(grown)
     except Exception as exc:
         warn("origin planes: %s" % exc)
     return picker

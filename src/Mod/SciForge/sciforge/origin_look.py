@@ -80,6 +80,34 @@ def square_size(extent, empty=False):
     return max(MIN_SIZE, SIZE_FACTOR * float(extent))
 
 
+def square_sizes_for(box):
+    """{"XY": side, "XZ": side, "YZ": side} of the origin squares for a part whose box (in
+    the body's own axes) is (xmin, xmax, ymin, ymax, zmin, zmax): 0.6 x its largest side,
+    but a square the part hides round the origin sticks out of it by a margin (15 % of the
+    part, at least 5 mm), or it could not be clicked:
+    - XY under a part that covers the origin in X and Y (a part centred on it): out of the
+      part's nearest side;
+    - XZ / YZ through a part that lies on both sides of it and covers the origin along it:
+      out of the part's nearest side or its top (below the part it is hidden from above).
+    The other squares keep 0.6 x (a taller XZ square stands in front of the top face and
+    takes its clicks)."""
+    x0, x1, y0, y1, z0, z1 = (float(c) for c in box)
+    extent = max(x1 - x0, y1 - y0, z1 - z0)
+    base = max(MIN_SIZE, SIZE_FACTOR * extent)
+    margin = max(5.0, 0.15 * extent)
+    need = {
+        "XY": min(-x0, x1, -y0, y1),
+        "XZ": min(-x0, x1, z1) if y0 < 0.0 < y1 else 0.0,
+        "YZ": min(-y0, y1, z1) if x0 < 0.0 < x1 else 0.0,
+    }
+    return {k: max(base, 2.0 * (n + margin)) if n > 0.0 else base for k, n in need.items()}
+
+
+def square_size_for(box):
+    """The largest of square_sizes_for(box)."""
+    return max(square_sizes_for(box).values())
+
+
 def look(role, hovered):
     """(face colour, transparency, outline colour, outline width) of a square."""
     base = plane_colour(role)

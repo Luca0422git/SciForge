@@ -464,7 +464,7 @@ def c_taken():
     if h.check("Split Body open", p is not None):
         h.check("the clicked face's body is taken", p.options["body"] is s.bodies()[0], p.options)
         h.check("tool box waits", p.active == "tool", p.active)
-    h.click(V(0, -24, 20))  # the YZ square, in front of the part
+    pl.click_square("YZ_Plane")  # the YZ square where it shows
 
 
 def c_extend_off():

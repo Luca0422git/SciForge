@@ -356,7 +356,7 @@ def front_planes():
                     continue
                 point, t = hit
                 local = point - base
-                half = self.size / 2.0
+                half = self.half_of(role)
                 if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
                     if best is None or t < best[1]:
                         best = (role, t)

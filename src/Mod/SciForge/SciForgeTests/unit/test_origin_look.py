@@ -50,6 +50,34 @@ class Size(unittest.TestCase):
         self.assertEqual(look.square_size(0.0, empty=True), look.EMPTY_SIZE)
 
 
+class SizeForBox(unittest.TestCase):
+    def test_part_beside_the_origin(self):
+        # a part in the + octant leaves 3/4 of each square free: 0.6 x the part
+        self.assertEqual(
+            look.square_sizes_for((0, 100, 0, 60, 0, 20)), {"XY": 60.0, "XZ": 60.0, "YZ": 60.0}
+        )
+        self.assertEqual(look.square_size_for((0, 20, 0, 20, 0, 20)), look.MIN_SIZE)
+
+    def test_part_centred_on_the_origin(self):
+        # a 40 x 30 x 10 box centred in x and y: XY sticks out of the nearer sides (y = +-15)
+        # by 15 % of the part (6): half 21; XZ and YZ stand 6 above its top (half 16)
+        sizes = look.square_sizes_for((-20, 20, -15, 15, 0, 10))
+        self.assertAlmostEqual(sizes["XY"], 42.0)
+        self.assertAlmostEqual(sizes["XZ"], 32.0)
+        self.assertAlmostEqual(sizes["YZ"], 32.0)
+
+    def test_thin_plate_centred(self):
+        # 30 x 20 x 5: sides at 10, margin 5 (at least 5 mm); 5 above its top
+        sizes = look.square_sizes_for((-15, 15, -10, 10, 0, 5))
+        self.assertAlmostEqual(sizes["XY"], 30.0)
+        self.assertAlmostEqual(sizes["XZ"], 20.0)
+
+    def test_part_on_one_side_of_a_plane(self):
+        # centred in x, all at y > 0: XZ is seen from the front, it stays 0.6 x
+        sizes = look.square_sizes_for((-20, 20, 0, 30, 0, 10))
+        self.assertAlmostEqual(sizes["XZ"], 24.0)
+
+
 class AxisLabel(unittest.TestCase):
     def test_on_the_plus_half_near_the_middle(self):
         spot = look.axis_label_spot((-100, 0, 0), (100, 0, 0))
