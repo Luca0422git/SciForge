@@ -1,0 +1,19 @@
+{
+  "id": "sketch_face_projected_rest",
+  "title": "Block 40x30x10, sketch on its top with the face's edges projected, a 10x10 rectangle from the projected corner: the L-shaped rest of the face extruded 5",
+  "tags": ["sketch", "auto-project", "regions"],
+  "steps": [
+    {"op": "sketch", "id": "s1", "plane": "XY", "geometry": [{"rect": [0, 0, 40, 30], "name": "base"}]},
+    {"op": "extrude", "id": "e1", "profile": "s1", "distance": 10},
+    {"op": "sketch", "id": "s2", "face": {"normal": [0, 0, 1], "count": 1}, "auto_project": true, "geometry": [{"rect": [0, 0, 10, 10], "name": "corner"}]},
+    {"op": "extrude", "id": "e2", "profile": "s2", "regions": [[30, 20]], "distance": 5}
+  ],
+  "expect": {
+    "volume": 17500,
+    "area": 4500,
+    "faces": 9,
+    "bbox": [0, 0, 0, 40, 30, 15],
+    "source": "analytic",
+    "note": "The area between the projected outline and the rectangle (an L) is its own profile. V = 12000 + (1200 - 100)*5; A = bottom 1200 + L top 1100 + notch floor 100 + x=0 400 + y=0 550 + x=40 450 + y=30 600 + notch walls 2*50"
+  }
+}

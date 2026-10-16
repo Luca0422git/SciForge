@@ -263,6 +263,7 @@ def reset_for_tests():
         "orientation",
         "active_component_visibility",
         "version_on_close",
+        "sketch_auto_project",
     ):
         opt = core.option(key)
         try:

@@ -18,8 +18,9 @@ TOLERANCE = 1e-7
 TYPES_WITHOUT_AREA = ("Part::GeomPoint",)
 
 
-def sketch_edges(sketch, include_construction=False):
-    """Edges of a sketch's own curves, in sketch coordinates (z = 0).
+def sketch_edges(sketch, include_construction=False, projected=True):
+    """Edges of a sketch's own curves, in sketch coordinates (z = 0), and (`projected`)
+    its profile-making projected curves.
 
     Construction curves and points never make profiles in Fusion."""
     edges = []
@@ -32,7 +33,8 @@ def sketch_edges(sketch, include_construction=False):
             edges.append(geometry.toShape())
         except Exception:
             continue
-    edges += _projected_edges(sketch)
+    if projected:
+        edges += _projected_edges(sketch)
     return edges
 
 
@@ -56,6 +58,45 @@ def _projected_edges(sketch):
         except Exception:
             continue
     return edges
+
+
+def drawn_regions(sketch, faces):
+    """The indices of `faces` (the sketch's areas with its projected curves, sketch
+    coordinates) that lie inside the one area the sketch's own curves close by
+    themselves, or [] when they close none or several. With the face's edges projected
+    (Auto project) a circle drawn on a face makes two areas (the disc and the face
+    around it) and a rectangle drawn over a face's outline is split by the face's inner
+    edges: Extrude still takes what was drawn by itself, as without the projected
+    curves (SciForge's choice: Fusion with its Auto project option on takes nothing)."""
+    try:
+        own = regions(sketch_edges(sketch, projected=False))
+    except Exception:
+        return []
+    if len(own) != 1:
+        return []
+    found = []
+    for i, face in enumerate(faces):
+        point = inner_point(face)
+        if point is not None and own[0].isInside(point, 1e-6, True):
+            found.append(i)
+    return found
+
+
+def inner_point(face):
+    """A point inside the face (its centre can be in a hole of it), or None."""
+    try:
+        centre = face.CenterOfMass
+        if face.isInside(centre, 1e-6, False):
+            return centre
+        u0, u1, v0, v1 = face.ParameterRange
+        for i in range(1, 12):
+            for j in range(1, 12):
+                point = face.valueAt(u0 + (u1 - u0) * i / 12.0, v0 + (v1 - v0) * j / 12.0)
+                if face.isInside(point, 1e-6, False):
+                    return point
+    except Exception:
+        return None
+    return None
 
 
 def regions(edges, tolerance=TOLERANCE):

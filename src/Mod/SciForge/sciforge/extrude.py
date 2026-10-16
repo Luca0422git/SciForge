@@ -223,6 +223,23 @@ def regions(sketch):
     return found
 
 
+def lost_area(sketch):
+    """How much area (mm^2) the sketch's curves close that FreeCAD's own areas
+    ("InternalFaceN") leave out: FreeCAD 1.1.4 makes no area where an arc ends tangent on
+    the middle of a line (a rectangle drawn over a projected rounded outline), while the
+    sketch's shading (sketch_regions) shows it. 0.0 when they agree or on any doubt."""
+    try:
+        from . import sketch_regions
+
+        if not sketch.MakeInternals or sketch.InternalShape.isNull():
+            return 0.0
+        made = sum(f.Area for f in sketch.InternalShape.Faces)
+        closed = sum(f.Area for f in sketch_regions.sketch_regions(sketch))
+        return max(0.0, closed - made) if closed - made > 1e-6 * max(1.0, closed) else 0.0
+    except Exception:
+        return 0.0
+
+
 def normalize(profile):
     """Profiles in the list form [(obj, sub), ...] from the forms callers use."""
     if profile is None:

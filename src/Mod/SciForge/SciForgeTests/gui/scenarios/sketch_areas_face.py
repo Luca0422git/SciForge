@@ -114,6 +114,12 @@ def cancel():
 # -- Luca's case: a sketch on the top face ----------------------------------------------
 def sketch_on_top():
     h.check("the box is there", near(h.solid_volume(), 12000.0), h.solid_volume())
+    # Preferences > Design > Auto project off (as in Fusion's default): this scenario is
+    # about the face outside the drawn areas; with the face's edges projected that is a
+    # profile too (scenario sketch_projected_profiles)
+    App.ParamGet("User parameter:BaseApp/Preferences/Mod/SciForge/SketchInference").SetBool(
+        "AutoProject", False
+    )
     h.ribbon("Create Sketch")
 
 

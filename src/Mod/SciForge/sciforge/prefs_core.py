@@ -278,6 +278,17 @@ OPTIONS = [
         (INFERENCE, "Bool", "GuideConstraint"),
         group="Sketch",
     ),
+    _option(
+        "sketch_auto_project",
+        "design",
+        "Auto project the face's edges when sketching on a face",
+        "bool",
+        True,
+        (INFERENCE, "Bool", "AutoProject"),
+        group="Sketch",
+        tip="A new sketch on a flat face of the part gets the face's edges as projected "
+        "(purple) curves, so the shapes you draw against them make profiles.",
+    ),
     # -- General > API ----------------------------------------------------------------------
     _option(
         "scripts_folder",

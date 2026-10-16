@@ -28,7 +28,7 @@ SOURCES = ("analytic", "baseline-freecad-1.1.4", "fusion")
 
 # op -> (required keys, optional keys)
 STEP_KEYS = {
-    "sketch": ({"id", "plane", "geometry"}, {"offset", "comment"}),
+    "sketch": ({"id", "geometry"}, {"plane", "face", "auto_project", "offset", "comment"}),
     "extrude": (
         {"id"},
         {
@@ -300,9 +300,12 @@ def validate(model):
             seen[step["id"]] = op
 
         if op == "sketch":
-            plane = step["plane"]
-            if plane not in PLANES:
+            if ("plane" in step) == ("face" in step):
+                _fail(here, "sketch needs exactly one of 'plane' or 'face' (a selector)")
+            if "plane" in step and step["plane"] not in PLANES:
                 _fail(here, "'plane' must be one of %s" % (PLANES,))
+            if step.get("auto_project") and "face" not in step:
+                _fail(here, "'auto_project' projects the edges of the sketch's 'face'")
             _check_geometry(here, step["geometry"])
         if op == "extrude" and "curves" not in step and ("profile" in step) == ("face" in step):
             _fail(here, "extrude needs exactly one of 'profile' (a sketch) or 'face' (a selector)")

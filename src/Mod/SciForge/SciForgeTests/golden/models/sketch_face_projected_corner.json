@@ -1,0 +1,19 @@
+{
+  "id": "sketch_face_projected_corner",
+  "title": "Block 40x30x10, sketch on its top with the face's edges projected, a 10x10 rectangle from the projected corner: only the rectangle extruded 5",
+  "tags": ["sketch", "auto-project", "regions"],
+  "steps": [
+    {"op": "sketch", "id": "s1", "plane": "XY", "geometry": [{"rect": [0, 0, 40, 30], "name": "base"}]},
+    {"op": "extrude", "id": "e1", "profile": "s1", "distance": 10},
+    {"op": "sketch", "id": "s2", "face": {"normal": [0, 0, 1], "count": 1}, "auto_project": true, "geometry": [{"rect": [0, 0, 10, 10], "name": "corner"}]},
+    {"op": "extrude", "id": "e2", "profile": "s2", "regions": [[5, 5]], "distance": 5}
+  ],
+  "expect": {
+    "volume": 12500,
+    "area": 4000,
+    "faces": 9,
+    "bbox": [0, 0, 0, 40, 30, 15],
+    "source": "analytic",
+    "note": "The projected outline and the rectangle share a corner and two half edges; the rectangle is its own area (F9). V = 40*30*10 + 10*10*5; A = 3800 + four 10x5 boss sides; faces: bottom, L top, boss top, x=0, y=0 (merged with the boss), x=40, y=30, boss x=10, boss y=10"
+  }
+}

@@ -306,7 +306,7 @@ def create_sketch(body, target):
     A face or plane of another body puts the sketch in that body and makes it active, as
     in Fusion, where Extrude then joins the body that was clicked. (In `body` the sketch
     would reach out of its body, and the extrude would join the wrong one.)"""
-    from . import components, timeline_ops
+    from . import components, sketch_auto_project, timeline_ops
 
     owner = timeline_ops.body_of(target[0])
     # A face of a surface body (SURFACE tools, surface.py) hosts the sketch but not its
@@ -330,6 +330,8 @@ def create_sketch(body, target):
         sketch.AttachmentSupport = [target]
         sketch.MapMode = "FlatFace"
         doc.recompute()
+        if sketch_auto_project.enabled():
+            sketch_auto_project.auto_project(sketch, target)
     except Exception:
         doc.abortTransaction()
         raise

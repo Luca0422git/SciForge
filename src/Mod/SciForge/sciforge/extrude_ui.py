@@ -453,9 +453,19 @@ def selected_profile(body):
 
 def single_region(sketch):
     """[(sketch, area)] when the sketch has exactly one closed area, else []. A text counts
-    as one profile (a sketch holding only a text gives the text)."""
+    as one profile (a sketch holding only a text gives the text). With the face's edges
+    projected (Auto project) the areas inside the one area the sketch's own curves close
+    (a disc on a face; a rectangle drawn over a rim, split by its inner edges): what was
+    drawn, as without the projected curves (sketch_regions.drawn_regions)."""
     try:
         found = [(sketch, name) for name, _face in extrude.regions(sketch)]
+        if len(found) > 1 and not text.texts_of(sketch):
+            from . import sketch_regions
+
+            local = list(sketch.InternalShape.Faces)
+            drawn = sketch_regions.drawn_regions(sketch, local) if len(local) == len(found) else []
+            if drawn:
+                return [found[i] for i in drawn]
     except Exception:
         return []
     found += [(obj, "") for obj in text.texts_of(sketch)]
@@ -463,18 +473,17 @@ def single_region(sketch):
 
 
 def newest_single_region(body):
-    """The only area of the newest sketch no extrude uses yet (Fusion picks a sketch's
-    single profile by itself), or None."""
+    """The areas of the newest sketch no extrude uses yet when they are one profile
+    (Fusion picks a sketch's single profile by itself; single_region), or []."""
     if body is None:
-        return None
+        return []
     used = _used_profiles(body)
     for obj in reversed(body.Group):
         if extrude.is_sketch(obj) and obj.Name not in used:
             if any(text.users(t) for t in text.texts_of(obj)):
-                return None  # its text is extruded already: not a new sketch
-            found = single_region(obj)
-            return found[0] if found else None
-    return None
+                return []  # its text is extruded already: not a new sketch
+            return single_region(obj)
+    return []
 
 
 # -- the dialog -------------------------------------------------------------------------------
@@ -942,12 +951,12 @@ class ExtrudePanel(Panel):
         else:
             picked = selected_profiles(self.body)
         if not picked and self.auto_pick and self.from_sketch is None:
-            single = newest_single_region(self.body)
-            picked = [single] if single else []
+            picked = newest_single_region(self.body)
         try:
             Gui.Selection.clearSelection()
         except Exception:
             pass
+        self._tell_lost_areas(picked)
         if picked:
             self.profiles = picked
             self._profiles_changed()
@@ -957,6 +966,28 @@ class ExtrudePanel(Panel):
             self._recompute()
         else:
             self._refresh_profiles()
+
+    def _tell_lost_areas(self, picked):
+        """Say so when FreeCAD could not make an area the sketch shows (extrude.lost_area):
+        it cannot be picked here, and nothing else would tell why."""
+        try:
+            sketch = self.from_sketch
+            if sketch is None and picked and extrude.is_sketch(picked[0][0]):
+                sketch = picked[0][0]
+            if sketch is None:
+                return
+            lost = extrude.lost_area(sketch)
+            if lost > 0.0:
+                text = (
+                    "Extrude: FreeCAD could not make an area of %s (%.1f mm2): a curve "
+                    "meets an arc tangent in the middle of a line (often a line drawn over "
+                    "a projected rounded edge). Pick the projected outline's own areas "
+                    "instead, or keep the drawn line off the rounded edge." % (sketch.Label, lost)
+                )
+                log(text)
+                commands.tell(text)
+        except Exception as exc:
+            warn("extrude: %s" % exc)
 
     def _watch(self):
         """Wait for clicks: inside a shaded sketch area, on a face, plane or body. Work is
