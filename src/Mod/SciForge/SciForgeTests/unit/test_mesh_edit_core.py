@@ -93,6 +93,32 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(len(mc.boundary_loops(state.facets)), 1)
         self.assertEqual(len(state.groups), len(state.facets))
 
+    def test_erase_next_to_turned_faces(self):
+        """Faces turned over with Reverse Normal next to the erased ones: the gap's rim does
+        not run one way all round, and is still found and filled."""
+        pts, facets = sphere(10.0, 12)
+        state = ec.EditState(pts, facets)
+        top = [i for i, f in enumerate(facets) if 0 in f]
+        ring = [i for i in ec.grow(facets, top) if i not in top][:6]
+        ec.reverse_facets(state, ring)
+        self.assertEqual(
+            mc.boundary_loops([f for i, f in enumerate(state.facets) if i not in top]), []
+        )
+        ec.erase_and_fill(state, top, "Minimal")
+        self.assertEqual(mc.boundary_edges(state.facets), [])
+        self.assertEqual(len(ec.rim_loops(state.facets)), 0)
+
+    def test_rim_loops_like_boundary_loops(self):
+        pts, facets = grid(4)
+        loops = ec.rim_loops(facets)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(sorted(loops[0]), sorted(mc.boundary_loops(facets)[0]))
+        # the same way round as the faces wind it
+        first = mc.boundary_loops(facets)[0]
+        a, b = loops[0][0], loops[0][1]
+        i = first.index(a)
+        self.assertEqual(first[(i + 1) % len(first)], b)
+
     def test_reverse_and_group(self):
         pts, facets = box()
         state = ec.EditState(pts, facets)

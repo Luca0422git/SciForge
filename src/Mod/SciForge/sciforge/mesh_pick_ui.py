@@ -48,12 +48,14 @@ class FacetMarks:
         for index in picked:
             for i in facets[index]:
                 coords.append(tuple(points[i]))
+        # both fields cut to the new size first: setValues only writes over the start of a
+        # field, and faces left over from a bigger pick read past the points (Coin crashed
+        # drawing them after a pick shrank from every face to a few)
+        self.faces.numVertices.setNum(0)
         self.coords.point.setNum(0)
         if coords:
             self.coords.point.setValues(0, len(coords), coords)
             self.faces.numVertices.setValues(0, len(picked), [3] * len(picked))
-        else:
-            self.faces.numVertices.setNum(0)
 
     def remove(self):
         try:

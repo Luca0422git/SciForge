@@ -24,7 +24,7 @@ from .compat import QtCore, QtGui, QtWidgets
 FILTERS = [
     ("Face/Edge/Vertex", "sub", True, ""),
     ("Body", "body", True, ""),
-    ("Component", "component", False, "SciForge designs have no components yet"),
+    ("Component", "component", True, "A click picks the whole component it lands on"),
 ]
 LINE = (0.98, 0.78, 0.25)  # the measured distance, drawn over the part
 DOT = (0.98, 0.78, 0.25)
@@ -427,8 +427,9 @@ class MeasurePanel:
 
     def _filter_changed(self, *_):
         try:
-            if self.mode() == "component":
-                hole_common.set_combo(self.filter, "sub")
+            if self.mode() == "component" and self.sketch is not None:
+                hole_common.set_combo(self.filter, "sub")  # a sketch has no components
+                self.say("Inside a sketch Measure picks its curves and points.")
                 return
             self._restart()
             self._snap_toggled(self.snap.isChecked())
@@ -453,6 +454,12 @@ class MeasurePanel:
         key = (obj.Name, short)
         if key in self._shown:
             return True
+        if self.mode() == "component":
+            # a click anywhere on a component's bodies picks the component (its planes,
+            # sketches and axes are no part of it to measure)
+            if obj.TypeId in measure.PLANE_TYPES + measure.LINE_TYPES + measure.POINT_TYPES:
+                return False
+            return obj.TypeId == "App::Part" or measure.body_of(obj) is not None
         if measure.body_of(obj) is not None and obj.TypeId == "PartDesign::Body" and not short:
             return self.mode() == "body"
         if obj.TypeId in measure.PLANE_TYPES + measure.LINE_TYPES + measure.POINT_TYPES:
@@ -469,7 +476,17 @@ class MeasurePanel:
         if self.sketch is not None and str(short).startswith("Constraint"):
             return False  # a sketch dimension or constraint symbol: nothing to measure
         try:
-            e = self.entity(obj, short, point, whole_body=self.mode() == "body")
+            if self.mode() == "component":
+                component = measure.component_of(obj)
+                if component is None:
+                    raise measure.MeasureError(
+                        "%s is not in a component (it is at the top of the design): pick a "
+                        "component's body, or use the Body filter."
+                        % (getattr(measure.body_of(obj), "Label", None) or obj.Label)
+                    )
+                e = measure.component_entity(component)
+            else:
+                e = self.entity(obj, short, point, whole_body=self.mode() == "body")
         except measure.MeasureError as exc:
             if not quiet:
                 self.say(str(exc))

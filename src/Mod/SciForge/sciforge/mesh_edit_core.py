@@ -329,6 +329,59 @@ def _drop_degenerate_tagged(facets, tags):
     return out, out_tags
 
 
+def rim_loops(facets):
+    """The holes of `facets` as point loops running the way the faces around them do (as
+    mesh_core.boundary_loops gives them), also where those faces do not agree on their
+    winding (some were turned over with Reverse Normal): the open edges are chained
+    without their direction, and each loop then runs the way most of its faces wind it."""
+    edges = core.boundary_edges(facets)
+    if not edges:
+        return []
+    directed = set(edges)
+    near = {}
+    for u, v in edges:
+        near.setdefault(u, []).append(v)
+        near.setdefault(v, []).append(u)
+    used = set()
+    loops = []
+    for u0, v0 in edges:
+        key = (u0, v0) if u0 < v0 else (v0, u0)
+        if key in used:
+            continue
+        loop = [u0]
+        used.add(key)
+        prev, current = u0, v0
+        closed = False
+        for _guard in range(len(edges) + 1):
+            if current == u0:
+                closed = True
+                break
+            loop.append(current)
+            step = None
+            for nxt in near.get(current, ()):
+                k = (current, nxt) if current < nxt else (nxt, current)
+                if k not in used and nxt != prev:
+                    step = nxt
+                    used.add(k)
+                    break
+            if step is None:
+                # only the edge back to the start is left
+                k = (current, u0) if current < u0 else (u0, current)
+                if u0 in near.get(current, ()) and k not in used:
+                    used.add(k)
+                    closed = True
+                break
+            prev, current = current, step
+        if not closed or len(loop) < 3:
+            continue
+        pairs = list(zip(loop, loop[1:] + loop[:1]))
+        forward = sum(1 for a, b in pairs if (a, b) in directed)
+        if forward * 2 < len(pairs):
+            loop = loop[::-1]
+        loops.append(loop)
+    return loops
+
+
 def erase_and_fill(state, which, fill="Uniform", density=core.ERASE_DENSITY):
     """Erase and Fill: the picked faces go and the gap is closed (Minimal: no new points;
     Uniform: even triangles, finer with a higher Density). Holes the body had stay. The patch
@@ -337,14 +390,14 @@ def erase_and_fill(state, which, fill="Uniform", density=core.ERASE_DENSITY):
     if len(gone) >= len(state.facets):
         raise MeshError("That is every face of the body: there is nothing left to fill from.")
     facets = state.facets
-    before = {tuple(sorted(loop)) for loop in core.boundary_loops(facets)}
+    before = {tuple(sorted(loop)) for loop in rim_loops(facets)}
     kept = [f for i, f in enumerate(facets) if i not in gone]
     kept_groups = [g for i, g in enumerate(state.groups) if i not in gone]
     counts = {}
     for i in gone:
         counts[state.groups[i]] = counts.get(state.groups[i], 0) + 1
     patch_group = max(counts, key=lambda g: (counts[g], -g)) if counts else 0
-    loops = [loop for loop in core.boundary_loops(kept) if tuple(sorted(loop)) not in before]
+    loops = [loop for loop in rim_loops(kept) if tuple(sorted(loop)) not in before]
     patch = []
     for loop in loops:
         try:

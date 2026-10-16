@@ -18,6 +18,34 @@ V = App.Vector
 R = 10.0  # the test sphere's radius (mesh_steps.sphere_triangles)
 
 
+def grid_box_triangles(sx=20.0, sy=20.0, sz=10.0, n=4):
+    """A box sx x sy x sz from the origin whose every side is an n x n grid of squares (two
+    triangles each), facing out: enough faces to paint over, flat sides for face groups."""
+
+    def side(origin, u, v):
+        tris = []
+        for i in range(n):
+            for j in range(n):
+                p = [
+                    tuple(origin[k] + u[k] * (i + a) / n + v[k] * (j + b) / n for k in range(3))
+                    for a, b in ((0, 0), (1, 0), (1, 1), (0, 1))
+                ]
+                tris.append((p[0], p[1], p[2]))
+                tris.append((p[0], p[2], p[3]))
+        return tris
+
+    o = (0.0, 0.0, 0.0)
+    X, Y, Z = (sx, 0.0, 0.0), (0.0, sy, 0.0), (0.0, 0.0, sz)
+    tris = []
+    tris += side(o, Y, X)  # bottom (faces -Z)
+    tris += side((0.0, 0.0, sz), X, Y)  # top (+Z)
+    tris += side(o, X, Z)  # front (-Y)
+    tris += side((0.0, sy, 0.0), Z, X)  # back (+Y)
+    tris += side(o, Z, Y)  # left (-X)
+    tris += side((sx, 0.0, 0.0), Y, Z)  # right (+X)
+    return tris
+
+
 def panel():
     return m.panel()
 
@@ -113,6 +141,38 @@ def drag_box(centre, half_px, right_to_left=False):
     if right_to_left:
         a, z = QtCore.QPoint(z.x(), a.y()), QtCore.QPoint(a.x(), z.y())
     h.drag(a, z, steps=12)
+
+
+def lasso(centre, radius_px, corners=20):
+    """Draw round the 3D point `centre` with the left button held (Free Form selection): a
+    circle of `radius_px` pixels, back to where it started."""
+    from PySide import QtGui
+
+    h.uncover(centre)
+    c = h.screen_point(centre)
+    widget = h.gl_widget()
+    pts = [
+        QtCore.QPoint(
+            int(round(c.x() + radius_px * math.cos(2 * math.pi * k / corners))),
+            int(round(c.y() + radius_px * math.sin(2 * math.pi * k / corners))),
+        )
+        for k in range(corners + 1)
+    ]
+    h.move(pts[0])
+    QtTest.QTest.mousePress(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pts[0])
+    for p in pts[1:]:
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.MouseMove,
+            QtCore.QPointF(p),
+            QtCore.QPointF(widget.mapToGlobal(p)),
+            QtCore.Qt.NoButton,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.NoModifier,
+        )
+        QtWidgets.QApplication.sendEvent(widget, event)
+        QtWidgets.QApplication.processEvents()
+    QtTest.QTest.mouseRelease(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pts[-1])
+    QtWidgets.QApplication.processEvents()
 
 
 def edits(p):

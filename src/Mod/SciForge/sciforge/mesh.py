@@ -916,8 +916,9 @@ def erase_fill_mesh(mesh, picks, fill="Uniform", density=core.ERASE_DENSITY):
     new points; Uniform: even triangles, finer with a higher Density). Holes the body had
     before stay as they were."""
     points, kept, facets, lost = _without_picked(mesh, picks)
-    before = {tuple(sorted(loop)) for loop in core.boundary_loops(facets)}
-    loops = [loop for loop in core.boundary_loops(kept) if tuple(sorted(loop)) not in before]
+    # (rim_loops: also where faces round the gap were turned over and disagree on winding)
+    before = {tuple(sorted(loop)) for loop in edit_core.rim_loops(facets)}
+    loops = [loop for loop in edit_core.rim_loops(kept) if tuple(sorted(loop)) not in before]
     patch = []
     for loop in loops:
         try:

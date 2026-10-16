@@ -156,6 +156,39 @@ def entity(obj, sub="", point=None, whole_body=False):
     raise MeasureError("%s cannot be measured." % obj.Label)
 
 
+def component_of(obj):
+    """The component (App::Part) a pick lies in: the nearest one holding it, or None at the
+    design's root."""
+    from . import components
+
+    if obj is None:
+        return None
+    return components.component_of(obj)
+
+
+def component_entity(component):
+    """The Entity of a whole component (Selection Filter: Component): every solid of its
+    bodies (and of the components inside it) where it shows in the design."""
+    import Part
+
+    from . import bodies, components
+
+    solids = []
+    for body in components.bodies_in(component.Document, component, recursive=True):
+        if not bodies.alive(body) or not bodies.is_shown(body):
+            continue
+        try:
+            shape = bodies.global_shape(body)
+        except Exception:
+            continue
+        if shape is not None and not shape.isNull():
+            solids += list(shape.Solids)
+    if not solids:
+        raise MeasureError("%s has no solid body to measure." % components.label_of(component))
+    shape = Part.Compound(solids) if len(solids) > 1 else solids[0]
+    return Entity("component", component, "", shape=shape, label=components.label_of(component))
+
+
 def sketch_entity(sketch, name, point=None):
     """The Entity for a pick in a sketch that is open for editing. The sketch editor names
     its picks after the sketch's own lists, not after its shape: "Edge2" is the second curve
@@ -256,7 +289,7 @@ def properties(e):
             r = e.shape.Surface.Radius
             rows += [("Radius", r, "length"), ("Diameter", 2 * r, "length")]
         rows.append(("Perimeter", perimeter(e.shape), "length"))
-    elif e.kind == "body":
+    elif e.kind in ("body", "component"):
         rows += [("Volume", e.shape.Volume, "volume"), ("Area", e.shape.Area, "area")]
     elif e.kind == "plane":
         p = e.point
