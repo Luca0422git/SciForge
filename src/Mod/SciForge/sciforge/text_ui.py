@@ -2081,6 +2081,52 @@ class TextCommand:
             warn("Text failed to start: %s" % exc)
 
 
+@_safe
+def _dialog_when_ready(sketch, tries):
+    """The Text dialog in `sketch` once FreeCAD has it open (its edit mode starts later)."""
+    session = _session()
+    if session is not None and session.sketch is sketch:
+        open_dialog(session)  # (it makes the text layer of the sketch when there is none yet)
+        return
+    if tries < 30:
+        QtCore.QTimer.singleShot(100, lambda: _dialog_when_ready(sketch, tries + 1))
+    else:
+        warn("Text: the sketch did not open")
+
+
+class FaceTextCommand:
+    """SOLID > CREATE > Text (Luca, 2026-10-16: "a text tool to add text to a face"): click
+    a flat face or a plane, a sketch opens there with the Text dialog. In Fusion text is a
+    sketch tool too (Create Sketch on the face, then Text); Finish Sketch, then Extrude or
+    Emboss raises or cuts it."""
+
+    def GetResources(self):
+        return {
+            "MenuText": "Text",
+            "ToolTip": "Text on a face: click a flat face or a plane, then type; Finish Sketch "
+            "and Extrude (E) or Emboss it into the part",
+            "Pixmap": ui_icon_path("sk_text"),
+        }
+
+    def IsActive(self):
+        return App.ActiveDocument is not None
+
+    def Activated(self):
+        try:
+            if _session() is not None:
+                open_dialog()  # a sketch is open: text in it, as SKETCH > Text
+                return
+            if not commands.finish_open_dialog():
+                return
+            from . import sketch_ui
+
+            sketch_ui.start(
+                then=lambda sketch: _dialog_when_ready(sketch, 0), title="Text: pick a face"
+            )
+        except Exception as exc:
+            warn("Text failed to start: %s" % exc)
+
+
 class EditTextCommand:
     def GetResources(self):
         return {
@@ -2195,6 +2241,7 @@ def disable():
 
 COMMANDS = {
     "SciForge_SketchText": TextCommand,
+    "SciForge_FaceText": FaceTextCommand,
     "SciForge_EditText": EditTextCommand,
     "SciForge_ExplodeText": ExplodeTextCommand,
 }

@@ -204,6 +204,7 @@ def p1_window():
             "Default Units",
             "Default Units > Design",
             "Network",
+            "Keyboard Shortcuts",  # SciForge's own: every command's key in one list
         ],
         titles,
     )

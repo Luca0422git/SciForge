@@ -93,6 +93,12 @@ def startup():
         _connect()
         workbench = Gui.activeWorkbench()
         name = workbench.name() if workbench is not None else ""
+        if _state["on"] and config.USE_RIBBON:
+            # FreeCAD opened in SciForge (start_in.py): it switched SciForge on before it
+            # restored its window layout, which put its toolbars and menu bar back
+            _hide_toolbars_soon()
+            _hide_menubar()
+            _hide_panels()
         if name and name != SCIFORGE_WB and not _state["on"]:
             from . import shortcuts, sketch_mode, theme, versions_ui
 
@@ -144,6 +150,9 @@ def enable():
     _state["on"] = True
     theme.apply()
     _show_ribbon()
+    # Fusion's document tabs are at the top (the ribbon's application bar): FreeCAD's tab bar
+    # under the 3D view hides while SciForge is on
+    _safely(lambda: __import__("sciforge.doc_tabs").doc_tabs.hide_mdi_tabs(True))
     _hide_toolbars()
     _hide_menubar()
     _safely(lambda: __import__("sciforge.browser_ui").browser_ui.show())
@@ -194,6 +203,7 @@ def disable():
         _restore_panels,
         _restore_menubar,
         _restore_toolbars,
+        lambda: __import__("sciforge.doc_tabs").doc_tabs.hide_mdi_tabs(False),
         _hide_ribbon,
         lambda: __import__("sciforge.browser_ui").browser_ui.hide(),
         theme.restore,
@@ -245,7 +255,10 @@ def _hide_toolbars():
     written to the user's preferences."""
     known = {id(bar) for bar, _ in _state["hidden"]}
     for bar in _main().findChildren(QtWidgets.QToolBar):
-        if bar.objectName() == "SciForgeRibbonBar" or not bar.isVisible():
+        # isHidden, not isVisible: when FreeCAD opens in SciForge the main window is not
+        # shown yet and no toolbar counts as visible (start_in.py); FreeCAD then showed them
+        # all when it restored its window layout
+        if bar.objectName() == "SciForgeRibbonBar" or bar.isHidden():
             continue
         action = bar.toggleViewAction()
         if id(bar) not in known:  # remember the state from before SciForge only
@@ -290,7 +303,8 @@ def _restore_toolbars():
 
 def _hide_menubar():
     bar = _main().menuBar()
-    _state["menubar"] = bar.isVisible()
+    if _state["menubar"] is None:  # (again at start: keep what it was before SciForge)
+        _state["menubar"] = not bar.isHidden()  # (the window may not be shown yet)
     bar.hide()
 
 
@@ -342,8 +356,11 @@ def _hide_panels():
     ]
     panels.append(main.statusBar())
     for widget in panels:
-        if widget.isVisible():
-            _state["panels"].append(widget)
+        # isHidden, not isVisible: the window is not shown yet when FreeCAD opens in
+        # SciForge (start_in.py), and the status bar stayed (31 px less 3D view)
+        if not widget.isHidden():
+            if widget not in _state["panels"]:
+                _state["panels"].append(widget)
             widget.hide()
 
 

@@ -77,7 +77,7 @@ Unavailable items are greyed out. Separators group related commands.
   drag-right gesture (3 o'clock) and a forum answer Cancel at 9 o'clock, so SciForge shows
   them there (2026-10-13; they were at the top and in the list before).
 - ViewCube: see the ViewCube section below for what is still unconfirmed.
-- Document tabs sit at the bottom of the view (FreeCAD); Fusion has them in the application bar.
+- (Document tabs: at the top since 2026-10-16, see "Keyboard shortcuts, pins, document tabs".)
 - Sketch Palette: FreeCAD's sketch task panel, restyled; Fusion's palette options differ.
 - Command dialogs appear in the Tasks dock on the right; Fusion shows floating dialogs.
 - Extrude picks a whole sketch (all its closed regions), not one region of it as Fusion can.
@@ -86,6 +86,31 @@ Unavailable items are greyed out. Separators group related commands.
 - (Timeline: drag-to-reorder, suppress and groups are built, groups dragged as a whole since
   polish-2: `parity/timeline-browser.md`.)
 - Menu icons are 16 px (Fusion about 20 px); COMMENTS panel and "Unsaved" banner not done.
+
+## Keyboard shortcuts, pins, document tabs (2026-10-16, Luca's list)
+
+Luca: "There should be a way to change the keybinds of each tool", "there should be a way to
+pin tools to the toolbar", "the toolbar where open documents sit should be at the top. like
+fusion". Code: `shortcuts_core.py` and `ribbon_pins.py` (the rules, no Qt, unit tested),
+`command_options.py` (the menu and the dialog), `ribbon_ui.py`, `doc_tabs.py`,
+`preferences_ui.py` (Keyboard page). Scenarios `ribbon_customize` (57 checks) and
+`doc_tabs_top` (17).
+
+| Fusion | Source | SciForge |
+|---|---|---|
+| A command in a panel's drop-down has a three-dot button; its menu: Pin to Toolbar, Pin to Shortcuts, Change Keyboard Shortcut | Autodesk (blog on keyboard shortcuts; forum "Customizable Keyboard Shortcuts") | A small "..." button at the right of every command row in the ribbon drop-downs (and a right-click on the row): Pin to Toolbar / Unpin from Toolbar, Change Keyboard Shortcut... Pin to Shortcuts is not built (see gaps). |
+| Change Keyboard Shortcut: press one key with optional Shift / Ctrl / Alt; blank = no key; Reset = the default | Autodesk (forum) | Same dialog: one key with modifiers (a chord is refused), Clear = no key, Reset = the default key. Saved in `<user data>/SciForge/shortcuts.json` and bound at once. |
+| A key another command has: the dialog names that command; you can override (it loses the key) | Autodesk (forum) | Same: "X is the key of Fillet. Override gives it to ... and takes it away from Fillet."; OK becomes Override. FreeCAD's own menu commands on a key SciForge uses are parked while SciForge is on (as before) and given back when it is off. |
+| No list of all shortcuts | Forum (users asked for one) | Beyond Fusion: Preferences > SciForge > Keyboard lists every command and its key, with a search box, Change (double-click a row) and Reset All Shortcuts. |
+| Shown keys | Autodesk | The keys shown in the drop-downs, tooltips and command search follow the changes. The keys a mode handles itself (sketch letters, 1/2/3 selection filters) stay fixed. |
+| Pin to Toolbar: the command's icon is added to its panel's row of big icons; Unpin from the same menu | Autodesk (blog), Forum | Same, per tab and panel, remembered (`Mod/SciForge/Ribbon/Pinned`); a right-click on a pinned icon also offers Unpin. A command that is already a big icon shows Pin greyed. |
+| Right-click on the toolbar: Reset All Toolbar Customization | Forum (it resets without asking; users asked for a confirmation) | Same, after a Yes / No question. |
+| Document tabs in the application bar at the top, the active one highlighted, an x on each | Autodesk (UI overview), owner's screenshots | Same: a tab strip in the application bar in place of the plain document name. A click activates the document (or drawing / sheet), the x closes it as FreeCAD's own x did (asks to save when changed). FreeCAD's tab bar under the 3D view is hidden while SciForge is on and comes back when it is off. |
+
+Gaps:
+- **Pin to Shortcuts** (the S box) and the drop-down's own pinned section: not built yet.
+- Pins cannot be dragged into another order; they are added at the end of the panel's icons.
+- Document tabs cannot be dragged to reorder or torn off into their own window.
 
 ## Value fields: a formula of the wrong kind (2026-10-14, gaps work)
 

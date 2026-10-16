@@ -71,6 +71,12 @@ SOLID_CREATE = group(
         item("Rib", "SciForge_Rib", "rib"),
         item("Web", "SciForge_Web", "web"),
         item("Emboss", "SciForge_Emboss", "emboss"),
+        item(
+            "Text",
+            "SciForge_FaceText",
+            "sk_text",
+            note="Click a face or plane and type; Finish Sketch, then Extrude or Emboss it.",
+        ),
         SEP,
         item("Hole", ("SciForge_Hole", "PartDesign_Hole"), "hole", "H"),
         item("Thread", "SciForge_Thread", "thread"),

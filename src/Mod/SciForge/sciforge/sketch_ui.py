@@ -536,14 +536,16 @@ class _EscFilter(QtCore.QObject):
 
 
 class SketchPicker:
-    """The waiting state of Create Sketch (a task dialog with only Cancel)."""
+    """The waiting state of Create Sketch (a task dialog with only Cancel). `then(sketch)`
+    runs once the sketch is open (SOLID > CREATE > Text opens the Text dialog there)."""
 
-    def __init__(self, body):
+    def __init__(self, body, then=None, title="Create Sketch"):
         self.body = body
+        self.then = then
         self.doc = body.Document
         self._closed = False
         self.form = QtWidgets.QWidget()
-        self.form.setWindowTitle("Create Sketch")
+        self.form.setWindowTitle(title)
         self.form.setWindowIcon(ui_icon("sketch_create"))
         layout = QtWidgets.QVBoxLayout(self.form)
         label = QtWidgets.QLabel("Click a plane or a flat face to sketch on.")
@@ -602,7 +604,9 @@ class SketchPicker:
 
     def _create(self, target):
         try:
-            open_sketch(create_sketch(self.body, target))
+            sketch = create_sketch(self.body, target)
+            open_sketch(sketch)
+            _then(self.then, sketch)
         except Exception as exc:
             warn("Create Sketch failed: %s" % exc)
 
@@ -641,8 +645,18 @@ class SketchPicker:
         self.reject()
 
 
-def start():
-    """Create Sketch: on the selected plane/face at once, else let the user click one."""
+def _then(then, sketch):
+    if then is None:
+        return
+    try:
+        then(sketch)
+    except Exception as exc:
+        warn("after Create Sketch: %s" % exc)
+
+
+def start(then=None, title="Create Sketch"):
+    """Create Sketch: on the selected plane/face at once, else let the user click one.
+    `then(sketch)` runs once the sketch is open."""
     body = commands.ensure_body()
     if body is None:
         warn("Create Sketch: could not create a body")
@@ -651,8 +665,9 @@ def start():
     if target is not None:
         sketch = create_sketch(body, target)
         open_sketch(sketch)
+        _then(then, sketch)
         return sketch
-    picker = SketchPicker(body)
+    picker = SketchPicker(body, then, title)
     Gui.Control.showDialog(picker)
     log("create sketch: waiting for a plane or face")
     return picker

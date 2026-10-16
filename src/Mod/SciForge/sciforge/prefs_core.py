@@ -30,6 +30,9 @@ PAGES = [
     ("default_units", "Default Units", None),
     ("default_units_design", "Design", "default_units"),
     ("network", "Network", None),
+    # SciForge's own: every command's keyboard shortcut in one list (Fusion only changes them
+    # one at a time from a command's three-dot menu; its users keep asking for a list)
+    ("keyboard", "Keyboard Shortcuts", None),
 ]
 
 # Fusion's Pan, Zoom, Orbit Shortcuts presets: (value, label, FreeCAD navigation style or None
@@ -127,6 +130,18 @@ OPTIONS = [
         group="Language",
         tip="The language of FreeCAD's own windows; SciForge's own words stay English.",
         restart=True,
+    ),
+    _option(
+        "start_in_sciforge",
+        "general",
+        "Start in SciForge",
+        "bool",
+        True,
+        (SCIFORGE, "Bool", "StartInSciForge"),
+        group="Startup",
+        tip="On: the program opens straight in SciForge, without FreeCAD's Start page, from "
+        "the next start. Off: FreeCAD's own start workbench and Start page as before.",
+        apply="startup",
     ),
     _option(
         "mouse_preset",

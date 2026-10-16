@@ -45,6 +45,15 @@ class SciForgeWorkbench(FreeCADGui.Workbench):
 
 FreeCADGui.addWorkbench(SciForgeWorkbench())
 
+# FreeCAD opens in SciForge (Preferences > General > Start in SciForge). FreeCAD picks the
+# workbench it opens in after every InitGui.py has run, so this counts for this start.
+try:
+    from sciforge import start_in
+
+    start_in.at_launch()
+except Exception as _exc:
+    FreeCAD.Console.PrintError("[SciForge] start in SciForge: %s\n" % _exc)
+
 
 def _sciforge_startup():
     try:
