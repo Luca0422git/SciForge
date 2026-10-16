@@ -346,9 +346,8 @@ def _rail_loft(sections, rails, merge=False, options=None):
     if any(len(s.wires) > 1 for s in sections):
         raise LoftError("Rails work with profiles without holes. Cut the holes afterwards.")
     normal = App.Vector(sections[0].normal)
-    for s in sections[1:]:
-        if abs(abs(s.normal.dot(normal)) - 1.0) > 1e-6:
-            raise LoftError("Rails need profiles in parallel planes (all square to one direction).")
+    if any(abs(abs(s.normal.dot(normal)) - 1.0) > 1e-6 for s in sections[1:]):
+        return _rail_loft_turning(sections, rails, merge, options)
     origin = sections[0].center
     heights = [(s.center - origin).dot(normal) for s in sections]
     steps = [b - a for a, b in zip(heights, heights[1:])]
@@ -409,6 +408,23 @@ def _rail_loft(sections, rails, merge=False, options=None):
     return _thru(items, False)
 
 
+def _rail_loft_turning(sections, rails, merge=False, options=None):
+    """Rails between profiles in planes that are not parallel (a loft that turns): sections
+    of the plain loft between each pair of profiles, moved, turned and scaled evenly so that
+    they touch the rails (the surface loft's way, surface_geom._rail_stations)."""
+    from . import surface_core
+    from . import surface_geom
+
+    wires = [_ends(s, 0, merge) for s in sections]
+    try:
+        items, kinds = surface_geom._rail_stations(wires, rails)
+    except surface_core.SurfaceError as exc:
+        raise LoftError(str(exc))
+    if options is not None and loft_ends.active(options):
+        return _with_ends(sections, items, kinds, options)
+    return _thru([loft_ends.as_wire(w) for w in items], False)
+
+
 def _with_ends(sections, items, kinds, options):
     """The loft through `items` (profiles and stations) with the end conditions of the first
     and the last profile."""
@@ -419,7 +435,7 @@ def _with_ends(sections, items, kinds, options):
         else:
             row = loft_ends.profile_row(sections[kind])
             if row.point is None:
-                row.item = loft_ends.polynomial_wire(item)
+                row.item = loft_ends.polynomial_wire(loft_ends.as_wire(item))
             rows.append(row)
     try:
         return loft_ends.thru_rows(

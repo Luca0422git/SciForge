@@ -1,0 +1,102 @@
+{
+  "id": "sf_loft_rails_turning",
+  "title": "Loft with two quarter-arc rails between a square on XY and a square on YZ (a turn)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "rails"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            20,
+            -5,
+            30,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            20,
+            5,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            0,
+            0,
+            30,
+            0,
+            90
+          ]
+        },
+        {
+          "arc": [
+            0,
+            0,
+            20,
+            0,
+            90
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "rails": [
+        {
+          "sketch": "r",
+          "at": [
+            21.213203435596427,
+            21.213203435596427
+          ]
+        },
+        {
+          "sketch": "r",
+          "at": [
+            14.142135623730951,
+            14.142135623730951
+          ]
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 3926.990816987241,
+    "rel_tol": 0.015,
+    "solids": 1,
+    "valid": true,
+    "source": "analytic",
+    "note": "the square turned a quarter about the Y axis (rails: quarter arcs r 30 and r 20 through its outer and inner side): 100 x 25 x pi / 2 (Pappus). SciForge fits the plain loft's sections to the rails 8 times between the profiles (turned, moved and stretched toward the rails), so the loft comes within 1 % (3889 mm^3: the plain loft's sections lean a little off the radial planes)."
+  }
+}

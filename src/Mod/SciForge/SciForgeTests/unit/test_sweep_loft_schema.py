@@ -146,7 +146,7 @@ class SweepLoftSchemaTests(unittest.TestCase):
         # wave 4: sweep joining two bodies, two sweeps driven by parameters, a loft cutting
         # two bodies
         self.assertEqual(
-            counts, {"sf_sweep_": 18, "sf_loft_": 21, "sf_rib_": 6, "sf_web_": 7}, counts
+            counts, {"sf_sweep_": 18, "sf_loft_": 22, "sf_rib_": 6, "sf_web_": 7}, counts
         )
 
 

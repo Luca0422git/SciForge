@@ -325,6 +325,144 @@ class CellTests(unittest.TestCase):
         self.assertEqual(points, [[20.0, 0.0, 0.0]])
 
 
+class PartTwoTests(unittest.TestCase):
+    """Surface and Loft part 2 (sf/surface-2): From Object / All, Revolve To, Sweep rail and
+    taper, Loft guides and end conditions."""
+
+    def test_new_choices_follow_fusion(self):
+        self.assertEqual(core.STARTS, ("profile", "offset", "object"))
+        self.assertEqual(core.EXTENTS, ("distance", "to_object", "all"))
+        self.assertEqual(core.REVOLVE_TYPES, ("angle", "to", "full"))
+        self.assertEqual(core.SWEEP_TYPES, ("single", "rail"))
+        self.assertEqual(core.SCALINGS, ("scale", "stretch", "none"))
+        self.assertEqual(core.GUIDES, ("rails", "centerline"))
+        loft = core.with_defaults("loft")
+        self.assertEqual(loft["guide"], "rails")
+        self.assertFalse(loft["merge"])  # Keep (see parity/surface.md: OpenCASCADE's volume)
+        self.assertEqual((loft["start_condition"], loft["end_condition"]), ("free", "free"))
+        self.assertEqual(core.with_defaults("sweep")["scaling"], "scale")
+        self.assertFalse(core.with_defaults("extrude")["flip"])
+
+    def test_extrude_all_and_from_object_need_no_distance(self):
+        for extent in ("to_object", "all"):
+            core.check_values("extrude", core.with_defaults("extrude", {"extent": extent}))
+        core.check_values(
+            "extrude", core.with_defaults("extrude", {"start": "object", "distance": 5})
+        )
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("extrude", core.with_defaults("extrude", {"start": "sketch"}))
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("extrude", core.with_defaults("extrude", {"extent": "through"}))
+        with self.assertRaises(core.SurfaceError):
+            core.check_values(
+                "extrude",
+                core.with_defaults(
+                    "extrude", {"direction": "two_sides", "distance": 5, "taper2": 89.5}
+                ),
+            )
+
+    def test_revolve_to_needs_no_angle(self):
+        core.check_values("revolve", core.with_defaults("revolve", {"type": "to", "angle": 0}))
+
+    def test_sweep_rail_and_taper(self):
+        core.check_values("sweep", core.with_defaults("sweep", {"type": "rail"}))
+        core.check_values("sweep", core.with_defaults("sweep", {"taper": -20}))
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("sweep", core.with_defaults("sweep", {"type": "surface"}))
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("sweep", core.with_defaults("sweep", {"scaling": "grow"}))
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("sweep", core.with_defaults("sweep", {"taper": 90}))
+
+    def test_loft_end_values(self):
+        core.check_values("loft", core.with_defaults("loft", {"start_condition": "tangent"}))
+        core.check_values(
+            "loft", core.with_defaults("loft", {"end_condition": "free", "end_weight": -1})
+        )  # a free end ignores its weight
+        for bad in (
+            {"start_condition": "direction", "start_weight": 0},
+            {"start_condition": "direction", "start_weight": core.MAX_END_WEIGHT + 1},
+            {"end_condition": "direction", "end_angle": 95},
+            {"end_condition": "smooth"},
+            {"guide": "spine"},
+        ):
+            with self.assertRaises(core.SurfaceError, msg=bad):
+                core.check_values("loft", core.with_defaults("loft", bad))
+
+    def test_stop_angle_turns_the_shorter_way(self):
+        z = (0.0, 0.0, 1.0)
+        self.assertAlmostEqual(core.stop_angle((1, 0, 0), [(0, 1, 0)], z), 90.0)
+        self.assertAlmostEqual(core.stop_angle((1, 0, 0), [(0, -1, 0)], z), -90.0)
+        # a plane through the axis marks two half-planes: the nearer, the positive way on a tie
+        self.assertAlmostEqual(core.stop_angle((1, 0, 0), [(0, 1, 0), (0, -1, 0)], z), 90.0)
+        # the profile's own plane: its other half (half a turn)
+        self.assertAlmostEqual(core.stop_angle((1, 0, 0), [(1, 0, 0), (-1, 0, 0)], z), 180.0)
+        s45 = math.sqrt(0.5)
+        self.assertAlmostEqual(core.stop_angle((1, 0, 0), [(s45, -s45, 0)], z), -45.0)
+        with self.assertRaises(core.SurfaceError):
+            core.stop_angle((1, 0, 0), [(1, 0, 0)], z)
+
+    def test_all_lengths(self):
+        self.assertEqual(core.all_lengths("one_side", False, 25, 10), (25.0, 0.0))
+        self.assertEqual(core.all_lengths("one_side", True, 25, 10), (0.0, 10.0))
+        self.assertEqual(core.all_lengths("two_sides", False, 25, -3), (25.0, 0.0))
+        self.assertEqual(core.all_lengths("symmetric", False, 5, 10), (5.0, 10.0))
+        with self.assertRaises(core.SurfaceError) as raised:
+            core.all_lengths("one_side", False, -1, 10)
+        self.assertIn("Flip", str(raised.exception))
+        with self.assertRaises(core.SurfaceError):
+            core.all_lengths("two_sides", False, 0, 0)
+
+    def test_taper_factor(self):
+        self.assertAlmostEqual(
+            core.taper_factor(20, 10, 5), 1 + 20 * math.tan(math.radians(10)) / 5
+        )
+        self.assertAlmostEqual(
+            core.taper_factor(20, -10, 5), 1 - 20 * math.tan(math.radians(10)) / 5
+        )
+        with self.assertRaises(core.SurfaceError):
+            core.taper_factor(40, -45, 10)  # shrinks to nothing
+        with self.assertRaises(core.SurfaceError):
+            core.taper_factor(40, 10, 0)
+
+    def test_lerp_fraction(self):
+        self.assertAlmostEqual(core.lerp_fraction(0.2, 0.6, 0.5, False), 0.4)
+        # closed: the shorter way round over the start
+        self.assertAlmostEqual(core.lerp_fraction(0.9, 0.1, 0.5, True), 0.0)
+        self.assertAlmostEqual(core.lerp_fraction(0.1, 0.9, 0.25, True), 0.05)
+        self.assertAlmostEqual(core.lerp_fraction(0.2, 0.4, 1.0, True), 0.4)
+
+    def test_similarity_moves_two_points_onto_two(self):
+        cases = [
+            ((0, 0, 0), (10, 0, 0), (1, 2, 3), (1, 2, 23)),  # turned a quarter, scaled 2
+            ((0, 0, 0), (0, 5, 0), (3, 3, 3), (3, 8, 3)),  # moved only
+            ((1, 1, 1), (2, 1, 1), (0, 0, 0), (-3, 0, 0)),  # turned half, scaled 3
+            ((0, 0, 0), (1, 2, 2), (5, 5, 5), (7, 4, 6)),
+        ]
+        for q1, q2, r1, r2 in cases:
+            m = core.similarity(q1, q2, r1, r2)
+            self.assertTrue(close(core.apply_matrix(m, q1), r1, 1e-9), (q1, r1))
+            self.assertTrue(close(core.apply_matrix(m, q2), r2, 1e-9), (q2, r2))
+            # an even scale: lengths grow by one factor in every direction
+            a = core.apply_matrix(m, (q1[0] + 1, q1[1], q1[2]))
+            b = core.apply_matrix(m, (q1[0], q1[1] + 1, q1[2]))
+            la = math.dist(a, core.apply_matrix(m, q1))
+            lb = math.dist(b, core.apply_matrix(m, q1))
+            self.assertAlmostEqual(la, lb, 9)
+        for q1, q2, r1, r2 in cases:
+            m = core.stretch_similarity(q1, q2, r1, r2)
+            self.assertTrue(close(core.apply_matrix(m, q1), r1, 1e-9), (q1, r1))
+            self.assertTrue(close(core.apply_matrix(m, q2), r2, 1e-9), (q2, r2))
+        # stretched only along the rails' line: a direction square to it keeps its length
+        m = core.stretch_similarity((0, 0, 0), (10, 0, 0), (0, 0, 0), (30, 0, 0))
+        self.assertTrue(close(core.apply_matrix(m, (0, 4, 0)), (0, 4, 0), 1e-9))
+        self.assertTrue(close(core.apply_matrix(m, (5, 0, 2)), (15, 0, 2), 1e-9))
+        one = core.similarity((1, 2, 3), (1, 2, 3), (4, 4, 4), (4, 4, 4))
+        self.assertTrue(close(core.apply_matrix(one, (0, 0, 0)), (3, 2, 1)))
+        with self.assertRaises(core.SurfaceError):
+            core.similarity((0, 0, 0), (1, 0, 0), (2, 2, 2), (2, 2, 2))
+
+
 class WordTests(unittest.TestCase):
     def test_count_label(self):
         self.assertEqual(core.count_label(0, "edge"), "")

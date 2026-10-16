@@ -1163,7 +1163,8 @@ def _loft_centerline(items, centerline, o, profiles, ends):
 
 def _rail_stations(items, rails):
     """The profiles plus, between each pair, RAIL_STATIONS sections of the plain loft moved
-    (one rail), or moved, turned and scaled evenly (two rails) so that they touch the rails.
+    (one rail), or moved, turned and stretched along the line between the rails (two rails;
+    the other way they keep the plain loft's size) so that they touch the rails.
     Returns (items, kinds): kinds[k] is the profile index, or None for a station."""
     from . import curves
 
@@ -1225,7 +1226,7 @@ def _rail_stations(items, rails):
                     tuple(pairs[0][0]), tuple(pairs[0][0]), tuple(pairs[0][1]), tuple(pairs[0][1])
                 )
             else:
-                matrix = core.similarity(
+                matrix = core.stretch_similarity(
                     tuple(pairs[0][0]), tuple(pairs[1][0]), tuple(pairs[0][1]), tuple(pairs[1][1])
                 )
             out.append(wire.transformGeometry(_matrix(matrix)))

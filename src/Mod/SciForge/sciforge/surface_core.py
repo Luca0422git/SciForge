@@ -638,6 +638,29 @@ def similarity(q1, q2, r1, r2):
     return [m[i] + [shift[i]] for i in range(3)]
 
 
+def stretch_similarity(q1, q2, r1, r2):
+    """Like similarity(), but the section grows only along the line between the two rails
+    (the rest keeps the size the plain loft gives it): turned the least, stretched along
+    r1 -> r2, moved so that q1 lands on r1 and q2 on r2."""
+    m = similarity(q1, q2, r1, r2)
+    a = [y - x for x, y in zip(q1, q2)]
+    b = [y - x for x, y in zip(r1, r2)]
+    la = math.sqrt(sum(c * c for c in a))
+    lb = math.sqrt(sum(c * c for c in b))
+    if la < 1e-12 or lb < 1e-12:
+        return m
+    k = lb / la
+    bn = [c / lb for c in b]
+    # m's 3 x 3 part is (turn) x k: take k out of the directions square to b
+    rot = [[m[i][j] / k for j in range(3)] for i in range(3)]
+    stretch = [
+        [(1.0 if i == j else 0.0) + (k - 1.0) * bn[i] * bn[j] for j in range(3)] for i in range(3)
+    ]
+    lin = [[sum(stretch[i][t] * rot[t][j] for t in range(3)) for j in range(3)] for i in range(3)]
+    moved = [sum(lin[i][j] * q1[j] for j in range(3)) for i in range(3)]
+    return [lin[i] + [r1[i] - moved[i]] for i in range(3)]
+
+
 def apply_matrix(m, p):
     return tuple(sum(m[i][j] * p[j] for j in range(3)) + m[i][3] for i in range(3))
 
