@@ -19,6 +19,18 @@ Fusion (parity/selection.md). Only real input, on a 40 x 30 x 10 box.
   F  inside a command: Fillet open with faces filtered out: a click on the top face is not
      picked, an edge is; faces on again while the dialog is open: a face is picked; Cancel.
      After the dialog, the filter gate is back (faces off: a click picks nothing).
+  G  Body priority inside a tool (Luca: "when using a tool and selection is set to 'body',
+     the whole body should be highlighted when hovering over it. not just the face"):
+     Shell open, the mouse over the top face: the whole body lights up, and it is lit the
+     moment FreeCAD has handled the move (steady: before, a timer lit it again after
+     FreeCAD had cleared it, so it blinked); moved again on the face: still lit; Esc.
+     Move (M) open: the same; Esc.
+  H  A body inside a component: Create Components from Bodies; with the Body priority the
+     body lights up through its component's path, a click selects the body (not a face).
+  I  FreeCAD drops the filters' gate (a FreeCAD command written in C++ puts in its own gate,
+     which replaces SciForge's, and takes it away when it ends): with faces filtered out the
+     next mouse move over a face notices it and puts the gate back; a click on the face
+     picks nothing. Every filter on again at the end.
 """
 
 import FreeCAD as App
@@ -337,6 +349,150 @@ def f_gate_back():
     )
 
 
+# -- G -------------------------------------------------------------------------------------------
+def move_now(point):
+    """One mouse move over the 3D view, delivered at once (no event loop run after it):
+    what is lit right then is what the next drawing of the view shows."""
+    from PySide import QtGui, QtWidgets
+
+    widget = h.gl_widget()
+    pixel = h.screen_point(point)
+    event = QtGui.QMouseEvent(
+        QtCore.QEvent.MouseMove,
+        QtCore.QPointF(pixel),
+        QtCore.QPointF(widget.mapToGlobal(pixel)),
+        QtCore.Qt.NoButton,
+        QtCore.Qt.NoButton,
+        QtCore.Qt.NoModifier,
+    )
+    QtWidgets.QApplication.sendEvent(widget, event)
+    return si.preselected()
+
+
+def g_body_priority_shell():
+    h.click_empty()
+    result = si.choose_select(["Selection Priority", "Select Body Priority"])
+    h.check("G Select Body Priority", result["ok"] and sel_ui().priority() == "body", result)
+    h.fit()
+    h.ribbon("Shell")
+
+
+def g_shell_hover():
+    from sciforge import taskui
+
+    p = taskui.current()
+    h.check("G the Shell dialog is open", p is not None and "Shell" in p.title, p)
+    h.move(h.screen_point(V(18, 14, 10)))
+    lit = [move_now(V(20 + i, 15, 10)) for i in range(4)]
+    h.check(
+        "G inside Shell: the whole body is lit at every move (steady)",
+        all(x == ("Body", "") for x in lit),
+        lit,
+    )
+
+
+def g_shell_hover_again():
+    lit = move_now(V(25, 20, 10))
+    h.check("G inside Shell: still lit on another spot of the face", lit == ("Body", ""), lit)
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def g_move():
+    h.click_empty()
+    h.fit()
+    h.press("m")
+
+
+def g_move_hover():
+    from sciforge import taskui
+
+    p = taskui.current()
+    h.check("G the Move dialog is open", p is not None and p.title == "Move/Copy", p)
+    h.move(h.screen_point(V(30, 22, 10)))
+    lit = [move_now(V(30 - i, 22, 10)) for i in range(3)]
+    h.check("G inside Move: the whole body is lit", all(x == ("Body", "") for x in lit), lit)
+    h.press(QtCore.Qt.Key_Escape)
+
+
+# -- H -------------------------------------------------------------------------------------------
+def the_body():
+    return App.ActiveDocument.getObject("Body")
+
+
+def h_component():
+    from SciForgeTests.gui import timeline_input as t
+
+    h.click_empty()
+    t.row_menu(the_body().Label, "Create Components from Bodies")
+
+
+def h_hover():
+    from sciforge import components
+
+    part = components.component_of(the_body())
+    if not h.check("H the body is in a component", part is not None):
+        return
+    st["part"] = part.Name
+    h.fit()
+    h.move(h.screen_point(V(18, 14, 10)))
+    lit = move_now(TOP)
+    h.check(
+        "H the body in the component lights up (through its path)",
+        lit == (part.Name, the_body().Name + "."),
+        (lit, part.Name),
+    )
+    h.click(TOP)
+
+
+def h_click():
+    sel = Gui.Selection.getSelectionEx("", 0)
+    got = [(x.ObjectName, tuple(x.SubElementNames)) for x in sel]
+    h.check(
+        "H a click selects the body, not a face",
+        got == [(st.get("part"), (the_body().Name + ".",))],
+        got,
+    )
+    h.click_empty()
+    result = si.choose_select(["Selection Priority", "Select Body Priority"])
+    h.check("H the priority cleared again", result["ok"] and sel_ui().priority() is None)
+
+
+# -- I -------------------------------------------------------------------------------------------
+def i_gate_dropped():
+    ui = sel_ui()
+    Gui.runCommand("SciForge_SelectFilterFaces")
+    h.check("I faces filtered out", not ui.faces_on())
+    st["restored"] = ui._state["gate_restored"]
+
+    class CommandGate:  # what a FreeCAD command written in C++ does to the gate
+        def allow(self, doc, obj, sub):
+            return True
+
+    ui._state["orig_add"](CommandGate())
+    ui._state["orig_remove"]()
+    h.move(h.screen_point(V(18, 14, 10)))
+    h.move(h.screen_point(TOP))
+
+
+def i_gate_back():
+    ui = sel_ui()
+    h.check(
+        "I the dropped gate was noticed and put back",
+        ui._state["gate_restored"] > st.get("restored", 0),
+        ui._state["gate_restored"],
+    )
+    h.click_empty()
+    h.click(TOP)
+
+
+def i_face_refused():
+    h.check("I a click on the face picks nothing", not Gui.Selection.hasSelection(), si.selected())
+    Gui.runCommand("SciForge_SelectFilterFaces")
+    h.check(
+        "I every filter on at the end", not sel_ui().filters().is_restrictive(), sel_ui().filters()
+    )
+
+
 steps = b.box_steps("SelFilters") + [
     remember_names,
     a_read_menu,
@@ -366,6 +522,17 @@ steps = b.box_steps("SelFilters") + [
     f_face_picked,
     f_after_dialog,
     f_gate_back,
+    g_body_priority_shell,
+    g_shell_hover,
+    g_shell_hover_again,
+    g_move,
+    g_move_hover,
+    h_component,
+    h_hover,
+    h_click,
+    i_gate_dropped,
+    i_gate_back,
+    i_face_refused,
 ]
 
 h.run("selection_filters", steps)
