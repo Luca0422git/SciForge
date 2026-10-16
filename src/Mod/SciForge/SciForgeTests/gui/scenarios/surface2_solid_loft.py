@@ -21,7 +21,7 @@ Path M3 (edit: a rail on another body, Direction ends): double-click Loft 1, Mer
 Path M4 (a centerline with a Direction end): edit again, Guide Type Centerline, click the
         Centerline box, then the line where it runs above the slots: the profiles held square
         to it, the loft ends at the profiles, Direction at both ends: the straight slot again.
-        OK.
+        Takeoff Weight typed as 2: the formula goes, the loft takes 2. OK.
 Path M5 (Closed, Esc): edit again, Closed: the Last Profile row goes (the loop has no last
         end) and the dialog says a closed loft needs three profiles; Esc: unchanged."""
 
@@ -446,6 +446,15 @@ def m4_follows():
     )
     h.check("no problem with ends and a centerline", not p.message.text(), p.message.text())
     h.check("the straight slot along it", st.near(vol(), SLOT, 5e-3), vol())
+    ui.type_into(p.ends["start"]["weight"].widget, "2")
+
+
+def m4_number():
+    wait_loft()
+    engine = dict(s["loft"].ExpressionEngine)
+    h.check("a number typed over the formula drops it", "StartWeight" not in engine, engine)
+    h.check("the loft takes the number", st.near(s["loft"].StartWeight, 2.0), s["loft"].StartWeight)
+    h.check("still the straight slot", st.near(vol(), SLOT, 5e-3), vol())
     h.task_button("OK")
 
 
@@ -541,6 +550,7 @@ h.run(
         m4_centerline_box,
         m4_click_line,
         m4_follows,
+        m4_number,
         m4_done,
         m5_edit,
         m5_closed,

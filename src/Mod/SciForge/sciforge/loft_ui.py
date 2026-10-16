@@ -786,6 +786,10 @@ class LoftPanel(Panel):
             operation = self.options["operation"]
             self._test_bodies()
             options = dict(self.options, bodies=self.bodies_row.for_build(operation))
+            if self.target is not None:
+                # first: a formula replaced by a typed number lets go of its property (the
+                # build then sets the number), a new one drives it
+                self._apply_formulas()
             self.target = loft.build(
                 self.profiles,
                 self.rails,
