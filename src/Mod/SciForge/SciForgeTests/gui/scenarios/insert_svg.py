@@ -2,12 +2,14 @@
 """Insert SVG (INSERT menu) into a sketch, then extrude it; only real input.
 
 Fixture: shape.svg, a 30 x 20 mm rectangle (5..35 x 5..25) with a round 10 mm hole at
-(20, 15); SVG's Y points down, so it lands at Y -25..-5 on the sketch (as FreeCAD reads it).
+(20, 15). Fusion centres the SVG on the sketch origin (help "Insert SVG": "the image
+geometry is centered on the sketch origin"), so it lands at -15..15 x -10..10, the hole at
+the origin.
 
 A  INSERT > Insert SVG: the dialog waits for a plane; click the XY square: a sketch with 5
-   fixed curves (Block constraints), rectangle 5..35 x -25..-5, the circle round (20, -15).
-B  Scale 2: 10..70 x -50..-10. Vertical Flip: Y 10..50. X Distance 10: X 20..80. Back to
-   scale 1, flip off, X 0.
+   fixed curves (Block constraints), rectangle -15..15 x -10..10, the circle round (0, 0).
+B  Scale 2: -30..30 x -20..20. Vertical Flip (about the middle): the same box. X Distance
+   10: X -20..40. Back to scale 1, flip off, X 0.
 C  OK: the dialog closes, the sketch stays and is open for editing; Finish Sketch.
 D  E, click inside the rectangle beside the hole, 5, OK: (600 - 25 pi) x 5 = 2607.3 mm3.
 E  Ctrl+Z twice (the extrude, then the whole insert): no sketch; Ctrl+Y twice: 2607.3 again.
@@ -80,8 +82,8 @@ def a_check():
         return
     h.check("5 curves", sk.GeometryCount == 5, sk.GeometryCount)
     h.check("all fixed (Block)", i.block_constraints(sk) == 5, i.block_constraints(sk))
-    h.check("rectangle 5..35 x -25..-5", rect_box(sk) == (5, -25, 35, -5), rect_box(sk))
-    h.check("circle round (20, -15)", circle_center(sk) == (20, -15), circle_center(sk))
+    h.check("rectangle -15..15 x -10..10", rect_box(sk) == (-15, -10, 15, 10), rect_box(sk))
+    h.check("circle round (0, 0)", circle_center(sk) == (0, 0), circle_center(sk))
     h.check("in the browser", i.browser_has(sk.Label), i.browser_labels())
 
 
@@ -95,7 +97,7 @@ def b_scale():
 def b_check_scale():
     sk = sketch()
     h.check(
-        "scale 2: 10..70 x -50..-10", sk and rect_box(sk) == (10, -50, 70, -10), sk and rect_box(sk)
+        "scale 2: -30..30 x -20..20", sk and rect_box(sk) == (-30, -20, 30, 20), sk and rect_box(sk)
     )
 
 
@@ -107,7 +109,11 @@ def b_flip():
 
 def b_check_flip():
     sk = sketch()
-    h.check("vertical flip: Y 10..50", sk and rect_box(sk) == (10, 10, 70, 50), sk and rect_box(sk))
+    h.check(
+        "vertical flip about the middle: the same box",
+        sk and rect_box(sk) == (-30, -20, 30, 20),
+        sk and rect_box(sk),
+    )
 
 
 def b_offset():
@@ -118,7 +124,9 @@ def b_offset():
 
 def b_check_offset():
     sk = sketch()
-    h.check("X Distance 10: X 20..80", sk and rect_box(sk) == (20, 10, 80, 50), sk and rect_box(sk))
+    h.check(
+        "X Distance 10: X -20..40", sk and rect_box(sk) == (-20, -20, 40, 20), sk and rect_box(sk)
+    )
 
 
 def b_back():
@@ -131,7 +139,9 @@ def b_back():
 
 def b_check_back():
     sk = sketch()
-    h.check("back to 5..35 x -25..-5", sk and rect_box(sk) == (5, -25, 35, -5), sk and rect_box(sk))
+    h.check(
+        "back to -15..15 x -10..10", sk and rect_box(sk) == (-15, -10, 15, 10), sk and rect_box(sk)
+    )
     h.check("still 5 curves", sk and sk.GeometryCount == 5, sk and sk.GeometryCount)
 
 
@@ -161,7 +171,7 @@ def d_extrude():
 
 
 def d_click_region():
-    h.click(V(10, -10, 0))
+    h.click(V(-10, -6, 0))
 
 
 def d_distance():

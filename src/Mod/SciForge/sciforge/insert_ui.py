@@ -335,7 +335,39 @@ class _PlaneHandles:
         self.handles = []
         self.handle_by = {}
         self._drag_start = None
+        self._camera_seen = None
         self.value_boxes = taskui.ValueBoxes(self, default="x")
+        # Fusion's manipulator keeps its size on the screen when the view is zoomed or
+        # turned: the handles are made again for the new view (handles left from the old
+        # view also stopped taking drags after a zoom)
+        self._camera_timer = QtCore.QTimer()
+        self._camera_timer.setInterval(250)
+        self._camera_timer.timeout.connect(self._camera_moved)
+        self._camera_timer.start()
+
+    def _camera_state(self):
+        try:
+            camera = self.view.getCameraNode()
+            values = list(camera.position.getValue().getValue())
+            values += list(camera.orientation.getValue().getValue())
+            for name in ("height", "heightAngle"):
+                field = getattr(camera, name, None)
+                if field is not None:
+                    values.append(float(field.getValue()))
+            return tuple(round(v, 4) for v in values)
+        except Exception:
+            return None
+
+    def _camera_moved(self):
+        try:
+            if getattr(self, "_closed", False) or not self.handles or self._drag_start is not None:
+                return
+            if QtWidgets.QApplication.mouseButtons() != QtCore.Qt.NoButton:
+                return  # never under a drag or an orbit in progress
+            if self._camera_state() != self._camera_seen:
+                self.make_handles()
+        except Exception as exc:
+            warn("%s handles: %s" % (self.title, exc))
 
     # -- the dialog's side (override) -----------------------------------------------------
     def handle_frame(self):
@@ -377,6 +409,14 @@ class _PlaneHandles:
         z = rot.multVec(App.Vector(0, 0, 1))
         point = self.handle_point()
         size = taskui.handle_size_at(self.view, point)
+        # A little off the plane, on the camera's side: the handles lie on the picture /
+        # the curves, and a press there must reach the handle, never the canvas under it
+        # (at the same depth Coin's pick took either one).
+        try:
+            toward = z if App.Vector(self.view.getViewDirection()).dot(z) < 0 else z * -1.0
+            point = point + toward * (size * 0.25)
+        except Exception:
+            pass
         ccw = self.angle_sign * self.angle.value()
         a = math.radians(ccw)
         xr = x * math.cos(a) + y * math.sin(a)
@@ -388,8 +428,10 @@ class _PlaneHandles:
             move_y = taskui.ArrowDragger(
                 point, y, 0.0, size, lambda d: self._handle_drag("y", d), self._handle_release
             )
+            # just outside the right edge: a press on it is never a press on the picture
+            # or the curves under it (a canvas is drawn on top and took the click)
             scale = taskui.ArrowDragger(
-                point + xr * half,
+                point + xr * (half + 1.6 * size * 0.8),
                 xr,
                 0.0,
                 size * 0.8,
@@ -411,6 +453,7 @@ class _PlaneHandles:
             return
         self.handles = [move_x, move_y, scale, turn]
         self.handle_by = {"x": move_x, "y": move_y, "scale": scale, "angle": turn}
+        self._camera_seen = self._camera_state()
         boxes = self.value_boxes
         boxes.attach(move_x, "x", lambda: self.dx.widget.text(), self._typed(self.dx))
         boxes.attach(move_y, "y", lambda: self.dy.widget.text(), self._typed(self.dy))
@@ -494,6 +537,10 @@ class _PlaneHandles:
             self.make_handles()
 
     def drop_handles(self):
+        try:
+            self._camera_timer.stop()
+        except Exception:
+            pass
         self.remove_handles()
         try:
             self.value_boxes.discard()
