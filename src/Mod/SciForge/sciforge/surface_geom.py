@@ -1037,11 +1037,9 @@ def loft_surface(items, options, rails=None, centerline=None, profiles=None):
     o = core.with_defaults("loft", options)
     core.check_values("loft", o)
     closed = bool(o.get("closed"))
+    if closed:
+        o["end_condition"] = "free"  # the loop goes on from the last profile to the first
     items = list(items)
-    _check_loft_items(items, closed)
-    if o.get("merge"):
-        items = [s if s.ShapeType == "Vertex" else loft_ends.merged_wire(s) for s in items]
-    ends = loft_ends.active(o)
     guide_rails = o["guide"] == "rails" and bool(rails)
     guide_line = o["guide"] == "centerline" and centerline is not None
     if (guide_rails or guide_line) and closed:
@@ -1049,6 +1047,10 @@ def loft_surface(items, options, rails=None, centerline=None, profiles=None):
             "A closed loft cannot follow %s. Clear Closed or the %s."
             % (("rails", "rails") if guide_rails else ("a centerline", "centerline"))
         )
+    _check_loft_items(items, closed)
+    if o.get("merge"):
+        items = [s if s.ShapeType == "Vertex" else loft_ends.merged_wire(s) for s in items]
+    ends = loft_ends.active(o)
     if ends:
         if profiles is None or len(profiles) != len(items):
             raise SurfaceError("internal: the end conditions need the profiles")

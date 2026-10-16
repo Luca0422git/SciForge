@@ -69,6 +69,8 @@ def check(sections, options, closed=False):
     """Refuse conditions the end profiles cannot take (with the reason)."""
     for which, section in (("start", sections[0]), ("end", sections[-1])):
         condition = options.get(which + "_condition", "free")
+        if closed and which == "end":
+            continue
         try:
             core.check(
                 condition,
@@ -79,12 +81,8 @@ def check(sections, options, closed=False):
         except EndError as exc:
             raise EndError("%s profile: %s" % ("First" if which == "start" else "Last", exc))
     if closed:
-        if options.get("end_condition", "free") != "free":
-            raise EndError(
-                "A closed loft goes on from the last profile back to the first, so the last "
-                "profile is in the middle of the loop. Set the first profile's condition "
-                "instead (Last Profile: Connected)."
-            )
+        # The loop goes on from the last profile back to the first: the last profile's
+        # condition does not apply (the callers pass it as free).
         if options.get("start_condition", "free") not in ("free", "direction"):
             raise EndError(
                 "A closed loft runs through its first profile, so it cannot end on faces "

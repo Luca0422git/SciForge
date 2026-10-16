@@ -37,7 +37,6 @@ OPERATION_LABELS = [
     ("New Component", "new_component"),
 ]
 END_TITLES = (("start", "First Profile"), ("end", "Last Profile"))
-CLOSED_ENDS = ("free", "direction")  # a closed loop passes through its first profile
 MERGE_TIP = (
     "Profile curves joined smoothly (a slot's lines and arcs) loft into one smooth side face; "
     "off: one face per curve. Inspect's volume of a merged spline side can be a few % off "
@@ -293,10 +292,9 @@ class LoftPanel(Panel):
         return not (self.closed.isChecked() and end == "end")
 
     def _end_choices(self, end, kind):
-        choices = list(loft_ends_core.LABELS.get(kind, []))
-        if self.closed.isChecked():
-            choices = [c for c in choices if c[1] in CLOSED_ENDS]
-        return choices
+        # Every choice of the profile stays offered (a closed loft refuses the ones it cannot
+        # take, with the reason): ticking Closed and back keeps what was chosen.
+        return list(loft_ends_core.LABELS.get(kind, []))
 
     def _update_ends(self):
         """Each end's choices follow its profile (sketch / face / point); the weight and the
@@ -359,8 +357,7 @@ class LoftPanel(Panel):
         self.options["merge"] = bool(self.merge.isChecked())
         for end, row in self.ends.items():
             condition = row["combo"].currentData() if row["kind"] is not None else None
-            possible = self._ends_possible(end)
-            self.options[end + "_condition"] = (condition or "free") if possible else "free"
+            self.options[end + "_condition"] = condition or "free"
             self.options[end + "_weight"] = float(row["weight"].value())
             self.options[end + "_angle"] = float(row["angle"].value())
 

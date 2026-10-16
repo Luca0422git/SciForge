@@ -515,8 +515,15 @@ class SurfacePanel(BodyPanel):
             if near is not None:
                 obj, short = near
         if self.own_preview(obj) and core.makes_body(self.kind):
-            self.message.setText("⚠ That is what this dialog is making. Pick something else.")
-            return None
+            # A sketch curve along the preview's edge (a loft's rail, a sweep's path) is what
+            # a person aims at: Fusion picks the curve then.
+            near = None
+            if ("curve" in accepts or "sketch_curve" in accepts) and point is not None:
+                near = self.sketch_curve_near(point)
+            if near is None:
+                self.message.setText("⚠ That is what this dialog is making. Pick something else.")
+                return None
+            obj, short = near
         if (
             self.step is not None
             and not core.makes_body(self.kind)
@@ -1626,6 +1633,26 @@ class LoftPanel(SurfacePanel):
             self.groups.append(group)
         self.picks_changed(name)
 
+    def expand(self, name, ref):
+        """Chain Selection on an edge of a body takes the edges joined smoothly to it (a
+        cylinder's rim, not the four sides of a wall); sketch curves chain as connected."""
+        obj, sub = ref
+        if (
+            name == "sections"
+            and sub.startswith("Edge")
+            and not curves.is_sketch(obj)
+            and self.chain_on()
+        ):
+            try:
+                names = free_chain(obj, sub, tangent=True)
+                if names is None:
+                    names = curves.chain(obj, sub, tangent=True)
+                return [(obj, n) for n in names]
+            except Exception as exc:
+                warn("%s chain: %s" % (self.title, exc))
+                return [ref]
+        return super().expand(name, ref)
+
     def cleared(self, name):
         if name == "sections":
             self.groups = []
@@ -1666,6 +1693,8 @@ class LoftPanel(SurfacePanel):
     def build_options(self):
         options = super().build_options()
         options["groups"] = [len(g) for g in self.groups]
+        if options.get("closed"):
+            options["end_condition"] = "free"  # the loop goes on from the last profile
         return options
 
     # -- what the boxes and rows show ---------------------------------------------------------
@@ -1695,9 +1724,9 @@ class LoftPanel(SurfacePanel):
                 group = self.groups[0] if end == "start" else self.groups[-1]
             kind = self._group_kind(group)
             shown = kind is not None and not (closed and end == "end")
+            # Every choice of the profile stays offered (a closed loft refuses the ones it
+            # cannot take, with the reason): ticking Closed and back keeps what was chosen.
             choices = loft_ends_labels(kind or "sketch")
-            if closed:
-                choices = [c for c in choices if c[1] in ("free", "direction")]
             self._refill(end + "_condition", choices)
             condition = self.options.get(end + "_condition", "free")
             self.show_option(end + "_condition", shown)

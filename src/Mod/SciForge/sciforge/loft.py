@@ -445,6 +445,8 @@ def tool_shape(profiles, rail_refs, centerline_refs, options):
     """The lofted solid (global coordinates)."""
     options = options_with_defaults(options)
     sections = sections_of(profiles)
+    if options["closed"]:
+        options = dict(options, end_condition="free")  # the loop has no last end
     guide = options["guide"]
     ends = loft_ends.active(options)
     merge = options["merge"]
