@@ -47,10 +47,11 @@ def companions(sketch, kind=None):
     """The companions of a sketch (of one SciForgeType when `kind` is given), oldest first."""
     found = []
     try:
-        for obj in sketch.InList:
-            if is_companion(obj) and getattr(obj, OWNER, None) is sketch:
-                if kind is None or obj.SciForgeType == kind:
-                    found.append(obj)
+        for obj in sketch.InList:  # (an object that links the sketch twice is listed twice)
+            if obj in found or not is_companion(obj) or getattr(obj, OWNER, None) is not sketch:
+                continue
+            if kind is None or obj.SciForgeType == kind:
+                found.append(obj)
     except Exception:
         return []
     return sorted(found, key=lambda o: getattr(o, "ID", 0))
