@@ -1,0 +1,37 @@
+{
+  "id": "sf_gear_english",
+  "title": "Spur gear, English standard: diametral pitch 10, 20 teeth, 0.5 in thick, 0.5 in bore",
+  "tags": [
+    "gear",
+    "spur",
+    "english"
+  ],
+  "steps": [
+    {
+      "op": "sf_gear",
+      "id": "g1",
+      "plane": "XY",
+      "standard": "english",
+      "diametral_pitch": 10,
+      "teeth": 20,
+      "fillet": 0.3,
+      "thickness": 12.7,
+      "hole": 12.7
+    }
+  ],
+  "expect": {
+    "volume": 23515.938635400784,
+    "bbox": [
+      -27.94,
+      -27.94,
+      0,
+      27.94,
+      27.94,
+      12.7
+    ],
+    "abs_tol": 0.005,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "module = 25.4 / DP = 2.54 mm; pitch diameter z / DP = 2 in = 50.8; outside diameter (z + 2) / DP = 2.2 in = 55.88 (20 teeth: tips on +-x and +-y). Volume: FreeCAD 1.1.4 baseline."
+  }
+}

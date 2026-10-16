@@ -1,0 +1,35 @@
+{
+  "id": "sf_gear_internal",
+  "title": "Internal (ring) gear on XY: module 2, 40 teeth, rim 5, 8 thick",
+  "tags": [
+    "gear",
+    "internal"
+  ],
+  "steps": [
+    {
+      "op": "sf_gear",
+      "id": "g1",
+      "plane": "XY",
+      "type": "internal",
+      "module": 2,
+      "teeth": 40,
+      "rim": 5,
+      "thickness": 8
+    }
+  ],
+  "expect": {
+    "volume": 16350.842099715444,
+    "bbox": [
+      -47.5,
+      -47.5,
+      0,
+      47.5,
+      47.5,
+      8
+    ],
+    "abs_tol": 0.0001,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "bbox: the rim's outer circle: root radius m(z+2.5)/2 = 42.5 plus the rim 5. Volume: FreeCAD 1.1.4 baseline (the involute ring area is too complex to work out by hand)."
+  }
+}
