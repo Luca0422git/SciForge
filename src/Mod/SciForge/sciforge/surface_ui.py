@@ -1128,20 +1128,41 @@ class ExtrudePanel(SurfacePanel):
     kind = "extrude"
     boxes = (
         ("profile", "Profiles", "refs", ("curve", "sketch"), "Select curves"),
-        ("object", "Object", "refs2", ("plane",), "Select a plane or face"),
+        (
+            "start_object",
+            "Start Object",
+            "refs3",
+            ("plane", "face", "point"),
+            "Select a plane, face or point",
+        ),
+        ("object", "Object", "refs2", ("plane", "face", "body", "point"), "Select an object"),
     )
-    single = ("object",)
+    single = ("object", "start_object")
     chain_boxes = ("profile",)
     default_box = "distance"
+
+    def load_extra(self, feature, refs, options):
+        if options.get("extent") != "to_object":
+            self.picks["object"] = []  # All keeps the bodies it goes through there
 
     def build_rows(self):
         self.box("profile")
         self.chain_row()
-        self.add_combo("start", "Start", [("Profile Plane", "profile"), ("Offset", "offset")])
+        self.add_combo(
+            "start",
+            "Start",
+            [("Profile Plane", "profile"), ("Offset", "offset"), ("From Object", "object")],
+        )
+        self.box("start_object")
         self.add_number("start_offset", "Offset")
         self.add_combo("direction", "Direction", DIRECTIONS)
-        self.add_combo("extent", "Extent", [("Distance", "distance"), ("To Object", "to_object")])
+        self.add_combo(
+            "extent",
+            "Extent",
+            [("Distance", "distance"), ("To Object", "to_object"), ("All", "all")],
+        )
         self.box("object")
+        self.add_check("flip", "Flip", "All goes the other way, through what lies behind")
         self.add_combo(
             "measurement", "Measurement", [("Half Length", "half"), ("Whole Length", "whole")]
         )
@@ -1153,26 +1174,96 @@ class ExtrudePanel(SurfacePanel):
 
     def update_visibility(self):
         o = self.options
-        to_object = o["extent"] == "to_object"
+        extent = o["extent"]
+        to_object = extent == "to_object"
         two = o["direction"] == "two_sides"
-        self.show_option("start_offset", o["start"] == "offset")
+        from_object = o["start"] == "object"
+        self.show_box("start_object", from_object)
+        self.show_option("start_offset", o["start"] in ("offset", "object"))
         self.show_box("object", to_object)
-        self.show_option("measurement", o["direction"] == "symmetric" and not to_object)
-        self.show_option("distance", not to_object)
+        self.show_option("flip", extent == "all" and o["direction"] == "one_side")
+        self.show_option("measurement", o["direction"] == "symmetric" and extent == "distance")
+        self.show_option("distance", extent == "distance")
         self.show_option("taper", not to_object)
-        self.show_option("distance2", two and not to_object)
+        self.show_option("distance2", two and extent == "distance")
         self.show_option("taper2", two and not to_object)
-        if not to_object and self.active == "object":
+        if (self.active == "object" and not to_object) or (
+            self.active == "start_object" and not from_object
+        ):
             self.activate("profile")
-        if to_object:
-            self.show_plane_squares(self.active == "object")
+        self.show_plane_squares(self.active in ("object", "start_object"))
 
     def box_activated(self, name):
-        self.show_plane_squares(name == "object")
+        self.show_plane_squares(name in ("object", "start_object"))
 
     def option_changed(self, key):
         if key == "extent" and self.options["extent"] == "to_object":
             self.activate("object")
+        if key == "start" and self.options["start"] == "object":
+            self.activate("start_object")
+
+    def after_pick(self, name):
+        if name == "profile" and self.picks["profile"]:
+            if self.options["start"] == "object" and not self.picks["start_object"]:
+                self.activate("start_object")
+            elif self.options["extent"] == "to_object" and not self.picks["object"]:
+                self.activate("object")
+            return
+        super().after_pick(name)
+
+    def refs(self):
+        refs = super().refs()
+        if self.options["extent"] == "all":
+            refs["refs2"] = self.through_bodies()
+        elif self.options["extent"] != "to_object":
+            refs["refs2"] = []
+        if self.options["start"] != "object":
+            refs["refs3"] = []
+        return refs
+
+    def through_bodies(self):
+        """Extent All: the visible bodies (not the one this dialog makes)."""
+        mine = None
+        if self.step is not None and _alive(self.step):
+            mine = surface.created_body(self.step)
+        found = []
+        for body in bodies.list_bodies(self.doc):
+            if body is mine or not bodies.is_shown(body):
+                continue
+            try:
+                if body.Shape.isNull() or not body.Shape.Faces:
+                    continue
+            except Exception:
+                continue
+            found.append((body, ""))
+        return found
+
+    def check(self, options):
+        if options["extent"] == "all" and not self.through_bodies():
+            raise core.SurfaceError(
+                "There is no visible body for All to extrude through. Show one, or use Distance."
+            )
+
+    def _start_point(self, centre, normal):
+        """Where the arrow starts: the profile moved to where the extrusion starts."""
+        from . import surface_geom as g
+
+        o = self.options
+        lift = float(o["start_offset"]) if o["start"] in ("offset", "object") else 0.0
+        if o["start"] != "object" or not self.picks["start_object"]:
+            return centre + normal * lift
+        try:
+            start = surface.target_of_ref(*self.picks["start_object"][0])
+            height = g._start_height(start, normal, centre)
+            if height is not None:
+                return centre + normal * (height + lift)
+            face = g._start_face(start, normal, lift, [])
+            hit = g._nearest_hit(face, centre, normal, g.reach([face], 0.0))
+            if hit is not None:
+                return centre + normal * hit
+        except Exception:
+            pass
+        return centre + normal * lift
 
     def handle_specs(self):
         if self.options["extent"] != "distance":
@@ -1187,8 +1278,7 @@ class ExtrudePanel(SurfacePanel):
         centre, _size = _centre(edges)
         if centre is None:
             return []
-        if self.options["start"] == "offset":
-            centre = centre + normal * float(self.options["start_offset"])
+        centre = self._start_point(centre, normal)
         size = self.handle_size(centre)
         d1 = float(self.options["distance"])
         specs = []
@@ -1234,8 +1324,15 @@ class RevolvePanel(SurfacePanel):
     boxes = (
         ("profile", "Profile", "refs", ("curve", "sketch"), "Select curves"),
         ("axis", "Axis", "refs2", ("axis",), "Select an axis"),
+        (
+            "to_object",
+            "Object",
+            "refs3",
+            ("plane", "point", "curve"),
+            "Select a plane, an edge or a point",
+        ),
     )
-    single = ("axis",)
+    single = ("axis", "to_object")
     chain_boxes = ("profile",)
     default_box = "angle"
 
@@ -1243,29 +1340,50 @@ class RevolvePanel(SurfacePanel):
         self.box("profile")
         self.box("axis")
         self.chain_row()
-        self.add_combo("type", "Type", [("Angle", "angle"), ("Full", "full")])
+        self.add_combo("type", "Type", [("Angle", "angle"), ("To", "to"), ("Full", "full")])
+        self.box("to_object")
         self.add_combo("direction", "Direction", DIRECTIONS)
         self.add_number("angle", "Angle", "deg")
         self.add_number("angle2", "Angle Two", "deg")
         self.add_operation()
 
     def update_visibility(self):
-        full = self.options["type"] == "full"
-        self.show_option("direction", not full)
-        self.show_option("angle", not full)
-        self.show_option("angle2", not full and self.options["direction"] == "two_sides")
+        rtype = self.options["type"]
+        angle = rtype == "angle"
+        self.show_box("to_object", rtype == "to")
+        self.show_option("direction", angle)
+        self.show_option("angle", angle)
+        self.show_option("angle2", angle and self.options["direction"] == "two_sides")
+        if self.active == "to_object" and rtype != "to":
+            self.activate("profile")
 
     def box_activated(self, name):
         self.show_axis_lines(name == "axis")
+        self.show_plane_squares(name == "to_object")
+
+    def option_changed(self, key):
+        if key == "type" and self.options["type"] == "to" and not self.picks["to_object"]:
+            if self.picks["profile"] and self.picks["axis"]:
+                self.activate("to_object")
+
+    def refs(self):
+        refs = super().refs()
+        if self.options["type"] != "to":
+            refs["refs3"] = []
+        return refs
 
     def after_pick(self, name):
         if name == "profile" and self.picks["profile"] and not self.picks["axis"]:
             self.activate("axis")
         elif name == "axis" and self.picks["axis"]:
             self.show_axis_lines(False)
+            if self.options["type"] == "to" and not self.picks["to_object"]:
+                self.activate("to_object")
+        elif name == "to_object" and self.picks["to_object"]:
+            self.show_plane_squares(False)
 
     def handle_specs(self):
-        if self.options["type"] == "full" or not self.picks["axis"]:
+        if self.options["type"] != "angle" or not self.picks["axis"]:
             return []
         edges = self.edges("profile")
         if not edges:
@@ -1288,7 +1406,6 @@ class RevolvePanel(SurfacePanel):
         specs = []
         a1 = float(self.options["angle"])
         direction = self.options["direction"]
-        start = 0.0
         specs.append(
             {
                 "key": "angle",
@@ -1297,7 +1414,7 @@ class RevolvePanel(SurfacePanel):
                 "axis": axis,
                 "zero": zero,
                 "radius": radius,
-                "value": a1 + start,
+                "value": a1,
                 "size": size,
             }
         )
@@ -1335,20 +1452,16 @@ class SweepPanel(SurfacePanel):
     boxes = (
         ("profile", "Profile", "refs", ("curve", "sketch"), "Select curves"),
         ("path", "Path", "refs2", ("curve", "sketch"), "Select the path"),
+        ("rail", "Guide Rail", "refs3", ("curve", "sketch"), "Select the guide rail"),
     )
-    chain_boxes = ("profile", "path")
+    chain_boxes = ("profile", "path", "rail")
+    tangent_boxes = ("path", "rail", "edges")
 
     def build_rows(self):
-        self.add_combo(
-            "type",
-            "Type",
-            [
-                ("Single Path", "single"),
-                ("Path + Guide Rail", "rail", False, "Not in SciForge's surface sweep yet"),
-            ],
-        )
+        self.add_combo("type", "Type", [("Single Path", "single"), ("Path + Guide Rail", "rail")])
         self.box("profile")
         self.box("path")
+        self.box("rail")
         self.chain_row()
         self.add_ratio("distance", "Distance")
         self.add_ratio("distance2", "Distance Two")
@@ -1357,14 +1470,29 @@ class SweepPanel(SurfacePanel):
             "Orientation",
             [("Perpendicular", "perpendicular"), ("Parallel", "parallel")],
         )
+        self.add_combo("scaling", "Profile Scaling", _pairs(core.SCALING_LABELS, core.SCALINGS))
+        self.add_number("taper", "Taper Angle", "deg")
         self.add_number("twist", "Twist Angle", "deg")
         self.add_operation()
 
     def update_visibility(self):
+        rail = self.options.get("type") == "rail"
+        self.show_box("rail", rail)
+        self.show_option("scaling", rail)
+        self.show_option("orientation", not rail)
+        self.show_option("taper", not rail)
+        self.show_option("twist", not rail)
         self.show_option("distance2", self._two_sides())
-        row = self.rows.get("twist")
-        if row is not None:
-            row[0].setEnabled(self.options["orientation"] == "perpendicular")
+        perpendicular = self.options["orientation"] == "perpendicular"
+        for key in ("twist", "taper"):
+            row = self.rows.get(key)
+            if row is not None:
+                row[0].setEnabled(perpendicular)
+                row[0].setToolTip(
+                    "" if perpendicular else "Twist and taper need Orientation Perpendicular"
+                )
+        if self.active == "rail" and not rail:
+            self.activate("profile")
 
     def _two_sides(self):
         try:
@@ -1383,6 +1511,17 @@ class SweepPanel(SurfacePanel):
         except Exception:
             return False
 
+    def option_changed(self, key):
+        if key == "type" and self.options["type"] == "rail" and not self.picks["rail"]:
+            if self.picks["profile"] and self.picks["path"]:
+                self.activate("rail")
+
+    def refs(self):
+        refs = super().refs()
+        if self.options.get("type") != "rail":
+            refs["refs3"] = []
+        return refs
+
     def picks_changed(self, name):
         super().picks_changed(name)
         self.update_visibility()
@@ -1390,16 +1529,28 @@ class SweepPanel(SurfacePanel):
     def after_pick(self, name):
         if name == "profile" and self.picks["profile"] and not self.picks["path"]:
             self.activate("path")
+        elif name == "path" and self.picks["path"] and self.options.get("type") == "rail":
+            if not self.picks["rail"]:
+                self.activate("rail")
 
 
 # -- CREATE: Loft ----------------------------------------------------------------------------------
+END_ROWS = (("start", "First Profile"), ("end", "Last Profile"))
+
+
 class LoftPanel(SurfacePanel):
     kind = "loft"
-    boxes = (("sections", "Profiles", "refs", ("curve", "point", "sketch"), "Select profiles"),)
-    chain_boxes = ("sections",)
+    boxes = (
+        ("sections", "Profiles", "refs", ("curve", "point", "sketch"), "Select profiles"),
+        ("rails", "Rails", "refs2", ("curve", "sketch"), "Select rails"),
+        ("centerline", "Centerline", "refs3", ("curve", "sketch"), "Select a centerline"),
+    )
+    chain_boxes = ("sections", "rails", "centerline")
+    tangent_boxes = ("rails", "centerline")
 
     def __init__(self, doc, feature=None):
         self.groups = []  # [[(obj, sub)...] one per profile, in loft order]
+        self.end_kinds = {}
         super().__init__(doc, feature)
 
     def load_extra(self, feature, refs, options):
@@ -1424,8 +1575,20 @@ class LoftPanel(SurfacePanel):
         holder = QtWidgets.QWidget()
         holder.setLayout(buttons)
         self.layout.addRow(holder)
+        self.add_combo("guide", "Guide Type", [("Rails", "rails"), ("Centerline", "centerline")])
+        self.box("rails")
+        self.box("centerline")
         self.chain_row()
         self.add_check("closed", "Closed", "The last profile lofts back to the first")
+        self.add_check(
+            "merge",
+            "Tangent Edges Merge",
+            "Profile curves joined smoothly loft into one side face (off: one face per curve)",
+        )
+        for end, title in END_ROWS:
+            self.add_combo(end + "_condition", title, loft_ends_labels("sketch"))
+            self.add_number(end + "_weight", "Takeoff Weight", "")
+            self.add_number(end + "_angle", "Takeoff Angle", "deg")
         self.add_operation()
 
     def _flat(self):
@@ -1449,6 +1612,9 @@ class LoftPanel(SurfacePanel):
         )
 
     def take(self, name, ref):
+        if name != "sections":
+            super().take(name, ref)
+            return
         self.message.setText("")
         group = self.expand(name, ref)
         key = (ref[0].Name, ref[1])
@@ -1461,8 +1627,13 @@ class LoftPanel(SurfacePanel):
         self.picks_changed(name)
 
     def cleared(self, name):
-        self.groups = []
+        if name == "sections":
+            self.groups = []
         super().cleared(name)
+
+    def picks_changed(self, name):
+        super().picks_changed(name)
+        self.update_visibility()
 
     def _move(self, step):
         row = self.list.currentRow()
@@ -1485,12 +1656,83 @@ class LoftPanel(SurfacePanel):
         return ""
 
     def refs(self):
-        return {"refs": self._flat(), "refs2": [], "refs3": []}
+        rails = self.options.get("guide", "rails") == "rails"
+        return {
+            "refs": self._flat(),
+            "refs2": list(self.picks.get("rails") or []) if rails else [],
+            "refs3": [] if rails else list(self.picks.get("centerline") or []),
+        }
 
     def build_options(self):
         options = super().build_options()
         options["groups"] = [len(g) for g in self.groups]
         return options
+
+    # -- what the boxes and rows show ---------------------------------------------------------
+    def _group_kind(self, group):
+        """point / sketch / edge: what a profile is (which end conditions it offers)."""
+        if not group:
+            return None
+        obj, sub = group[0]
+        if sub.startswith("Vertex") or obj.TypeId in surface.POINT_TYPES:
+            return "point"
+        if all(curves.is_sketch(o) for o, _s in group):
+            return "sketch"
+        return "edge"
+
+    def update_visibility(self):
+        rails = self.options.get("guide", "rails") == "rails"
+        self.show_box("rails", rails)
+        self.show_box("centerline", not rails)
+        if self.active in ("rails", "centerline") and self.active != (
+            "rails" if rails else "centerline"
+        ):
+            self.activate("sections")
+        closed = bool(self.options.get("closed"))
+        for end, _title in END_ROWS:
+            group = None
+            if len(self.groups) >= 2:
+                group = self.groups[0] if end == "start" else self.groups[-1]
+            kind = self._group_kind(group)
+            shown = kind is not None and not (closed and end == "end")
+            choices = loft_ends_labels(kind or "sketch")
+            if closed:
+                choices = [c for c in choices if c[1] in ("free", "direction")]
+            self._refill(end + "_condition", choices)
+            condition = self.options.get(end + "_condition", "free")
+            self.show_option(end + "_condition", shown)
+            self.show_option(end + "_weight", shown and condition != "free")
+            self.show_option(end + "_angle", shown and condition == "direction")
+            caption = self.rows[end + "_weight"][1]
+            caption.setText("Takeoff Weight" if condition == "direction" else "Tangency Weight")
+
+    def _refill(self, key, choices):
+        box = self.rows[key][0]
+        wanted = [value for _label, value in choices]
+        current = [box.itemData(i) for i in range(box.count())]
+        condition = self.options.get(key, "free")
+        if condition not in wanted:
+            condition = "free"
+            self.options[key] = "free"
+        self._quiet = True
+        try:
+            if current != wanted:
+                box.clear()
+                for label, value in choices:
+                    box.addItem(label, value)
+            curve_pick.set_combo(box, condition)
+        finally:
+            self._quiet = False
+
+    def option_changed(self, key):
+        if key == "guide":
+            self.activate("rails" if self.options["guide"] == "rails" else "centerline")
+
+
+def loft_ends_labels(kind):
+    from . import loft_ends_core
+
+    return list(loft_ends_core.LABELS["face" if kind == "edge" else kind])
 
 
 # -- CREATE: Patch ---------------------------------------------------------------------------------

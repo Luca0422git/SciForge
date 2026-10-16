@@ -6,12 +6,15 @@ blue), flat faces of the part, or a sketch point (only first or last: a dome or 
 are listed in that order; move one up or down or take it out with the buttons next to the
 list, or click it again in the 3D view. Guide Type Rails: click the Rails box, then curves
 the side must run along; Centerline: one curve the profiles stay square to. Closed lofts the
-last profile back to the first. First Profile / Last Profile set how the loft leaves the first
-profile and meets the last (Fusion's end conditions): a sketch profile Connected or Direction
-(Takeoff Weight, Takeoff Angle), a face of the part Connected (G0), Tangent (G1) or Curvature
-(G2), a point Sharp or Point Tangent (a dome), with a Tangency Weight. Lofting into material
-switches to Cut, unless you picked the operation yourself. Problems are shown in the dialog,
-which then stays open.
+last profile back to the first. Tangent Edges Merge lofts profile curves joined smoothly
+into one side face. First Profile / Last Profile set how the loft leaves the first profile and
+meets the last (Fusion's end conditions): a sketch profile Connected or Direction (Takeoff
+Weight, Takeoff Angle), a face of the part Connected (G0), Tangent (G1) or Curvature (G2), a
+point Sharp or Point Tangent (a dome), with a Tangency Weight; with rails or a centerline too
+(they bend the loft near its ends), and on a closed loft at the first profile (Direction: the
+loop passes through it that way). Rails may be sketch curves or edges of any body. Lofting
+into material switches to Cut, unless you picked the operation yourself. Problems are shown
+in the dialog, which then stays open.
 """
 
 import FreeCAD as App
@@ -34,10 +37,11 @@ OPERATION_LABELS = [
     ("New Component", "new_component"),
 ]
 END_TITLES = (("start", "First Profile"), ("end", "Last Profile"))
-ENDS_GAP = "SciForge makes end conditions on an open loft without rails or a centerline."
-MERGE_GAP = (
-    "Not in SciForge yet: the loft keeps one side face per profile curve (Fusion's Keep). "
-    "The geometry kernel measures merged smooth sides wrongly, so they are not made."
+CLOSED_ENDS = ("free", "direction")  # a closed loop passes through its first profile
+MERGE_TIP = (
+    "Profile curves joined smoothly (a slot's lines and arcs) loft into one smooth side face; "
+    "off: one face per curve. Inspect's volume of a merged spline side can be a few % off "
+    "(OpenCASCADE's measurement)."
 )
 
 
@@ -204,10 +208,9 @@ class LoftPanel(Panel):
         self.closed = curve_pick.checkbox("Closed", self.options["closed"])
         self.closed.setObjectName("SciForgeLoft_closed")
         form.addRow("", self.closed)
-        self.merge = curve_pick.checkbox("Tangent Edges Merge", False)
+        self.merge = curve_pick.checkbox("Tangent Edges Merge", self.options.get("merge", False))
         self.merge.setObjectName("SciForgeLoft_merge")
-        self.merge.setEnabled(False)
-        self.merge.setToolTip(MERGE_GAP)
+        self.merge.setToolTip(MERGE_TIP)
         form.addRow("", self.merge)
         self.ends = {}
         for end, title in END_TITLES:
@@ -243,6 +246,7 @@ class LoftPanel(Panel):
         self.message.setMinimumHeight(lines * 3 + 4)
         self.guide.currentIndexChanged.connect(self._guide_changed)
         self.closed.toggled.connect(self._value_changed)
+        self.merge.toggled.connect(self._value_changed)
         self.operation.activated.connect(self._operation_picked)
         self.up.clicked.connect(lambda *_: self._move(-1))
         self.down.clicked.connect(lambda *_: self._move(1))
@@ -254,6 +258,7 @@ class LoftPanel(Panel):
             curve_pick.set_combo(self.guide, self.options["guide"])
             curve_pick.set_combo(self.operation, self.options["operation"])
             self.closed.setChecked(self.options["closed"])
+            self.merge.setChecked(bool(self.options.get("merge")))
             self.chain.setChecked(self.options["chain"])
             for end, row in self.ends.items():
                 row["weight"].set_value(self.options[end + "_weight"])
@@ -282,32 +287,36 @@ class LoftPanel(Panel):
             return "point"
         return "sketch" if extrude.is_sketch(obj) else "face"
 
-    def _ends_possible(self):
-        """End conditions need an open loft without rails or a centerline (SciForge)."""
+    def _ends_possible(self, end):
+        """Every end takes a condition, except the last profile of a closed loft (the loop
+        goes on from it back to the first)."""
+        return not (self.closed.isChecked() and end == "end")
+
+    def _end_choices(self, end, kind):
+        choices = list(loft_ends_core.LABELS.get(kind, []))
         if self.closed.isChecked():
-            return False
-        if self.guide.currentData() == "rails":
-            return not self.rails
-        return not self.centerline
+            choices = [c for c in choices if c[1] in CLOSED_ENDS]
+        return choices
 
     def _update_ends(self):
         """Each end's choices follow its profile (sketch / face / point); the weight and the
         angle show for the conditions that use them."""
-        possible = self._ends_possible()
         for end, row in self.ends.items():
             kind = self._end_kind(end)
             combo = row["combo"]
-            if kind != row["kind"]:
+            choices = self._end_choices(end, kind)
+            keys = [key for _label, key in choices]
+            if keys != [combo.itemData(i) for i in range(combo.count())]:
                 row["kind"] = kind
                 self._quiet = True
                 try:
                     combo.clear()
-                    for label, key in loft_ends_core.LABELS.get(kind, []):
+                    for label, key in choices:
                         combo.addItem(label, key)
                 finally:
                     self._quiet = False
             wanted = self.options.get(end + "_condition", "free")
-            if kind is None or wanted not in loft_ends_core.allowed(kind):
+            if kind is None or wanted not in keys:
                 wanted = "free"
                 self.options[end + "_condition"] = "free"
             self._quiet = True
@@ -315,11 +324,10 @@ class LoftPanel(Panel):
                 curve_pick.set_combo(combo, wanted)
             finally:
                 self._quiet = False
-            shown = kind is not None and not self.closed.isChecked()
+            possible = self._ends_possible(end)
+            shown = kind is not None and possible
             row["label"].setVisible(shown)
             combo.setVisible(shown)
-            combo.setEnabled(possible)
-            combo.setToolTip("" if possible else ENDS_GAP)
             condition = combo.currentData() if possible else "free"
             row["weight_label"].setText(
                 "Takeoff Weight" if condition == "direction" else "Tangency Weight"
@@ -348,9 +356,10 @@ class LoftPanel(Panel):
         self.options["closed"] = bool(self.closed.isChecked())
         self.options["operation"] = self.operation.currentData()
         self.options["chain"] = bool(self.chain.isChecked())
-        possible = self._ends_possible()
+        self.options["merge"] = bool(self.merge.isChecked())
         for end, row in self.ends.items():
             condition = row["combo"].currentData() if row["kind"] is not None else None
+            possible = self._ends_possible(end)
             self.options[end + "_condition"] = (condition or "free") if possible else "free"
             self.options[end + "_weight"] = float(row["weight"].value())
             self.options[end + "_angle"] = float(row["angle"].value())
@@ -495,7 +504,8 @@ class LoftPanel(Panel):
         base = self._base_feature()
         if short.startswith("Edge"):
             ref = (obj, short)
-            if not extrude.is_sketch(obj):
+            if not extrude.is_sketch(obj) and self._own_body(obj):
+                # an edge of the loft's own body: as it is before the loft
                 ref = curve_pick.base_element(base, obj, short)
                 if ref is None:
                     self.message.setText("⚠ That edge is made by this loft. Pick another one.")
@@ -520,6 +530,16 @@ class LoftPanel(Panel):
                 self.message.setText("⚠ Only flat faces can be lofted. Pick a flat face.")
                 return
             self._toggle_profile(ref)
+
+    def _own_body(self, obj):
+        """True for an object of the body the loft is built in (or its preview body)."""
+        body = loft.owner_body(obj)
+        if body is None:
+            return False
+        if body is self._source_body():
+            return True
+        target = self.target
+        return target is not None and loft.owner_body(target) is body
 
     def _toggle_profile(self, ref):
         keys = [loft.key(p) for p in self.profiles]
