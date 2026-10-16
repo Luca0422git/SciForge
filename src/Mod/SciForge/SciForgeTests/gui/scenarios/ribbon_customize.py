@@ -52,6 +52,17 @@ def popup():
     return QtWidgets.QApplication.activePopupWidget()
 
 
+CLICKED = {"pending": False}  # a menu row click is on its way (click_menu_action)
+
+
+def guard_popups():
+    """The safety net for a menu that never got its click: close it, unless a click is on
+    its way (under load the net went off first and closed the menu under the coming click,
+    so Reset All's question never opened)."""
+    if not CLICKED["pending"]:
+        close_popups()
+
+
 def close_popups():
     p = popup()
     while p is not None:
@@ -66,12 +77,15 @@ def click_menu_action(menu, text):
         if action.text().replace("&", "").split("\t")[0] == text:
             rect = menu.actionGeometry(action)
             QtTest.QTest.mouseMove(menu, rect.center())
-            QtCore.QTimer.singleShot(
-                0,
-                lambda: QtTest.QTest.mouseClick(
+            CLICKED["pending"] = True
+
+            def click():
+                CLICKED["pending"] = False
+                QtTest.QTest.mouseClick(
                     menu, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, rect.center()
-                ),
-            )
+                )
+
+            QtCore.QTimer.singleShot(0, click)
             return True
     return False
 
@@ -142,8 +156,8 @@ def menu_options(title, label, option):
     QtCore.QTimer.singleShot(300, lambda: later([hover, dots, choose], done))
     guard = QtCore.QTimer()
     guard.setSingleShot(True)
-    guard.timeout.connect(close_popups)
-    guard.start(8000)
+    guard.timeout.connect(guard_popups)
+    guard.start(20000)
     g.open_menu()
     guard.stop()
     QtWidgets.QApplication.processEvents()
@@ -166,8 +180,8 @@ def right_click(widget, option, pos=None):
     QtCore.QTimer.singleShot(300, lambda: later([choose], done))
     guard = QtCore.QTimer()
     guard.setSingleShot(True)
-    guard.timeout.connect(close_popups)
-    guard.start(6000)
+    guard.timeout.connect(guard_popups)
+    guard.start(20000)
     pos = pos or QtCore.QPoint(widget.width() // 2, widget.height() // 2)
     event = QtGui.QContextMenuEvent(
         QtGui.QContextMenuEvent.Mouse, pos, widget.mapToGlobal(pos), QtCore.Qt.NoModifier
@@ -308,8 +322,8 @@ def c_pin_by_right_click():
     QtCore.QTimer.singleShot(300, lambda: later([right, choose], done))
     guard = QtCore.QTimer()
     guard.setSingleShot(True)
-    guard.timeout.connect(close_popups)
-    guard.start(8000)
+    guard.timeout.connect(guard_popups)
+    guard.start(20000)
     g.open_menu()
     guard.stop()
     QtWidgets.QApplication.processEvents()

@@ -1431,12 +1431,33 @@ class RevolvePanel(Panel):
             info = Gui.ActiveDocument.ActiveView.getObjectInfo((int(position[0]), int(position[1])))
         except Exception:
             info = None
+        if info and not str(info.get("Component", "")).startswith("Edge"):
+            info = self._edge_near(position) or info
         if not info or not str(info.get("Component", "")).startswith("Edge"):
             return False
         obj = self.doc.getObject(str(info.get("Object", "")))
         if extrude.is_sketch(obj):
             return True
         return self._edge_on_border(position, info)
+
+    def _edge_near(self, position, reach=4):
+        """The pick of a part edge a few pixels from `position`, or None. The press sees the
+        face where FreeCAD's selection, on the release, takes the edge beside it: with the
+        face's edges projected (Auto project) the area beside the edge took the press, and
+        the edge picked as an axis was lost (revolve_qa_part P10)."""
+        view = Gui.ActiveDocument.ActiveView
+        x, y = int(position[0]), int(position[1])
+        for r in range(1, reach + 1):
+            for dx, dy in ((0, r), (0, -r), (r, 0), (-r, 0)):
+                try:
+                    info = view.getObjectInfo((x + dx, y + dy))
+                except Exception:
+                    continue
+                if info and str(info.get("Component", "")).startswith("Edge"):
+                    obj = self.doc.getObject(str(info.get("Object", "")))
+                    if obj is not None and not extrude.is_sketch(obj):
+                        return info
+        return None
 
     def _edge_on_border(self, position, info):
         """A part edge under the mouse that runs along the border of the area there (a
