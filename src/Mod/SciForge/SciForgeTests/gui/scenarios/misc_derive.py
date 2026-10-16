@@ -6,11 +6,11 @@ Source design Bracket.FCStd (saved, closed): component "Arm" moved 10 mm along X
 "Top Plane" (z 5) and the user parameter width = 12 mm.
 
 P1 INSERT > Insert Derive in a new, unsaved design: the Save dialog comes first (the source is
-   kept relative to this design's file); after the save the Derive dialog lists Bodies,
-   Sketches, Construction and Parameters with tick boxes. Tick Body1, Outline, Top Plane and
-   width; OK: one Derive step in the timeline; Body1 (1000) at x 10..30 (where it is in the
-   source design); the sketch's curves fixed; the plane at z 5; width = 12 shown greyed in
-   Change Parameters and usable in a formula.
+   kept relative to this design's file); after the save the Derive dialog lists
+   Components, Bodies, Sketches, Construction and Parameters with tick boxes. Tick Body1,
+   Outline, Top Plane and width; OK: one Derive step in the timeline; Body1 (1000) at x
+   10..30 (where it is in the source design); the sketch's curves fixed; the plane at z 5;
+   width = 12 shown greyed in Change Parameters and usable in a formula.
 P2 A cylinder step added on the derived body (work built on it).
 P3 Bracket saved again with a 40 mm box and width 15: the Derive turns yellow (out of date) in
    the timeline and a note says so.
@@ -115,8 +115,8 @@ def p1_dialog():
     h.check("P1 the design was saved", bool(doc().FileName))
     groups = [p.tree.topLevelItem(i).text(0) for i in range(p.tree.topLevelItemCount())]
     h.check(
-        "P1 the source's browser: Bodies, Sketches, Construction, Parameters",
-        groups == ["Bodies", "Sketches", "Construction", "Parameters"],
+        "P1 the source's browser: Components, Bodies, Sketches, Construction, Parameters",
+        groups == ["Components", "Bodies", "Sketches", "Construction", "Parameters"],
         groups,
     )
     h.check("P1 nothing ticked yet", p.ticked() == [], p.ticked())

@@ -1070,7 +1070,16 @@ def rename_design(path, new_name, project_folder=None, use_git=True):
     target = design_path(folder, new_name)
     if os.path.exists(target) and not same_path(target, path):
         raise StoreError("A design called %s is already in this folder." % new_name)
+    users = referrers(path, project_folder) if project_folder else []
     _relocate(path, target, project_folder, use_git, None)
+    for other in users:  # the designs that insert or derive it follow the new name
+        try:
+            here = os.path.dirname(other)
+            xml, n = retarget_xml(read_design_xml(other), here, here, path, target)
+            if n:
+                write_design_xml(other, xml)
+        except Exception:
+            continue
     return target
 
 

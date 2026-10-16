@@ -1705,8 +1705,11 @@ class DataPanel(QtWidgets.QWidget):
                     raise core.StoreError("A folder called %s is already there." % new)
                 os.replace(path, target)
             else:
-                if doc_for_file(path) is not None:
+                if doc_for_file(path) is not None and _has_views(doc_for_file(path)):
                     raise core.StoreError("Close the design before renaming it.")
+                users = _open_referrers(path)
+                if users:
+                    raise core.StoreError("Close %s first: it uses %s." % (", ".join(users), old))
                 core.rename_design(path, new, project_folder(), use_git())
             self.refresh()
         except Exception as exc:

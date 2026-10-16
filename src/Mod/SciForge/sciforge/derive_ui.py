@@ -13,9 +13,15 @@ What a person does (sources in docs/sciforge/parity/misc.md):
     date") and a note says so; right-click > Update Derive brings the changes in (later
     steps built on the derived bodies follow). Edit Feature (double-click) opens the
     dialog again: tick more, untick, Update, Break Link (the objects stay, the link goes).
+  * A ticked component comes in as a component with its bodies and the components inside
+    it (Fusion keeps the structure). Version: the latest saved version (the default) or an
+    older one of the source; a Derive of an older version shows that a newer one exists,
+    and Update Derive takes the newest.
 """
 
 import os
+import shutil
+import tempfile
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -75,6 +81,37 @@ def _modified(doc):
         return False
 
 
+def source_versions(path):
+    """The saved versions of a source design, oldest first ([] when it has none)."""
+    try:
+        from . import versions_ui
+
+        return versions_ui.store_of(path).versions()
+    except Exception as exc:
+        warn("derive: the versions of %s: %s" % (core.design_name(path), exc))
+        return []
+
+
+def read_source_version(path, number=0):
+    """read_source of the design `path` as saved in version `number` (0: its file now, the
+    latest)."""
+    if not number:
+        return derive.read_source(path)
+    from . import versions_ui
+
+    info = versions_ui.number_to_info(path, number)
+    if info is None:
+        raise core.DeriveError(
+            "v%d of %s was not found in its versions." % (number, core.design_name(path))
+        )
+    folder = tempfile.mkdtemp(prefix="sciforge-derive-v")
+    try:
+        copy = versions_ui.store_of(path).extract(info, folder)
+        return derive.read_source(path, version_file=copy, version=number)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 # -- the dialog ----------------------------------------------------------------------------------
 class DerivePanel(taskui.Panel):
     """Fusion's Derive dialog. mode "insert" (Insert Derive: into this design from `source`),
@@ -109,8 +146,15 @@ class DerivePanel(taskui.Panel):
             self.source = derive.source_path(master)
         elif mode == "create":
             self.source = doc.FileName
+        self.version = derive.version_of(master) if master is not None else 0
         if self.source:
-            self.data = derive.read_source(self.source)
+            try:
+                self.data = read_source_version(self.source, self.version)
+            except core.DeriveError:
+                if not self.version:
+                    raise
+                self.version = 0  # that version is gone from the history: the latest
+                self.data = read_source_version(self.source, 0)
         elif mode != "edit":
             raise core.DeriveError("Pick the design to derive from.")
         name = (
@@ -125,6 +169,9 @@ class DerivePanel(taskui.Panel):
         )
         if mode == "create":
             self._destination_rows()
+        self.version_combo = None
+        if mode != "create" and self.source:
+            self._version_row()
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setObjectName("SciForgeDeriveTree")
         self.tree.setHeaderHidden(True)
@@ -170,6 +217,54 @@ class DerivePanel(taskui.Panel):
         self.tree.itemChanged.connect(lambda *_: self._guarded(self._ticks_changed))
 
     # -- rows ----------------------------------------------------------------------------
+    def _version_row(self):
+        """Which saved version of the source to derive: the latest (default) or an older one
+        (Fusion keeps the version a reference was made from)."""
+        self.version_combo = QtWidgets.QComboBox()
+        self.version_combo.setObjectName("SciForgeDeriveVersion")
+        self.version_combo.setToolTip(
+            "Derive the latest saved version of the source, or an older one (it then shows "
+            "that a newer version exists)"
+        )
+        listed = source_versions(self.source)
+        newest = listed[-1].number if listed else 0
+        self.version_combo.addItem(core.version_words(0, newest), 0)
+        for info in reversed(listed):
+            text = core.version_words(info.number, newest)
+            if info.milestone:
+                text += "  \u2691 milestone"
+            if info.description:
+                text += "  %s" % info.description
+            self.version_combo.addItem(text, info.number)
+        index = self.version_combo.findData(self.version)
+        self.version_combo.setCurrentIndex(max(0, index))
+        self.version_combo.currentIndexChanged.connect(
+            lambda *_: self._guarded(self._version_changed)
+        )
+        self.layout.addRow(QtWidgets.QLabel("Version"), self.version_combo)
+
+    def chosen_version(self):
+        if self.version_combo is None:
+            return self.version
+        return int(self.version_combo.currentData() or 0)
+
+    def _version_changed(self):
+        """Another version picked: its contents are read and listed (the ticks stay)."""
+        ticks = self.ticked()
+        self.data = read_source_version(self.source, self.chosen_version())
+        self._fill(ticks)
+        self.info.setText(
+            "Reads %s of %s."
+            % (
+                (
+                    "the latest version"
+                    if not self.chosen_version()
+                    else "v%d" % self.chosen_version()
+                ),
+                core.design_name(self.source),
+            )
+        )
+
     def _destination_rows(self):
         self.dest_combo = QtWidgets.QComboBox()
         self.dest_combo.setObjectName("SciForgeDeriveDestination")
@@ -212,7 +307,7 @@ class DerivePanel(taskui.Panel):
         self.tree.blockSignals(True)
         try:
             self.tree.clear()
-            ticked = set(self.master.Items) if self.master is not None else set(preselect)
+            ticked = set(preselect) if preselect else self._fill_ticks()
             if self.data is not None:
                 rows = self.data["rows"]
             else:  # the source is gone: what this Derive took, greyed
@@ -252,6 +347,10 @@ class DerivePanel(taskui.Panel):
                     keys.append(item.data(0, QtCore.Qt.UserRole))
         return [k for k in keys if k]
 
+    def _fill_ticks(self):
+        """The ticks the tree starts with on a refill (edit: what the Derive has)."""
+        return set(self.master.Items) if self.master is not None else set()
+
     def item_for(self, key):
         for i in range(self.tree.topLevelItemCount()):
             group = self.tree.topLevelItem(i)
@@ -280,7 +379,9 @@ class DerivePanel(taskui.Panel):
             )
             return
         current = derive.state(self.master)
-        self.state_label.setText(core.state_words(current, self.master.SourceName))
+        self.state_label.setText(
+            core.state_words(current, self.master.SourceName, derive.version_of(self.master))
+        )
         broken = bool(self.master.LinkBroken)
         if self.update_button is not None:
             self.update_button.setEnabled(current == core.NEWER and self.data is not None)
@@ -301,6 +402,13 @@ class DerivePanel(taskui.Panel):
 
     # -- edit actions -----------------------------------------------------------------------
     def update_now(self):
+        """Update: the newest saved version of the source (Fusion's Get Latest)."""
+        if self.version_combo is not None and self.chosen_version():
+            self.version_combo.blockSignals(True)
+            self.version_combo.setCurrentIndex(0)
+            self.version_combo.blockSignals(False)
+        self.data = read_source_version(self.source, 0)
+        self._fill(())
         gone = derive.update(self.master, self.data)
         self.doc.recompute()
         _told.pop((self.doc.Name, self.master.Name), None)
@@ -367,6 +475,7 @@ class DerivePanel(taskui.Panel):
             component=components.active_component(self.doc),
         )
         self.doc.recompute()
+        check_doc(self.doc, tell=False)
         commands.tell("Derived %s from %s." % (core.summary(keys), master.SourceName))
         return True
 
@@ -404,6 +513,8 @@ class DerivePanel(taskui.Panel):
             )
         if removed:
             derive.remove_items(master, removed)
+        if self.chosen_version() != derive.version_of(master):
+            derive.update(master, self.data)  # another version of the source: read it in
         if self.origin.isChecked() != bool(master.PlaceAtOrigin):
             derive.set_place_at_origin(master, self.origin.isChecked(), self.data)
         if added:
@@ -417,6 +528,7 @@ class DerivePanel(taskui.Panel):
                 component=components.active_component(self.doc),
             )
         self.doc.recompute()
+        check_doc(self.doc, tell=False)  # an older version: yellow at once (newer exists)
         return True
 
     def reject(self):
@@ -657,7 +769,10 @@ def check_doc(doc, tell=True):
             note = getattr(master, derive.WARNING, "") or ""
             mine = note.startswith("Out of date") or note.startswith("The source design")
             if current in (core.NEWER, core.MISSING):
-                derive.set_warning(master, core.state_words(current, master.SourceName))
+                derive.set_warning(
+                    master,
+                    core.state_words(current, master.SourceName, derive.version_of(master)),
+                )
                 key = (doc.Name, master.Name)
                 if (
                     current == core.NEWER

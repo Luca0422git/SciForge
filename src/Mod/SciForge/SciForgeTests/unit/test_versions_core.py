@@ -593,6 +593,13 @@ class MoveCopyTests(Scratch):
         renamed = v.rename_design(new, "Arm 2", project, True)
         self.assertEqual(v.store_for(renamed, project).count(), 3)
 
+    def test_rename_points_the_users_at_the_new_name(self):
+        project = os.path.join(self.root, "proj")
+        wheel, cart = self._linked_pair(project)
+        renamed = v.rename_design(wheel, "Rim", project, use_git=False)
+        self.assertEqual(os.path.basename(renamed), "Rim.FCStd")
+        self.assertIn('<XLink file="Rim.FCStd"', v.read_design_xml(cart))
+
     def test_copy_is_a_separate_design(self):
         project = os.path.join(self.root, "proj")
         wheel, cart = self._linked_pair(project)

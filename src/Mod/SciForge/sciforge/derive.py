@@ -7,8 +7,14 @@ logic without FreeCAD is derive_core.py. Spec and sources: docs/sciforge/parity/
 What a Derive makes (all found again by their SciForgeType):
   Derive         an App::FeaturePython at document level: the timeline step (kind "derive").
                  SourceFile (absolute) + SourceRelative (from this design's folder),
-                 SourceStamp, Items ("body:Body001", ...), Results ("key=ObjectName"),
-                 PlaceAtOrigin, LinkBroken. No proxy: nothing to load but plain properties.
+                 SourceStamp, SourceVersion (0: the latest saved version, else the version
+                 number it was derived from), Items ("body:Body001", ...), Results
+                 ("key=ObjectName"), PlaceAtOrigin, LinkBroken. No proxy: nothing to load
+                 but plain properties.
+  derived component  an App::Part (a component, not a timeline step of its own) for a
+                 ticked component of the source, with its bodies and components inside it
+                 (Fusion keeps the structure); its bodies sit in it at their place in the
+                 source component.
   DerivedSolid   a hidden Part::Feature holding a derived body's solid; the derived body's
                  BaseFeature (PartDesign shows it as the body's first step, hidden from the
                  timeline), so features added on the derived body follow an update.
@@ -104,11 +110,51 @@ def _value_text(value, unit):
         return str(value)
 
 
+def _component_rows(doc, rows, items):
+    """The components of a source design: one row each, and their data (placement in the
+    design and in the component around them, the parent, the components and bodies directly
+    inside) for a Derive that keeps the structure (derive_core.expand)."""
+    from . import components
+
+    parts = components.list_components(doc)
+    for part in parts:
+        if getattr(part, "SciForgeTimeline", True) is False and not getattr(part, DERIVED_PROP, ""):
+            continue  # an instance of a pattern / paste: its original is what is derived
+        parent = components.container_of(part)
+        key = core.item_key("component", part.Name)
+        rows.append(
+            {
+                "kind": "component",
+                "name": part.Name,
+                "label": part.Label,
+                "component": parent.Label if parent is not None else None,
+            }
+        )
+        try:
+            glob = part.getGlobalPlacement()
+        except Exception:
+            glob = App.Placement(part.Placement)
+        items[key] = {
+            "label": part.Label,
+            "global": glob,
+            "local": App.Placement(part.Placement),
+            "parent": core.item_key("component", parent.Name) if parent is not None else None,
+            "children": [
+                core.item_key("component", c.Name) for c in components.components_in(doc, part)
+            ],
+            "bodies": [core.item_key("body", b.Name) for b in components.bodies_in(doc, part)],
+        }
+
+
 def read_doc(doc):
     """Everything a Derive can take from an open design, as plain data (shapes copied):
     {"rows": [dialog rows], "items": {key: data}, "derives": [source files of its Derives]}.
     """
     rows, items = [], {}
+    try:
+        _component_rows(doc, rows, items)
+    except Exception as exc:
+        warn("derive: the components of %s: %s" % (doc.Label, exc))
     used_up = _used_up(doc)
     for body in bodies.list_bodies(doc):
         if body.Name in used_up or getattr(body, "SciForgeTimeline", True) is False:
@@ -297,14 +343,18 @@ class _Copy:
             shutil.rmtree(self.folder, ignore_errors=True)
 
 
-def read_source(path):
+def read_source(path, version_file=None, version=0):
     """What a saved design offers to derive (see read_doc), read from a copy of its file,
-    plus "stamp" (the file read) and "path"."""
-    with _Copy(path) as doc:
+    plus "stamp" (the file read), "path" and "version". `version_file`: an older saved
+    version of the design (extracted from its versions) to read instead, `version` its
+    number; the stamp is then that version's, so the Derive shows that a newer one exists."""
+    source = version_file or path
+    with _Copy(source) as doc:
         data = read_doc(doc)
-    data["stamp"] = core.file_stamp(path)
+    data["stamp"] = core.file_stamp(source)
     data["path"] = os.path.abspath(path)
     data["name"] = core.design_name(path)
+    data["version"] = int(version or 0) if version_file else 0
     return data
 
 
@@ -345,12 +395,29 @@ def make_master(doc, source_path, label=None):
     _add(master, "App::PropertyStringList", "ItemLabels", "The items' names in the source")
     _add(master, "App::PropertyBool", "PlaceAtOrigin", "At their component's origin", False)
     _add(master, "App::PropertyBool", "LinkBroken", "No longer follows the source", False)
+    _add_version(master)
     master.SourceFile = os.path.abspath(source_path)
     master.SourceName = core.design_name(source_path)
     set_relative(master)
     if label:
         master.Label = label
     return master
+
+
+def _add_version(master):
+    if "SourceVersion" not in master.PropertiesList:
+        _add(
+            master,
+            "App::PropertyInteger",
+            "SourceVersion",
+            "The source's version it was derived from (0: the latest)",
+            False,
+        )
+
+
+def version_of(master):
+    """The source version a Derive uses (0: the latest saved one)."""
+    return int(getattr(master, "SourceVersion", 0) or 0)
 
 
 def set_relative(master, design_file=None):
@@ -438,13 +505,15 @@ def _solid_shape(data, at_origin):
     return shape
 
 
-def _build_body(master, data, component):
+def _build_body(master, data, component, structured=False):
+    """A derived body (in `component`). structured: it lies in a derived component, at
+    its place in its source component (the component carries the rest of the placement)."""
     doc = master.Document
     holder = doc.addObject(SOLID_TYPEID, "DerivedSolid")
     bodies.mark(holder, SOLID_TYPE)
     bodies.hide_from_timeline(holder)
     _mark_derived(holder, master)
-    holder.Shape = _solid_shape(data, master.PlaceAtOrigin)
+    holder.Shape = _solid_shape(data, True if structured else master.PlaceAtOrigin)
     body = _new_body(doc, data["label"], component)
     _mark_derived(body, master)
     body.BaseFeature = holder
@@ -554,22 +623,72 @@ def _target_body(doc, made_bodies, target_body, component):
     return body
 
 
+def _component_place(master, data, key, inside, destination):
+    """Where a derived component goes in the component that holds it: inside another derived
+    component at its place in its source parent; at the top in the design where it is in the
+    source (or at the destination's origin with Place Objects At Origin)."""
+    item = data["items"][key]
+    if key in inside:
+        return App.Placement(item["local"])
+    if master.PlaceAtOrigin:
+        return App.Placement()
+    outer = App.Placement()
+    if destination is not None:
+        try:
+            outer = destination.getGlobalPlacement()
+        except Exception:
+            outer = App.Placement(destination.Placement)
+    return outer.inverse().multiply(item["global"])
+
+
+def _build_components(master, data, keys, component, made, skip=()):
+    """The derived components of the ticked components (and of those inside them), with
+    their bodies (derive_core.expand). Fills `made` {key: name}; returns the bodies made.
+    `skip`: keys not to make (made before: an update does not bring back what was deleted)."""
+    from . import components
+
+    doc = master.Document
+    comps, inside, _flat = core.expand(keys, data["items"])
+    made_bodies = []
+    for key in comps:
+        if key in skip or (key in made and doc.getObject(made[key]) is not None):
+            continue
+        parent = doc.getObject(made.get(inside.get(key), "")) if key in inside else component
+        part = components.new_component(doc, data["items"][key]["label"], parent)
+        bodies.hide_from_timeline(part)  # the Derive is the step (Fusion: one Derive step)
+        _mark_derived(part, master)
+        part.Placement = _component_place(master, data, key, inside, parent)
+        made[key] = part.Name
+    for key, owner in inside.items():
+        if core.parse_item(key)[0] != "body" or key in made or key in skip:
+            continue
+        part = doc.getObject(made.get(owner, ""))
+        if part is None:
+            continue
+        body = _build_body(master, data["items"][key], part, structured=True)
+        made[key] = body.Name
+        made_bodies.append(body)
+    return made_bodies
+
+
 def build(master, data, keys, target_body=None, component=None):
     """Make the derived objects of `keys` (item keys) from read_source() data. Returns the
     {key: object name} of what was made. `target_body`: the body that holds derived sketches
-    and planes (the active one); `component`: where derived bodies go (None: the root)."""
+    and planes (the active one); `component`: where derived bodies go (None: the root). A
+    ticked component comes with its structure (derived components holding their bodies)."""
     doc = master.Document
     made = {}
     labels = list(master.ItemLabels)
-    made_bodies = []
-    for key in keys:
+    _comps, inside, flat = core.expand(keys, data["items"])
+    made_bodies = _build_components(master, data, keys, component, made)
+    for key in flat:
         kind, _name = core.parse_item(key)
         if kind == "body" and key in data["items"]:
             body = _build_body(master, data["items"][key], component)
             made[key] = body.Name
             made_bodies.append(body)
     holder = None
-    for key in keys:
+    for key in flat:
         kind, _name = core.parse_item(key)
         item = data["items"].get(key)
         if item is None:
@@ -581,7 +700,7 @@ def build(master, data, keys, target_body=None, component=None):
             made[key] = obj.Name
         elif kind == "parameter":
             made[key] = _build_parameter(master, item)
-    for key in keys:
+    for key in list(keys) + [k for k in inside if k not in keys]:
         item = data["items"].get(key)
         if item is not None:
             labels.append("%s=%s" % (key, item.get("label") or item.get("name") or ""))
@@ -603,6 +722,7 @@ def derive(doc, source, keys, place_at_origin=False, target_body=None, component
     master = make_master(doc, source["path"])
     master.PlaceAtOrigin = bool(place_at_origin)
     master.SourceStamp = source["stamp"]
+    master.SourceVersion = int(source.get("version", 0) or 0)
     build(master, source, keys, target_body, component)
     log("derived %s from %s into %s" % (core.summary(keys), source["name"], doc.Label or doc.Name))
     return master
@@ -647,6 +767,30 @@ def result_steps(master):
     return out
 
 
+def result_components(master):
+    """The derived components (App::Part) of a Derive, parents before what is inside them."""
+    doc = master.Document
+    out = []
+    for key, name in results(master).items():
+        if core.parse_item(key)[0] == "component":
+            part = doc.getObject(name)
+            if part is not None:
+                out.append(part)
+    return sorted(out, key=lambda o: o.ID)
+
+
+def _in_derived_component(master, body):
+    """True when a derived body lies in one of this Derive's components (its solid then
+    sits at its place in its source component)."""
+    try:
+        from . import components
+
+        part = components.container_of(body)
+        return part is not None and getattr(part, DERIVED_PROP, "") == master.Name
+    except Exception:
+        return False
+
+
 def result_parameters(master):
     return [n for k, n in results(master).items() if core.parse_item(k)[0] == "parameter"]
 
@@ -681,20 +825,44 @@ def update(master, data=None):
     made = results(master)
     gone = []
     container = _params(doc)
-    for key in master.Items:
+    ever = core.result_map(master.Results)  # what was ever made (deleted ones stay deleted)
+    comps, inside, _flat = core.expand(master.Items, data["items"])
+    new = [k for k in comps + list(inside) if k not in ever]
+    if new:  # a ticked component got more bodies or components in the source: made now
+        destination = None
+        for key in comps:
+            if key not in inside and key in made:
+                destination = components_parent(doc.getObject(made[key]))
+                break
+        fresh = dict(made)
+        _build_components(master, data, master.Items, destination, fresh, skip=set(ever))
+        mapping = core.result_map(master.Results)
+        mapping.update({k: v for k, v in fresh.items() if k in new})
+        master.Results = core.result_entries(mapping)
+        made = results(master)
+    implied = [k for k in dict.fromkeys(comps + list(inside)) if k not in master.Items]
+    for key in list(master.Items) + implied:
         kind, _name = core.parse_item(key)
         item = data["items"].get(key)
         if item is None:
-            gone.append(key)
+            if key in master.Items:
+                gone.append(key)
             continue
         name = made.get(key)
         if name is None:
             continue  # deleted in this design: not brought back
-        if kind == "body":
+        if kind == "component":
+            part = doc.getObject(name)
+            if part is not None:
+                part.Placement = _component_place(
+                    master, data, key, inside, components_parent(part)
+                )
+        elif kind == "body":
             body = doc.getObject(name)
             holder = _solid_holder(body) if body is not None else None
             if holder is not None:
-                holder.Shape = _solid_shape(item, master.PlaceAtOrigin)
+                structured = key in inside or _in_derived_component(master, body)
+                holder.Shape = _solid_shape(item, True if structured else master.PlaceAtOrigin)
                 holder.touch()
                 _copy_look(body, item)
         elif kind == "sketch":
@@ -713,12 +881,24 @@ def update(master, data=None):
             except Exception as exc:
                 warn("derive: parameter %s: %s" % (name, exc))
     master.SourceStamp = data["stamp"]
+    _add_version(master)
+    master.SourceVersion = int(data.get("version", 0) or 0)
     if data.get("path"):
         master.SourceFile = data["path"]
         set_relative(master)
     set_warning(master, _gone_words(master, gone))
     log("%s updated from %s" % (master.Label, master.SourceName))
     return gone
+
+
+def components_parent(part):
+    """The component a derived component sits in (None: the root)."""
+    try:
+        from . import components
+
+        return components.container_of(part) if part is not None else None
+    except Exception:
+        return None
 
 
 def _gone_words(master, gone):
@@ -739,13 +919,18 @@ def set_place_at_origin(master, on, data):
         return
     master.PlaceAtOrigin = bool(on)
     doc = master.Document
+    _comps, inside, _flat = core.expand(master.Items, data["items"])
     for key, name in results(master).items():
         kind, _n = core.parse_item(key)
         item = data["items"].get(key)
         obj = doc.getObject(name) if kind != "parameter" else None
         if item is None or obj is None:
             continue
-        if kind == "body":
+        if kind == "component":
+            obj.Placement = _component_place(master, data, key, inside, components_parent(obj))
+        elif kind == "body" and (key in inside or _in_derived_component(master, obj)):
+            continue  # it sits in its derived component, which moved
+        elif kind == "body":
             holder = _solid_holder(obj)
             if holder is not None:
                 holder.Shape = _solid_shape(item, master.PlaceAtOrigin)
@@ -760,8 +945,19 @@ def remove_items(master, keys):
 
     doc = master.Document
     made = results(master)
-    body_objs, step_objs, params = [], [], []
-    for key in keys:
+    body_objs, step_objs, params, parts = [], [], [], []
+    # an unticked component takes what lies in it along (unless still ticked on its own)
+    from . import components
+
+    gone_parts = {made[k] for k in keys if core.parse_item(k)[0] == "component" and k in made}
+    expanded = list(keys)
+    for key, name in made.items():
+        if key in expanded or key in master.Items:
+            continue
+        obj = doc.getObject(name)
+        if obj is not None and any(a.Name in gone_parts for a in components.ancestors(obj)):
+            expanded.append(key)
+    for key in expanded:
         name = made.get(key)
         kind, _n = core.parse_item(key)
         if name is None:
@@ -770,18 +966,38 @@ def remove_items(master, keys):
             params.append(name)
         elif kind == "body":
             body_objs.append(doc.getObject(name))
+        elif kind == "component":
+            parts.append(doc.getObject(name))
         else:
             step_objs.append(doc.getObject(name))
     if step_objs:
         delete.delete_steps(doc, [o for o in step_objs if o is not None])
     if body_objs:
         remove_bodies(doc, [b for b in body_objs if b is not None])
+    _remove_components(doc, [p for p in parts if p is not None])
     _remove_parameters(doc, params)
     mapping = core.result_map(master.Results)
-    for key in keys:
+    for key in expanded:
         mapping.pop(key, None)
     master.Results = core.result_entries(mapping)
     master.Items = [k for k in master.Items if k not in keys]
+
+
+def _remove_components(doc, parts):
+    """Derived components (their bodies are gone already): the outermost ones are removed
+    with what is still in them."""
+    from . import components
+
+    names = {p.Name for p in parts}
+    for part in parts:
+        if not bodies.alive(part):
+            continue
+        if any(a.Name in names for a in components.ancestors(part)):
+            continue  # goes with the component around it
+        try:
+            components.remove(doc, part, _top=False)
+        except Exception as exc:
+            warn("derive: component %s stays: %s" % (part.Label, exc))
 
 
 def remove_bodies(doc, targets):
@@ -815,9 +1031,11 @@ def _remove_parameters(doc, names):
 
 
 def remove_master_parts(master):
-    """What goes with a deleted Derive (delete.py): its parameters. Its bodies, sketches and
-    planes are taken by delete.extra_steps / its step list."""
+    """What goes with a deleted Derive (delete.py): its parameters and its components (their
+    bodies are gone by then). Its bodies, sketches and planes are taken by
+    delete.extra_steps / its step list."""
     _remove_parameters(master.Document, result_parameters(master))
+    _remove_components(master.Document, result_components(master))
 
 
 def break_link(master):
