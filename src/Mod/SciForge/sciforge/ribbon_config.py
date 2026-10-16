@@ -254,7 +254,7 @@ INSERT = group(
             "Insert Component",
             "SciForge_InsertDesign",
             "insert_component",
-            note="Another design's bodies, linked to its file by a relative path",
+            note="Another design as a component linked to its file (Break Link: a copy)",
         ),
         item(
             "Insert Derive",
@@ -268,7 +268,7 @@ INSERT = group(
             "Insert STEP",
             "SciForge_InsertSTEP",
             "insert_step",
-            note="Bodies from a STEP file, with their names and colours.",
+            note="A STEP or IGES file as a component: its parts, copies, names, colours.",
         ),
     ],
 )
@@ -625,7 +625,7 @@ UTIL_MAKE = group(
             "Export",
             ("SciForge_Export", "Std_Export"),
             "export",
-            note="STEP, STL, 3MF or OBJ of the design or of chosen bodies.",
+            note="STEP with components, IGES, STL, 3MF, OBJ; a sketch as DXF.",
         ),
         item(
             "Export Everything",
@@ -1073,7 +1073,7 @@ FILE_MENU = [
         "dw_new",
         note="From Design: views of this design on a sheet",
     ),
-    item("Open", "Std_Open", "qa_open", "Ctrl+O"),
+    item("Open", ("SciForge_Open", "Std_Open"), "qa_open", "Ctrl+O"),
     item("Recover Documents", "SciForge_RecoverDocuments", "document"),
     SEP,
     item("Save", ("SciForge_Save", "Std_Save"), "qa_save", "Ctrl+S"),
@@ -1106,7 +1106,7 @@ QUICK_ACCESS = [
     ),
     item("Menu", "__menu__", "qa_menu", note="All FreeCAD menus"),
     item("New", "Std_New", "qa_new", "Ctrl+N"),
-    item("Open", "Std_Open", "qa_open", "Ctrl+O"),
+    item("Open", ("SciForge_Open", "Std_Open"), "qa_open", "Ctrl+O"),
     item(
         "Save",
         ("SciForge_Save", "Std_Save"),

@@ -620,6 +620,9 @@ def _check_links(doc_name):
         for obj in doc.Objects:
             if obj.TypeId == "App::Link" and getattr(obj, "LinkedObject", None) is None:
                 broken.append(obj.Label)
+        from . import design_insert
+
+        broken += design_insert.broken(doc)  # linked components (Insert Design)
         if broken:
             commands.tell(
                 "%d linked design(s) were not found (%s). Keep linked designs inside the "
@@ -1670,9 +1673,10 @@ def panel_visible():
 
 # -- Insert Design (a link to another design, by relative path) ----
 def insert_design(path=None):
-    """Insert the bodies of another design into the active one as links that follow the
-    other file (FreeCAD stores the link by its path relative to this design, so a project
-    folder moved as a whole keeps working). The design must be saved first."""
+    """Insert another design into the active one as a component linked to its file (Fusion's
+    Insert into Current Design; FreeCAD stores the link by its path relative to this design,
+    so a project folder moved as a whole keeps working), then place it (Fusion's Initial
+    Position: the Move dialog). The design must be saved first. design_insert does it."""
     doc = _active_doc()
     if doc is None:
         doc = App.newDocument("Design")
@@ -1708,30 +1712,26 @@ def insert_design(path=None):
         if other is None:
             other = App.openDocument(path, True)  # hidden: no tab of its own
             _restore_active(doc.Name)
-        bodies = [o for o in other.Objects if o.TypeId == "PartDesign::Body"]
-        if not bodies:
-            commands.tell("%s has no bodies to insert." % core.design_name(path))
-            return
+        # Fusion inserts the design as one linked component (help "Insert designs"), then
+        # its Initial Position dialog places it.
+        from . import components, design_insert, exchange_ui
+
         doc.openTransaction("Insert Design")
-        made = []
-        for body in bodies:
-            link = doc.addObject(
-                "App::Link", core.clean_name(body.Label).replace(" ", "_") or "Link"
-            )
-            link.LinkedObject = body
-            link.Label = "%s: %s" % (core.design_name(path), body.Label)
-            made.append(link)
+        try:
+            made = [design_insert.insert_linked(doc, other, components.active_component(doc))]
+        except ValueError as exc:
+            doc.abortTransaction()
+            commands.tell(str(exc))
+            return None
         doc.commitTransaction()
         doc.recompute()
         rel = core.relative_path(doc.FileName, path)
-        log(
-            "inserted %d bod%s of %s, linked by the relative path %s"
-            % (len(made), "y" if len(made) == 1 else "ies", core.design_name(path), rel)
-        )
+        log("inserted %s, linked by the relative path %s" % (core.design_name(path), rel))
         commands.tell(
-            "Inserted %s (%d bod%s), linked to its file."
-            % (core.design_name(path), len(made), "y" if len(made) == 1 else "ies")
+            "Inserted %s as a component linked to its file: place it, then OK."
+            % core.design_name(path)
         )
+        exchange_ui.place_after(doc.Name, made[0].Name)
         return made
     except Exception as exc:
         try:

@@ -224,24 +224,63 @@ class _MeshDialog(QtWidgets.QDialog):
 
 
 # ============================================================================ Export
+WHOLE = "Whole design"
+SELECTED = "Selected bodies"
+COMPONENT = "A component"
+MESH_KINDS = ("stl", "stl_ascii", "3mf", "obj")
+
+
 class ExportDialog(_MeshDialog):
     """Fusion's Export: Name, Type, Location (and, for mesh types, what Save As Mesh offers:
-    Unit Type, Structure, Refinement). Exports the whole design or the ticked bodies."""
+    Unit Type, Structure, Refinement). Exports the whole design (STEP keeps its components),
+    the ticked bodies or one component; DXF / DWG take the sketch or flat face picked.
+    `preset`: a body or component to export (Save As Mesh from the browser); `mesh`: start
+    on a mesh type."""
 
-    def __init__(self, doc):
+    def __init__(self, doc, preset=None, mesh=False):
         super().__init__(doc, "Export", "export")
+        from . import components, exchange_core
+
+        self.exchange_core = exchange_core
         form = self.form
         self.what = QtWidgets.QComboBox()
-        self.what.addItems(["Whole design", "Selected bodies"])
+        self.what.addItems([WHOLE, SELECTED, COMPONENT])
         form.addRow("Export", self.what)
         self.bodies = BodyList(doc, self.schedule_count)
         form.addRow("Bodies", self.bodies)
+        self.component = QtWidgets.QComboBox()
+        self.component_list = components.list_components(doc)
+        for comp in self.component_list:
+            self.component.addItem(comp.Label, comp.Name)
+        self.component.currentIndexChanged.connect(lambda *_: self.schedule_count())
+        form.addRow("Component", self.component)
+        self.flat = None
+        try:
+            from . import exchange_ui
+
+            self.flat = exchange_ui.selected_flat()
+        except Exception:
+            self.flat = None
+        flat_row = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(flat_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.flat_label = QtWidgets.QLabel("")
+        self.flat_label.setWordWrap(True)
+        self.use_selection = QtWidgets.QPushButton("Use Selection")
+        self.use_selection.setToolTip(
+            "Pick a sketch (browser or window) or a flat face, then click"
+        )
+        self.use_selection.clicked.connect(lambda *_: self._take_selection())
+        row.addWidget(self.flat_label, 1)
+        row.addWidget(self.use_selection)
+        self.flat_caption = QtWidgets.QLabel("Sketch or face")
+        form.addRow(self.flat_caption, flat_row)
         preselected = bool(Gui.Selection.getSelectionEx())
-        self.what.setCurrentText("Selected bodies" if preselected else "Whole design")
-        self.what.currentIndexChanged.connect(lambda *_: self._what_changed())
+        self.what.setCurrentText(SELECTED if preselected else WHOLE)
         self.type = QtWidgets.QComboBox()
-        self.type.addItems([entry[0] for entry in export.FORMATS])
-        self.type.currentIndexChanged.connect(lambda *_: self._type_changed())
+        self.type.addItems([entry[0] for entry in exchange_core.EXPORT_TYPES])
+        if self.flat is not None and self.flat[0].TypeId == "Sketcher::SketchObject":
+            self.type.setCurrentText("DXF")
         form.addRow("Type", self.type)
         self.unit = QtWidgets.QComboBox()
         self.unit.addItems(export.UNIT_NAMES)
@@ -265,6 +304,10 @@ class ExportDialog(_MeshDialog):
         self.open_folder = QtWidgets.QCheckBox("Open the folder afterwards")
         self.open_folder.setChecked(True)
         form.addRow(self.open_folder)
+        self.note = QtWidgets.QLabel("")
+        self.note.setWordWrap(True)
+        self.note.setStyleSheet(NOTE_STYLE)
+        form.addRow(self.note)
         form.addRow(self.message)
         buttons = QtWidgets.QDialogButtonBox()
         self.export_button = buttons.addButton("Export", QtWidgets.QDialogButtonBox.AcceptRole)
@@ -272,23 +315,78 @@ class ExportDialog(_MeshDialog):
         buttons.accepted.connect(self.run)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
-        self._what_changed()
+        if preset is not None:
+            self._preset(preset, mesh)
+        self.what.currentIndexChanged.connect(lambda *_: self._what_changed())
+        self.type.currentIndexChanged.connect(lambda *_: self._type_changed())
+        self._show_flat()
         self._type_changed()
         if self.bodies.count() == 0:
             self.say("There is no body with a solid to export yet.")
 
-    def _what_changed(self):
-        whole = self.what.currentText() == "Whole design"
-        self.bodies.setEnabled(not whole)
-        if whole:
-            self.bodies.tick_all(True)
-        self.schedule_count()
+    def _preset(self, obj, mesh):
+        from . import components
+
+        if components.is_component(obj):
+            index = self.component.findData(obj.Name)
+            if index >= 0:
+                self.component.setCurrentIndex(index)
+            self.what.setCurrentText(COMPONENT)
+        else:
+            for i in range(self.bodies.count()):
+                item = self.bodies.item(i)
+                tick = item.data(QtCore.Qt.UserRole) == obj.Name
+                item.setCheckState(QtCore.Qt.Checked if tick else QtCore.Qt.Unchecked)
+            self.what.setCurrentText(SELECTED)
+        self.name.setText(export.safe_name(obj.Label))
+        if mesh:
+            self.type.setCurrentText("3MF")
+
+    def kind(self):
+        return self.exchange_core.export_kind(self.type.currentText())
 
     def is_mesh(self):
-        return export.is_mesh_format(self.type.currentText())
+        return self.kind() in MESH_KINDS
+
+    def is_flat(self):
+        return self.kind() in self.exchange_core.FLAT_KINDS
+
+    def _take_selection(self):
+        try:
+            from . import exchange_ui
+
+            found = exchange_ui.selected_flat()
+            if found is None:
+                self.say("Pick a sketch (in the browser or the window) or a flat face first.")
+            else:
+                self.flat = found
+                self.say("")
+            self._show_flat()
+        except Exception as exc:
+            warn("export: %s" % exc)
+
+    def _show_flat(self):
+        if self.flat is None:
+            self.flat_label.setText("(pick a sketch or a flat face, then Use Selection)")
+        else:
+            obj, sub = self.flat
+            self.flat_label.setText(obj.Label + (" " + sub if sub else ""))
+
+    def _what_changed(self):
+        what = self.what.currentText()
+        flat = self.is_flat()
+        self.what.setEnabled(not flat)
+        self.bodies.setEnabled(what == SELECTED and not flat)
+        self.component.setEnabled(what == COMPONENT and not flat)
+        if what == WHOLE:
+            self.bodies.tick_all(True)
+        if what == COMPONENT and not self.component_list:
+            self.say("The design has no components.")
+        self.schedule_count()
 
     def _type_changed(self):
         mesh = self.is_mesh()
+        flat = self.is_flat()
         for widget in (
             self.unit,
             self.structure,
@@ -305,30 +403,53 @@ class ExportDialog(_MeshDialog):
                     or self.refinement.level.currentText() == "Custom"
                 )
             )
-        self.schedule_count()
+        self.flat_caption.setEnabled(flat)
+        self.flat_label.setEnabled(flat)
+        self.use_selection.setEnabled(flat)
+        kind = self.kind()
+        note = ""
+        if kind == "step":
+            note = "STEP keeps the components, their names and colours."
+        elif kind == "iges":
+            note = "IGES keeps the solids, not the components."
+        elif kind == "dwg":
+            from . import exchange
+
+            if exchange.dwg_converter() is None:
+                note = self.exchange_core.DWG_NONE
+        elif flat:
+            note = "DXF writes the picked sketch's curves (or a flat face's edges) in 2D."
+        self.note.setText(note)
+        self._what_changed()
 
     def _browse(self):
         folder = _folder_dialog("Export to", self.folder.text() or _home(self.doc))
         if folder:
             self.folder.setText(folder)
 
+    def chosen_component(self):
+        name = self.component.currentData()
+        return self.doc.getObject(name) if name else None
+
     def chosen_bodies(self):
-        if self.what.currentText() == "Whole design":
+        what = self.what.currentText()
+        if what == WHOLE:
             return export.exportable_bodies(self.doc)
+        if what == COMPONENT:
+            from . import exchange
+
+            return exchange.mesh_bodies_of(self.doc, self.chosen_component())
         return [b for b in self.bodies.chosen() if export.can_export(b)]
 
     def run(self, path=None):
         """Export (the button). `path` skips the Name / Location rows (tests)."""
         try:
-            chosen = self.chosen_bodies()
-            if not chosen:
-                raise export.ExportError("Tick at least one body (or switch to Whole design).")
             fmt = self.type.currentText()
             if path is None:
                 folder = self.folder.text().strip() or _home(self.doc)
                 name = export.safe_name(self.name.text(), "design")
-                path = os.path.join(folder, name + export.extension_of(fmt))
-            written = self.export_to(path, chosen, fmt)
+                path = os.path.join(folder, name + self.exchange_core.export_extension(fmt))
+            written = self.export_to(path, fmt)
             self.say("")
             _remember_folder(path)
             if self.open_folder.isChecked():
@@ -339,20 +460,45 @@ class ExportDialog(_MeshDialog):
             )
             self.accept()
             return written
-        except export.ExportError as exc:
+        except (export.ExportError, self.exchange_core.ExchangeError) as exc:
             self.say(str(exc))
         except Exception as exc:
             warn("Export failed: %s" % exc)
             self.say("The export failed: %s" % exc)
         return None
 
-    def export_to(self, path, chosen, fmt):
-        if not export.is_mesh_format(fmt):
-            return [(export.export_step(chosen, path), None)]
+    def export_to(self, path, fmt, chosen=None):
+        from . import exchange
+
+        core = self.exchange_core
+        kind = core.export_kind(fmt)
+        what = self.what.currentText()
+        if kind in core.FLAT_KINDS:
+            if self.flat is None:
+                raise core.ExchangeError(
+                    "DXF and DWG take a sketch or a flat face: pick one, then Use Selection."
+                )
+            if kind == "dxf":
+                return [(exchange.export_dxf(self.flat, path), None)]
+            return [(exchange.export_dwg(self.flat, path), None)]
+        component = self.chosen_component() if what == COMPONENT else None
+        if what == COMPONENT and component is None:
+            raise export.ExportError("Pick the component to export.")
+        if kind in core.CAD_KINDS:
+            if what == SELECTED:
+                picked = chosen if chosen is not None else self.chosen_bodies()
+                if not picked:
+                    raise export.ExportError("Tick at least one body (or switch to Whole design).")
+                return [(exchange.export_cad(self.doc, kind, path, "bodies", chosen=picked), None)]
+            scope = "component" if component is not None else "design"
+            return [(exchange.export_cad(self.doc, kind, path, scope, target=component), None)]
+        picked = chosen if chosen is not None else self.chosen_bodies()
+        if not picked:
+            raise export.ExportError("Tick at least one body (or switch to Whole design).")
         level, surface, normal = self.refinement.values()
         return export.export_mesh_files(
             self.doc,
-            chosen,
+            picked,
             fmt,
             path,
             level,
@@ -360,6 +506,7 @@ class ExportDialog(_MeshDialog):
             normal,
             unit=self.unit.currentText(),
             per_body=self.structure.currentText() == "One File Per Body",
+            frame=exchange.component_frame(component) if component is not None else None,
         )
 
 
@@ -543,7 +690,7 @@ class _Command:
 
 class ExportCommand(_Command):
     text = "Export"
-    tip = "STEP, STL, 3MF or OBJ of the design or of chosen bodies"
+    tip = "STEP (with its components), IGES, STL, 3MF, OBJ, or a sketch as DXF"
     icon = "export"
 
     def run(self, doc):

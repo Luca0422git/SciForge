@@ -199,4 +199,6 @@ PREFERRED = {
     "Sketcher_Projection": "SciForge_SketchProject",
     # Fusion's Save: Name + Location on the first save, a version description after.
     "Std_Save": "SciForge_Save",
+    # Fusion's Open also takes STEP / IGES files and opens them as designs with components.
+    "Std_Open": "SciForge_Open",
 }

@@ -9,7 +9,8 @@ Objects made here (all found again by their SciForgeType):
                Bodies folder; its kernel holds the file's triangles in design units.
   ConvertMesh  a PartDesign::FeaturePython step, the first step of a new body, that
                builds a solid from a mesh body (faceted, or prismatic = flat faces merged).
-  InsertSTEP   the first step (PartDesign::FeatureBase) of each body made from a STEP file.
+  InsertSTEP   the first step (PartDesign::FeatureBase) of each body made from a STEP or
+               IGES file (step_import.py: the file's components and copies).
   Canvas       an Image::ImagePlane with the image kept inside the design file.
 """
 
@@ -422,47 +423,8 @@ def convert_steps(doc):
 
 
 # -- STEP ------------------------------------------------------------------------------------
-def _import_module():
-    """FreeCAD's STEP reader: ImportGui keeps names and colours (it needs the GUI); Import is
-    the headless one."""
-    import FreeCAD as App
-
-    if App.GuiUp:
-        try:
-            import ImportGui
-
-            return ImportGui
-        except Exception:
-            pass
-    import Import
-
-    return Import
-
-
-def _leaves(top, path=""):
-    """[(subname path, object)] of the leaf objects under a STEP container (App::Part /
-    links), the paths FreeCAD's getSubObject understands."""
-    try:
-        subs = top.getSubObjects()
-    except Exception:
-        subs = ()
-    if not subs:
-        return [(path, top)]
-    found = []
-    for sub in subs:
-        try:
-            child = top.getSubObject(sub, retType=1)
-        except Exception:
-            child = None
-        if child is None or child is top:
-            continue
-        if child.TypeId in ("App::Origin", "App::Line", "App::Plane", "App::Point"):
-            continue
-        for inner_path, leaf in _leaves(child, ""):
-            found.append((path + sub + inner_path, leaf))
-    return found
-
-
+# STEP and IGES files come in with their structure (components, copies): step_import.py.
+# What is kept here is shared with it: the part colours and the labels.
 def _view_colours(obj):
     """[(r, g, b)] per face of an object's view (empty headless)."""
     try:
@@ -472,19 +434,6 @@ def _view_colours(obj):
         return [tuple(float(c) for c in m.DiffuseColor[:3]) for m in vobj.ShapeAppearance]
     except Exception:
         return []
-
-
-def _part_name(doc, leaf, new_names):
-    """The part's name from the file. FreeCAD never lets two objects share a label: a part
-    called like a body already in the design came in as "Plate001". That suffix is FreeCAD's,
-    not the file's, when the design holds the plain name."""
-    label = leaf.Label or ""
-    match = re.match(r"^(.*?)(\d{3})$", label)
-    if match and match.group(1):
-        plain = match.group(1)
-        if any(o.Label == plain for o in doc.Objects if o.Name not in new_names):
-            return plain
-    return label
 
 
 def _unique_label(doc, label, taken):
@@ -497,73 +446,18 @@ def _unique_label(doc, label, taken):
     return label
 
 
-def insert_step(doc, path):
-    """Insert STEP: one body per solid of the file, named after the file's parts, with their
-    colours (GUI). Returns the bodies. Anything else the file brought in (containers, origins,
-    links) is removed again, so the browser shows bodies only."""
-    import Part
+def insert_step(doc, path, parent=None):
+    """Insert STEP: the file as one component with its structure (step_import). Returns the
+    bodies made."""
+    from . import exchange_core, step_import
 
     if not path or not os.path.isfile(path):
         raise InsertError("The file was not found: %s" % (path or "(no file)"))
-    if os.path.splitext(path)[1].lower() not in STEP_EXTENSIONS:
-        raise InsertError("Choose a STEP file (.step or .stp).")
-    before = {o.Name for o in doc.Objects}
-    reader = _import_module()
-    reader.insert(path, doc.Name)
-    doc.recompute()
-    new = [o for o in doc.Objects if o.Name not in before]
-    if not new:
-        raise InsertError("Nothing could be read from the file.")
-    new_names = {o.Name for o in new}
-    tops = [o for o in new if not any(p.Name in new_names for p in o.InList if p.Name != o.Name)]
-    pieces = []  # (label, global shape, colours)
-    for top in tops:
-        for sub, leaf in _leaves(top):
-            try:
-                shape = Part.getShape(top, sub) if sub else Part.getShape(leaf)
-            except Exception:
-                continue
-            if shape is None or shape.isNull() or not shape.Solids:
-                continue
-            colours = _view_colours(leaf)
-            label = _part_name(doc, leaf, new_names) or os.path.splitext(os.path.basename(path))[0]
-            if len(shape.Solids) == 1:
-                pieces.append((label, shape.Solids[0], colours))
-            else:
-                for solid in shape.Solids:
-                    pieces.append((label, solid, colours if len(colours) <= 1 else []))
-    if not pieces:
-        for o in new:
-            _remove_quietly(doc, o)
-        raise InsertError("The file holds no solid body (surfaces and wires are not taken).")
-    # The file's own objects go first: a body labelled like one of them would be renamed
-    # "Plate001" by FreeCAD (two objects never share a label).
-    for o in new:
-        _remove_quietly(doc, o)
-    taken = set()
-    made = []
-    for label, solid, colours in pieces:
-        body = bodies.new_body(doc, label=_unique_label(doc, label, taken))
-        base = doc.addObject("Part::Feature", "ImportedShape")
-        base.Label = body.Label + " (imported)"
-        base.Shape = solid
-        body.BaseFeature = base
-        doc.recompute()
-        tip = body.Tip
-        if tip is not None:
-            bodies.mark(tip, TYPE_STEP)
-            bodies.add_prop(tip, "App::PropertyString", "SourceFile", "Insert", "The STEP file")
-            tip.SourceFile = path
-        _colour_body(body, colours)
-        try:
-            if base.ViewObject is not None:
-                base.ViewObject.Visibility = False
-        except Exception:
-            pass
-        made.append(body)
-    doc.recompute()
-    log("Insert STEP: %d bod%s from %s" % (len(made), "y" if len(made) == 1 else "ies", path))
-    return made
+    try:
+        made = step_import.import_file(doc, path, exchange_core.INSERT, parent)
+    except exchange_core.ExchangeError as exc:
+        raise InsertError(str(exc))
+    return made.bodies
 
 
 def _remove_quietly(doc, obj):
@@ -767,9 +661,13 @@ def plane_matrix(dx=0.0, dy=0.0, angle=0.0, scale=1.0, flip_h=False, flip_v=Fals
     return move.multiply(turn.multiply(m))
 
 
-def plane_transform_point(point, dx=0.0, dy=0.0, angle=0.0, scale=1.0, flip_h=False, flip_v=False):
-    """plane_matrix applied to an (x, y) point, for tests and the preview maths."""
-    x, y = point
+def plane_transform_point(
+    point, dx=0.0, dy=0.0, angle=0.0, scale=1.0, flip_h=False, flip_v=False, origin=(0.0, 0.0)
+):
+    """plane_matrix applied to an (x, y) point, for tests and the preview maths. `origin`:
+    the file's point that lands on the sketch origin (an SVG's middle: Fusion centres the
+    image on the sketch origin) and that the flips, scale and turn go about."""
+    x, y = point[0] - origin[0], point[1] - origin[1]
     if flip_h:
         x = -x
     if flip_v:
@@ -875,7 +773,9 @@ def _spline_moved(curve, point):
     return moved
 
 
-def transformed_geometry(geos, dx=0.0, dy=0.0, angle=0.0, scale=1.0, flip_h=False, flip_v=False):
+def transformed_geometry(
+    geos, dx=0.0, dy=0.0, angle=0.0, scale=1.0, flip_h=False, flip_v=False, origin=(0.0, 0.0)
+):
     """Copies of sketch geometry moved by the dialog's values (see plane_matrix), done on the
     geometry itself so a line stays a line and a circle a circle (OpenCASCADE's shape
     transform would turn them all into B-splines). Arcs are rebuilt from three points, so
@@ -884,7 +784,7 @@ def transformed_geometry(geos, dx=0.0, dy=0.0, angle=0.0, scale=1.0, flip_h=Fals
     import Part
 
     def point(p):
-        x, y = plane_transform_point((p.x, p.y), dx, dy, angle, scale, flip_h, flip_v)
+        x, y = plane_transform_point((p.x, p.y), dx, dy, angle, scale, flip_h, flip_v, origin)
         return App.Vector(x, y, 0.0)
 
     mirrored = bool(flip_h) != bool(flip_v)

@@ -27,7 +27,8 @@ PREFS = "User parameter:BaseApp/Preferences/Mod/SciForge"
 
 FILTERS = {
     "mesh": "Mesh files (*.stl *.obj *.3mf *.STL *.OBJ *.3MF);;All files (*)",
-    "step": "STEP files (*.step *.stp *.STEP *.STP);;All files (*)",
+    "step": "STEP and IGES files (*.step *.stp *.STEP *.STP *.iges *.igs *.IGES *.IGS);;"
+    "All files (*)",
     "svg": "SVG files (*.svg *.SVG);;All files (*)",
     "dxf": "DXF files (*.dxf *.DXF);;All files (*)",
     "image": "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff);;All files (*)",
@@ -315,6 +316,189 @@ class _PlanePick:
 def _any_body(doc):
     found = bodies.list_bodies(doc)
     return found[0] if found else None
+
+
+# -- the manipulator on a plane (Insert SVG / DXF, Canvas) -----------------------------------
+class _PlaneHandles:
+    """Fusion's manipulator for curves or a picture on a plane, drawn at its middle (help
+    "Insert SVG": "the manipulator handles allow you to move, rotate, and scale the SVG image
+    on the active sketch plane"; forum: the canvas manipulator "stays anchored to the
+    image's center"): two arrows along the plane's X and Y (X / Y Distance), a curved handle
+    that turns it about the plane's normal (Z Angle) and an arrow at its right edge that
+    scales it (Scale), each with its value box. The dialog has the fields self.dx, self.dy,
+    self.angle (taskui.DistanceField) and implements handle_frame(), handle_half(),
+    scale_value(), scale_by(start, factor) and handles_moved()."""
+
+    angle_sign = 1.0  # +1: the field turns counter-clockwise; -1: clockwise (SVG)
+
+    def init_handles(self):
+        self.handles = []
+        self.handle_by = {}
+        self._drag_start = None
+        self.value_boxes = taskui.ValueBoxes(self, default="x")
+
+    # -- the dialog's side (override) -----------------------------------------------------
+    def handle_frame(self):
+        """The plane's placement (its X, Y and normal), or None while there is no plane."""
+        return None
+
+    def handle_half(self):
+        """Half the width of what is placed (mm), where the scale arrow sits."""
+        return 10.0
+
+    def scale_value(self):
+        return 1.0
+
+    def scale_by(self, start, factor):
+        """Scale what is placed to `factor` times what it was when the drag started."""
+
+    def handles_moved(self):
+        """The fields changed from a handle: update the preview."""
+
+    # -- the handles ------------------------------------------------------------------------
+    def handle_point(self):
+        frame = self.handle_frame()
+        if frame is None:
+            return None
+        return frame.multVec(App.Vector(self.dx.value(), self.dy.value(), 0.0))
+
+    def make_handles(self):
+        import math
+
+        self.remove_handles()
+        frame = self.handle_frame()
+        if frame is None or self.view is None or getattr(self, "_closed", False):
+            return
+        from . import extrude_ui
+
+        rot = frame.Rotation
+        x = rot.multVec(App.Vector(1, 0, 0))
+        y = rot.multVec(App.Vector(0, 1, 0))
+        z = rot.multVec(App.Vector(0, 0, 1))
+        point = self.handle_point()
+        size = taskui.handle_size_at(self.view, point)
+        ccw = self.angle_sign * self.angle.value()
+        a = math.radians(ccw)
+        xr = x * math.cos(a) + y * math.sin(a)
+        half = max(self.handle_half(), size * 1.2)
+        try:
+            move_x = taskui.ArrowDragger(
+                point, x, 0.0, size, lambda d: self._handle_drag("x", d), self._handle_release
+            )
+            move_y = taskui.ArrowDragger(
+                point, y, 0.0, size, lambda d: self._handle_drag("y", d), self._handle_release
+            )
+            scale = taskui.ArrowDragger(
+                point + xr * half,
+                xr,
+                0.0,
+                size * 0.8,
+                lambda d: self._handle_drag("scale", d),
+                self._handle_release,
+            )
+            turn = extrude_ui.AngleDragger(
+                point,
+                z,
+                x,
+                ccw,
+                max(half * 0.7, size * 1.5),
+                size * 0.35,
+                lambda deg: self._handle_drag("angle", deg),
+                self._handle_release,
+            )
+        except Exception as exc:
+            warn("%s handles: %s" % (self.title, exc))
+            return
+        self.handles = [move_x, move_y, scale, turn]
+        self.handle_by = {"x": move_x, "y": move_y, "scale": scale, "angle": turn}
+        boxes = self.value_boxes
+        boxes.attach(move_x, "x", lambda: self.dx.widget.text(), self._typed(self.dx))
+        boxes.attach(move_y, "y", lambda: self.dy.widget.text(), self._typed(self.dy))
+        boxes.attach(turn, "angle", lambda: self.angle.widget.text(), self._typed(self.angle))
+        boxes.attach(scale, "scale", lambda: "%g" % round(self.scale_value(), 4), self._typed_scale)
+
+    def _typed(self, field):
+        def commit(text):
+            field.take(field.parse(text))
+
+        return commit
+
+    def _typed_scale(self, text):
+        try:
+            value = float(str(text).replace(",", ".").strip().split()[0])
+        except (ValueError, IndexError):
+            self.message.setText("⚠ The scale is a number, like 2 or 0.5.")
+            return
+        if value <= 0:
+            self.message.setText("⚠ The scale must be more than 0.")
+            return
+        now = self.scale_value()
+        if now > 0:
+            self._quiet = True
+            try:
+                self.scale_by(self._scale_start(), value / now)
+            finally:
+                self._quiet = False
+            self.handles_moved()
+
+    def _scale_start(self):
+        return {"scale": self.scale_value()}
+
+    def _handle_drag(self, kind, value):
+        if getattr(self, "_closed", False):
+            return
+        if self._drag_start is None:
+            self._drag_start = dict(
+                dx=self.dx.value(),
+                dy=self.dy.value(),
+                half=max(1e-6, self.handle_half()),
+                **self._scale_start()
+            )
+        start = self._drag_start
+        self._quiet = True
+        try:
+            if kind == "x":
+                self.dx.set_value(start["dx"] + value)
+            elif kind == "y":
+                self.dy.set_value(start["dy"] + value)
+            elif kind == "angle":
+                self.angle.set_value(self.angle_sign * value)
+            elif kind == "scale":
+                factor = max(0.01, (start["half"] + value) / start["half"])
+                self.scale_by(start, factor)
+        finally:
+            self._quiet = False
+        try:
+            self.handles_moved()
+        except insert.InsertError as exc:
+            self.message.setText("⚠ %s" % exc)
+        except Exception as exc:
+            warn("%s drag: %s" % (self.title, exc))
+
+    def _handle_release(self, _value=None):
+        self._drag_start = None
+        # The handles go to the new middle (later: never inside the dragger's poll).
+        QtCore.QTimer.singleShot(0, lambda: self.guarded(self.make_handles))
+
+    def remove_handles(self):
+        handles, self.handles = getattr(self, "handles", []), []
+        self.handle_by = {}
+        for handle in handles:
+            try:
+                handle.remove()
+            except Exception:
+                pass
+
+    def handles_after_recompute(self):
+        if self._drag_start is None:  # never under a handle being dragged
+            self.make_handles()
+
+    def drop_handles(self):
+        self.remove_handles()
+        try:
+            self.value_boxes.discard()
+        except Exception:
+            pass
 
 
 def _preselected_plane():
@@ -750,11 +934,14 @@ class ConvertMeshPanel(_InsertPanel):
 
 
 # ============================================================================ SVG / DXF
-class InsertCurvesPanel(_InsertPanel):
+class InsertCurvesPanel(_PlaneHandles, _InsertPanel):
     """Fusion's Insert SVG / Insert DXF: a plane or flat face (or the open sketch), the
-    file, X / Y distance, Z angle, scale, horizontal / vertical flip; DXF adds Units, Insert
-    Mode (one sketch, or one per layer) and the layer list. The curves are fixed sketch
-    geometry; OK keeps the sketch(es)."""
+    file, X / Y distance, Z angle, scale, horizontal / vertical flip, and the manipulator on
+    the plane (arrows, turn and scale handles with value boxes); DXF adds Units, Insert Mode
+    (one sketch, or one per layer) and the layer list. An SVG is centred on the sketch
+    origin and its Z Angle turns clockwise (help "Insert SVG"); a DXF's origin is the
+    sketch origin (help "Insert DXF"). The curves are fixed sketch geometry; OK keeps the
+    sketch(es)."""
 
     icon = "insert_svg"
 
@@ -762,10 +949,15 @@ class InsertCurvesPanel(_InsertPanel):
         self.kind = kind
         self.title = "Insert SVG" if kind == "svg" else "Insert DXF"
         self.icon = "insert_svg" if kind == "svg" else "insert_dxf"
+        self.angle_sign = -1.0 if kind == "svg" else 1.0
         super().__init__(doc, self.title)
-        self.layers = [
-            (name, insert.curves_to_geometry(edges)) for name, edges in insert.read_curves(path)
-        ]
+        self.init_handles()
+        raw = insert.read_curves(path)
+        box = insert.curves_bounds([e for _name, edges in raw for e in edges])
+        self.extent = box or ((0.0, 0.0), (0.0, 0.0))
+        (x0, y0), (x1, y1) = self.extent
+        self.origin = ((x0 + x1) / 2.0, (y0 + y1) / 2.0) if kind == "svg" else (0.0, 0.0)
+        self.layers = [(name, insert.curves_to_geometry(edges)) for name, edges in raw]
         self.layers = [(name, geos) for name, geos in self.layers if geos]
         if not self.layers:
             raise insert.InsertError("The file holds no curves that can go into a sketch.")
@@ -879,11 +1071,42 @@ class InsertCurvesPanel(_InsertPanel):
             geos,
             self.dx.value(),
             self.dy.value(),
-            self.angle.value(),
+            self.angle_sign * self.angle.value(),
             self.scale.value() * self._unit_factor(),
             self.flip_h.isChecked(),
             self.flip_v.isChecked(),
+            self.origin,
         )
+
+    # -- the manipulator (_PlaneHandles) ------------------------------------------------
+    def handle_frame(self):
+        for sketch, _ids in self.sketches.values():
+            if sketch is not None and bodies.alive(sketch):
+                try:
+                    return sketch.getGlobalPlacement()
+                except Exception:
+                    return App.Placement(sketch.Placement)
+        return None
+
+    def handle_half(self):
+        (x0, _y0), (x1, _y1) = self.extent
+        factor = self.scale.value() * self._unit_factor()
+        if self.kind == "svg":
+            return 0.5 * (x1 - x0) * factor
+        return max(abs(x0), abs(x1)) * factor
+
+    def scale_value(self):
+        return self.scale.value()
+
+    def scale_by(self, start, factor):
+        self.scale.setValue(start["scale"] * factor)
+
+    def handles_moved(self):
+        self.rebuild()
+
+    def _recompute(self):
+        super()._recompute()
+        self.handles_after_recompute()
 
     def _mode_changed(self):
         self._clear_sketches()
@@ -982,6 +1205,7 @@ class InsertCurvesPanel(_InsertPanel):
         if self.pick is not None:
             self.pick.remove()
             self.pick = None
+        self.drop_handles()
         super().cleanup()
 
 
@@ -1061,16 +1285,18 @@ def display_through(obj, on):
         warn("canvas display through: %s" % exc)
 
 
-class CanvasPanel(_InsertPanel):
+class CanvasPanel(_PlaneHandles, _InsertPanel):
     """Fusion's Insert Canvas / Edit Canvas dialog: the face or plane, Canvas Opacity,
     Display Through, Selectable, horizontal / vertical flip, X / Y distance, Z angle,
-    Scale X / Y / Plane XY."""
+    Scale X / Y / Plane XY, and the manipulator at the picture's middle (arrows, turn and
+    scale handles with value boxes)."""
 
     title = "Canvas"
     icon = "canvas"
 
     def __init__(self, doc, path=None, feature=None):
         super().__init__(doc, "Edit Canvas" if feature is not None else "Canvas")
+        self.init_handles()
         self.editing = feature is not None
         self.obj = feature
         self.pick = None
@@ -1144,10 +1370,38 @@ class CanvasPanel(_InsertPanel):
         else:
             self.target = feature
             self.say(
-                "%d x %d pixels, %.1f x %.1f mm"
+                "%d x %d pixels, %.1f x %.1f mm. Drag the arrows to move it, the curved "
+                "handle to turn it, the right arrow to scale it."
                 % (feature.PixelWidth, feature.PixelHeight, feature.XSize, feature.YSize)
             )
+            self.make_handles()
         Gui.Selection.clearSelection()
+
+    # -- the manipulator (_PlaneHandles) ------------------------------------------------
+    def handle_frame(self):
+        if self.obj is None or not bodies.alive(self.obj):
+            return None
+        return App.Placement(self.obj.PlaneFrame)
+
+    def handle_half(self):
+        return 0.5 * float(self.obj.BaseWidth) * self.scale_x.value()
+
+    def scale_value(self):
+        return self.scale_x.value()
+
+    def _scale_start(self):
+        return {"scale": self.scale_x.value(), "scale_y": self.scale_y.value()}
+
+    def scale_by(self, start, factor):
+        self.scale_x.setValue(start["scale"] * factor)
+        self.scale_y.setValue(start.get("scale_y", start["scale"]) * factor)
+
+    def handles_moved(self):
+        self.apply()
+
+    def _recompute(self):
+        super()._recompute()
+        self.handles_after_recompute()
 
     def _plane_picked(self, target):
         frame = insert.plane_frame(target)
@@ -1158,10 +1412,13 @@ class CanvasPanel(_InsertPanel):
         self.plane_label.setText(label)
         self.apply()
         self.say(
-            "%d x %d pixels, %.1f x %.1f mm. To size it: right-click the canvas in the "
-            "browser > Calibrate." % (self.pixels[0], self.pixels[1], size[0], size[1])
+            "%d x %d pixels, %.1f x %.1f mm. Drag the arrows to move it, the curved handle "
+            "to turn it, the right arrow to scale it. To size it exactly: right-click the "
+            "canvas in the browser > Calibrate."
+            % (self.pixels[0], self.pixels[1], size[0], size[1])
         )
         _refresh_browser()
+        self.make_handles()
 
     def _scale_both(self):
         value = self.scale_xy.value()
@@ -1221,6 +1478,7 @@ class CanvasPanel(_InsertPanel):
         if self.pick is not None:
             self.pick.remove()
             self.pick = None
+        self.drop_handles()
         super().cleanup()
 
 
@@ -1486,7 +1744,7 @@ class ConvertMeshCommand(_Command):
 
 class InsertStepCommand(_Command):
     text = "Insert STEP"
-    tip = "Bodies from a STEP file, with their names and colours"
+    tip = "A STEP or IGES file as a component: its parts, copies, names and colours"
     icon = "insert_step"
 
     def run(self):
@@ -1499,41 +1757,14 @@ class InsertStepCommand(_Command):
 
 
 def insert_step_file(path):
-    """Insert STEP into the active design (made if there is none), one undo step."""
-    if App.ActiveDocument is None:
-        App.newDocument("Design")
-    doc = App.ActiveDocument
-    doc.openTransaction("Insert STEP")
-    try:
-        made = insert.insert_step(doc, path)
-    except Exception:
-        doc.abortTransaction()
-        App.closeActiveTransaction(True)
-        doc.recompute()
-        raise
-    doc.commitTransaction()
-    App.closeActiveTransaction()
-    doc.recompute()
-    try:
-        from . import appearance
+    """Insert STEP (or IGES) into the active design: one component named after the file
+    with its components and copies, then Fusion's Initial Position (exchange_ui)."""
+    from . import exchange_core, exchange_ui
 
-        for body in made:
-            appearance.apply(body)
-    except Exception as exc:
-        warn("Insert STEP: looks not applied (%s)" % exc)
     try:
-        Gui.Selection.clearSelection()
-        for body in made:
-            Gui.Selection.addSelection(doc.Name, body.Name)
-        Gui.SendMsgToActiveView("ViewFit")
-    except Exception:
-        pass
-    _refresh_browser()
-    commands.tell(
-        "%d bod%s inserted from %s"
-        % (len(made), "y" if len(made) == 1 else "ies", os.path.basename(path))
-    )
-    return made
+        return exchange_ui.insert_cad_file(path).bodies
+    except exchange_core.ExchangeError as exc:
+        raise insert.InsertError(str(exc))
 
 
 class InsertSVGCommand(_Command):
