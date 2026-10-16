@@ -148,7 +148,15 @@ def press_pull(base, faces, distance, refine=True, report=None, pieces=None):
     if not faces:
         raise PressPullError("Select one or more faces to push or pull.")
     if abs(distance) < TOL:
-        return base.copy()
+        out = base.copy()
+        place = out.Placement
+        if not place.isIdentity():
+            # The base's own placement (a primitive's) goes into the geometry: the feature's
+            # Shape takes the feature's placement and would drop it (at 0, while the dialog
+            # opens, the body jumped to the origin and a decal on it with it).
+            out.Placement = type(place)()
+            out.transformShape(place.toMatrix(), True)
+        return out
     slabs = [slab(face, distance) for face in faces]
     tool = slabs[0] if len(slabs) == 1 else slabs[0].multiFuse(slabs[1:])
     if pieces is not None:

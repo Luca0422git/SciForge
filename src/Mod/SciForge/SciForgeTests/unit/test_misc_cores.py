@@ -146,6 +146,14 @@ class DecalCore(unittest.TestCase):
         self.assertAlmostEqual(y[2], 1.0)  # its up is the design's up
         self.assertEqual(decal_core.upright_hint((0, 0, 1)), (1.0, 0.0, 0.0))
 
+    def test_upright_in_turned_coordinates(self):
+        # a component tipped over: the design's up is its -Y, the design's X its Z
+        up, right = (0.0, -1.0, 0.0), (0.0, 0.0, 1.0)
+        hint = decal_core.upright_hint((1, 0, 0), up, right)  # a wall of it
+        x, y, z = decal_core.frame_axes((1, 0, 0), hint)
+        self.assertAlmostEqual(decal_core._dot(y, up), 1.0)  # still reads upright
+        self.assertEqual(decal_core.upright_hint((0, -1, 0), up, right), (0.0, 0.0, 1.0))
+
     def test_placed_centre_corners_flips(self):
         self.assertEqual(decal_core.placed(0, 0, self.OPTS), (0.5, 0.5))
         self.assertEqual(decal_core.placed(10, 5, self.OPTS), (1.0, 1.0))

@@ -54,13 +54,15 @@ def frame_axes(normal, hint=(1.0, 0.0, 0.0)):
     return x, y, z
 
 
-def upright_hint(normal):
+def upright_hint(normal, up=(0.0, 0.0, 1.0), right=(1.0, 0.0, 0.0)):
     """The X direction a picture gets on a face: for a wall (normal level), along the wall so
-    that the picture's up is the design's up (Z); else the design's X."""
+    that the picture's up is the design's up (Z); else the design's X. `up` / `right`: the
+    design's Z / X in the coordinates `normal` is given in (a turned body's own)."""
     z = _norm(normal)
-    if abs(z[2]) < 0.7:  # a wall: x horizontal along it, y up
-        return _norm(_cross((0.0, 0.0, 1.0), z))
-    return (1.0, 0.0, 0.0)
+    up = _norm(up)
+    if abs(_dot(z, up)) < 0.7:  # a wall: x horizontal along it, y up
+        return _norm(_cross(up, z))
+    return _norm(right)
 
 
 def placed(u, v, options):
