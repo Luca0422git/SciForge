@@ -31,6 +31,7 @@ Autodesk forums, often by Autodesk staff), **Guess** (nothing found; SciForge's 
 | In a sketch, a double-click on a curve selects the connected chain of curves, without a window | Forum / course, [Selecting sketch chained entities](https://origin-www.lynda.com/Fusion-360-tutorials/Selecting-sketch-chained-entities/2810401/2884089-4.html); Forum, [chain select](https://forums.autodesk.com/t5/fusion-360-ideastation-archived/chain-select/idi-p/6717640) ("double clicking a curve that's part of a chain") |
 | Esc clears the selection when no command runs (a single Esc inside a command keeps its picks) | Forum, [How to exit orbit without deselecting](https://forums.autodesk.com/t5/fusion-support-forum/how-to-exit-orbit-without-deselecting/m-p/12320285) (Autodesk community manager); outside a command: **Guess** |
 | Component Drag (Select menu): a drag on a component moves it; off, a drag draws the box | Autodesk, [Select multiple components](https://www.autodesk.com/products/fusion-360/blog/select-multiple-components-fusion-360-tutorial/) |
+| Inside a command only what the command takes can be picked (Fillet: edges and faces, Shell: faces); the pointer picks what the command takes under it, so the corner at the end of a short edge does not stop a Fillet from taking the edge | Autodesk, [Use selection filters](https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/SLD-SELECTION-FILTERS.htm) (commands restrict what can be selected); the short-edge case is **Guess** (follows from the restriction) |
 
 ## What SciForge does
 
@@ -50,8 +51,14 @@ Autodesk forums, often by Autodesk staff), **Guess** (nothing found; SciForge's 
 | A drag on a handle | A press on one of the open dialog's handles (their screen extents, `taskui.BoxCarrier`) or on a `handles3d` handle just pressed is the handle's drag: no box, no Select Other. FreeCAD's edit modes (a sketch, a datum, Move's manipulator) get the mouse untouched. `selection_dialogs` C, `extrude_presspull_qa` |
 | In a sketch | SciForge's box, Select Other and mode keys stay out: FreeCAD's Sketcher draws its own box (window to the right, crossing to the left, 1.1.4). Since sketch-2 (`sketch_select.py`): a plain box replaces the selection, Shift adds, Ctrl toggles (FreeCAD's only added), and a double-click on a curve selects its chain (the curves joined end to end, of its line type). `selection_sketch`, `sketch2_select` |
 | Construction planes, axes, points | Since sketch-2: a window takes the planes, axes and points that are shown (an origin's only while the origin is shown), measured as FreeCAD draws them at rest; a crossing box touching one takes it; whole objects, selected by their path like a click; the Work Geometry filter applies. `sketch2_box_planes` |
+| A click a command's own gate refuses | Since the Pi 5 case test (2026-10-16): when an open command's gate refuses what is nearest the pointer, SciForge selects the first thing under the pointer it takes (`getObjectsInfo`, front to back; for a refused corner an edge first), with the click's modifiers (a plain click on a pick drops it). FreeCAD's own pick can also meet a refused corner while `getObjectInfo` reports the edge: when a click inside a command made no selection event at all (`_EventCount`), SciForge takes the edge under the pointer the same way. Before, the click selected nothing: the corners of the 2 mm edges of a lid could not be rounded. `pi5_case` (lid corners) |
 
 ## Facts found on the way
+
+- FreeCAD's click pick (`SoFCUnifiedSelection`) prefers a corner within the pick radius to
+  the edge under the pointer, while `view.getObjectInfo` at the same pixel reports the edge.
+  When a selection gate refuses the corner, FreeCAD selects nothing on that click. Seen on a
+  2 mm edge (about 10 px on the screen, both corners within 5 px).
 
 - FreeCAD selects on the **release** of the left button (`SoFCUnifiedSelection`), so a box
   drag only has to swallow the release; the press goes on to FreeCAD and to every handle.

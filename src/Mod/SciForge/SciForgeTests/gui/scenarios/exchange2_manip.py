@@ -440,10 +440,20 @@ def p9_drag():
     )
     s["dxf_sketch"] = sketch().Name if sketch() is not None else None
     h.fit()
-    drag_arrow("x", 6.0)
 
 
-p9_drag.wait_ms = 1500
+p9_drag.wait_ms = 800
+
+
+def p9_drag_x():
+    # a step of its own after the fit (as P8's): the value boxes follow the handles to
+    # their new place first; dragged in the fit's step, a box left where the arrow was
+    # took the press and X stayed 0 (CI #136 re-run, #137, with FreeCAD's own layout)
+    if panel() is not None and panel().handles:
+        drag_arrow("x", 6.0)
+
+
+p9_drag_x.wait_ms = 1500
 
 
 def p9_cancel():
@@ -515,6 +525,7 @@ h.run(
         p9_dxf,
         p9_click_xy,
         p9_drag,
+        p9_drag_x,
         p9_cancel,
         p9_check,
         cleanup,

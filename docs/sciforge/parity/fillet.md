@@ -158,6 +158,17 @@ from the old place. Golden
 `gaps_picks_kept.py`. Left: a Draft of a tapered extrude's side face is found again but
 FreeCAD's Draft cannot draft that face (it is a B-spline), so it stays red.
 
+## Picks made while a preview is built (2026-10-16, the Pi 5 case test)
+
+The dialog takes clicks from FreeCAD's selection 30 ms after they happen and then makes the
+selection show exactly its picks (`_sync`: clear, add). When the first preview appears, the
+part turns see-through and `_sync` runs again; a click that had come in meanwhile was wiped
+before the dialog read it: one edge of several quick clicks was lost (three lid corners
+clicked, two taken), and on CI's slow machine one of seven edges clicked a step apart
+(`inspect_analysis_curvature`, CI #136). `_sync` now keeps what FreeCAD selected or
+unselected since the dialog last looked, while such clicks are waiting. The corners of short
+edges are covered by the selection fall-through (`parity/selection.md`).
+
 ## Known gaps (shown greyed in the dialog with the reason, never faked)
 
 | Fusion option | Why not |

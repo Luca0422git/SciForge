@@ -56,6 +56,7 @@ _state = {
     "mode": core.DEFAULT_MODE,
     "gate": None,  # our FilterGate while it is the installed gate
     "inner": None,  # a dialog's own gate, combined with the filters
+    "events": None,  # _EventCount: selection events, to tell a click that selected nothing
     "orig_add": None,
     "orig_remove": None,
     "menu": None,
@@ -448,6 +449,99 @@ def _body_of_info(info):
     if obj is not None and obj.TypeId == core.BODY_TYPE:
         return obj
     return None
+
+
+class _EventCount:
+    """Counts FreeCAD's selection events: a click that made none selected nothing (a dialog
+    that takes a pick and clears the selection at once still made events)."""
+
+    def __init__(self):
+        self.count = 0
+
+    def addSelection(self, doc, obj, sub, pnt):
+        self.count += 1
+
+    def removeSelection(self, doc, obj, sub):
+        self.count += 1
+
+    def setSelection(self, doc):
+        self.count += 1
+
+    def clearSelection(self, doc):
+        self.count += 1
+
+
+def _selection_keys():
+    """A mark to compare after FreeCAD handled a click: the selection event count."""
+    counter = _state.get("events")
+    return counter.count if counter is not None else None
+
+
+def _dialog_allows(info):
+    """False when an open command's own selection gate refuses this pick (True without one)."""
+    gate = _state["inner"]
+    if gate is None:
+        return True
+    try:
+        feature = _pick_object(info)
+        if feature is None:
+            return True
+        return bool(gate.allow(feature.Document, feature, str(info.get("Component", ""))))
+    except Exception:
+        return True
+
+
+def _element_of(info):
+    """(doc, obj, sub, feature, short, kind) for _Element from a pick dictionary."""
+    doc_name, obj_name, sub = _pick_target(info)
+    return (
+        doc_name,
+        obj_name,
+        sub,
+        _pick_object(info),
+        str(info.get("Component", "")),
+        _kind_of_info(info),
+    )
+
+
+def _fall_through(view, gl, pos, refused, radius=None):
+    """(doc, obj, sub, feature, short, kind) of what the open command takes under the mouse
+    when it refused the nearest pick, or None. Only a refused corner or edge falls through,
+    and only to an edge or face of the same object (the user aimed at a short edge or the
+    face beside an edge; never through to something behind): an edge first for a corner."""
+    short = str(refused.get("Component", ""))
+    if not short.startswith(("Vertex", "Edge")):
+        return None
+    if radius is None:
+        try:
+            radius = float(App.ParamGet(VIEW_PARAMS).GetFloat("PickRadius", 5.0))
+        except Exception:
+            radius = 5.0
+    taken = []
+    for info in _infos_at(view, gl, pos, radius):
+        if not info.get("Object") or not info.get("Component"):
+            continue
+        if (info.get("Document"), info.get("Object")) != (
+            refused.get("Document"),
+            refused.get("Object"),
+        ):
+            continue
+        if not str(info["Component"]).startswith(("Edge", "Face")):
+            continue
+        if not _dialog_allows(info):
+            continue
+        kind = _kind_of_info(info)
+        if kind is not None and not filters().allows(kind):
+            continue
+        taken.append(info)
+    if not taken:
+        return None
+    best = taken[0]
+    if short.startswith("Vertex"):
+        edges = [i for i in taken if str(i.get("Component", "")).startswith("Edge")]
+        if edges:
+            best = edges[0]
+    return _element_of(best)
 
 
 def _in_dialog():
@@ -1633,6 +1727,22 @@ class _ViewFilter(QtCore.QObject):
             if plan != "keep":
                 QtCore.QTimer.singleShot(0, lambda: _safely(_apply, [el], plan, el.doc))
             return True
+        if info and press.in_dialog and _state["inner"] is not None:
+            # The open command does not take what FreeCAD's own pick finds nearest (a corner
+            # of a 2 mm edge in Fillet: FreeCAD picks corners first, the command refuses
+            # them, and the click selected nothing). Fusion's pick goes to what the command
+            # takes there instead, as if the refused kind were not drawn.
+            if not _dialog_allows(info):
+                if self._take_instead(view, gl, pos, info, shift, ctrl, press.in_dialog):
+                    return True  # FreeCAD must not select on this release
+            else:
+                before = _selection_keys()
+                QtCore.QTimer.singleShot(
+                    0,
+                    lambda: _safely(
+                        self._unless_taken, view, gl, pos, info, before, shift, ctrl
+                    ),
+                )
         if info:
             kind = _kind_of_info(info)
             if kind is not None and not filters().allows(kind):
@@ -1649,6 +1759,32 @@ class _ViewFilter(QtCore.QObject):
             self._forward_release(gl, event, CTRL)  # FreeCAD's Ctrl adds
             return True
         return False
+
+    def _take_instead(self, view, gl, pos, info, shift, ctrl, in_dialog, other=None):
+        """Select what the open command takes under the mouse, as a click would; False if
+        there is nothing it takes there."""
+        if other is None:
+            other = _fall_through(view, gl, pos, info)
+        if other is None:
+            return False
+        el = _Element(*other)
+        selected = el.is_selected()
+        plan = core.click_plan(shift, ctrl, in_dialog, selected)
+        if plan == "add" and selected and not shift:
+            plan = "toggle"  # a plain click on a pick drops it, as FreeCAD's does
+        if plan != "keep":
+            QtCore.QTimer.singleShot(0, lambda: _safely(_apply, [el], plan, el.doc))
+        return True
+
+    def _unless_taken(self, view, gl, pos, info, before, shift, ctrl):
+        """After FreeCAD's own click in a command: when it changed nothing (its pick met a
+        corner the command refuses, while the edge the mouse is over is taken), select
+        what the command takes there."""
+        if before is None or _selection_keys() != before or not _state["on"]:
+            return
+        if not str(info.get("Component", "")).startswith(("Edge", "Face")):
+            return
+        self._take_instead(view, gl, pos, info, shift, ctrl, True, other=_element_of(info))
 
     def _forward_release(self, gl, event, modifiers):
         copy = QtGui.QMouseEvent(
@@ -1799,6 +1935,13 @@ def enable():
     filters as FreeCAD's gate, the remembered mode."""
     _state["on"] = True
     load()
+    if _state.get("events") is None:
+        try:
+            _state["events"] = _EventCount()
+            Gui.Selection.addObserver(_state["events"])
+        except Exception as exc:
+            _state["events"] = None
+            warn("selection: %s" % exc)
     _patch_gate_api()
     _refresh_gate()
     if _state["filter"] is None:
@@ -1816,6 +1959,12 @@ def enable():
 def disable():
     """SciForge's interface turned off: FreeCAD's own selection again."""
     _state["on"] = False
+    counter, _state["events"] = _state.get("events"), None
+    if counter is not None:
+        try:
+            Gui.Selection.removeObserver(counter)
+        except Exception:
+            pass
     _close_menu()
     filt, _state["filter"] = _state["filter"], None
     if filt is not None:

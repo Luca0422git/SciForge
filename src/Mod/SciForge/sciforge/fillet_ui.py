@@ -973,6 +973,15 @@ class BlendPanel(Panel):
         if self.base is None:
             return
         want = self._display_set()
+        shown = list(want)
+        if self._events.isActive():
+            # Clicks not handled yet (they came in while a preview was built): keep them as
+            # they are for _process_selection, which compares the selection with _shown.
+            # Wiping them lost a pick: seven edges clicked, six taken (CI's
+            # inspect_analysis_curvature), a lid corner of the Pi 5 case.
+            current = self._base_selection()
+            want = [n for n in want if n in current or n not in self._shown]
+            want += [n for n in current if n not in want and n not in self._shown]
         self._syncing = True
         try:
             Gui.Selection.clearSelection()
@@ -980,7 +989,19 @@ class BlendPanel(Panel):
                 Gui.Selection.addSelection(self.base, want)
         finally:
             self._syncing = False
-        self._shown = want
+        self._shown = shown
+
+    def _base_selection(self):
+        """Element names of the part before the blend that FreeCAD has selected now."""
+        names = []
+        try:
+            for sel in Gui.Selection.getSelectionEx(self._doc_name):
+                for obj, name in _resolve(sel):
+                    if obj is not None and name and obj.Name == self.base.Name:
+                        names.append(name)
+        except Exception as exc:
+            warn("%s selection: %s" % (self.title, exc))
+        return names
 
     def _selection_event(self, cleared):
         if self._syncing or self._closed:

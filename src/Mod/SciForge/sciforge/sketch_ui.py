@@ -41,11 +41,12 @@ def origin_planes(body):
 class PlanePicker:
     """The three big origin squares; on_pick(plane object) when one is clicked."""
 
-    def __init__(self, view, body, on_pick):
+    def __init__(self, view, body, on_pick, on_face=None):
         from pivy import coin
 
         self.view = view
         self.on_pick = on_pick
+        self.on_face = on_face  # (feature, "FaceN"): a flat face behind a clicked edge
         self.placement = body.getGlobalPlacement()
         self.objects = origin_planes(body)
         empty = body.Shape.isNull() or not body.Shape.Solids
@@ -132,8 +133,22 @@ class PlanePicker:
         info = self.view.getObjectInfo(tuple(position))
         if not (info and info.get("Object")):
             return False
-        if info.get("Component", "").startswith("Face"):
+        component = str(info.get("Component", ""))
+        if component.startswith("Face"):
             return True
+        if component.startswith(("Edge", "Vertex")):
+            # An edge or corner of the part hides the squares, as a face does: a click on
+            # the edge of a 2 mm rim (lying on the XZ square) took the square and the
+            # sketch landed on XZ (the Pi 5 case test). A sketch's curve or a construction
+            # line only hides a square it lies in front of (a curve drawn on XY must not
+            # keep XY from being clicked).
+            try:
+                obj = Gui.ActiveDocument.Document.getObject(str(info.get("Object")))
+            except Exception:
+                obj = None
+            if obj is not None and not _curve_object(obj):
+                return True
+            return self._in_front(position, info)
         # A construction plane (an Offset Plane for a loft's next profile) is picked as a
         # whole object, not a face: the origin square behind it took the click and the
         # sketch landed on XZ (found by the sweep / loft QA, sweep_loft_qa_loft).
@@ -150,6 +165,41 @@ class PlanePicker:
             return square is None or (spot - start).dot(direction) <= square[1] + 1e-6
         except Exception:
             return False
+
+    def _in_front(self, position, info, slack=1e-3):
+        """True if the picked point of `info` lies before the origin square under the mouse
+        (or there is no square there)."""
+        try:
+            from .profile_pick import mouse_ray
+
+            square = self._square_at(position)
+            if square is None:
+                return True
+            start, direction = mouse_ray(self.view, position)
+            spot = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
+            return (spot - start).dot(direction) < square[1] - slack
+        except Exception:
+            return True
+
+    def flat_face_at(self, position):
+        """(feature, "FaceN") of the frontmost face under the mouse if it is flat, else None.
+        Create Sketch only takes planes and flat faces (Fusion), so a click on an edge goes
+        to the face the mouse is over there, never to the edge."""
+        try:
+            infos = self.view.getObjectsInfo(tuple(position)) or []
+        except Exception:
+            return None
+        doc = Gui.ActiveDocument.Document
+        for info in infos:
+            component = str(info.get("Component", ""))
+            if not component.startswith("Face"):
+                continue
+            obj = doc.getObject(str(info.get("Object")))
+            if obj is None:
+                return None
+            # the frontmost face decides: a curved one gives None
+            return sketch_target([_Pick(obj, component)])
+        return None
 
     def _moved(self, info):
         try:
@@ -172,6 +222,11 @@ class PlanePicker:
             if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
                 return
             if self._geometry_at(info["Position"]):
+                under = self.view.getObjectInfo(tuple(info["Position"])) or {}
+                if str(under.get("Component", "")).startswith(("Edge", "Vertex")):
+                    face = self.flat_face_at(info["Position"])
+                    if face is not None and self.on_face is not None:
+                        self.on_face(face)
                 return  # a face of the part: the selection observer takes it
             role = self.plane_at(info["Position"])
             if role is not None:
@@ -190,6 +245,24 @@ class PlanePicker:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+
+
+def _curve_object(obj):
+    """Sketches and construction lines / points: they lie on planes, they are not the part."""
+    type_id = getattr(obj, "TypeId", "")
+    return (
+        type_id.startswith("Sketcher::")
+        or type_id in ("PartDesign::Line", "PartDesign::Point", "App::Line", "App::Point")
+        or obj.isDerivedFrom("Part::Part2DObject")
+    )
+
+
+class _Pick:
+    """A selection entry made by hand (sketch_target reads Object and SubElementNames)."""
+
+    def __init__(self, obj, name):
+        self.Object = obj
+        self.SubElementNames = [name]
 
 
 def _resolve(sel_obj, name):
@@ -444,6 +517,7 @@ class SketchPicker:
                 Gui.ActiveDocument.ActiveView,
                 body,
                 lambda plane: QtCore.QTimer.singleShot(0, lambda: self._picked((plane, ""))),
+                on_face=lambda face: QtCore.QTimer.singleShot(0, lambda: self._picked(face)),
             )
         except Exception as exc:
             warn("origin planes unavailable: %s" % exc)
@@ -485,6 +559,7 @@ class SketchPicker:
             return
         self._cleanup()
         Gui.Control.closeDialog()
+        Gui.Selection.clearSelection()  # an edge clicked on the way to its face stays out
         QtCore.QTimer.singleShot(0, lambda: self._create(target))
 
     def _create(self, target):

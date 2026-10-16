@@ -1359,7 +1359,6 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 - Primitives (`docs/sciforge/parity/primitives.md`): which defaults does your Fusion show for
   Torus Position, Coil Rotation (Clockwise?) and Section Position, and is Section Size of a
   square/triangle section the circle round it or its side?
-- The 6 open Dependabot PRs (GitHub Actions version bumps): close them, or merge them?
 - The browser lists a Single Hole's own sketch ("Hole 1 Sketch") under the body. Fusion
   shows nothing there; hiding it is easy, but double-clicking it is how the `hole` scenario
   edits the hole today. Hide it?
@@ -1369,6 +1368,59 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Raspberry Pi 5 case from scratch (branch `develop`, 2026-10-16)
+
+Luca: "to test how well SciForge works, make a Raspberry Pi 5 case from scratch. maybe do
+some research to find all the dimensions and specs." Also: the work branch is `develop`, no
+screen recordings, no `.f3d` (Decisions log).
+
+#### Research
+
+The sandbox and WebFetch could not reach raspberrypi.com or its mirrors (proxy / DNS);
+WebSearch snippets of the official mechanical drawing confirm 85 x 56 board, holes 3.5 in
+(58 x 49), and the numbers 10.2 / 29.1 / 47 (Ethernet, USB, USB centres on the short edge)
+and 25.8 (HDMI). USB-C 11.2 and HDMI 39.2, the microSD at the board's middle under it and
+the connector heights are from memory of the drawing / data sheets, rounded up. The case
+keeps about 0.5 mm play round every port. The power button's edge is not confirmed (no
+opening for it).
+
+#### What was built
+
+- Scenario `pi5_case` (real FreeCAD 1.1.4, real clicks): base 91 x 62 x 25, corners R3,
+  Shell 2 mm, four posts with 2.5 mm holes (Hole From Sketch), three walls of openings
+  (sketch on each wall, E, -3 = Cut), lid as a New Body (Join offered first, New Body chosen),
+  its corners R3, a lip (E on a ring, Cut offered, Join chosen), a vent slot + Rectangular
+  Pattern x6 along Y, a GPIO opening, the top outline rounded R1 in one click (Tangent
+  Chain: 8 edges); then the Pi 5's envelope (board, ports, header, card) touches nothing,
+  the lid does not collide, every port is reachable from outside, Export STEP (2 solids,
+  the design's volume) and one STL per body. Every volume is worked out by hand (Pappus for
+  the lid's rounded outline). 120 checks, PASS.
+
+#### SciForge bugs it found (fixed)
+
+1. **Create Sketch on a narrow face took an origin plane behind it** (`sketch_ui.PlanePicker`):
+   only a face under the mouse hid the origin squares; an edge did not, so a click on the
+   2 mm rim of the shelled base (it met the rim's outer edge, which lies on the XZ square)
+   put the sketch on XZ. Now an edge or corner of the part hides the squares (a sketch
+   curve or construction line only when in front), and a click on an edge takes the flat
+   face under the mouse there (`flat_face_at`, `getObjectsInfo`).
+2. **Fillet lost a pick made while its first preview was being built** (`fillet_ui._sync`):
+   making the selection show the picks wiped clicks not yet read (three quick corner
+   clicks gave two). Very likely CI #136's `inspect_analysis_curvature` failure (seven
+   edges clicked a step apart on a slow runner, six taken). `_sync` keeps waiting clicks.
+3. **A click on a short edge selected nothing in Fillet** (`selection_ui._click`): FreeCAD's
+   click pick prefers the corner at the end of a 2 mm edge, the Fillet's gate refuses
+   corners, FreeCAD selects nothing. Now when an open command's gate refuses the nearest
+   pick, or the click made no selection event at all, SciForge selects the first thing
+   under the pointer the command takes (an edge first for a refused corner). Applies to
+   every dialog with a gate (Shell, Hole, Draft, Measure, Section, Construct, Joints...).
+
+#### Noticed, not changed
+
+- The first body is called "Body" (Fusion: "Body1"), the second "Body2".
+- Screenshots of the 3D view are no longer blank under xvfb (they show the model).
+
 
 ### Session log: sketch, part 2 (branch `sf/sketch-2`, wave 5, 2026-10-16)
 
