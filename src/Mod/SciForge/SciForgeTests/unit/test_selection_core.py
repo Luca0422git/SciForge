@@ -97,19 +97,22 @@ class KindTests(unittest.TestCase):
 
     def test_box_kinds(self):
         f = core.Filters()
-        self.assertEqual(core.box_kinds(f), {"faces", "edges", "sketch_curves"})
+        work = "work_geometry"  # planes, axes and points that are shown (sketch-2)
+        self.assertEqual(core.box_kinds(f), {"faces", "edges", "sketch_curves", work})
         self.assertFalse(core.only_bodies(f))
         f.apply_priority("body")
         self.assertEqual(core.box_kinds(f), {"bodies"})
         self.assertTrue(core.only_bodies(f))
         f = core.Filters(["faces", "edges"])
-        self.assertEqual(core.box_kinds(f), {"vertices", "sketch_curves"})
+        self.assertEqual(core.box_kinds(f), {"vertices", "sketch_curves", work})
         f = core.Filters(["faces", "edges", "sketch_curves"])
-        self.assertEqual(core.box_kinds(f), {"vertices"})
+        self.assertEqual(core.box_kinds(f), {"vertices", work})
         f = core.Filters(["faces", "edges", "vertices", "sketch_curves"])
-        self.assertEqual(core.box_kinds(f), {"bodies"})
+        self.assertEqual(core.box_kinds(f), {"bodies", work})
         f = core.Filters(["sketch_curves"])
-        self.assertEqual(core.box_kinds(f), {"faces", "edges"})
+        self.assertEqual(core.box_kinds(f), {"faces", "edges", work})
+        f = core.Filters([work])
+        self.assertEqual(core.box_kinds(f), {"faces", "edges", "sketch_curves"})
 
 
 class ModifierTests(unittest.TestCase):

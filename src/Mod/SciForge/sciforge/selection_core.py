@@ -209,6 +209,10 @@ def box_kinds(filters):
             kinds.add("vertices")
     if filters.allows("sketch_curves"):
         kinds.add("sketch_curves")
+    if filters.allows("work_geometry"):
+        # the planes, axes and points that are shown (Guess: Fusion's Work Geometry filter
+        # covers window selection like the other kinds; sketch-2)
+        kinds.add("work_geometry")
     return kinds
 
 
