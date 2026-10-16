@@ -98,6 +98,7 @@ def startup():
             # restored its window layout, which put its toolbars and menu bar back
             _hide_toolbars_soon()
             _hide_menubar()
+            _hide_panels()
         if name and name != SCIFORGE_WB and not _state["on"]:
             from . import shortcuts, sketch_mode, theme, versions_ui
 
@@ -355,8 +356,11 @@ def _hide_panels():
     ]
     panels.append(main.statusBar())
     for widget in panels:
-        if widget.isVisible():
-            _state["panels"].append(widget)
+        # isHidden, not isVisible: the window is not shown yet when FreeCAD opens in
+        # SciForge (start_in.py), and the status bar stayed (31 px less 3D view)
+        if not widget.isHidden():
+            if widget not in _state["panels"]:
+                _state["panels"].append(widget)
             widget.hide()
 
 

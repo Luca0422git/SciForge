@@ -71,6 +71,33 @@ def apply(on=None):
         warn("start in SciForge: %s" % exc)
 
 
+# FreeCAD's floating panel on the right (the Tasks panel with the command dialogs)
+OVERLAY_RIGHT = "User parameter:BaseApp/MainWindow/DockWindows/OverlayRight"
+PANEL_WIDTH = 382  # what a fresh FreeCAD gives it when it opens in its own workbench
+
+
+def _panel_width():
+    """A fresh profile: FreeCAD sizes the right panel from the main window's minimum size
+    when it is made and keeps that width for good (Gui/OverlayWidgets.cpp). Opening in
+    SciForge, the ribbon is already there and the panel came out 559 px instead of 382:
+    the dialogs covered a third more of the 3D view. A width already kept (the user's) is
+    left as it is."""
+    import FreeCAD as App
+
+    group = App.ParamGet(OVERLAY_RIGHT)
+    if group.GetInt("Width", 0) <= 100:  # (FreeCAD treats up to 100 as not set either)
+        group.SetInt("Width", PANEL_WIDTH)
+        # with a width kept FreeCAD reads the panel's list of docks as set by the user and
+        # an unset list as empty (the Tasks panel then sat beside the view, not over it)
+        if "Widgets" not in group.GetStrings():
+            group.SetString("Widgets", "Tasks,")
+
+
 def at_launch():
     """From InitGui.py, before FreeCAD picks the workbench it opens in."""
     apply()
+    try:
+        if wanted():
+            _panel_width()
+    except Exception as exc:
+        warn("start in SciForge: panel width: %s" % exc)
