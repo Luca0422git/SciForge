@@ -163,11 +163,21 @@ class InterferencePanel(bodypick.BodyPickPanel):
         from .measure_ui import RESULTS_STYLE
 
         self.table.setStyleSheet(RESULTS_STYLE)
-        self.table.setColumnCount(4)
-        self.table.setHeaderLabels(["#", "Body 1", "Body 2", "Volume"])
+        self.table.setColumnCount(5)
+        self.table.setHeaderLabels(["#", "Body 1", "Body 2", "Volume", "Create Body"])
         self.table.setRootIsDecorated(False)
         self.table.setMinimumHeight(140)
+        self.table.itemChanged.connect(self._row_ticked)
         self.layout.addRow(self.table)
+        # Fusion: the overlaps can be kept as bodies of their own (each row, or all)
+        self.create_all = QtWidgets.QCheckBox("Create Bodies From Interferences")
+        self.create_all.setObjectName("SciForgeInterference_create_all")
+        self.create_all.setToolTip(
+            "On OK, each ticked overlap becomes a new body (a body without history)"
+        )
+        self.create_all.toggled.connect(self._create_all_toggled)
+        self.layout.addRow(self.create_all)
+        self._ticking = False
         self.finish_layout()
         self.start_picking()
         self.box.set_active(True)
@@ -235,13 +245,21 @@ class InterferencePanel(bodypick.BodyPickPanel):
         return True
 
     def _show_results(self):
-        self.table.clear()
-        found = analysis.results(self.target) if self.target is not None else []
-        for i, (a, b, volume) in enumerate(found, start=1):
-            text = measure.fmt(volume, "volume", 3, self.unit) if volume > 0 else "touching"
-            QtWidgets.QTreeWidgetItem(self.table, [str(i), a, b, text])
-        for column in range(4):
-            self.table.resizeColumnToContents(column)
+        self._ticking = True
+        try:
+            self.table.clear()
+            found = analysis.results(self.target) if self.target is not None else []
+            for i, (a, b, volume) in enumerate(found, start=1):
+                text = measure.fmt(volume, "volume", 3, self.unit) if volume > 0 else "touching"
+                row = QtWidgets.QTreeWidgetItem(self.table, [str(i), a, b, text, ""])
+                if volume > 0:  # a body can only be made of a shared volume
+                    row.setFlags(row.flags() | QtCore.Qt.ItemIsUserCheckable)
+                    on = self.create_all.isChecked()
+                    row.setCheckState(4, QtCore.Qt.Checked if on else QtCore.Qt.Unchecked)
+            for column in range(5):
+                self.table.resizeColumnToContents(column)
+        finally:
+            self._ticking = False
         problem = analysis.problem(self.target) if self.target is not None else ""
         if problem:
             self.say(problem)
@@ -255,6 +273,74 @@ class InterferencePanel(bodypick.BodyPickPanel):
             [self.table.topLevelItem(i).text(c) for c in range(4)]
             for i in range(self.table.topLevelItemCount())
         ]
+
+    def _checkable(self):
+        """The table rows that can become a body (the overlapping pairs), in order."""
+        found = []
+        for i in range(self.table.topLevelItemCount()):
+            row = self.table.topLevelItem(i)
+            if row.flags() & QtCore.Qt.ItemIsUserCheckable:
+                found.append(row)
+        return found
+
+    def ticked(self):
+        """Indices (among the overlapping pairs) of the rows ticked to become bodies."""
+        return [
+            n for n, row in enumerate(self._checkable()) if row.checkState(4) == QtCore.Qt.Checked
+        ]
+
+    def tick_row(self, index, on=True):
+        """Tick the Create Body box of overlap `index` (the scenarios click like a person
+        would through this)."""
+        rows = self._checkable()
+        if 0 <= index < len(rows):
+            rows[index].setCheckState(4, QtCore.Qt.Checked if on else QtCore.Qt.Unchecked)
+
+    def _row_ticked(self, item, column):
+        if self._ticking or column != 4:
+            return
+        try:
+            rows = self._checkable()
+            every = bool(rows) and all(r.checkState(4) == QtCore.Qt.Checked for r in rows)
+            if self.create_all.isChecked() != every:
+                self._ticking = True
+                try:
+                    self.create_all.setChecked(every)
+                finally:
+                    self._ticking = False
+            self._say_bodies()
+        except Exception as exc:
+            warn("Interference: %s" % exc)
+
+    def _create_all_toggled(self, on):
+        if self._ticking:
+            return
+        try:
+            self._ticking = True
+            try:
+                for row in self._checkable():
+                    row.setCheckState(4, QtCore.Qt.Checked if on else QtCore.Qt.Unchecked)
+            finally:
+                self._ticking = False
+            self._say_bodies()
+        except Exception as exc:
+            warn("Interference: %s" % exc)
+
+    def _say_bodies(self):
+        count = len(self.ticked())
+        if count:
+            self.hint(
+                "OK makes %d bod%s of the shared volume." % (count, "y" if count == 1 else "ies")
+            )
+        elif self.computed:
+            self._show_results_hint()
+
+    def _show_results_hint(self):
+        found = analysis.results(self.target) if self.target is not None else []
+        if found:
+            self.hint("%d interference%s found." % (len(found), "" if len(found) == 1 else "s"))
+        else:
+            self.hint("No interference: the bodies do not overlap.")
 
     def schedule(self):
         pass  # nothing previews by itself: Compute does
@@ -270,7 +356,21 @@ class InterferencePanel(bodypick.BodyPickPanel):
                 self.say("Click two or more bodies, then Compute.")
                 return False
             label = self.target.Label
+            rows = self.ticked()
+            made = []
+            if rows:
+                try:
+                    made = analysis.create_bodies(self.target, rows)
+                except analysis.AnalysisError as exc:
+                    self.say(str(exc))
+                    return False
+                preview.recompute(self.doc)
             done = self.finish_ok()
+            if made:
+                log(
+                    "%s: %s made of the interference%s"
+                    % (label, ", ".join(b.Label for b in made), "" if len(rows) == 1 else "s")
+                )
             log("%s kept" % label)
             return done
         except Exception as exc:

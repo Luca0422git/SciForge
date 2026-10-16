@@ -552,7 +552,19 @@ MESH_PREPARE = group(
     "PREPARE",
     ["Generate Face Groups", "Repair"],
     [
+        item(
+            "Create Face Group",
+            "SciForge_MeshCreateFaceGroup",
+            "mesh_create_group",
+            note="Faces you paint over become one face group.",
+        ),
         item("Generate Face Groups", "SciForge_MeshFaceGroups", "mesh_face_groups"),
+        item(
+            "Combine Face Groups",
+            "SciForge_MeshCombineFaceGroups",
+            "mesh_combine_groups",
+            note="Face groups that touch become one.",
+        ),
         item(
             "Repair",
             ("SciForge_MeshRepair", "Mesh_Evaluation"),
@@ -583,6 +595,12 @@ MESH_MODIFY = group(
             "Reverse Normal",
             ("SciForge_MeshReverseNormal", "Mesh_FlipNormals"),
             "mesh_reverse_normal",
+        ),
+        item(
+            "Direct Edit",
+            "SciForge_MeshDirectEdit",
+            "mesh_direct_edit",
+            note="Pick single faces of a mesh body: delete, fill, group, turn, move, smooth.",
         ),
         SEP,
         item("Erase and Fill", "SciForge_MeshEraseFill", "mesh_erase_fill"),

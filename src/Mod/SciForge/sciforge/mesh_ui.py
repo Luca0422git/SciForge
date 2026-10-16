@@ -28,8 +28,8 @@ def _later(fn, ms=30):
 
 def body_end(obj):
     """A mesh body a click can pick: a mesh object no later step uses up."""
-    if not mesh.is_mesh(obj):
-        return False
+    if not mesh.is_mesh(obj) or mesh.rolled_back(obj):
+        return False  # a step after the history marker does not exist there
     try:
         return obj.Name not in bodies.consumed(obj.Document)
     except Exception:
@@ -395,6 +395,10 @@ class MeshPanel(insert_ui._InsertPanel):
             self.report()
             return False
         step = self.step
+        if not self.editing:
+            # made at a rolled-back marker: the body's later steps build on it (one undo step)
+            if mesh.insert_before_rolled(step):
+                self.doc.recompute()
         if not super().accept():
             return False
         for obj in [step] + mesh.pieces_of(step):
@@ -623,67 +627,13 @@ class ReducePanel(MeshPanel):
         step.ReduceType = self.reduce_type.currentText()
 
 
-# ============================================================================ Smooth
-class SmoothPanel(MeshPanel):
-    """Fusion's Smooth: Smoothness 0 (barely) .. 1 (strongly)."""
+# ============================================================================ face group picks
+class _FaceGroupPicks:
+    """A Face Groups box after the Body box (Reverse Normal, Smooth): clicks on the body
+    pick its face groups ("All faces" while none is picked); without face groups the box
+    is off and the whole body counts."""
 
-    title = "Smooth"
-    icon = "mesh_smooth"
-    step_kind = "MeshSmooth"
-    wait_text = "Click the mesh body to smooth."
-
-    def build(self):
-        self.smoothness = self.spin(
-            "Smoothness", core.DEFAULT_SMOOTHNESS, 0.0, 1.0, self.changed, 2, 0.05
-        )
-
-    def load(self, feature):
-        self._quiet = True
-        try:
-            self.smoothness.setValue(float(feature.Smoothness))
-        finally:
-            self._quiet = False
-
-    def write(self, step):
-        step.Smoothness = float(self.smoothness.value())
-
-
-# ============================================================================ Shell
-class ShellPanel(MeshPanel):
-    """Fusion's mesh Shell: the body hollowed, the walls Thickness thick (3D prints use less
-    material and time)."""
-
-    title = "Shell"
-    icon = "mesh_shell"
-    step_kind = "MeshShell"
-    wait_text = "Click the closed mesh body to hollow."
-
-    def build(self):
-        self.thickness = self.number("Thickness", core.DEFAULT_SHELL, "mm", lambda: self.changed())
-
-    def load(self, feature):
-        self._quiet = True
-        try:
-            self.thickness.set_value(float(feature.Thickness))
-        finally:
-            self._quiet = False
-
-    def write(self, step):
-        step.Thickness = max(1e-6, float(self.thickness.value()))
-
-
-# ============================================================================ Reverse Normal
-class ReverseNormalPanel(MeshPanel):
-    """Fusion's Reverse Normal: every face of the body turned over, or only the face groups
-    clicked (when the body has face groups)."""
-
-    title = "Reverse Normal"
-    icon = "mesh_reverse_normal"
-    step_kind = "MeshReverseNormal"
-    preview_box = False
-    wait_text = "Click the mesh body whose faces point the wrong way."
-
-    def build(self):
+    def add_groups_field(self):
         self.groups = []
         self.groups_field = self.add_field("groups", "Face Groups", "All faces")
 
@@ -734,6 +684,76 @@ class ReverseNormalPanel(MeshPanel):
 
     def write(self, step):
         step.Groups = list(self.groups)
+
+
+# ============================================================================ Smooth
+class SmoothPanel(_FaceGroupPicks, MeshPanel):
+    """Fusion's Smooth: Smoothness 0 (barely) .. 1 (strongly), the whole body or the face
+    groups clicked (when the body has face groups; their rim stays where it is)."""
+
+    title = "Smooth"
+    icon = "mesh_smooth"
+    step_kind = "MeshSmooth"
+    wait_text = "Click the mesh body to smooth."
+
+    def build(self):
+        self.add_groups_field()
+        self.smoothness = self.spin(
+            "Smoothness", core.DEFAULT_SMOOTHNESS, 0.0, 1.0, self.changed, 2, 0.05
+        )
+
+    def load(self, feature):
+        self._quiet = True
+        try:
+            self.smoothness.setValue(float(feature.Smoothness))
+            self.groups = list(getattr(feature, "Groups", []) or [])
+            self._show_groups()
+        finally:
+            self._quiet = False
+
+    def write(self, step):
+        step.Smoothness = float(self.smoothness.value())
+        if "Groups" in step.PropertiesList:
+            step.Groups = list(self.groups)
+
+
+# ============================================================================ Shell
+class ShellPanel(MeshPanel):
+    """Fusion's mesh Shell: the body hollowed, the walls Thickness thick (3D prints use less
+    material and time)."""
+
+    title = "Shell"
+    icon = "mesh_shell"
+    step_kind = "MeshShell"
+    wait_text = "Click the closed mesh body to hollow."
+
+    def build(self):
+        self.thickness = self.number("Thickness", core.DEFAULT_SHELL, "mm", lambda: self.changed())
+
+    def load(self, feature):
+        self._quiet = True
+        try:
+            self.thickness.set_value(float(feature.Thickness))
+        finally:
+            self._quiet = False
+
+    def write(self, step):
+        step.Thickness = max(1e-6, float(self.thickness.value()))
+
+
+# ============================================================================ Reverse Normal
+class ReverseNormalPanel(_FaceGroupPicks, MeshPanel):
+    """Fusion's Reverse Normal: every face of the body turned over, or only the face groups
+    clicked (when the body has face groups)."""
+
+    title = "Reverse Normal"
+    icon = "mesh_reverse_normal"
+    step_kind = "MeshReverseNormal"
+    preview_box = False
+    wait_text = "Click the mesh body whose faces point the wrong way."
+
+    def build(self):
+        self.add_groups_field()
 
 
 def facet_group_at(body, point):

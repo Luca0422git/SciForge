@@ -246,6 +246,12 @@ def make_mesh_body(doc, mesh, path, unit="Millimeter", flip=False, label=None):
     obj.UnitType = unit
     obj.FlipUp = bool(flip)
     obj.UnitScale = scale
+    try:  # inserted while the timeline is rolled back: it goes in at the history marker
+        from . import timeline_ops
+
+        timeline_ops.place_root_step(obj)
+    except Exception as exc:
+        log("timeline: the mesh body stays at the end (%s)" % exc)
     return obj
 
 

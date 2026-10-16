@@ -58,10 +58,15 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 - **text-emboss.md**: the text frame cannot be resized by dragging its corner.
 - **insert-export.md**: no IGES, DXF or DWG export. STEP comes in flattened to bodies. Insert
   SVG/DXF and Canvas have no manipulators.
-- **mesh.md**: no Direct Edit environment. No Create or Combine Face Groups. Mesh steps do not
-  roll back with the marker.
-- **inspect.md**: Interference cannot create bodies. Measure's Component filter is greyed.
-- **inspect-analysis.md**: meshes cannot be analysed. No Include Sharp Curves.
+- **mesh.md**: (Direct Edit with brush / window / free-form selection, delete, move, smooth,
+  Erase and Fill, Reverse Normal; Create / Combine Face Groups; mesh steps roll back with the
+  marker, by sf/mesh-inspect-2.) Left: no contextual ribbon tab (one dialog); Move is an arrow,
+  not Fusion's triad; no Remesh / Reduce on picked face groups; no Shift+F face-group colours.
+- **inspect.md**: (Interference Create Bodies and Measure's Component filter by
+  sf/mesh-inspect-2.) Left: no Cycle Component Color.
+- **inspect-analysis.md**: (Zebra on mesh bodies and Include Sharp Curves in Minimum Radius by
+  sf/mesh-inspect-2.) The other analyses refuse mesh bodies (only Zebra is documented for
+  meshes).
 - **misc.md**: (Decals follow their face through moves, joints, face edits and component
   copies by sf/fix-decal.) Derive brings components in flat. The source version cannot be
   chosen. No adsk add-in API. A decal on a component's copy is listed only under the

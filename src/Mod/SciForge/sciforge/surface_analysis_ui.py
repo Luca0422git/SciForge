@@ -317,8 +317,14 @@ def surface_nodes(coin, group, m, alpha=0.0):
     hints.vertexOrdering = coin.SoShapeHints.UNKNOWN_ORDERING
     hints.shapeType = coin.SoShapeHints.UNKNOWN_SHAPE_TYPE
     offset = coin.SoPolygonOffset()  # like the model's own faces: its edges stay on top
-    offset.factor.setValue(1.0)
-    offset.units.setValue(1.0)
+    if getattr(m, "on_mesh", False):
+        # a mesh body's own faces stay drawn (FreeCAD's mesh display has no face style to
+        # switch off): the analysis is pulled a hair towards the eye to cover them
+        offset.factor.setValue(-1.0)
+        offset.units.setValue(-1.0)
+    else:
+        offset.factor.setValue(1.0)
+        offset.units.setValue(1.0)
     group.addChild(hints)
     group.addChild(offset)
     coords = coin.SoCoordinate3()
@@ -569,7 +575,7 @@ class ViewProviderSurfaceAnalysis:
         """The analysed faces' Mesh, from the cache while the body's shape is the same."""
         try:
             key = (owner.Name, tuple(names), bool(quality), bool(curvature))
-            stamp = (owner.Shape.hashCode(), sa.display_tolerance(owner))
+            stamp = sa.stamp(owner)
         except Exception:
             return sa.Mesh()
         found = self.cache.get(key)
@@ -586,6 +592,7 @@ class ViewProviderSurfaceAnalysis:
         content.removeAllChildren()
         self.stripes = []
         self.curves = []
+        self.sharp_edges = []
         try:
             if obj.ViewObject is None or not obj.ViewObject.Visibility:
                 return
@@ -625,9 +632,40 @@ class ViewProviderSurfaceAnalysis:
                 colors = self._colors(obj, kind, owner, m, frame)
                 colors = [core.mix(base, c, opacity) for c in colors]
                 colored_into(coin, group, m, colors)
+                if kind == sa.MIN_RADIUS and getattr(obj, "IncludeSharpCurves", False):
+                    self._sharp(coin, group, owner)
             content.addChild(group)
         if kind == sa.ZEBRA:
             self.restripe(obj, view)
+
+    def _sharp(self, coin, group, owner):
+        """Include Sharp Curves: the sharp inner edges (radius 0) drawn red over the body."""
+        try:
+            key = ("sharp", owner.Name)
+            stamp = sa.stamp(owner)
+            found = self.cache.get(key)
+            if found is None or found[0] != stamp:
+                found = (stamp, sa.sharp_concave_edges(owner))
+                self.cache[key] = found
+            lines = found[1]
+        except Exception as exc:
+            warn("Minimum Radius: %s" % exc)
+            lines = []
+        self.sharp_edges = lines  # what is drawn (the scenarios count it)
+        if not lines:
+            return
+        sep = coin.SoSeparator()
+        light = coin.SoLightModel()
+        light.model = coin.SoLightModel.BASE_COLOR
+        style = coin.SoDrawStyle()
+        style.lineWidth.setValue(4.0)
+        offset = coin.SoPolygonOffset()
+        sep.addChild(light)
+        sep.addChild(style)
+        sep.addChild(offset)
+        for points in lines:
+            self._polyline(coin, sep, points, core.BLOCKED)
+        group.addChild(sep)
 
     def _colors(self, obj, kind, owner, m, frame):
         vector = obj.PullVector if "PullVector" in obj.PropertiesList else None
@@ -696,9 +734,7 @@ class ViewProviderSurfaceAnalysis:
             if owner is None:
                 continue
             frame = sa.parent_placement(owner)
-            b = owner.Shape.BoundBox
-            if not frame.isIdentity():
-                b = owner.Shape.transformed(frame.toMatrix()).BoundBox
+            b = sa.global_box(owner, frame)
             box = b if box is None else box.united(b)
         if box is None:
             return
@@ -815,6 +851,7 @@ LABELS = {
     "AccessMode": "Access",
     "MinimumRadius": "Minimum Radius",
     "ToolRadius": "Maximum Tool Radius",
+    "IncludeSharpCurves": "Include Sharp Curves",
 }
 # (property, kind of widget, extra) in the dialog's order, after the selection boxes
 FIELDS = {
@@ -859,6 +896,7 @@ FIELDS = {
     sa.MIN_RADIUS: [
         ("MinimumRadius", "length", None),
         ("ToolRadius", "length", None),
+        ("IncludeSharpCurves", "check", None),
         ("Opacity", "slider", (0, 100)),
         ("HighQuality", "check", None),
     ],
@@ -934,6 +972,21 @@ def _direction_ref(obj, short):
     if owner is not None and short and _name_on(owner, obj, short) == short:
         obj = owner
     return (obj, short)
+
+
+_TOLD = {"text": "", "time": 0.0}
+
+
+def _tell_on_click(text, gap=4.0):
+    """Say why the thing under the mouse cannot be picked (next to the pointer), at most
+    every few seconds: the selection filter asks on every move over it."""
+    import time
+
+    now = time.time()
+    if _TOLD["text"] == text and now - _TOLD["time"] < gap:
+        return
+    _TOLD["text"], _TOLD["time"] = text, now
+    QtCore.QTimer.singleShot(0, lambda: commands.tell(text))
 
 
 class _Gate:
@@ -1178,6 +1231,9 @@ class AnalysisPanel(bodypick.Tones, pickpanel.PickPanel):
             warn("%s: selection filter unavailable: %s" % (self.title, exc))
 
     def _fits_target(self, obj, short):
+        if sa.is_mesh_owner(obj):
+            # a mesh body: whole, and only for the analyses Fusion offers on meshes (Zebra)
+            return self.what == "bodies" and sa.takes_meshes(self.kind) and sa.owner_of(obj) is obj
         if not _solid_feature(obj):
             return False
         owner = sa.owner_of(obj)
@@ -1195,7 +1251,10 @@ class AnalysisPanel(bodypick.Tones, pickpanel.PickPanel):
             if obj is None or construct.is_helper(obj) or sa.is_analysis(obj):
                 return False
             return sa.fits_direction(obj, short)
-        return self._fits_target(obj, short)
+        fits = self._fits_target(obj, short)
+        if not fits and sa.is_mesh_owner(obj) and not sa.takes_meshes(self.kind):
+            _tell_on_click(sa.mesh_refusal(self.kind))
+        return fits
 
     def _toggle_target(self, obj, short):
         owner = sa.owner_of(obj)
@@ -1347,6 +1406,14 @@ class AnalysisPanel(bodypick.Tones, pickpanel.PickPanel):
         self._show_boxes()
         if obj.Problem:
             self.say(obj.Problem)
+        elif self.kind == sa.MIN_RADIUS and self.values.get("IncludeSharpCurves"):
+            count = sum(len(sa.sharp_concave_edges(o)) for o, _n in sa.targets(obj))
+            self.hint(
+                "%d sharp inner edge%s (radius 0, red): no round tool reaches into %s."
+                % (count, "" if count == 1 else "s", "it" if count == 1 else "them")
+                if count
+                else "No sharp inner edges."
+            )
         else:
             self.hint("")
 
@@ -1405,7 +1472,15 @@ def start(kind):
         return None
     if chosen is not None:
         return edit(chosen)
-    if not [o for o in App.ActiveDocument.Objects if sa.owner_of(o) is o]:
+    owners = [o for o in App.ActiveDocument.Objects if sa.owner_of(o) is o]
+    if not sa.takes_meshes(kind):
+        meshes = [o for o in owners if sa.is_mesh_owner(o)]
+        owners = [o for o in owners if not sa.is_mesh_owner(o)]
+        if meshes and not owners:
+            commands.tell(sa.mesh_refusal(kind))
+            return None
+        picks = [p for p in picks if not sa.is_mesh_owner(p[0])]
+    if not owners:
         commands.tell("There is no body to analyse yet: make one first.")
         return None
     panel = AnalysisPanel(App.ActiveDocument, kind, initial=picks)

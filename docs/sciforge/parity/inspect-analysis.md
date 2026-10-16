@@ -13,6 +13,23 @@ Tests: scenarios `inspect_analysis_zebra` (74 checks), `inspect_analysis_draft` 
 `inspect_analysis_curvature` (71), `inspect_analysis_components` (28); unit tests
 `test_analysis_core.py`.
 
+## Wave 5 (branch `sf/mesh-inspect-2`, 2026-10-16)
+
+Sources (search excerpts): the Fusion API's What's New (September 2026: `ZebraAnalysis`,
+`ZebraAnalysisInput`; `ZebraAnalysis.inputEntities` returns "solid and surface BRepBody
+objects, T-Spline surface bodies, and mesh bodies"), the `Analysis` class list, help "Analysis
+tools" (SLD-INSPECT-TOOLS) and "Determine appropriate draft angle"; no page or forum answer
+says Draft, Curvature Map, Isocurve, Accessibility or Minimum Radius take mesh bodies (forum
+answers on draft checks of STL files convert them first). "Include Sharp Curves": only the
+Minimum Radius forum answer already cited below; no source names it for Curvature Comb.
+
+| Fusion | SciForge | Source |
+|---|---|---|
+| Zebra Analysis takes mesh bodies | same: a click on a mesh body picks it; the stripes lie on the mesh's own triangles (one normal per corner, the mean of its faces', so they shade smoothly across the facets as the body is drawn) | Autodesk (API) |
+| The analysis follows its body | a mesh body's analysis follows the body's newest step (after a Smooth, a Repair...); it shows nothing while the history marker stands before the mesh | Guess (as for solids) |
+| The other analyses on a mesh body | not offered: a mesh has no exact surface (normals and curvatures of a face); a click on a mesh body says "Draft Analysis needs a solid or surface body: a mesh body has no exact surface. Mesh bodies take Zebra Analysis (or MESH > Convert Mesh first)", and starting one in a design of mesh bodies only says so too | Forum (convert first); Guess |
+| Minimum Radius: Include Sharp Curves (sharp inner corners count as radius 0) | an Include Sharp Curves box (off at first): the sharp inner edges (two faces meeting at an inner corner, not tangent) are drawn red over the body and counted in the dialog ("1 sharp inner edge (radius 0, red): no round tool reaches into it") | Forum; Guess (drawn as red edges, off at first) |
+
 ## Behaviour spec and sources
 
 Source column: **Autodesk** = Fusion help or API reference (read through search excerpts:
@@ -33,7 +50,7 @@ pictures were copied.
 | High Quality: finer display, slower | Autodesk | Same: the analysis is worked out on about 2.7 times finer triangles. |
 | The analysis follows model changes | Guess | Same: drawn again a moment after every recompute, undo, redo, show / hide. A deleted body or face: the analysis shows nothing and its dialog says why. |
 | Undo | Guess | Creating or editing an analysis is one undo step; Ctrl+Z removes a new one, Ctrl+Y brings it back. Cancel / Esc leave nothing. |
-| Mesh, T-spline bodies can be analysed | Autodesk (API lists mesh bodies for Zebra) | Solid and surface bodies only (see gaps). |
+| Mesh, T-spline bodies can be analysed | Autodesk (API lists mesh bodies for Zebra) | Zebra takes mesh bodies (wave 5); the others solid and surface bodies only (see gaps). |
 
 ### Zebra Analysis
 
@@ -94,7 +111,7 @@ pictures were copied.
 |---|---|---|
 | Colours concave rounds by radius: where a cutter of a given radius cannot go | Autodesk | Same: concave rounds a tool of Tool Radius fits green, tighter than Minimum Radius red, a blend through yellow in between; convex and flat faces neutral grey. |
 | With tool radius 0 everything green; a bigger tool turns tight rounds red | Autodesk (example) | Same. A second Autodesk example (rounds under 1.6 mm green, over 6 mm red) reads the other way round; SciForge follows the first. |
-| Include sharp curves | Forum | Not built (sharp inner corners count as radius 0 in Fusion; SciForge colours faces only). |
+| Include sharp curves | Forum | Include Sharp Curves (wave 5): the sharp inner edges drawn red, counted in the dialog. |
 
 ### Display Component Colors (Shift+N)
 
@@ -124,14 +141,14 @@ pictures were copied.
 
 ## Gaps (not built, and why)
 
-- **Mesh and T-spline bodies.** FreeCAD's `Mesh::Feature` has no exact surface (no
-  curvature, no `normalAt`); Zebra and Draft could be done from mesh normals, not yet.
-  T-splines do not exist in FreeCAD.
+- **Mesh and T-spline bodies.** Zebra takes mesh bodies (wave 5). The other analyses do not:
+  FreeCAD's `Mesh::Feature` has no exact surface (no curvature, no `normalAt`), and no source
+  says Fusion offers them on meshes. T-splines do not exist in FreeCAD.
 - **Stripe look.** Fusion draws its stripes from an environment picture on the GPU;
   SciForge's striped ball is a model of it (Guess), worked out per point on the CPU, so on
   very coarse triangles the stripes can look slightly stepped (High Quality helps).
-- **Include Sharp Curves** (Minimum Radius) and **Cycle Component Color** (right-click) not
-  built.
+- **Cycle Component Color** (right-click) not built. Include Sharp Curves draws the sharp
+  inner edges as red lines; Fusion may colour the faces next to them instead (not found).
 - Isocurve lines and comb teeth are drawn on the surface, not lifted towards the camera:
   on a face seen almost edge-on a line can dip behind it.
 - Colours of Accessibility and Minimum Radius, and the default numbers marked Guess above,

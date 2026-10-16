@@ -2011,6 +2011,35 @@ def _():
     return out
 
 
+@icon("mesh_direct_edit")
+def _():
+    # a mesh piece with a few faces picked (blue) and a brush tip over them
+    out = mesh_patch(HEX, inner=[(24, 7, 24, 41), (9, 15, 39, 33), (39, 15, 9, 33)])
+    out += poly([(24, 24), (39, 15), (39, 33)], "#7cc4f5")
+    out += poly([(24, 24), (24, 7), (39, 15)], "#7cc4f5")
+    out += line(18, 40, 33, 22, WHITE, 3.0)
+    return out + circle(34, 21, 3.2, WHITE, DARK, 1.2)
+
+
+@icon("mesh_create_group")
+def _():
+    # faces gathered into one coloured group, with a plus
+    out = mesh_patch(HEX, inner=[(24, 7, 24, 41), (9, 15, 39, 33), (39, 15, 9, 33)])
+    out += poly([(24, 24), (9, 33), (9, 15), (24, 7)], "#a8e6b0")
+    out += line(24, 7, 24, 24, DARK, 1.4) + line(9, 33, 24, 24, DARK, 1.4)
+    return out + plus_badge(37, 37, 7.5)
+
+
+@icon("mesh_combine_groups")
+def _():
+    # two face groups (green, blue) joined into one (green) across their shared edge
+    out = poly([(6, 34), (16, 12), (26, 34)], "#a8e6b0")
+    out += poly([(22, 34), (32, 12), (42, 34)], "#7cc4f5")
+    out += poly([(16, 12), (32, 12), (26, 34), (22, 34)], "#a8e6b0")
+    out += line(16, 12, 26, 34, DARK, 1.2) + line(32, 12, 22, 34, DARK, 1.2)
+    return out + arrow(32, 42, 16, 42, WHITE, 2.0, 4.0)
+
+
 @icon("mesh_tessellate")
 def _():
     # a solid block on the left becomes triangles on the right

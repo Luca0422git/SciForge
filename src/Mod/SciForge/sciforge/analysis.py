@@ -50,9 +50,12 @@ def bodies(doc):
 
 
 def solid_of(obj):
-    """The solid shape of a body or loose solid in global coordinates."""
+    """The solid shape of a body or loose solid in global coordinates (a body in a moved
+    component where it shows: its Shape alone leaves the component's placement out)."""
     try:
-        shape = obj.Shape
+        from . import bodies
+
+        shape = bodies.global_shape(obj)
     except Exception:
         shape = None
     if shape is None or shape.isNull() or not shape.Solids:
@@ -364,6 +367,49 @@ class InterferenceAnalysis:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def overlaps(obj):
+    """[(label 1, label 2, volume, common solid shape)] of the pairs of an interference
+    analysis that overlap (worked out again from its bodies, in the order of its results)."""
+    picked = [o for o in obj.Bodies if o is not None]
+    if len(picked) < 2:
+        raise AnalysisError(TOO_FEW)
+    named = [(o.Label, solid_of(o)) for o in picked]
+    return [entry for entry in interference(named, False) if entry[2] > VOLUME_EPS]
+
+
+def create_bodies(obj, rows=None):
+    """Fusion's Create Bodies of an interference: each overlap (all, or the `rows`: indices
+    of the overlapping pairs in the results table) becomes a new body holding the shared
+    volume (a body without history: one Base Feature step, as Fusion's interference bodies
+    are not parametric). Part of the caller's undo step. Returns the new bodies."""
+    from . import bodies, direct
+
+    doc = obj.Document
+    made = []
+    for index, (a, b, _volume, common) in enumerate(overlaps(obj)):
+        if rows is not None and index not in rows:
+            continue
+        for solid in common.Solids:
+            if solid.Volume <= VOLUME_EPS:
+                continue
+            body = bodies.new_body(doc)
+            holder = doc.addObject("Part::Feature", "InterferenceShape")
+            holder.Label = "%s (base)" % body.Label
+            holder.Shape = solid
+            bodies.add_prop(holder, "App::PropertyString", direct.ROLE, "Base")
+            setattr(holder, direct.ROLE, direct.SHAPE_ROLE)
+            bodies.hide_from_timeline(holder)
+            direct._hide(holder)
+            body.BaseFeature = holder
+            doc.recompute()
+            direct._mark_base(direct.base_of(body))
+            bodies.add_prop(body, "App::PropertyString", "SciForgeInterference", "Base")
+            body.SciForgeInterference = "%s|%s" % (a, b)
+            bodies.show_tip(body)
+            made.append(body)
+    return made
 
 
 def results(obj):

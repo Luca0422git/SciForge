@@ -18,6 +18,8 @@ try:
 except ImportError:
     App = V = None
 
+import math  # noqa: E402
+
 from . import analysis_core as core  # noqa: E402
 from . import labels  # noqa: E402
 
@@ -99,6 +101,12 @@ PROPS = {
     + [
         ("App::PropertyLength", "MinimumRadius", "Tighter concave rounds: red", 1.0),
         ("App::PropertyLength", "ToolRadius", "Concave rounds this tool fits: green", 5.0),
+        (
+            "App::PropertyBool",
+            "IncludeSharpCurves",
+            "Sharp inner edges count as radius 0 (red)",
+            False,
+        ),
     ],
 }
 ENUMS = {
@@ -202,6 +210,11 @@ class SurfaceAnalysis:
         try:
             if not targets(obj):
                 problem = GONE[picks(obj.SciForgeType)]
+                if any(is_mesh_owner(o) and _mesh_end(o) is None for o, _s in obj.Targets or []):
+                    problem = (
+                        "Its mesh body does not exist at the history marker (the marker stands "
+                        "before it): roll the marker forward to see the analysis."
+                    )
             elif has_direction(obj.SciForgeType):
                 vector = pull_vector(obj)
                 if (obj.PullVector - vector).Length > 1e-12:
@@ -251,11 +264,105 @@ def make(doc, kind):
     return obj
 
 
+# -- mesh bodies -------------------------------------------------------------------------------
+# Fusion analyses mesh bodies with Zebra (its API lists mesh bodies among a zebra analysis'
+# input entities); the other analyses need an exact surface (normals and curvatures of a
+# B-rep face), which a mesh has not.
+MESH_KINDS = {ZEBRA}
+MESH_TYPES = ("Mesh::Feature", "Mesh::FeaturePython")
+
+
+def is_mesh_owner(obj):
+    try:
+        return obj is not None and obj.TypeId in MESH_TYPES
+    except Exception:
+        return False
+
+
+def takes_meshes(kind):
+    return kind in MESH_KINDS
+
+
+def mesh_refusal(kind):
+    """Why a mesh body cannot take this analysis (said when one is clicked)."""
+    return (
+        "%s needs a solid or surface body: a mesh body has no exact surface. Mesh bodies "
+        "take Zebra Analysis (or MESH > Convert Mesh first)." % title(kind)
+    )
+
+
+def _mesh_end(obj):
+    """The mesh body `obj` belongs to as the design is now: the newest step of its history
+    (a later mesh step uses the older one up), or None when it does not exist at the
+    history marker."""
+    try:
+        from . import bodies, mesh
+    except Exception:
+        return obj
+    seen = set()
+    current = obj
+    while current is not None and current.Name not in seen:
+        seen.add(current.Name)
+        if mesh.rolled_back(current):
+            return None
+        users = bodies.consumers(current.Document)
+        user = users.get(current.Name)
+        if user is None:
+            return current
+        if not mesh.is_mesh(user) or mesh.is_piece(user):
+            return current if not mesh.is_piece(user) else user
+        current = user
+    return current
+
+
+def mesh_of(owner):
+    """The triangles of a mesh body where it shows (its placement built in), with one normal
+    per point (the mean of its faces': Coin shades smoothly across them, as the body is)."""
+    result = Mesh()
+    try:
+        points, facets = owner.Mesh.Topology
+    except Exception:
+        return result
+    points = [(p.x, p.y, p.z) for p in points]
+    triangles = [tuple(f) for f in facets]
+    result.add(points, triangles, _triangle_normals(points, triangles), [])
+    result.on_mesh = True
+    return result
+
+
+def bound_box(owner):
+    """The bounds of a body or mesh body in its parent's coordinates."""
+    if is_mesh_owner(owner):
+        return owner.Mesh.BoundBox
+    return owner.Shape.BoundBox
+
+
+def global_box(owner, frame):
+    """Bounds of `owner` moved by `frame` (its component's placement)."""
+    if frame.isIdentity():
+        return bound_box(owner)
+    if is_mesh_owner(owner):
+        copy = owner.Mesh.copy()
+        copy.transform(frame.toMatrix())
+        return copy.BoundBox
+    return owner.Shape.transformed(frame.toMatrix()).BoundBox
+
+
+def stamp(owner):
+    """Changes whenever what an analysis of `owner` draws on changes."""
+    if is_mesh_owner(owner):
+        m = owner.Mesh
+        return (m.CountFacets, m.CountPoints, round(m.Area, 9), str(owner.Placement))
+    return (owner.Shape.hashCode(), display_tolerance(owner))
+
+
 # -- what is analysed --------------------------------------------------------------------------
 def owner_of(obj):
-    """The body (or loose solid) a picked object belongs to, or None."""
+    """The body (or loose solid, or mesh body) a picked object belongs to, or None."""
     if obj is None:
         return None
+    if is_mesh_owner(obj):
+        return _mesh_end(obj)
     if obj.TypeId == "PartDesign::Body":
         return obj
     try:
@@ -290,6 +397,13 @@ def targets(obj):
     for entry in obj.Targets or []:
         owner, subs = entry
         if not alive(owner):
+            continue
+        if is_mesh_owner(owner):
+            # a mesh body: the whole body, as its history stands now (a later mesh step is
+            # the body then); none when it does not exist at the history marker
+            end = _mesh_end(owner)
+            if end is not None and alive(end) and takes_meshes(getattr(obj, "SciForgeType", "")):
+                found.append((end, []))
             continue
         if isinstance(subs, str):
             subs = [subs]
@@ -404,6 +518,7 @@ class Mesh:
         self.triangles = []
         self.normals = []
         self.curvatures = []  # (k1, k2) per point, when asked for
+        self.on_mesh = False  # drawn over a mesh body's own faces (they are not switched off)
 
     def add(self, points, triangles, normals, curvatures):
         base = len(self.points)
@@ -494,6 +609,8 @@ def owner_faces(owner, names):
 def mesh(owner, names=(), quality=False, curvature=False, coarse=False):
     """The Mesh of the analysed faces of `owner` (owner coordinates: put them in the
     component with parent_placement). coarse: the model's own triangles, not split."""
+    if is_mesh_owner(owner):
+        return mesh_of(owner)
     result = Mesh()
     shape = owner.Shape
     if shape.isNull():
@@ -548,6 +665,58 @@ def radius_colors(obj, m):
     lo = float(obj.MinimumRadius.Value)
     hi = float(obj.ToolRadius.Value)
     return [core.min_radius_color(core.concave_radius(k1, k2), lo, hi) for k1, k2 in m.curvatures]
+
+
+def _face_normal_at(face, point):
+    try:
+        u, v = face.Surface.parameter(point)
+        n = face.normalAt(u, v)
+        return V(n.x, n.y, n.z)
+    except Exception:
+        return None
+
+
+def sharp_concave_edges(owner, crease_degrees=1.0):
+    """Minimum Radius' Include Sharp Curves: the edges where two faces meet in a sharp inner
+    corner (radius 0: no round cutter reaches into it), as polylines in the owner's
+    coordinates. An edge is concave when the second face's outward normal points into the
+    first face's side of the edge; faces meeting smoothly (tangent) do not count."""
+    import Part
+
+    shape = owner.Shape
+    if shape.isNull():
+        return []
+    faces = list(shape.Faces)
+    size = max(shape.BoundBox.DiagonalLength, 1e-6)
+    eps = size * 1e-4
+    limit = math.cos(math.radians(crease_degrees))
+    found = []
+    for edge in shape.Edges:
+        try:
+            if edge.Length < eps:
+                continue
+            owners = [f for f in faces if any(e.isSame(edge) for e in f.Edges)]
+            if len(owners) != 2:
+                continue
+            t = 0.5 * (edge.FirstParameter + edge.LastParameter)
+            point = edge.valueAt(t)
+            n1 = _face_normal_at(owners[0], point)
+            n2 = _face_normal_at(owners[1], point)
+            if n1 is None or n2 is None or n1.dot(n2) >= limit:
+                continue  # smooth or tangent there: not a sharp corner
+            tangent = edge.tangentAt(t)
+            into = n1.cross(tangent)
+            if into.Length < 1e-12:
+                continue
+            into.normalize()
+            probe = Part.Vertex(point + into * (eps * 10.0))
+            if owners[0].distToShape(probe)[0] > eps * 5.0:
+                into = into * -1.0  # the other way runs off the first face
+            if n2.dot(into) > 1e-6:
+                found.append(polyline(edge, size))
+        except Exception:
+            continue
+    return found
 
 
 def access_colors(obj, m, owner, pull):

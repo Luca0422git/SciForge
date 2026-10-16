@@ -586,5 +586,57 @@ class StepAtMarkerBeforeRootStepTests(unittest.TestCase):
         self.assertEqual(core.keys_to_go_before(rows, "Nope", "Pattern"), {})
 
 
+class MeshStepsAndTheMarkerTests(unittest.TestCase):
+    """Mesh steps sit outside the bodies and roll back with the marker (mesh-inspect-2); a
+    design of mesh bodies only has no solid step to carry the marker: the note does."""
+
+    def mesh_rows(self):
+        return [
+            feat("MeshBody", "SciForge::InsertMesh", 1, body=None, rolls=True),
+            feat("Smooth", "SciForge::MeshSmooth", 2, body=None, rolls=True),
+            feat("Edit", "SciForge::MeshDirectEdit", 3, body=None, rolls=True),
+        ]
+
+    def test_new_kinds(self):
+        self.assertEqual(core.classify("SciForge::MeshDirectEdit"), "mesh_direct_edit")
+        self.assertEqual(
+            core.title_base("SciForge::MeshDirectEdit", "mesh_direct_edit"), "Mesh Base Feature"
+        )
+        self.assertEqual(core.classify("SciForge::MeshCreateFaceGroup"), "mesh_create_group")
+        self.assertEqual(core.classify("SciForge::MeshCombineFaceGroups"), "mesh_combine_groups")
+        self.assertEqual(core.icon_for("mesh_combine_groups"), "mesh_combine_groups")
+
+    def test_marker_anywhere_without_solids(self):
+        tl = core.build(self.mesh_rows(), {})
+        self.assertTrue(tl.at_end)
+        self.assertEqual(core.marker_for_slot(tl, 2), (None, "Edit"))
+        self.assertEqual(core.marker_for_slot(tl, 0), (None, "MeshBody"))
+        self.assertEqual(core.marker_for_slot(tl, 3), (None, None))  # the end: no note
+        rolled = core.build(self.mesh_rows(), {}, marker_before="Smooth")
+        state = {i.name: i.state for i in rolled.items}
+        self.assertEqual(
+            state, {"MeshBody": "done", "Smooth": "rolled_back", "Edit": "rolled_back"}
+        )
+        self.assertEqual(rolled.marker, 1)
+        self.assertEqual([i.title for i in rolled.items][2], "Mesh Base Feature 1")
+
+    def test_mesh_steps_after_solids_roll_with_the_marker(self):
+        rows = one_body() + [
+            feat("Tess", "SciForge::Tessellate", 6, body=None, rolls=True),
+            feat("Smooth", "SciForge::MeshSmooth", 7, body=None, rolls=True),
+        ]
+        tl = core.build(rows, {"Body": "Fillet"})
+        tips, before = core.marker_for_slot(tl, 6)
+        self.assertEqual((tips, before), (None, "Smooth"))
+        noted = core.build(rows, {"Body": "Fillet"}, marker_before="Smooth")
+        state = {i.name: i.state for i in noted.items}
+        self.assertEqual(state["Tess"], "done")
+        self.assertEqual(state["Smooth"], "rolled_back")
+        # before the fillet: both mesh steps are rolled back with it
+        early = core.build(rows, {"Body": "Pad001"})
+        state = {i.name: i.state for i in early.items}
+        self.assertEqual((state["Tess"], state["Smooth"]), ("rolled_back", "rolled_back"))
+
+
 if __name__ == "__main__":
     unittest.main()

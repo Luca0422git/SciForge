@@ -358,7 +358,9 @@ def is_active_step(obj):
         return False
     body = body_of(obj)
     if body is None:
-        return True
+        # a step outside the bodies the marker stands before (a mesh step: timeline_ops.
+        # follow_mesh_steps) uses nothing up there
+        return not getattr(obj, "SciForgeRolledBack", False)
     tip = body.Tip
     if tip is None:
         return False
