@@ -147,7 +147,11 @@ class PlanePicker:
             except Exception:
                 obj = None
             if obj is not None and not _curve_object(obj):
-                return True
+                # but only an edge on the square (the rim) or one with the part's face under
+                # the mouse in front of the square: FreeCAD picks an edge up to a few pixels
+                # away, and a loft's edge passing near the mouse, the plane under it, kept
+                # XZ from being clicked (sweep_loft_loft, CI #141)
+                return self._on_square(position, info) or self._face_in_front(position)
             return self._in_front(position, info)
         # A construction plane (an Offset Plane for a loft's next profile) is picked as a
         # whole object, not a face: the origin square behind it took the click and the
@@ -165,6 +169,40 @@ class PlanePicker:
             return square is None or (spot - start).dot(direction) <= square[1] + 1e-6
         except Exception:
             return False
+
+    def _on_square(self, position, info, tolerance=1e-3):
+        """True if the picked point of `info` lies in the plane of the origin square under
+        the mouse (or there is no square there). (The point FreeCAD gives for an edge is the
+        edge's point nearest the mouse ray, not where the ray meets the square.)"""
+        try:
+            square = self._square_at(position)
+            if square is None:
+                return True
+            base, normal, _u, _v = self._frame(square[0])
+            spot = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
+            return abs((spot - base).dot(normal)) <= tolerance
+        except Exception:
+            return True
+
+    def _face_in_front(self, position):
+        """True if a face of the part is under the mouse before the origin square there."""
+        try:
+            from .profile_pick import mouse_ray
+
+            square = self._square_at(position)
+            infos = self.view.getObjectsInfo(tuple(position)) or []
+            start, direction = mouse_ray(self.view, position)
+            for info in infos:
+                if not str(info.get("Component", "")).startswith("Face"):
+                    continue
+                if square is None:
+                    return True
+                spot = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
+                if (spot - start).dot(direction) < square[1] + 1e-3:
+                    return True
+            return False
+        except Exception:
+            return True
 
     def _in_front(self, position, info, slack=1e-3):
         """True if the picked point of `info` lies before the origin square under the mouse
