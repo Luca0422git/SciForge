@@ -1356,7 +1356,12 @@ class DrawTool:
                     d = result.direction
                     u = d if not result.on_line else (-d[0], -d[1])
                     marks.append(icore.right_angle_mark(result.corner, u, result.along, 10 * px))
-        if snap.key is not None or snap.mid_of is not None or snap.curve is not None:
+                elif result.kind == icore.DIAGONAL:
+                    marks += icore.diagonal_mark(result.start, result.point, 6 * px)
+        if snap.target is not None:
+            # what the point sits on, as in FreeCAD's tools (sketch_infer.Overlay)
+            marks += icore.snap_mark(snap.target, 6 * px)
+        elif snap.key is not None or snap.mid_of is not None or snap.curve is not None:
             points.append(snap.point)
         return guides, marks, points
 

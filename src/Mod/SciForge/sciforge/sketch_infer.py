@@ -1477,6 +1477,12 @@ class Overlay:
             marks += core.level_mark(result.start, result.point, 6 * px)
         elif result.kind == core.VERTICAL and result.start is not None:
             marks += core.upright_mark(result.start, result.point, 6 * px)
+        elif result.kind == core.DIAGONAL and result.start is not None:
+            marks += core.diagonal_mark(result.start, result.point, 6 * px)
+        if result.snap is not None:
+            # what the point sits on: an end (square), a middle (triangle), a centre
+            # (circle and dot), a quadrant (diamond), a crossing (X)
+            marks += core.snap_mark(result.snap, 6 * px)
         self._draw(guides, marks, [])
 
     def show_arc(self, arc, guides, marks):

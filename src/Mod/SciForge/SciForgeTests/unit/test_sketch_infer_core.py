@@ -657,3 +657,41 @@ class Diagonal(unittest.TestCase):
         self.assertAlmostEqual(core.diagonal_angle((-1.0, 1.02)), 3 * math.pi / 4)
         self.assertAlmostEqual(core.diagonal_angle((-1.0, -1.0)), -3 * math.pi / 4)
         self.assertAlmostEqual(core.diagonal_angle((1.0, -0.98)), -math.pi / 4)
+
+
+class Glyphs(unittest.TestCase):
+    def test_the_midpoint_triangle(self):
+        (tri,) = core.mid_mark((5.0, 5.0), 1.0)
+        self.assertEqual(len(tri), 4)  # three corners, closed
+        self.assertEqual(tri[0], tri[-1])
+        xs = sorted(p[0] for p in tri[:3])
+        self.assertAlmostEqual(xs[1], 5.0)  # the apex above the middle
+
+    def test_end_square_quadrant_diamond_crossing_x_centre_circle(self):
+        self.assertEqual(len(core.end_mark((0.0, 0.0), 1.0)[0]), 5)
+        diamond = core.quadrant_mark((0.0, 0.0), 1.0)[0]
+        self.assertIn((1.0, 0.0), diamond)
+        self.assertIn((0.0, 1.0), diamond)
+        self.assertEqual(len(core.crossing_mark((0.0, 0.0), 1.0)), 2)
+        ring, dot = core.centre_mark((0.0, 0.0), 1.0)
+        self.assertAlmostEqual(core.length(ring[3]), 0.9)
+        self.assertLess(max(abs(c) for p in dot for c in p), 0.2)
+
+    def test_snap_mark_picks_the_glyph_of_its_kind(self):
+        for kind, draw in core.GLYPHS.items():
+            s = core.SnapPoint(kind, (1.0, 2.0))
+            self.assertEqual(core.snap_mark(s, 0.5), draw((1.0, 2.0), 0.5))
+
+    def test_the_45_glyph_is_an_arc_and_the_digits(self):
+        strokes = core.diagonal_mark((0.0, 0.0), (10.0, 10.0), 1.0)
+        arc = strokes[0]
+        self.assertAlmostEqual(arc[0][1], 0.0)  # from level ...
+        self.assertAlmostEqual(
+            math.degrees(math.atan2(arc[-1][1], arc[-1][0])), 45.0
+        )  # to the line
+        # "4" has four strokes and "5" five
+        self.assertEqual(len(strokes) - 1, 4 + 5)
+
+    def test_digit_strokes(self):
+        self.assertEqual(len(core.digit_strokes("8", (0.0, 0.0), 1.0)), 7)
+        self.assertEqual(core.digit_strokes("1", (0.0, 0.0), 1.0)[0], [(1.0, 2.0), (1.0, 1.0)])

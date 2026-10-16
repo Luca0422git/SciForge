@@ -860,6 +860,143 @@ def tangent_mark(joint, tangent, away, size):
     return [[add(c, mul(tangent, -size * 0.8)), add(c, mul(tangent, size * 0.8))]]
 
 
+# -- snap glyphs (SciForge's own pictograms, Fusion's look is not documented: the
+# midpoint triangle is Fusion's, sourced; the rest are SciForge's) ---------------------
+def _closed(points):
+    return list(points) + [points[0]]
+
+
+def end_mark(p, size):
+    """A small square round an end point (end / coincident)."""
+    s = size * 0.7
+    return [
+        _closed(
+            [(p[0] - s, p[1] - s), (p[0] + s, p[1] - s), (p[0] + s, p[1] + s), (p[0] - s, p[1] + s)]
+        )
+    ]
+
+
+def mid_mark(p, size):
+    """A small triangle round a middle point (Fusion's midpoint glyph)."""
+    s = size
+    return [_closed([(p[0] - s, p[1] - 0.6 * s), (p[0] + s, p[1] - 0.6 * s), (p[0], p[1] + s)])]
+
+
+def centre_mark(p, size, n=16):
+    """A small circle with a dot in it (a centre)."""
+    r = size * 0.9
+    ring = [
+        (p[0] + r * math.cos(2 * math.pi * k / n), p[1] + r * math.sin(2 * math.pi * k / n))
+        for k in range(n + 1)
+    ]
+    d = size * 0.15
+    dot = _closed(
+        [(p[0] - d, p[1] - d), (p[0] + d, p[1] - d), (p[0] + d, p[1] + d), (p[0] - d, p[1] + d)]
+    )
+    return [ring, dot]
+
+
+def quadrant_mark(p, size):
+    """A small diamond round a quadrant point (0 / 90 / 180 / 270 degrees on a circle)."""
+    s = size
+    return [_closed([(p[0] + s, p[1]), (p[0], p[1] + s), (p[0] - s, p[1]), (p[0], p[1] - s)])]
+
+
+def crossing_mark(p, size):
+    """A small X on a crossing of two curves."""
+    s = size * 0.8
+    return [
+        [(p[0] - s, p[1] - s), (p[0] + s, p[1] + s)],
+        [(p[0] - s, p[1] + s), (p[0] + s, p[1] - s)],
+    ]
+
+
+GLYPHS = {
+    END: end_mark,
+    MIDDLE: mid_mark,
+    CENTRE: centre_mark,
+    QUADRANT: quadrant_mark,
+    CROSSING: crossing_mark,
+}
+
+
+def snap_mark(snap, size):
+    """The glyph (polylines) of a snap point."""
+    draw = GLYPHS.get(snap.kind)
+    return draw(snap.point, size) if draw is not None else []
+
+
+# stroke digits for the angle label (a seven-segment look): segments of a unit cell
+# (0..1 wide, 0..2 high), a = top, b = top right, c = bottom right, d = bottom,
+# e = bottom left, f = top left, g = middle
+_SEGMENTS = {
+    "a": ((0, 2), (1, 2)),
+    "b": ((1, 2), (1, 1)),
+    "c": ((1, 1), (1, 0)),
+    "d": ((1, 0), (0, 0)),
+    "e": ((0, 0), (0, 1)),
+    "f": ((0, 1), (0, 2)),
+    "g": ((0, 1), (1, 1)),
+}
+_DIGITS = {
+    "0": "abcdef",
+    "1": "bc",
+    "2": "abged",
+    "3": "abgcd",
+    "4": "fgbc",
+    "5": "afgcd",
+    "6": "afgedc",
+    "7": "abc",
+    "8": "abcdefg",
+    "9": "abcdfg",
+}
+
+
+def digit_strokes(text, at, size):
+    """Polylines writing the digits of `text`, the bottom left of the first at `at`, each
+    digit `size` wide and twice as high."""
+    out = []
+    x = at[0]
+    for ch in text:
+        for seg in _DIGITS.get(ch, ""):
+            (x0, y0), (x1, y1) = _SEGMENTS[seg]
+            out.append([(x + x0 * size, at[1] + y0 * size), (x + x1 * size, at[1] + y1 * size)])
+        x += size * 1.6
+    return out
+
+
+def diagonal_mark(start, end, size):
+    """SciForge's 45 degree glyph while a line snaps to 45 / 135 / 225 / 315 degrees: a
+    small arc at the line's start from the level direction round to the line, and "45"
+    beside it."""
+    d = unit(sub(end, start))
+    if d is None:
+        return []
+    r = size * 4.0
+    level = 0.0 if d[0] >= 0 else math.pi
+    ang = math.atan2(d[1], d[0])
+    turn = ang - level
+    while turn > math.pi:
+        turn -= 2 * math.pi
+    while turn < -math.pi:
+        turn += 2 * math.pi
+    n = 8
+    arc = [
+        (
+            start[0] + r * math.cos(level + turn * k / n),
+            start[1] + r * math.sin(level + turn * k / n),
+        )
+        for k in range(n + 1)
+    ]
+    mid = level + turn / 2.0
+    label = (
+        start[0] + (r + size * 2.2) * math.cos(mid),
+        start[1] + (r + size * 2.2) * math.sin(mid),
+    )
+    h = size * 0.8
+    return [arc] + digit_strokes("45", (label[0] - h * 1.3, label[1] - h), h)
+
+
 # -- the other tools' previews --------------------------------------------------------
 def preview_anchor(kind, polylines):
     """The point the direction of the shape's next point starts from, read from
