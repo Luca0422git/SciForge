@@ -9,8 +9,10 @@ clicks on the palette and in the view.
      plane keeps only what lies behind the sketch; a pick in the middle reaches the
      sketch plane, no longer the top face); Slice off: the top face again
   C  seen from below (the other side): Slice keeps the top half instead
-  D  a component (with a body) active: a sketch in it, 3D Sketch, a 3D line: its 3D Curves
-     go into the component and lie where the line was drawn
+  D  a component (with a body) active: a sketch in it, 3D Sketch, L: a line on the sketch
+     plane is an ordinary sketch line (no 3D Curves); the manipulator's ZX plane and a
+     line 10 up from its end: a 3D line, whose 3D Curves go into the component, lie where
+     the line was drawn and start tied to the sketch line's end
 """
 
 import FreeCAD as App
@@ -213,10 +215,16 @@ def d_3d():
 
 
 def d_line():
+    s["count"] = len(s["sk"].Geometry)
+    # seen at an angle: the manipulator's ZX plane is edge-on in the sketch's own view
+    h.view().viewIsometric()
+    h.fit()
+    QtWidgets.QApplication.processEvents()
     h.press("l")
 
 
 def d_a():
+    h.check("D L runs the 3D Line", st.tool_title() == "3D Line", st.tool_title())
     st.click(V(0, 0, 0))
 
 
@@ -225,6 +233,49 @@ def d_b():
 
 
 d_b.wait_ms = 900
+
+
+def d_flat():
+    from sciforge import sketch3d
+
+    sk = s["sk"]
+    h.check(
+        "D a line on the sketch plane is a sketch line",
+        len(sk.Geometry) == s["count"] + 1 and sk.Geometry[-1].TypeId == "Part::GeomLineSegment",
+        len(sk.Geometry) - s["count"],
+    )
+    if len(sk.Geometry) > s["count"]:
+        line = sk.Geometry[-1]
+        h.check(
+            "D ...from the origin 10 along X",
+            (line.StartPoint - V(0, 0, 0)).Length < 1e-6
+            and (line.EndPoint - V(10, 0, 0)).Length < 1e-6,
+            (line.StartPoint, line.EndPoint),
+        )
+    kinds = [c.Type for c in sk.Constraints]
+    h.check(
+        "D ...on the origin and level",
+        "Coincident" in kinds and "Horizontal" in kinds,
+        kinds,
+    )
+    h.check("D ...and no 3D Curves", sketch3d.curves_of(sk) is None)
+    t = st.tool()
+    corners = t.manipulator.corners.get("ZX") if t is not None else None
+    if not corners:
+        h.check("D the manipulator shows its ZX plane", False)
+        return
+    st.click(V(*[sum(c[i] for c in corners) / 4.0 for i in range(3)]))
+
+
+def d_up():
+    from sciforge import sketch3d_ui
+
+    plane = sketch3d_ui.layer(st.session(), create=False).plane
+    h.check("D the ZX plane is the drawing plane", plane == "ZX", plane)
+    st.click(V(10, 0, 10))
+
+
+d_up.wait_ms = 900
 
 
 def d_check():
@@ -242,16 +293,22 @@ def d_check():
     )
     pts = sketch3d.global_points(obj)
     h.check(
-        "D ...where the line was drawn (100 to the right)",
-        len(pts) == 2 and abs(pts[0].x - 100) < 1e-6 and abs(pts[1].x - 110) < 1e-6,
+        "D ...where the line was drawn (100 to the right, from the sketch line's end up)",
+        len(pts) == 2
+        and (pts[0] - V(110, 0, 0)).Length < 1e-6
+        and abs(pts[1].x - 110) < 1e-6
+        and abs(pts[1].z - 10) < 0.35,
         pts,
     )
+    ties = list(obj.PointTies)
+    h.check("D ...tied to the sketch line's end", ties[:1] and ties[0].startswith("v:"), ties)
     shape = obj.Shape.copy()
     shape.Placement = s["part"].getGlobalPlacement().multiply(shape.Placement)
+    box = shape.BoundBox
     h.check(
         "D the line shows there",
-        abs(shape.BoundBox.XMin - 100) < 1e-6 and abs(shape.BoundBox.XMax - 110) < 1e-6,
-        shape.BoundBox,
+        abs(box.XMin - 110) < 1e-6 and abs(box.XMax - 110) < 1e-6 and abs(box.ZMax - 10) < 0.35,
+        box,
     )
     h.ribbon("Finish Sketch")
 
@@ -274,6 +331,8 @@ h.run(
             d_line,
             d_a,
             d_b,
+            d_flat,
+            d_up,
             d_check,
         ]
     ),

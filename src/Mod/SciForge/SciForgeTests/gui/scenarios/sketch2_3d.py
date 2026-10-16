@@ -12,8 +12,11 @@ A sketch on the XY plane; SKETCH PALETTE > 3D Sketch.
   C  a drag of the triad's Y arrow moves the point along Y only; Ctrl+Z
   D  CREATE > Spline > Fit Point Spline (3D): two points on the plane, the manipulator's
      ZX plane, a third point 10 up; Enter: a spline through the three points
+  I  L, the manipulator's XY plane, a triangle on the sketch plane closed on its first
+     point: three ordinary sketch lines (joined, a profile; no 3D line); a click on its
+     corner, the ZX plane, a click 15 up: a 3D line tied to the triangle's corner
   E  Finish Sketch: the browser lists "3D Curves" under the sketch; the timeline has no
-     step for it; the sketch's eye hides and shows it
+     step for it; the sketch's eye hides and shows it; the triangle is a closed profile
   F  a circle (radius 2) sketched on XY at the origin, CREATE > Sweep: the circle, then a
      click on the 3D line: a tube 20 high (pi 2^2 20)
   G  save, close, reopen: the curves, their sketch and the tube are there
@@ -324,6 +327,123 @@ def d_check():
     h.check("D the spline tool ended", st.tool() is None, st.tool_title())
 
 
+# -- I ----------------------------------------------------------------------------------------
+def i_line():
+    s["count"] = len(s["sk3d"].Geometry)
+    s["n3d"] = len(curves().Lines) if curves() is not None else 0
+    h.press("l")
+
+
+def i_plane():
+    h.check("I L runs the 3D Line", st.tool_title() == "3D Line", st.tool_title())
+    click_manipulator("XY")
+
+
+def i_a():
+    h.check("I the XY plane is the drawing plane", layer().plane == "XY", layer().plane)
+    click_global(V(10, -20, 0))
+
+
+def i_b():
+    click_global(V(30, -20, 0))
+
+
+i_b.wait_ms = 700
+
+
+def i_c():
+    click_global(V(10, -30, 0))
+
+
+i_c.wait_ms = 700
+
+
+def i_close():
+    click_global(V(10, -20, 0))
+
+
+i_close.wait_ms = 900
+
+
+def i_check():
+    import Part
+
+    sk = s["sk3d"]
+    new = list(sk.Geometry)[s["count"] :]
+    h.check(
+        "I three sketch lines on the sketch plane",
+        len(new) == 3 and all(g.TypeId == "Part::GeomLineSegment" for g in new),
+        [g.TypeId for g in new],
+    )
+    h.check("I ...and no 3D line", len(curves().Lines) == s["n3d"], list(curves().Lines))
+    want = [(V(10, -20, 0), V(30, -20, 0)), (V(30, -20, 0), V(10, -30, 0))]
+    want.append((V(10, -30, 0), V(10, -20, 0)))
+    h.check(
+        "I ...where they were clicked",
+        len(new) == 3
+        and all(
+            (g.StartPoint - a).Length < TOL and (g.EndPoint - b).Length < TOL
+            for g, (a, b) in zip(new, want)
+        ),
+        [(g.StartPoint, g.EndPoint) for g in new],
+    )
+    first = s["count"]
+    joined = 0
+    for c in sk.Constraints:
+        if c.Type == "Coincident" and min(c.First, c.Second) >= first:
+            joined += 1
+    h.check("I ...joined end to end (three Coincident)", joined == 3, joined)
+    closed = False
+    try:
+        closed = Part.Wire(Part.__sortEdges__([g.toShape() for g in new])).isClosed()
+    except Exception:
+        pass
+    h.check("I ...a closed triangle", closed)
+    t = st.tool()
+    h.check("I closed: the next click starts a new chain", t is not None and not t.chain)
+    click_global(V(10, -20, 0))
+
+
+def i_corner():
+    t = st.tool()
+    tie = t.chain[0][1] if t is not None and t.chain else ""
+    h.check("I the new chain starts on the triangle's corner (tied)", tie.startswith("v:"), tie)
+    click_manipulator("ZX")
+
+
+def i_up():
+    h.check("I the ZX plane is the drawing plane", layer().plane == "ZX", layer().plane)
+    click_global(V(10, -20, 15))
+
+
+i_up.wait_ms = 900
+
+
+def i_up_check():
+    from sciforge import sketch3d
+
+    obj = curves()
+    lines = list(obj.Lines) if obj is not None else []
+    h.check("I a 3D line was made", len(lines) == s["n3d"] + 2, lines)
+    if len(lines) < s["n3d"] + 2:
+        st.esc()
+        return
+    a, b = lines[-2], lines[-1]
+    pts = points()
+    ties = list(obj.PointTies)
+    h.check(
+        "I from the triangle's corner 15 up",
+        vnear(pts[a], (10, -20, 0), TOL) and vnear(pts[b], (10, -20, 15), TOL),
+        (pts[a], pts[b]),
+    )
+    h.check(
+        "I ...tied to the corner",
+        a < len(ties) and sketch3d.resolve(s["sk3d"], ties[a]) is not None,
+        ties,
+    )
+    st.esc()
+
+
 # -- E ----------------------------------------------------------------------------------------
 def e_finish():
     h.ribbon("Finish Sketch")
@@ -359,6 +479,12 @@ def e_hidden():
 
 def e_shown():
     h.check("E shown again with the sketch", curves().ViewObject.Visibility)
+    wires = s["sk3d"].Shape.Wires
+    h.check(
+        "E the triangle drawn with 3D Sketch on is a closed profile of the sketch",
+        any(w.isClosed() and len(w.Edges) == 3 for w in wires),
+        [(w.isClosed(), len(w.Edges)) for w in wires],
+    )
 
 
 # -- F ----------------------------------------------------------------------------------------
@@ -437,7 +563,7 @@ def g_check():
     sk, cv = doc.getObject(s["names"][0]), doc.getObject(s["names"][1])
     h.check(
         "G reopened: the 3D curves are there",
-        cv is not None and len(cv.Shape.Edges) == 3,
+        cv is not None and len(cv.Shape.Edges) == 4,
         cv and len(cv.Shape.Edges),
     )
     h.check("G ...still the sketch's", cv is not None and sketch_companions.owner(cv) is sk)
@@ -516,6 +642,16 @@ h.run(
             d_third,
             d_enter,
             d_check,
+            i_line,
+            i_plane,
+            i_a,
+            i_b,
+            i_c,
+            i_close,
+            i_check,
+            i_corner,
+            i_up,
+            i_up_check,
             e_finish,
             e_browser,
             e_hidden,

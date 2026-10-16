@@ -231,6 +231,22 @@ def add_spline(sketch, points, ties=None):
     return obj, len(obj.Lines) // 2 + len(splines)
 
 
+def tie_point(sketch, point, tie):
+    """A 3D point stored at `point` that is tied to nothing gets tied to sketch point `tie`
+    (a sketch line now starts where a 3D line ended: the 3D line follows it)."""
+    obj = curves_of(sketch)
+    if obj is None or not tie:
+        return
+    index = core.join_index([_tuple(p) for p in obj.Points], point)
+    if index is None:
+        return
+    ties = list(obj.PointTies) + [""] * (len(obj.Points) - len(obj.PointTies))
+    if ties[index]:
+        return
+    ties[index] = tie
+    obj.PointTies = ties
+
+
 def move_point(obj, index, point):
     """Put point `index` at `point` (sketch coordinates); a tie to a sketch point is
     dropped (Fusion: dragging a point off what it sat on frees it)."""

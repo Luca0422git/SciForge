@@ -562,13 +562,15 @@ class Manipulator:
 # -- the 3D tools ---------------------------------------------------------------------------
 class Snap3D:
     """Where a 3D point goes: point (sketch x, y, z), tie (a sketch point: "v:id:pos"),
-    on (what it sits on, for the hint: "point", "corner", "edge", "plane")."""
+    on (what it sits on, for the hint: "point", "corner", "edge", "plane"), vertex (the
+    sketch vertex (geo, pos) it sits on, the origin and projected points too, or None)."""
 
-    def __init__(self, point, tie="", on="plane", free=False):
+    def __init__(self, point, tie="", on="plane", free=False, vertex=None):
         self.point = tuple(point)
         self.tie = tie
         self.on = on
         self.free = free
+        self.vertex = vertex
         self.raw = (point[0], point[1])
         self.key = None
 
@@ -587,6 +589,7 @@ class Line3D(draw.DrawTool):
         self.chain = []  # [(point, tie)] of the chain being drawn
         self.manipulator = Manipulator(session)
         self.made = []  # (object, edge number) of the curves made (tests)
+        self.flat = []  # geometry numbers of the sketch lines made on its plane (tests)
 
     # -- life cycle ---------------------------------------------------------------------
     def start(self):
@@ -657,19 +660,21 @@ class Line3D(draw.DrawTool):
         candidates = []
         obj = sketch3d.curves_of(self.sketch)
         if obj is not None:
-            candidates += [(p, "", "point") for p in sketch3d.resolved_points(obj, self.sketch)]
-        candidates += [(p, "", "point") for p, _t in self.chain]
+            candidates += [(p, "", None) for p in sketch3d.resolved_points(obj, self.sketch)]
+        candidates += [(p, "", None) for p, _t in self.chain]
         geometry = self.geometry()
         for key, (x, y) in geometry.verts:
             tie = sketch3d.ref_of(self.sketch, key[0], key[1]) if key[0] >= 0 else ""
-            candidates.append(((x, y, 0.0), tie, "point"))
+            candidates.append(((x, y, 0.0), tie, key))
         pick = draw.pick_pixels()
-        for p, tie, on in candidates:
+        for p, tie, key in candidates:
             s = v.screen(p)
             d = math.hypot(s[0] - pos.x(), s[1] - pos.y())
             if d <= pick and (best is None or d < best[0]):
-                best = (d, p, tie, on)
-        return Snap3D(best[1], best[2], best[3]) if best else None
+                best = (d, p, tie, key)
+        if best is None:
+            return None
+        return Snap3D(best[1], best[2], "point", vertex=best[3])
 
     def _on_design(self, v, pos):
         """A corner (or an edge) of a body under the pointer: the point lands on it."""
@@ -741,22 +746,76 @@ class Line3D(draw.DrawTool):
         last, last_tie = self.chain[-1]
         if core.length(core.sub(point, last)) <= 1e-9:
             return  # the same point again
+        flat = core.on_sketch_plane([last, point])
         doc = self.doc
         doc.openTransaction(self.title)
         try:
-            made = sketch3d.add_line(self.sketch, last, point, last_tie, tie)
+            if flat:
+                geo = self._flat_line(last, point)
+                # the 3D curves that start or end here follow the line's ends
+                last_tie = last_tie or sketch3d.ref_of(self.sketch, geo, 1)
+                tie = sketch3d.ref_of(self.sketch, geo, 2)
+                sketch3d.tie_point(self.sketch, last, last_tie)
+                self.chain[-1] = (last, last_tie)
+            else:
+                made = sketch3d.add_line(self.sketch, last, point, last_tie, tie)
         except Exception as exc:
             doc.abortTransaction()
             warn("3D Line: %s" % exc)
+            self._geometry = None
             return
         doc.commitTransaction()
-        self.made.append(made)
+        self._geometry = None  # the sketch's points changed
+        if flat:
+            self.flat.append(geo)
+        else:
+            self.made.append(made)
         first = self.chain[0][0]
         self.chain.append((point, tie))
         if len(self.chain) > 2 and core.length(core.sub(point, first)) <= 1e-9:
             self.chain = []  # closed: the next click starts a new chain
             log("3D Line: closed")
         self._after_point()
+
+    def _flat_line(self, a, b):
+        """A line that lies on the sketch plane: an ordinary sketch line (Fusion: with 3D
+        Sketch on, curves stay in the sketch's plane unless they leave it, so they make
+        profiles), Coincident with the sketch points at its ends, level or upright when it
+        is. Returns its geometry number (inside the caller's transaction)."""
+        import Part
+        import Sketcher
+
+        sketch = self.sketch
+        construction = False
+        try:
+            from . import sketch_mode
+
+            construction = bool(sketch_mode.construction_mode())
+        except Exception:
+            pass
+        ends = [self._vertex_at(a), self._vertex_at(b)]
+        segment = Part.LineSegment(App.Vector(a[0], a[1], 0.0), App.Vector(b[0], b[1], 0.0))
+        geo = sketch.addGeometry(segment, construction)
+        ties = [
+            Sketcher.Constraint("Coincident", geo, pos, key[0], key[1])
+            for pos, key in ((1, ends[0]), (2, ends[1]))
+            if key is not None
+        ]
+        if abs(a[1] - b[1]) <= 1e-9:
+            ties.append(Sketcher.Constraint("Horizontal", geo))
+        elif abs(a[0] - b[0]) <= 1e-9:
+            ties.append(Sketcher.Constraint("Vertical", geo))
+        self._add_checked(ties)
+        sketch.solve()
+        log("3D Line: on the sketch plane, a sketch line (Edge%d)" % (geo + 1))
+        return geo
+
+    def _vertex_at(self, p, tol=1e-6):
+        """The sketch vertex (geo, pos) at sketch point p (the origin too), or None."""
+        for key, (x, y) in draw.Geometry(self.sketch).verts:
+            if abs(x - p[0]) <= tol and abs(y - p[1]) <= tol:
+                return key
+        return None
 
     def _after_point(self):
         self.preview.clear()

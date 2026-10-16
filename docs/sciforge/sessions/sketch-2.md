@@ -39,7 +39,8 @@ FreeCAD core file changed (no full build needed).
   of the design, the grid; the triad moves a 3D point (drag an arrow, or type a distance +
   Enter). Sweep takes the 3D curves as its path. **Built as a separate 3D-curve feature**
   (a companion object of the sketch, sketch coordinates), because FreeCAD's Sketcher cannot
-  hold a curve off its plane.
+  hold a curve off its plane. A line whose ends both lie on the sketch plane is an ordinary
+  sketch line (joined to the points at its ends; it makes profiles, as in Fusion).
 
 ## FreeCAD facts and traps found
 
@@ -89,8 +90,8 @@ plus `--only base`.
 ## Gaps (also in the parity docs)
 
 - 3D Sketch: no rotation handles on the manipulator, no key to cycle planes, no typed
-  length / angle for a 3D line, no constraints or dimensions on 3D curves, no 3D arcs; lines
-  drawn with the box checked are 3D curves even on the sketch plane (no profiles).
+  length / angle for a 3D line, no constraints or dimensions on 3D curves, no 3D arcs; a
+  spline drawn with the box checked is a 3D curve even when it lies on the sketch plane.
 - Project to Surface curves cannot be dimensioned from the sketch; no Break Link.
 - The FreeCAD TNP limit above (re-project the edge); a repair by geometry is not built.
 - No Linetype Centerline.
