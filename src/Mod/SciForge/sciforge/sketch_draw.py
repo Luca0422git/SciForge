@@ -142,11 +142,14 @@ class Geometry:
         self.keyed = dict(verts)
         self.sketch = sketch
 
-    def curve_at(self, raw, tol, kinds=None):
+    def curve_at(self, raw, tol, kinds=None, own=False):
         """(geo, distance) of the curve nearest to raw within tol, or None. `kinds`:
-        TypeIds the curve must have (None: any)."""
+        TypeIds the curve must have (None: any); `own`: only the sketch's own curves (a
+        line lying on an axis is the line, not the axis)."""
         best = None
         for geo, curve in self.hits:
+            if own and geo < 0:
+                continue
             if kinds is not None and _type_of(self.sketch, geo) not in kinds:
                 continue
             if not icore.near_curve(raw, curve, tol):

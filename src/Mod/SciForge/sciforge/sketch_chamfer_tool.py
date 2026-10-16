@@ -35,6 +35,7 @@ CHOOSER_STYLE = (
     " border-radius: 3px; } QLabel { color: #e8edf3; padding: 0 2px; }"
 )
 LINE = "Part::GeomLineSegment"
+ARC = "Part::GeomArcOfCircle"
 
 
 class TypeChooser(QtWidgets.QWidget):
@@ -79,6 +80,18 @@ def _ends(geometry):
     return (
         (geometry.StartPoint.x, geometry.StartPoint.y),
         (geometry.EndPoint.x, geometry.EndPoint.y),
+    )
+
+
+def _arc(geometry):
+    """A sketch arc as sketch_chamfer_core's (centre, radius, start angle, end angle)."""
+    c = geometry.Center
+    s, e = geometry.StartPoint, geometry.EndPoint
+    return (
+        (c.x, c.y),
+        geometry.Radius,
+        math.atan2(s.y - c.y, s.x - c.x),
+        math.atan2(e.y - c.y, e.x - c.x),
     )
 
 
@@ -162,10 +175,10 @@ class SketchChamfer(draw.DrawTool):
 
     # -- picking the corner ----------------------------------------------------------------
     def _lines_at(self, point):
-        """The lines of the sketch with an end at `point` (sketch x, y)."""
+        """The lines and arcs of the sketch with an end at `point` (sketch x, y)."""
         found = []
         for i, g in enumerate(self.sketch.Geometry):
-            if g.TypeId != LINE:
+            if g.TypeId not in (LINE, ARC):
                 continue
             for end in _ends(g):
                 if math.hypot(end[0] - point[0], end[1] - point[1]) <= 1e-7:
@@ -173,10 +186,25 @@ class SketchChamfer(draw.DrawTool):
                     break
         return found
 
+    def arc_mode(self):
+        """A line and an arc are picked (SciForge's line-arc chamfer)."""
+        return any(self.sketch.Geometry[g].TypeId == ARC for g in self.picks)
+
+    def _line_first(self):
+        return self.sketch.Geometry[self.picks[0]].TypeId == LINE
+
     def _corner(self):
-        """(corner, u1, u2, reach1, reach2, angle) of the picked lines."""
+        """(corner, u1, u2, reach1, reach2, angle) of the picked lines; for a line and an
+        arc the dict of sketch_chamfer_core.line_arc_corner."""
         l1, l2 = self.picks
         g1, g2 = self.sketch.Geometry[l1], self.sketch.Geometry[l2]
+        if ARC in (g1.TypeId, g2.TypeId):
+            if g1.TypeId == ARC and g2.TypeId == ARC:
+                raise core.ChamferError("a chamfer needs a line: pick a line and an arc.")
+            line_first = g1.TypeId == LINE
+            line, arc = (g1, g2) if line_first else (g2, g1)
+            keep_line, keep_arc = self.keeps if line_first else self.keeps[::-1]
+            return core.line_arc_corner(_ends(line), _arc(arc), keep_line, keep_arc)
         return core.corner(_ends(g1), _ends(g2), self.keeps[0], self.keeps[1])
 
     def use_selection(self, selection):
@@ -203,13 +231,14 @@ class SketchChamfer(draw.DrawTool):
         self._tell()
 
     def _is_line(self, geo):
+        """A line or an arc (what can be chamfered)."""
         try:
-            return geo >= 0 and self.sketch.Geometry[geo].TypeId == LINE
+            return geo >= 0 and self.sketch.Geometry[geo].TypeId in (LINE, ARC)
         except Exception:
             return False
 
     def pick(self, snap):
-        if self.step == 0 and snap.key is not None and snap.key[0] >= 0:
+        if self.step == 0 and snap.key is not None:  # a point (the origin counts)
             found = self._lines_at(snap.point)
             if len(found) == 2:
                 self.picks, self.keeps = found, [None, None]
@@ -220,7 +249,9 @@ class SketchChamfer(draw.DrawTool):
             if len(found) > 2:
                 self.say("more than two lines meet there: click the two lines.")
                 return
-        hit = self.geometry().curve_at(snap.raw, draw.pick_pixels() * self._px(), kinds=(LINE,))
+        hit = self.geometry().curve_at(
+            snap.raw, draw.pick_pixels() * self._px(), kinds=(LINE, ARC), own=True
+        )
         if hit is None or hit[0] < 0:
             self.say("click a corner where two lines meet, or a line.")
             return
@@ -268,9 +299,36 @@ class SketchChamfer(draw.DrawTool):
         s1, s2 = core.setbacks(kind, angle, d, second)
         return s1, s2, data
 
+    def arc_values(self, snap):
+        """Line and arc: (setback on the line, chord on the arc, P1, P2, data)."""
+        data = self._corner()
+        kind = SketchChamfer.kind
+        line_first = self._line_first()
+        pointer = snap.raw if snap else data["point"]
+        given = core.line_arc_pointer(kind, data, pointer, line_first)
+        for name in ("distance", "distance2"):
+            f = self.boxes.field(name)
+            if f is not None:
+                f.value = given.get(name)
+        d = self.boxes.typed("distance")
+        d = given["distance"] if d is None else d
+        second = None
+        if kind == "two_distances":
+            second = self.boxes.typed("distance2")
+            second = given["distance2"] if second is None else second
+        elif kind == "distance_angle":
+            second = self.boxes.typed("angle")
+        s_line, s_arc, p1, p2 = core.line_arc_values(kind, data, d, second, line_first)
+        f = self.boxes.field("angle")
+        if f is not None:
+            f.value = core.angle_at_line(data, p1, p2)
+        return s_line, s_arc, p1, p2, data
+
     def moved(self, snap):
         if self.step < 2:
-            hit = self.geometry().curve_at(snap.raw, draw.pick_pixels() * self._px(), kinds=(LINE,))
+            hit = self.geometry().curve_at(
+                snap.raw, draw.pick_pixels() * self._px(), kinds=(LINE, ARC), own=True
+            )
             picked = [draw.curve_points(self.sketch, g) for g in self.picks]
             if hit is not None and hit[0] >= 0 and hit[0] not in self.picks:
                 picked.append(draw.curve_points(self.sketch, hit[0]))
@@ -278,16 +336,26 @@ class SketchChamfer(draw.DrawTool):
             self.preview.show(picked=[p for p in picked if p], points=points)
             return
         picked = [draw.curve_points(self.sketch, g) for g in self.picks]
-        try:
-            s1, s2, data = self.values(snap)
-        except core.ChamferError:
-            self.preview.show(picked=[p for p in picked if p])
-            return
-        point, u1, u2, _r1, _r2, angle = data
-        p1, p2 = core.points(point, u1, u2, s1, s2)
+        if self.arc_mode():
+            try:
+                _s_line, _s_arc, p1, p2, data = self.arc_values(snap)
+            except core.ChamferError:
+                self.preview.show(picked=[p for p in picked if p])
+                return
+            point = data["point"]
+            first, second = (p1, p2) if self._line_first() else (p2, p1)
+        else:
+            try:
+                s1, s2, data = self.values(snap)
+            except core.ChamferError:
+                self.preview.show(picked=[p for p in picked if p])
+                return
+            point, u1, u2, _r1, _r2, _angle = data
+            p1, p2 = core.points(point, u1, u2, s1, s2)
+            first, second = p1, p2
         for name, anchor in (
-            ("distance", ((point[0] + p1[0]) / 2, (point[1] + p1[1]) / 2)),
-            ("distance2", ((point[0] + p2[0]) / 2, (point[1] + p2[1]) / 2)),
+            ("distance", ((point[0] + first[0]) / 2, (point[1] + first[1]) / 2)),
+            ("distance2", ((point[0] + second[0]) / 2, (point[1] + second[1]) / 2)),
             ("angle", p1),
         ):
             f = self.boxes.field(name)
@@ -307,8 +375,11 @@ class SketchChamfer(draw.DrawTool):
         if not self.boxes.take():
             return
         try:
-            s1, s2, data = self.values(snap)
-            core.check_fits(s1, s2, data[3], data[4])
+            if self.arc_mode():
+                self.arc_values(snap)
+            else:
+                s1, s2, data = self.values(snap)
+                core.check_fits(s1, s2, data[3], data[4])
         except core.ChamferError as exc:
             self.say(str(exc))
             return
@@ -317,6 +388,8 @@ class SketchChamfer(draw.DrawTool):
 
     # -- making it -------------------------------------------------------------------------
     def build(self, construction):
+        if self.arc_mode():
+            return self._build_arc(construction)
         import Sketcher
 
         sketch = self.sketch
@@ -360,18 +433,110 @@ class SketchChamfer(draw.DrawTool):
             added.append(
                 sketch.addConstraint(Sketcher.Constraint("Distance", corner, 1, l2, pos2, s2))
             )
+        self._settle_values(added, kind)
+        self.made = {"line": line, "corner": corner, "constraints": added, "kind": kind}
+        return []
+
+    def _settle_values(self, added, kind):
+        """Values the sketch already fixes become references; Equal distance: the second
+        follows the first (fx), as Fusion's one value sizes both sides."""
+        sketch = self.sketch
         sketch.solve()
         bad = set(sketch.RedundantConstraints) | set(sketch.ConflictingConstraints)
         for index in added:
             if index + 1 in bad:
                 sketch.setDriving(index, False)  # the sketch already fixes it: a reference
         if kind == "equal" and not (bad & {added[0] + 1, added[1] + 1}):
-            # Fusion: one value sizes both sides; the second follows the first (fx).
             name = self._free_name()
             sketch.renameConstraint(added[0], name)
             sketch.renameConstraint(added[1], name + "b")
             sketch.setExpression("Constraints.%sb" % name, "Constraints.%s" % name)
-        self.made = {"line": line, "corner": corner, "constraints": added, "kind": kind}
+
+    def _build_arc(self, construction):
+        """A line and an arc: both are cut back to P1 and P2 (their constraints at the old
+        corner go: that point is no longer on them, as FreeCAD's fillet of curves does), a
+        chamfer line joins them, and the old corner stays as a construction point on both
+        (where the line meets the arc's circle) with the values as dimensions from it."""
+        import Part
+        import Sketcher
+
+        sketch = self.sketch
+        s_line, s_arc, p1, p2, data = self.arc_values(self.snaps[-1])
+        kind = SketchChamfer.kind
+        line_first = self._line_first()
+        g1, g2 = self.picks
+        line_geo, arc_geo = (g1, g2) if line_first else (g2, g1)
+        point = data["point"]
+        corner_v = App.Vector(point[0], point[1], 0)
+        q1 = App.Vector(p1[0], p1[1], 0)
+        q2 = App.Vector(p2[0], p2[1], 0)
+        line_pos = self._end_at(line_geo, corner_v)
+        arc_pos = self._end_at(arc_geo, corner_v)
+        on_corner = {(line_geo, line_pos), (arc_geo, arc_pos)}
+        dropped = []
+        for index in range(len(sketch.Constraints) - 1, -1, -1):
+            c = sketch.Constraints[index]
+            ends = {(c.First, c.FirstPos), (c.Second, c.SecondPos), (c.Third, c.ThirdPos)}
+            if ends & on_corner:
+                dropped.append(c.Type)
+                sketch.delConstraint(index)
+        geos = list(sketch.Geometry)
+        line_g = geos[line_geo]
+        if line_pos == 1:
+            line_g.StartPoint = q1
+        else:
+            line_g.EndPoint = q1
+        arc_g = geos[arc_geo]
+        u = arc_g.parameter(q2)
+        first, last = arc_g.FirstParameter, arc_g.LastParameter
+        if arc_pos == 1:
+            first = u
+            while first >= last:
+                first -= 2 * math.pi
+        else:
+            last = u
+            while last <= first:
+                last += 2 * math.pi
+        arc_g.setParameterRange(first, last)
+        geos[line_geo] = line_g
+        geos[arc_geo] = arc_g
+        sketch.Geometry = geos
+        chamfer = sketch.addGeometry(Part.LineSegment(q1, q2), bool(construction))
+        corner = sketch.addGeometry(Part.Point(corner_v), True)
+        sketch.addConstraint(
+            [
+                Sketcher.Constraint("Coincident", chamfer, 1, line_geo, line_pos),
+                Sketcher.Constraint("Coincident", chamfer, 2, arc_geo, arc_pos),
+                Sketcher.Constraint("PointOnObject", corner, 1, line_geo),
+                Sketcher.Constraint("PointOnObject", corner, 1, arc_geo),
+            ]
+        )
+        on_line = sketch.addConstraint(
+            Sketcher.Constraint("Distance", corner, 1, line_geo, line_pos, s_line)
+        )
+        if kind == "distance_angle":
+            far = 3 - line_pos
+            g = sketch.Geometry[line_geo]
+            start = g.StartPoint if far == 1 else g.EndPoint
+            end = g.EndPoint if far == 1 else g.StartPoint
+            a, b = end - start, q2 - q1
+            signed = math.atan2(a.x * b.y - a.y * b.x, a.x * b.x + a.y * b.y)
+            alpha = core.angle_at_line(data, p1, p2)
+            if signed >= 0:
+                angle = Sketcher.Constraint("Angle", line_geo, far, chamfer, 1, alpha)
+            else:
+                angle = Sketcher.Constraint("Angle", chamfer, 1, line_geo, far, alpha)
+            second = sketch.addConstraint(angle)
+        else:
+            second = sketch.addConstraint(
+                Sketcher.Constraint("Distance", corner, 1, arc_geo, arc_pos, s_arc)
+            )
+        # D1 is the first curve picked's (the arc's when it came first)
+        added = [on_line, second] if line_first or kind != "two_distances" else [second, on_line]
+        self._settle_values(added, kind)
+        if dropped:
+            log("Chamfer: constraints at the old corner removed: %s" % ", ".join(dropped))
+        self.made = {"line": chamfer, "corner": corner, "constraints": added, "kind": kind}
         return []
 
     def _end_at(self, geo, where):

@@ -13,7 +13,8 @@ A 40 x 20 rectangle from (10, 10) to (50, 30) (fully dimensioned: 40, 20, its co
    dimensions, the second follows the first (fx): changing the first to 6 moves both.
 3. Two distances: click the top line, then the left line, type 3, Tab, 6, Enter: 3 along
    the top line, 6 down the left one. Ctrl+Z takes it away, Ctrl+Y brings it back.
-MODIFY > Fillet: click the two lines at the corner (10, 10), the radius box opens, type 4.
+MODIFY > Fillet (SciForge's, since sketch-2): click the two lines at the corner (10, 10),
+type 4, Enter.
 LINE: click (70, 0), type 30, Tab, 45, Enter: a 30 mm line at 45 degrees; then 20, Tab,
 135: the angle is measured from the sketch's X axis, as Fusion does (Autodesk forum: the
 typed angle follows the sketch's horizontal, not the previous line); both become
@@ -40,14 +41,11 @@ from SciForgeTests.gui import sketch_tools_steps as st
 V = App.Vector
 s = st.s
 T30 = math.tan(math.radians(30))
-AREA_NO_FILLET = 800 - 5 * 5 * T30 / 2 - 6 * 6 / 2 - 3 * 6 / 2
-AREA = AREA_NO_FILLET - (16 - math.pi * 4)
+AREA = 800 - 5 * 5 * T30 / 2 - 6 * 6 / 2 - 3 * 6 / 2 - (16 - math.pi * 4)
 
 
 def plate_area():
-    """The plate's area: without the rounded corner when the fillet clicks made nothing
-    (CI: see fillet_settle)."""
-    return AREA_NO_FILLET if s.get("fillet_fallback") else AREA
+    return AREA
 
 
 def sk():
@@ -256,23 +254,10 @@ def fillet():
     si.menu_item("MODIFY", "Fillet")
 
 
-def _tool():
-    """What FreeCAD's sketch is running now (the fillet tool, or nothing)."""
-    from sciforge import recent
-
-    last = recent.last()
-    return last[0] if last else None
-
-
 def fillet_first():
-    # CI #123 / #124: both clicks in one step, close to the corner point, opened no radius
-    # box on CI's machine (it does locally). Each click is its own step now, with time for
-    # FreeCAD's fillet tool to take the first one, and further from the corner point.
-    h.check(
-        "the fillet tool runs",
-        _tool() in ("Sketcher_CreateFillet", "Sketcher_CompCreateFillets"),
-        _tool(),
-    )
+    # SKETCH > MODIFY > Fillet is SciForge's own tool since sketch-2: it finds the curves
+    # itself (FreeCAD's fillet tool never saw a click on CI's virtual screen, CI #123-#126)
+    h.check("the fillet tool runs", st.tool_title() == "Fillet", st.tool_title())
     si.click(V(22, 10, 0), approach=V(0.0, -1.0, 0))  # the bottom line
 
 
@@ -286,50 +271,17 @@ def fillet_second():
 fillet_second.wait_ms = 700
 
 
-def fillet_settle():
-    """CI #123-#126: on CI's virtual screen FreeCAD's own sketch picking never saw the fillet
-    clicks (its fillet tool ran, no arc was made, whatever the timing and click places;
-    SciForge's chamfer, which finds the curves itself, works there, and so does the fillet
-    on a real screen and locally). Selecting the lines first does not start FreeCAD 1.1's
-    fillet, and making the fillet by script does not give the tool's shape. So there the
-    fillet's checks are left out, said in the log, and the plate is checked without it."""
-    new = [g for g in sk().Geometry[s["before_fillet"] :] if g.TypeId == "Part::GeomArcOfCircle"]
-    s["fillet_fallback"] = not new
-    if not new:
-        print(
-            "[SciForge] modeling2_sketch: FreeCAD's sketch picking saw no fillet click here: "
-            "the fillet checks are left out",
-            flush=True,
-        )
-        st.esc()
-
-
-fillet_settle.wait_ms = 700
-
-
 def fillet_box():
-    if s.get("fillet_fallback"):
-        return
+    t = st.tool()
+    h.check("the radius box is up", t is not None and t.step == 2, t and t.step)
     h.shot("fillet-click")
-    sess = st.session()
-    new = [g.TypeId.split("::")[-1] for g in sk().Geometry[s["before_fillet"] :]]
-    h.check(
-        "the radius box opens",
-        sess is not None and sess.editor is not None,
-        {
-            "tool": _tool(),
-            "new geometry": new,
-            "editor": getattr(sess, "editor", None),
-            "lines selected first": s.get("fillet_fallback"),
-        },
-    )
-    si.type_text("4")
+    st.keys("4\n")
+
+
+fillet_box.wait_ms = 700
 
 
 def fillet_check():
-    if s.get("fillet_fallback"):
-        st.esc()
-        return
     arcs = [g for g in sk().Geometry if g.TypeId == "Part::GeomArcOfCircle"]
     h.check("radius 4", len(arcs) == 1 and st.near(arcs[0].Radius, 4.0), arcs)
     radius = [c for c in sk().Constraints if c.Type == "Radius" and c.Driving]
@@ -479,7 +431,6 @@ h.run(
             fillet,
             fillet_first,
             fillet_second,
-            fillet_settle,
             fillet_box,
             fillet_check,
             line_tool,

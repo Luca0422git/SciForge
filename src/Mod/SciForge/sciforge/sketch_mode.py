@@ -772,6 +772,11 @@ class SketchSession:
         except Exception as exc:
             warn("sketch inference: %s" % exc)
         self.fillet_watch = FilletRadius(self)
+        from .sketch_select import SketchSelect
+
+        # Fusion: a double-click selects a curve's chain; a box replaces / Shift adds /
+        # Ctrl toggles (sketch_select.py)
+        self.select = SketchSelect(self)
         self._refresh = QtCore.QTimer()
         self._refresh.setSingleShot(True)
         self._refresh.setInterval(120)
@@ -1386,6 +1391,12 @@ class SketchSession:
                     return True
         return False
 
+    def chain_clicked(self, pos):
+        """A double-click on a curve with no tool running selects its chain (Fusion)."""
+        if self.editor is not None or self.tool_running():
+            return False
+        return self.select.double_clicked(pos)
+
     def close(self):
         if self.closed:
             return
@@ -1566,6 +1577,8 @@ class _ViewFilter(QtCore.QObject):
             if kind == QtCore.QEvent.MouseMove:
                 if event.buttons() == QtCore.Qt.NoButton:
                     session.areas.moved(event.position().toPoint())
+                elif event.buttons() & QtCore.Qt.LeftButton:
+                    session.select.moved(event)  # a box drag (Fusion's modifiers)
                 return False
             if kind == QtCore.QEvent.Leave:
                 session.areas.left()
@@ -1573,9 +1586,13 @@ class _ViewFilter(QtCore.QObject):
                     session.infer.leave()  # no guide or mark stays behind
                 return False
             if kind == QtCore.QEvent.MouseButtonPress:
+                # (a double-click whose release never came: Qt's test clicks send none)
+                session.select.swallow_release = False
                 if event.button() == QtCore.Qt.LeftButton:
                     # (before the value box closes: that click is not a pick)
                     session.areas.pressed(event.position().toPoint(), event.modifiers())
+                    if session.editor is None and not session.tool_running():
+                        session.select.pressed(event)
                 session.last_press = event.position().toPoint()
                 if session.editor is not None and not session.editor.underMouse():
                     QtCore.QTimer.singleShot(0, lambda: session.close_editor(commit=True))
@@ -1585,7 +1602,13 @@ class _ViewFilter(QtCore.QObject):
                     return True
             elif kind == QtCore.QEvent.MouseButtonRelease:
                 if event.button() == QtCore.Qt.LeftButton:
+                    if session.select.swallow_release:
+                        # the release of a double-click that selected a chain: FreeCAD
+                        # would toggle the clicked curve off again
+                        session.select.swallow_release = False
+                        return True
                     session.areas.released(event.position().toPoint())
+                    session.select.released(event)
                 if event.button() == QtCore.Qt.RightButton and self.right_pressed is not None:
                     start, self.right_pressed = self.right_pressed, None
                     pos = event.globalPosition().toPoint()
@@ -1596,7 +1619,8 @@ class _ViewFilter(QtCore.QObject):
                     return True
             elif kind == QtCore.QEvent.MouseButtonDblClick:
                 if event.button() == QtCore.Qt.LeftButton:
-                    return session.double_clicked(event.position().toPoint())
+                    pos = event.position().toPoint()
+                    return session.double_clicked(pos) or session.chain_clicked(pos)
         except Exception as exc:
             warn("sketch view: %s" % exc)
         return False
