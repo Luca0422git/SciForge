@@ -120,6 +120,7 @@ class Result:
     on_line   True when the point lies on `other` (a line ending on another line)
     corner    where the right-angle mark goes (PERPENDICULAR), with `along` the other
               line's direction from there
+    snap      the SnapPoint the point sits on (an end, a middle, a centre...), or None
     """
 
     def __init__(self, point, guides=(), kind=None, direction=None, other=None):
@@ -132,6 +133,7 @@ class Result:
         self.corner = None
         self.along = None
         self.start = None  # the line's first point (None before the first click)
+        self.snap = None  # SnapPoint the point sits on exactly (snap_result), or None
 
     def __repr__(self):
         return "Result(%r, guides=%r, kind=%r, other=%r)" % (
@@ -289,6 +291,246 @@ def remember(items, item, keep):
     items = [i for i in items if i != item]
     items.append(item)
     return items[-keep:] if keep > 0 else []
+
+
+# -- snap points (Fusion: end points, middles, centres; SciForge adds quadrants and the
+# crossings of curves) ----------------------------------------------------------------
+END, MIDDLE, CENTRE, QUADRANT, CROSSING = "end", "mid", "centre", "quadrant", "crossing"
+VERTEX_KINDS = (END, CENTRE)  # FreeCAD sketch points: a click there gets a Coincident
+QUADRANTS = (0.0, 0.5 * math.pi, math.pi, 1.5 * math.pi)
+
+
+class SnapPoint:
+    """A point a click snaps to exactly.
+
+    kind   END (a curve's end, a sketch point, the origin), MIDDLE (of a line or arc),
+           CENTRE (of a circle, arc or ellipse), QUADRANT (0/90/180/270 degrees on a
+           circle or arc), CROSSING (where two curves cross)
+    point  (x, y) in sketch millimetres
+    key    (geo, pos) of FreeCAD's sketch point for END / CENTRE (Coincident), else None
+    geo    the curve it belongs to (MIDDLE, QUADRANT, CROSSING: the first curve)
+    other  CROSSING: the second curve
+    """
+
+    __slots__ = ("kind", "point", "key", "geo", "other")
+
+    def __init__(self, kind, point, key=None, geo=None, other=None):
+        self.kind = kind
+        self.point = point
+        self.key = key
+        self.geo = geo
+        self.other = other
+
+    def __repr__(self):
+        return "SnapPoint(%s, %r, key=%r, geo=%r, other=%r)" % (
+            self.kind,
+            self.point,
+            self.key,
+            self.geo,
+            self.other,
+        )
+
+
+def _angle(c, p):
+    return math.atan2(p[1] - c[1], p[0] - c[0])
+
+
+def on_arc(angle, start, end, mid):
+    """True when the direction `angle` (radians, from the centre) lies on the arc that
+    runs from the angle `start` to `end` through `mid` (either way round)."""
+    two_pi = 2.0 * math.pi
+
+    def ccw(a, b):  # the counterclockwise sweep from a to b, 0..2pi
+        return (b - a) % two_pi
+
+    sweep = ccw(start, end)
+    if ccw(start, mid) <= sweep:  # the arc runs counterclockwise from start to end
+        return ccw(start, angle) <= sweep + 1e-12
+    return ccw(end, angle) <= two_pi - sweep + 1e-12
+
+
+def snap_points(items):
+    """Every snap point of the sketch's curves and of its projected (external) curves.
+
+    items: descriptions of the curves (sketch_infer.describe), each starting with its
+    kind and FreeCAD geometry index:
+      ("point", geo, p)
+      ("line", geo, a, b)
+      ("circle", geo, centre, radius)
+      ("arc", geo, centre, radius, start, end, mid)      (mid: the arc's middle point)
+      ("ellipse", geo, centre)
+      ("conic_arc", geo, centre, start, end)             (arcs of ellipse, hyperbola...)
+      ("spline", geo, start, end)
+    FreeCAD numbers a curve's points 1 (start), 2 (end), 3 (centre)."""
+    out = []
+    for item in items:
+        kind, geo = item[0], item[1]
+        if kind == "point":
+            out.append(SnapPoint(END, item[2], (geo, 1)))
+        elif kind == "line":
+            a, b = item[2], item[3]
+            out += [SnapPoint(END, a, (geo, 1)), SnapPoint(END, b, (geo, 2))]
+            if dist(a, b) > 1e-9:
+                out.append(SnapPoint(MIDDLE, mul(add(a, b), 0.5), geo=geo))
+        elif kind == "circle":
+            c, r = item[2], item[3]
+            out.append(SnapPoint(CENTRE, c, (geo, 3)))
+            for q in QUADRANTS:
+                p = (c[0] + r * math.cos(q), c[1] + r * math.sin(q))
+                out.append(SnapPoint(QUADRANT, p, geo=geo))
+        elif kind == "arc":
+            c, r, start, end, mid = item[2:7]
+            out += [
+                SnapPoint(END, start, (geo, 1)),
+                SnapPoint(END, end, (geo, 2)),
+                SnapPoint(CENTRE, c, (geo, 3)),
+                SnapPoint(MIDDLE, mid, geo=geo),
+            ]
+            a0, a1, am = _angle(c, start), _angle(c, end), _angle(c, mid)
+            eps = 1e-9 * max(1.0, r)
+            for q in QUADRANTS:
+                p = (c[0] + r * math.cos(q), c[1] + r * math.sin(q))
+                if not on_arc(q, a0, a1, am):
+                    continue
+                if min(dist(p, start), dist(p, end), dist(p, mid)) <= eps:
+                    continue  # already an end or the middle
+                out.append(SnapPoint(QUADRANT, p, geo=geo))
+        elif kind == "ellipse":
+            out.append(SnapPoint(CENTRE, item[2], (geo, 3)))
+        elif kind == "conic_arc":
+            out += [
+                SnapPoint(END, item[3], (geo, 1)),
+                SnapPoint(END, item[4], (geo, 2)),
+                SnapPoint(CENTRE, item[2], (geo, 3)),
+            ]
+        elif kind == "spline":
+            out += [SnapPoint(END, item[2], (geo, 1)), SnapPoint(END, item[3], (geo, 2))]
+    return out
+
+
+def nearest_snap(raw, points, tol):
+    """The snap point nearest to raw within tol, or None. Where points lie on top of
+    each other (a corner of the sketch on a projected corner, an end on a middle) a
+    sketch point (Coincident) wins, then the sketch's own curves over projected ones."""
+    best = None
+    for s in points:
+        d = dist(raw, s.point)
+        if d > tol:
+            continue
+        rank = (0 if s.kind in VERTEX_KINDS else 1, 0 if _own(s) else 1)
+        if best is None or d < best[0] - 1e-9 or (abs(d - best[0]) <= 1e-9 and rank < best[1]):
+            best = (d, rank, s)
+    return best[2] if best else None
+
+
+def _own(snap):
+    geo = snap.key[0] if snap.key is not None else snap.geo
+    return geo is not None and geo >= 0
+
+
+def crossings(raw, items, tol):
+    """Where two curves near `raw` (within tol) cross, as CROSSING snap points (lines,
+    circles, arcs; the ends of curves are END points already and are left out)."""
+    near = []
+    for item in items:
+        kind = item[0]
+        if kind == "line" and segment_within(raw, item[2], item[3], tol):
+            near.append(item)
+        elif kind in ("circle", "arc") and abs(dist(raw, item[2]) - item[3]) <= tol:
+            near.append(item)
+    out = []
+    for i in range(len(near)):
+        for j in range(i + 1, len(near)):
+            for p in _cross(near[i], near[j]):
+                if dist(p, raw) > tol or _is_end(p, near[i]) or _is_end(p, near[j]):
+                    continue
+                out.append(SnapPoint(CROSSING, p, geo=near[i][1], other=near[j][1]))
+    return out
+
+
+def _is_end(p, item, eps=1e-7):
+    if item[0] == "line":
+        return dist(p, item[2]) <= eps or dist(p, item[3]) <= eps
+    if item[0] == "arc":
+        return dist(p, item[4]) <= eps or dist(p, item[5]) <= eps
+    return False
+
+
+def _cross(a, b):
+    """Crossing points of two curve descriptions (line / circle / arc)."""
+    if a[0] != "line" and b[0] == "line":
+        a, b = b, a
+    if a[0] == "line" and b[0] == "line":
+        p = _line_line(a[2], a[3], b[2], b[3])
+        return [p] if p is not None else []
+    if a[0] == "line":
+        points = _line_circle(a[2], a[3], b[2], b[3])
+        return [p for p in points if _on_item(p, b)]
+    points = _circle_circle(a[2], a[3], b[2], b[3])
+    return [p for p in points if _on_item(p, a) and _on_item(p, b)]
+
+
+def _on_item(p, item):
+    if item[0] != "arc":
+        return True
+    c, _r, start, end, mid = item[2:7]
+    return on_arc(_angle(c, p), _angle(c, start), _angle(c, end), _angle(c, mid))
+
+
+def _line_line(a, b, c, d):
+    r, s = sub(b, a), sub(d, c)
+    den = r[0] * s[1] - r[1] * s[0]
+    if abs(den) < 1e-12 * max(1.0, length(r) * length(s)):
+        return None  # parallel
+    t = ((c[0] - a[0]) * s[1] - (c[1] - a[1]) * s[0]) / den
+    u = ((c[0] - a[0]) * r[1] - (c[1] - a[1]) * r[0]) / den
+    if -1e-9 <= t <= 1 + 1e-9 and -1e-9 <= u <= 1 + 1e-9:
+        return add(a, mul(r, t))
+    return None
+
+
+def _line_circle(a, b, c, r):
+    d = sub(b, a)
+    f = sub(a, c)
+    qa = dot(d, d)
+    if qa < 1e-24:
+        return []
+    qb = 2 * dot(f, d)
+    qc = dot(f, f) - r * r
+    disc = qb * qb - 4 * qa * qc
+    if disc < 0:
+        return []
+    root = math.sqrt(disc)
+    out = []
+    for t in ((-qb - root) / (2 * qa), (-qb + root) / (2 * qa)):
+        if -1e-9 <= t <= 1 + 1e-9:
+            p = add(a, mul(d, t))
+            if all(dist(p, q) > 1e-9 for q in out):
+                out.append(p)
+    return out
+
+
+def _circle_circle(c1, r1, c2, r2):
+    d = dist(c1, c2)
+    if d < 1e-12 or d > r1 + r2 + 1e-9 or d < abs(r1 - r2) - 1e-9:
+        return []
+    a = (r1 * r1 - r2 * r2 + d * d) / (2 * d)
+    h = math.sqrt(max(0.0, r1 * r1 - a * a))
+    u = mul(sub(c2, c1), 1.0 / d)
+    m = add(c1, mul(u, a))
+    n = (-u[1], u[0])
+    points = [add(m, mul(n, h))]
+    if h > 1e-9:
+        points.append(add(m, mul(n, -h)))
+    return points
+
+
+def snap_result(snap, start=None):
+    """The Result of a click on a snap point (the point is placed exactly there)."""
+    result = Result(snap.point)
+    result.snap = snap
+    result.start = start
+    return result
 
 
 # -- the inference ----------------------------------------------------------------
@@ -494,8 +736,9 @@ def locked_values(result, start=None):
 def grid_off(result, grid, px):
     """True when FreeCAD's own grid snap has to be off while it takes this point: it
     would pull a fixed coordinate (or a slanted direction) off the inference. Otherwise
-    it stays on, so the free coordinate lands exactly on the grid as before."""
-    if result.kind in (PERPENDICULAR, PARALLEL) or result.on_line:
+    it stays on, so the free coordinate lands exactly on the grid as before. A snap
+    point is exact already (the grid must not pull it off)."""
+    if result.snap is not None or result.kind in (PERPENDICULAR, PARALLEL) or result.on_line:
         return True
     if not grid or grid <= 0:
         return False
@@ -514,6 +757,8 @@ def exact_point(result, placed, px, start=None):
     `start`: the line's first point as it is now (default: as it was when inferred)."""
     tol = 1.5 * px
     start = start if start is not None else result.start
+    if result.snap is not None:
+        return result.point if dist(placed, result.point) <= tol else None
     if result.on_line or (result.guides and result.direction is not None):
         return result.point if dist(placed, result.point) <= tol else None
     if result.guides or result.kind in (HORIZONTAL, VERTICAL):

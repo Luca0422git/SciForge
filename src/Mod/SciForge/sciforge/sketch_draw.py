@@ -52,6 +52,7 @@ VERTEX_POSITIONS = {
     "Part::GeomBSplineCurve": (1, 2),
 }
 CROSS = QtCore.Qt.CrossCursor
+LINE_TYPE = "Part::GeomLineSegment"
 
 
 def _xy(v):
@@ -76,16 +77,32 @@ class Snap:
     key     (geo, pos) of the sketch point it sits on (Coincident), or None
     mid_of  a line whose middle it sits on (Symmetric), or None
     curve   a curve it sits on (PointOnObject; -1 / -2 the axes), or None
+    curve2  a second curve it sits on (where two curves cross), or None
+    target  the sketch_infer_core.SnapPoint it snapped to exactly (an end, middle, centre,
+            quadrant or crossing: the glyph shown), or None
     result  sketch_infer_core.Result of a guide / direction, or None
     free    Ctrl: nothing snapped, nothing added
     """
 
-    def __init__(self, point, raw=None, key=None, mid_of=None, curve=None, result=None, free=False):
+    def __init__(
+        self,
+        point,
+        raw=None,
+        key=None,
+        mid_of=None,
+        curve=None,
+        result=None,
+        free=False,
+        target=None,
+        curve2=None,
+    ):
         self.point = point
         self.raw = raw if raw is not None else point
         self.key = key
         self.mid_of = mid_of
         self.curve = curve
+        self.curve2 = curve2
+        self.target = target
         self.result = result
         self.free = free
 
@@ -107,14 +124,14 @@ class Geometry:
     """The sketch's points and curves for snapping, rebuilt when the sketch changed."""
 
     def __init__(self, sketch):
-        from .sketch_infer import _add_geometry
+        from .sketch_infer import _add_geometry, describe
 
         verts = [((-1, 1), (0.0, 0.0))]  # the origin
         curves = [("line", (0.0, 0.0), (1.0, 0.0)), ("line", (0.0, 0.0), (0.0, 1.0))]
         lines = []
         # (geo, curve) for "which curve is under the pointer" (axes -1, -2 first)
         self.hits = [(-1, curves[0]), (-2, curves[1])]
-        self.mids = []  # (line geo, middle)
+        items = [("point", -1, (0.0, 0.0))]  # snap point descriptions (sketch_infer_core)
         for i, geo in enumerate(sketch.Geometry):
             try:
                 construction = bool(sketch.getConstruction(i))
@@ -124,9 +141,7 @@ class Geometry:
             _add_geometry(verts, curves, lines, i, geo, construction)
             for c in curves[n:]:
                 self.hits.append((i, c))
-            if geo.TypeId == "Part::GeomLineSegment":
-                a, b = _xy(geo.StartPoint), _xy(geo.EndPoint)
-                self.mids.append((i, icore.mul(icore.add(a, b), 0.5)))
+            items.append(describe(i, geo))
         try:
             external = list(sketch.ExternalGeo)[2:]
         except Exception:
@@ -136,6 +151,11 @@ class Geometry:
             _add_geometry(verts, curves, lines, -3 - k, geo, False)
             for c in curves[n:]:
                 self.hits.append((-3 - k, c))
+            items.append(describe(-3 - k, geo))
+        # the ends, middles, centres and quadrants of the sketch's curves and of the
+        # projected ones (Fusion: projected geometry snaps like sketch geometry)
+        self.items = [item for item in items if item is not None]
+        self.snaps = icore.snap_points(self.items)
         self.verts = verts
         self.curves = curves
         self.lines = lines
@@ -182,6 +202,13 @@ def project_on(sketch, geo, raw):
         return (p.x, p.y)
     except Exception:
         return raw
+
+
+def snap_pixels(ratio=1.0):
+    """How close (screen pixels) the pointer must be to a snap point (sketch_infer)."""
+    from . import sketch_infer
+
+    return sketch_infer.snap_pixels(ratio)
 
 
 def pick_pixels():
@@ -1059,6 +1086,7 @@ class DrawTool:
 
     def snap_for(self, view, event):
         ctrl = bool(event.modifiers() & QtCore.Qt.ControlModifier)
+        self._ratio = view.ratio
         return self.snap(view.raw, view.px, ctrl, self.start_point())
 
     def snap(self, raw, px, ctrl=False, start=None):
@@ -1069,17 +1097,14 @@ class DrawTool:
             return Snap(raw, raw, free=True)
         geo = self.geometry()
         pick = pick_pixels() * px
-        hit = icore.nearest_vertex(raw, geo.verts, pick)
+        hit = self.snap_point(raw, px)
         if hit is not None:
-            self._acquire(hit[0])
-            return Snap(hit[1], raw, key=hit[0])
-        best_mid = None
-        for line, middle in geo.mids:
-            d = icore.dist(raw, middle)
-            if d <= pick and (best_mid is None or d < best_mid[0]):
-                best_mid = (d, line, middle)
-        if best_mid is not None:
-            return Snap(best_mid[2], raw, mid_of=best_mid[1])
+            if hit.kind in icore.VERTEX_KINDS:
+                self._acquire(hit.key)
+                return Snap(hit.point, raw, key=hit.key, target=hit)
+            if hit.kind == icore.MIDDLE and _type_of(self.sketch, hit.geo) == LINE_TYPE:
+                return Snap(hit.point, raw, mid_of=hit.geo, target=hit)
+            return Snap(hit.point, raw, curve=hit.geo, curve2=hit.other, target=hit)
         opt = icore.Options(
             guide_px=sketch_infer.setting("GuidePixels"),
             pick_px=pick_pixels(),
@@ -1106,6 +1131,14 @@ class DrawTool:
                 return Snap(result.point, raw, result=result)
         grid = opt.grid
         return Snap((icore.grid_snap(raw[0], grid), icore.grid_snap(raw[1], grid)), raw)
+
+    def snap_point(self, raw, px):
+        """The end, middle, centre, quadrant or crossing (sketch or projected curves) the
+        pointer is on, within the snap radius (sketch_infer_core.SnapPoint), or None."""
+        geo = self.geometry()
+        tol = snap_pixels(getattr(self, "_ratio", 1.0)) * px
+        points = geo.snaps + icore.crossings(raw, geo.items, tol)
+        return icore.nearest_snap(raw, points, tol)
 
     def _acquire(self, key):
         """Hovering a point acquires it for guides (Fusion keeps the last 3)."""
@@ -1273,6 +1306,8 @@ class DrawTool:
             out.append(Sketcher.Constraint("Symmetric", snap.mid_of, 1, snap.mid_of, 2, geo, pos))
         elif snap.curve is not None:
             out.append(Sketcher.Constraint("PointOnObject", geo, pos, snap.curve))
+            if snap.curve2 is not None:
+                out.append(Sketcher.Constraint("PointOnObject", geo, pos, snap.curve2))
         result = snap.result
         if result is not None:
             from . import sketch_infer

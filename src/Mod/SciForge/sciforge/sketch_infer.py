@@ -78,6 +78,10 @@ DEFAULTS = {
     "ParallelDegrees": ("Float", 3.0),
     "TangentArc": ("Bool", True),  # press-and-drag from the line's start makes an arc
     "DragPixels": ("Float", 6.0),  # a press that moves less is a click
+    # how close (screen pixels) the pointer must be to an end, middle, centre, quadrant
+    # or crossing for the point to land exactly on it (never less than FreeCAD's own
+    # pick radius, which counts device pixels on a scaled screen)
+    "SnapPixels": ("Float", 8.0),
 }
 SNAP_OFF_MARK = "SnapSwitchedOff"  # set while FreeCAD's Snap is off for a Ctrl event
 
@@ -165,6 +169,9 @@ class Inference:
         self.last_step = None  # which click `last` was computed for
         self.last_start = None  # the line's first point as last previewed
         self._cache = None
+        self.aiming = False  # SciForge's Line chain clicks a point itself: no snapping
+        self._items = []  # the curves as sketch_infer_core descriptions (snap points)
+        self._snaps = []  # their snap points (sketch_infer_core.SnapPoint)
         self._flip = False  # Autoconstraints back on at the next commit (Ctrl click)
         self._applying = False
         self._queued = False
@@ -275,7 +282,10 @@ class Inference:
             # of no length): the start is where it was at the last move. Only there:
             # anywhere else an empty preview means the tool waits for its first click
             view = _ViewMap(session, obj, event.position())
-            if view.ok and core.dist(view.raw, self.last_start) <= _pick_pixels() * view.px:
+            if (
+                view.ok
+                and core.dist(view.raw, self.last_start) <= _pick_pixels(view.ratio) * view.px
+            ):
                 start = self.last_start
         if tool == "line" and self.arc.handle(obj, event, ctrl, start):
             return SWALLOW
@@ -394,7 +404,8 @@ class Inference:
     def _infer(self, view, start):
         verts, curves, lines, keyed = self._geometry()
         raw = view.raw
-        pick = _pick_pixels()
+        pick = _pick_pixels(view.ratio)
+        reach = snap_pixels(view.ratio) * view.px
         opt = core.Options(
             guide_px=setting("GuidePixels"),
             pick_px=pick,
@@ -406,12 +417,18 @@ class Inference:
         )
         # hovering a point acquires it (Fusion keeps the last 3), a line likewise
         keep = max(0, int(setting("MaxHovered")))
-        hit = core.nearest_vertex(raw, verts, pick * view.px)
+        hit = core.nearest_vertex(raw, verts, reach)
         if hit is not None:
             self.acquired = core.remember(self.acquired, hit[0], keep)
         line = core.nearest_line(raw, lines, pick * view.px)
         if line is not None:
             self.hovered_lines = core.remember(self.hovered_lines, line[0], keep)
+        # an end, middle, centre, quadrant or crossing within reach: exactly there (the
+        # pointer FreeCAD gets is moved onto it, so a point it lights up gets FreeCAD's
+        # own Coincident; the rest is made exact after the click: _snap_constraints)
+        snap = self._snap_at(raw, reach, start) if not self.aiming else None
+        if snap is not None:
+            return core.snap_result(snap, start), opt.grid
         keys = list(self.tool_points) + [k for k in self.acquired if k not in self.tool_points]
         acquired = [(k, keyed[k]) for k in keys if k in keyed]
         by_geo = {geo: (geo, a, b) for geo, a, b in lines}
@@ -444,7 +461,25 @@ class Inference:
             _add_geometry(verts, curves, lines, -3 - k, geo, False)
         keyed = dict(verts)
         self._cache = (verts, curves, lines, keyed)
+        items = [("point", -1, (0.0, 0.0))]  # the origin (FreeCAD's point -1, 1)
+        for i, geo in enumerate(sketch.Geometry):
+            items.append(describe(i, geo))
+        for k, geo in enumerate(external):
+            items.append(describe(-3 - k, geo))
+        self._items = [item for item in items if item is not None]
+        self._snaps = core.snap_points(self._items)
         return self._cache
+
+    def _snap_at(self, raw, tol, start=None):
+        """The snap point (an end, middle, centre, quadrant or crossing of the sketch's
+        curves or of the projected ones) within tol of raw, or None. Never the start of
+        the line being drawn (a line of no length)."""
+        self._geometry()
+        points = self._snaps + core.crossings(raw, self._items, tol)
+        if start is not None:
+            eps = 1e-6 * max(1.0, tol)
+            points = [p for p in points if core.dist(p.point, start) > eps]
+        return core.nearest_snap(raw, points, tol)
 
     def _remember_press(self, result, px, step, view, ctrl):
         """A click of the tool: the first one of a shape starts a new record, the next
@@ -465,7 +500,7 @@ class Inference:
             point = view.raw
             if not ctrl:
                 verts = self._geometry()[0]
-                hit = core.nearest_vertex(view.raw, verts, _pick_pixels() * view.px)
+                hit = core.nearest_vertex(view.raw, verts, snap_pixels(view.ratio) * view.px)
                 if hit is not None:
                     point = hit[1]
         if point is not None:
@@ -697,7 +732,8 @@ class Inference:
                 point = vertex_point(geos[i], pos)
                 if point is not None:
                     verts.append(((i, pos), point))
-        moves, constraints = [], []
+        moves, constraints, drops = [], [], set()
+        held = set()  # the curves the clicks snapped to: they stay put meanwhile
         start_exact = None  # the direction's start after its own exact move
         for step, (result, px) in enumerate(record["points"]):
             if result is None or not px:
@@ -722,6 +758,16 @@ class Inference:
                 moves.append((key, target))
             if step == 0:
                 start_exact = target
+            if result.snap is not None:
+                add, drop = self._snap_constraints(key, result.snap, new)
+                constraints += add
+                drops |= drop
+                snap = result.snap
+                held |= {
+                    g
+                    for g in (snap.key[0] if snap.key else None, snap.geo, snap.other)
+                    if g is not None and g >= 0
+                }
             for guide in result.guides:
                 constraints.append(self._alignment(key, guide, new))
             if directed:
@@ -737,14 +783,13 @@ class Inference:
                 elif result.kind == core.PARALLEL and result.other is not None:
                     constraints.append(Sketcher.Constraint("Parallel", line, result.other))
         constraints = [c for c in constraints if c is not None]
-        if not moves and not constraints:
+        if not moves and not constraints and not drops:
             return
         # the curves our constraints refer to (a hovered line's point, the line a slot
         # stands on) stay put while the shape is made exact
-        pinned = {c.Second for c in constraints if c.Second >= 0} | {
-            c.First for c in constraints if c.First not in new and c.First >= 0
-        }
-        names = self._transaction(INFER_STEP, moves, constraints, pinned - set(new))
+        pinned = held | {c.Second for c in constraints if c.Second >= 0}
+        pinned |= {c.First for c in constraints if c.First not in new and c.First >= 0}
+        names = self._transaction(INFER_STEP, moves, constraints, pinned - set(new), drops)
         if names:
             log(
                 "sketch: %s added to %s (inferred)"
@@ -766,12 +811,14 @@ class Inference:
                 return i
         return None
 
-    def _transaction(self, name, moves, constraints, pinned=()):
+    def _transaction(self, name, moves, constraints, pinned=(), drops=()):
         """Moves and constraints in one undo step; constraints that turn out redundant
         or conflicting are dropped. The `pinned` curves are held still meanwhile (a
         Block constraint for the duration): a move solves the sketch, and a free line
         the shape touches would otherwise drift by a micron or two as the solver
-        spreads the half-pixel correction. Returns the names of the constraints kept."""
+        spreads the half-pixel correction. `drops`: indices of constraints FreeCAD added
+        that ours replace (a point put on a line where it belongs on the line's end).
+        Returns the names of the constraints kept."""
         import Sketcher
 
         sketch = self.session.sketch
@@ -780,6 +827,8 @@ class Inference:
         self._applying = True
         doc.openTransaction(name)
         try:
+            for i in sorted(drops, reverse=True):
+                sketch.delConstraint(i)
             pins = 0
             first = len(sketch.Constraints)
             blocks = [Sketcher.Constraint("Block", g) for g in sorted(pinned)]
@@ -827,6 +876,69 @@ class Inference:
         if geo in new:
             return None
         return Sketcher.Constraint(name, key[0], key[1], geo, other_pos)
+
+    def _snap_constraints(self, key, snap, new):
+        """(constraints to add, indices of FreeCAD's constraints they replace) that tie
+        the new point `key` (geo, pos), placed exactly on `snap`, to what it snapped to.
+
+        FreeCAD's tool gets the pointer right on the snap point and adds its own
+        constraint when it lit the point or curve up: a Coincident on an end or centre, a
+        Symmetric on a line's middle, a PointOnObject on a curve. Where it did not (the
+        pixel found the line through the corner instead: a PointOnObject on that line, the
+        line ending a hair off the corner; Luca: "lines are often not connected because
+        it's slightly off the corner"), SciForge adds the right one and drops FreeCAD's.
+        An arc's middle, a quadrant and a crossing have no FreeCAD constraint of their
+        own: the point is put exactly there and kept on its curve(s)."""
+        import Sketcher
+
+        sketch = self.session.sketch
+        mine = [
+            (i, c)
+            for i, c in enumerate(sketch.Constraints)
+            if (c.First, c.FirstPos) == key
+            or (c.Second, c.SecondPos) == key
+            or (c.Type == "Symmetric" and (c.Third, c.ThirdPos) == key)
+        ]
+
+        def on(curve):
+            return [
+                i
+                for i, c in mine
+                if c.Type == "PointOnObject" and (c.First, c.FirstPos) == key and c.Second == curve
+            ]
+
+        if snap.kind in core.VERTEX_KINDS and snap.key is not None:
+            if snap.key[0] in new:
+                return [], set()
+            for _i, c in mine:
+                if c.Type not in ("Coincident", "Tangent"):
+                    continue
+                other = (
+                    (c.Second, c.SecondPos)
+                    if (c.First, c.FirstPos) == key
+                    else (c.First, c.FirstPos)
+                )
+                if other == snap.key or _point_at(sketch, other, snap.point):
+                    return [], set()  # FreeCAD joined it there itself
+            drop = {
+                i for i, c in mine if c.Type == "PointOnObject" and (c.First, c.FirstPos) == key
+            }
+            return [
+                Sketcher.Constraint("Coincident", key[0], key[1], snap.key[0], snap.key[1])
+            ], drop
+        if snap.kind == core.MIDDLE and _type_of(sketch, snap.geo) == "Part::GeomLineSegment":
+            if any(c.Type == "Symmetric" and c.First == snap.geo for _i, c in mine):
+                return [], set()
+            line = snap.geo
+            return [Sketcher.Constraint("Symmetric", line, 1, line, 2, key[0], key[1])], set(
+                on(line)
+            )
+        add = []
+        for curve in (snap.geo, snap.other):
+            if curve is None or curve in new or on(curve):
+                continue
+            add.append(Sketcher.Constraint("PointOnObject", key[0], key[1], curve))
+        return add, set()
 
     # -- for tests and diagnostics ------------------------------------------------------
     def state(self):
@@ -880,7 +992,7 @@ class TangentArc:
             if kind not in PRESSES or start is None or not setting("TangentArc"):
                 return False
             view = _ViewMap(infer.session, obj, event.position())
-            if not view.ok or core.dist(view.raw, start) > _pick_pixels() * view.px:
+            if not view.ok or core.dist(view.raw, start) > snap_pixels(view.ratio) * view.px:
                 return False
             # the preview's start is single precision: take the sketch point it is on
             verts = infer._geometry()[0]
@@ -957,12 +1069,14 @@ class TangentArc:
         if ctrl and setting("CtrlFree"):
             return raw, None, []
         verts, _curves, _lines, keyed = infer._geometry()
-        pick = _pick_pixels() * view.px
+        pick = snap_pixels(view.ratio) * view.px
         hit = core.nearest_vertex(raw, verts, pick)
         if hit is not None and core.dist(hit[1], self.start) > pick:
             return hit[1], hit[0], []
         opt = core.Options(
-            guide_px=setting("GuidePixels"), pick_px=_pick_pixels(), grid=_grid_size(infer.session)
+            guide_px=setting("GuidePixels"),
+            pick_px=_pick_pixels(view.ratio),
+            grid=_grid_size(infer.session),
         )
         keys = list(infer.tool_points) + [k for k in infer.acquired if k not in infer.tool_points]
         acquired = [(k, keyed[k]) for k in keys if k in keyed]
@@ -1047,6 +1161,62 @@ class TangentArc:
             warn("tangent arc: %s" % exc)
 
 
+def describe(i, geo):
+    """A sketch curve as sketch_infer_core.snap_points takes it ((kind, geo, ...)), or None
+    for a curve without snap points."""
+    kind = geo.TypeId
+    try:
+        if kind == "Part::GeomPoint":
+            return ("point", i, (geo.X, geo.Y))
+        if kind == "Part::GeomLineSegment":
+            return ("line", i, _xy(geo.StartPoint), _xy(geo.EndPoint))
+        if kind == "Part::GeomCircle":
+            return ("circle", i, _xy(geo.Center), geo.Radius)
+        if kind == "Part::GeomArcOfCircle":
+            mid = geo.value(0.5 * (geo.FirstParameter + geo.LastParameter))
+            return (
+                "arc",
+                i,
+                _xy(geo.Center),
+                geo.Radius,
+                _xy(geo.StartPoint),
+                _xy(geo.EndPoint),
+                _xy(mid),
+            )
+        if kind == "Part::GeomEllipse":
+            return ("ellipse", i, _xy(geo.Center))
+        if kind in (
+            "Part::GeomArcOfEllipse",
+            "Part::GeomArcOfHyperbola",
+            "Part::GeomArcOfParabola",
+        ):
+            return ("conic_arc", i, _xy(geo.Center), _xy(geo.StartPoint), _xy(geo.EndPoint))
+        if kind == "Part::GeomBSplineCurve":
+            return ("spline", i, _xy(geo.StartPoint), _xy(geo.EndPoint))
+    except Exception:
+        return None
+    return None
+
+
+def _type_of(sketch, geo):
+    """The TypeId of sketch curve `geo` (projected ones from -3), or ""."""
+    try:
+        if geo >= 0:
+            return sketch.Geometry[geo].TypeId
+        return list(sketch.ExternalGeo)[-geo - 1].TypeId
+    except Exception:
+        return ""
+
+
+def _point_at(sketch, key, point, eps=1e-6):
+    """Sketch point `key` (geo, pos) lies at `point`."""
+    try:
+        p = sketch.getPoint(key[0], key[1])
+        return core.dist((p.x, p.y), point) <= eps
+    except Exception:
+        return False
+
+
 def _has(sketch, name, index):
     return any(c.Type == name and c.First == index and c.Second < -1999 for c in sketch.Constraints)
 
@@ -1076,11 +1246,26 @@ def _add_geometry(verts, curves, lines, i, geo, construction):
             pass
 
 
-def _pick_pixels():
+def _pick_pixels(ratio=1.0):
+    """How far (screen pixels) FreeCAD's own pick reaches: its PickRadius counts device
+    pixels, so on a screen scaled to 150 % its 5 pixels are 3.3 of the pixels Qt reports
+    (SciForge took 5 and left the snap to FreeCAD between the two: a line ended a hair
+    off the corner)."""
     try:
-        return max(5.0, float(App.ParamGet(VIEW).GetFloat("PickRadius", 5.0)))
+        radius = max(5.0, float(App.ParamGet(VIEW).GetFloat("PickRadius", 5.0)))
     except Exception:
-        return 5.0
+        radius = 5.0
+    return radius / ratio if ratio and ratio > 0 else radius
+
+
+def snap_pixels(ratio=1.0):
+    """How close (screen pixels) the pointer must be to a snap point: SnapPixels, and never
+    less than FreeCAD's own reach (_pick_pixels)."""
+    try:
+        wanted = float(setting("SnapPixels"))
+    except Exception:
+        wanted = 8.0
+    return max(wanted, _pick_pixels(ratio))
 
 
 def _grid_size(session):

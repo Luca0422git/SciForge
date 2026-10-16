@@ -187,6 +187,20 @@ class LineChain:
         pos = self._pixel(sketch_point)
         if gl is None or pos is None:
             return False
+        infer = self.session.infer
+        if infer is not None:
+            # the pixels tried and clicked here are this chain's own: the snapping must
+            # not move them onto the point (on a tilted view the point's own pixel can
+            # light up the line through it: _aim_at_vertex looks for one that lights the
+            # point)
+            infer.aiming = True
+        try:
+            return self._send_click(gl, pos)
+        finally:
+            if infer is not None:
+                infer.aiming = False
+
+    def _send_click(self, gl, pos):
         pos = self._aim_at_vertex(pos)
         hand = gl.mapFromGlobal(QtGui.QCursor.pos())
         left, none = QtCore.Qt.LeftButton, QtCore.Qt.NoButton
