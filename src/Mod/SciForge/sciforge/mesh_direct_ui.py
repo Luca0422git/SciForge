@@ -762,6 +762,9 @@ class DirectEditPanel(mesh_ui.MeshPanel):
     def _can_do(self, edit):
         """Try the edit on a copy first: one that cannot be done says why and is left out."""
         work = self.work()
+        if work is None:
+            self.message.setText("⚠ " + self.wait_text)
+            return False
         trial = work[0].copy()
         try:
             ec.apply(trial, edit)
