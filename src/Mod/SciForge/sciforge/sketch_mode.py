@@ -156,8 +156,6 @@ ENTER_FINISHES = {
     "SciForge_PolygonCircumscribed",
     "SciForge_PolygonInscribed",
 }
-# FreeCAD's spline tools (Fusion's Fit Point / Control Point Spline) and the undo step
-# their points are kept in while a spline is drawn.
 # FreeCAD's Project tool, started by SciForge's P / Include 3D Geometry or FreeCAD's own
 PROJECT_COMMANDS = (
     "SciForge_SketchProject",
@@ -165,6 +163,8 @@ PROJECT_COMMANDS = (
     "Sketcher_Projection",
     "Sketcher_External",
 )
+# FreeCAD's spline tools (Fusion's Fit Point / Control Point Spline) and the undo step
+# their points are kept in while a spline is drawn.
 SPLINE_COMMANDS = (
     "Sketcher_CreateBSpline",
     "Sketcher_CreateBSplineByInterpolation",
