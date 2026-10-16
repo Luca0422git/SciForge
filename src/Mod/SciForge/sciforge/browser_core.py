@@ -41,6 +41,8 @@ CONSTRUCTION_TYPES = {
     "Part::DatumPoint",
 }
 SKETCH_TYPES = {"Sketcher::SketchObject"}
+# A sketch's curves kept beside it (sketch_companions.py), listed under the sketch.
+CURVES_ICONS = {"ProjectedCurves": "sk_project", "Sketch3DCurves": "sk_spline"}
 BODY_TYPES = {"PartDesign::Body"}
 COMPONENT_TYPES = {"App::Part"}
 # Fusion lists mesh bodies beside solid bodies (Bodies folder) and canvases (reference
@@ -179,6 +181,7 @@ def _folders(objects, active_body, component):
     joints, joint_origins = [], []
     contacts, studies = [], []  # Fusion's Contacts and Motion Studies folders
     drawings = []
+    sketch_curves = []  # (owner sketch, node): a sketch's Projected Curves and 3D curves
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
         # Fusion's design has one origin. FreeCAD gives every body its own: show the active
@@ -194,6 +197,12 @@ def _folders(objects, active_body, component):
     for obj in objects:
         type_id = obj["type_id"]
         sciforge_type = obj.get("sciforge_type") or ""
+        if obj.get("owner_sketch"):
+            icon = CURVES_ICONS.get(sciforge_type, "sk_project")
+            sketch_curves.append(
+                (obj["owner_sketch"], _item("curves:", obj, icon, "sketch_curves"))
+            )
+            continue
         if type_id in BODY_TYPES:
             grounded = bool(obj.get("grounded"))
             # A surface body (surface.py) has its own icon, like Fusion's browser.
@@ -268,6 +277,13 @@ def _folders(objects, active_body, component):
                     origin.append(_origin_node(obj))
             elif not obj.get("body"):
                 origin.append(_origin_node(obj))  # the component's own origin
+    for owner, node in sketch_curves:
+        # Fusion keeps them in the sketch: a row under the sketch's own
+        holder = next((n for n in sketches if n["object"] == owner), None)
+        if holder is not None:
+            holder["children"].append(node)
+        else:
+            sketches.append(node)
     origin.sort(key=lambda n: ORIGIN_ROLES.index(n["role"]))
     folders = []
     if studies and component is None:  # Fusion: at the top of the browser
@@ -552,6 +568,7 @@ MENUS = {
         "Rename",
         "Delete",
     ],
+    "sketch_curves": ["Show/Hide", "Find in Window", "-", "Delete"],
     "construction": [
         "Edit Feature",
         "-",

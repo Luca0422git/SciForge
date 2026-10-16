@@ -119,5 +119,62 @@ class Placing(unittest.TestCase):
         self.assertAlmostEqual(core.fillet_radius(5.0, math.pi / 2), 5.0)
 
 
+# a line ending on a quarter arc: (0, 0)-(40, 0), then about (55, 0) up to (55, 15)
+LINE = ((0.0, 0.0), (40.0, 0.0))
+ARC = ((55.0, 0.0), 15.0, math.pi / 2, math.pi)
+
+
+class LineAndArc(unittest.TestCase):
+    def setUp(self):
+        self.data = core.line_arc_corner(LINE, ARC)
+
+    def test_corner(self):
+        d = self.data
+        self.assertAlmostEqual(d["point"][0], 40.0)
+        self.assertAlmostEqual(d["point"][1], 0.0)
+        self.assertAlmostEqual(d["u1"][0], -1.0)
+        self.assertAlmostEqual(d["u2"][1], 1.0)  # the arc leaves the corner straight up
+        self.assertAlmostEqual(d["angle"], math.pi / 2)
+        self.assertAlmostEqual(d["reach2"], math.pi / 2)
+
+    def test_equal(self):
+        s_line, s_arc, p1, p2 = core.line_arc_values("equal", self.data, 4.0)
+        self.assertEqual((s_line, s_arc), (4.0, 4.0))
+        self.assertAlmostEqual(p1[0], 36.0)
+        self.assertAlmostEqual(math.hypot(p2[0] - 40.0, p2[1]), 4.0)  # straight from the corner
+        self.assertAlmostEqual(math.hypot(p2[0] - 55.0, p2[1]), 15.0)  # on the arc
+        self.assertGreater(p2[1], 0.0)
+
+    def test_two_distances_follow_the_pick_order(self):
+        line_first = core.line_arc_values("two_distances", self.data, 3.0, 5.0, True)
+        arc_first = core.line_arc_values("two_distances", self.data, 5.0, 3.0, False)
+        self.assertEqual(line_first[:2], (3.0, 5.0))
+        self.assertEqual(arc_first[:2], (3.0, 5.0))
+
+    def test_distance_and_angle(self):
+        alpha = math.radians(40)
+        s_line, chord, p1, p2 = core.line_arc_values("distance_angle", self.data, 5.0, alpha)
+        self.assertAlmostEqual(core.angle_at_line(self.data, p1, p2), alpha)
+        self.assertAlmostEqual(math.hypot(p2[0] - 55.0, p2[1]), 15.0)
+        self.assertAlmostEqual(chord, math.hypot(p2[0] - 40.0, p2[1]))
+
+    def test_refusals(self):
+        with self.assertRaises(core.ChamferError):
+            core.line_arc_values("equal", self.data, 45.0)  # longer than the line
+        with self.assertRaises(core.ChamferError):
+            core.line_arc_values("equal", self.data, 25.0)  # past the arc's other end
+
+    def test_tangent_line_and_arc_make_no_corner(self):
+        arc = ((40.0, 15.0), 15.0, -math.pi / 2, math.pi / 2)  # leaves (40, 0) along the line
+        with self.assertRaises(core.ChamferError):
+            core.line_arc_corner(LINE, arc)
+
+    def test_line_that_stops_short(self):
+        # the line ends at (35, 0): the corner is where it would meet the arc's circle
+        d = core.line_arc_corner(((0.0, 0.0), (35.0, 0.0)), ARC, (10.0, 0.0), (44.4, 10.6))
+        self.assertAlmostEqual(d["point"][0], 40.0)
+        self.assertAlmostEqual(d["point"][1], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

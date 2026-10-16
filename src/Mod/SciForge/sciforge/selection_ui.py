@@ -781,6 +781,115 @@ def _candidates(doc):
     return found
 
 
+WORK_BOX_TYPES = (
+    "App::Plane",
+    "App::Line",
+    "App::Point",
+    "PartDesign::Plane",
+    "PartDesign::Line",
+    "PartDesign::Point",
+    "Part::DatumPlane",
+    "Part::DatumLine",
+    "Part::DatumPoint",
+)
+
+
+def _shown_in_view(doc, obj):
+    """The object is drawn: its own eye and those of the containers it sits in (an origin
+    plane shows only while its origin does, a datum plane only with its body)."""
+    try:
+        if not obj.ViewObject.Visibility:
+            return False
+        for parent, sub in obj.Parents or [(None, "")]:
+            chain = [parent] if parent is not None else []
+            for name in [n for n in sub.split(".")[:-2] if n]:
+                found = doc.getObject(name)
+                if found is not None:
+                    chain.append(found)
+            if all(c.ViewObject is None or c.ViewObject.Visibility for c in chain):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _work_elements(doc, to_screen):
+    """The construction planes, axes and points that are shown, as box elements: the
+    corners of what the view draws of them (its bounding box), whole objects selected by
+    their path (Body, "Origin.XY_Plane.") the way a click on one selects it."""
+    found = []
+    try:
+        objects = list(doc.Objects)
+    except Exception:
+        return found
+    for obj in objects:
+        try:
+            if obj.TypeId not in WORK_BOX_TYPES or obj.ViewObject is None:
+                continue
+            if not _shown_in_view(doc, obj):
+                continue
+            box = obj.ViewObject.getBoundingBox()
+            if not box.isValid():
+                continue
+            parents = obj.Parents or []
+            holder, sub = (parents[0][0].Name, parents[0][1]) if parents else (obj.Name, "")
+            el = _Element(doc.Name, holder, sub, obj, "", "work_geometry")
+            corners = []
+            for x in (box.XMin, box.XMax):
+                for y in (box.YMin, box.YMax):
+                    for z in (box.ZMin, box.ZMax):
+                        corners.append((x, y, z))
+            corners = sorted(set(corners))
+            if obj.TypeId == "App::Plane" and getattr(obj, "Role", ""):
+                corners = _origin_plane_corners(obj, corners)
+            el.points = [to_screen(App.Vector(*c)) for c in corners]
+            if "Plane" in obj.TypeId and len(corners) == 4:
+                # the drawn square, in order round it (its outline makes a box inside it
+                # a crossing pick)
+                ring = _ring(corners)
+                screen = [to_screen(App.Vector(*p)) for p in ring + ring[:1]]
+                el.segments = _polyline(screen)
+                el.outline = screen[:-1]
+            elif len(el.points) >= 2:
+                el.segments = _polyline(el.points)
+            el.samples = [box.Center]
+            found.append(el)
+        except Exception:
+            continue
+    return found
+
+
+def _origin_plane_corners(obj, corners):
+    """The square an origin plane shows at rest. FreeCAD draws it as a square in the
+    plane's first quadrant, set off from the origin (ViewProviderPlane::updatePlaneSize:
+    corners at 8 and DatumPlaneSize), and as the whole square round the origin while it is
+    lit up or selected: a box drag that passes over it lights it up, so the square is taken
+    as it was before."""
+    params = App.ParamGet("User parameter:BaseApp/Preferences/View")
+    size = params.GetFloat("DatumPlaneSize", 62.0) * params.GetFloat("DatumScale", 100.0) / 100.0
+    k = 8.0 / size if size > 8.0 else 0.0
+    place = obj.getGlobalPlacement()
+    inverse = place.inverse()
+    local = [inverse.multVec(App.Vector(*c)) for c in corners]
+    reach = max(max(abs(p.x), abs(p.y)) for p in local)
+    rest = [(k * reach, k * reach), (reach, k * reach), (reach, reach), (k * reach, reach)]
+    out = [place.multVec(App.Vector(x, y, 0)) for x, y in rest]
+    return sorted((p.x, p.y, p.z) for p in out)
+
+
+def _ring(corners):
+    """The four corners of a rectangle in order round it: the corner across from the
+    first is the one farthest from it."""
+
+    def dist(p, q):
+        return sum((p[i] - q[i]) ** 2 for i in range(3))
+
+    first, others = corners[0], list(corners[1:])
+    far = max(others, key=lambda q: dist(first, q))
+    others.remove(far)
+    return [first, others[0], far, others[1]]
+
+
 def _is_edited(obj):
     try:
         edit = Gui.getDocument(obj.Document.Name).getInEdit()
@@ -853,6 +962,8 @@ def _elements_in(view, gl, polygon_qt, crossing, filters_):
                 el.points = [to_screen(vertex.Point)]
                 el.samples = [vertex.Point]
                 found.append(el)
+    if "work_geometry" in kinds:
+        found.extend(_work_elements(doc, to_screen))
     taken = []
     for el in found:
         if core.quick_reject(el.points, poly):
@@ -870,7 +981,10 @@ def _elements_in(view, gl, polygon_qt, crossing, filters_):
         if hit:
             taken.append(el)
     if not filters_.select_through and taken:
-        taken = [el for el in taken if _is_visible(view, gl, el, to_screen)]
+        # (planes and axes are drawn see-through: one that shows can be boxed: Guess)
+        taken = [
+            el for el in taken if el.kind == "work_geometry" or _is_visible(view, gl, el, to_screen)
+        ]
     spent = time.perf_counter() - started
     if spent > 0.5:
         log("box selection took %.1f s on %d elements" % (spent, len(found)))

@@ -420,6 +420,29 @@ def frame_from_corners(bottom_left, bottom_right, top_right, top_left):
     return (bx, by), angle, width, height
 
 
+def resized_frame(corner, angle_deg, width, frame_height, which, point, minimum=0.5):
+    """The frame after its corner `which` (0 bottom left, 1 bottom right, 2 top right, 3 top
+    left) was dragged to `point`: the opposite corner stays, the angle stays, the size
+    follows the pointer along the frame's own axes (never below `minimum`; the frame does
+    not turn inside out). Returns (bottom-left corner, angle degrees, width, height)."""
+    corners = frame_corners(corner, angle_deg, width, frame_height)
+    opposite = corners[(which + 2) % 4]
+    a = math.radians(angle_deg)
+    ex, ey = (math.cos(a), math.sin(a)), (-math.sin(a), math.cos(a))
+    dx, dy = point[0] - opposite[0], point[1] - opposite[1]
+    sign_x = 1.0 if which in (1, 2) else -1.0
+    sign_y = 1.0 if which in (2, 3) else -1.0
+    w = max(minimum, sign_x * (dx * ex[0] + dy * ex[1]))
+    h = max(minimum, sign_y * (dx * ey[0] + dy * ey[1]))
+    back_x = w if which in (0, 3) else 0.0  # from the opposite corner to the bottom left
+    back_y = h if which in (0, 1) else 0.0
+    bl = (
+        opposite[0] - ex[0] * back_x - ey[0] * back_y,
+        opposite[1] - ex[1] * back_x - ey[1] * back_y,
+    )
+    return bl, angle_deg, w, h
+
+
 def snap_points(corner, angle_deg, width, frame_height):
     """{name: (x, y)} the frame's corners, edge middles and centre (sketch coordinates):
     the points Fusion lets you click to turn the frame about."""

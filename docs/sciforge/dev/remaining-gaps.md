@@ -11,8 +11,11 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   the part as it is now, and an older sketch edited from the timeline shows its own body
   rolled back, by sf/fix-sketch-face.) Editing an older sketch rolls back only its own body in
   the drawing (Fusion rolls back the other bodies too); suppressing a Move also suppresses a
-  sketch on its face. No 3D Sketch. Project to Surface
-  curves sit outside the sketch (not in the browser or timeline). Chamfer lines only.
+  sketch on its face. (3D Sketch on SciForge's own handler, Projected Curves belonging to the
+  sketch, SciForge's own Fillet, line-arc Chamfer, by sf/sketch-2.) Left: no Centerline line
+  type; 3D curves have no constraints, dimensions, arcs or typed length / angle; projected
+  curves cannot be dimensioned and have no Break Link; FreeCAD loses some projections when the
+  source edge moves (re-project by hand).
 - **extrude-presspull.md**: (To Object extend options, Offset and a following Start: Object by
   sf/modeling-2; a clicked face or corner sets the height, and a held arrow snaps to it, by
   sf/fix-extrude-to-face; value boxes on Move's triad, Scale, Draft and the other handles by
@@ -62,7 +65,7 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   conditions / Merge, Stitch's green edges, by sf/surface-2.) Left: Sweep Path + Guide Rail
   extents; Extrude All counts the bodies visible when the step was made; no taper from a
   slanted or curved start; Patch per-edge continuity and Tangency Weight; Extend Align Edges.
-- **text-emboss.md**: the text frame cannot be resized by dragging its corner.
+- **text-emboss.md**: (a text frame resized by dragging its corner by sf/sketch-2.)
 - **insert-export.md**: (STEP / IGES open and insert as components, STEP export with
   structure, IGES / DXF / mesh export, SVG / DXF / Canvas manipulators, Insert Design as a
   linked component with Break Link, Data Panel Upload, by sf/exchange-2.) Left: bodies inside
@@ -84,8 +87,8 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   sf/polish-2.) No adsk add-in API. A decal on a component's copy is listed only under the
   original; a face that changes shape and moves in one step may lose its decal (red, Select
   Face puts it back).
-- **selection.md**: no double-click chain selection in sketches. No box selection of planes
-  and axes.
+- **selection.md**: (double-click chain selection in sketches, Fusion's box modifiers, box
+  selection of planes, axes and points, by sf/sketch-2.)
 - **timeline-browser.md**: (Groups dragged as a whole, Roll History Marker Here on a group, by
   sf/polish-2; the rolled-back Extrude switching to Cut was already fixed in 27d4492778.)
   Groups cannot nest. No New Body command.

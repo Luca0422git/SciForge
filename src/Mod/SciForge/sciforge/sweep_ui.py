@@ -591,7 +591,10 @@ class SweepPanel(Panel):
             return
         if curves.is_curve_pick(obj, short):
             ref = (obj, short)
-            if not extrude.is_sketch(obj):
+            from . import sketch_companions
+
+            # a sketch's curves, also its 3D curves (sketch_companions, sketch-2): as they are
+            if not extrude.is_sketch(obj) and not sketch_companions.is_companion(obj):
                 ref = curve_pick.base_element(self._base_feature(), obj, short)
                 if ref is None:
                     self.message.setText(

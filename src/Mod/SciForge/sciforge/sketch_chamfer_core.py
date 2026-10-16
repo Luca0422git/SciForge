@@ -175,3 +175,192 @@ def fillet_radius(setback, angle):
     """The radius of the arc that touches both lines `setback` from the corner (FreeCAD's
     sketch fillet / chamfer works with that radius)."""
     return setback * math.tan(angle / 2.0)
+
+
+# -- a line and an arc -------------------------------------------------------------------------
+# Fusion's sketch chamfer is documented for two lines (Autodesk help "Add chamfers to sketch
+# geometry": a vertex or two lines; the API's chamfers are SketchLines methods). SciForge
+# also cuts the corner between a line and an arc (it goes further; the sketch-2 brief asks
+# for it): the setback on the line is measured along it, the one on the arc as the straight
+# distance from the corner to where the chamfer meets the arc (what a sketch dimension
+# between the two points shows). Distance and angle: the distance on the line and the angle
+# between the line and the chamfer.
+# An arc is (centre, radius, start angle, end angle), anticlockwise from start to end.
+TWO_PI = 2.0 * math.pi
+
+
+def arc_ends(arc):
+    c, r, s, e = arc
+    return (c[0] + r * math.cos(s), c[1] + r * math.sin(s)), (
+        c[0] + r * math.cos(e),
+        c[1] + r * math.sin(e),
+    )
+
+
+def _angle_of(c, p):
+    return math.atan2(p[1] - c[1], p[0] - c[0])
+
+
+def _line_circle(a, b, c, r):
+    """Where the (extended) line a-b crosses the circle."""
+    d = _unit(_sub(b, a))
+    f = _sub(a, c)
+    k = _dot(f, d)
+    disc = k * k - (_dot(f, f) - r * r)
+    if disc < -1e-9:
+        return []
+    root = math.sqrt(max(disc, 0.0))
+    return [_add(a, _scale(d, -k - root)), _add(a, _scale(d, -k + root))]
+
+
+def line_arc_corner(line, arc, keep_line=None, keep_arc=None):
+    """The corner of a line and an arc: a dict with the corner point, the line's direction
+    from it along the part that stays (u1) and how far it reaches, the arc's tangent there
+    towards its part that stays (u2), sigma (+1: that way is anticlockwise), how far round
+    the arc that part reaches (radians), and the angle between u1 and u2."""
+    c, r, _s, _e = arc
+    if r <= EPS:
+        raise ChamferError("The arc has no size.")
+    start, end = arc_ends(arc)
+    a, b = line
+    point = None
+    for p in (a, b):
+        for q in (start, end):
+            if _length(_sub(p, q)) <= 1e-7:
+                point = p
+    if point is None:
+        hits = _line_circle(a, b, c, r)
+        if not hits:
+            raise ChamferError("That line and arc make no corner: they do not meet.")
+        refs = [p for p in (keep_line, keep_arc) if p is not None] or [a, b]
+
+        def cost(p):
+            return sum(_length(_sub(p, q)) for q in refs)
+
+        point = min(hits, key=cost)
+    u1, reach1 = _side(line, point, keep_line)
+    theta = _angle_of(c, point)
+    d_start, d_end = _length(_sub(start, point)), _length(_sub(end, point))
+    if keep_arc is not None:
+        # the part that stays runs from the corner past the click
+        sigma = 1.0 if (_angle_of(c, keep_arc) - theta) % TWO_PI <= math.pi else -1.0
+        if d_start <= 1e-7:
+            sigma = 1.0  # the arc leaves its start anticlockwise
+        elif d_end <= 1e-7:
+            sigma = -1.0
+    elif d_start <= 1e-7:
+        sigma = 1.0
+    elif d_end <= 1e-7:
+        sigma = -1.0
+    else:
+        far = start if d_start >= d_end else end
+        sigma = 1.0 if (_angle_of(c, far) - theta) % TWO_PI <= math.pi else -1.0
+    far = end if sigma > 0 else start
+    reach2 = ((_angle_of(c, far) - theta) * sigma) % TWO_PI
+    if reach2 <= 1e-9:
+        reach2 = TWO_PI
+    u2 = (-math.sin(theta) * sigma, math.cos(theta) * sigma)
+    if reach1 <= EPS:
+        raise ChamferError("Click the line on the side that stays.")
+    angle = math.acos(max(-1.0, min(1.0, _dot(u1, u2))))
+    if angle <= 1e-6 or angle >= math.pi - 1e-6:
+        raise ChamferError("The line and the arc run on smoothly there: there is no corner.")
+    return {
+        "point": point,
+        "u1": u1,
+        "reach1": reach1,
+        "u2": u2,
+        "sigma": sigma,
+        "theta": theta,
+        "reach2": reach2,
+        "angle": angle,
+        "centre": c,
+        "radius": r,
+    }
+
+
+def arc_point(data, chord):
+    """The point on the arc `chord` (straight distance) from the corner, along the part
+    that stays."""
+    r = data["radius"]
+    if chord is None or chord <= EPS:
+        raise ChamferError("The distance must be more than 0.")
+    if chord >= 2 * r - 1e-9:
+        raise ChamferError("The distance on the arc is more than the arc's diameter.")
+    turn = 2.0 * math.asin(chord / (2.0 * r))
+    if turn >= data["reach2"] - 1e-9:
+        raise ChamferError("The chamfer is longer than the arc: make it smaller.")
+    t = data["theta"] + data["sigma"] * turn
+    c = data["centre"]
+    return (c[0] + r * math.cos(t), c[1] + r * math.sin(t))
+
+
+def line_point(data, distance):
+    if distance is None or distance <= EPS:
+        raise ChamferError("The distance must be more than 0.")
+    if distance >= data["reach1"] - 1e-7:
+        raise ChamferError("The chamfer is longer than the line: make it smaller.")
+    return _add(data["point"], _scale(data["u1"], distance))
+
+
+def angle_at_line(data, p1, p2):
+    """The angle at P1 between the line (towards the corner) and the chamfer."""
+    to_corner = _sub(data["point"], p1)
+    to_p2 = _sub(p2, p1)
+    cosine = _dot(to_corner, to_p2) / (_length(to_corner) * _length(to_p2))
+    return math.acos(max(-1.0, min(1.0, cosine)))
+
+
+def arc_point_at_angle(data, p1, alpha):
+    """Distance and angle: where the chamfer leaving P1 at `alpha` from the line (towards
+    the corner, turned into the corner) meets the arc; (point, chord from the corner)."""
+    if alpha is None or alpha <= 1e-6 or alpha >= math.pi - 1e-6:
+        raise ChamferError("The angle must be between 0 and 180 degrees.")
+    to_corner = _unit(_sub(data["point"], p1))
+    # turn towards the arc's side: the side u2 points to, seen along the line
+    side = 1.0 if _cross(to_corner, data["u2"]) >= 0 else -1.0
+    ca, sa = math.cos(alpha), math.sin(alpha) * side
+    d = (to_corner[0] * ca - to_corner[1] * sa, to_corner[0] * sa + to_corner[1] * ca)
+    hits = _line_circle(p1, _add(p1, d), data["centre"], data["radius"])
+    ahead = [q for q in hits if _dot(_sub(q, p1), d) > 1e-9]
+    if not ahead:
+        raise ChamferError("At that angle the chamfer misses the arc: change the angle.")
+    best = min(ahead, key=lambda q: _length(_sub(q, data["point"])))
+    chord = _length(_sub(best, data["point"]))
+    return arc_point(data, chord), chord
+
+
+def line_arc_values(kind, data, distance, second=None, line_first=True):
+    """(setback on the line, chord on the arc, P1, P2) for the type and values.
+    two_distances: `distance` belongs to the curve picked first (line_first)."""
+    if kind not in KINDS:
+        raise ChamferError("Unknown chamfer type %r." % kind)
+    if kind == "distance_angle":
+        p1 = line_point(data, distance)
+        alpha = second
+        if alpha is None:
+            alpha = angle_at_line(data, p1, arc_point(data, distance))
+        p2, chord = arc_point_at_angle(data, p1, alpha)
+        return distance, chord, p1, p2
+    if kind == "equal":
+        s_line = s_arc = distance
+    else:
+        if second is None or second <= EPS:
+            raise ChamferError("The second distance must be more than 0.")
+        s_line, s_arc = (distance, second) if line_first else (second, distance)
+    return s_line, s_arc, line_point(data, s_line), arc_point(data, s_arc)
+
+
+def line_arc_pointer(kind, data, pointer, line_first=True):
+    """What the pointer gives: its distance from the corner (Equal distance, and the arc's
+    distance of Two distances); the line's distance is along the line."""
+    rel = _sub(pointer, data["point"])
+    along = max(_dot(rel, data["u1"]), 0.0)
+    away = _length(rel)
+    if kind == "equal":
+        return {"distance": away}
+    if kind == "two_distances":
+        if line_first:
+            return {"distance": along, "distance2": away}
+        return {"distance": away, "distance2": along}
+    return {"distance": along}

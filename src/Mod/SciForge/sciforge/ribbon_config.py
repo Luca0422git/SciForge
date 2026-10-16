@@ -760,7 +760,11 @@ SKETCH_CREATE = group(
         sub(
             "Spline",
             [
-                item("Fit Point Spline", "Sketcher_CreateBSplineByInterpolation", "sk_spline"),
+                item(
+                    "Fit Point Spline",
+                    ("SciForge_SketchFitSpline", "Sketcher_CreateBSplineByInterpolation"),
+                    "sk_spline",
+                ),
                 item("Control Point Spline", "Sketcher_CreateBSpline", "sk_spline"),
             ],
             "sk_spline",
@@ -790,7 +794,7 @@ SKETCH_MODIFY = group(
     "MODIFY",
     ["Fillet", "Trim", "Offset", "Extend"],
     [
-        item("Fillet", "Sketcher_CreateFillet", "sk_fillet"),
+        item("Fillet", ("SciForge_SketchFillet", "Sketcher_CreateFillet"), "sk_fillet"),
         item("Chamfer", ("SciForge_SketchChamfer", "Sketcher_CreateChamfer"), "sk_chamfer"),
         item("Offset", "SciForge_SketchOffset", "sk_offset", "O"),
         item("Trim", ("SciForge_SketchTrim", "Sketcher_Trimming"), "sk_trim", "T"),

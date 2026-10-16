@@ -207,6 +207,7 @@ class TextLayer(QtCore.QObject):
         self.dialog = None
         self._press = None  # (pos, modifiers, text name) of a left press on a text
         self._drag = None  # {"name", "last": (x, y), "moved": bool}
+        self._resize = None  # {"name", "which", "frame", "moved"}: a frame corner dragged
         self._last_draw = None
         self.root = coin.SoSeparator()
         self.root.setName("SciForgeSketchTexts")
@@ -507,9 +508,27 @@ class TextLayer(QtCore.QObject):
             warn("sketch text: %s" % exc)
         return False
 
+    def frame_corner_at(self, pos):
+        """(text, corner number 0..3, frame) of a text frame's corner under widget pixel
+        `pos` (Fusion: drag a corner of the frame to resize it), or None."""
+        best = None
+        for item in self.shown.values():
+            obj = item.obj
+            if not _alive(obj) or obj.TextType != "Text":
+                continue
+            frame = text.read_frame(self.sketch, list(obj.FrameIds))
+            if frame is None:
+                continue
+            for which, xy in enumerate(core.frame_corners(*frame)):
+                d = _dist(_screen(self.session, xy), QtCore.QPointF(pos))
+                if d <= DOT_PX and (best is None or d < best[0]):
+                    best = (d, obj, which, frame)
+        return best[1:] if best is not None else None
+
     def _pressed(self, event):
         self._press = None
         self._drag = None
+        self._resize = None
         pos = event.position().toPoint()
         if event.button() == QtCore.Qt.RightButton:
             found = self.text_at(pos) if self._usable() else None
@@ -518,6 +537,12 @@ class TextLayer(QtCore.QObject):
             return False
         if event.button() != QtCore.Qt.LeftButton or not self._usable():
             return False
+        corner = self.frame_corner_at(pos)
+        if corner is not None:
+            obj, which, frame = corner
+            self._press = (QtCore.QPoint(pos), event.modifiers(), obj.Name)
+            self._resize = {"name": obj.Name, "which": which, "frame": frame, "moved": False}
+            return True  # the frame's own drag, not FreeCAD's drag of the point
         found = self.text_at(pos)
         if found is None:
             return False
@@ -528,10 +553,17 @@ class TextLayer(QtCore.QObject):
         if self._press is None:
             return False
         if not event.buttons() & QtCore.Qt.LeftButton:
+            if self._resize is not None:
+                if QtWidgets.QApplication.mouseButtons() & QtCore.Qt.LeftButton:
+                    return True  # (xvfb now and then sends a move without the held button)
+                resize, self._resize, self._press = self._resize, None, None
+                return self._released_resize(resize)  # the release never came: keep it
             self._press = None
             return False
         pos = event.position().toPoint()
         start, _mods, name = self._press
+        if self._resize is not None:
+            return self._resize_to(start, pos)
         if self._drag is None:
             if (pos - start).manhattanLength() <= CLICK_SLOP:
                 return True
@@ -559,11 +591,68 @@ class TextLayer(QtCore.QObject):
             self.refresh(now=True)
         return True
 
+    def _resize_to(self, start, pos):
+        """A frame corner follows the pointer: the opposite corner stays, the letters keep
+        their height and are laid out again in the new frame (Fusion)."""
+        resize = self._resize
+        if not resize["moved"]:
+            if (pos - start).manhattanLength() <= CLICK_SLOP:
+                return True
+            resize["moved"] = True
+            self.sketch.Document.openTransaction("Resize Text Frame")
+        point = _sketch_point(self.session, pos)
+        obj = self.sketch.Document.getObject(resize["name"])
+        if point is None or obj is None:
+            return True
+        corner, angle, width, height = resize["frame"]
+        new = core.resized_frame(
+            corner, angle, width, height, resize["which"], point, minimum=self._min_frame()
+        )
+        resize["held"] = not text.set_frame(self.sketch, list(obj.FrameIds), *new)
+        self.refresh(now=True)
+        return True
+
+    def _min_frame(self):
+        """The smallest frame side a drag leaves (a few pixels' worth)."""
+        try:
+            gl = self.session.gl
+            centre = QtCore.QPoint(gl.width() // 2, gl.height() // 2)
+            return max(4 * _mm_per_px(self.session, centre), 1e-3)
+        except Exception:
+            return 0.5
+
+    def _released_resize(self, resize):
+        doc = self.sketch.Document
+        if not resize["moved"]:
+            return True
+        obj = doc.getObject(resize["name"])
+        try:
+            if obj is not None:
+                _keep_frame_values(obj)
+                obj.recompute()
+            doc.commitTransaction()
+        except Exception as exc:
+            doc.abortTransaction()
+            warn("resize text frame: %s" % exc)
+            return True
+        if resize.get("held"):
+            commands.tell(
+                "The frame's dimensions hold its size: change them (double-click one) to "
+                "resize the text frame."
+            )
+        else:
+            log("text frame resized")
+        self.refresh()
+        return True
+
     def _released(self, event):
         press, self._press = self._press, None
         drag, self._drag = self._drag, None
+        resize, self._resize = self._resize, None
         if press is None or event.button() != QtCore.Qt.LeftButton:
             return False
+        if resize is not None:
+            return self._released_resize(resize)
         doc = self.sketch.Document
         if drag is not None:
             obj = doc.getObject(drag["name"])

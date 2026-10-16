@@ -278,6 +278,12 @@ def enable():
         sketch_area_pick.enable()
     except Exception as exc:
         warn("sketch areas: %s" % exc)
+    try:
+        from . import sketch_companions
+
+        sketch_companions.enable()  # Project to Surface / 3D curves go with their sketch
+    except Exception as exc:
+        warn("sketch curves: %s" % exc)
     sketch = editing_sketch()
     if sketch is not None:
         _start(sketch)
@@ -294,6 +300,12 @@ def disable():
         sketch_area_pick.disable()
     except Exception as exc:
         warn("sketch areas: %s" % exc)
+    try:
+        from . import sketch_companions
+
+        sketch_companions.disable()
+    except Exception as exc:
+        warn("sketch curves: %s" % exc)
     for key, remove in (
         ("observer", Gui.removeDocumentObserver),
         ("app_observer", App.removeDocumentObserver),
@@ -764,6 +776,7 @@ class SketchSession:
         self.line = LineChain(self)
         self.tool = None  # SciForge's own drawing tool while one runs (sketch_draw.py)
         self.check = None  # Fusion's floating green check (sketch_check.py), made below
+        self.sketch3d = None  # Fusion's 3D Sketch (sketch3d_ui.Layer) once it is used
         self.infer = None
         try:
             from .sketch_infer import Inference
@@ -773,6 +786,11 @@ class SketchSession:
         except Exception as exc:
             warn("sketch inference: %s" % exc)
         self.fillet_watch = FilletRadius(self)
+        from .sketch_select import SketchSelect
+
+        # Fusion: a double-click selects a curve's chain; a box replaces / Shift adds /
+        # Ctrl toggles (sketch_select.py)
+        self.select = SketchSelect(self)
         self._refresh = QtCore.QTimer()
         self._refresh.setSingleShot(True)
         self._refresh.setInterval(120)
@@ -804,6 +822,13 @@ class SketchSession:
                 self.apply_option(name)
         self._palette_tries = 0
         normal_mode()
+        try:
+            from . import sketch3d_ui
+
+            if sketch3d_ui.starts_on(sketch):  # a sketch with 3D curves opens in 3D
+                sketch3d_ui.layer(self).set_on(True, quiet=True)
+        except Exception as exc:
+            warn("3D Sketch: %s" % exc)
         QtCore.QTimer.singleShot(0, self._add_palette)
         self._refreshed()
 
@@ -1393,6 +1418,12 @@ class SketchSession:
                     return True
         return False
 
+    def chain_clicked(self, pos):
+        """A double-click on a curve with no tool running selects its chain (Fusion)."""
+        if self.editor is not None or self.tool_running():
+            return False
+        return self.select.double_clicked(pos)
+
     def close(self):
         if self.closed:
             return
@@ -1416,7 +1447,10 @@ class SketchSession:
             pass
         self.close_editor(commit=True)
         remove_stray_editors(self.gl)
-        for part in (self.polygon, self.areas, self.shading, self.display, self.fixed, self.check):
+        parts = [self.polygon, self.areas, self.shading, self.display, self.fixed, self.check]
+        if self.sketch3d is not None:
+            parts.append(self.sketch3d)
+        for part in parts:
             try:
                 if part is not None:
                     part.remove()
@@ -1574,6 +1608,8 @@ class _ViewFilter(QtCore.QObject):
             if kind == QtCore.QEvent.MouseMove:
                 if event.buttons() == QtCore.Qt.NoButton:
                     session.areas.moved(event.position().toPoint())
+                elif event.buttons() & QtCore.Qt.LeftButton:
+                    session.select.moved(event)  # a box drag (Fusion's modifiers)
                 return False
             if kind == QtCore.QEvent.Leave:
                 session.areas.left()
@@ -1581,9 +1617,13 @@ class _ViewFilter(QtCore.QObject):
                     session.infer.leave()  # no guide or mark stays behind
                 return False
             if kind == QtCore.QEvent.MouseButtonPress:
+                # (a double-click whose release never came: Qt's test clicks send none)
+                session.select.swallow_release = False
                 if event.button() == QtCore.Qt.LeftButton:
                     # (before the value box closes: that click is not a pick)
                     session.areas.pressed(event.position().toPoint(), event.modifiers())
+                    if session.editor is None and not session.tool_running():
+                        session.select.pressed(event)
                 session.last_press = event.position().toPoint()
                 if session.editor is not None and not session.editor.underMouse():
                     QtCore.QTimer.singleShot(0, lambda: session.close_editor(commit=True))
@@ -1593,7 +1633,13 @@ class _ViewFilter(QtCore.QObject):
                     return True
             elif kind == QtCore.QEvent.MouseButtonRelease:
                 if event.button() == QtCore.Qt.LeftButton:
+                    if session.select.swallow_release:
+                        # the release of a double-click that selected a chain: FreeCAD
+                        # would toggle the clicked curve off again
+                        session.select.swallow_release = False
+                        return True
                     session.areas.released(event.position().toPoint())
+                    session.select.released(event)
                 if event.button() == QtCore.Qt.RightButton and self.right_pressed is not None:
                     start, self.right_pressed = self.right_pressed, None
                     pos = event.globalPosition().toPoint()
@@ -1604,7 +1650,8 @@ class _ViewFilter(QtCore.QObject):
                     return True
             elif kind == QtCore.QEvent.MouseButtonDblClick:
                 if event.button() == QtCore.Qt.LeftButton:
-                    return session.double_clicked(event.position().toPoint())
+                    pos = event.position().toPoint()
+                    return session.double_clicked(pos) or session.chain_clicked(pos)
         except Exception as exc:
             warn("sketch view: %s" % exc)
         return False
@@ -2258,6 +2305,7 @@ class DisplayOptions:
     def __init__(self, session):
         self.session = session
         self.saved_styles = {}
+        self.hidden_curves = set()  # Projected Curves hidden by Show Projected Geometries
         self._timer = QtCore.QTimer()
         self._timer.setInterval(200)
         self._timer.timeout.connect(self.apply)
@@ -2303,6 +2351,27 @@ class DisplayOptions:
                     node.style = coin.SoDrawStyle.INVISIBLE
             elif key in self.saved_styles:
                 node.style = self.saved_styles.pop(key)
+        self._projected_curves(hidden["projected"])
+
+    def _projected_curves(self, hide):
+        """Project to Surface's curves are projected geometry too (Fusion draws them
+        purple in the sketch): Show Projected Geometries off hides them while the sketch is
+        open (sketch_companions.py keeps them beside the sketch)."""
+        try:
+            from . import sketch_companions
+
+            for obj in sketch_companions.companions(self.session.sketch, "ProjectedCurves"):
+                vobj = obj.ViewObject
+                if vobj is None:
+                    continue
+                if hide and vobj.Visibility:
+                    vobj.Visibility = False
+                    self.hidden_curves.add(obj.Name)
+                elif not hide and obj.Name in self.hidden_curves:
+                    vobj.Visibility = True
+                    self.hidden_curves.discard(obj.Name)
+        except Exception as exc:
+            warn("sketch display options: %s" % exc)
 
     def _constraints(self, root, hidden):
         node, _ = find_node(root, "ConstraintGroup")
@@ -2340,6 +2409,8 @@ class DisplayOptions:
         except Exception:
             pass
         self.saved_styles = {}
+        if self.hidden_curves:
+            self._projected_curves(False)  # shown again when the sketch closes
 
 
 # -- fixed curves and points (green) ---------------------------------------------------
