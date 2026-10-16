@@ -10,7 +10,7 @@ cylinder of radius 10 round (70, 25), 30 high (its radius a dimension).
   B  the block made 50 wide: the projected line follows (x 0 to 50)
   C  a sketch on XZ holding a line in front of the cylinder; Project to Surface: the
      cylinder's face, Next, the line, Along Vector, OK: the curve lies on the cylinder,
-     on its front
+     on its front; the palette's Show Projected Geometries hides and shows it
   D  Finish Sketch: the browser lists "Projected Curves" under that sketch; no timeline
      step of their own; the sketch's eye hides and shows them
   E  the cylinder made radius 12: the curve follows onto the new face
@@ -237,6 +237,20 @@ def c_check():
         h.check("C the curve lies on the cylinder's front (radius 10)", ok, dists)
         s["projected"] = found[-1].Name
     h.shot("C-project-to-surface")
+    si.palette_click("SciForgePalette_projected")
+
+
+def c_hide_projected():
+    obj = doc().getObject(s["projected"])
+    h.check(
+        "C Show Projected Geometries off hides the Projected Curves", not obj.ViewObject.Visibility
+    )
+    si.palette_click("SciForgePalette_projected")
+
+
+def c_show_projected():
+    obj = doc().getObject(s["projected"])
+    h.check("C ...on again shows them", obj.ViewObject.Visibility)
 
 
 # -- D ----------------------------------------------------------------------------------------
@@ -368,6 +382,8 @@ h.run(
             c_type,
             c_ok,
             c_check,
+            c_hide_projected,
+            c_show_projected,
             d_finish,
             d_browser,
             d_hidden,

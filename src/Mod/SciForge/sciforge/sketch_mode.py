@@ -2297,6 +2297,7 @@ class DisplayOptions:
     def __init__(self, session):
         self.session = session
         self.saved_styles = {}
+        self.hidden_curves = set()  # Projected Curves hidden by Show Projected Geometries
         self._timer = QtCore.QTimer()
         self._timer.setInterval(200)
         self._timer.timeout.connect(self.apply)
@@ -2342,6 +2343,27 @@ class DisplayOptions:
                     node.style = coin.SoDrawStyle.INVISIBLE
             elif key in self.saved_styles:
                 node.style = self.saved_styles.pop(key)
+        self._projected_curves(hidden["projected"])
+
+    def _projected_curves(self, hide):
+        """Project to Surface's curves are projected geometry too (Fusion draws them
+        purple in the sketch): Show Projected Geometries off hides them while the sketch is
+        open (sketch_companions.py keeps them beside the sketch)."""
+        try:
+            from . import sketch_companions
+
+            for obj in sketch_companions.companions(self.session.sketch, "ProjectedCurves"):
+                vobj = obj.ViewObject
+                if vobj is None:
+                    continue
+                if hide and vobj.Visibility:
+                    vobj.Visibility = False
+                    self.hidden_curves.add(obj.Name)
+                elif not hide and obj.Name in self.hidden_curves:
+                    vobj.Visibility = True
+                    self.hidden_curves.discard(obj.Name)
+        except Exception as exc:
+            warn("sketch display options: %s" % exc)
 
     def _constraints(self, root, hidden):
         node, _ = find_node(root, "ConstraintGroup")
@@ -2379,6 +2401,8 @@ class DisplayOptions:
         except Exception:
             pass
         self.saved_styles = {}
+        if self.hidden_curves:
+            self._projected_curves(False)  # shown again when the sketch closes
 
 
 # -- fixed curves and points (green) ---------------------------------------------------
