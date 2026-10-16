@@ -220,6 +220,12 @@ def _mirror_document(doc, scope, target, chosen, shown_only=True):
             mirror.finish_links()
         tmp.recompute()
         if not tops:
+            found = chosen if chosen is not None else export.exportable_bodies(doc)
+            if any(export.is_mesh_body(b) for b in found):
+                raise core.ExchangeError(
+                    "STEP holds solid bodies only (IGES too): convert the mesh bodies first "
+                    "(MESH > Convert Mesh), or export them as STL, 3MF or OBJ."
+                )
             raise core.ExchangeError(
                 "There is no solid body to export (hidden bodies are left out)."
             )

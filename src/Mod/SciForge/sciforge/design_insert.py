@@ -119,7 +119,12 @@ def insert_linked(doc, other, parent=None, label=None):
     if not sources:
         raise ValueError("%s has no bodies to insert." % design_name(other.FileName))
     name = label or design_name(other.FileName)
-    comp = components.new_component(doc, name, parent)
+    taken = {c.Label for c in components.list_components(doc)}
+    unique, n = name, 1
+    while unique in taken:  # a second insert of the same design: "Wheel (2)"
+        n += 1
+        unique = "%s (%d)" % (name, n)
+    comp = components.new_component(doc, unique, parent)
     bodies.add_prop(comp, "App::PropertyString", LINKED_FILE, "SciForge")
     setattr(comp, LINKED_FILE, _relative(doc, other.FileName))
     for source in sources:
