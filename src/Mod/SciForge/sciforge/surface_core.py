@@ -87,6 +87,7 @@ KINDS = {
             "taper": 0.0,
             "taper2": 0.0,
             "flip": False,
+            "chain_faces": True,
             "chain": True,
             "operation": "new_body",
         },

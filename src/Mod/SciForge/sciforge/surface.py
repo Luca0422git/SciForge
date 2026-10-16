@@ -426,12 +426,22 @@ def _base(obj, what="surface"):
     return bodies.global_shape(base)
 
 
-def target_of_ref(obj, sub):
+def target_of_ref(obj, sub, chain=False):
     """What a picked object is for Extrude's To Object / From Object: ("plane", point,
     normal) for a plane or a flat face, ("point", point) for a point, ("shape", shape) for a
-    curved face or a whole body (design coordinates)."""
+    curved face or a whole body (design coordinates). chain: a face and the faces joined
+    smoothly to it (Fusion's Chain Faces)."""
     import Part
 
+    if chain and sub.startswith("Face") and obj.TypeId not in PLANE_TYPES:
+        from . import shelling
+
+        try:
+            names = shelling.tangent_faces(obj.Shape, [sub])
+        except Exception:
+            names = [sub]
+        if len(names) > 1:
+            return ("shape", Part.makeCompound([element_of(obj, n) for n in names]))
     if obj.TypeId in PLANE_TYPES:
         return ("plane",) + tuple(plane_of_ref(obj, sub))
     if obj.TypeId in POINT_TYPES:
@@ -463,7 +473,7 @@ def _c_extrude(obj, leader, o, refs):
     if o["extent"] == "to_object":
         if not refs[1]:
             raise NeedsPick("Select the object to extrude to: a plane, a face, a body or a point.")
-        target = target_of_ref(*refs[1][0])
+        target = target_of_ref(*refs[1][0], chain=bool(o.get("chain_faces", True)))
     elif o["extent"] == "all":
         through = [whole_shape(b) for b, _s in refs[1]]
     start = None

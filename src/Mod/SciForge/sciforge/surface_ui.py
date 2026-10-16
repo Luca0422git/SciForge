@@ -1169,6 +1169,9 @@ class ExtrudePanel(SurfacePanel):
             [("Distance", "distance"), ("To Object", "to_object"), ("All", "all")],
         )
         self.box("object")
+        self.add_check(
+            "chain_faces", "Chain Faces", "The object face and the faces joined smoothly to it"
+        )
         self.add_check("flip", "Flip", "All goes the other way, through what lies behind")
         self.add_combo(
             "measurement", "Measurement", [("Half Length", "half"), ("Whole Length", "whole")]
@@ -1188,6 +1191,7 @@ class ExtrudePanel(SurfacePanel):
         self.show_box("start_object", from_object)
         self.show_option("start_offset", o["start"] in ("offset", "object"))
         self.show_box("object", to_object)
+        self.show_option("chain_faces", to_object)
         self.show_option("flip", extent == "all" and o["direction"] == "one_side")
         self.show_option("measurement", o["direction"] == "symmetric" and extent == "distance")
         self.show_option("distance", extent == "distance")
