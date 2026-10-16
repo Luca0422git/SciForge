@@ -3,8 +3,8 @@
 Insert Mesh, Convert Mesh, Insert STEP, Insert SVG, Insert DXF, Canvas (Insert / Edit /
 Calibrate), Export, 3D Print, Export Everything. The rest of the MESH tab (Repair, Remesh,
 Reduce, Plane Cut...) is in `parity/mesh.md`. Copied behaviour only, never Fusion's assets,
-wording or code. Status: **built and tested with real clicks (9 scenarios, 320 checks), not yet
-signed off by Luca**. Every choice marked **(assumed)** is a guess to confirm in real Fusion.
+wording or code. Status: **built and tested with real clicks (9 scenarios, 320 checks; Part 2 below: 5
+more, 329 checks), not yet signed off by Luca**. Every choice marked **(assumed)** is a guess to confirm in real Fusion.
 
 Code (all in `src/Mod/SciForge/sciforge/`):
 
@@ -24,7 +24,66 @@ Tests: scenarios `insert_mesh.py` (Insert Mesh + Convert Mesh, 65 checks), `inse
 a mesh, a converted body and a canvas, 24); unit tests `test_insert_core.py`,
 `test_export_core.py`; fixtures in `SciForgeTests/fixtures/` (made by `make_fixtures.py`).
 
-## Sources
+## Part 2 (exchange-2, 2026-10-16): structure in and out, manipulators, linked designs
+
+Built in `src/Mod/SciForge/sciforge/`: `exchange_core.py` (no FreeCAD: file kinds, how a
+file's tree becomes components and bodies, how a design is written so it reads back the
+same; unit tested in `test_exchange_core.py`), `step_import.py` (STEP / IGES with their
+structure), `exchange.py` (STEP with components, IGES, DXF of a sketch or flat face, DWG
+through a converter, meshes in a component's frame), `design_insert.py` (Insert into
+Current Design as a linked component, Break Link), `exchange_ui.py` (File > Open, Insert
+STEP's flow, Save As DXF, Save As Mesh, Break Link), the manipulator (`_PlaneHandles`) in
+`insert_ui.py`, the Export dialog in `export_ui.py`, the Data Panel's Upload in
+`versions_ui.py`. Scenarios `exchange2_step_open` (80 checks), `exchange2_step_insert`
+(75), `exchange2_export` (89), `exchange2_manip` (43), `exchange2_link` (42); the earlier
+`insert_step`, `insert_svg` and `versions_link` follow the new behaviour.
+
+### Behaviour spec (sources: Autodesk = Autodesk help / support / blog; Forum = Autodesk
+Community answer; Guess = no source found, to check in real Fusion)
+
+| Fusion | Source | SciForge |
+|---|---|---|
+| A STEP file keeps its component structure and names ("STEP (.stp) files retain component structure and names") | Autodesk (handout "Fusion 360 Large Model Management"); Forum ("STEP files imported into Fusion create components"; a round trip Fusion > STEP > Fusion keeps the structure) | Same: every product of the file is a component named after it, nested as in the file |
+| SAT files "will place all components into a flattened structure" | Autodesk (same handout) | SAT is refused: FreeCAD cannot read ACIS (the message says to save STEP in the other program) |
+| IGES comes in as bodies (no assemblies in IGES) | Guess (IGES has no product structure) | The solids as bodies; a file of loose faces is sewn: closed shells become solids, open ones surface bodies |
+| A part used several times comes in once, the others as copies ("Wheel:1", "Wheel:2") | Guess (Fusion's occurrence naming from Copy / Paste, parity/components.md) | Same: the second occurrence is a linked copy (instances.py), "Wheel:2"; the browser shows "Wheel:1" for the original |
+| A part's solids are the component's bodies, numbered Body1, Body2 ... | Guess (Fusion numbers bodies per component) | Same; a single part opened on its own is a body of the design named after the part |
+| File > Open of a STEP file (Fusion: Upload, then the translated design opens) | Autodesk (support "How to insert / open DXF files"; Data Panel Upload) | File > Open (Ctrl+O; the application menu) takes designs, STEP and IGES; a STEP / IGES file becomes a new, unsaved design named after the file (Ctrl+S then asks where to keep it) |
+| Upload in the Data Panel | Autodesk (Data Panel pages) | The Data Panel's **Upload** copies a STEP / IGES file into the folder shown; double-click opens it as a design; right-click > Insert into Current Design |
+| Insert into Current Design: "inserted as an external component and the Initial Position dialog displays"; "position the component by dragging manipulators in the canvas or by entering Distance and Angle values"; "An Insert feature displays in the Timeline" | Autodesk (help "Insert designs", ASM-INSERT-FUSION-DESIGN) | Insert STEP: the whole file is one component named after the file, in the active component, one undo step; then the Move dialog opens on it (arrows and Distance / Angle fields); Esc leaves it where it came in (**Guess**: Esc in Fusion's Initial Position) |
+| The inserted design is "associatively linked to the source design"; when the source changes, it is out of date and can be brought up to date | Autodesk (help "Insert designs created in other CAD applications": Out-Of-Date icon) | Insert Component (Insert Design, the Data Panel's Insert into Current Design) of a SciForge design: one component named after it, linked to its file by a relative path; its bodies are copies of the other design's bodies; when the other design was saved again, the copies are brought up to date as the design opens (no out-of-date icon: they follow at once) |
+| Right-click > Break Link: "Your component now becomes a stand-alone part, and you're free to edit its features within your current file" | Autodesk (blog "Insert Into Current Design ... Break Link") | Same: the other design's bodies are copied in with every feature (their steps join the timeline), one undo step; refused with the reason when the other design is not found |
+| File > Export types: Fusion archive, Inventor, DWG, DXF, FBX, IGES, OBJ, SAT, SketchUp, SMT, STEP, STL (newer help: 3MF, USDZ) | Autodesk (support "How to export a CAD design from Fusion"; help "Export designs") | Type: STEP, IGES, STL (Binary), STL (ASCII), 3MF, OBJ, DXF, DWG; Export: Whole design, Selected bodies or **A component** (a list of the components) |
+| STEP export keeps the structure (round trip) | Forum (the round-trip test above) | Each component is a product (a component with bodies only is a part named after it; with components in it, an assembly holding them and a part of its name for its bodies); a copy of a component is a second occurrence of the same product; colours kept. Opened again: the same components, copies, bodies, places and colours (`exchange2_export` P1) |
+| Save As Mesh of a component: "the selected component defines the coordinate system"; "only visible bodies are exported"; Structure One File / One Body Per File | Forum (Autodesk employee); Autodesk (help "Save bodies in a component as 3MF, OBJ, or STL files") | Export > A component (or right-click a component or body > **Save As Mesh**, which opens the Export dialog on it with 3MF): the shown bodies of the component and its components, in the component's own coordinates; One File / One File Per Body as before |
+| Right-click a sketch > Save As DXF: "this method will include only the geometry in that individual sketch"; "If your design doesn't include a sketch, the Save As DXF option is disabled" | Autodesk (support "How to export a Fusion design to a DWG or DXF file"); SendCutSend guide | Same entry in the browser's sketch menu: the sketch's curves in the sketch's own X / Y (whatever plane it is on), mm ($INSUNITS 4); construction lines are left out (**Guess**) |
+| DXF of a flat face | Guess (Fusion: project the face into a sketch, then Save As DXF) | Export, Type DXF, with a flat face picked (or Use Selection): its edges in the face's own frame, the origin at its middle |
+| DWG of a design ("DWG and DXF export a wireframe") | Autodesk (export list); the content is not documented | DWG is written only through a free converter (LibreDWG's dxf2dwg, the ODA File Converter or QCAD, found the way FreeCAD finds them); without one, Export refuses and names them. This machine has none, so the DWG path is untested |
+| Insert SVG: "the manipulator handles allow you to move, rotate, and scale the SVG image on the active sketch plane"; "the image geometry is centered on the sketch origin"; "Z Angle: Rotates the image geometry around the origin point. Positive values are clockwise" | Autodesk (support "How to insert and engrave an SVG file"; help "Add an SVG image", SLD-INS-SVG, read through search excerpts) | Same: the SVG is centred on the sketch origin; positive Z Angle turns it clockwise; the manipulator sits at its middle: two arrows (X / Y Distance), a curved handle (Z Angle), an arrow beyond its right edge (Scale), each with a value box; Enter in a value box takes the value and finishes (OK), as Enter does everywhere in Fusion |
+| The SVG manipulator follows the sketch plane (a bug made it follow the world axes in a child component) | Forum (FUS-97316, Autodesk QA) | The arrows follow the plane's X and Y |
+| Insert DXF: "the DXF origin is placed at the sketch origin" | Autodesk (help "Insert a DXF file") | Same; its manipulator sits at the DXF's origin (where it turns and scales about); its Z Angle turns counter-clockwise (**Guess**: no source for DXF) |
+| Canvas: the manipulator "stays anchored to the image's center"; no way to move the pivot | Forum (Autodesk support answer, "Dynamic Manipulator") | Same handles at the picture's middle (Z Angle counter-clockwise, **Guess**); Edit Canvas has them too; the scale handle scales X and Y together; Calibrate's scale is kept (the handles start from it) |
+| The manipulator keeps its size on the screen when zooming | Guess (every Fusion manipulator does) | The handles are made again when the view is zoomed, panned or turned |
+| McMaster-Carr insert | Autodesk (Insert > Insert McMaster-Carr Component) | Not built: it needs McMaster's online catalogue inside the program; a STEP downloaded from mcmaster.com goes in with Insert STEP |
+
+### Known gaps of Part 2 (also listed in Known gaps below)
+
+- Body names inside components do not survive a STEP round trip (FreeCAD's STEP writer has
+  no names for the solids of a product): they come back as Body1, Body2 (Fusion keeps them).
+  A component named like its only sub-component folds into one level when read back.
+- An inserted design's own components come in flat (its bodies in one component), like a
+  copy of a component (parity/components.md); a linked copy can be changed in this design
+  (Fusion locks it until Break Link).
+- No out-of-date icon and no Get Latest: the copies follow the other design's saved file
+  when this design opens.
+- Insert STEP is a one-off import (not linked to the STEP file).
+- DWG untested (no converter in the sandbox); the DWG path converts the DXF SciForge writes.
+- SAT / SMT / F3D / FBX / USD / SketchUp / Inventor: not read or written (FreeCAD has no
+  readers or writers for them; ACIS needs a commercial kernel).
+- A decal keeps its own manipulator (decal_ui.py: arrows, turn and scale, value boxes on the
+  arrows and the turn); its scale arrow has no value box.
+
+## Sources (Part 1)
 
 Autodesk's public help and support pages (read through search summaries on 2026-10-13; the
 help site itself is not reachable from the build sandbox), community answers where the help
@@ -80,11 +139,12 @@ says nothing, and the Fusion API reference for defaults:
 |---|---|
 | Insert Mesh | a `Mesh::Feature` at document level (SciForgeType `InsertMesh`), its triangles in design units, Z up; Placement = the dialog's position and angles; `SourceFile`, `UnitType`, `FlipUp`, `UnitScale` remembered so the step can be edited without the file |
 | Convert Mesh | a new body whose first step is SciForge's `ConvertMesh` feature (`Source` = the mesh body, `Method`, `Parametric`, `Tolerance`); Parametric rebuilds from the mesh when it moves or changes, Base Feature keeps the solid it made |
-| Insert STEP | one `PartDesign::Body` per solid of the file (FreeCAD's `BaseFeature` step, marked `InsertSTEP`), named after the file's parts, its colours as a SciForge Appearance (per face when the part has several); the file's containers, origins and links are removed again |
+| Insert STEP | the file as one component (`App::Part`) named after it, its products as nested components, each solid a `PartDesign::Body` (FreeCAD's `BaseFeature` step, marked `InsertSTEP`, its base `Part::Feature` inside the component), a repeated part as an instance (`instances.py`), its colours as a SciForge Appearance (per face when the part has several); read with FreeCAD's STEP reader in a hidden throw-away document (Part 2) |
 | Insert SVG / DXF | sketch geometry (lines, circles, arcs, ellipses, splines) added to a sketch with a `Block` constraint each (fixed, green), made from FreeCAD's `importSVG` / `importDXF` run in a throw-away hidden document; the dialog's X / Y / angle / scale / flips are applied to the geometry itself (never OpenCASCADE's shape transform, which turns everything into B-splines) |
 | Canvas | an `Image::ImagePlane` (SciForgeType `Canvas`, kept out of the timeline) with the picture inside the design file (FreeCAD's `ImageFile` keeps a copy), `PlaneFrame` = the plane it sits on, `BaseWidth` / `BaseHeight`, `ScaleX` / `ScaleY`, `XDistance`, `YDistance`, `ZAngle`, `FlipHorizontal`, `FlipVertical`, `CanvasOpacity`, `DisplayThrough`; opacity = the view's Transparency, Display Through = the image drawn as a Coin annotation (after everything else, no depth test), Selectable = the view's Selectable |
 | Export (meshes) | FreeCAD's mesher with Surface Deviation (linear deflection, mm) and Normal Deviation (angular deflection); STL = one mesh (the union), 3MF and OBJ = one object per body with its name (the 3MF object names and unit are written by SciForge, FreeCAD leaves them out) |
-| Export (STEP) | FreeCAD's `ImportGui.export` (names and colours) |
+| Export (STEP / IGES) | a hidden throw-away document mirroring the components (Part 2), written by FreeCAD's `ImportGui.export` (names and colours); IGES with solids (OpenCASCADE's brep mode 1) |
+| Export (DXF / DWG) | the sketch's or face's edges in its own 2D frame, written by FreeCAD's `importDXF`; DWG converted by FreeCAD's `importDWG.convertToDwg` when a converter is installed |
 | Export Everything | `<design folder>/<name>-export/` with `<name>.step`, `.stl`, `.3mf`, `.obj` (Medium refinement), `.png` (the 3D view, 1600 x 1200) and `README.txt` saying what each file is |
 
 ## What the user does (and what SciForge does)
@@ -115,23 +175,23 @@ says nothing, and the Fusion API reference for defaults:
 | Not watertight: cannot convert | the dialog says so and points at MESH > Repair; OK waits |
 | The mesh body afterwards | hidden (its eye off) **(assumed)**; Ctrl+Z shows it again |
 
-### Insert STEP (INSERT > Insert STEP; File menu)
+### Insert STEP (INSERT > Insert STEP; File menu; Data Panel > Insert into Current Design)
 
 | Fusion | SciForge |
 |---|---|
-| Upload the STEP to the Data Panel, then Insert into Current Design (a Move dialog opens) | pick the file; the bodies appear at once, selected (press M to move them) **(SciForge's own: no cloud panel)** |
-| One body per STEP solid, the parts' names, colours | same (per-face colours kept when a part has several); the browser lists the bodies; the timeline shows "Insert STEP N" per body |
-| The STEP's component structure | flattened to bodies (no components yet: `parity/components.md` once it exists) |
-| A second insert of the same file | the new bodies are "Plate (2)", "Peg (2)" |
-| Ctrl+Z | removes the bodies; Ctrl+Y brings them back with their colours |
+| Upload the STEP to the Data Panel, then Insert into Current Design (the Initial Position dialog opens) | pick the file (STEP or IGES; or the Data Panel's uploaded file); the file comes in as one component named after it, in the active component; the Move dialog opens on it (Part 2) |
+| The STEP's component structure, the parts' names, colours | same: nested components named after the products, Body1 ... in each, per-face colours kept; a part used twice comes in once plus a linked copy ("Wheel:2"); the timeline shows the components and "Insert STEP N" per body |
+| A second insert of the same file | "two_parts (2)" with its own components |
+| Ctrl+Z | the Move first, then the whole insert; Ctrl+Y brings them back with their colours |
+| File > Open of a STEP / IGES file | a new design of the file (Part 2) |
 
 ### Insert SVG / Insert DXF (INSERT menu; File menu)
 
 | Fusion | SciForge |
 |---|---|
 | Pick the file, then a planar face or plane (an active sketch is used) | same: the origin squares light up like Create Sketch, flat faces can be clicked; a sketch that is open gets the curves (the sketch is closed while the dialog runs and opened again on OK or Cancel) |
-| The curves appear in a sketch at the sketch origin | same; the SVG's origin at the sketch origin, Y of the file pointing down (as FreeCAD reads SVG and as Fusion's Y Distance says) |
-| X Distance, Y Distance, Z Angle, Scale Plane XY, Horizontal Flip, Vertical Flip, manipulators | the fields (live); no manipulator yet (gap) |
+| The curves appear in a sketch; an SVG "centered on the sketch origin", a DXF's origin at the sketch origin | same (Part 2); Y of an SVG pointing down (as FreeCAD reads SVG and as Fusion's Y Distance says) |
+| X Distance, Y Distance, Z Angle (SVG: positive clockwise), Scale Plane XY, Horizontal Flip, Vertical Flip, manipulators | the fields (live) and the manipulator on the plane: two arrows, a curved handle, a scale arrow, value boxes (Part 2) |
 | DXF: Units (the file's, or a unit the file's numbers count in), Insert Mode Single Sketch / One Sketch per Layer, DXF Layers ticked | same; "As in the file" takes FreeCAD's reading of $INSUNITS; per-layer sketches are named "<file> <layer>" |
 | The geometry is fixed after OK | same: a Block constraint on every curve (green = fixed in SciForge's sketches) |
 | OK: the sketch is the active sketch | the sketch opens for editing (Finish Sketch, or E to extrude it) |
@@ -147,6 +207,7 @@ says nothing, and the Fusion API reference for defaults:
 | Canvas Opacity (50 %), Display Through (on), Selectable, Horizontal / Vertical Flip, X / Y Distance, Z Angle, Scale X / Y / Plane XY | same fields, same defaults; Display Through draws the image over everything in front of it; a flip turns the picture over (the image plane shows both sides) |
 | Canvases folder in the browser, eye, rename, delete; not in the timeline | same **(not in the timeline: assumed)** |
 | Right-click > Edit Canvas | same (also a double-click on the row); Cancel puts the values back |
+| The manipulator at the picture's middle (move, turn, scale) | same in Canvas and Edit Canvas, with value boxes (Part 2) |
 | Right-click > Calibrate: two points, the distance, Enter | same: the dialog says which point to click, draws the two points and the line, shows the picked distance in the field; type the real distance, Enter (or OK): the canvas scales about its centre **(about which point Fusion scales: assumed)**; the clicks land on screen pixels, so the result is within about 0.1 mm |
 | Save, reopen: the canvas is there | same, the picture is inside the design file (FreeCAD keeps a copy); Display Through and opacity are put back when a design opens |
 
@@ -154,9 +215,9 @@ says nothing, and the Fusion API reference for defaults:
 
 | Fusion | SciForge |
 |---|---|
-| File > Export: Name, Type, Location, Export | the Export dialog: Export (Whole design / Selected bodies with a ticked list), Type (STEP, STL Binary, STL ASCII, 3MF, OBJ), Name, Location (…), "Open the folder afterwards", Export |
+| File > Export: Name, Type, Location, Export | the Export dialog: Export (Whole design / Selected bodies with a ticked list / A component), Type (STEP, IGES, STL Binary, STL ASCII, 3MF, OBJ, DXF, DWG), Sketch or face (DXF / DWG, with Use Selection), Name, Location (…), "Open the folder afterwards", Export (Part 2) |
 | Mesh types from Save As Mesh: Unit Type, Structure One File / One File Per Body, Refinement Low / Medium / High / Custom, Surface Deviation, Normal Deviation, Number of Triangles | same rows (shown for mesh types; greyed for STEP); the count follows the refinement |
-| Formats SciForge does not write | IGES, SAT, SMT, F3D, DWG, DXF, FBX, USD (FreeCAD could do IGES and DXF; not offered yet) |
+| Formats SciForge does not write | SAT, SMT, F3D, FBX, USD, SketchUp, Inventor (FreeCAD has no writers for them); DWG only through a free converter (Part 2) |
 | A body with no solid | left out of the list; "Whole design" exports the shown bodies **(hidden bodies left out: assumed)**; mesh bodies are listed and written with their own triangles (STEP refuses them: `parity/mesh.md`) |
 
 ### 3D Print (UTILITIES > MAKE > 3D Print; File menu)
@@ -180,13 +241,12 @@ export. Fusion has no such command (its nearest is File > Export, one format at 
 
 | Fusion behaviour | Why not (yet) |
 |---|---|
-| Insert Derive, Insert McMaster-Carr, Decal, Insert Component | out of scope / components first |
-| STEP into a component, Fusion's Move dialog after an insert | no components yet; the bodies are selected so M moves them |
-| Insert SVG / DXF manipulators (move, turn, scale on the plane) | fields only |
+| Insert McMaster-Carr | needs McMaster's online catalogue in the program (SciForge is offline): a downloaded STEP goes in with Insert STEP. Derive, Decal, Insert Component: their own docs (parity/misc.md, Part 2) |
+| STEP body names inside components after a round trip; an inserted design's own components; a linked copy locked against edits; the out-of-date icon | Part 2, Known gaps |
 | Convert Mesh "Organic", surface fitting of round faces (Prismatic keeps them faceted) | FreeCAD has no mesh-to-surface fitting |
-| Export: IGES, SAT, SMT, F3D, DWG, DXF, FBX, USD | not offered; FreeCAD could write IGES / DXF |
+| Export: SAT, SMT, F3D, FBX, USD; DWG without a converter | no FreeCAD writers; DWG needs LibreDWG / ODA / QCAD installed (untested here) |
 | 3D Print: Maximum Edge Length, Aspect Ratio, Preview Mesh overlay, Manufacturing preparation | FreeCAD's mesher has no edge length / aspect settings; no CAM |
 | The exact refinement numbers of Low / Medium / High | from memory of Fusion's dialog, to confirm |
 | An inserted mesh in the timeline rolls back with the marker | mesh bodies sit outside the PartDesign bodies, so the history marker never hides them |
-| Canvas: Fusion's manipulators on the image, "Render as" options | the fields only |
+| Canvas: "Render as" options | not built (rendering is out of scope) |
 | FreeCAD's SVG importer skips text and gradients; a `<circle>` with stroke attributes came in at twice its position in one FreeCAD build | FreeCAD's importer; the fixture avoids stroke attributes, real files may need a path-based circle |

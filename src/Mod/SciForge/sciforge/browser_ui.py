@@ -68,6 +68,27 @@ def _joints():
     return joints
 
 
+def _exchange_action(name, arg):
+    """Save As DXF / Save As Mesh / Break Link (exchange_ui), run after the menu closed."""
+    try:
+        from . import exchange_core, exchange_ui
+
+        getattr(exchange_ui, name)(arg)
+    except exchange_core.ExchangeError as exc:
+        commands.tell(str(exc))
+    except Exception as exc:
+        warn("%s: %s" % (name.replace("_", " "), exc))
+
+
+def _is_linked(obj):
+    try:
+        from . import design_insert
+
+        return design_insert.is_linked(obj)
+    except Exception:
+        return False
+
+
 def _is_surface_body(body):
     try:
         from . import surface
@@ -1309,6 +1330,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Copy": lambda: _clipboard_action("copy", node, obj, selected_nodes, self),
             "Paste": lambda: _clipboard_action("paste", node, obj, selected_nodes, self),
             "Paste New": lambda: _clipboard_action("paste_new", node, obj, selected_nodes, self),
+            "Save As DXF": lambda: _exchange_action("save_as_dxf", (obj, "")),
+            "Save As Mesh": lambda: _exchange_action("save_as_mesh", obj),
+            "Break Link": lambda: _exchange_action("break_link", obj),
         }
         isolated = _isolated_names(doc)
         if node["kind"] in ("body", "component") and isolated:
@@ -1344,6 +1368,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 continue
             if entry in ("Paste", "Paste New") and not _can_paste(doc, entry == "Paste New"):
                 continue  # nothing copied (Paste New: no component copied)
+            if entry == "Break Link" and not _is_linked(obj):
+                continue  # only a component inserted from another design
             if entry == "Move to Component":
                 if self._move_menu(menu, node, obj):
                     added = True

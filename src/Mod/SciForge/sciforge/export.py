@@ -387,16 +387,23 @@ def export_mesh_files(
     normal=None,
     unit="Millimeter",
     per_body=False,
+    frame=None,
 ):
     """Export bodies as mesh files. One file at `path`, or one file per body beside it.
+    `frame`: a placement whose coordinates the file is in (Fusion's Save As Mesh of a
+    component: "the selected component defines the coordinate system"); None: the design's.
     Returns [(path, triangles)]."""
     if not body_list:
         raise ExportError("Pick at least one body to export.")
     extension = extension_of(fmt)
     path = with_extension(path, extension)
     meshes = []
+    inverse = frame.inverse().toMatrix() if frame is not None and not frame.isIdentity() else None
     for body in body_list:
         mesh = body_mesh(body, surface, normal, level)
+        if inverse is not None:
+            mesh = mesh.copy()
+            mesh.transform(inverse)
         if not mesh.isSolid():
             warn("%s: the mesh is not watertight (open edges); a slicer may complain" % body.Label)
         meshes.append((body.Label, mesh))

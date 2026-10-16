@@ -3,8 +3,9 @@
 
 A project folder with Wheel.FCStd (a box of 1000, closed). A new design Cart.
 Path 1, Insert Design on an unsaved design asks to save it first (the link is stored
-  relative to the design's file); after the save the insert goes on by itself: Cart holds a
-  link to Wheel's body, volume 1000.
+  relative to the design's file); after the save the insert goes on by itself: Cart holds
+  a component "Wheel" linked to Wheel's file (Fusion's Insert into Current Design), its
+  body a copy of Wheel's (volume 1000); the Move dialog places it (Esc leaves it).
 Path 2, Cart saved (v2): the file stores the link as the relative path "Wheel.FCStd".
 Path 3, the whole project folder is moved elsewhere (a NAS folder moved as a whole): Cart
   opened from the new place finds Wheel again, no error in the report view.
@@ -44,11 +45,32 @@ def near(a, b, tol=1e-3):
 
 
 def links(document):
-    return [o for o in document.Objects if o.TypeId == "App::Link"]
+    """The linked copies (design_insert.LinkedCopy) of the components inserted from other
+    designs."""
+    from sciforge import design_insert
+
+    found = []
+    for comp in design_insert.linked_components(document):
+        found += design_insert.copy_features(comp)
+    return found
 
 
 def link_volume(document):
-    return sum(o.Shape.Volume for o in links(document) if not o.Shape.isNull())
+    from sciforge import design_insert
+
+    total = 0.0
+    for feature in links(document):
+        body = design_insert.copy_body(feature)
+        if body is not None and not body.Shape.isNull():
+            total += body.Shape.Volume
+    return total
+
+
+def linked_component(document):
+    from sciforge import design_insert
+
+    found = design_insert.linked_components(document)
+    return found[0] if found else None
 
 
 def xlink_file(path):
@@ -107,21 +129,35 @@ def p1_inserted():
     s["cart"] = os.path.join(s["project"], "Cart.FCStd")
     h.check("P1 Cart saved", os.path.isfile(s["cart"]))
     h.check(
-        "P1 the insert went on by itself: one link",
+        "P1 the insert went on by itself: one linked copy",
         len(links(cart)) == 1,
         [o.Label for o in cart.Objects],
     )
     h.check(
-        "P1 the link shows Wheel's box (1000)", near(link_volume(cart), 1000.0), link_volume(cart)
+        "P1 the copy shows Wheel's box (1000)", near(link_volume(cart), 1000.0), link_volume(cart)
     )
+    comp = linked_component(cart)
     h.check(
-        "P1 the link is named after the design",
-        links(cart) and links(cart)[0].Label == "Wheel: Body",
-        links(cart) and links(cart)[0].Label,
+        "P1 a component named after the design",
+        comp is not None and comp.Label == "Wheel",
+        comp and comp.Label,
+    )
+    from sciforge import component_move_ui, taskui
+
+    h.check(
+        "P1 the Move dialog places it",
+        isinstance(taskui.current(), component_move_ui.ComponentMovePanel),
     )
     h.check("P1 Wheel is open hidden (no tab of its own)", "Wheel" in App.listDocuments())
     h.check("P1 Cart shows as changed", Gui.getDocument("Cart").Modified)
     h.shot("1-inserted")
+    h.press(QtCore.Qt.Key_Escape)
+
+
+def p1_save():
+    from sciforge import taskui
+
+    h.check("P1 Esc closed the Move dialog", taskui.current() is None)
     h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
 
 
@@ -173,7 +209,7 @@ def p3_resolved():
         cart is not None and near(link_volume(cart), 1000.0),
         cart and link_volume(cart),
     )
-    linked = links(cart)[0].LinkedObject if cart and links(cart) else None
+    linked = links(cart)[0].Source if cart and links(cart) else None
     h.check(
         "P3 from the moved folder",
         linked is not None
@@ -233,7 +269,12 @@ def p5_message():
     h.check("P5 Cart still opens", cart is not None)
     h.check(
         "P5 the link is broken",
-        cart is not None and links(cart) and links(cart)[0].LinkedObject is None,
+        cart is not None and links(cart) and links(cart)[0].Source is None,
+    )
+    h.check(
+        "P5 the copy keeps the shape it was saved with (1000)",
+        cart is not None and near(link_volume(cart), 1000.0),
+        cart and link_volume(cart),
     )
     msg = commands._TOLD["msg"] or ""
     h.check(
@@ -260,6 +301,7 @@ h.run(
         p1_insert,
         p1_save_first,
         p1_inserted,
+        p1_save,
         p2_describe,
         p2_saved,
         p3_move,

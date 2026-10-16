@@ -238,3 +238,7 @@ Create Copy of a component makes a linked instance; the dimmed transparency (75 
 - Selection filters / priority Components (SELECT menu) and Component Drag in the canvas belong
   to the selection and joints-2 work.
 - No "New Body" command (Fusion has none: bodies come from features).
+- STEP files open and insert as components (exchange-2, parity/insert-export.md Part 2): a
+  repeated part is an instance; another SciForge design inserts as one linked component
+  (Break Link copies its features in); both bring nested components of an inserted design
+  in flat only where noted there.

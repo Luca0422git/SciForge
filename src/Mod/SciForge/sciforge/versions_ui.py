@@ -33,6 +33,9 @@ import FreeCADGui as Gui
 from . import commands, log, theme, ui_icon, versions as core, warn
 from .compat import QtCore, QtGui, QtWidgets
 
+# Tests put a function() -> path here instead of the Data Panel's Upload file dialog.
+UPLOAD_PICKER = None
+
 PREFS = "User parameter:BaseApp/Preferences/Mod/SciForge/Files"
 FREECAD_DOC_PREFS = "User parameter:BaseApp/Preferences/Document"
 BACKUP = "User parameter:BaseApp/Preferences/Mod/SciForge/FilesBackup"
@@ -697,6 +700,9 @@ def _check_links(doc_name):
         for obj in doc.Objects:
             if obj.TypeId == "App::Link" and getattr(obj, "LinkedObject", None) is None:
                 broken.append(obj.Label)
+        from . import design_insert
+
+        broken += design_insert.broken(doc)  # linked components (Insert Design)
         if broken:
             commands.tell(
                 "%d linked design(s) were not found (%s). Keep linked designs inside the "
@@ -1431,6 +1437,13 @@ class DataPanel(QtWidgets.QWidget):
         self.new_folder.setIcon(ui_icon("folder"))
         self.new_folder.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         bar.addWidget(self.new_folder)
+        self.upload = self._tool(
+            "Upload",
+            "Copy a STEP or IGES file into this folder (double-click it to open it)",
+            lambda *_: self.upload_file(),
+            "SciForgeDataPanelUpload",
+        )
+        bar.addWidget(self.upload)
         self.choose = self._tool(
             "...",
             "Choose the project folder (your NAS folder)",
@@ -1639,6 +1652,47 @@ class DataPanel(QtWidgets.QWidget):
         except Exception as exc:
             warn("data panel: %s" % exc)
 
+    def upload_file(self, path=None):
+        """Fusion's Upload: a STEP / IGES file is copied into the folder shown, listed with
+        the designs; double-click opens it as a design with its components."""
+        try:
+            if path is None:
+                path = UPLOAD_PICKER() if UPLOAD_PICKER is not None else None
+            if path is None:
+                path, _filter = QtWidgets.QFileDialog.getOpenFileName(
+                    self,
+                    "Upload",
+                    os.path.expanduser("~"),
+                    "STEP and IGES files (*.step *.stp *.STEP *.STP *.iges *.igs *.IGES *.IGS)",
+                )
+            if not path:
+                return None
+            if not core.is_cad_file(path):
+                commands.tell("Upload takes STEP (.step, .stp) and IGES (.iges, .igs) files.")
+                return None
+            import shutil
+
+            base, ext = os.path.splitext(os.path.basename(path))
+            target = os.path.join(self.folder, base + ext)
+            n = 1
+            while os.path.exists(target):
+                n += 1
+                target = os.path.join(self.folder, "%s %d%s" % (base, n, ext))
+            shutil.copy2(path, target)
+            log("uploaded %s to %s" % (path, target))
+            self.refresh()
+            item = self.item_for(target)
+            if item is not None:
+                self.list.setCurrentItem(item)
+            commands.tell(
+                "%s is in the project: double-click it to open it." % os.path.basename(target)
+            )
+            return target
+        except Exception as exc:
+            warn("upload: %s" % exc)
+            commands.tell("The file could not be uploaded: %s" % exc)
+            return None
+
     def make_folder(self):
         try:
             path = core.new_folder(self.folder)
@@ -1675,6 +1729,13 @@ class DataPanel(QtWidgets.QWidget):
                 if kind == "folder":
                     menu.addAction("Open", lambda: self.set_folder(path))
                     menu.addAction("Rename", lambda: self._rename(path, True))
+                elif core.is_cad_file(path):  # an uploaded STEP / IGES file
+                    menu.addAction("Open", lambda: open_design(path))
+                    menu.addAction(
+                        "Insert into Current Design", lambda: _insert_cad(path)
+                    ).setEnabled(App.ActiveDocument is not None)
+                    menu.addSeparator()
+                    menu.addAction("Delete", lambda: self._trash(path))
                 else:
                     menu.addAction("Open", lambda: open_design(path))
                     menu.addAction("Version History", lambda: show_history(path))
@@ -1976,7 +2037,20 @@ def _show_in_folder(path):
 
 
 def open_design(path):
-    """Open a design from the Data Panel (bring it to the front if it is open already)."""
+    """Open a design from the Data Panel (bring it to the front if it is open already). A
+    STEP / IGES file opens as a new design with its components (Fusion opens an uploaded
+    file as a design)."""
+    if core.is_cad_file(path):
+        from . import exchange_core, exchange_ui
+
+        try:
+            return exchange_ui.open_file(path)
+        except exchange_core.ExchangeError as exc:
+            commands.tell(str(exc))
+        except Exception as exc:
+            warn("could not open %s: %s" % (path, exc))
+            commands.tell("The file could not be opened: %s" % exc)
+        return None
     try:
         existing = doc_for_file(path)
         if existing is not None:
@@ -1999,6 +2073,18 @@ def open_design(path):
         warn("could not open %s: %s" % (path, exc))
         commands.tell("The design could not be opened: %s" % exc)
         return None
+
+
+def _insert_cad(path):
+    try:
+        from . import exchange_core, exchange_ui
+
+        exchange_ui.insert_cad_file(path)
+    except exchange_core.ExchangeError as exc:
+        commands.tell(str(exc))
+    except Exception as exc:
+        warn("insert: %s" % exc)
+        commands.tell("The file could not be inserted: %s" % exc)
 
 
 def _ensure_dock():
@@ -2055,9 +2141,10 @@ def panel_visible():
 
 # -- Insert Design (a link to another design, by relative path) ----
 def insert_design(path=None):
-    """Insert the bodies of another design into the active one as links that follow the
-    other file (FreeCAD stores the link by its path relative to this design, so a project
-    folder moved as a whole keeps working). The design must be saved first."""
+    """Insert another design into the active one as a component linked to its file (Fusion's
+    Insert into Current Design; FreeCAD stores the link by its path relative to this design,
+    so a project folder moved as a whole keeps working), then place it (Fusion's Initial
+    Position: the Move dialog). The design must be saved first. design_insert does it."""
     doc = _active_doc()
     if doc is None:
         doc = App.newDocument("Design")
@@ -2093,30 +2180,26 @@ def insert_design(path=None):
         if other is None:
             other = App.openDocument(path, True)  # hidden: no tab of its own
             _restore_active(doc.Name)
-        bodies = [o for o in other.Objects if o.TypeId == "PartDesign::Body"]
-        if not bodies:
-            commands.tell("%s has no bodies to insert." % core.design_name(path))
-            return
+        # Fusion inserts the design as one linked component (help "Insert designs"), then
+        # its Initial Position dialog places it.
+        from . import components, design_insert, exchange_ui
+
         doc.openTransaction("Insert Design")
-        made = []
-        for body in bodies:
-            link = doc.addObject(
-                "App::Link", core.clean_name(body.Label).replace(" ", "_") or "Link"
-            )
-            link.LinkedObject = body
-            link.Label = "%s: %s" % (core.design_name(path), body.Label)
-            made.append(link)
+        try:
+            made = [design_insert.insert_linked(doc, other, components.active_component(doc))]
+        except ValueError as exc:
+            doc.abortTransaction()
+            commands.tell(str(exc))
+            return None
         doc.commitTransaction()
         doc.recompute()
         rel = core.relative_path(doc.FileName, path)
-        log(
-            "inserted %d bod%s of %s, linked by the relative path %s"
-            % (len(made), "y" if len(made) == 1 else "ies", core.design_name(path), rel)
-        )
+        log("inserted %s, linked by the relative path %s" % (core.design_name(path), rel))
         commands.tell(
-            "Inserted %s (%d bod%s), linked to its file."
-            % (core.design_name(path), len(made), "y" if len(made) == 1 else "ies")
+            "Inserted %s as a component linked to its file: place it, then OK."
+            % core.design_name(path)
         )
+        exchange_ui.place_after(doc.Name, made[0].Name)
         return made
     except Exception as exc:
         try:

@@ -56,8 +56,13 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 - **surface.md**: surface Extrude has no From Object or All. Surface Revolve has no Type To.
   Surface Sweep has no rail or taper, surface Loft no rails or end conditions.
 - **text-emboss.md**: the text frame cannot be resized by dragging its corner.
-- **insert-export.md**: no IGES, DXF or DWG export. STEP comes in flattened to bodies. Insert
-  SVG/DXF and Canvas have no manipulators.
+- **insert-export.md**: (STEP / IGES open and insert as components, STEP export with
+  structure, IGES / DXF / mesh export, SVG / DXF / Canvas manipulators, Insert Design as a
+  linked component with Break Link, Data Panel Upload, by sf/exchange-2.) Left: bodies inside
+  a component come back as Body1, Body2 after a STEP round trip; an inserted design's own
+  components come in flat; a linked copy can be edited in place; DWG needs a free converter
+  (none bundled); no SAT / SMT / F3D / FBX / USD; no McMaster-Carr; the decal's scale arrow has
+  no value box.
 - **mesh.md**: (Direct Edit with brush / window / free-form selection, delete, move, smooth,
   Erase and Fill, Reverse Normal; Create / Combine Face Groups; mesh steps roll back with the
   marker, by sf/mesh-inspect-2.) Left: no contextual ribbon tab (one dialog); Move is an arrow,

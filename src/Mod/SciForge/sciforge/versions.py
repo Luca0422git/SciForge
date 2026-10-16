@@ -70,6 +70,15 @@ def is_design(path):
     return path.lower().endswith(DESIGN_SUFFIX.lower())
 
 
+# STEP / IGES files in a project folder (uploaded): the Data Panel lists them; opening one
+# makes a new design of it with its components (exchange_ui.open_file).
+CAD_SUFFIXES = (".step", ".stp", ".iges", ".igs")
+
+
+def is_cad_file(path):
+    return path.lower().endswith(CAD_SUFFIXES)
+
+
 _BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
@@ -1020,17 +1029,19 @@ def list_folder(folder):
             if name in HIDDEN_FOLDERS or name.startswith(".") or name.endswith(VERSIONS_SUFFIX):
                 continue
             folders.append({"name": name, "path": full})
-        elif is_design(name):
+        elif is_design(name) or is_cad_file(name):
             try:
                 stat = os.stat(full)
             except OSError:
                 continue
+            cad = is_cad_file(name)
             designs.append(
                 {
-                    "name": design_name(name),
+                    "name": name if cad else design_name(name),
                     "path": full,
                     "size": stat.st_size,
                     "modified": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(stat.st_mtime)),
+                    "cad": cad,
                 }
             )
     return folders, designs
@@ -1087,6 +1098,12 @@ def rename_design(path, new_name, project_folder=None, use_git=True):
 _XLINK_FILE = re.compile(r'(<XLink\b[^>]*?\bfile=")([^"]*)(")')
 _DERIVE_PATH = re.compile(
     r'(<Property\s+name="(SourceRelative|SourceFile)"\s+type="App::PropertyString"[^>]*>\s*'
+    r'<String\s+value=")([^"]*)(")'
+)
+# An inserted design's component keeps the other design's file name, relative to this
+# design's folder, beside the XLinks of its copies (design_insert.LINKED_FILE).
+_LINKED_FILE_PATH = re.compile(
+    r'(<Property\s+name="SciForgeLinkedFile"\s+type="App::PropertyString"[^>]*>\s*'
     r'<String\s+value=")([^"]*)(")'
 )
 
@@ -1170,8 +1187,19 @@ def retarget_xml(xml, old_dir, new_dir, moved_from=None, moved_to=None):
         changed[0] += 1
         return match.group(1) + _xml_escape(new) + match.group(4)
 
+    def linked_file(match):
+        # follows the XLinks of the same component: not counted as a reference of its own
+        value = _xml_unescape(match.group(2))
+        if not value:
+            return match.group(0)
+        rel = relative(target_of(os.path.normpath(os.path.join(old_dir, value))))
+        if rel is None or rel == value:
+            return match.group(0)
+        return match.group(1) + _xml_escape(rel) + match.group(3)
+
     xml = _XLINK_FILE.sub(xlink, xml)
     xml = _DERIVE_PATH.sub(derive, xml)
+    xml = _LINKED_FILE_PATH.sub(linked_file, xml)
     return xml, changed[0]
 
 

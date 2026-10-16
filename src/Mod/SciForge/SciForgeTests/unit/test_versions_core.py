@@ -531,6 +531,29 @@ class MoveCopyTests(Scratch):
             [os.path.normpath(t) for t in v.link_targets(out, new_dir)], [wheel, wheel, wheel]
         )
 
+    def test_retarget_keeps_an_inserted_designs_file_name(self):
+        # Insert into Current Design (design_insert) stores the other design's file name
+        # beside the XLinks; a move keeps both pointing at the same file
+        old_dir = os.path.join(self.root, "proj")
+        new_dir = os.path.join(self.root, "proj", "Robots")
+        xml = (
+            '<Property name="SciForgeLinkedFile" type="App::PropertyString" status="1">\n'
+            '<String value="Wheel.FCStd"/>\n</Property>\n<XLink file="Wheel.FCStd" name="Body"/>'
+        )
+        out, n = v.retarget_xml(xml, old_dir, new_dir)
+        self.assertEqual(n, 1)  # the XLink; the file name follows it
+        self.assertIn('<String value="../Wheel.FCStd"/>', out)
+        self.assertIn('<XLink file="../Wheel.FCStd"', out)
+        folder = old_dir
+        out, n = v.retarget_xml(
+            xml,
+            folder,
+            folder,
+            os.path.join(folder, "Wheel.FCStd"),
+            os.path.join(folder, "Parts", "Wheel.FCStd"),
+        )
+        self.assertIn('<String value="Parts/Wheel.FCStd"/>', out)
+
     def test_retarget_links_to_a_moved_design(self):
         folder = os.path.join(self.root, "proj")
         old = os.path.join(folder, "Wheel.FCStd")
