@@ -18,6 +18,9 @@ D  Scale, click the body: the box beside the arrow shows the factor (1); 2 typed
    the part is 8 times the volume. Esc: the part as it was, no box left.
 E  Draft (MODIFY), click the XY square, click the front face: the angle disc with its box
    (1 deg); 5 typed in it: the front face drafted 5 deg. Cancel: as it was.
+F  INSERT > Insert Mesh (a 20 x 10 x 5 STL): its manipulator is Move's triad; the mouse over
+   the Z arrow: a box beside it with Z Distance's text; 7 typed in it: the mesh at z 7 and
+   the field says so. Cancel: no mesh body, no box left.
 """
 
 import math
@@ -30,6 +33,7 @@ from PySide6 import QtTest
 from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import bodies_steps as bs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import insert_steps as ins
 from SciForgeTests.gui import shell_draft_steps as sd
 
 V = App.Vector
@@ -399,6 +403,63 @@ def e_cancelled():
     h.check("E no value box left", not shown_boxes(), shown_boxes())
 
 
+# -- F: Insert Mesh's triad ----
+def f_insert():
+    Gui.Selection.clearSelection()
+    ins.use_file(ins.fixture("box_20x10x5.stl"))
+    h.fit()
+    h.ribbon("Insert Mesh")
+
+
+f_insert.wait_ms = 800
+
+
+def f_hover():
+    p = ins.panel()
+    triad = getattr(p, "triad", None)
+    h.check("F Insert Mesh with its manipulator", triad is not None, p)
+    if triad is not None:
+        hover(triad.center + V(0, 0, 1) * (0.6 * triad.size))
+
+
+f_hover.wait_ms = 500
+
+
+def f_box():
+    p = ins.panel()
+    triad = getattr(p, "triad", None)
+    box = a.value_box("move2", p)
+    h.check(
+        "F the mouse over the Z arrow: its box",
+        box is not None and box.isVisible(),
+        p is not None and sorted(getattr(p, "value_boxes", None).boxes),
+    )
+    if box is None or triad is None:
+        return
+    h.check(
+        "F it shows Z Distance", box.text() == p.z.widget.text(), (box.text(), p.z.widget.text())
+    )
+    ok, detail = box_beside(box, triad)
+    h.check("F not over the arrow", ok, detail)
+    h.shot("F-insert-mesh-box")
+    type_and_leave(box, "7")
+
+
+def f_moved():
+    wait_preview()
+    p = ins.panel()
+    meshes = ins.mesh_bodies()
+    z = meshes[0].Placement.Base.z if meshes else None
+    h.check("F the mesh at z 7", z is not None and close(z, 7.0), z)
+    h.check("F the Z Distance field says 7", p is not None and close(p.z.value(), 7.0))
+    h.task_button("Cancel")
+
+
+def f_cancelled():
+    h.check("F Cancel: no mesh body", not ins.mesh_bodies(), ins.mesh_bodies())
+    h.check("F no value box left", not shown_boxes(), shown_boxes())
+
+
 STEPS = sd.box_steps("Polish2Boxes") + [
     a_m,
     a_click_body,
@@ -425,6 +486,11 @@ STEPS = sd.box_steps("Polish2Boxes") + [
     e_box,
     e_drafted,
     e_cancelled,
+    f_insert,
+    f_hover,
+    f_box,
+    f_moved,
+    f_cancelled,
 ]
 
 h.run("polish2_value_boxes", STEPS)
