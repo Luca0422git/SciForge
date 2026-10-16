@@ -10,6 +10,7 @@ Hand-derived geometry used by the checks (box 40 x 30 x 10 from the origin):
   sharp, the removed regions overlap by r^3 * (5/3 - pi/2), so that is added back.
   A chamfer with legs a and b along an edge of length L removes L * a * b / 2.
 """
+
 import math
 
 import FreeCAD as App
@@ -338,11 +339,11 @@ def top_cut():
 
 
 def click_tab(label_start):
-    """Click the document tab under the 3D view whose title starts with label_start."""
+    """Click the document tab (at the top, Fusion's place) whose title starts with
+    label_start."""
     from SciForgeTests.gui import widget_input
 
-    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
-    bar = area.findChild(QtWidgets.QTabBar) if area is not None else None
+    bar = h.document_tabs()
     if bar is None:
         h.check("document tabs exist", False)
         return False

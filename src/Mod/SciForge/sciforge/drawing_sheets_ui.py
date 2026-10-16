@@ -223,12 +223,11 @@ class _EscapeFilter(QtCore.QObject):
 
 # ------------------------------------------------------------------ switching sheets
 def _area_tabs():
-    area = drawing_ui._area()
-    if area is None:
-        return None
-    for bar in area.findChildren(QtWidgets.QTabBar, "", QtCore.Qt.FindDirectChildrenOnly):
-        return bar
-    return None
+    """FreeCAD's document tab bar (the lookup used before found nothing in FreeCAD 1.1.4's
+    PySide: a sheet's tab was never moved to its place)."""
+    from . import doc_tabs
+
+    return doc_tabs.mdi_tabs()
 
 
 def _tab_index(title):

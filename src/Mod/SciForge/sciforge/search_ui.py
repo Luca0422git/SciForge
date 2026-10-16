@@ -6,8 +6,26 @@ from . import search_core
 from .compat import QtCore, QtWidgets
 
 
+def _sciforge_keys():
+    """{command: key} SciForge binds itself (the current map, after Change Keyboard Shortcut):
+    FreeCAD's own shortcut of those commands is parked while SciForge is on."""
+    try:
+        from . import config, shortcuts
+
+        keys = {}
+        for name, key in shortcuts.current_map().items():
+            keys[name] = key
+            better = config.PREFERRED.get(name)
+            if better:
+                keys[better] = key
+        return keys
+    except Exception:
+        return {}
+
+
 def _build_entries():
     entries = []
+    ours = _sciforge_keys()
     for name in Gui.listCommands():
         text, shortcut = name, ""
         try:
@@ -16,6 +34,8 @@ def _build_entries():
             shortcut = info.get("shortcut") or ""
         except Exception:
             pass
+        if name in ours:
+            shortcut = ours[name]
         entries.append({"name": name, "text": text, "shortcut": shortcut})
     return entries
 

@@ -30,6 +30,9 @@ PAGES = [
     ("default_units", "Default Units", None),
     ("default_units_design", "Design", "default_units"),
     ("network", "Network", None),
+    # SciForge's own: every command's keyboard shortcut in one list (Fusion only changes them
+    # one at a time from a command's three-dot menu; its users keep asking for a list)
+    ("keyboard", "Keyboard Shortcuts", None),
 ]
 
 # Fusion's Pan, Zoom, Orbit Shortcuts presets: (value, label, FreeCAD navigation style or None

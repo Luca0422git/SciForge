@@ -351,6 +351,131 @@ def give_back_left_over():
         warn("preferences: %s" % exc)
 
 
+# -- keyboard shortcuts -------------------------------------------------------------------------
+def shortcut_rows():
+    """[(label, key, command)] of every command with a key or in the ribbon, one row per
+    command (SciForge's version and FreeCAD's share a row), sorted by label."""
+    from . import command_options, config, ribbon_config as cfg, shortcuts_core
+
+    rows = {}
+    for entry in cfg.all_items():
+        command = command_options.command_of(entry)
+        if command is None:
+            continue
+        own = shortcuts_core.canonical(command, config.SHORTCUTS, config.PREFERRED)
+        if own not in rows:
+            rows[own] = (entry["label"], command_options.key_for(entry), command)
+    mapping = command_options.shortcuts.current_map()
+    available = set(Gui.listCommands())
+    for name in config.SHORTCUTS:
+        if name in rows:
+            continue
+        command = config.PREFERRED.get(name, name)
+        if command not in available:
+            command = name if name in available else None
+        if command is None:
+            continue
+        rows[name] = (command_options.label_of(command), mapping.get(name, ""), command)
+    return sorted(rows.values(), key=lambda r: r[0].lower())
+
+
+class KeyboardPage(QtWidgets.QWidget):
+    """Every command and its key; double-click (or Change...) opens Change Keyboard Shortcut;
+    Reset All Shortcuts gives every default back."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("SciForgeKeyboardPage")
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.search = QtWidgets.QLineEdit()
+        self.search.setObjectName("SciForgeKeyboardSearch")
+        self.search.setPlaceholderText("Search commands or keys")
+        self.search.textChanged.connect(self._filter)
+        layout.addWidget(self.search)
+        self.table = QtWidgets.QTableWidget(0, 2)
+        self.table.setObjectName("SciForgeKeyboardTable")
+        self.table.setHorizontalHeaderLabels(["Command", "Key"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.table.setMinimumHeight(300)
+        self.table.cellDoubleClicked.connect(lambda row, _col: self.change(row))
+        layout.addWidget(self.table, 1)
+        buttons = QtWidgets.QHBoxLayout()
+        self.change_button = QtWidgets.QPushButton("Change...")
+        self.change_button.clicked.connect(lambda: self.change(self.table.currentRow()))
+        self.reset_button = QtWidgets.QPushButton("Reset All Shortcuts")
+        self.reset_button.setObjectName("SciForgeKeyboardResetAll")
+        self.reset_button.clicked.connect(self.reset_all)
+        buttons.addWidget(self.change_button)
+        buttons.addStretch(1)
+        buttons.addWidget(self.reset_button)
+        layout.addLayout(buttons)
+        self.rows = []
+        self.fill()
+
+    def fill(self):
+        try:
+            self.rows = shortcut_rows()
+        except Exception as exc:
+            warn("keyboard page: %s" % exc)
+            self.rows = []
+        self.table.setRowCount(len(self.rows))
+        for i, (label, key, command) in enumerate(self.rows):
+            first = QtWidgets.QTableWidgetItem(label)
+            first.setToolTip(command)
+            self.table.setItem(i, 0, first)
+            self.table.setItem(i, 1, QtWidgets.QTableWidgetItem(key))
+        self._filter(self.search.text())
+
+    def row_of(self, label):
+        for i, row in enumerate(self.rows):
+            if row[0] == label:
+                return i
+        return -1
+
+    def _filter(self, text):
+        wanted = (text or "").strip().lower()
+        for i, (label, key, _command) in enumerate(self.rows):
+            hide = bool(wanted) and wanted not in label.lower() and wanted != key.lower()
+            self.table.setRowHidden(i, hide)
+
+    def change(self, row):
+        if row < 0 or row >= len(self.rows):
+            return None
+        from . import command_options
+
+        label, _key, command = self.rows[row]
+        dialog = command_options.change_shortcut(label, command)
+        if dialog is not None:
+            dialog.finished.connect(lambda _r: self.fill())
+        return dialog
+
+    def reset_all(self):
+        try:
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Reset All Shortcuts",
+                "Give every command its default key back?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if answer != QtWidgets.QMessageBox.Yes:
+                return False
+            from . import command_options, shortcuts_core
+
+            command_options.save_overrides(shortcuts_core.reset_all())
+            log("every shortcut reset to its default")
+            self.fill()
+            return True
+        except Exception as exc:
+            warn("reset shortcuts: %s" % exc)
+            return False
+
+
 # -- the window ---------------------------------------------------------------------------------
 class PreferencesDialog(QtWidgets.QDialog):
     last = None
@@ -451,6 +576,9 @@ class PreferencesDialog(QtWidgets.QDialog):
                     label.setToolTip(opt["tip"])
                 form.addRow(label, widget)
             layout.addWidget(box)
+        if pid == "keyboard":
+            self.keyboard = KeyboardPage(inner)
+            layout.addWidget(self.keyboard, 1)
         if pid == "network":
             note = QtWidgets.QLabel(
                 "SciForge never sends anything anywhere: there is no account and no data "

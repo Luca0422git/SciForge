@@ -46,19 +46,17 @@ def page_window():
 
 
 def tab_close_button(sub):
-    """The x of the drawing's tab in the MDI tab bar (as a person clicks it)."""
-    area = mdi()
-    bar = area.findChild(QtWidgets.QTabBar) if area is not None else None
+    """The x of the drawing's document tab (at the top, as a person clicks it)."""
+    bar = h.document_tabs()
     if bar is None or sub is None:
         return None
-    try:
-        index = area.subWindowList().index(sub)
-    except ValueError:
-        return None
-    for side in (QtWidgets.QTabBar.RightSide, QtWidgets.QTabBar.LeftSide):
-        button = bar.tabButton(index, side)
-        if button is not None:
-            return button
+    title = sub.windowTitle().replace("[*]", "").strip()
+    for index in range(bar.count()):
+        if bar.tabText(index).replace("[*]", "").strip() == title:
+            for side in (QtWidgets.QTabBar.RightSide, QtWidgets.QTabBar.LeftSide):
+                button = bar.tabButton(index, side)
+                if button is not None:
+                    return button
     return None
 
 

@@ -50,9 +50,94 @@ def is_active(resolved):
         return True
 
 
+def shown_key(entry):
+    """The key a menu shows for an entry: the current one (Change Keyboard Shortcut may have
+    changed it), else the entry's own."""
+    try:
+        from . import command_options
+
+        return command_options.key_for(entry)
+    except Exception:
+        return entry.get("key", "")
+
+
 def _menu_text(entry):
     # Text after a tab is drawn right-aligned as the shortcut column, without binding the key.
-    return entry["label"] + ("\t" + entry["key"] if entry.get("key") else "")
+    key = shown_key(entry)
+    return entry["label"] + ("\t" + key if key else "")
+
+
+class _MenuOptions(QtCore.QObject):
+    """Fusion's three-dot button beside the command under the mouse in a drop-down, and the
+    same options on a right-click (Pin to Toolbar / Unpin, Change Keyboard Shortcut)."""
+
+    def __init__(self, menu, context):
+        super().__init__(menu)
+        self.menu = menu
+        self.context = context
+        self.entries = {}  # action -> entry
+        self.current = None
+        self.button = QtWidgets.QToolButton(menu)
+        self.button.setObjectName("SciForgeMenuOptions")
+        self.button.setText("\u22ee")  # vertical ellipsis
+        self.button.setAutoRaise(True)
+        self.button.setToolTip("Options: Pin to Toolbar, Change Keyboard Shortcut")
+        self.button.setCursor(QtCore.Qt.PointingHandCursor)
+        self.button.hide()
+        self.button.clicked.connect(self._button_clicked)
+        menu.installEventFilter(self)
+        menu.aboutToHide.connect(self.button.hide)
+
+    def add(self, action, entry):
+        self.entries[action] = entry
+
+    def eventFilter(self, obj, event):
+        try:
+            if obj is not self.menu:
+                return False
+            kind = event.type()
+            if kind == QtCore.QEvent.MouseMove:
+                pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+                self._hover(self.menu.actionAt(pos))
+            elif kind == QtCore.QEvent.Leave:
+                if not self.button.underMouse():
+                    self.button.hide()
+            elif kind == QtCore.QEvent.ContextMenu:
+                action = self.menu.actionAt(event.pos())
+                if action in self.entries:
+                    self.current = action
+                    self.open_options(self.menu.mapToGlobal(event.pos()))
+                    return True
+        except Exception as exc:
+            warn("menu options: %s" % exc)
+        return False
+
+    def _hover(self, action):
+        if action is None or action not in self.entries:
+            if not self.button.underMouse():
+                self.button.hide()
+            return
+        self.current = action
+        rect = self.menu.actionGeometry(action)
+        size = max(14, rect.height() - 4)
+        self.button.setFixedSize(size, size)
+        self.button.move(rect.right() - size - 2, rect.top() + (rect.height() - size) // 2)
+        self.button.show()
+        self.button.raise_()
+
+    def _button_clicked(self):
+        self.open_options(self.button.mapToGlobal(QtCore.QPoint(self.button.width(), 0)))
+
+    def open_options(self, at):
+        entry = self.entries.get(self.current)
+        if entry is None:
+            return
+        from . import command_options
+
+        options = command_options.options_menu(self.menu, entry, self.context)
+        chosen = options.exec_(at)
+        if chosen is not None:
+            self.menu.close()  # Fusion closes the drop-down after an option
 
 
 def is_checked(spec):
@@ -69,10 +154,14 @@ def is_checked(spec):
         return False
 
 
-def build_menu(parent, entries, available):
-    """QMenu for a list of config entries. Unavailable commands are greyed out."""
+def build_menu(parent, entries, available, context=None):
+    """QMenu for a list of config entries. Unavailable commands are greyed out. Each command
+    has Fusion's options (three-dot button on hover, right-click): context = (tab id, group
+    id, labels of the group's own big icons) for Pin to Toolbar, or None."""
     menu = QtWidgets.QMenu(parent)
     menu.setToolTipsVisible(True)
+    options = _MenuOptions(menu, context)
+    menu._sf_options = options  # kept with the menu
     checks = []  # (action, resolved, checked spec) re-checked each time the menu opens
     choices = None  # the ticked entries of one menu are one choice: exactly one tick
     for entry in entries:
@@ -80,7 +169,7 @@ def build_menu(parent, entries, available):
             menu.addSeparator()
             continue
         if "submenu" in entry:
-            submenu = build_menu(menu, entry["submenu"], available)
+            submenu = build_menu(menu, entry["submenu"], available, context)
             submenu.setTitle(entry["label"])
             if entry.get("icon"):
                 submenu.setIcon(ui_icon(entry["icon"]))
@@ -88,6 +177,7 @@ def build_menu(parent, entries, available):
             continue
         action = menu.addAction(ui_icon(entry["icon"]), _menu_text(entry))
         resolved = resolve(entry["command"], available)
+        options.add(action, entry)
         if resolved:
             action.triggered.connect(lambda _=False, r=resolved, e=entry: run(r, e["label"]))
             if entry.get("note"):
@@ -122,36 +212,76 @@ def build_menu(parent, entries, available):
 
 
 class GroupWidget(QtWidgets.QWidget):
-    """Large icons on top, 'NAME ▾' underneath; the name opens the full menu."""
+    """Large icons on top, 'NAME ▾' underneath; the name opens the full menu. Commands pinned
+    to the toolbar (ribbon_pins) get a large icon after the group's own."""
 
-    def __init__(self, group, available, parent=None):
+    def __init__(self, group, available, parent=None, tab_id=""):
         super().__init__(parent)
         self.group = group
+        self.tab_id = tab_id
+        self.available = available
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(2, 2, 2, 0)
         outer.setSpacing(0)
-        row = QtWidgets.QHBoxLayout()
-        row.setContentsMargins(4, 0, 4, 0)
-        row.setSpacing(4)
+        self.row = QtWidgets.QHBoxLayout()
+        self.row.setContentsMargins(4, 0, 4, 0)
+        self.row.setSpacing(4)
         self.buttons = []
-        for label in group["big"]:
-            entry = cfg.find(group, label)
-            if entry is None:
-                warn("ribbon: '%s' is not in group %s" % (label, group["title"]))
-                continue
-            if "submenu" in entry:  # big icon of a submenu runs its first entry
-                entry = next(cfg.iter_items(entry["submenu"]))
-            row.addWidget(self._big_button(entry, available))
-        outer.addLayout(row)
+        outer.addLayout(self.row)
 
         self.label = QtWidgets.QToolButton()
         self.label.setProperty("role", "group")
         self.label.setText(group["title"] + " ▾")
         self.label.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
         self.label.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
-        self.menu = build_menu(self, group["items"], available)
+        self.menu = None
         self.label.clicked.connect(self.open_menu)
         outer.addWidget(self.label)
+        self.refresh()
+
+    def context(self):
+        return (self.tab_id, self.group["id"], tuple(self.group["big"]))
+
+    def refresh(self):
+        """(Re)build the large icons (the group's own, then the pinned ones) and the menu (its
+        keys may have changed)."""
+        for button in self.buttons:
+            self.row.removeWidget(button)
+            button.deleteLater()
+        self.buttons = []
+        labels = list(self.group["big"])
+        pinned = []
+        try:
+            from . import ribbon_pins
+
+            pinned = [
+                x
+                for x in ribbon_pins.pinned(ribbon_pins.load(), self.tab_id, self.group["id"])
+                if x not in labels
+            ]
+        except Exception as exc:
+            warn("ribbon pins: %s" % exc)
+        for label in labels + pinned:
+            entry = cfg.find(self.group, label)
+            if entry is None:
+                if label not in pinned:
+                    warn("ribbon: '%s' is not in group %s" % (label, self.group["title"]))
+                continue
+            if "submenu" in entry:  # big icon of a submenu runs its first entry
+                entry = next(cfg.iter_items(entry["submenu"]))
+            button = self._big_button(entry, self.available)
+            button.setProperty("pinned", label in pinned)
+            self.row.addWidget(button)
+        old = self.menu
+        self.menu = build_menu(self, self.group["items"], self.available, self.context())
+        if old is not None:
+            old.deleteLater()
+
+    def _options(self, button, entry):
+        from . import command_options
+
+        menu = command_options.options_menu(button, entry, self.context())
+        menu.exec_(button.mapToGlobal(QtCore.QPoint(0, button.height())))
 
     def _big_button(self, entry, available):
         button = QtWidgets.QToolButton()
@@ -160,7 +290,8 @@ class GroupWidget(QtWidgets.QWidget):
         button.setFixedSize(BIG + 12, BIG + 12)
         button.setAutoRaise(True)
         resolved = resolve(entry["command"], available)
-        tip = entry["label"] + ("  (%s)" % entry["key"] if entry.get("key") else "")
+        key = shown_key(entry)
+        tip = entry["label"] + ("  (%s)" % key if key else "")
         if resolved:
             button.clicked.connect(lambda _=False, r=resolved, e=entry: run(r, e["label"]))
             button.setToolTip(tip + ("\n" + entry["note"] if entry.get("note") else ""))
@@ -168,6 +299,11 @@ class GroupWidget(QtWidgets.QWidget):
             button.setEnabled(False)
             button.setToolTip(tip + "\n" + (entry.get("note") or "Not available in SciForge yet"))
         button.setObjectName("SciForgeBig_" + entry["label"].replace(" ", "_"))
+        # right-click: the command's options (Unpin from Toolbar, Change Keyboard Shortcut)
+        button.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        button.customContextMenuRequested.connect(
+            lambda _pos, b=button, e=entry: _safely(self._options, b, e)
+        )
         self.buttons.append(button)
         return button
 
@@ -177,6 +313,13 @@ class GroupWidget(QtWidgets.QWidget):
         self.menu.exec_(self.label.mapToGlobal(QtCore.QPoint(0, self.label.height())))
         self.label.setProperty("open", "false")
         self.label.style().polish(self.label)
+
+
+def _safely(function, *args):
+    try:
+        function(*args)
+    except Exception as exc:
+        warn("ribbon: %s" % exc)
 
 
 def _separator():
@@ -211,6 +354,7 @@ class RibbonWidget(QtWidgets.QWidget):
         tabs_row = QtWidgets.QHBoxLayout()
         tabs_row.setSpacing(0)
         self.tab_buttons = {}
+        self.group_widgets = []
         self.pages = QtWidgets.QStackedWidget()
         self.page_index = {}
         for tab in cfg.TABS:
@@ -228,7 +372,9 @@ class RibbonWidget(QtWidgets.QWidget):
             for i, grp in enumerate(tab["groups"]):
                 if i:
                     row.addWidget(_separator())
-                row.addWidget(GroupWidget(grp, available))
+                widget = GroupWidget(grp, available, tab_id=tab["id"])
+                self.group_widgets.append(widget)
+                row.addWidget(widget)
             row.addStretch(1)
             self.page_index[tab["id"]] = self.pages.addWidget(page)
         tabs_row.addStretch(1)
@@ -251,6 +397,23 @@ class RibbonWidget(QtWidgets.QWidget):
         self._timer.setInterval(700)
         self._timer.timeout.connect(self._refresh_title)
         self._timer.start()
+        try:  # a new or activated window shows in the tabs at once (not at the next tick)
+            area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+            if area is not None:
+                area.subWindowActivated.connect(
+                    lambda *_a: QtCore.QTimer.singleShot(0, self._sync_tabs)
+                )
+        except Exception as exc:
+            warn("document tabs: %s" % exc)
+
+    def _sync_tabs(self):
+        try:
+            if self.isVisible():
+                self.doc_tabs.sync()
+        except RuntimeError:
+            pass
+        except Exception as exc:
+            warn("document tabs: %s" % exc)
 
     # -- pieces ---------------------------------------------------------
     def _doc_bar(self, available):
@@ -275,9 +438,15 @@ class RibbonWidget(QtWidgets.QWidget):
                 button.setEnabled(bool(resolved))
                 button.clicked.connect(lambda _=False, r=resolved, e=entry: run(r, e["label"]))
             row.addWidget(button)
-        row.addStretch(1)
-        self.title = QtWidgets.QLabel("")
+        # Fusion's document tabs, at the top (FreeCAD's own tab bar under the 3D view is
+        # hidden while SciForge is on: doc_tabs)
+        from .doc_tabs import DocumentTabs
+
+        self.doc_tabs = DocumentTabs()
+        row.addWidget(self.doc_tabs, 1)
+        self.title = QtWidgets.QLabel("")  # (the active document's name; the tabs show it)
         self.title.setProperty("role", "document")
+        self.title.hide()
         row.addWidget(self.title)
         # Fusion's Out-of-Date icon: something of the design has a newer saved version
         # (versions_ui.out_of_date); its menu has Get Latest.
@@ -355,6 +524,29 @@ class RibbonWidget(QtWidgets.QWidget):
             action.triggered.connect(lambda _=False, r=resolved, e=entry: run(r, e["label"]))
         return menu
 
+    # -- customization (Pin to Toolbar, Change Keyboard Shortcut) ------
+    def refresh_customization(self):
+        """Pins or keys changed: rebuild every group's large icons and menu."""
+        for widget in self.group_widgets:
+            try:
+                widget.refresh()
+            except Exception as exc:
+                warn("ribbon group %s: %s" % (widget.group.get("title"), exc))
+
+    def contextMenuEvent(self, event):
+        """Right-click on the ribbon (not on a command): Reset All Toolbar Customization."""
+        try:
+            menu = QtWidgets.QMenu(self)
+            menu.setObjectName("SciForgeRibbonMenu")
+            reset = menu.addAction("Reset All Toolbar Customization")
+            from . import command_options
+
+            reset.triggered.connect(lambda: command_options.reset_all_toolbar(self))
+            menu.exec_(event.globalPos())
+            event.accept()
+        except Exception as exc:
+            warn("ribbon menu: %s" % exc)
+
     # -- behaviour ------------------------------------------------------
     def select_tab(self, tab_id, user=False):
         for tid, button in self.tab_buttons.items():
@@ -401,6 +593,11 @@ class RibbonWidget(QtWidgets.QWidget):
         return None
 
     def _refresh_title(self):
+        try:
+            if self.isVisible():
+                self.doc_tabs.sync()
+        except Exception as exc:
+            warn("document tabs: %s" % exc)
         try:
             import FreeCAD as App
 

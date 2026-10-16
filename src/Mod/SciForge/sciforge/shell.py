@@ -144,6 +144,9 @@ def enable():
     _state["on"] = True
     theme.apply()
     _show_ribbon()
+    # Fusion's document tabs are at the top (the ribbon's application bar): FreeCAD's tab bar
+    # under the 3D view hides while SciForge is on
+    _safely(lambda: __import__("sciforge.doc_tabs").doc_tabs.hide_mdi_tabs(True))
     _hide_toolbars()
     _hide_menubar()
     _safely(lambda: __import__("sciforge.browser_ui").browser_ui.show())
@@ -194,6 +197,7 @@ def disable():
         _restore_panels,
         _restore_menubar,
         _restore_toolbars,
+        lambda: __import__("sciforge.doc_tabs").doc_tabs.hide_mdi_tabs(False),
         _hide_ribbon,
         lambda: __import__("sciforge.browser_ui").browser_ui.hide(),
         theme.restore,

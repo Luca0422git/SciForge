@@ -383,6 +383,23 @@ def ribbon_buttons():
     return [b for b in ribbon.findChildren(QtWidgets.QToolButton) if b.isVisible()]
 
 
+def document_tabs():
+    """The document tabs a person sees: SciForge's at the top (FreeCAD's own bar under the 3D
+    view is hidden while SciForge is on), or FreeCAD's when SciForge is off."""
+    try:
+        from sciforge import shell
+
+        ribbon = shell.ribbon()
+        tabs = getattr(ribbon, "doc_tabs", None) if ribbon is not None else None
+        if tabs is not None and tabs.isVisible():
+            tabs.sync()
+            return tabs
+    except Exception:
+        pass
+    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    return area.findChild(QtWidgets.QTabBar) if area is not None else None
+
+
 def ribbon(label):
     """Click the big ribbon button with this label (as the user would)."""
     name = "SciForgeBig_" + label.replace(" ", "_")
@@ -595,6 +612,12 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
             joints_drag.reset()
         except Exception as exc:
             print("[SciForge] component drag reset failed: %s" % exc, flush=True)
+        try:  # the default keys and no pinned commands (Change Keyboard Shortcut, Pin)
+            from sciforge import command_options
+
+            command_options.reset_for_tests()
+        except Exception as exc:
+            print("[SciForge] shortcuts / pins reset failed: %s" % exc, flush=True)
         _tap = _ConsoleTap()
         new_errors()  # start-up messages are not the scenario's
 

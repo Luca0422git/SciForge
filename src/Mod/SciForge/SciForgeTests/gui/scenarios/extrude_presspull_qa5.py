@@ -233,8 +233,7 @@ def p22_cancelled_saved():
 
 # -- Path 23: two designs open ---------------------------------------------------------------
 def tab_bar():
-    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
-    return area.findChild(QtWidgets.QTabBar) if area is not None else None
+    return h.document_tabs()
 
 
 def click_tab(label_start):
