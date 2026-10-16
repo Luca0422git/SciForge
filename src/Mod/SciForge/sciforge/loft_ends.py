@@ -158,6 +158,16 @@ def as_wire(shape):
     return Part.Wire(Part.__sortEdges__(shape.Edges))
 
 
+def between_profiles(path, first, last):
+    """The part of a centerline (curves.Path) from where the first profile sits to where the
+    last one does (Fusion's loft ends at its profiles even when the line runs on)."""
+    s0 = path.length_at(first)
+    s1 = path.length_at(last)
+    if s1 - s0 < 1e-6 or (s0 < 1e-6 and s1 > path.length - 1e-6):
+        return path
+    return path.sub(s0, s1)
+
+
 def simulated(mk, count):
     """The sections a pipe shell (MakePipeShell) passes through at `count` places along its
     spine, as wires (OpenCASCADE gives the last one twice: repeats are dropped)."""

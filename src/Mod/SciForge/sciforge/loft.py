@@ -467,6 +467,7 @@ def tool_shape(profiles, rail_refs, centerline_refs, options):
     if centerline:
         try:
             line = curves.Path(curves.refs_edges(centerline_refs), start_near=sections[0].center)
+            line = loft_ends.between_profiles(line, sections[0].center, sections[-1].center)
         except curves.CurveError as exc:
             raise LoftError("Centerline: %s" % exc)
         if not ends:

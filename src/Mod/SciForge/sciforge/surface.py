@@ -537,6 +537,7 @@ def _c_loft(obj, leader, o, refs):
     if o.get("guide") == "centerline" and refs[2]:
         try:
             centerline = curves.Path(edges_of(refs[2]), start_near=near)
+            centerline = loft_ends.between_profiles(centerline, near, shapes[-1].BoundBox.Center)
         except curves.CurveError as exc:
             raise SurfaceError("Centerline: %s" % exc)
     return g.loft_surface(shapes, o, rails, centerline, profiles)
