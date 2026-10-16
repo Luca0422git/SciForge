@@ -405,6 +405,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         parent = self.parentWidget()
         if parent is None:
             return
+        avoid_rects = tuple(avoid_rects) + self._covered(parent)
         ratio = parent.devicePixelRatioF() or 1.0
         height = parent.height()
 
@@ -465,6 +466,36 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         if not self.isVisible():
             self.show()
             self.raise_()
+
+    COVER_S = 0.5  # how long the panels found floating over the view are trusted
+
+    def _covered(self, parent):
+        """The parts of the 3D view that FreeCAD's floating panels (its overlay: the command
+        dialog over the right of the view) cover, as (left, top, width, height) in the view's
+        pixels: a box there would be hidden under the dialog, so it goes elsewhere."""
+        now = time.monotonic()
+        cached = getattr(self, "_cover_cache", None)
+        if cached is not None and now - cached[0] < self.COVER_S:
+            return cached[1]
+        rects = []
+        try:
+            main = Gui.getMainWindow()
+            view_rect = QtCore.QRect(parent.mapToGlobal(QtCore.QPoint(0, 0)), parent.size())
+            for widget in main.findChildren(QtWidgets.QTabWidget):  # (the overlay is one)
+                if widget.metaObject().className() != "Gui::OverlayTabWidget":
+                    continue
+                if not widget.isVisible():
+                    continue
+                area = QtCore.QRect(widget.mapToGlobal(QtCore.QPoint(0, 0)), widget.size())
+                common = area.intersected(view_rect)
+                if common.isEmpty():
+                    continue
+                corner = parent.mapFromGlobal(common.topLeft())
+                rects.append((corner.x(), corner.y(), common.width(), common.height()))
+        except Exception:
+            rects = []
+        self._cover_cache = (now, tuple(rects))
+        return self._cover_cache[1]
 
     HOVER_PIXELS = 14.0
 
@@ -589,7 +620,15 @@ def handle_pixels(handle, widget):
     drawing widget), worked out as the value box does; None when it cannot be."""
     try:
         anchor, tail, tip, radius = handle.box_geometry()
-        view = handle.view
+        return geometry_pixels(handle.view, widget, anchor, tail, tip, radius)
+    except Exception:
+        return None
+
+
+def geometry_pixels(view, widget, anchor, tail, tip, radius):
+    """(tail, tip, radius) in `widget` pixels of a grabbable part given in 3D (see
+    BoxCarrier.box_geometry); None when it cannot be worked out."""
+    try:
         ratio = widget.devicePixelRatioF() or 1.0
         height = widget.height()
 
@@ -638,6 +677,12 @@ class BoxCarrier:
         """True while this handle is dragged (or hovered, when the handle knows)."""
         return False
 
+    def box_avoid(self):
+        """More grabbable parts the box must not cover, [(anchor, tail, tip, radius)] in
+        3D: a handle made of several (Move's triad: the arrows and turn handles that are
+        not the one in use). Override."""
+        return ()
+
     def attach_box(self, box, owner=None, key=None):
         self.value_box = box
         self.box_owner = owner
@@ -667,7 +712,12 @@ class BoxCarrier:
             box.refresh()
             anchor, tail, tip, radius = self.box_geometry()
             owner = self.box_owner
-            avoid = owner.other_handles(box) if owner is not None else ()
+            avoid = list(owner.other_handles(box)) if owner is not None else []
+            parent = box.parentWidget()
+            for part in self.box_avoid():
+                pixels = geometry_pixels(self.view, parent, *part) if parent else None
+                if pixels is not None:
+                    avoid.append(pixels)
             rects = owner.other_boxes(box) if owner is not None else ()
             box.place_segment(self.view, anchor, tail, tip, radius, avoid=avoid, avoid_rects=rects)
             if owner is None:

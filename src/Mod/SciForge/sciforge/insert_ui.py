@@ -329,7 +329,8 @@ def _preselected_plane():
 # ============================================================================ Insert Mesh
 class InsertMeshPanel(_InsertPanel):
     """Fusion's Insert Mesh dialog: Unit Type, Flip Up Direction, Center, Move to Ground,
-    X / Y / Z distance and angle, a move manipulator (arrows and turn handles), Reset."""
+    X / Y / Z distance and angle, a move manipulator (arrows and turn handles, with the
+    value box of the one in use, as Move's), Reset."""
 
     title = "Insert Mesh"
     icon = "insert_mesh"
@@ -339,6 +340,7 @@ class InsertMeshPanel(_InsertPanel):
         self.editing = feature is not None
         self.triad = None
         self._start = None
+        self.value_boxes = taskui.ValueBoxes(self)
         if feature is None:
             mesh = insert.read_mesh(path)
             unit = insert.design_unit(doc)
@@ -478,10 +480,39 @@ class InsertMeshPanel(_InsertPanel):
                 turns=True,
                 on_drag=self._dragged,
                 on_release=self._released,
+                on_handle=self._triad_handle,
             )
         except Exception as exc:
             warn("Insert Mesh: manipulator unavailable: %s" % exc)
             self.triad = None
+
+    def _triad_handle(self, handle):
+        """The triad's handle in use changed: the box of its field (X / Y / Z Distance or
+        Angle) goes beside it (move_ui.MovePanel does the same)."""
+        if getattr(self, "_closed", False) or self.triad is None:
+            return
+        kind, index = handle
+        fields = (self.x, self.y, self.z) if kind == "move" else (self.ax, self.ay, self.az)
+        field = fields[index]
+        self.value_boxes.attach(
+            self.triad,
+            "%s%d" % (kind, index),
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(field, text),
+        )
+
+    def _box_typed(self, field, text):
+        """A value typed in the box: as if typed in its field (a plain number is in the
+        field's unit)."""
+        if getattr(self, "_closed", False):
+            return
+        try:
+            value = field.parse(text.strip().lstrip("="))
+        except ValueError as exc:
+            self.message.setText("⚠ %s" % exc)
+            return
+        self.message.setText("")
+        field.take(value)
 
     def _centre(self):
         (x0, y0, z0), (x1, y1, z1) = insert.placed_bounds(self.obj)
@@ -537,6 +568,10 @@ class InsertMeshPanel(_InsertPanel):
         return result
 
     def cleanup(self):
+        try:
+            self.value_boxes.discard()
+        except Exception:
+            pass
         if self.triad is not None:
             try:
                 self.triad.remove()

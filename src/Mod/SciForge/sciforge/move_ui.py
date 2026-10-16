@@ -32,7 +32,7 @@ from . import bodies, drag_guard, handles3d, increments, move, move_face, profil
 from . import ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
-from .taskui import DistanceField
+from .taskui import BoxCarrier, DistanceField, ValueBoxes
 
 MOVE_TYPES = [
     ("Free Move", "free"),
@@ -53,16 +53,24 @@ OVERLAY_CLICK_S = 0.8
 
 
 # -- the manipulator ---------------------------------------------------------------------------------
-class Triad:
+class Triad(BoxCarrier):
     """Fusion's move manipulator: three arrows (X red, Y green, Z blue) and, for Free Move,
     three curved handles that turn about those axes. on_drag(kind, index, value) while
     dragging: kind "move" (value in mm along axis `index` since the press) or "turn" (degrees
-    about it since the press); on_release() at the end."""
+    about it since the press); on_release() at the end.
+
+    Fusion shows the value of the handle in use beside it (the distance along the arrow
+    being dragged, the angle of the turn handle): the triad carries one value box
+    (taskui.BoxCarrier) and moves it to the handle last dragged or under the mouse;
+    on_handle((kind, index)) tells the dialog which one that is, so it gives the box that
+    handle's field (X / Y / Z Distance or Angle)."""
 
     POLL_MS = 30
     GRAB_PIXELS = 9.0
 
-    def __init__(self, view, center, size, turns=True, on_drag=None, on_release=None):
+    def __init__(
+        self, view, center, size, turns=True, on_drag=None, on_release=None, on_handle=None
+    ):
         from pivy import coin
 
         self.coin = coin
@@ -72,6 +80,8 @@ class Triad:
         self.turns = turns
         self.on_drag = on_drag
         self.on_release = on_release
+        self.on_handle = on_handle
+        self.in_use = None  # (kind, index): the handle the value box sits beside
         self._hover = None
         self._painted = None
         self._drag = None  # (kind, index); None or False when no drag
@@ -188,6 +198,71 @@ class Triad:
 
     def ball_point(self, index):
         return self.center + self.ball(index)
+
+    # -- the value box (taskui.BoxCarrier) ------------------------------------------------------
+    def box_geometry(self):
+        """The handle in use as the box sees it: an arrow from just off the centre to its
+        tip (anchored at its middle), or a turn handle's arc (anchored at its ball)."""
+        if not self.in_use:
+            raise ValueError("no handle in use yet")
+        return self._part(self.in_use)
+
+    def box_active(self):
+        return bool(self._drag)
+
+    def _part(self, handle):
+        """(anchor, tail, tip, radius) of one of the triad's handles (see box_geometry)."""
+        kind, index = handle
+        if kind == "move":
+            tail = self.center + AXES[index] * (0.15 * self.size)
+            tip = self.tip(index)
+            return (tail + tip) * 0.5, tail, tip, 0.08 * self.size
+        points = self.arc_points(index, 8)
+        return (
+            self.ball_point(index),
+            self.center + points[0],
+            self.center + points[-1],
+            0.07 * self.size,
+        )
+
+    def box_avoid(self):
+        """The box never covers the triad's other arrows, arcs and balls (they stay
+        grabbable, and the mouse over them moves the box to them)."""
+        parts = []
+        for kind in ("move", "turn") if self.turns else ("move",):
+            for index in range(3):
+                if (kind, index) == self.in_use:
+                    continue
+                parts.append(self._part((kind, index)))
+                if kind == "turn":
+                    ball = self.ball_point(index)
+                    parts.append((ball, ball, ball, 0.1 * self.size))
+        return parts
+
+    def use(self, handle):
+        """Make `handle` ((kind, index)) the one the value box sits beside."""
+        if not handle or handle == self.in_use:
+            return
+        if handle[0] == "turn" and not self.turns:
+            return
+        self.in_use = handle
+        if self.on_handle is not None:
+            try:
+                self.on_handle(handle)
+            except Exception as exc:
+                warn("move value box: %s" % exc)
+
+    def attach_box(self, box, owner=None, key=None):
+        """A box for another handle: the one shown before steps aside (one box at a time,
+        beside the handle in use), unless the user is typing in it."""
+        old = self.value_box
+        if old is not None and old is not box:
+            try:
+                if not old.hasFocus():
+                    old.hide()
+            except RuntimeError:
+                pass
+        super().attach_box(box, owner, key)
 
     def set_center(self, center):
         self.center = App.Vector(center)
@@ -337,6 +412,7 @@ class Triad:
                 return
             drag_guard.end_lost_drag(self, idle=None)  # its release never came (drag_guard)
             self._paint()
+            self.use(self._drag or self._hover)
             pending, self._pending = self._pending, None
             if pending is not None and self.on_drag:
                 self.on_drag(*pending)
@@ -345,6 +421,8 @@ class Triad:
                 self._drag_done()
                 if self.on_release:
                     self.on_release()
+            if self.in_use:
+                self.follow_box()
         except Exception as exc:
             warn("move drag: %s" % exc)
 
@@ -367,6 +445,7 @@ class Triad:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        self.drop_box()
 
 
 def _segment_distance(p, a, b):
@@ -401,6 +480,9 @@ class MovePanel(BodyPanel):
         self.triad = None
         self.turn_handle = None
         self.axis_picker = None
+        # The value box beside the handle in use (Fusion): one per field, made once.
+        self.value_boxes = ValueBoxes(self)
+        self._box_handle = None  # (kind, index) of the triad handle last in use
         self.marks = None  # the picked faces, shaded (Move Object Faces)
         self._overlay_time = 0.0
         self._drag_start = None
@@ -1125,11 +1207,55 @@ class MovePanel(BodyPanel):
                     turns=kind == "free" and not self.setting_pivot,
                     on_drag=self._dragged,
                     on_release=self._released,
+                    on_handle=self._triad_handle,
                 )
+                last = self._box_handle
+                if last and (last[0] == "move" or self.triad.turns):
+                    self.triad.use(last)  # the box stays beside the handle last used
             elif kind == "rotate" and self.options["axis_dir"] is not None:
                 self._make_turn_handle()
         except Exception as exc:
             warn("Move: no manipulator: %s" % exc)
+
+    # -- the value boxes (Fusion shows the value beside the handle in use) -----------------------
+    def _box_field(self, handle):
+        """The dialog field a triad handle sets: X / Y / Z Distance or Angle (Pivot X / Y / Z
+        while Set Pivot moves the manipulator)."""
+        kind, index = handle
+        if kind == "move":
+            return (self.pivot_fields if self.setting_pivot else self.distance_fields)[index]
+        return self.angle_fields[index]
+
+    def _triad_handle(self, handle):
+        """The triad's handle in use changed: its box (its field's value) goes beside it."""
+        if self._closed or self.triad is None:
+            return
+        self._box_handle = handle
+        field = self._box_field(handle)
+        key = "%s%s%d" % (
+            "pivot_" if self.setting_pivot and handle[0] == "move" else "",
+            handle[0],
+            handle[1],
+        )
+        self.value_boxes.attach(
+            self.triad,
+            key,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(field, text),
+        )
+
+    def _box_typed(self, field, text):
+        """A value typed in a handle's box: as if typed in its field (a plain number is in
+        the field's unit)."""
+        if self._closed:
+            return
+        try:
+            value = field.parse(text.strip().lstrip("="))
+        except ValueError as exc:
+            self.message.setText("⚠ %s" % exc)
+            return
+        self.message.setText("")
+        field.take(value)
 
     def _triad_center(self):
         o = self.options
@@ -1156,6 +1282,13 @@ class MovePanel(BodyPanel):
             self._size() * 0.35,
             on_drag=self._turned,
             on_release=lambda _v: self._released(),
+        )
+        field = self.angle
+        self.value_boxes.attach(
+            self.turn_handle,
+            "angle",
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(field, text),
         )
 
     def _place_handles(self):
@@ -1286,6 +1419,10 @@ class MovePanel(BodyPanel):
                 "Set Pivot: click a point of the model (a corner, an edge, a round edge's "
                 "centre) or drag the arrows, then Done."
             )
+
+    def cleanup(self):
+        super().cleanup()
+        self.value_boxes.discard()
 
     def can_finish(self):
         if self._faces_mode() and not self._has_objects():

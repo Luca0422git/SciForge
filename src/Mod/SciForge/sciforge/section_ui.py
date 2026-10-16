@@ -15,6 +15,7 @@ analysis' own view provider. refresh(doc) puts both in order again after anythin
 (recompute, a body shown or hidden, an analysis shown, hidden, made or deleted); nodes of
 FreeCAD's view providers are looked up fresh every time, never kept.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -22,7 +23,7 @@ from . import bodypick, commands, construct, handles3d, hole_common, log, pickpa
 from . import preview, section, warn
 from . import ui_icon_path
 from .compat import QtCore, QtGui, QtWidgets
-from .taskui import DistanceField
+from .taskui import DistanceField, ValueBoxes
 
 CLIP_NAME = "SciForgeSectionClip"
 HATCH = (0.08, 0.08, 0.08)
@@ -481,6 +482,9 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
                 if text:
                     self.formulas[key] = text
         self.handles = {}
+        # Fusion shows the value beside each handle (the offset, X and Y Angle); typed
+        # there it is taken like the dialog's field. One box per field, made once.
+        self.value_boxes = ValueBoxes(self, default="distance")
         self.planes = None
         self.repick = False
         self.error = ""
@@ -848,6 +852,25 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
             on_drag=self._dragged_y,
             on_release=self._dragged_y,
         )
+        for key, name, field in (
+            ("distance", "distance", self.distance),
+            ("x", "x_angle", self.x_angle),
+            ("y", "y_angle", self.y_angle),
+        ):
+            self.value_boxes.attach(
+                self.handles.get(key),
+                name,
+                lambda f=field: f.widget.text(),
+                lambda text, n=name: self._box_typed(n, text),
+            )
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        for formula in getattr(self, "_formula_inputs", []):
+            if formula.key == key:
+                formula.take(text)
+                return
 
     def _move_handles(self):
         if not self.handles:
@@ -991,6 +1014,7 @@ class SectionPanel(bodypick.Tones, pickpanel.PickPanel):
 
     def cleanup(self):
         self._remove_handles()
+        self.value_boxes.discard()
         enter = getattr(self, "_enter_sum", None)
         if enter is not None:
             enter.remove()

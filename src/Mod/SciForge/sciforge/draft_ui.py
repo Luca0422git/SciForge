@@ -23,6 +23,7 @@ light up; a draft that cannot be made is explained in the dialog and OK waits.
 Built on FreeCAD's PartDesign::Draft (Fixed Plane, One Side) or SciForge's DraftFeature
 (drafting.py). Double-click the step in the timeline to edit it.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -39,7 +40,7 @@ from . import (
     warn,
 )
 from .compat import QtCore, QtWidgets
-from .taskui import DistanceField
+from .taskui import DistanceField, ValueBoxes
 
 PLANE_HELP = (
     "Pull Direction: click a flat face or an origin plane. The faces turn about it; the "
@@ -154,6 +155,9 @@ class DraftPanel(pickpanel.PickPanel):
         self.formula_error = ""
         self.handle = None
         self.arrow = None
+        # Fusion shows the draft angle beside the angle disc; typed there it is taken like
+        # the Angle field (a formula too).
+        self.value_boxes = ValueBoxes(self, default="angle")
         self.planes = None  # the origin squares while a plane box takes the clicks
         self._chains = {}
         if feature is not None:
@@ -865,8 +869,23 @@ class DraftPanel(pickpanel.PickPanel):
                 on_release=lambda d: self._turned(d, True),
             )
             hole_common.on_top(self.handle.root)
+            field = self.angle
+            self.value_boxes.attach(
+                self.handle,
+                "angle",
+                lambda: field.widget.text(),
+                lambda text: self._box_typed("angle", text),
+            )
         except Exception as exc:
             warn("Draft handles unavailable: %s" % exc)
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        for formula in self._formula_inputs:
+            if formula.key == key:
+                formula.take(text)
+                return
 
     def _arrow_foot(self, shape, point, pull, placement):
         """Where the pull arrow stands: on the plane, just beside the part (at the corner
@@ -1041,6 +1060,7 @@ class DraftPanel(pickpanel.PickPanel):
     def cleanup(self):
         self._remove_handles()
         self._hide_planes()
+        self.value_boxes.discard()
         super().cleanup()
 
 

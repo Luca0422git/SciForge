@@ -15,6 +15,7 @@ sliding along the path for Plane / Point Along Path. Values take parameters and 
 Problems are shown in the dialog, which then stays open. OK keeps it (one undo step),
 Cancel / Esc / Ctrl+Z leave the design as it was. Double-click it in the timeline to edit.
 """
+
 import math
 import re
 
@@ -24,7 +25,7 @@ import FreeCADGui as Gui
 from . import bodypick, commands, construct, handles3d, hole_common, log, pickpanel, preview, warn
 from . import ui_icon_path
 from .compat import QtCore, QtWidgets
-from .taskui import DistanceField
+from .taskui import DistanceField, ValueBoxes
 
 ICONS = {
     "OffsetPlane": "offset_plane",
@@ -399,6 +400,9 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         self.work_body = commands.find_body()
         self.handle = None
         self.handle_key = None
+        # Fusion shows the value beside the blue handle (the offset, the angle, the place
+        # along the path); typed there it is taken like the dialog's field.
+        self.value_boxes = ValueBoxes(self)
         self.overlays = {}
         self.error = ""
         self.boxes = []
@@ -923,6 +927,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
         self.values["distance_type"] = kind
         self.formulas.pop("distance", None)
         self.formula_errors.pop("distance", None)
+        self._attach_box()  # the box now shows the field of the new Distance Type
         self._show_path_type()
         self.schedule()
 
@@ -1014,6 +1019,50 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
                 edge, u, size, on_drag=self._dragged_path, on_release=self._dragged_path
             )
             self.handle_key = "path"
+        self._attach_box()
+
+    def _attach_box(self):
+        """The handle's value box: the Distance (or Angle) field's text, or the place along
+        the path as a fraction while Distance Type is Proportional."""
+        if self.handle is None or self._closed:
+            return
+        key = self.handle_key
+        if key == "path" and self.values.get("distance_type") != "physical":
+            spin = self.fraction
+            self.value_boxes.attach(self.handle, "fraction", spin.text, self._box_fraction)
+            return
+        name = "angle" if key == "angle" else "distance"
+        field = self.angle if name == "angle" else self.distance
+        if field is None:
+            return
+        self.value_boxes.attach(
+            self.handle,
+            name,
+            lambda: field.widget.text(),
+            lambda text: self._box_typed(name, text),
+        )
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        for formula in self._formula_inputs:
+            if formula.key == key:
+                formula.take(text)
+                return
+
+    def _box_fraction(self, text):
+        if self._closed or self.fraction is None:
+            return
+        try:
+            value = float((text or "").strip().replace(",", "."))
+        except ValueError:
+            self.message.setText("⚠ '%s' is not a value. Type a fraction, for example 0.5." % text)
+            return
+        if not 0.0 <= value <= 1.0:
+            self.message.setText("⚠ Type a fraction of the path from 0 to 1, for example 0.5.")
+            return
+        self.message.setText("")
+        self.fraction.setValue(value)
 
     def _angle_frame(self, refs, points):
         """(centre, axis, zero direction, radius) of the angle handle: the ball stays in the
@@ -1193,6 +1242,7 @@ class ConstructPanel(bodypick.Tones, pickpanel.PickPanel):
 
     def cleanup(self):
         self._remove_handle()
+        self.value_boxes.discard()
         self._remove_overlays()
         enter = getattr(self, "_enter_sum", None)
         if enter is not None:

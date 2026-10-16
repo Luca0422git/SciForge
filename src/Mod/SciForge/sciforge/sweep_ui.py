@@ -25,7 +25,7 @@ from . import bodies_row_ui, commands, curve_pick, curves, extrude, log, preview
 from . import profile_pick, sweep, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .hole_common import SelectionField
-from .taskui import DistanceField, Panel
+from .taskui import DistanceField, Panel, ValueBoxes
 
 safe = curve_pick.safe("sweep")
 
@@ -137,6 +137,9 @@ class SweepPanel(Panel):
         self._geometry_changed = False
         self.active = "profiles"
         self.handles = {}
+        # Fusion shows the Distance (a share of the path) beside each ball; typed there it
+        # is taken like the dialog's field (a formula too).
+        self.value_boxes = ValueBoxes(self, default="distance")
         self.picker = None
         self.overlay = None
         self.observer = None
@@ -985,8 +988,23 @@ class SweepPanel(Panel):
                     on_drag=lambda v, n=name: self._dragged(n, v),
                     on_release=lambda v, n=name: self._dragged(n, v),
                 )
+                box = self.distance if name == "distance" else self.distance2
+                self.value_boxes.attach(
+                    self.handles[name],
+                    name,
+                    box.text,
+                    lambda text, n=name: self._box_typed(n, text),
+                )
         except Exception as exc:
             warn("sweep handles unavailable: %s" % exc)
+
+    def _box_typed(self, key, text):
+        if self._closed:
+            return
+        for formula in self.formula_inputs:
+            if formula.key == key:
+                formula.take(text)
+                return
 
     def _sync_handles(self):
         for name, handle in self.handles.items():
@@ -1085,6 +1103,7 @@ class SweepPanel(Panel):
             except Exception:
                 pass
         self._remove_handles()
+        self.value_boxes.discard()
         self._hide_shown()
         super().cleanup()
 

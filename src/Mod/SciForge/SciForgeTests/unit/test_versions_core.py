@@ -451,5 +451,174 @@ class ProjectFolderTests(Scratch):
         self.assertEqual(data["versions"][0]["file"], "v0001.FCStd")
 
 
+XLINK_XML = """<Object name="Link"><Properties>
+<Property name="LinkedObject" type="App::PropertyXLink">
+<XLink file="%s" stamp="2026-10-16T00:00:00Z" name="Body"/></Property>
+<Property name="Empty" type="App::PropertyXLink"><XLink file="" name=""/></Property>
+<Property name="SourceFile" type="App::PropertyString"><String value="%s"/></Property>
+<Property name="SourceRelative" type="App::PropertyString"><String value="%s"/></Property>
+</Properties></Object>"""
+
+
+class MilestoneTests(Scratch):
+    """Fusion's milestones: a version marked as one (Save dialog box, Version History)."""
+
+    def test_plain_store_milestones(self):
+        path = make_design(os.path.join(self.root, "Bracket.FCStd"))
+        store = v.PlainStore(path)
+        one = store.record("first")
+        two = store.record("release", milestone=True)
+        self.assertFalse(one.milestone)
+        self.assertTrue(two.milestone)
+        self.assertEqual([x.milestone for x in store.versions()], [False, True])
+        store.set_milestone(store.versions()[0], True)
+        store.set_milestone(store.versions()[1], False)
+        self.assertEqual([x.milestone for x in store.versions()], [True, False])
+        self.assertTrue(store.versions()[0].as_dict()["milestone"])
+        ghost = v.VersionInfo(9, "", "", 0, "v0009.FCStd", "copy")
+        with self.assertRaises(v.StoreError):
+            store.set_milestone(ghost, True)
+
+    @unittest.skipUnless(v.git_available(), "git is not installed")
+    def test_git_milestones_are_tags(self):
+        project = os.path.join(self.root, "proj")
+        path = make_design(os.path.join(project, "Arm.FCStd"))
+        store = v.store_for(path, project)
+        store.record("first")
+        make_design(path, bodies=2)
+        two = store.record("release", milestone=True)
+        self.assertTrue(two.milestone)
+        listed = store.versions()
+        self.assertEqual([x.milestone for x in listed], [False, True])
+        store.set_milestone(listed[0], True)
+        store.set_milestone(listed[1], False)
+        store.set_milestone(listed[1], False)  # twice: nothing to take off, no error
+        self.assertEqual([x.milestone for x in store.versions()], [True, False])
+
+
+class MoveCopyTests(Scratch):
+    """The Data Panel's Move / Copy of designs between folders."""
+
+    def test_count_versions_follows_moves(self):
+        log = (
+            "\x1eSave\nA\tArm.FCStd\n\x1erelease\nM\tArm.FCStd\n"
+            "\x1e%s Arm.FCStd to Robots/Arm.FCStd\nR100\tArm.FCStd\tRobots/Arm.FCStd\n"
+            "\x1eSave\nM\tRobots/Arm.FCStd\nA\tBase.FCStd\n" % v.MOVE_MESSAGE
+        )
+        self.assertEqual(v.count_versions(log), {"Robots/Arm.FCStd": 3, "Base.FCStd": 1})
+
+    def test_parse_log(self):
+        out = (
+            "\x1ec2\x1f2026-10-16T09:00:00+00:00\x1f%s x\n"
+            "\x1ec1\x1f2026-10-16T08:00:00+00:00\x1ffirst\n" % v.MOVE_MESSAGE
+        )
+        rows = v.parse_log(out)
+        self.assertEqual([r[0] for r in rows], ["c2", "c1"])
+        self.assertEqual(rows[1][2], "first")
+        self.assertTrue(rows[0][2].startswith(v.MOVE_MESSAGE))
+
+    def test_retarget_links_of_a_moved_design(self):
+        old_dir = os.path.join(self.root, "proj")
+        new_dir = os.path.join(self.root, "proj", "Robots")
+        wheel = os.path.join(old_dir, "Wheel.FCStd")
+        xml = XLINK_XML % ("Wheel.FCStd", wheel, "Wheel.FCStd")
+        out, n = v.retarget_xml(xml, old_dir, new_dir)
+        self.assertEqual(n, 2)  # the link and the Derive's relative path
+        self.assertIn('<XLink file="../Wheel.FCStd"', out)
+        self.assertIn('<String value="../Wheel.FCStd"/>', out)
+        self.assertIn('<XLink file="" name=""/>', out)  # empty links stay empty
+        self.assertEqual(
+            [os.path.normpath(t) for t in v.link_targets(out, new_dir)], [wheel, wheel, wheel]
+        )
+
+    def test_retarget_links_to_a_moved_design(self):
+        folder = os.path.join(self.root, "proj")
+        old = os.path.join(folder, "Wheel.FCStd")
+        new = os.path.join(folder, "Parts", "Wheel.FCStd")
+        xml = XLINK_XML % ("Wheel.FCStd", old, "Wheel.FCStd")
+        out, n = v.retarget_xml(xml, folder, folder, old, new)
+        self.assertEqual(n, 3)  # link, absolute and relative source
+        self.assertIn('<XLink file="Parts/Wheel.FCStd"', out)
+        self.assertIn('<String value="%s"/>' % new, out)
+        self.assertIn('<String value="Parts/Wheel.FCStd"/>', out)
+        same, none = v.retarget_xml(out, folder, folder, old, new)
+        self.assertEqual((same, none), (out, 0))
+
+    def _linked_pair(self, project):
+        wheel = make_design(os.path.join(project, "Wheel.FCStd"))
+        cart = make_design(
+            os.path.join(project, "Cart.FCStd"),
+            extra=XLINK_XML % ("Wheel.FCStd", wheel, "Wheel.FCStd"),
+        )
+        return wheel, cart
+
+    def test_move_with_plain_versions_and_referrers(self):
+        project = os.path.join(self.root, "proj")
+        wheel, cart = self._linked_pair(project)
+        v.PlainStore(wheel).record("one")
+        os.makedirs(os.path.join(project, "Parts"))
+        self.assertEqual(v.referrers(wheel, project), [cart])
+        new, updated = v.move_design(wheel, os.path.join(project, "Parts"), project, use_git=False)
+        self.assertEqual(new, os.path.join(project, "Parts", "Wheel.FCStd"))
+        self.assertFalse(os.path.exists(wheel))
+        self.assertEqual(updated, [cart])
+        self.assertIn('<XLink file="Parts/Wheel.FCStd"', v.read_design_xml(cart))
+        self.assertEqual([x.description for x in v.PlainStore(new).versions()], ["one"])
+        self.assertFalse(os.path.isdir(os.path.join(project, "Wheel.FCStd.versions")))
+        with self.assertRaises(v.StoreError):
+            v.move_design(new, os.path.join(project, "Parts"), project, use_git=False)
+        make_design(os.path.join(project, "Wheel.FCStd"))
+        with self.assertRaises(v.StoreError):  # the name is taken there
+            v.move_design(new, project, project, use_git=False)
+
+    @unittest.skipUnless(v.git_available(), "git is not installed")
+    def test_move_in_git_keeps_the_versions(self):
+        project = os.path.join(self.root, "proj")
+        path = make_design(os.path.join(project, "Arm.FCStd"))
+        store = v.store_for(path, project)
+        store.record("first")
+        make_design(path, bodies=2)
+        store.record("second", milestone=True)
+        os.makedirs(os.path.join(project, "Robots"))
+        new, _updated = v.move_design(path, os.path.join(project, "Robots"), project)
+        moved = v.store_for(new, project)
+        listed = moved.versions()
+        self.assertEqual([x.description for x in listed], ["first", "second"])
+        self.assertEqual([x.milestone for x in listed], [False, True])
+        out = moved.extract(listed[0], os.path.join(self.root, "open"))
+        self.assertEqual(v.summary(out)["bodies"], 1)  # an older version still opens
+        self.assertEqual(v.repo_counts(project).get("Robots/Arm.FCStd"), 2)
+        make_design(new, bodies=3)
+        self.assertEqual(moved.record("third").number, 3)
+        renamed = v.rename_design(new, "Arm 2", project, True)
+        self.assertEqual(v.store_for(renamed, project).count(), 3)
+
+    def test_rename_points_the_users_at_the_new_name(self):
+        project = os.path.join(self.root, "proj")
+        wheel, cart = self._linked_pair(project)
+        renamed = v.rename_design(wheel, "Rim", project, use_git=False)
+        self.assertEqual(os.path.basename(renamed), "Rim.FCStd")
+        self.assertIn('<XLink file="Rim.FCStd"', v.read_design_xml(cart))
+
+    def test_copy_is_a_separate_design(self):
+        project = os.path.join(self.root, "proj")
+        wheel, cart = self._linked_pair(project)
+        os.makedirs(os.path.join(project, "Old"))
+        copy = v.copy_design(cart, os.path.join(project, "Old"))
+        self.assertEqual(copy, os.path.join(project, "Old", "Cart.FCStd"))
+        self.assertTrue(os.path.isfile(cart))
+        self.assertIn('<XLink file="../Wheel.FCStd"', v.read_design_xml(copy))
+        again = v.copy_design(cart, os.path.join(project, "Old"))
+        self.assertEqual(os.path.basename(again), "Cart 2.FCStd")
+        self.assertEqual(v.version_count(copy), 0)  # its own versions start with v1
+
+    def test_project_folders_for_the_dialog(self):
+        project = os.path.join(self.root, "proj")
+        for sub in ("b", "a", os.path.join("a", "x"), ".git", "Arm.versions"):
+            os.makedirs(os.path.join(project, sub))
+        labels = [label for label, _path in v.project_folders(project)]
+        self.assertEqual(labels, ["Project", "Project / a", "Project / a / x", "Project / b"])
+
+
 if __name__ == "__main__":
     unittest.main()

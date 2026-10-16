@@ -12,8 +12,9 @@ import hashlib
 import os
 import re
 
-KINDS = ("body", "sketch", "construction", "parameter")
+KINDS = ("component", "body", "sketch", "construction", "parameter")
 GROUP_TITLES = {
+    "component": "Components",
     "body": "Bodies",
     "sketch": "Sketches",
     "construction": "Construction",
@@ -100,6 +101,7 @@ def summary(keys):
         if kind:
             counts[kind] += 1
     words = {
+        "component": ("component", "components"),
         "body": ("body", "bodies"),
         "sketch": ("sketch", "sketches"),
         "construction": ("construction object", "construction objects"),
@@ -115,6 +117,48 @@ def summary(keys):
     if len(parts) == 1:
         return parts[0]
     return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def expand(keys, items):
+    """What a Derive makes for its ticked `keys`, with Fusion's structure: a ticked component
+    comes with its bodies and the components inside it (at any depth), as components.
+    `items`: read_source()'s items ({key: data}; a component's data names its "parent",
+    "children" and "bodies" by item key). Returns (components to make, parents first;
+    {item key: the component key it goes into} for what lies inside a ticked component;
+    the other ticked keys, made flat as before)."""
+    ticked = [k for k in keys or [] if k in items]
+    chosen = {k for k in ticked if parse_item(k)[0] == "component"}
+
+    def ancestor_ticked(key):
+        parent = (items.get(key) or {}).get("parent")
+        seen = set()
+        while parent and parent not in seen:
+            if parent in chosen:
+                return True
+            seen.add(parent)
+            parent = (items.get(parent) or {}).get("parent")
+        return False
+
+    made, inside = [], {}
+
+    def walk(key, parent):
+        if key in made or key not in items:
+            return
+        made.append(key)
+        if parent:
+            inside[key] = parent
+        data = items[key]
+        for body in data.get("bodies", []):
+            if body in items:
+                inside[body] = key
+        for child in data.get("children", []):
+            walk(child, key)
+
+    for key in ticked:
+        if key in chosen and not ancestor_ticked(key):
+            walk(key, None)
+    flat = [k for k in ticked if k not in made and k not in inside]
+    return made, inside, flat
 
 
 # -- parameters ---------------------------------------------------------------------------------
@@ -202,8 +246,22 @@ def compare_stamp(stored, mtime, size, digest_of=None):
     return NEWER, None
 
 
-def state_words(state, source_name):
-    """What the dialog and the timeline say about a Derive in each state."""
+def version_words(number, newest):
+    """The Derive dialog's Version choice: "Latest (v5)" or "v2"."""
+    if not number:
+        return "Latest (v%d)" % newest if newest else "Latest"
+    return "v%d" % number
+
+
+def state_words(state, source_name, version=0):
+    """What the dialog and the timeline say about a Derive in each state (`version`: the
+    source version it was pinned to, 0 for the latest)."""
+    if state == NEWER and version:
+        return (
+            "Out of date: this Derive uses v%d of %s and a newer version exists. Right-click "
+            "the Derive in the timeline > Update Derive to take the newest."
+            % (version, source_name)
+        )
     if state == NEWER:
         return (
             "Out of date: %s was saved again after this Derive. Right-click the Derive in the "

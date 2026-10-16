@@ -77,7 +77,7 @@ Coin draws the picture, not only what the decal stores).
 |---|---|---|
 | INSERT > Insert Derive: pick the source design; the Derive dialog lists what can be derived; Insert Derive needs a saved design | Same: an unsaved design gets the Save dialog first (the source is kept by a path relative to it), then the file picker (project folder first), then the **Derive** dialog with the source's browser as a tick list: Bodies, Sketches, Construction, Parameters (each body with its component: "Arm > Body1"; each parameter with its value) | Autodesk (dialog), Forum (save first) |
 | The source opens in its own tab while you tick | The source is **never opened**: a copy of its saved file is read and thrown away (an open source with unsaved changes is left alone, only saved versions are derived) | SciForge (no cloud tab) |
-| Components, bodies, sketches, construction geometry, flat patterns, favourite and feature parameters | Bodies, sketches, construction planes / axes / points, user parameters (SciForge has no favourites column: every user parameter is offered) | Autodesk |
+| Components, bodies, sketches, construction geometry, flat patterns, favourite and feature parameters | Components (with their structure, since polish-2), bodies, sketches, construction planes / axes / points, user parameters (SciForge has no favourites column: every user parameter is offered) | Autodesk |
 | Place Objects At Origin | Same: off = where they are in the source design; on = at their own component's origin | Autodesk |
 | A Derive feature in the timeline | Same: one **Derive** step; the derived bodies / sketches / planes have no steps of their own | Autodesk |
 | Derived bodies can be built on | Same: a derived body's first step holds the derived solid (hidden); later steps on it follow an update | Guess (Fusion works this way in practice) |
@@ -90,6 +90,27 @@ Coin draws the picture, not only what the decal stores).
 | (cloud data) | The source is found by its relative path first, then its absolute path: a project folder moved as a whole keeps working; a copied folder with unchanged designs is not "out of date" (the content is compared) | SciForge |
 | — | Refused with the reason: a design deriving from itself, from a design that already derives from it (directly or through other designs), an older version opened read-only | SciForge |
 | Undo | Insert, Update, Edit, Break Link: one undo step each | — |
+
+### Components with their structure, the source version (branch `sf/polish-2`, 2026-10-16)
+
+Sources: **Autodesk** blog "Copy and paste in Fusion" (Insert > Derive, pick the design and the
+body or component; it stays linked); **Autodesk** blog "How to derive from configurations"
+(derive the top component rather than a body); **Forum** "Derive Function does not retain
+grouped bodies" (nested components derive fine, as components); **Forum** "Insert Derive
+directs me to old version" (a Derive reads a particular version of the source); **Autodesk**
+help "Update designs" (a reference with a newer version shows the Out-of-Date icon, Get
+Latest). **Guess**: the Version drop-down in the dialog (Fusion picks the version through its
+reference's version in the Data Panel), and that Update Derive always takes the newest.
+
+| Fusion | SciForge |
+|---|---|
+| A ticked component comes in as a component, with its bodies and the components inside it | The dialog lists **Components** first ("Arm", "Arm > Hand"). A ticked component is made as a component (App::Part, no timeline step of its own: the Derive is the step) at its place in the source, holding its bodies at their place in it and its components (at any depth) the same way. A body ticked on its own still comes in flat into the active component. Place Objects At Origin puts a derived component at the active component's origin. |
+| The source changes: Get Latest | Update Derive also brings bodies and components added since inside a ticked component (deleted ones stay deleted); a ticked component unticked in Edit Derive takes what is in it along. |
+| Which version of the source | **Version** in the Derive dialog (Insert and Edit): Latest (vN, the default), or any saved version (milestones marked). A Derive of an older version is yellow at once ("uses v1 of Robot and a newer version exists") and the application bar shows Out-of-Date; Update Derive takes the newest. |
+
+Code: `derive_core.expand` (unit tested), `derive._component_rows`, `_build_components`,
+`_component_place`, `update`, `remove_items`, `remove_master_parts`, `derive_ui._version_row`,
+`read_source_version`. Scenario `polish2_derive`.
 
 ## Decal
 
@@ -144,7 +165,7 @@ mouse are applied while SciForge is on; the user's own FreeCAD values come back 
 | General: Reverse zoom direction | Same (off: rolling the wheel away zooms in) | Autodesk (which way is default: Guess) |
 | General: default orbit type | Constrained Orbit / Free Orbit (the navigation bar's choice) | Forum |
 | General: Recovery save time interval | Same (1..120 minutes; Fusion's minimum is 5) | Autodesk support |
-| General: Automatic version on close | Greyed: not built (closing asks to save) | Forum |
+| General: Automatic version on close | On by default (Fusion): closing a changed, saved design saves a version; off: the Close dialog asks (polish-2, `parity/versions.md`) | Autodesk (support article), Forum |
 | — | Ask for a version description, Project folder, Keep versions with git (SciForge's local files; also in Project and Recovery Settings) | SciForge |
 | General > Design: Design History | **Capture design history**: off makes every new design a direct design from the start | Autodesk blog |
 | General > Design: Default modeling orientation Y up / Z up | Z up; Y up greyed (SciForge's views, ViewCube and sketches are made for Z up) | Autodesk |
@@ -222,14 +243,13 @@ exist here).
 
 | Fusion | Why not (yet) |
 |---|---|
-| Derive of whole components as components, sheet-metal flat patterns, feature parameters "From Components" | Derived objects come in flat into the active component; SciForge has no favourites / flat patterns |
+| Sheet-metal flat patterns, feature parameters "From Components" | SciForge has no favourites / flat patterns (components come with their structure since polish-2) |
 | The source opening in its own tab while deriving | The saved file is read instead (no cloud copy to show) |
-| Choosing which version of the source to derive (timeline right-click) | The newest saved file is used |
-| An out-of-date icon in the application bar (Get All Latest for every reference) | The yellow step and a note; Update Derives (command search) updates a design's Derives |
+| Fusion's Get Latest Version of one reference from the application bar | The Out-of-Date button's Get Latest updates every out-of-date Derive (and inserted design) at once; one Derive: right-click > Update Derive |
 | Decal on spheres / free-form faces without stretching; decal manipulators on the picture's corners | Other curved faces are laid straight onto the decal's plane; one edge arrow scales (in proportion) |
 | Decals rendered in Render / in drawings | No Render workspace (out of scope); TechDraw does not draw textures |
 | A copy's own Decals folder in the browser (Copy / Paste, Create Copy, a component pattern) | The picture is drawn on every copy, but the browser lists the decal under the original only (the copies have no decal objects of their own; edit the original's) |
 | Which face a decal sticks to when a face is rebuilt in a way that changes it and moves it at the same time (Fusion keeps its own face names) | SciForge follows what it remembered of the face's shape and place; FreeCAD's own face names are lost by SciForge's Python steps (a Move gives "?Face6"), so they are not used |
-| Preferences: Inventor / Tinkercad / Alias / PowerMill mouse presets, Y up, Automatic version on close, default appearance, angular precision | Greyed with the reason in the window (see above) |
+| Preferences: Inventor / Tinkercad / Alias / PowerMill mouse presets, Y up, default appearance, angular precision | Greyed with the reason in the window (see above) |
 | Fusion's add-in API (`adsk.core`, `adsk.fusion`) | FreeCAD's Python API instead: Fusion scripts do not run unchanged |
 | Your own materials travel with the design (Fusion keeps them in the cloud) | They live in FreeCAD's User library of each computer; a body keeps its material's name, density and base in the design, and SciForge makes the material again when the design is opened on a computer without it (FreeCAD first prints "Material not found" for it) |

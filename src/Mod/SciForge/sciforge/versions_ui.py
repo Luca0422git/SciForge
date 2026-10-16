@@ -12,7 +12,15 @@ Behaviour copied from Fusion (sources in docs/sciforge/parity/versions.md):
   * A recovery copy of every changed design every few minutes (not while a command runs;
     Ctrl+Shift+S writes one now); at the next start after a crash: "Recover unsaved work?".
   * The Data Panel: the project folder's folders and designs with thumbnails, double-click
-    opens, New Folder, right-click for Open / Version History / Insert / Rename / Delete.
+    opens, New Folder, right-click for Open / Version History / Insert / Rename / Move /
+    Copy / Delete.
+  * Milestones: a version marked as one (the Save dialog's Milestone box, or Version
+    History > Mark as Milestone); Version History lists them (Milestones only) and opens one.
+  * Closing a changed design: Automatic version on close (Fusion's default) saves the changes
+    as a version; with it off (or a design never saved) SciForge asks Save / Don't Save /
+    Cancel, also when SciForge is quit.
+  * Out of date: an inserted design or a Derive's source saved again (or an older version
+    open) shows the Out-of-Date button in the application bar: Get Latest brings them in.
 
 The logic that needs no Qt or FreeCAD (stores, recovery files, summaries) is versions.py.
 """
@@ -45,6 +53,8 @@ _state = {
     "last_location": "",
 }
 _pending = {}  # document name -> description of the version its running save records
+_pending_milestone = {}  # document name -> True when that version is a milestone
+_record_now = set()  # documents whose save records its version itself (closing, quitting)
 _version_docs = {}  # document name -> (design file, version number): an older version open
 _recovered = {}  # document name -> recovery key of the copy it was opened from
 _dialogs = {}  # open dialogs by key (one Save dialog per design, one history per file)
@@ -106,6 +116,15 @@ def ask_description():
 def use_git():
     try:
         return prefs().GetBool("UseGit", True)
+    except Exception:
+        return True
+
+
+def version_on_close():
+    """Fusion's Automatic version on close (Preferences > General, on by default): closing a
+    saved design with changes saves them as a version without asking."""
+    try:
+        return prefs().GetBool("VersionOnClose", True)
     except Exception:
         return True
 
@@ -345,7 +364,7 @@ class VersionDialog(QtWidgets.QDialog):
     """Fusion's Save dialog for a saved design: the Version Description (optional; Enter
     saves without one) and Save. With `note` it is Fusion's "Save As Latest" (Promote)."""
 
-    def __init__(self, title, note="", default="", placeholder=""):
+    def __init__(self, title, note="", default="", placeholder="", milestone=False):
         super().__init__(_main())
         self.setObjectName("SciForgeVersionDialog")
         self.setWindowTitle(title)
@@ -364,6 +383,15 @@ class VersionDialog(QtWidgets.QDialog):
         )
         self.description.returnPressed.connect(self.accept)
         layout.addWidget(self.description)
+        self.milestone = None
+        if milestone:
+            # Fusion's save dialog: Milestone marks an important version (a release, a print)
+            self.milestone = QtWidgets.QCheckBox("Milestone")
+            self.milestone.setObjectName("SciForgeVersionMilestone")
+            self.milestone.setToolTip(
+                "Mark this version as a milestone: Version History can list only those"
+            )
+            layout.addWidget(self.milestone)
         buttons = QtWidgets.QDialogButtonBox()
         self.save = buttons.addButton("Save", QtWidgets.QDialogButtonBox.AcceptRole)
         self.save.setObjectName("SciForgeVersionSave")
@@ -376,6 +404,9 @@ class VersionDialog(QtWidgets.QDialog):
 
     def text(self):
         return self.description.text().strip()
+
+    def is_milestone(self):
+        return bool(self.milestone is not None and self.milestone.isChecked())
 
 
 class OlderVersionDialog(QtWidgets.QDialog):
@@ -445,8 +476,10 @@ def save_design(doc, after=None):
     elif ask_description():
         # A recovered design: the description says so unless the user writes another.
         default = RECOVERED_DESCRIPTION if name in _recovered else ""
-        dialog = VersionDialog("Save", default=default)
-        dialog.accepted.connect(lambda: _save_version(name, dialog.text(), after))
+        dialog = VersionDialog("Save", default=default, milestone=True)
+        dialog.accepted.connect(
+            lambda: _save_version(name, dialog.text(), after, dialog.is_milestone())
+        )
         _show(dialog, "save:" + name)
     else:
         _save_version(name, "", after)
@@ -503,18 +536,20 @@ def _first_save(doc_name, path, after=None, save_as=False):
         commands.tell("The design could not be saved: %s" % exc)
 
 
-def _save_version(doc_name, description, after=None):
+def _save_version(doc_name, description, after=None, milestone=False):
     doc = _document(doc_name)
     if doc is None:
         commands.tell("The design was closed before it could be saved.")
         return
     try:
         _pending[doc_name] = description or ""
+        _pending_milestone[doc_name] = bool(milestone)
         before = _mtime(doc.FileName)
         # FreeCAD's save() returns None (1.1.4) and raises when it fails: the file tells.
         doc.save()
         if not os.path.isfile(doc.FileName) or _mtime(doc.FileName) < before:
             _pending.pop(doc_name, None)
+            _pending_milestone.pop(doc_name, None)
             commands.tell("The design could not be saved to %s." % doc.FileName)
             return
         # FreeCAD's own Save command clears its "changed" mark after saving; a save from
@@ -524,8 +559,38 @@ def _save_version(doc_name, description, after=None):
             QtCore.QTimer.singleShot(0, after)
     except Exception as exc:
         _pending.pop(doc_name, None)
+        _pending_milestone.pop(doc_name, None)
         warn("save failed: %s" % exc)
         commands.tell("The design could not be saved: %s" % exc)
+
+
+def save_version_now(doc, description=""):
+    """Save a saved design as its next version at once, the version recorded before this
+    returns (a design about to close, or SciForge quitting: a timer would come too late).
+    True when it was saved."""
+    name = doc.Name
+    path = doc.FileName
+    if not path:
+        return False
+    _record_now.add(name)
+    _pending[name] = description or ""
+    try:
+        before = _mtime(path)
+        doc.save()
+        if not os.path.isfile(path) or _mtime(path) < before:
+            commands.tell("The design could not be saved to %s." % path)
+            return False
+        set_modified(doc, False)
+    except Exception as exc:
+        warn("save failed: %s" % exc)
+        commands.tell("The design could not be saved: %s" % exc)
+        return False
+    finally:
+        _record_now.discard(name)
+        _pending.pop(name, None)
+        _pending_milestone.pop(name, None)
+    _record(name, doc.Label, path, description or "")
+    return True
 
 
 class _Watch:
@@ -540,18 +605,24 @@ class _Watch:
                 return
             if doc.Name in _version_docs:
                 return  # FreeCAD's own Save on a read-only copy: no version of that
-            description = _pending.pop(doc.Name, "")
-            name, label = doc.Name, doc.Label
-            QtCore.QTimer.singleShot(0, lambda: _record(name, label, filename, description))
             recovery = _state["recovery"]
             if recovery is not None:
                 recovery.clear_for(doc)
+            if doc.Name in _record_now:
+                return  # save_version_now records it itself
+            description = _pending.pop(doc.Name, "")
+            milestone = _pending_milestone.pop(doc.Name, False)
+            name, label = doc.Name, doc.Label
+            QtCore.QTimer.singleShot(
+                0, lambda: _record(name, label, filename, description, milestone)
+            )
         except Exception as exc:
             warn("after saving: %s" % exc)
 
     def slotDeletedDocument(self, doc):
         try:
             _pending.pop(doc.Name, None)
+            _pending_milestone.pop(doc.Name, None)
             _version_docs.pop(doc.Name, None)
             recovery = _state["recovery"]
             if recovery is not None:
@@ -568,7 +639,7 @@ class _Watch:
             warn("after opening a design: %s" % exc)
 
 
-def _record(doc_name, label, path, description):
+def _record(doc_name, label, path, description, milestone=False):
     """Record the version of a design just saved to `path` (a moment after the save)."""
     try:
         if description == RECOVERED_DESCRIPTION or doc_name in _recovered:
@@ -578,18 +649,24 @@ def _record(doc_name, label, path, description):
             description = description or RECOVERED_DESCRIPTION
         store = store_of(path)
         try:
-            info = store.record(description)
+            info = store.record(description, milestone=milestone)
         except core.StoreError as exc:
             if store.backend != "git":
                 raise
             warn("git could not record the version (%s); kept as a copy instead" % exc)
             store = core.PlainStore(path, os.path.join(user_dir(), "SciForge", "versions"))
-            info = store.record(description)
+            info = store.record(description, milestone=milestone)
         log(
-            "saved %s as %s%s (%s)"
-            % (label, info.label, (": " + description) if description else "", store.backend)
+            "saved %s as %s%s%s (%s)"
+            % (
+                label,
+                info.label,
+                " (milestone)" if milestone else "",
+                (": " + description) if description else "",
+                store.backend,
+            )
         )
-        commands.tell("Saved %s (%s)" % (label, info.label))
+        commands.tell("Saved %s (%s%s)" % (label, info.label, ", milestone" if milestone else ""))
         _refresh_views(path)
     except Exception as exc:
         warn("the save worked but its version could not be recorded: %s" % exc)
@@ -637,9 +714,13 @@ def number_to_info(path, number):
     return None
 
 
+MILESTONE_MARK = "\u2691 Milestone"  # a flag: Fusion marks milestones in the version list
+
+
 class HistoryDialog(QtWidgets.QDialog):
-    """The versions of one design, newest first: number, date, description, size. Open
-    shows one read-only, Promote makes it the newest, Compare shows what differs."""
+    """The versions of one design, newest first: number, date, description, size,
+    milestone. Open shows one read-only, Promote makes it the newest, Compare shows what
+    differs, Mark as Milestone marks one (Fusion's milestones); Milestones only lists those."""
 
     def __init__(self, path):
         super().__init__(_main())
@@ -648,9 +729,11 @@ class HistoryDialog(QtWidgets.QDialog):
         self.setWindowTitle("Version History: %s" % core.design_name(path))
         self.resize(640, 360)
         layout = QtWidgets.QVBoxLayout(self)
-        self.table = QtWidgets.QTableWidget(0, 4)
+        self.table = QtWidgets.QTableWidget(0, 5)
         self.table.setObjectName("SciForgeHistoryTable")
-        self.table.setHorizontalHeaderLabels(["Version", "Date", "Description", "Size"])
+        self.table.setHorizontalHeaderLabels(
+            ["Version", "Date", "Description", "Size", "Milestone"]
+        )
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
@@ -660,6 +743,11 @@ class HistoryDialog(QtWidgets.QDialog):
         self.table.itemDoubleClicked.connect(lambda _item: self.open_selected())
         self.table.itemSelectionChanged.connect(self._selection_changed)
         layout.addWidget(self.table)
+        self.only = QtWidgets.QCheckBox("Milestones only")
+        self.only.setObjectName("SciForgeHistoryMilestonesOnly")
+        self.only.setToolTip("List only the versions marked as milestones")
+        self.only.toggled.connect(lambda _on: self.refresh())
+        layout.addWidget(self.only)
         self.note = QtWidgets.QLabel("")
         self.note.setWordWrap(True)
         layout.addWidget(self.note)
@@ -673,6 +761,12 @@ class HistoryDialog(QtWidgets.QDialog):
         self.compare_button = buttons.addButton("Compare", QtWidgets.QDialogButtonBox.ActionRole)
         self.compare_button.setObjectName("SciForgeHistoryCompare")
         self.compare_button.setToolTip("What differs between this version and the newest")
+        self.milestone_button = buttons.addButton(
+            "Mark as Milestone", QtWidgets.QDialogButtonBox.ActionRole
+        )
+        self.milestone_button.setObjectName("SciForgeHistoryMilestone")
+        self.milestone_button.setToolTip("Mark this version as a milestone, or take the mark off")
+        self.milestone_button.clicked.connect(self.toggle_milestone)
         buttons.addButton(QtWidgets.QDialogButtonBox.Close)
         self.open_button.clicked.connect(self.open_selected)
         self.promote_button.clicked.connect(self.promote_selected)
@@ -680,19 +774,24 @@ class HistoryDialog(QtWidgets.QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.versions = []
+        self.all_versions = []
         self.refresh()
 
     def refresh(self):
+        keep = self.selected()
         try:
             store = store_of(self.path)
-            self.versions = list(reversed(store.versions()))
+            self.all_versions = list(reversed(store.versions()))
+            self.versions = [
+                v for v in self.all_versions if v.milestone or not self.only.isChecked()
+            ]
             where = (
                 "Versions are git commits in the project folder."
                 if store.backend == "git"
                 else "Versions are copies in %s." % store.folder
             )
         except Exception as exc:
-            self.versions = []
+            self.versions = self.all_versions = []
             where = "The versions could not be read: %s" % exc
         self.table.setRowCount(len(self.versions))
         for row, info in enumerate(self.versions):
@@ -701,6 +800,7 @@ class HistoryDialog(QtWidgets.QDialog):
                 core.pretty_time(info.time),
                 info.description,
                 core.human_size(info.size),
+                MILESTONE_MARK if info.milestone else "",
             ]
             for col, text in enumerate(cells):
                 item = QtWidgets.QTableWidgetItem(text)
@@ -711,9 +811,18 @@ class HistoryDialog(QtWidgets.QDialog):
                 self.table.setItem(row, col, item)
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
+        marked = len([v for v in self.all_versions if v.milestone])
         if self.versions:
-            self.table.selectRow(0)
-            self.note.setText("%d version(s). %s" % (len(self.versions), where))
+            if keep is None or not self.select_version(keep.number):
+                self.table.selectRow(0)
+            self.note.setText(
+                "%d version(s), %d milestone(s). %s" % (len(self.all_versions), marked, where)
+            )
+        elif self.all_versions:
+            self.note.setText(
+                "No milestones yet: select a version and Mark as Milestone (or tick Milestone "
+                "when saving)."
+            )
         else:
             self.note.setText("No versions yet: the first save makes v1. %s" % where)
         self._selection_changed()
@@ -736,7 +845,16 @@ class HistoryDialog(QtWidgets.QDialog):
         info = self.selected()
         self.open_button.setEnabled(info is not None)
         self.promote_button.setEnabled(info is not None and not info.current)
-        self.compare_button.setEnabled(info is not None and len(self.versions) > 1)
+        self.compare_button.setEnabled(info is not None and len(self.all_versions) > 1)
+        self.milestone_button.setEnabled(info is not None)
+        self.milestone_button.setText(
+            "Remove Milestone" if info is not None and info.milestone else "Mark as Milestone"
+        )
+
+    def toggle_milestone(self):
+        info = self.selected()
+        if info is not None:
+            set_milestone(self.path, info, not info.milestone)
 
     def open_selected(self):
         info = self.selected()
@@ -750,19 +868,49 @@ class HistoryDialog(QtWidgets.QDialog):
 
     def compare_selected(self):
         info = self.selected()
-        if info is None or len(self.versions) < 2:
+        if info is None:
             return
-        newest = self.versions[0]
-        other = info if not info.current else self.versions[1]
+        if len(self.all_versions) < 2:
+            return
+        newest = self.all_versions[0]
+        other = info if not info.current else self.all_versions[1]
         dialog = CompareDialog(self.path, other, newest)
         _show(dialog, "compare:%s:%d:%d" % (self.path, other.number, newest.number))
 
 
-def show_history(path):
+def show_history(path, milestones_only=False):
     if not path:
         commands.tell("Save the design first: its version history starts with the first save.")
         return None
-    return _show(HistoryDialog(path), "history:" + path)
+    dialog = _show(HistoryDialog(path), "history:" + path)
+    if milestones_only and dialog is not None:
+        dialog.only.setChecked(True)
+    return dialog
+
+
+def set_milestone(path, info, on=True):
+    """Mark version `info` of the design `path` as a milestone (or take the mark off)."""
+    try:
+        store_of(path).set_milestone(info, on)
+        info.milestone = bool(on)
+        log(
+            "%s of %s %s"
+            % (info.label, core.design_name(path), "is a milestone" if on else "is no milestone")
+        )
+        commands.tell(
+            "%s of %s %s."
+            % (
+                info.label,
+                core.design_name(path),
+                "marked as a milestone" if on else "is no longer a milestone",
+            )
+        )
+        _refresh_views(path)
+        return True
+    except Exception as exc:
+        warn("milestone: %s" % exc)
+        commands.tell("The milestone could not be set: %s" % exc)
+        return False
 
 
 def open_version(path, info):
@@ -1530,11 +1678,14 @@ class DataPanel(QtWidgets.QWidget):
                 else:
                     menu.addAction("Open", lambda: open_design(path))
                     menu.addAction("Version History", lambda: show_history(path))
+                    menu.addAction("Milestones", lambda: show_history(path, True))
                     menu.addAction(
                         "Insert into Current Design", lambda: insert_design(path)
                     ).setEnabled(App.ActiveDocument is not None)
                     menu.addSeparator()
                     menu.addAction("Rename", lambda: self._rename(path, False))
+                    menu.addAction("Move...", lambda: self.move_or_copy(path, "move"))
+                    menu.addAction("Copy...", lambda: self.move_or_copy(path, "copy"))
                     menu.addAction("Delete", lambda: self._trash(path))
                 menu.addSeparator()
                 menu.addAction("Show in Folder", lambda: _show_in_folder(path))
@@ -1554,13 +1705,32 @@ class DataPanel(QtWidgets.QWidget):
                     raise core.StoreError("A folder called %s is already there." % new)
                 os.replace(path, target)
             else:
-                if doc_for_file(path) is not None:
+                if doc_for_file(path) is not None and _has_views(doc_for_file(path)):
                     raise core.StoreError("Close the design before renaming it.")
-                core.rename_design(path, new)
+                users = _open_referrers(path)
+                if users:
+                    raise core.StoreError("Close %s first: it uses %s." % (", ".join(users), old))
+                core.rename_design(path, new, project_folder(), use_git())
             self.refresh()
         except Exception as exc:
             warn("rename: %s" % exc)
             commands.tell("Could not rename: %s" % exc)
+
+    def move_or_copy(self, path, kind):
+        """Right-click > Move... / Copy...: pick the folder (Fusion's Move / Copy To)."""
+        try:
+            dialog = MoveCopyDialog(path, kind, self.folder)
+            dialog.accepted.connect(lambda: self._moved_or_copied(path, kind, dialog.target()))
+            _show(dialog, "%s:%s" % (kind, path))
+        except Exception as exc:
+            warn("%s: %s" % (kind, exc))
+
+    def _moved_or_copied(self, path, kind, folder):
+        if not folder:
+            return
+        done = move_design(path, folder) if kind == "move" else copy_design(path, folder)
+        if done:
+            self.refresh()
 
     def _trash(self, path):
         try:
@@ -1581,6 +1751,221 @@ class DataPanel(QtWidgets.QWidget):
         except Exception as exc:
             warn("delete: %s" % exc)
             commands.tell("Could not delete: %s" % exc)
+
+
+class MoveCopyDialog(QtWidgets.QDialog):
+    """Fusion's Move / Copy To: the project's folders (New Folder makes one in the folder
+    picked), OK moves or copies the design there."""
+
+    def __init__(self, path, kind, current=None):
+        super().__init__(_main())
+        self.kind = kind
+        self.path = path
+        self.setObjectName("SciForgeMoveCopyDialog")
+        verb = "Move" if kind == "move" else "Copy"
+        self.setWindowTitle("%s %s" % (verb, core.design_name(path)))
+        self.setModal(True)
+        self.setMinimumWidth(420)
+        layout = QtWidgets.QVBoxLayout(self)
+        text = QtWidgets.QLabel(
+            "Move %s and its versions to:" % core.design_name(path)
+            if kind == "move"
+            else "Copy %s to (the copy is a separate design, v1):" % core.design_name(path)
+        )
+        text.setWordWrap(True)
+        layout.addWidget(text)
+        self.list = QtWidgets.QListWidget()
+        self.list.setObjectName("SciForgeMoveCopyFolders")
+        layout.addWidget(self.list)
+        row = QtWidgets.QHBoxLayout()
+        self.new_folder = QtWidgets.QPushButton("New Folder")
+        self.new_folder.setObjectName("SciForgeMoveCopyNewFolder")
+        self.new_folder.clicked.connect(self._make_folder)
+        row.addWidget(self.new_folder)
+        row.addStretch(1)
+        layout.addLayout(row)
+        buttons = QtWidgets.QDialogButtonBox()
+        self.ok = buttons.addButton(verb, QtWidgets.QDialogButtonBox.AcceptRole)
+        self.ok.setObjectName("SciForgeMoveCopyOk")
+        self.ok.setDefault(True)
+        buttons.addButton(QtWidgets.QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self._fill(current)
+
+    def _fill(self, select=None):
+        self.list.clear()
+        here = os.path.dirname(self.path)
+        for label, folder in core.project_folders(project_folder()):
+            item = QtWidgets.QListWidgetItem(ui_icon("folder"), label)
+            item.setData(QtCore.Qt.UserRole, folder)
+            if self.kind == "move" and core.same_path(folder, here):
+                item.setText(label + "  (here now)")
+            self.list.addItem(item)
+            if select and core.same_path(folder, select):
+                self.list.setCurrentItem(item)
+        if self.list.currentItem() is None and self.list.count():
+            self.list.setCurrentRow(0)
+
+    def target(self):
+        item = self.list.currentItem()
+        return item.data(QtCore.Qt.UserRole) if item is not None else None
+
+    def choose(self, folder):
+        """Select `folder` in the list (tests and the New Folder button)."""
+        for i in range(self.list.count()):
+            if core.same_path(self.list.item(i).data(QtCore.Qt.UserRole), folder):
+                self.list.setCurrentRow(i)
+                return True
+        return False
+
+    def _make_folder(self):
+        try:
+            parent = self.target() or project_folder()
+            made = core.new_folder(parent)
+            log("made the folder %s" % made)
+            self._fill(made)
+            panel_ = _state.get("panel")
+            if _alive(panel_):
+                panel_.refresh()
+        except Exception as exc:
+            warn("new folder: %s" % exc)
+            commands.tell("The folder could not be made: %s" % exc)
+
+
+def _has_views(doc):
+    """False for a design FreeCAD read only for another design's links (no tab of its own)."""
+    try:
+        return bool(gui_doc(doc).mdiViewsOfType("Gui::MDIView"))
+    except Exception:
+        return True
+
+
+def _open_referrers(path):
+    """Open designs that link to or derive from the design `path` (they must be closed
+    before it moves: their files are pointed at its new place)."""
+    found = []
+    for name in App.listDocuments():
+        doc = App.getDocument(name)
+        if doc is None or not doc.FileName or core.same_path(doc.FileName, path):
+            continue
+        try:
+            targets = core.link_targets(
+                core.read_design_xml(doc.FileName), os.path.dirname(doc.FileName)
+            )
+        except Exception:
+            continue
+        if any(core.same_path(t, path) for t in targets):
+            found.append(doc.Label)
+    return found
+
+
+def move_design(path, folder):
+    """Move a design and its versions to `folder` of the project (Fusion's Move); the
+    designs that insert or derive it are pointed at its new place. Returns the new path."""
+    try:
+        name = core.design_name(path)
+        users = _open_referrers(path)
+        loaded = doc_for_file(path)
+        if loaded is not None and (_has_views(loaded) or is_modified(loaded) or not users):
+            if not _has_views(loaded) and not is_modified(loaded):
+                App.closeDocument(loaded.Name)  # read for a link that is gone: not in use
+            else:
+                commands.tell("Close %s before moving it." % name)
+                return None
+        if users:
+            commands.tell(
+                "Close %s first: %s use%s %s, and %s pointed at its new place."
+                % (
+                    ", ".join(users),
+                    "they" if len(users) > 1 else "it",
+                    "" if len(users) > 1 else "s",
+                    name,
+                    "they are" if len(users) > 1 else "it is",
+                )
+            )
+            return None
+        new, updated = core.move_design(
+            path,
+            folder,
+            project_folder(),
+            use_git(),
+            os.path.join(user_dir(), "SciForge", "versions"),
+        )
+        where = os.path.basename(os.path.normpath(folder)) or folder
+        log(
+            "moved %s to %s%s" % (path, new, ("; updated " + ", ".join(updated)) if updated else "")
+        )
+        commands.tell(
+            "%s moved to %s with its versions%s."
+            % (
+                name,
+                where,
+                (
+                    (
+                        " (%s now point%s there)"
+                        % (
+                            ", ".join(core.design_name(u) for u in updated),
+                            "" if len(updated) > 1 else "s",
+                        )
+                    )
+                    if updated
+                    else ""
+                ),
+            )
+        )
+        _refresh_views(new)
+        return new
+    except core.StoreError as exc:  # refused with the reason (a name taken, the same folder)
+        log("move refused: %s" % exc)
+        commands.tell("Could not move: %s" % exc)
+        return None
+    except Exception as exc:
+        warn("move: %s" % exc)
+        commands.tell("Could not move: %s" % exc)
+        return None
+
+
+def copy_design(path, folder):
+    """Copy a design to `folder` (Fusion's Copy): a separate design whose versions start at
+    v1; its links and Derives still point at the same designs. Returns the new path."""
+    try:
+        source = doc_for_file(path)
+        if source is not None and is_modified(source):
+            commands.tell(
+                "%s has unsaved changes: only its saved file is copied." % core.design_name(path)
+            )
+        new = core.copy_design(path, folder)
+        info = None
+        try:
+            listed = store_of(path).versions()
+            number = listed[-1].number if listed else 0
+            info = store_of(new).record(
+                "Copy of %s%s" % (core.design_name(path), (" v%d" % number) if number else "")
+            )
+        except Exception as exc:
+            warn("the copy's first version could not be recorded: %s" % exc)
+        log("copied %s to %s" % (path, new))
+        commands.tell(
+            "%s copied to %s as %s%s."
+            % (
+                core.design_name(path),
+                os.path.basename(os.path.normpath(folder)) or folder,
+                core.design_name(new),
+                " (%s)" % info.label if info is not None else "",
+            )
+        )
+        _refresh_views(new)
+        return new
+    except core.StoreError as exc:
+        log("copy refused: %s" % exc)
+        commands.tell("Could not copy: %s" % exc)
+        return None
+    except Exception as exc:
+        warn("copy: %s" % exc)
+        commands.tell("Could not copy: %s" % exc)
+        return None
 
 
 def _show_in_folder(path):
@@ -1743,6 +2128,454 @@ def insert_design(path=None):
         return None
 
 
+# -- closing a changed design (Fusion's Automatic version on close) ----
+class CloseDialog(QtWidgets.QDialog):
+    """Closing a design with changes that are not saved, when they are not saved as a
+    version by themselves (Automatic version on close off, a design never saved, an older
+    version opened read-only): Save (with the Version Description; Enter saves), Don't Save,
+    Cancel. Non-modal like every SciForge dialog; `choice` says what was pressed."""
+
+    def __init__(self, doc):
+        super().__init__(_main())
+        self.setObjectName("SciForgeCloseDialog")
+        self.setWindowTitle("Close %s" % doc.Label)
+        self.setModal(True)
+        self.setMinimumWidth(460)
+        self.choice = None
+        self.doc_name = doc.Name
+        older = version_of(doc)
+        self.kind = "older" if older else ("saved" if doc.FileName else "new")
+        layout = QtWidgets.QVBoxLayout(self)
+        if self.kind == "older":
+            words = (
+                "This is v%d of %s, opened read-only, and it was changed. The changes are "
+                "lost when it closes; to keep them, Cancel and press Save (Save As Latest or "
+                "Save As New Design)." % (older[1], core.design_name(older[0]))
+            )
+        elif self.kind == "saved":
+            words = (
+                "%s has changes that are not saved. Save them as a new version before it "
+                "closes?" % doc.Label
+            )
+        else:
+            words = "%s has never been saved. Save it before it closes?" % doc.Label
+        text = QtWidgets.QLabel(words)
+        text.setWordWrap(True)
+        layout.addWidget(text)
+        self.description = None
+        if self.kind == "saved":
+            layout.addWidget(QtWidgets.QLabel("Version Description"))
+            self.description = QtWidgets.QLineEdit("")
+            self.description.setObjectName("SciForgeCloseDescription")
+            self.description.setPlaceholderText(
+                "What changed in this version (optional). Enter saves."
+            )
+            self.description.returnPressed.connect(lambda: self._pick("save"))
+            layout.addWidget(self.description)
+        buttons = QtWidgets.QDialogButtonBox()
+        self.save = None
+        if self.kind != "older":
+            self.save = buttons.addButton(
+                "Save" if self.kind == "saved" else "Save...", QtWidgets.QDialogButtonBox.AcceptRole
+            )
+            self.save.setObjectName("SciForgeCloseSave")
+            self.save.setDefault(True)
+            self.save.clicked.connect(lambda: self._pick("save"))
+        discard = buttons.addButton("Don't Save", QtWidgets.QDialogButtonBox.DestructiveRole)
+        discard.setObjectName("SciForgeCloseDiscard")
+        discard.clicked.connect(lambda: self._pick("discard"))
+        cancel = buttons.addButton(QtWidgets.QDialogButtonBox.Cancel)
+        cancel.setObjectName("SciForgeCloseCancel")
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        if self.description is not None:
+            self.description.setFocus()
+
+    def text(self):
+        return self.description.text().strip() if self.description is not None else ""
+
+    def _pick(self, choice):
+        self.choice = choice
+        self.accept()
+
+
+def _doc_of_view(widget):
+    """The document whose 3D view `widget` (an MDI view) is, or None (another kind of
+    view: FreeCAD handles its close)."""
+    for name in App.listDocuments():
+        try:
+            # A design closed from code (App.closeDocument) has lost its Gui document by
+            # the time its views close: nothing to ask then.
+            gdoc = Gui.getDocument(name)
+            views = gdoc.mdiViewsOfType("Gui::View3DInventor") if gdoc is not None else []
+        except Exception:
+            continue
+        for view in views:
+            try:
+                inner = view.graphicsView()
+                if inner is not None and (inner is widget or widget.isAncestorOf(inner)):
+                    return App.getDocument(name)
+            except Exception:
+                continue
+    return None
+
+
+def _last_view(doc):
+    """True when closing one view closes the design (FreeCAD asks only then)."""
+    try:
+        return len(gui_doc(doc).mdiViewsOfType("Gui::MDIView")) <= 1
+    except Exception:
+        return True
+
+
+def close_without_asking(doc):
+    """Close a design now (its changes saved or given up): FreeCAD's own prompt is not
+    shown for a design closed this way."""
+    name = doc.Name
+    try:
+        set_modified(doc, False)
+        App.closeDocument(name)
+        log("closed %s" % name)
+    except Exception as exc:
+        warn("closing %s: %s" % (name, exc))
+
+
+def closing(doc):
+    """A changed design is about to close (its last view, or SciForge quitting). Fusion:
+    with Automatic version on close the changes become a version without a question.
+    Returns True when the close can go on now (nothing to ask), False when SciForge asks
+    first (CloseDialog; the close is done by its answer)."""
+    if not is_modified(doc):
+        return True
+    if not version_of(doc) and doc.FileName and version_on_close():
+        if save_version_now(doc, core.AUTO_CLOSE_DESCRIPTION):
+            log("automatic version on close of %s" % doc.Label)
+            return True
+    return False
+
+
+def ask_before_close(doc, after=None):
+    """Show the CloseDialog for `doc`; `after(closed)` runs once the answer is carried out
+    (closed: the design is gone)."""
+    name = doc.Name
+    dialog = CloseDialog(doc)
+
+    def answered(_result=0):
+        target = _document(name)
+        choice = dialog.choice
+        if target is None:
+            done(True)
+            return
+        if choice == "discard":
+            close_without_asking(target)
+            done(True)
+        elif choice == "save" and dialog.kind == "saved":
+            if save_version_now(target, dialog.text()):
+                close_without_asking(target)
+                done(True)
+            else:
+                done(False)
+        elif choice == "save":
+            save_design(target, after=lambda: (_close_saved(name), done(_document(name) is None)))
+        else:
+            done(False)
+
+    def done(closed):
+        if after is not None:
+            QtCore.QTimer.singleShot(0, lambda: after(closed))
+
+    dialog.finished.connect(answered)
+    _show(dialog, "close:" + name)
+    return dialog
+
+
+def _close_saved(name):
+    doc = _document(name)
+    if doc is not None and not is_modified(doc):
+        close_without_asking(doc)
+
+
+class _CloseWatch(QtCore.QObject):
+    """Event filter on the designs' views and on the main window: a close of a changed
+    design goes through closing() before FreeCAD's own Save / Discard question."""
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() != QtCore.QEvent.Close or not _state["on"]:
+                return False
+            if obj is _main():
+                return self._quitting(event)
+            doc = _doc_of_view(obj)
+            if doc is None or not _last_view(doc) or closing(doc):
+                return False
+            event.ignore()  # the dialog's answer closes it (or not)
+            QtCore.QTimer.singleShot(0, lambda n=doc.Name: _ask_named(n))
+            return True
+        except Exception as exc:
+            warn("closing: %s" % exc)
+            return False
+
+    def _quitting(self, event):
+        if _state.get("quit_asked"):
+            return False
+        left = []
+        for name in list(App.listDocuments()):
+            doc = App.getDocument(name)
+            if doc is not None and not closing(doc):
+                left.append(name)
+        if not left:
+            return False
+        event.ignore()
+        QtCore.QTimer.singleShot(0, lambda: _ask_in_turn(left))
+        return True
+
+
+def _ask_named(name):
+    doc = _document(name)
+    if doc is not None and is_modified(doc):
+        ask_before_close(doc)
+
+
+def _ask_in_turn(names):
+    """Quitting: ask about each changed design in turn; when none was cancelled, quit."""
+    names = [n for n in names if _document(n) is not None and is_modified(_document(n))]
+    if not names:
+        _state["quit_asked"] = True
+        try:
+            _main().close()
+        finally:
+            _state["quit_asked"] = False
+        return
+
+    def after(closed):
+        if closed:
+            _ask_in_turn(names[1:])
+        else:
+            log("quit cancelled: %s stays open" % names[0])
+
+    ask_before_close(_document(names[0]), after)
+
+
+def _watch_closes(*_args):
+    """Put the close watch on every design view (new ones as they become active)."""
+    watch = _state.get("close_watch")
+    if watch is None:
+        return
+    try:
+        area = _main().findChild(QtWidgets.QMdiArea)
+        for sub in area.subWindowList() if area is not None else []:
+            widget = sub.widget()
+            if widget is None or widget.property("sciforgeCloseWatch"):
+                continue
+            if widget.inherits("Gui::View3DInventor"):
+                widget.installEventFilter(watch)
+                widget.setProperty("sciforgeCloseWatch", True)
+    except Exception as exc:
+        warn("close watch: %s" % exc)
+
+
+def _install_close_watch():
+    if _state.get("close_watch") is None:
+        _state["close_watch"] = _CloseWatch()
+    watch = _state["close_watch"]
+    try:
+        _main().installEventFilter(watch)
+        area = _main().findChild(QtWidgets.QMdiArea)
+        if area is not None and not _state.get("close_hooked"):
+            area.subWindowActivated.connect(_watch_closes)
+            _state["close_hooked"] = True
+        _watch_closes()
+    except Exception as exc:
+        warn("close watch: %s" % exc)
+
+
+def _remove_close_watch():
+    watch = _state.get("close_watch")
+    if watch is None:
+        return
+    try:
+        _main().removeEventFilter(watch)
+        area = _main().findChild(QtWidgets.QMdiArea)
+        for sub in area.subWindowList() if area is not None else []:
+            widget = sub.widget()
+            if widget is not None and widget.property("sciforgeCloseWatch"):
+                widget.removeEventFilter(watch)
+                widget.setProperty("sciforgeCloseWatch", False)
+    except Exception as exc:
+        warn("close watch: %s" % exc)
+
+
+# -- out of date: an inserted design or a Derive's source saved again ----
+_FILE_DATES = {}  # design file -> ((mtime, size), LastModifiedDate in its Document.xml)
+
+
+def _saved_date(path):
+    """The LastModifiedDate stored in a design file (read again only when the file changes)."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    stamp = (st.st_mtime, st.st_size)
+    cached = _FILE_DATES.get(path)
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+    date = core.summary(path).get("lastModifiedDate")
+    _FILE_DATES[path] = (stamp, date)
+    return date
+
+
+def linked_documents(doc):
+    """The other designs `doc` inserts (Insert Design's links), as open documents."""
+    found = []
+    for obj in doc.Objects:
+        if obj.TypeId != "App::Link":
+            continue
+        target = getattr(obj, "LinkedObject", None)
+        other = getattr(target, "Document", None)
+        if other is None or other is doc or other in found:
+            continue
+        found.append(other)
+    return found
+
+
+def out_of_date(doc):
+    """What of `doc` has a newer saved version, like Fusion's Out-of-Date icon:
+    [(kind, name, words)] kind "link" (an inserted design saved again: name is its
+    document), "derive" (a Derive's source saved again: name is the Derive) or "version"
+    (doc is an older version opened read-only)."""
+    found = []
+    if doc is None:
+        return found
+    older = version_of(doc)
+    if older:
+        found.append(
+            (
+                "version",
+                doc.Name,
+                "This is v%d of %s; a newer version exists"
+                % (older[1], core.design_name(older[0])),
+            )
+        )
+    for other in linked_documents(doc):
+        try:
+            if not other.FileName or is_modified(other):
+                continue
+            saved = _saved_date(other.FileName)
+            loaded = getattr(other, "LastModifiedDate", "")
+            if saved and loaded and saved != loaded:
+                found.append(
+                    ("link", other.Name, "%s was saved again" % core.design_name(other.FileName))
+                )
+        except Exception:
+            continue
+    try:
+        from . import derive, derive_core
+
+        for master in derive.masters(doc):
+            if derive.state(master, refresh=True) == derive_core.NEWER:
+                found.append(
+                    (
+                        "derive",
+                        master.Name,
+                        "%s: %s was saved again" % (master.Label, master.SourceName),
+                    )
+                )
+    except Exception as exc:
+        warn("out of date: %s" % exc)
+    return found
+
+
+def get_latest(doc, kinds=("link", "derive")):
+    """Fusion's Get Latest: every inserted design saved again is read again (its links in
+    the design follow), every out-of-date Derive is updated. Returns how many."""
+    if doc is None:
+        return 0
+    count = 0
+    for kind, name, _words in out_of_date(doc):
+        if kind not in kinds:
+            continue
+        try:
+            if kind == "link":
+                other = _document(name)
+                if other is None:
+                    continue
+                other.restore()  # read from its file again; the links follow it
+                count += 1
+                log("got the latest %s" % other.FileName)
+            elif kind == "derive":
+                from . import derive_ui
+
+                master = doc.getObject(name)
+                if master is not None and derive_ui.update_derive(master):
+                    count += 1
+        except Exception as exc:
+            warn("Get Latest %s: %s" % (name, exc))
+    if count:
+        try:
+            doc.recompute()
+        except Exception as exc:
+            warn("Get Latest: %s" % exc)
+        commands.tell("Got the latest of %d design%s." % (count, "" if count == 1 else "s"))
+    return count
+
+
+def open_newest(doc):
+    """The Out-of-Date entry of an older version: open the design itself (its newest)."""
+    older = version_of(doc)
+    if older:
+        open_design(older[0])
+
+
+def out_of_date_icon(size=18):
+    """SciForge's own Out-of-Date picture: an orange disc with a white turning arrow."""
+    pixmap = QtGui.QPixmap(size, size)
+    pixmap.fill(QtCore.Qt.transparent)
+    painter = QtGui.QPainter(pixmap)
+    try:
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(QtGui.QColor("#f0a030"))
+        painter.drawEllipse(QtCore.QRectF(0.5, 0.5, size - 1.0, size - 1.0))
+        pen = QtGui.QPen(QtGui.QColor("#ffffff"), max(1.5, size / 9.0))
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        painter.setPen(pen)
+        r = size * 0.27
+        c = size / 2.0
+        painter.drawArc(QtCore.QRectF(c - r, c - r, 2 * r, 2 * r), 40 * 16, 270 * 16)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(QtGui.QColor("#ffffff"))
+        tip = QtCore.QPointF(c + r * 0.77, c - r * 0.64)
+        painter.drawPolygon(
+            QtGui.QPolygonF(
+                [
+                    tip + QtCore.QPointF(size * 0.16, size * 0.02),
+                    tip + QtCore.QPointF(-size * 0.04, -size * 0.16),
+                    tip + QtCore.QPointF(-size * 0.02, size * 0.14),
+                ]
+            )
+        )
+    finally:
+        painter.end()
+    return QtGui.QIcon(pixmap)
+
+
+def out_of_date_menu(menu, doc):
+    """Fill the application bar's Out-of-Date menu for `doc` (ribbon_ui calls this)."""
+    items = out_of_date(doc)
+    for kind, _name, words in items:
+        action = menu.addAction(words)
+        action.setEnabled(False)
+    menu.addSeparator()
+    if any(kind in ("link", "derive") for kind, _n, _w in items):
+        latest = menu.addAction("Get Latest")
+        latest.setObjectName("SciForgeGetLatest")
+        latest.triggered.connect(lambda: _safe(lambda: get_latest(doc))())
+    if any(kind == "version" for kind, _n, _w in items):
+        newest = menu.addAction("Open the Newest Version")
+        newest.triggered.connect(lambda: _safe(lambda: open_newest(doc))())
+    return items
+
+
 # -- settings dialog ----
 class SettingsDialog(QtWidgets.QDialog):
     """Project folder, recovery copy interval, the description prompt and git."""
@@ -1847,6 +2680,7 @@ def enable():
             _state["quit_hooked"] = True
         except Exception:
             pass
+    _install_close_watch()
 
 
 def disable():
@@ -1856,6 +2690,7 @@ def disable():
     for step in (
         lambda: _state["recovery"].stop(),
         lambda: App.removeDocumentObserver(_state["watch"]),
+        _remove_close_watch,
         hide_panel,
         lambda: theme.give_back(FREECAD_SETTINGS, BACKUP),
     ):

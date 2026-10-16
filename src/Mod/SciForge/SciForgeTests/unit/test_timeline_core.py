@@ -638,5 +638,97 @@ class MeshStepsAndTheMarkerTests(unittest.TestCase):
         self.assertEqual((state["Tess"], state["Smooth"]), ("rolled_back", "rolled_back"))
 
 
+class GroupMoveTests(unittest.TestCase):
+    """A whole timeline group dragged (timeline_core.plan_group_move)."""
+
+    def rows(self, members=("Sketch001", "Pad001")):
+        rows = one_body()
+        for r in rows:
+            if r["name"] in members:
+                r["group"] = "g1"
+                r["group_name"] = "Boss"
+        return rows
+
+    def test_members_and_marker_inside(self):
+        tl = core.build(self.rows(), {"Body": "Fillet"})
+        self.assertEqual([i.name for i in core.group_members(tl, "g1")], ["Sketch001", "Pad001"])
+        self.assertFalse(core.marker_in_group(tl, "g1"))
+        rows = self.rows(("Sketch001", "Pad001", "Fillet"))
+        self.assertTrue(core.marker_in_group(core.build(rows, {"Body": "Pad001"}), "g1"))
+        self.assertEqual(core.group_members(tl, ""), [])
+
+    def test_group_moves_after_a_later_step(self):
+        # Fillet does not use the boss: the boss group can go after it.
+        tl = core.build(self.rows(), {"Body": "Fillet"})
+        plan = core.plan_group_move(tl, "g1", 5)
+        self.assertTrue(plan.ok, plan.reason)
+        self.assertEqual(plan.order, ("Sketch", "Pad", "Fillet", "Sketch001", "Pad001"))
+        self.assertEqual(plan.body_orders["Body"], plan.order)
+        self.assertTrue(plan.marker_at_end)
+        self.assertEqual(plan.keys, {})  # one body: its order is enough
+
+    def test_group_cannot_come_before_what_it_uses(self):
+        tl = core.build(self.rows(), {"Body": "Fillet"})
+        plan = core.plan_group_move(tl, "g1", 1)  # before Pad, which Sketch001 sits on
+        self.assertFalse(plan.ok)
+        self.assertIn("Sketch 2 uses Extrude 1, so Boss cannot come before it", plan.reason)
+
+    def test_a_step_using_the_group_cannot_come_first(self):
+        rows = self.rows(("Sketch", "Pad"))  # the first sketch and extrude are the group
+        tl = core.build(rows, {"Body": "Fillet"})
+        plan = core.plan_group_move(tl, "g1", 4)  # after Sketch001, which sits on Pad
+        self.assertFalse(plan.ok)
+        self.assertIn("so Boss cannot move after it", plan.reason)
+
+    def test_drop_on_itself_is_no_move(self):
+        tl = core.build(self.rows(), {"Body": "Fillet"})
+        for slot in (2, 3, 4):
+            plan = core.plan_group_move(tl, "g1", slot)
+            self.assertFalse(plan.ok)
+            self.assertEqual(plan.reason, "")
+
+    def test_marker_inside_refuses(self):
+        rows = self.rows(("Sketch001", "Pad001", "Fillet"))
+        tl = core.build(rows, {"Body": "Pad001"})
+        plan = core.plan_group_move(tl, "g1", 5)
+        self.assertFalse(plan.ok)
+        self.assertIn("history marker is inside Boss", plan.reason)
+
+    def test_not_into_another_group(self):
+        rows = one_body()
+        rows[0]["group"] = rows[1]["group"] = "g2"
+        rows[0]["group_name"] = rows[1]["group_name"] = "Base"
+        rows[4]["group"] = "g1"
+        rows[4]["group_name"] = "Round"
+        tl = core.build(rows, {"Body": "Fillet"})
+        plan = core.plan_group_move(tl, "g1", 1)  # between Sketch and Pad
+        self.assertFalse(plan.ok)
+        self.assertIn("cannot go inside Base", plan.reason)
+
+    def test_rolled_back_group_keeps_the_marker(self):
+        # marker before Fillet; the boss group (done) moves after Fillet: rolled back too
+        tl = core.build(self.rows(), {"Body": "Pad001"})
+        self.assertEqual(tl.marker, 4)
+        plan = core.plan_group_move(tl, "g1", 5)
+        self.assertTrue(plan.ok, plan.reason)
+        self.assertFalse(plan.marker_at_end)
+        self.assertEqual(plan.marker_count, 1)  # only Pad is before the marker now
+
+    def test_group_across_bodies_gets_keys(self):
+        rows = [
+            feat("a1", SKETCH, 1, "A"),
+            feat("a2", PAD, 2, "A", ["a1"]),
+            feat("b1", SKETCH, 3, "B", group="g1", group_name="Second"),
+            feat("b2", PAD, 4, "B", ["b1"], group="g1", group_name="Second"),
+        ]
+        tl = core.build(rows, {"A": "a2", "B": "b2"})
+        plan = core.plan_group_move(tl, "g1", 0)
+        self.assertTrue(plan.ok, plan.reason)
+        self.assertEqual(plan.order, ("b1", "b2", "a1", "a2"))
+        moved = [dict(r, key=plan.keys.get(r["name"], r["key"])) for r in rows]
+        self.assertEqual(core.build(moved, {"A": "a2", "B": "b2"}).names(), list(plan.order))
+        self.assertEqual(set(plan.keys), {"b1", "b2"})  # only the group's steps re-ranked
+
+
 if __name__ == "__main__":
     unittest.main()

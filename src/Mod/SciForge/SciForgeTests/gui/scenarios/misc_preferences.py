@@ -3,8 +3,8 @@
 
 P1 UTILITIES > Preferences: Fusion's window: the pages on the left (General with Design and API
    under it, Material, Graphics, Unit and Value Display, Default Units with Design, Network),
-   General shown first; options SciForge cannot honour are greyed with the reason (Automatic
-   version on close; the Inventor / Tinkercad / Alias / PowerMill mouse presets; Y up).
+   General shown first (Automatic version on close on); options SciForge cannot honour are
+   greyed with the reason (the Inventor / Tinkercad / Alias / PowerMill mouse presets; Y up).
 P2 Default Units > Design: Inch, OK. Ctrl+N: the new design is in inches (its browser says
    so); a design made before keeps millimetres.
 P3 General: Reverse zoom direction, Apply: the mouse wheel rolled away from you now zooms out
@@ -210,8 +210,8 @@ def p1_window():
     h.check("P1 General first", d.current_page() == "general", d.current_page())
     closing = widget("version_on_close")
     h.check(
-        "P1 Automatic version on close greyed with the reason",
-        closing is not None and not closing.isEnabled() and "Not built" in closing.toolTip(),
+        "P1 Automatic version on close can be set, on by default (Fusion)",
+        closing is not None and closing.isEnabled() and closing.isChecked(),
     )
     combo = widget("mouse_preset")
     off = []

@@ -15,8 +15,8 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   curves sit outside the sketch (not in the browser or timeline). Chamfer lines only.
 - **extrude-presspull.md**: (To Object extend options, Offset and a following Start: Object by
   sf/modeling-2; a clicked face or corner sets the height, and a held arrow snaps to it, by
-  sf/fix-extrude-to-face.) Move, Scale and Draft handles have no value box. Press Pull on a
-  face (an offset) does not snap to a clicked face; no snapping to edges or sketch points
+  sf/fix-extrude-to-face; value boxes on Move's triad, Scale, Draft and the other handles by
+  sf/polish-2.) Press Pull on a face (an offset) does not snap to a clicked face; no snapping to edges or sketch points
   while dragging.
 - **fillet.md**: (sf/fillet-2 built radius sets, Chord Length, Variable, Tangent Chain off,
   Rule and Full Round fillets.) Left: G2, Setback, Asymmetric (kernel); Full Round only on a
@@ -68,16 +68,19 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   sf/mesh-inspect-2.) The other analyses refuse mesh bodies (only Zebra is documented for
   meshes).
 - **misc.md**: (Decals follow their face through moves, joints, face edits and component
-  copies by sf/fix-decal.) Derive brings components in flat. The source version cannot be
-  chosen. No adsk add-in API. A decal on a component's copy is listed only under the
+  copies by sf/fix-decal; Derive keeps the component structure and takes a chosen version, by
+  sf/polish-2.) No adsk add-in API. A decal on a component's copy is listed only under the
   original; a face that changes shape and moves in one step may lose its decal (red, Select
   Face puts it back).
 - **selection.md**: no double-click chain selection in sketches. No box selection of planes
   and axes.
-- **timeline-browser.md**: an Extrude made while rolled back before a fillet cannot switch to
-  Cut. Groups cannot be dragged as a whole. No New Body command.
-- **versions.md**: no automatic version on close, Milestone, Data Panel Move/Copy or
-  out-of-date icon.
+- **timeline-browser.md**: (Groups dragged as a whole, Roll History Marker Here on a group, by
+  sf/polish-2; the rolled-back Extrude switching to Cut was already fixed in 27d4492778.)
+  Groups cannot nest. No New Body command.
+- **versions.md**: (Milestones, automatic version on close, Data Panel Move / Copy of designs,
+  the out-of-date button, by sf/polish-2.) No Move / Copy of whole folders; Get Latest updates
+  every out-of-date reference at once; FreeCAD's Close All Documents still asks FreeCAD's
+  question.
 - **ui-shell.md**: dialogs are docked, not floating. Document tabs are at the bottom. No
   COMMENTS panel. No lit environments.
 

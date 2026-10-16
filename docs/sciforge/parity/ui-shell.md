@@ -83,7 +83,8 @@ Unavailable items are greyed out. Separators group related commands.
 - Extrude picks a whole sketch (all its closed regions), not one region of it as Fusion can.
 - Origin plane squares are only drawn while Create Sketch waits; Fusion shows them on demand from
   the browser too.
-- Timeline: no drag-to-reorder, suppress or groups yet.
+- (Timeline: drag-to-reorder, suppress and groups are built, groups dragged as a whole since
+  polish-2: `parity/timeline-browser.md`.)
 - Menu icons are 16 px (Fusion about 20 px); COMMENTS panel and "Unsaved" banner not done.
 
 ## Value fields: a formula of the wrong kind (2026-10-14, gaps work)
