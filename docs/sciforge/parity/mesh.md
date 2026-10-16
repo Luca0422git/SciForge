@@ -214,7 +214,7 @@ values; a step that cannot be done says why in the dialog and OK waits.
 | Repair's OneTouchFix and the detailed analysis (thresholds, before / after table) | the dialog lists the problems before and after in one line each |
 | The warning icon as a button that opens Repair | right-click > Repair instead |
 | Rebuild types Adaptive and Adaptive Preserve Sharp Edges (newer Fusion API) | the four of the help page only |
-| Tessellate's Aspect Ratio and Create Quads; Combine's New Component | FreeCAD's mesher has no aspect setting and no quads; no components here |
+| Tessellate's Aspect Ratio and Create Quads; Combine's New Component | FreeCAD's mesher has no aspect setting and no quads; mesh Combine's result is always the target body (New Component not built for meshes) |
 | Fusion's mesh-section curve and Fit Curves to Mesh Section | plain fixed lines instead |
 | Remesh / Reduce / Smooth results equal to Fusion's | different algorithms (FreeCAD's decimation and Taubin smoothing, SciForge's voxel rebuild); the rows, ranges and defaults are Fusion's, the faces they make are not |
 | Big meshes | the voxel rebuild and the section are pure Python: a 500 000-face body takes seconds to minutes; the dialogs' Preview stays off until ticked (Fusion's way too) |
