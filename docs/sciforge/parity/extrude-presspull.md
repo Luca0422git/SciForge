@@ -195,6 +195,15 @@ sketches, a profile in another body) a hidden SubShapeBinder carries it into the
 
 ## Known gaps (honest list)
 
+- **Complex shapes: work in progress** (Luca, 2026-10-16: "press pulling complex shapes is
+  rough. the whole program freezes ... the shape it spits out is all sorts of
+  'interesting'"). Faces that are not planes or cylinders go through OpenCASCADE's offset
+  with fill and then defeaturing, and every preview tick rebuilds the whole document; on
+  freeform or many-face picks that is slow and the kernel's result can be odd. Until the
+  face-editing engine (outline 9.1) handles them, the Press Pull icon carries a small
+  yellow warning triangle, the ribbon tooltip and the dialog say "Work in progress: on
+  complex shapes ... can be slow and give odd results" (scenario `limits_notes` A).
+
 - **Click a face to end the extrude** (2026-10-16): Press Pull on a *face* (an offset, not an
   extrude) does not snap its arrow to a clicked face yet (Fusion does once the drag started,
   Forum); the dragged arrow snaps to parallel faces and vertices, not to edges, sketch points

@@ -136,6 +136,12 @@ def _local(obj, point):
     return body.getGlobalPlacement().inverse().multVec(point)
 
 
+WIP_NOTE = (
+    "\u26a0 Work in progress: on complex shapes (curved or freeform faces, many faces at once) "
+    "Press Pull can be slow and give odd results."
+)
+
+
 class PressPullPanel(Panel):
     title = "Press Pull"
     icon = "press_pull"
@@ -168,6 +174,14 @@ class PressPullPanel(Panel):
         self.what = QtWidgets.QLabel(self.hint)
         self.what.setWordWrap(True)
         self.layout.addRow(self.what)
+        # Luca (2026-10-16): on complex shapes the program froze for a while and the result
+        # was odd; mark the command as work in progress until the face-editing engine
+        # (outline 9.1) handles them.
+        self.wip_note = QtWidgets.QLabel(WIP_NOTE)
+        self.wip_note.setObjectName("SciForgeWorkInProgress")
+        self.wip_note.setWordWrap(True)
+        self.wip_note.setStyleSheet("color: #ffcc66;")
+        self.layout.addRow(self.wip_note)
         self.selection_field = SelectionField(self, "faces", "Select faces")
         self.selection_field.set_active(True)
         self.layout.addRow("Selection", self.selection_field.widget)
@@ -929,7 +943,7 @@ class PressPullCommand:
         return {
             "MenuText": "Press Pull",
             "ToolTip": "Push or pull faces (their neighbours follow), fillet edges, or change "
-            "a fillet's radius, with a live preview (Q)",
+            "a fillet's radius, with a live preview (Q). " + WIP_NOTE,
             "Pixmap": ui_icon_path("press_pull"),
         }
 

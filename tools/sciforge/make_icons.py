@@ -191,6 +191,21 @@ def plus_badge(cx=37, cy=37, r=8.5):
     )
 
 
+WARN = "#ffcc33"
+
+
+def warn_badge(cx=36, cy=36, s=10.5):
+    """A small yellow warning triangle with an exclamation mark: a command still being
+    worked on (Press Pull on complex shapes, Luca 2026-10-16). Original drawing."""
+    h = s * 0.87
+    tri = [(cx, cy - h * 0.62), (cx + s * 0.55, cy + h * 0.38), (cx - s * 0.55, cy + h * 0.38)]
+    return (
+        poly(tri, WARN, 'stroke="%s" stroke-width="1.2" stroke-linejoin="round"' % DARK)
+        + rect(cx - 0.9, cy - h * 0.32, 1.8, h * 0.4, DARK, 0.6)
+        + rect(cx - 0.9, cy + h * 0.14, 1.8, 1.8, DARK, 0.6)
+    )
+
+
 def arrow(x1, y1, x2, y2, color=WHITE, w=2.4, head=5.5):
     ang = math.atan2(y2 - y1, x2 - x1)
     hx1 = x2 - head * math.cos(ang - 0.5)
@@ -435,6 +450,7 @@ def _():
         block(0, 0, 0, 22, 22, 8, GREY, 24, 34)
         + block(0, 0, 8, 22, 22, 3, BLUE, 24, 34)
         + arrow(24, 22, 24, 4, WHITE, 2.4)
+        + warn_badge()  # work in progress (Luca, 2026-10-16)
     )
 
 

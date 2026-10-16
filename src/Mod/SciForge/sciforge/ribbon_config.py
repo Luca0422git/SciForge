@@ -124,7 +124,8 @@ SOLID_MODIFY = group(
             "SciForge_PressPull",
             "press_pull",
             "Q",
-            note="Faces: push/pull. Edges: fillet. A fillet face: change its radius.",
+            note="Faces: push/pull. Edges: fillet. A fillet face: change its radius. "
+            "Work in progress: complex shapes can be slow or give odd results.",
         ),
         item("Fillet", ("SciForge_Fillet", "PartDesign_Fillet"), "fillet", "F"),
         item("Chamfer", ("SciForge_Chamfer", "PartDesign_Chamfer"), "chamfer"),
