@@ -4265,6 +4265,20 @@ extend + offset, Revolve / Sweep / Loft Objects To Cut, Sweep formulas). **Wave 
 `sf/surface-2`, `sf/polish-2`, `sf/mesh-inspect-2` (briefs in `docs/sciforge/dev/briefs/`).
 Not in wave 5 (risky, deferred): floating dialogs and document tabs at the top (every scenario
 uses the docked task panel).
+**2026-10-14 ~11:00: the weekly usage limit stopped all five wave 5 builders** (no commits; their
+worktrees are gone). Relaunch them from the same briefs once Luca's bugs are fixed.
+
+**2026-10-16: Luca's bug list (manual testing of the CI #117 quick update)**, four fix builders in
+worktrees: `sf/fix-pattern-bodies` (pattern / mirror of bodies: the copies read the source
+body's CURRENT shape (`pattern.body_copy_shapes` uses `source.Shape`), so later moves / edits of
+the original reach every copy; Fusion copies the body as it is at the pattern's place in the
+timeline), `sf/fix-sketch-face` (sketching on an edited face reverts the body; lead:
+`sketch_ui._earliest`), `sf/fix-decal` (decals do not follow their face when the body moves),
+`sf/fix-extrude-to-face` (Luca: in Extrude, a click on a face takes the extrude to that face).
+CI #123 / #124 failed only on `modeling2_sketch` (the sketch fillet's radius box did not open on
+CI); 64c393ced2 splits the two fillet clicks into steps and makes the failure print the sketch's
+new geometry. CI artifacts cannot be downloaded from this sandbox (blob storage host blocked):
+put diagnostics into `h.check` details, which reach the job log.
 
 **Merge trap (2026-10-14):** when two branches append blocks that end with the same lines
 (the golden `schema.py` `validate` wrappers), git's conflict hunk leaves the shared tail
