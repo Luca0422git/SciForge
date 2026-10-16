@@ -12,8 +12,8 @@ Block 40 x 30 x 10 (Create Sketch, XY, rectangle, Finish, E, 10, OK).
   B  Create Sketch on the top again, a circle r 5, E, 5, OK: a boss on the drilled block.
   C  Ctrl+Z: the boss goes, drawn with the hole; Ctrl+Y: back.
   D  Suppress the hole in the timeline: B's sketch and boss stay (they hang on the block's
-     top); A's sketch goes with the hole (it uses the hole's edge; Fusion suppresses what
-     depends on a step too). Unsuppress: as before.
+     top); A's sketch goes with the hole (it uses the hole's edge, and SciForge's suppress
+     takes what uses a step along). Unsuppress: as before.
   E  Double-click B's sketch in the timeline: drawn as it is at the sketch: with the hole,
      without the boss; Finish Sketch.
 

@@ -334,11 +334,14 @@ def _no_support_shown(sketch):
 def design_step(sketch):
     """(body, step): the sketch's body and the step whose solid it shows while the sketch is
     open: the design as it is at the sketch's place in the timeline (timeline_core.
-    shown_while_sketching). step None: nothing solid there yet. body None: not in a body."""
+    shown_while_sketching). step None: nothing solid there yet. body None: not in a body, or
+    its Tip is no solid step (FreeCAD's own "Set tip" on a sketch): left as it is drawn."""
     from . import timeline_core, timeline_ops
 
     body = sketch.getParentGeoFeatureGroup()
     if body is None or body.TypeId != "PartDesign::Body":
+        return None, None
+    if body.Tip is not None and "BaseFeature" not in body.Tip.PropertiesList:
         return None, None
     users = {o.Name for o in sketch.InListRecursive}
     try:
