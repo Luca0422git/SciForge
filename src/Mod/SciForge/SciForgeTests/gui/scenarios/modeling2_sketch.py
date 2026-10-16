@@ -245,18 +245,49 @@ def two_redone():
 
 # -- the sketch fillet ------------------------------------------------------------------------
 def fillet():
+    s["before_fillet"] = len(sk().Geometry)
     si.menu_item("MODIFY", "Fillet")
 
 
-def fillet_corner():
-    si.click(V(16, 10, 0), approach=V(0.0, -1.0, 0))  # the bottom line near the corner
-    si.click(V(10, 16, 0), approach=V(-1.0, 0.0, 0))  # then the left line
+def _tool():
+    """What FreeCAD's sketch is running now (the fillet tool, or nothing)."""
+    from sciforge import recent
+
+    last = recent.last()
+    return last[0] if last else None
+
+
+def fillet_first():
+    # CI #123 / #124: both clicks in one step, close to the corner point, opened no radius
+    # box on CI's machine (it does locally). Each click is its own step now, with time for
+    # FreeCAD's fillet tool to take the first one, and further from the corner point.
+    h.check(
+        "the fillet tool runs",
+        _tool() in ("Sketcher_CreateFillet", "Sketcher_CompCreateFillets"),
+        _tool(),
+    )
+    si.click(V(22, 10, 0), approach=V(0.0, -1.0, 0))  # the bottom line
+
+
+fillet_first.wait_ms = 500
+
+
+def fillet_second():
+    si.click(V(10, 19, 0), approach=V(-1.0, 0.0, 0))  # then the left line
+
+
+fillet_second.wait_ms = 700
 
 
 def fillet_box():
     h.shot("fillet-click")
     sess = st.session()
-    h.check("the radius box opens", sess is not None and sess.editor is not None)
+    new = [g.TypeId.split("::")[-1] for g in sk().Geometry[s["before_fillet"] :]]
+    h.check(
+        "the radius box opens",
+        sess is not None and sess.editor is not None,
+        {"tool": _tool(), "new geometry": new, "editor": getattr(sess, "editor", None)},
+    )
     si.type_text("4")
 
 
@@ -400,7 +431,8 @@ h.run(
             two_undone,
             two_redone,
             fillet,
-            fillet_corner,
+            fillet_first,
+            fillet_second,
             fillet_box,
             fillet_check,
             line_tool,
