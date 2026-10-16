@@ -19,7 +19,11 @@ check in real Fusion).
 
 Tests: scenarios `misc_derive` (76 checks), `misc_decal` (54), `misc_preferences` (84),
 `misc_scripts` (52), `misc_materials` (51), `misc_compute` (14), `misc_capture` (25), and the
-ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (39).
+ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (40). Decals following their
+faces (fix-decal, 2026-10-16): `fixdecal_body_move` (132), `fixdecal_components` (130),
+`fixdecal_face_change` (104), `fixdecal_face_gone` (61), `fixdecal_joints` (88),
+`fixdecal_reopen` (75), helpers in `SciForgeTests/gui/fixdecal_steps.py` (they check where
+Coin draws the picture, not only what the decal stores).
 
 ## Sources (read 2026-10-14 through search summaries; help.autodesk.com is not reachable from the build sandbox)
 

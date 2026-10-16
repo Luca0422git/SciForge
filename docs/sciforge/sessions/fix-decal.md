@@ -76,7 +76,40 @@ map, a link to "Face6" becomes "?Face6" (probed).
 
 ## Tests
 
-(see below, filled in at the end)
+Scenarios (real mouse and keys; the checks read where Coin draws the picture, through every
+transform in the scene graph, and how far it lies from the body's faces):
+
+- `fixdecal_body_move` (132): Move/Copy of the body (live in the dialog, OK, Ctrl+Z / Ctrl+Y,
+  edited from the timeline, an arrow dragged), a cylinder tipped over (still wrapped round
+  it), Create Copy (the decal stays on the original), the history marker dragged before the
+  moves and back to the end.
+- `fixdecal_components` (130): Create Components from Bodies (the decal goes into the
+  component), Move/Copy of the component captured (live, OK, undo, redo) and not captured
+  (turned), Component Drag of another component with a wrapped decal, a body dragged in the
+  browser into another component, Copy / Paste of the component (both pictures on the copy;
+  the copy moved and Esc; hidden and shown).
+- `fixdecal_face_change` (104): Press Pull of the top (live and OK) and of a cylinder's side
+  (thicker: still wrapped, same size), the extrude distance edited from the timeline, undo /
+  redo, a neighbour pulled out (the top grows, the decal stays), Esc during a Press Pull.
+- `fixdecal_face_gone` (61): the face's step deleted (red with the reason, nothing drawn),
+  Ctrl+Z / Ctrl+Y, Edit Decal waits for a face and puts it there, undo / redo of that,
+  Select Face onto another body's cylinder.
+- `fixdecal_joints` (88): a decal on a root body; the joint made (the body flips onto the
+  other), Drive Joints (live, OK), undo / redo, Component Drag along the joint, undo.
+- `fixdecal_reopen` (75): moved, saved, reopened (drawn in place, nothing to recompute),
+  moved again after reopening, undo / redo; a design saved by the earlier SciForge (no face
+  remembered) brought up to date and followed.
+- `misc_decal` (54) still passes; all seven pass in one profile.
+
+Other areas run after the change (they use `components.place` / `from_bodies`, Press Pull,
+primitives): `components_basic` 251, `components2_bodies` 298, `components2_copy` 277,
+`components2_pattern` 278, `direct_components` 219, `extrude_presspull_presspull` 53,
+`primitives_qa_keys` 47, `primitives_qa_part` 85: all pass. Unit: `test_misc_cores` 40.
+`--only base`: unit 1089 OK, golden 399 pass + the known XFAIL `plate_hole_grid`, smoke 71, journey 25: all pass.
+
+Headless probes (in the session's scratch folder) checked the maths on their own: Move
+translate / rotate, Pad length, Press Pull top and side, cylinder radius, the face's step
+removed, copies of an instance and of a circular component pattern in a turned component.
 
 ## FreeCAD facts and traps found
 

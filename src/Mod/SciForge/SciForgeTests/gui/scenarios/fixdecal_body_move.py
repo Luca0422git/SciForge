@@ -16,6 +16,8 @@ P5 M, click the cylinder, X Distance 60, Z Distance 15 and X Angle 90 (tipped ov
 P6 M, click the box, drag the X arrow: the decal follows the drag live; OK.
 P7 M, click the box, Create Copy, Y Distance 60: the copy is a new body without the decal;
    the decal stays on the original, untouched.
+P8 The history marker dragged before the first Move: both decals are back where the bodies
+   were before any move; the marker to the end: moved again.
 """
 
 import FreeCAD as App
@@ -325,6 +327,43 @@ def p7_check():
     h.shot("P7-copy")
 
 
+# -- P8 ----------------------------------------------------------------------------------------
+def p8_roll_back():
+    from SciForgeTests.gui import timeline_input as t
+
+    st["p8"] = movement(box())
+    h.fit()
+    t.drag_marker(before_title=s.timeline_title_of(moves()[0]))
+
+
+p8_roll_back.wait_ms = 2500
+
+
+def p8_rolled():
+    from SciForgeTests.gui import timeline_input as t
+
+    bb = box().Shape.BoundBox
+    h.check(
+        "P8 marker before the moves: the box is where it was made",
+        abs(bb.XMin) < 1e-6 and abs(bb.XMax - 40) < 1e-6 and abs(bb.YMax - 30) < 1e-6,
+        bb,
+    )
+    f.follows("P8 marker before the moves: the box's decal", f.flat(), st["flat0"], App.Placement())
+    f.follows(
+        "P8 marker before the moves: the cylinder's", f.wrapped(), st["wrap0"], App.Placement()
+    )
+    h.shot("P8-rolled")
+    t.drag_marker(to_end=True)
+
+
+p8_rolled.wait_ms = 2500
+
+
+def p8_end():
+    h.check("P8 marker at the end: the Moves are back", movement(box()).isSame(st["p8"], 1e-9))
+    f.follows("P8 marker at the end: moved again", f.flat(), st["flat0"], movement(box()))
+
+
 def cleanup():
     f.forget_picture()
     for name in list(App.listDocuments()):
@@ -366,6 +405,9 @@ h.run(
         p7_copy,
         p7_ok,
         p7_check,
+        p8_roll_back,
+        p8_rolled,
+        p8_end,
         cleanup,
     ],
 )

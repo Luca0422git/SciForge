@@ -691,7 +691,7 @@ class _Watch:
             if name not in App.listDocuments():
                 return
             doc = App.getDocument(name)
-            if getattr(doc, "Restoring", False):
+            if getattr(doc, "Restoring", False) or getattr(doc, "Recomputing", False):
                 QtCore.QTimer.singleShot(300, lambda: self._run(name))
                 return
             for obj in decal.decals(doc):
