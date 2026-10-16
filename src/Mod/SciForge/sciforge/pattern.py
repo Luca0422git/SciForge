@@ -2411,6 +2411,18 @@ class BodyCopyFeature:
             obj.addProperty("App::PropertyInteger", "Index", "Pattern", "Which copy")
         _hide_from_timeline(obj)
 
+    def onDocumentRestored(self, obj):
+        """FreeCAD shows this hidden feature when a design is opened in the GUI if it has no
+        view provider of its own (designs saved before 2026-10-16): a click on the copy then
+        picked it instead of the copy's body. upgrade.after_open hides it again."""
+        if App.GuiUp:
+            try:
+                from . import upgrade
+
+                upgrade.mark(obj, "copy_view")
+            except Exception:
+                pass
+
     def execute(self, obj):
         definition = obj.Pattern
         if definition is None:

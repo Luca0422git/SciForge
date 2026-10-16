@@ -71,8 +71,10 @@ B1-B10, with sources):
   a copy picked that feature instead of the copy's body: Move/Copy got no body, and a copy
   moved later would have left its old shape drawn. The copy feature now has a view provider
   (`pattern_ui.ViewProviderBodyCopy`, kept hidden when opened, as Move/Copy's copy step with
-  its `StepViewProvider`); for designs saved without it, `keep_copy_features_hidden` hides
-  them and attaches it once the file is open (the design does not count as changed).
+  its `StepViewProvider`); for designs saved without it, `BodyCopyFeature.onDocumentRestored`
+  marks the document (`upgrade.mark(obj, "copy_view")`) and `upgrade.after_open` runs
+  `keep_copy_features_hidden` (hides them, attaches the view provider; the design does not
+  count as changed for that) once the design is ready, and once more 0.5 s later.
 - Pattern Type Components (components-2) is untouched (instances by design).
 
 ## FreeCAD facts and traps
@@ -86,6 +88,11 @@ B1-B10, with sources):
   design is opened in the GUI (FreeCAD 1.1.4; headless it stays hidden). Give such helpers a
   view provider.
 - `DocumentObject.isTouched()` does not exist in Python: read `"Touched" in obj.State`.
+- An App document observer's `slotFinishRestoreDocument` is never called in FreeCAD 1.1.4
+  (checked with a spy while opening a file); FreeCAD's own visibility changes happen
+  synchronously inside `openDocument`. Use a feature's `onDocumentRestored` plus a deferred
+  step (`upgrade.mark` / `after_open`). `thread_ui._AppWatch` also defines that slot (it has
+  other triggers, so cosmetic threads still update).
 - The "marker stands before a non-solid step" note lives in `doc.Meta`, which FreeCAD's undo
   does not restore: Undo of such a marker roll leaves the marker after that step (general;
   listed in the parity doc).
@@ -95,12 +102,20 @@ B1-B10, with sources):
 
 ## Tests
 
-- New scenarios (`gui/fixpattern_steps.py` has the shared steps): `fixpattern_rect` (161
-  checks on the old code, failing; now 1xx, see the report), `fixpattern_circ`,
-  `fixpattern_mirror`, `fixpattern_path`, `fixpattern_marker` (Combine of the copy into the
-  original, marker before the pattern, a boss added there, rolled forward and back),
-  `fixpattern_old_file` (`fixtures/pattern_bodies_v1.FCStd`, made by
-  `fixtures/make_old_pattern.py` with the code before the fix).
+- New scenarios (`gui/fixpattern_steps.py` has the shared steps), all PASS on the final code:
+  `fixpattern_rect` 185 checks (161 before the copy steps were added: on the old code it
+  failed 24 of them, exactly Luca's complaints), `fixpattern_circ` 160 and `fixpattern_mirror`
+  159 (both failing the same way on the old code), `fixpattern_path` 162, `fixpattern_marker`
+  54 (Combine of the copy into the original, marker before the pattern, a boss added there,
+  rolled forward and back), `fixpattern_old_file` 110 (`fixtures/pattern_bodies_v1.FCStd`,
+  made by `fixtures/make_old_pattern.py` with the code before the fix).
+- Older scenarios run on this branch, all PASS: `patterns_*` (12), `bodies_*` (8),
+  `modify_remove`, `components2_bodies`, `components2_marker`, `components2_move`,
+  `components2_pattern`, `components_extrude`, `modify2_bodies`, `modify2_pattern_adjust`,
+  `modify2_pattern_path`, `gaps_timeline_start`, `revolve_qa_more`, `timeline_browser*` (6;
+  `timeline_browser_qa4` failed its known "marker is in view" check once under load and
+  passed alone), `timeline_roll_view`, `timeline_rolled_cut`; `--only base` (1091 unit tests,
+  golden 402 pass + 1 expected xfail, smoke, journey); `check_install.sh`.
 - Golden models `pattern_bodies_move_original_after`, `mirror_body_new_body_move_after` (fail
   on the old code: bbox z 20..30), `pattern_bodies_in_moved_component` (fails on the old
   code); `measure_bodies` takes a pattern of bodies (its copies).

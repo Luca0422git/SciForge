@@ -86,7 +86,11 @@ def after_open(doc):
     from . import coil, pipe, timeline_ops
 
     done = []
+    hide_copies = False
     for kind, name in _OLD.pop(doc.Name, []):
+        if kind == "copy_view":
+            hide_copies = True  # a pattern of bodies' copy feature (pattern.BodyCopyFeature)
+            continue
         if kind == "body_pattern":
             # pattern.py linked it to the body's step before it while the file was read; the
             # copies are computed again from that step (no rebuild needed)
@@ -117,4 +121,15 @@ def after_open(doc):
             warn("%s, saved by an older SciForge, could not be rebuilt: %s" % (label, exc))
     if done:
         timeline_ops.recompute(doc)
+    if hide_copies and App.GuiUp:
+        # FreeCAD shows the copy features of patterns of bodies while it opens a design (a
+        # click on a copy then picked that hidden feature, not the copy's body): hide them,
+        # now and once more a moment later
+        try:
+            from . import pattern_ui
+
+            pattern_ui.keep_copy_features_hidden(doc)
+            pattern_ui.keep_hidden_later(doc.Name)
+        except Exception as exc:
+            warn("the copies of a pattern of bodies could not be hidden: %s" % exc)
     return done

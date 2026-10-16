@@ -2406,22 +2406,19 @@ class _DeleteWatch:
         except Exception:
             pass
 
-    def slotFinishRestoreDocument(self, doc):
-        """A design was opened: its patterns' copy features stay hidden (once FreeCAD is done
-        with the opening, so a timer)."""
+
+def keep_hidden_later(doc_name, delay_ms=500):
+    """keep_copy_features_hidden() once more a moment later (upgrade.after_open runs it as
+    soon as the opened design is ready; FreeCAD shows the copy features while opening it)."""
+
+    def run():
         try:
-            name = doc.Name
-            QtCore.QTimer.singleShot(0, lambda: _keep_hidden(name))
-        except Exception:
-            pass
+            if doc_name in App.listDocuments():
+                keep_copy_features_hidden(App.getDocument(doc_name))
+        except Exception as exc:
+            warn("pattern copies: %s" % exc)
 
-
-def _keep_hidden(doc_name):
-    try:
-        if doc_name in App.listDocuments():
-            keep_copy_features_hidden(App.getDocument(doc_name))
-    except Exception as exc:
-        warn("pattern copies: %s" % exc)
+    QtCore.QTimer.singleShot(delay_ms, run)
 
 
 def _remove_orphans(doc_name):
