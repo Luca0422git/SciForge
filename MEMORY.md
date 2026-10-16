@@ -8,6 +8,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 work stopped (CI #136: one red scenario in shard 3, `inspect_analysis_curvature`) and what to do
 first. Then report to Luca with the quick update of the first green CI.
 
+**Work branch (Luca, 2026-10-16 late):** `claude/amazing-lamport-zkxex4` is the main branch from
+now on (it started at 967a630c8c, the head of the old `claude/inspiring-cerf-ragp6j`, which is
+no longer pushed to). Luca may ask for a better name; tests run on any branch name.
+
 ---
 
 ## Where things live
@@ -78,6 +82,14 @@ first. Then report to Luca with the quick update of the first green CI.
   `branding.xml`: a missing file would silently make it FreeCAD again and share FreeCAD's
   settings). The installer never touches `.FCStd` associations by default and never ships
   FreeCAD's system-wide thumbnail DLL. Original artwork only (an anvil with a spark).
+- **2026-10-16: no screen recordings, no Fusion reference captures; Luca reports what to fix.**
+  Luca: "im not submitting screen recordings ... i only have access to fusion at home ... i run
+  stock fusion. nothing special. so what youve built is 90% of how I use fusion. I will tell you
+  what needs to be fixed." So outline 2.4's capture process is dropped: do not ask for
+  recordings or sign-off of behaviour specs. Keep researching Fusion's documented behaviour
+  (Autodesk help, forum answers) and naming the source in the parity docs (decision of
+  2026-10-13 stands); Luca's bug reports are the priority list. Screenshots he sends can be
+  looked at (images, not video).
 
 ## Status by phase (outline section 10)
 
@@ -105,10 +117,13 @@ first. Then report to Luca with the quick update of the first green CI.
 - [x] Branding pass (2026-10-13, `sf/app`, core patches #8-#13): app name, icons, settings
       folder, installer, Linux desktop entry. **Not yet proven by a full build** (see the
       session log for the list the next Windows build must tick)
-- [ ] Parity capture: Luca records Fusion workflows; behavior specs written + signed off
+- [-] Parity capture: **dropped by Luca (2026-10-16)**: no recordings; he reports what to fix
+      (see Decisions log)
 - [ ] Spike 9.1: Press/Pull feasibility report (OCC offset / local ops), with benchmark
 - [ ] Spike 9.2: Fillet robustness benchmark + feasibility report
-- [ ] Answers to the open questions in outline section 12
+- [ ] Answers to the open questions in outline section 12 (2026-10-16: Q1 recordings = no;
+      Q3/Q4 settled by practice: GitHub Actions builds everything; Q5 settled: LGPL, repo
+      public. Open: Q1 Fusion scripting access, Q2 first real objects, Q6 `.f3d`)
 
 ### Phase 1: The modeling core (started)
 
@@ -5504,7 +5519,8 @@ MEMORY, remove the worktree, report once to Luca.
 3. Full Windows build: patches #4, #6, #7 compile (run #2/#3, `plate_hole_grid` PASS). Run #3's
    .7z was held back by the Shell Both tag bug (fixed 2026-10-12): a Windows-only build of
    the fix gives Luca the download.
-4. Get answers to outline section 12 + parity captures of Luca's Fusion workflows (2.4).
+4. Get answers to outline section 12 (Q2 and Q6 still open; no parity captures: Luca declined,
+   2026-10-16).
 5. Spike 9.2 (Fillets): 100+ case benchmark from real part workflows, success-rate metric.
 6. Branding pass: done on `sf/app` (2026-10-13), to be merged and then proven by a full
    Windows build (the first one that produces the installer); its checklist is in the
