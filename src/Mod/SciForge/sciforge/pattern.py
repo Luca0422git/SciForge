@@ -10,8 +10,10 @@ What gets built, by Fusion's Pattern Type:
             Path use SciForge's PatternFeature below.
   Faces     PatternFeature: the picked faces are closed into a solid (the hole or boss
             they bound), which is copied and joined or cut at every instance.
-  Bodies    the same FreeCAD features in "Whole shape" mode: the body's shape is copied
-            (copies that touch it join it; the others stay separate solids of the body).
+  Bodies    one new body per copy (Rectangular, Circular, Path, Mirror with Operation New
+            Body), copying the body as it stands at the pattern's place in the timeline
+            (see "Bodies: the copies are new bodies" below). Mirror with Operation Join:
+            FreeCAD's Mirrored in "Whole shape" mode (the mirror image joins the body).
 
 Spacing rules (Quantity, Distance, Extent/Spacing, One Direction/Symmetric, Full/Angle/
 Symmetric) live in pattern_core.py. Every feature carries SciForgeType (the timeline shows
@@ -1835,16 +1837,16 @@ def path_placements(options, tools, center=None):
     return moves
 
 
-def auto_start_point(options):
+def auto_start_point(options, base=None):
     """Where a Pattern on Path starts by itself, as a share of the path (0 its start, 1 its
     end): the point of the path nearest the objects. None until objects and path are
-    picked."""
+    picked. ``base``: see objects_center."""
     if not options.get("path") or not options.get("objects"):
         return None
     path = _Path(path_edges(options["path"]))
     if path.total <= 0:
         return None
-    center = objects_center(options)[0]
+    center = objects_center(options, base)[0]
     return max(0.0, min(1.0, path.locate(center) / path.total))
 
 
@@ -1982,13 +1984,15 @@ def _read_direction(obj, options, meta, suffix):
 # -- helpers for the dialogs ------------------------------------------------------------------------
 def objects_center(options, base=None):
     """(centre, box) of what is patterned, body coordinates (where the drag arrows start).
-    A feature's tool is clipped to the part: a cut through all is as long as the part."""
+    A feature's tool is clipped to the part: a cut through all is as long as the part.
+    ``base``: the step a pattern of bodies copies (the body as it stands at the pattern),
+    else the body's end."""
     box = None
     for obj, sub in options.get("objects") or []:
         try:
             if obj.TypeId == "PartDesign::Body":
-                shape = obj.Shape.copy()
-                shape.transformShape(obj.getGlobalPlacement().inverse().toMatrix())
+                step = base if base is not None and owner_body(base) is obj else obj.Tip
+                shape = step.Shape.copy()  # a step's shape is in body coordinates
                 part = shape.BoundBox
             elif sub:
                 shape = obj.Shape.getElement(sub)
@@ -2081,13 +2085,28 @@ def _on_shell(shape, point):
         return False
 
 
-# -- Bodies: the copies are new bodies (Fusion) ------------------------------------------------------
+# -- Bodies: the copies are new bodies (Fusion) ---------------------------------------------
 # A pattern of a body (or a mirror with Operation New Body) makes one new body per copy, like
 # Fusion. The pattern itself is a top-level SciForge feature (the timeline step) that knows the
 # source body and the pattern's values; every copy is a small feature (BodyCopyFeature) that a
-# new PartDesign body takes as its base feature, so the copies follow the source body and the
-# pattern when either changes, and more features can be added to each copy's body.
+# new PartDesign body takes as its base feature, and more features can be added to each copy's
+# body (each copy is a body of its own: it can be moved, edited, combined).
+#
+# Fusion copies the body AS IT STANDS AT THE PATTERN'S PLACE IN THE TIMELINE (2026-10-16, Luca's
+# report: moving the original, or a hole cut in it after the pattern, moved / cut every copy,
+# and deleting the original broke the pattern). So the step links the source body's step right
+# before it in the timeline ("Source"), never the body and its current shape: steps of the
+# original made after the pattern (a Move, a hole, a fillet) do not reach the copies, edits of
+# the steps before it do. Linking that step, not the body, also keeps FreeCAD's dependency
+# graph free of cycles when a later step of the original uses a copy (a Combine of a copy into
+# it). Which step that is is found again (resolve_sources) whenever the timeline order may have
+# changed: a step added at the history marker before the pattern, a step deleted, the pattern
+# dragged along the timeline (timeline_ops.recompute / settle call it). The step rolls back
+# with the history marker like a component (SciForgeRolls): while the marker stands before it,
+# its copies are hidden. Deleting the original leaves the copies as they are; the pattern step
+# then keeps them and says why (a warning, not a failure: nothing downstream breaks).
 COPY = "Part::FeaturePython"
+BODY = "PartDesign::Body"
 BODY_PROPS = (
     ("Direction", "direction", ("rectangular",)),
     ("Direction2", "direction2", ("rectangular",)),
@@ -2101,6 +2120,10 @@ BODY_ENUMS = (
     ("DirectionType2", "direction_type2"),
     ("CircularType", "circular_type"),
     ("Orientation", "orientation"),
+)
+DELETED_NOTE = (
+    "The body it copied was deleted: its copies keep the shape they had. Undo the delete to "
+    "change them again."
 )
 
 
@@ -2127,7 +2150,7 @@ def feature_body(feature):
     """The body a pattern works on (for a pattern of bodies: the body it copies; for a
     pattern of components: what gives the design's origin axes)."""
     if is_body_pattern(feature):
-        return feature.Source
+        return source_body(feature)
     if _is_component_pattern(feature):
         from . import component_move
 
@@ -2136,10 +2159,10 @@ def feature_body(feature):
 
 
 def base_of(feature):
-    """The step a pattern builds on (for a pattern of bodies: the end of the copied body)."""
+    """The step a pattern builds on (for a pattern of bodies: the copied body's step right
+    before the pattern in the timeline)."""
     if is_body_pattern(feature):
-        source = feature.Source
-        return source.Tip if source is not None else None
+        return source_step(feature)
     if _is_component_pattern(feature):
         return None
     return getattr(feature, "BaseFeature", None)
@@ -2154,6 +2177,140 @@ def _is_component_pattern(obj):
         return False
 
 
+# -- which step of the source body is copied ------------------------------------------------------
+def source_body(definition):
+    """The body a pattern of bodies copies, None once it was deleted."""
+    try:
+        step = definition.Source
+    except Exception:
+        step = None
+    if step is not None and alive(step):
+        if step.TypeId == BODY:
+            return step  # saved before 2026-10-16 (upgraded when the file is opened)
+        body = owner_body(step)
+        if body is not None:
+            return body
+    try:
+        name = getattr(definition, "SourceBody", "") or ""
+        found = definition.Document.getObject(name) if name else None
+    except Exception:
+        found = None
+    return found if found is not None and found.TypeId == BODY else None
+
+
+def _is_follower(obj):
+    try:
+        from . import timeline_ops
+
+        return timeline_ops.is_follower(obj)
+    except Exception:
+        return False
+
+
+def wanted_source(definition, order=None):
+    """The source body's last solid step before the pattern in the timeline (the body as it
+    stands there), or None. ``order``: the timeline's step names in order (computed when not
+    given). Hidden steps (a multi-body extrude's step in this body, a copy's base feature) sit
+    where their lead or the step before them is."""
+    body = source_body(definition)
+    if body is None:
+        return None
+    if order is None:
+        from . import timeline_ops
+
+        order = timeline_ops.step_order(definition.Document)
+    where = {name: i for i, name in enumerate(order)}
+    here = where.get(definition.Name, len(order))
+    found = None
+    last = -1
+    for obj in body.Group:
+        if "BaseFeature" not in obj.PropertiesList:
+            continue  # sketches, planes, axes: they change no solid
+        at = where.get(obj.Name)
+        if at is None:
+            lead = getattr(obj, "Source", None) if _is_follower(obj) else None
+            at = where.get(lead.Name, last) if lead is not None else last
+        last = at
+        if at < here and not _suppressed(obj):
+            found = obj
+    return found
+
+
+def source_step(definition):
+    """The step of the source body the copies are made from (None: the body was deleted, or
+    nothing of it exists before the pattern)."""
+    try:
+        step = definition.Source
+    except Exception:
+        return None
+    if step is None or not alive(step):
+        return None
+    if step.TypeId == BODY:
+        return wanted_source(definition)  # saved before 2026-10-16, not upgraded yet
+    return step
+
+
+def resolve_source(definition, order=None):
+    """Link the step the copies come from (wanted_source); True when it changed. Nothing
+    changes while the body is gone or nothing of it exists before the pattern."""
+    if not is_body_pattern(definition):
+        return False
+    body = source_body(definition)
+    if body is None:
+        return False
+    if (getattr(definition, "SourceBody", "") or "") != body.Name:
+        definition.SourceBody = body.Name
+    step = wanted_source(definition, order)
+    if step is None or definition.Source is step:
+        return False
+    definition.Source = step
+    return True
+
+
+def resolve_sources(doc):
+    """resolve_source() for every pattern of bodies of `doc` (one timeline order for all);
+    True when a link changed (the caller recomputes). Never raises."""
+    try:
+        found = [o for o in doc.Objects if is_body_pattern(o)]
+    except Exception:
+        return False
+    if not found:
+        return False
+    try:
+        from . import timeline_ops
+
+        order = timeline_ops.step_order(doc)
+    except Exception:
+        return False
+    changed = False
+    for obj in found:
+        try:
+            changed = resolve_source(obj, order) or changed
+        except Exception:
+            pass
+    return changed
+
+
+def _upgrade(obj):
+    """A pattern saved before 2026-10-16 linked the body itself and copied its current
+    shape: it now links the body's step right before it (the copies go back to where the
+    pattern put them; upgrade.after_open recomputes it)."""
+    source = getattr(obj, "Source", None)
+    if source is None or source.TypeId != BODY:
+        return False
+    obj.SourceBody = source.Name
+    step = wanted_source(obj)
+    if step is not None:
+        obj.Source = step
+    try:
+        from . import upgrade
+
+        upgrade.mark(obj, "body_pattern")
+    except Exception:
+        pass
+    return True
+
+
 class BodyPatternFeature:
     """The step of a pattern of bodies. Saved as "sciforge.pattern.BodyPatternFeature"."""
 
@@ -2163,9 +2320,9 @@ class BodyPatternFeature:
 
     @staticmethod
     def ensure_properties(obj):
-        def add(kind, name, doc):
+        def add(kind, name, doc, status=0):
             if name not in obj.PropertiesList:
-                obj.addProperty(kind, name, "Pattern", doc)
+                obj.addProperty(kind, name, "Pattern", doc, status)
                 return True
             return False
 
@@ -2173,7 +2330,14 @@ class BodyPatternFeature:
             if add("App::PropertyEnumeration", prop, "Dialog choice (Fusion's field)"):
                 setattr(obj, prop, ENUMS[prop])
         # Global links: the references sit inside the copied body, this feature outside it.
-        add("App::PropertyLinkGlobal", "Source", "The body that is copied")
+        add(
+            "App::PropertyLinkGlobal",
+            "Source",
+            "The copied body's step right before this pattern in the timeline (what is copied)",
+        )
+        # The body's name (no link: a link to the body would make every later step of the
+        # original reach the copies, and a Combine of a copy into it a dependency cycle)
+        add("App::PropertyString", "SourceBody", "The body that is copied", 4)
         for prop, _key, _kinds in BODY_PROPS:
             add("App::PropertyLinkSubGlobal", prop, prop)
         if add("App::PropertyInteger", "Quantity", "Instances (the original included)"):
@@ -2185,20 +2349,44 @@ class BodyPatternFeature:
         if add("App::PropertyAngle", "Angle", "Total angle of a circular pattern"):
             obj.Angle = 360.0
         add("App::PropertyIntegerList", "SuppressedCopies", "Copies left out (Suppression)")
+        # 4 = hidden, 16 = changing it does not mark the step for recompute
+        if WARNING_PROP not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", WARNING_PROP, "SciForge", "Timeline warning", 20)
+        # Rolls back with the history marker (timeline_core): its copies hide while it does.
+        if "SciForgeRolls" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyBool", "SciForgeRolls", "Base", "", 4)
+        if not obj.SciForgeRolls:
+            obj.SciForgeRolls = True
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        try:
+            _upgrade(obj)
+        except Exception:
+            pass
 
     def execute(self, obj):
-        source = obj.Source
-        if source is None:
+        step = source_step(obj)
+        if step is None:
+            body = source_body(obj)
+            if body is None:
+                # The original was deleted: its copies keep their shape (Fusion leaves the
+                # copies of a deleted body), and so does this step; it says why.
+                set_note(obj, DELETED_NOTE)
+                return
             raise PatternError(
-                "The body it copied was deleted; its copies stay as they are. Delete this step, "
-                "or undo the delete."
+                "Nothing of %s exists before this step in the timeline: move the step after "
+                "the steps that make %s." % (body.Label, body.Label)
             )
-        if source.Shape.isNull() or not source.Shape.Solids:
-            raise PatternError("%s has no solid to copy." % source.Label)
-        copies = body_copy_shapes(obj)
+        shape = _source_shape(step)
+        if shape.isNull() or not shape.Solids:
+            body = owner_body(step)
+            raise PatternError(
+                "%s has no solid before this step to copy."
+                % (body.Label if body is not None else "The body")
+            )
+        set_note(obj, "")
+        copies = body_copy_shapes(obj, shape)
         obj.Shape = Part.makeCompound(copies) if copies else Part.Shape()
 
     def dumps(self):
@@ -2229,10 +2417,9 @@ class BodyCopyFeature:
             # The pattern step was deleted: the copy keeps its shape (pattern_ui removes such
             # orphans right after a delete, as Fusion deletes the copies with the pattern).
             return
-        source = definition.Source
-        if source is None or source.Shape.isNull() or not source.Shape.Solids:
+        if source_step(definition) is None:
             return  # the copied body was deleted (the pattern step says so): keep the shape
-        copies = body_copy_shapes(definition)
+        copies = _computed_copies(definition)
         if obj.Index >= len(copies):
             return  # about to be removed by the pattern (fewer copies now)
         # design coordinates -> the new body's own (a body in a moved component: components-2)
@@ -2275,17 +2462,37 @@ def read_body_pattern(obj):
     options["distance2"] = obj.Distance2.Value
     options["angle"] = obj.Angle.Value
     options["suppressed"] = list(getattr(obj, "SuppressedCopies", []) or [])
-    options["objects"] = [(obj.Source, "")] if obj.Source is not None else []
+    body = source_body(obj)
+    options["objects"] = [(body, "")] if body is not None else []
     return options
 
 
-def body_copy_shapes(definition):
-    """The copies of a pattern of bodies, in global coordinates (the original not included)."""
+def _source_shape(step):
+    """The solid of the copied step in design coordinates: the body's placement (and its
+    component's) included, as the body stood at that step."""
+    from . import bodies
+
+    return bodies.global_shape(step)
+
+
+def body_copy_shapes(definition, shape=None):
+    """The copies of a pattern of bodies, in design coordinates (the original not included):
+    the source body as it stands at the pattern's place in the timeline (``shape``: that
+    solid, design coordinates, when the caller has it already). [] when there is nothing to
+    copy (the body was deleted)."""
     kind = kind_of(definition)
     options = read_body_pattern(definition)
-    source = definition.Source
-    shape = _baked(source.Shape)  # global: the body's placement is included
-    place = source.getGlobalPlacement()
+    if shape is None:
+        step = source_step(definition)
+        if step is None:
+            return []
+        shape = _source_shape(step)
+    if shape.isNull():
+        return []
+    body = source_body(definition)
+    # The references (an edge of the body, its origin axes) are read in the body's own
+    # coordinates; the movements are applied in design coordinates.
+    place = body.getGlobalPlacement() if body is not None else App.Placement()
     local = shape.copy()
     local.transformShape(place.inverse().toMatrix(), True)
     center = local.BoundBox.Center if kind == "path" else None
@@ -2301,6 +2508,21 @@ def body_copy_shapes(definition):
             copy.transformShape(whole.toMatrix(), True)
             copies.append(copy)
     return copies
+
+
+def _computed_copies(definition):
+    """The copies as the pattern step computed them (its compound: it is recomputed before
+    its copies), else computed here (the step is not up to date)."""
+    try:
+        state = set(definition.State)
+        shape = definition.Shape
+        if not shape.isNull() and not state & {"Touched", "Invalid", "Error"}:
+            children = [_baked(c) for c in shape.childShapes()]
+            if children:
+                return children
+    except Exception:
+        pass
+    return body_copy_shapes(definition)
 
 
 def _baked(shape):
@@ -2321,15 +2543,16 @@ def _copies_of(definition):
 
 def _body_of_copy(copy):
     for obj in copy.InList:
-        if obj.TypeId == "PartDesign::Body" and obj.BaseFeature is copy:
+        if obj.TypeId == BODY and obj.BaseFeature is copy:
             return obj
     return None
 
 
 def _set_body_props(obj, kind, options):
     source = _bodies(options)[0]
-    if obj.Source is not source:
-        obj.Source = source
+    if obj.SourceBody != source.Name or source_body(obj) is not source:
+        obj.SourceBody = source.Name
+        obj.Source = None  # another body: resolve_source() finds its step
     for prop, key, kinds in BODY_PROPS:
         _set_link(obj, prop, options[key] if kind in kinds else None)
     for prop, key in BODY_ENUMS:
@@ -2372,11 +2595,20 @@ def _build_body_copies(kind, options, feature, name=None):
                 feature.ViewObject.Visibility = False
             except Exception:
                 pass
+        try:  # made while the timeline is rolled back: the step goes in at the marker
+            from . import timeline_ops
+
+            timeline_ops.place_root_step(feature)
+        except Exception:
+            pass
     _set_body_props(feature, kind, options)
+    resolve_source(feature)
+    if source_step(feature) is None:
+        raise PatternError("%s has no solid at this point of the timeline." % source.Label)
     _save_meta(
         feature,
         {
-            "v": 1,
+            "v": 2,  # 2: copies the body as it stands at the pattern (2026-10-16)
             "kind": kind,
             "pattern_type": "bodies",
             "operation": "new_body",
@@ -2398,18 +2630,24 @@ def _new_copy(definition, index, source):
     BodyCopyFeature(copy)
     copy.Pattern = definition
     copy.Index = index
-    body = doc.addObject("PartDesign::Body", "Body")
+    body = doc.addObject(BODY, "Body")
     container = source.getParentGeoFeatureGroup()
     if container is not None and hasattr(container, "addObject"):
         container.addObject(body)
         container.addObject(copy)  # FreeCAD refuses a body's base outside its component
-    count = len([o for o in doc.Objects if o.TypeId == "PartDesign::Body"])
+    count = len([o for o in doc.Objects if o.TypeId == BODY])
     body.Label = "Body%d" % count
     body.BaseFeature = copy
     for obj in body.Group:
         if obj.TypeId == "PartDesign::FeatureBase":
             _hide_from_timeline(obj)  # the copy belongs to the pattern's step
     if App.GuiUp:
+        try:
+            from .pattern_ui import ViewProviderBodyCopy
+
+            ViewProviderBodyCopy(copy.ViewObject)  # keeps it hidden when the design is opened
+        except Exception:
+            pass
         try:
             copy.ViewObject.Visibility = False
         except Exception:

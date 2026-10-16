@@ -599,6 +599,58 @@ class ViewProviderPattern:
     __setstate__ = loads
 
 
+class ViewProviderBodyCopy:
+    """View provider of a pattern of bodies' hidden copy feature (pattern.BodyCopyFeature,
+    the base feature of a copy's body). Without a Python view provider FreeCAD showed the
+    copy feature again whenever the design was opened (it is saved hidden): a click on a
+    copy then picked it instead of the copy's body, so Move/Copy could not take the copy,
+    and a copy moved later left its old shape drawn where it was (2026-10-16)."""
+
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+
+    def getIcon(self):
+        return ui_icon_path("pattern_rect")
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def keep_copy_features_hidden(doc):
+    """Give every copy feature of a pattern of bodies its view provider and hide it (a design
+    saved before 2026-10-16 has none, and FreeCAD showed them when it was opened). The
+    design does not count as changed for that. Never raises."""
+    try:
+        gdoc = Gui.getDocument(doc.Name)
+        was_modified = bool(gdoc.Modified)
+    except Exception:
+        return
+    for obj in doc.Objects:
+        try:
+            if not pattern.is_body_copy(obj) or obj.ViewObject is None:
+                continue
+            if not isinstance(getattr(obj.ViewObject, "Proxy", None), ViewProviderBodyCopy):
+                ViewProviderBodyCopy(obj.ViewObject)
+            if obj.ViewObject.Visibility:
+                obj.ViewObject.Visibility = False
+        except Exception:
+            continue
+    try:
+        if not was_modified and gdoc.Modified:
+            gdoc.Modified = False
+    except Exception:
+        pass
+
+
 ICONS = {
     "rectangular": "pattern_rect",
     "circular": "pattern_circ",
@@ -1476,6 +1528,15 @@ class PatternPanel(Panel):
             return
         ref = self._base_ref(obj, short)
         if ref is None:
+            if self.options.get("pattern_type") == "bodies" and self.body is not None:
+                # the copies are of the body as it stands at the pattern (Fusion): an edge a
+                # later step made or moved (a Move of the original) did not exist there
+                self.message.setText(
+                    "⚠ That was made after this pattern: the copies are of %s as it was here. "
+                    "Pick an origin axis or plane, or an edge that was there already."
+                    % self.body.Label
+                )
+                return
             self.message.setText("⚠ That belongs to the copies. Pick an edge of the original part.")
             return
         try:
@@ -1549,7 +1610,7 @@ class PatternPanel(Panel):
     def _size_along(self, ref):
         try:
             _p, d = pattern.direction_of(ref)
-            _c, box = pattern.objects_center(self.options)
+            _c, box = pattern.objects_center(self.options, self.base)
             if box is None:
                 return 10.0
             corners = [
@@ -1609,7 +1670,7 @@ class PatternPanel(Panel):
 
     def _instance_points(self):
         """Global position of every copy (suppressed ones too), at the objects' centre."""
-        center, box = pattern.objects_center(self.options)
+        center, box = pattern.objects_center(self.options, self.base)
         moves = pattern.all_placements(self.kind, self.options, center=center)
         if box is not None:  # on top of what is patterned, like the arrows
             center = App.Vector(center.x, center.y, box.ZMax)
@@ -1630,7 +1691,7 @@ class PatternPanel(Panel):
             kept = [i for i in self.options.get("suppressed") or [] if i < count]
             if kept != list(self.options.get("suppressed") or []):
                 self.options["suppressed"] = kept  # fewer copies now
-            _center, objects_box = pattern.objects_center(self.options)
+            _center, objects_box = pattern.objects_center(self.options, self.base)
             radius = max(0.6, self._arrow_size(objects_box) * 0.12)
             self.dots = InstanceDots(self.view, points, set(kept), self._dot_clicked, radius)
         except PatternError:
@@ -1654,7 +1715,7 @@ class PatternPanel(Panel):
         value = self.options.get("start_point")
         if value is None:
             try:
-                value = pattern.auto_start_point(self.options)
+                value = pattern.auto_start_point(self.options, self.base)
             except Exception:
                 value = None
         if value is None:
@@ -1929,7 +1990,7 @@ class PatternPanel(Panel):
                         continue
                     point, d = pattern.axis_of(ref) if name == "axis" else pattern.direction_of(ref)
                     if name != "axis":
-                        center, _box = pattern.objects_center(self.options)
+                        center, _box = pattern.objects_center(self.options, self.base)
                         if self.options["objects"]:
                             point = center
                     lines.append(
@@ -2020,7 +2081,7 @@ class PatternPanel(Panel):
         if not wanted or self.body is None:
             return
         try:
-            center, box = pattern.objects_center(self.options)
+            center, box = pattern.objects_center(self.options, self.base)
             size = self._arrow_size(box)
             # The arrows start on top of what is patterned (a hole's centre would be inside
             # the part, where it can be neither seen nor grabbed), a little above it.
@@ -2344,6 +2405,23 @@ class _DeleteWatch:
                 QtCore.QTimer.singleShot(0, lambda: _remove_orphans(name))
         except Exception:
             pass
+
+    def slotFinishRestoreDocument(self, doc):
+        """A design was opened: its patterns' copy features stay hidden (once FreeCAD is done
+        with the opening, so a timer)."""
+        try:
+            name = doc.Name
+            QtCore.QTimer.singleShot(0, lambda: _keep_hidden(name))
+        except Exception:
+            pass
+
+
+def _keep_hidden(doc_name):
+    try:
+        if doc_name in App.listDocuments():
+            keep_copy_features_hidden(App.getDocument(doc_name))
+    except Exception as exc:
+        warn("pattern copies: %s" % exc)
 
 
 def _remove_orphans(doc_name):

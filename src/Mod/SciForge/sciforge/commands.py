@@ -71,8 +71,12 @@ def find_body():
 def not_made_yet(body):
     """True for a body that has solid steps but whose Tip is none of them: the history
     marker stands before its first step (timeline_ops.roll), so at the marker it does not
-    exist. A new, empty body is made already (it takes the work it was made for)."""
+    exist. A new, empty body is made already (it takes the work it was made for). A copy
+    made by a pattern of bodies does not exist while the marker stands before the pattern
+    (timeline_ops hides it then)."""
     try:
+        if getattr(body, "SciForgeRolledHidden", False):
+            return True
         if body.Tip is not None:
             return False
         return any(o.isDerivedFrom("PartDesign::Feature") for o in body.Group)

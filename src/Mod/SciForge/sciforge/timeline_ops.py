@@ -103,10 +103,23 @@ def recompute(doc):
     _settling.add(doc.Name)
     try:
         with quiet():
+            _resolve_patterns(doc)  # before: the copies must come from the right step
             doc.recompute()
             settle(doc)
     finally:
         _settling.discard(doc.Name)
+
+
+def _resolve_patterns(doc):
+    """A pattern of bodies copies its body as it stands right before the pattern in the
+    timeline (pattern.resolve_sources): after a step was added at the marker before it,
+    deleted or dragged, that is another step. True when one changed."""
+    try:
+        from . import pattern
+
+        return pattern.resolve_sources(doc)
+    except Exception:
+        return False
 
 
 def settle(doc):
@@ -121,7 +134,8 @@ def settle(doc):
     _settling.add(doc.Name)
     try:
         with quiet():
-            if repair_references(doc):
+            repaired = repair_references(doc)
+            if _resolve_patterns(doc) or repaired:
                 doc.recompute()
             _pass_through_failures(doc)
             _clear_empty_bodies(doc)
@@ -374,14 +388,40 @@ class MarkerInserts:
             order = core.place_at_marker(
                 old, new, tip.Name if tip is not None else None, marker_note(doc), solids
             )
-            if order is None:
-                return
-            by_name = {o.Name: o for o in group}
-            obj.Group = [by_name[n] for n in order]
+            if order is not None:
+                by_name = {o.Name: o for o in group}
+                obj.Group = [by_name[n] for n in order]
+            rank_before_marker_step(doc, doc.getObject(added[0]))
         except Exception as exc:
             from . import _remember
 
             _remember("info", "timeline: a new step stayed where FreeCAD put it: %s" % exc)
+
+
+def rank_before_marker_step(doc, new):
+    """Fusion adds a new step at the history marker. When the marker stands right before a
+    step outside the bodies (a pattern of bodies, a component: the marker note names it), a
+    step added to a body goes in before that step too; by its creation order it would come
+    after it (a hole added there to a pattern's original would not reach the copies, and the
+    step outside the bodies would be rolled forward). True when keys changed."""
+    note = marker_note(doc)
+    root = doc.getObject(note) if note else None
+    if root is None or new is None or root is new:
+        return False
+    if body_of(root) is not None or body_of(new) is None or not _is_step(new):
+        return False
+    rows = []
+    for obj, body in steps(doc):
+        rows.append(
+            {"name": obj.Name, "body": body.Name if body is not None else None, "key": _key(obj)}
+        )
+    keys = core.keys_to_go_before(rows, new.Name, note)
+    for name, key in keys.items():
+        target = doc.getObject(name)
+        if target is not None:
+            _add_prop(target, "App::PropertyFloat", RANK, "Place in the design timeline")
+            setattr(target, RANK, float(key))
+    return bool(keys)
 
 
 _inserts = {"observer": None}
@@ -481,6 +521,17 @@ def steps(doc):
     return result
 
 
+def step_order(doc):
+    """Names of the timeline's steps in the timeline's order (timeline()'s merge, without
+    reading each step's state: cheap enough to run before every recompute)."""
+    rows = []
+    for obj, body in steps(doc):
+        rows.append(
+            {"name": obj.Name, "body": body.Name if body is not None else None, "key": _key(obj)}
+        )
+    return [r["name"] for r in core.merge(rows)]
+
+
 def _objects_in(value):
     """Document objects inside a link property value (any nesting)."""
     found = []
@@ -522,6 +573,7 @@ def uses(obj):
     names = set()
     linked = set()
     base = getattr(obj, "BaseFeature", None)
+    body_pattern = _is_body_pattern(obj)
     for prop, _kind in _link_props(obj):
         try:
             value = getattr(obj, prop)
@@ -531,6 +583,8 @@ def uses(obj):
         linked.update(o.Name for o in objs)
         if prop in CHAIN_PROPS:
             continue
+        if body_pattern and prop == "Source":
+            continue  # the step it copies follows its place (_body_pattern_uses)
         if prop == "Base" and base is not None and objs and all(o is base for o in objs):
             continue  # a fillet/chamfer's edges live on the step before it
         if prop == "Faces" and base is not None and objs and all(o is base for o in objs):
@@ -542,8 +596,44 @@ def uses(obj):
                 names.add(o.Name)
     except Exception:
         pass
+    if body_pattern:
+        _body_pattern_uses(obj, names)
     names.discard(obj.Name)
     return names
+
+
+def _is_body_pattern(obj):
+    try:
+        from . import pattern
+
+        return pattern.is_body_pattern(obj)
+    except Exception:
+        return False
+
+
+def _body_pattern_uses(obj, names):
+    """A pattern of bodies copies its body as it stands at the pattern's place, so it can
+    go anywhere after the body's first step (not only after the step it copies now; its
+    references, an edge of a step, still count)."""
+    try:
+        from . import pattern
+
+        body = pattern.source_body(obj)
+        if body is None:
+            return
+        # a body that starts as a copy (another pattern's, a Move/Copy's) exists from that
+        # step on
+        base = getattr(body, "BaseFeature", None)
+        if pattern.is_body_copy(base) and base.Pattern is not None:
+            names.add(base.Pattern.Name)
+        elif base is not None and _is_step(base):
+            names.add(base.Name)
+        for o in body.Group:
+            if _is_solid_step(o) and _is_step(o):
+                names.add(o.Name)
+                return
+    except Exception:
+        pass
 
 
 def problem(obj, broken_before=None):
@@ -909,8 +999,19 @@ def _follow_root_steps(doc, tl=None):
                 hide = item.state == "rolled_back" or is_suppressed(obj)
                 for part in _pattern_parts(doc, obj):
                     hide_by_marker(part, hide)
+                for body in _pattern_bodies(obj):  # a pattern of bodies: its new bodies
+                    hide_by_marker(body, hide)
         except Exception:
             pass
+
+
+def _pattern_bodies(step):
+    try:
+        from . import pattern
+
+        return pattern.copy_bodies(step) if pattern.is_body_pattern(step) else []
+    except Exception:
+        return []
 
 
 def _done_inside(doc, tl, part):

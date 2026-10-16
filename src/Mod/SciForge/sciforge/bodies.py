@@ -524,7 +524,9 @@ def sync_consumed(doc, initial=False):
             set_shown(body, False)
     for name in before - now:
         body = doc.getObject(name)
-        if body is not None:
+        # a pattern's copy hidden by the history marker (timeline_ops.hide_by_marker) stays
+        # hidden: the marker shows it again when it passes the pattern
+        if body is not None and not getattr(body, "SciForgeRolledHidden", False):
             set_shown(body, True)
             show_tip(body)
     leave_used_up(doc, users)

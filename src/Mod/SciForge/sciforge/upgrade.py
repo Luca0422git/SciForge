@@ -10,6 +10,11 @@ file is read (a property the fixes added is missing, or the old path link is sti
 mark themselves; once the file is open the step is rebuilt from its own saved options (the
 same as editing it and pressing OK) and a log line says so. The design then shows as
 changed, so a save keeps the new shape.
+
+A pattern or mirror of bodies saved before 2026-10-16 linked the body itself (its copies
+followed every later Move or edit of the original): while the file is read it is linked to
+the body's step right before it (pattern._upgrade) and marks itself ("body_pattern"); once
+the file is open its copies are computed again from that step.
 """
 
 import FreeCAD as App
@@ -21,6 +26,8 @@ WHY = {
     "coil": "a coil with a negative angle was its mirror image, a tapered coil on a raised "
     "face drifted",
     "pipe": "a hollow pipe round a closed path was a solid ring",
+    "body_pattern": "a pattern or mirror of bodies copied the body as it is now, so a Move or "
+    "an edit of the original after the pattern reached every copy",
 }
 
 
@@ -80,6 +87,18 @@ def after_open(doc):
 
     done = []
     for kind, name in _OLD.pop(doc.Name, []):
+        if kind == "body_pattern":
+            # pattern.py linked it to the body's step before it while the file was read; the
+            # copies are computed again from that step (no rebuild needed)
+            step = doc.getObject(name)
+            if step is not None and step not in done:
+                step.touch()
+                done.append(step)
+                log(
+                    "%s was saved by an older SciForge (%s): its copies are computed again"
+                    % (step.Label, WHY[kind])
+                )
+            continue
         section = doc.getObject(name)
         feature = _owner(doc, section, kind) if section is not None else None
         if feature is None or feature in done:
