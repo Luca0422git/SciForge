@@ -24,6 +24,7 @@ The case, in design coordinates (the board's corner sits at (3, 3), on 3 mm post
 
 Expected volumes are worked out by hand (see the functions below).
 """
+
 import math
 import os
 import tempfile
@@ -124,8 +125,13 @@ def doc():
 def look(name):
     """The view a person picks on the ViewCube before clicking what it shows."""
     view = Gui.ActiveDocument.ActiveView
-    {"iso": view.viewIsometric, "top": view.viewTop, "front": view.viewFront,
-     "right": view.viewRight, "left": view.viewLeft}[name]()
+    {
+        "iso": view.viewIsometric,
+        "top": view.viewTop,
+        "front": view.viewFront,
+        "right": view.viewRight,
+        "left": view.viewLeft,
+    }[name]()
     view.fitAll()
     settle()
 
@@ -227,8 +233,11 @@ def extrude_block():
 
 def block_height():
     p = extrude_panel()
-    if not h.check("E opens Extrude on the finished sketch", p is not None and len(p.profiles) == 1,
-                   p and p.profiles):
+    if not h.check(
+        "E opens Extrude on the finished sketch",
+        p is not None and len(p.profiles) == 1,
+        p and p.profiles,
+    ):
         return
     ui.type_into(p.distance.widget, "25")
     wait_preview(p)
@@ -236,8 +245,11 @@ def block_height():
 
 def block_ok():
     p = extrude_panel()
-    h.check("a new body (nothing to join)", p is not None and p.operation.currentText() in
-            ("New Body", "Join"), p and p.operation.currentText())
+    h.check(
+        "a new body (nothing to join)",
+        p is not None and p.operation.currentText() in ("New Body", "Join"),
+        p and p.operation.currentText(),
+    )
     h.task_button("OK")
 
 
@@ -374,8 +386,11 @@ def posts_height():
 
 def posts_ok():
     p = extrude_panel()
-    h.check("posts join the base", p is not None and p.operation.currentText() == "Join",
-            p and p.operation.currentText())
+    h.check(
+        "posts join the base",
+        p is not None and p.operation.currentText() == "Join",
+        p and p.operation.currentText(),
+    )
     h.task_button("OK")
 
 
@@ -431,9 +446,30 @@ def holes_options():
     hs.type_into(p.depth.widget, "4")
 
 
-def holes_click():
-    for c in post_centres():
+def hole_count():
+    p = hs.hole_panel()
+    return len(hs.centres_all(p.target)) if p is not None and p.target is not None else 0
+
+
+def hole_click(i):
+    """Click post i's centre point, then (a later step) see its hole come, as a person
+    waits for each one: the four clicks in one step lost two on GitHub's runner (CI #142,
+    #143; the dialog takes a click a moment after it)."""
+
+    def click():
+        c = post_centres()[i]
         h.click(V(c.x, c.y, T + POST_H))
+
+    def taken():
+        h.check(
+            "hole %d taken" % (i + 1),
+            hole_count() == i + 1,
+            (hole_count(), hs.message(hs.hole_panel()) if hs.hole_panel() else "no dialog"),
+        )
+
+    click.__name__ = "holes_click_%d" % (i + 1)
+    taken.__name__ = "holes_taken_%d" % (i + 1)
+    return [click, h.idle_step(), taken]
 
 
 def holes_ok():
@@ -495,9 +531,11 @@ def wall_steps(wall, stage):
         if not h.check("%s wall: a sketch opens on its outside face" % wall, sk is not None):
             return
         normal = sk.getGlobalPlacement().Rotation.multVec(V(0, 0, 1))
-        h.check("%s wall: the sketch faces outwards" % wall,
-                {"front": normal.y < -0.99, "right": normal.x > 0.99, "left": normal.x < -0.99}[wall],
-                normal)
+        h.check(
+            "%s wall: the sketch faces outwards" % wall,
+            {"front": normal.y < -0.99, "right": normal.x > 0.99, "left": normal.x < -0.99}[wall],
+            normal,
+        )
         sketch_rects(sk, wall_rects(rows, wall))
         h.shot("06-%s-sketch" % wall)
 
@@ -521,25 +559,34 @@ def wall_steps(wall, stage):
 
     def depth():
         p = extrude_panel()
-        h.check("%s wall: %d opening(s) picked" % (wall, len(rows)),
-                p is not None and len(p.profiles) == len(rows), p and p.profiles)
+        h.check(
+            "%s wall: %d opening(s) picked" % (wall, len(rows)),
+            p is not None and len(p.profiles) == len(rows),
+            p and p.profiles,
+        )
         if p:
             ui.type_into(p.distance.widget, "-%g" % CUT_DEPTH)
             wait_preview(p)
 
     def ok():
         p = extrude_panel()
-        h.check("%s wall: into the part makes it a Cut" % wall,
-                p is not None and p.operation.currentText() == "Cut",
-                p and p.operation.currentText())
-        h.check("%s wall: no message" % wall, p is not None and p.message.text() == "",
-                p and p.message.text())
+        h.check(
+            "%s wall: into the part makes it a Cut" % wall,
+            p is not None and p.operation.currentText() == "Cut",
+            p and p.operation.currentText(),
+        )
+        h.check(
+            "%s wall: no message" % wall,
+            p is not None and p.message.text() == "",
+            p and p.message.text(),
+        )
         h.task_button("OK")
 
     def made():
         v = base_volume_now()
-        h.check("%s wall openings cut" % wall, close(v, base_volume(stage)),
-                (v, base_volume(stage)))
+        h.check(
+            "%s wall openings cut" % wall, close(v, base_volume(stage)), (v, base_volume(stage))
+        )
         part_ok("%s openings" % wall)
 
     for f in (turn, pick_face, draw, finish, extrude, click_openings, depth, ok, made):
@@ -551,8 +598,10 @@ def wall_steps(wall, stage):
 def lip_rects():
     o = T + LIP_PLAY
     i = o + LIP_W
-    return [(V(o, o, H + LID_T), V(L - o, W - o, H + LID_T)),
-            (V(i, i, H + LID_T), V(L - i, W - i, H + LID_T))]
+    return [
+        (V(o, o, H + LID_T), V(L - o, W - o, H + LID_T)),
+        (V(i, i, H + LID_T), V(L - i, W - i, H + LID_T)),
+    ]
 
 
 def lip_volume():
@@ -642,13 +691,17 @@ def lid_extrude():
 
 def lid_new_body():
     p = extrude_panel()
-    if not h.check("E takes the outline by itself", p is not None and len(p.profiles) == 1,
-                   p and p.profiles):
+    if not h.check(
+        "E takes the outline by itself", p is not None and len(p.profiles) == 1, p and p.profiles
+    ):
         return
     ui.type_into(p.distance.widget, "2")
     wait_preview(p)
-    h.check("on top of the base, Join is offered first (Fusion)",
-            p.operation.currentText() == "Join", p.operation.currentText())
+    h.check(
+        "on top of the base, Join is offered first (Fusion)",
+        p.operation.currentText() == "Join",
+        p.operation.currentText(),
+    )
     h.check("choose New Body", ui.choose(p.operation, "New Body"))
     wait_preview(p)
 
@@ -658,8 +711,11 @@ def lid_ok():
 
 
 def lid_made():
-    new = [o for o in doc().Objects if o.TypeId == "PartDesign::Body"
-           and o.Name not in s.get("bodies_before", [])]
+    new = [
+        o
+        for o in doc().Objects
+        if o.TypeId == "PartDesign::Body" and o.Name not in s.get("bodies_before", [])
+    ]
     h.check("one new body", len(new) == 1, [o.Label for o in new])
     if new:
         s["lid"] = new[0].Name
@@ -747,8 +803,11 @@ def lip_depth():
         return
     ui.type_into(p.distance.widget, "-%g" % (LID_T + LIP_D))
     wait_preview(p)
-    h.check("into the lid: Cut is offered (Fusion)", p.operation.currentText() == "Cut",
-            p.operation.currentText())
+    h.check(
+        "into the lid: Cut is offered (Fusion)",
+        p.operation.currentText() == "Cut",
+        p.operation.currentText(),
+    )
     h.check("choose Join", ui.choose(p.operation, "Join"))
     wait_preview(p)
 
@@ -797,8 +856,7 @@ def vent_extrude():
 
 def vent_depth():
     p = extrude_panel()
-    h.check("E takes the slot by itself", p is not None and len(p.profiles) == 1,
-            p and p.profiles)
+    h.check("E takes the slot by itself", p is not None and len(p.profiles) == 1, p and p.profiles)
     if p:
         ui.type_into(p.distance.widget, "-2")
         wait_preview(p)
@@ -894,8 +952,11 @@ def gpio_extrude():
 
 def gpio_depth():
     p = extrude_panel()
-    h.check("E takes the GPIO rectangle by itself", p is not None and len(p.profiles) == 1,
-            p and p.profiles)
+    h.check(
+        "E takes the GPIO rectangle by itself",
+        p is not None and len(p.profiles) == 1,
+        p and p.profiles,
+    )
     if p:
         ui.type_into(p.distance.widget, "-2")
         wait_preview(p)
@@ -1040,8 +1101,11 @@ def export_step_check():
     if h.check("pi5_case.step written", os.path.isfile(path)):
         solids, volume = i.read_step(path)
         expect = base_volume("left") + lid_volume("edges")
-        h.check("STEP: 2 solids with the design's volume",
-                solids == 2 and close(volume, expect, 1e-4), (solids, volume, expect))
+        h.check(
+            "STEP: 2 solids with the design's volume",
+            solids == 2 and close(volume, expect, 1e-4),
+            (solids, volume, expect),
+        )
 
 
 def export_stl_open():
@@ -1106,26 +1170,72 @@ STEPS = [
     holes_finish,
     holes_start,
     holes_options,
-    holes_click,
+    *[step for i in range(4) for step in hole_click(i)],
     holes_ok,
     holes_made,
 ]
 STEPS += wall_steps("front", "front") + wall_steps("right", "right") + wall_steps("left", "left")
 STEPS += [
-    lid_sketch, lid_pick_rim, lid_draw, lid_finish, lid_extrude, lid_new_body, lid_ok, lid_made,
-    lid_fillet_start, lid_fillet_front, lid_fillet_turn, lid_fillet_back, lid_fillet_radius,
-    lid_fillet_ok, lid_fillet_made,
-    lip_sketch, lip_pick_top, lip_draw, lip_finish, lip_extrude, lip_click_ring, lip_depth,
-    lip_ok, lip_made,
-    vent_sketch, vent_pick_top, vent_draw, vent_finish, vent_extrude, vent_depth, vent_ok,
+    lid_sketch,
+    lid_pick_rim,
+    lid_draw,
+    lid_finish,
+    lid_extrude,
+    lid_new_body,
+    lid_ok,
+    lid_made,
+    lid_fillet_start,
+    lid_fillet_front,
+    lid_fillet_turn,
+    lid_fillet_back,
+    lid_fillet_radius,
+    lid_fillet_ok,
+    lid_fillet_made,
+    lip_sketch,
+    lip_pick_top,
+    lip_draw,
+    lip_finish,
+    lip_extrude,
+    lip_click_ring,
+    lip_depth,
+    lip_ok,
+    lip_made,
+    vent_sketch,
+    vent_pick_top,
+    vent_draw,
+    vent_finish,
+    vent_extrude,
+    vent_depth,
+    vent_ok,
     vent_made,
-    pattern_start, pattern_pick_vent, pattern_direction_box, pattern_y_axis, pattern_values,
-    pattern_distance, pattern_ok, pattern_made,
-    gpio_sketch, gpio_pick_top, gpio_draw, gpio_finish, gpio_extrude, gpio_depth, gpio_ok,
+    pattern_start,
+    pattern_pick_vent,
+    pattern_direction_box,
+    pattern_y_axis,
+    pattern_values,
+    pattern_distance,
+    pattern_ok,
+    pattern_made,
+    gpio_sketch,
+    gpio_pick_top,
+    gpio_draw,
+    gpio_finish,
+    gpio_extrude,
+    gpio_depth,
+    gpio_ok,
     gpio_made,
-    edges_start, edges_click, edges_radius, edges_ok, edges_made,
+    edges_start,
+    edges_click,
+    edges_radius,
+    edges_ok,
+    edges_made,
     fit_check,
-    save_design, export_open, export_step, export_step_check, export_stl_open, export_stl,
+    save_design,
+    export_open,
+    export_step,
+    export_step_check,
+    export_stl_open,
+    export_stl,
     export_stl_check,
 ]
 
