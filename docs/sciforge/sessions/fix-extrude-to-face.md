@@ -65,8 +65,15 @@ height as that face".
   `extrudeface_drag` (55: held over the tower's top = 30 while the button is down, mark
   shown, kept on release; a plain click on the arrow; a plain drag; a corner = -10 and a cut;
   side two's arrow onto a corner = 10; Esc).
-- Regression: see the report (the extrude / Press Pull scenarios run in one profile) and
-  `--only base`.
+- Regression, run in one profile (as a CI shard does), all pass: `components_extrude`,
+  `extrude_bodies_highlight`, `extrude_edit_sketch_shown`, `extrude_feel`, `extrude_feel_box`,
+  `extrude_feel_cut`, `extrude_feel_keys`, `extrude_from_edited_sketch`, `extrude_multibody`,
+  `extrude_multibody_edit`, `extrude_multibody_move`, every `extrude_presspull_*` (objects,
+  options, presspull, qa .. qa7, regions), `extrude_review_fixes`, `gaps_extrude_taper_to`,
+  `gaps_join_new_body`, `gaps_thin_extrude`, `handles_on_top`, `modeling2_extrude`,
+  `modify2_presspull_type`, `sketch_areas_face`, `sketch_text_cut`, `sketch_tools_extrude`,
+  `value_box_units`. `--only base`: unit 1112 OK, golden 400 pass + the 1 known xfail, smoke
+  and journey pass; `check_install.sh` OK.
 
 ## FreeCAD facts and traps
 
