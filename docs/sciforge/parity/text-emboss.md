@@ -33,7 +33,7 @@ Only behaviour is copied: no Autodesk text, icon or code.
 | T14 | Text On Path: Placement Above / Below the path, Fit to Path, alignment along the path | Autodesk | same; lines, arcs, circles, ellipses and splines; open curves read left to right, closed ones clockwise from their lowest point (a centred text sits on top) **(Guess)**; Fit on a closed curve spreads the letters evenly all round |
 | T15 | no line spacing control | Autodesk (absent from the dialog) | none (the font's own line height) |
 | T16 | OK makes one undo step; the text is part of the sketch (no timeline step of its own) | Autodesk | same ("Text"; "Edit Text" when changed) |
-| T17 | the frame is sketch geometry: it can be dimensioned and constrained; resizing the frame does not scale the letters; the text does not grow the frame | Autodesk + Forum | the frame is four construction lines held as a rectangle; dimensions on them hold the text; letters keep their height |
+| T17 | the frame is sketch geometry: it can be dimensioned and constrained; resizing the frame does not scale the letters; the text does not grow the frame | Autodesk + Forum | the frame is four construction lines held as a rectangle; dimensions on them hold the text; letters keep their height. Since sketch-2: a press on a frame corner and a drag resizes the frame (the opposite corner stays, the angle stays, the letters are laid out again; one undo step "Resize Text Frame"); a dimension that holds the size wins and the reason shows by the pointer (`sketch2_text_frame`) |
 | T18 | dragging the text moves it | Forum | press and drag on the letters (one undo step "Move Text") |
 | T19 | double-click the text, or right-click > Edit Text, to change it later | Autodesk | same in the open sketch; after Finish Sketch, open the sketch (double-click its timeline step) and double-click the text, as in Fusion |
 | T20 | Explode Text: the letters become ordinary sketch curves; the link to the text (and its parameter) is gone | Autodesk | same (right-click > Explode Text); features that used the text use the letters' sketch areas instead, so the part does not change |
@@ -84,7 +84,6 @@ No FreeCAD core file was changed.
 
 | Fusion | Why not |
 |---|---|
-| dragging a frame corner to resize the frame | the frame is ordinary sketch lines: drag them or dimension them; a dedicated corner handle was left out to keep the drag on the letters unambiguous |
 | the red "unquoted word" check of the Text expression | plain text is accepted instead (T5) |
 | text in non-sketch places (TechDraw / drawings) | outside this area |
 | Emboss with single-line fonts | Fusion refuses them too |

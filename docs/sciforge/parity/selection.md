@@ -28,7 +28,7 @@ Autodesk forums, often by Autodesk staff), **Guess** (nothing found; SciForge's 
 | **Selection Priority**: Select Body / Face / Edge / Component Priority; one at a time; choosing one checks that filter and unchecks all the others; clicking the active one again removes the filter | Autodesk, [Use selection priority filters](https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/SLD-SELECTION-PRIORITY-FILTERS.htm) |
 | With Body priority a click on a face selects (and a box takes) the whole body | Autodesk, same page |
 | **Tangent Chain** is an option of Fillet, Chamfer and Press Pull (on by default in Fillet / Chamfer): one edge brings the edges tangent to it | Autodesk, [Tangent chain reference](https://help.autodesk.com/cloudhelp/ENU/Fusion-Model/files/SLD-REF-TANGENT-CHAIN.htm) |
-| In a sketch, a double-click on a curve selects the connected chain of curves | Forum / course, [Selecting sketch chained entities](https://origin-www.lynda.com/Fusion-360-tutorials/Selecting-sketch-chained-entities/2810401/2884089-4.html) |
+| In a sketch, a double-click on a curve selects the connected chain of curves, without a window | Forum / course, [Selecting sketch chained entities](https://origin-www.lynda.com/Fusion-360-tutorials/Selecting-sketch-chained-entities/2810401/2884089-4.html); Forum, [chain select](https://forums.autodesk.com/t5/fusion-360-ideastation-archived/chain-select/idi-p/6717640) ("double clicking a curve that's part of a chain") |
 | Esc clears the selection when no command runs (a single Esc inside a command keeps its picks) | Forum, [How to exit orbit without deselecting](https://forums.autodesk.com/t5/fusion-support-forum/how-to-exit-orbit-without-deselecting/m-p/12320285) (Autodesk community manager); outside a command: **Guess** |
 | Component Drag (Select menu): a drag on a component moves it; off, a drag draws the box | Autodesk, [Select multiple components](https://www.autodesk.com/products/fusion-360/blog/select-multiple-components-fusion-360-tutorial/) |
 
@@ -48,7 +48,8 @@ Autodesk forums, often by Autodesk staff), **Guess** (nothing found; SciForge's 
 | Esc | With no command and no sketch open, Esc clears the selection; while a box is being dragged, Esc cancels it (the release then selects nothing). Inside a sketch Esc stays the Sketcher's. `selection_box` G |
 | Tangent Chain | Already there: Fillet / Chamfer always follow tangent edges (the kernel cannot stop at one), Press Pull has the Tangent Chain box (`parity/fillet.md`, `parity/extrude-presspull.md`) |
 | A drag on a handle | A press on one of the open dialog's handles (their screen extents, `taskui.BoxCarrier`) or on a `handles3d` handle just pressed is the handle's drag: no box, no Select Other. FreeCAD's edit modes (a sketch, a datum, Move's manipulator) get the mouse untouched. `selection_dialogs` C, `extrude_presspull_qa` |
-| In a sketch | Nothing of this runs: FreeCAD's Sketcher does its own box selection (1.1.4 selects the curves and points inside a drag). `selection_sketch` |
+| In a sketch | SciForge's box, Select Other and mode keys stay out: FreeCAD's Sketcher draws its own box (window to the right, crossing to the left, 1.1.4). Since sketch-2 (`sketch_select.py`): a plain box replaces the selection, Shift adds, Ctrl toggles (FreeCAD's only added), and a double-click on a curve selects its chain (the curves joined end to end, of its line type). `selection_sketch`, `sketch2_select` |
+| Construction planes, axes, points | Since sketch-2: a window takes the planes, axes and points that are shown (an origin's only while the origin is shown), measured as FreeCAD draws them at rest; a crossing box touching one takes it; whole objects, selected by their path like a click; the Work Geometry filter applies. `sketch2_box_planes` |
 
 ## Facts found on the way
 
@@ -89,8 +90,11 @@ Autodesk forums, often by Autodesk staff), **Guess** (nothing found; SciForge's 
   `parity/joints.md` "Dragging components"): a plain drag that starts on a component moves
   it along its joints instead of drawing a box; SELECT > Component Drag turns it off.
 - Not built: the Components filter and priority, the Joint Origins / Canvas
-  filters (nothing to filter), the sketch double-click chain (the sketch area; FreeCAD's
-  Sketcher handles the mouse there), window selection of work geometry (planes, axes).
+  filters (nothing to filter). (The sketch double-click chain and window selection of
+  planes and axes: sketch-2.)
+- Whether Fusion's window takes construction planes and axes (Guess: yes, under the Work
+  Geometry filter), and whether its sketch double-click chain crosses into construction
+  curves (Guess: no).
 - A box drag that starts on a shaded sketch area while Extrude waits also picks that area
   (FreeCAD's area picker acts on the press, which SciForge does not hold back).
 - With filters on, FreeCAD shows its "forbidden" cursor over a filtered element (its gate
