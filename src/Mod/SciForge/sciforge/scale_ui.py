@@ -17,13 +17,14 @@ other body (scale.py, modify_bodies.py). Sketches: their curves are scaled in pl
 "Scale" step records the factor (editing it scales them again, deleting it scales them
 back). Double-click the step in the timeline to edit it.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import bodies, commands, hole_common, log, modify_bodies, pickpanel, preview, scale
 from . import ui_icon_path, warn
 from .compat import QtWidgets
-from .taskui import DistanceField
+from .taskui import DistanceField, ValueBoxes
 
 ENTITY_HELP = (
     "Click the bodies to scale (any face of them) or a sketch (its curves, or its row in the "
@@ -107,6 +108,9 @@ class ScalePanel(pickpanel.PickPanel):
         self.formulas = {"factor": "", "x": "", "y": "", "z": ""}
         self.formula_errors = {}
         self.arrows = []  # (pickpanel.Arrow, spot, origin, direction)
+        # Fusion shows the scale factor beside the arrow being dragged; typed there it is
+        # taken like the dialog's field (a formula too). One box per factor field.
+        self.value_boxes = ValueBoxes(self, default="factor")
         if feature is not None and scale.is_sketch_scale(feature):
             self.record = feature
             self.sketches = [s for s in feature.Sketches if scale.is_sketch(s)]
@@ -524,8 +528,25 @@ class ScalePanel(pickpanel.PickPanel):
                     on_release=lambda d, s=spot: self._dragged(s, d, True),
                 )
                 self.arrows.append((dragger, spot, origin, direction))
+                self._attach_box(dragger, what)
         except Exception as exc:
             warn("Scale arrow unavailable: %s" % exc)
+
+    def _attach_box(self, dragger, what):
+        """The value box beside an arrow: its factor field's text; a value or a formula
+        typed there goes to that field (Scale Factor, or X / Y / Z Scale)."""
+        field = self.field_for(what)
+        return self.value_boxes.attach(
+            dragger, what, lambda: field.widget.text(), lambda text: self._box_typed(what, text)
+        )
+
+    def _box_typed(self, what, text):
+        if self._closed:
+            return
+        for formula in self._formula_inputs:
+            if formula.key == what:
+                formula.take(text)
+                return
 
     # -- preview --------------------------------------------------------------------------
     def _remove_target(self):
@@ -710,6 +731,7 @@ class ScalePanel(pickpanel.PickPanel):
 
     def cleanup(self):
         self._remove_arrows()
+        self.value_boxes.discard()
         super().cleanup()
 
 

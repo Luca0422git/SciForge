@@ -22,6 +22,7 @@ import FreeCADGui as Gui
 
 from . import drag_guard, handles3d, profile_pick, warn
 from .compat import QtCore, QtGui, QtWidgets
+from .taskui import BoxCarrier
 
 HANDLE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
 HANDLE_ACTIVE = (0.55, 0.80, 1.0)
@@ -251,12 +252,13 @@ class CurveOverlay:
 _GRAB = {"time": 0.0}
 
 
-class PathHandle:
+class PathHandle(BoxCarrier):
     """A blue ball on the path, at `value` (0..1) of `samples` = [(0..1, global point)],
     with an arrow along the path. Dragging it slides it along the path (the nearest sample
     to the mouse on screen); on_drag(value) while dragging, on_release(value) at the end.
     Drawn over the part and grabbed by distance on screen (like revolve_ui.AngleHandle),
-    so it is not a Coin dragger."""
+    so it is not a Coin dragger. It carries the dialog's value box when given one
+    (taskui.BoxCarrier): Fusion shows the Distance beside the ball."""
 
     POLL_MS = 30
     GRAB_PIXELS = 14.0
@@ -342,6 +344,15 @@ class PathHandle:
         self._value = float(value)
         self._pending = None
         self._draw()
+
+    def box_geometry(self):
+        """The ball and its arrow along the path, as the value box sees them."""
+        point = self.point_at(self._value)
+        tip = point + self._direction(self._value) * (0.78 * self.size)
+        return point, point, tip, 0.3 * self.size
+
+    def box_active(self):
+        return bool(self._drag or self._hover)
 
     def _draw(self):
         if self._shown is not None and abs(self._shown - self._value) < 1e-9:
@@ -443,6 +454,7 @@ class PathHandle:
                 self._pending = None
                 if self.on_release:
                     self.on_release(self._value)
+            self.follow_box()
         except Exception as exc:
             warn("path handle: %s" % exc)
 
@@ -465,6 +477,7 @@ class PathHandle:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        self.drop_box()
 
 
 # -- a 0..1 number box ------------------------------------------------------------------------------
