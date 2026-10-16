@@ -12,7 +12,7 @@ import os
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, commands, decal, insert_ui, taskui, ui_icon_path, warn
+from . import bodies, commands, decal, insert_ui, log, preview, taskui, ui_icon_path, warn
 from . import decal_core as core
 from .compat import QtCore, QtGui, QtWidgets
 
@@ -91,32 +91,72 @@ class ViewProviderDecal:
         hints = coin.SoShapeHints()
         hints.vertexOrdering = coin.SoShapeHints.UNKNOWN_ORDERING
         self.root.addChild(hints)
+        # The picture itself (shared: drawn again on every copy of the body's component).
+        self.shape = coin.SoGroup()
         self.material = coin.SoMaterial()
         self.material.diffuseColor.setValue(1.0, 1.0, 1.0)
-        self.root.addChild(self.material)
+        self.shape.addChild(self.material)
         self.texture_group = coin.SoGroup()
-        self.root.addChild(self.texture_group)
+        self.shape.addChild(self.texture_group)
         self.uv = coin.SoTextureCoordinate2()
-        self.root.addChild(self.uv)
+        self.shape.addChild(self.uv)
         binding = coin.SoTextureCoordinateBinding()
         binding.value = coin.SoTextureCoordinateBinding.PER_VERTEX_INDEXED
-        self.root.addChild(binding)
+        self.shape.addChild(binding)
         self.normals = coin.SoNormal()
-        self.root.addChild(self.normals)
+        self.shape.addChild(self.normals)
         nbind = coin.SoNormalBinding()
         nbind.value = coin.SoNormalBinding.PER_VERTEX_INDEXED
-        self.root.addChild(nbind)
+        self.shape.addChild(nbind)
         self.coords = coin.SoCoordinate3()
-        self.root.addChild(self.coords)
+        self.shape.addChild(self.coords)
         self.faces = coin.SoIndexedFaceSet()
-        self.root.addChild(self.faces)
+        self.shape.addChild(self.faces)
+        # The mesh lies where the body was when it was computed: drawn moved the way the body
+        # moved by its own placement since (decal.drawn_place), so a joint or a drag that
+        # moves a body without recomputing it carries the picture along at once.
+        main = coin.SoSeparator()
+        self.transform = coin.SoTransform()
+        main.addChild(self.transform)
+        main.addChild(self.shape)
+        self.root.addChild(main)
+        # The copies of the body in instances of its component (Copy / Paste, Create Copy, a
+        # component pattern): the same picture where each copy is (decal.copy_places).
+        self.copies = coin.SoGroup()
+        self.root.addChild(self.copies)
         self._image = None
         vobj.addDisplayMode(self.root, "Decal")
         self._update(vobj.Object)
 
+    def place(self, obj=None):
+        """Put the drawing where the decal's body is now (its placement), and on the copies
+        of the body in instances of its component."""
+        from pivy import coin
+
+        obj = obj if obj is not None else self.Object
+        try:
+            _set_transform(self.transform, decal.drawn_place(obj))
+            places = decal.copy_places(obj)
+            while self.copies.getNumChildren() > len(places):
+                self.copies.removeChild(self.copies.getNumChildren() - 1)
+            while self.copies.getNumChildren() < len(places):
+                copy = coin.SoSeparator()
+                copy.addChild(coin.SoTransform())
+                copy.addChild(self.shape)
+                self.copies.addChild(copy)
+            for i, plc in enumerate(places):
+                _set_transform(self.copies.getChild(i).getChild(0), plc)
+        except Exception as exc:
+            warn("decal drawing: %s" % exc)
+
+    def copies_drawn(self):
+        """How many copies of the picture are drawn besides it (for the tests)."""
+        return self.copies.getNumChildren()
+
     def _update(self, obj):
         from pivy import coin
 
+        self.place(obj)
         try:
             path = getattr(obj, "ImageFile", "")
             if path != self._image:
@@ -156,6 +196,8 @@ class ViewProviderDecal:
     def updateData(self, obj, prop):
         if prop in ("MeshPoints", "MeshTriangles", "Opacity", "ImageFile", "MeshUV"):
             self._update(obj)
+        elif prop in ("Body", "BodyPlace"):
+            self.place(obj)
 
     def getDisplayModes(self, vobj):
         return ["Decal"]
@@ -187,6 +229,11 @@ class ViewProviderDecal:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _set_transform(node, plc):
+    node.translation.setValue(tuple(plc.Base))
+    node.rotation.setValue(tuple(plc.Rotation.Q))
 
 
 def attach_view(obj):
@@ -330,7 +377,20 @@ class DecalPanel(insert_ui._InsertPanel):
         self.layout.addRow(QtWidgets.QLabel("Image"), QtWidgets.QLabel(shown))
         self.face_label = QtWidgets.QLabel("")
         self.face_label.setObjectName("SciForgeDecalFace")
-        self.layout.addRow(QtWidgets.QLabel("Face"), self.face_label)
+        self.face_button = None
+        if feature is None:
+            self.layout.addRow(QtWidgets.QLabel("Face"), self.face_label)
+        else:  # Edit: another face can be clicked (its own one deleted, or elsewhere wanted)
+            row = QtWidgets.QWidget()
+            box = QtWidgets.QHBoxLayout(row)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.addWidget(self.face_label, 1)
+            self.face_button = QtWidgets.QPushButton("Select Face")
+            self.face_button.setObjectName("SciForgeDecalFaceButton")
+            self.face_button.setToolTip("Click it, then a face: the decal goes there")
+            self.face_button.clicked.connect(lambda _=False: self.guarded(self._wait_for_face))
+            box.addWidget(self.face_button)
+            self.layout.addRow(QtWidgets.QLabel("Face"), row)
         self.chain = self.check("Chain Faces", values["chain"], self.apply)
         self.opacity = QtWidgets.QSpinBox()
         self.opacity.setObjectName("SciForgeDecalOpacity")
@@ -360,13 +420,52 @@ class DecalPanel(insert_ui._InsertPanel):
                 self.pick = _FacePick(self, self._face_picked)
         else:
             self.target = feature
-            self.face_label.setText("%s %s" % (feature.Body.Label, feature.FaceName))
+            self._show_face()
             self._show_size()
             self._make_handles()
         Gui.Selection.clearSelection()
+        if feature is not None and not feature.MeshPoints:
+            # its face is gone: the dialog waits for the face to put it on
+            self.guarded(self._wait_for_face)
+            self.say("The face this decal was on is gone. Click a face to put the picture there.")
 
     # -- placing -----------------------------------------------------------------------------
+    def _show_face(self):
+        obj = self.feature()
+        if obj is None or self.pick is not None:
+            return
+        body = obj.Body
+        gone = not obj.MeshPoints and "Invalid" in list(obj.State)
+        self.face_label.setText(
+            "%s %s%s" % (body.Label if body is not None else "?", obj.FaceName, " (gone)" * gone)
+        )
+
+    def _wait_for_face(self):
+        if self.pick is not None:
+            self.pick.remove()
+        Gui.Selection.clearSelection()
+        self.face_label.setText("Click a face of a body")
+        self.pick = _FacePick(self, self._face_repicked)
+
+    def _face_repicked(self, body, face_name, point):
+        """Edit: a face clicked: the decal goes onto it (X / Y Distance back to 0)."""
+        self.pick = None
+        obj = self.feature()
+        if obj is None:
+            return
+        decal.relay(obj, body, face_name, point)
+        self._quiet = True
+        try:
+            self.dx.set_value(0.0)
+            self.dy.set_value(0.0)
+        finally:
+            self._quiet = False
+        self.apply()
+        self._show_face()
+        _refresh_browser()
+
     def _face_picked(self, body, face_name, point):
+        self.pick = None
         self.obj = decal.make(body, face_name, point, self.path, self.pixels)
         attach_view(self.obj)
         self.target = self.obj
@@ -425,6 +524,7 @@ class DecalPanel(insert_ui._InsertPanel):
         if self._drag_start is None:  # never under a handle being dragged
             self._make_handles()
         self._show_size()
+        self._show_face()
 
     def feature(self):
         return self.obj if self.obj is not None and bodies.alive(self.obj) else None
@@ -449,7 +549,7 @@ class DecalPanel(insert_ui._InsertPanel):
 
         from . import extrude_ui
 
-        place = _container_place(obj)
+        place = decal.global_place(obj)  # the decal's coordinates are its body's own
         point, x, y, z = decal.centre(obj)
         point = place.multVec(point)
         rot = place.Rotation
@@ -591,7 +691,7 @@ class _Watch:
             if name not in App.listDocuments():
                 return
             doc = App.getDocument(name)
-            if getattr(doc, "Restoring", False):
+            if getattr(doc, "Restoring", False) or getattr(doc, "Recomputing", False):
                 QtCore.QTimer.singleShot(300, lambda: self._run(name))
                 return
             for obj in decal.decals(doc):
@@ -600,6 +700,43 @@ class _Watch:
                     getattr(vobj, "Proxy", None), ViewProviderDecal
                 ):
                     attach_view(obj)
+            # a design saved before decals went with their body into its component
+            owners = {o.Body.Name: o.Body for o in decal.decals(doc) if o.Body is not None}
+            for body in owners.values():
+                decal.carry(body)
+            # an undo / redo that brought a body back without its decal's own change (a
+            # step recomputed after its undo step was closed): the decal follows its face now
+            for obj in decal.decals(doc):
+                if decal.stale(obj):
+                    log("decal %s follows its face again" % obj.Label)
+                    with preview.quiet():  # a red one says why in the timeline
+                        obj.recompute()
+            place_drawings(doc)
+        except Exception as exc:
+            warn("decals: %s" % exc)
+
+    def slotChangedObject(self, obj, prop):
+        """A body or component moved (a joint, Component Drag, a component Move, an undo),
+        shown or hidden, an instance's copy made or a pattern changed: the decals are drawn
+        where their bodies and the copies are now, at once."""
+        if prop not in ("Placement", "Group", "Visibility", "Moves", "Shape"):
+            return
+        try:
+            if prop == "Shape":
+                if bodies.kind(obj) != "InstanceCopy":
+                    return
+            elif prop != "Moves" and obj.TypeId not in ("PartDesign::Body", "App::Part"):
+                return
+            place_drawings(obj.Document)
+        except Exception as exc:
+            warn("decals: %s" % exc)
+
+    def slotDeletedObject(self, obj):
+        """An instance deleted: its copies of the pictures go (once it is gone)."""
+        try:
+            if obj.TypeId == "App::Part" or bodies.kind(obj) == "InstanceCopy":
+                name = obj.Document.Name
+                QtCore.QTimer.singleShot(0, lambda: _place_later(name))
         except Exception as exc:
             warn("decals: %s" % exc)
 
@@ -611,6 +748,22 @@ class _Watch:
 
     def slotRedoDocument(self, doc):
         self._later(doc)
+
+
+def _place_later(name):
+    try:
+        if name in App.listDocuments():
+            place_drawings(App.getDocument(name))
+    except Exception as exc:
+        warn("decals: %s" % exc)
+
+
+def place_drawings(doc):
+    """Every decal of `doc` drawn where its body is now."""
+    for obj in decal.decals(doc):
+        proxy = getattr(getattr(obj, "ViewObject", None), "Proxy", None)
+        if isinstance(proxy, ViewProviderDecal):
+            proxy.place(obj)
 
 
 _WATCH = {"observer": None}

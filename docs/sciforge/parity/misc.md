@@ -19,7 +19,11 @@ check in real Fusion).
 
 Tests: scenarios `misc_derive` (76 checks), `misc_decal` (54), `misc_preferences` (84),
 `misc_scripts` (52), `misc_materials` (51), `misc_compute` (14), `misc_capture` (25), and the
-ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (39).
+ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (40). Decals following their
+faces (fix-decal, 2026-10-16): `fixdecal_body_move` (132), `fixdecal_components` (130),
+`fixdecal_face_change` (104), `fixdecal_face_gone` (61), `fixdecal_joints` (88),
+`fixdecal_reopen` (75), helpers in `SciForgeTests/gui/fixdecal_steps.py` (they check where
+Coin draws the picture, not only what the decal stores).
 
 ## Sources (read 2026-10-14 through search summaries; help.autodesk.com is not reachable from the build sandbox)
 
@@ -32,6 +36,17 @@ ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (39).
 - Decal: Autodesk help "Add a decal" (SLD-INS-DECAL); Fusion API `DecalInput` (faces,
   isChainFaces default true, opacity 0..1 default 1.0), `Decal.redefine` (the decal is a
   timeline object); Autodesk Community "Placing a Decal at Correct Scale", "Decal improvements";
+  (fix-decal, 2026-10-16, through search summaries) Fusion API `DecalInput.transform` (the
+  matrix's origin is the decal's centre and must lie on the first face, its Z the face's
+  normal there), `Decal.faces` (the first face is the primary one that sets position and
+  orientation), `Decal.redefine` (position, orientation and faces changed with the marker
+  rolled to just before the decal); Autodesk Community "Decal not attached to component"
+  (a decal left behind when its body moved; the answer: "the decal is part of the component
+  and will move with it"), "Decal moving when making hole" (the decal re-sits when a later
+  hole removes the face under its centre; Autodesk staff: decals are hard to position, the
+  centre cannot sit over a hole), "Decal won't apply around face cutout", "Decals on things
+  with holes?"; general Fusion threads on lost references ("No fix for a broken copy-paste
+  of a body", "Face 1 Missing": edit the feature and select the face again);
   a rendering course page (Chain Faces wraps; often better off).
 - Preferences: Autodesk help, Preferences reference (pages General with API / Design / Render /
   Manufacture / Simulation, Material, Graphics, Unit and Value Display, Default Units; Restore
@@ -87,9 +102,30 @@ ribbon sweep; unit tests `SciForgeTests/unit/test_misc_cores.py` (39).
 | The first size | 80 % of the face's smaller side, the picture's proportions kept | Guess (Fusion's default size is not documented; users ask for "fit to face") |
 | Centred where the face is picked | Same | Guess |
 | A Decal folder in the browser; a timeline object | **Decals** folder in the body's component (eye, Edit Decal, Find in Timeline, Rename, Delete); a **Decal** step in the timeline (double-click edits it) | Autodesk (folder), API (timeline) |
-| The decal follows the body | Same: found again on the body after every recompute (by where it sits; a flat face moved along its normal takes the decal with it); a face that is gone makes the step red with the reason | Guess |
+| The decal is stuck to its face: it moves with its body and its component | Same, see **Following the face** below | Forum ("the decal is part of the component and will move with it") |
 | The picture is part of the design | Same: kept inside the design file | — |
 | Cancel / Esc, Ctrl+Z | Nothing left; one undo step | — |
+
+### Following the face (fix-decal, Luca: "decals dont follow their faces when moved")
+
+The decal used to keep a fixed frame and look for a face at that spot after every change, so
+any move of its body left it behind (red, or drawn where the face had been). Now it is stuck
+to its face (`decal.follow()`): at every compute it compares the face with what it remembered
+of it at the last good compute (`FaceRecord`: the face's own surface frame under the decal's
+middle, its corners, area, normal, and the body's volume and middle) and moves the same way.
+
+| Fusion | SciForge | Source |
+|---|---|---|
+| The decal's centre is a point on its (first) face, its Z the face's normal there | Same: its frame sits on the face | Autodesk (API `DecalInput.transform`, `Decal.faces`) |
+| The body moved (Move/Copy, live in the dialog, edited from the timeline) | The decal moves and turns with its face, on flat, wrapped and other faces; a Create Copy leaves it on the original | Forum (moves with it) |
+| The component moved (Move/Copy of components, captured or not; Component Drag; a joint driven, made or dragged; undo of any of them) | Drawn in its body's component and at its body's own placement, so it goes along at once, without a recompute (a joint moves a body at the root by its placement) | Forum |
+| A body made into a component (Create Components from Bodies) or dragged into another component | Its decals go into that component with it (the browser lists them there) and stay where they are in the design | Forum ("part of the component") |
+| The face changed by a later step: pushed / pulled (Press Pull, an edited extrude distance, a parameter) | The decal stays on it: moved with a face that moved as a whole; on a flat face pushed along its normal; on a cylinder made thicker or thinner (still wrapped round it, the picture keeps its size) | Guess (Fusion re-sits the decal on the changed face: Forum, hole thread) |
+| The face grows or is cut (a neighbour pulled out, a hole under the decal) | The decal stays where it is on the face (cut where the face is cut); Fusion's decal can jump when a hole removes the point under its centre, SciForge keeps it | Forum (the jump), SciForge (keeps it) |
+| The face is gone (its step deleted, replaced) | The decal's step turns **red** with the reason and the picture is not drawn (nothing floats in the air); double-click it: Edit Decal says the face is gone and waits for a click on a face; **Select Face** in Edit Decal moves it to any face, of any body | Forum (lost references: edit the feature, select the face again), API (`Decal.redefine`) |
+| A component copied (Copy / Paste, Move's Create Copy, a component pattern): every occurrence shows the component's decals | Same: the picture is drawn on each copy of the body too, and follows the copy when it moves, is hidden or the pattern changes (Paste New copies the decal with the component) | Guess (the decal belongs to the component: Forum) |
+| Undo / redo; save and reopen | Every move and change undoes with the decal; a red decal turns red again after a redo; a reopened design shows its decals where their faces are, and they go on following | — |
+| — | Decals saved by the earlier SciForge (no face remembered) are brought up to date when the design is opened | SciForge |
 
 ## Preferences (UTILITIES > Preferences)
 
@@ -192,6 +228,8 @@ exist here).
 | An out-of-date icon in the application bar (Get All Latest for every reference) | The yellow step and a note; Update Derives (command search) updates a design's Derives |
 | Decal on spheres / free-form faces without stretching; decal manipulators on the picture's corners | Other curved faces are laid straight onto the decal's plane; one edge arrow scales (in proportion) |
 | Decals rendered in Render / in drawings | No Render workspace (out of scope); TechDraw does not draw textures |
+| A copy's own Decals folder in the browser (Copy / Paste, Create Copy, a component pattern) | The picture is drawn on every copy, but the browser lists the decal under the original only (the copies have no decal objects of their own; edit the original's) |
+| Which face a decal sticks to when a face is rebuilt in a way that changes it and moves it at the same time (Fusion keeps its own face names) | SciForge follows what it remembered of the face's shape and place; FreeCAD's own face names are lost by SciForge's Python steps (a Move gives "?Face6"), so they are not used |
 | Preferences: Inventor / Tinkercad / Alias / PowerMill mouse presets, Y up, Automatic version on close, default appearance, angular precision | Greyed with the reason in the window (see above) |
 | Fusion's add-in API (`adsk.core`, `adsk.fusion`) | FreeCAD's Python API instead: Fusion scripts do not run unchanged |
 | Your own materials travel with the design (Fusion keeps them in the cloud) | They live in FreeCAD's User library of each computer; a body keeps its material's name, density and base in the design, and SciForge makes the material again when the design is opened on a computer without it (FreeCAD first prints "Material not found" for it) |

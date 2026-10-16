@@ -282,8 +282,21 @@ def place(obj, component, keep_position=True):
             obj.Placement = after.inverse().multiply(before).multiply(obj.Placement)
     except Exception as exc:
         warn("%s: could not keep its position: %s" % (obj.Label, exc))
+    _carry_decals(obj)
     log("%s moved to %s" % (obj.Label, component.Label if component is not None else "the root"))
     return True
+
+
+def _carry_decals(body):
+    """A body's decals go into its new component with it (decal.carry)."""
+    if not is_body(body):
+        return
+    try:
+        from . import decal
+
+        decal.carry(body)
+    except Exception as exc:
+        warn("%s: its decals did not follow: %s" % (body.Label, exc))
 
 
 def _container_placement(component):
@@ -314,6 +327,7 @@ def from_bodies(doc, bodies, parent=KEEP, label=None):
         name = label if (label and len(bodies) == 1) else body.Label
         part = new_component(doc, name, where)
         part.addObject(body)
+        _carry_decals(body)
         made.append(part)
     return made
 

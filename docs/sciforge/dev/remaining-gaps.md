@@ -54,8 +54,11 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
   roll back with the marker.
 - **inspect.md**: Interference cannot create bodies. Measure's Component filter is greyed.
 - **inspect-analysis.md**: meshes cannot be analysed. No Include Sharp Curves.
-- **misc.md**: Derive brings components in flat. The source version cannot be chosen. No adsk
-  add-in API.
+- **misc.md**: (Decals follow their face through moves, joints, face edits and component
+  copies by sf/fix-decal.) Derive brings components in flat. The source version cannot be
+  chosen. No adsk add-in API. A decal on a component's copy is listed only under the
+  original; a face that changes shape and moves in one step may lose its decal (red, Select
+  Face puts it back).
 - **selection.md**: no double-click chain selection in sketches. No box selection of planes
   and axes.
 - **timeline-browser.md**: an Extrude made while rolled back before a fillet cannot switch to

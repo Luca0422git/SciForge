@@ -5,9 +5,14 @@ FreeCAD is decal_core.py. Spec and sources: docs/sciforge/parity/misc.md.
 
 A decal is an App::FeaturePython (SciForgeType "Decal", a step in the timeline after the step
 whose face it is on; in the body's component, in the browser's Decals folder) holding:
-  Body / FaceName      the body and the face (found again by where the decal sits when the
-                       body changes: FreeCAD renames faces)
-  Anchor               the decal's frame on the face (origin, the face's outward normal as Z)
+  Body / FaceName      the body and the face (followed when the body changes: see follow())
+  Anchor               the decal's frame on the face (origin, the face's outward normal as Z),
+                       in the coordinates of the body's shape (its component's)
+  BodyPlace            the body's own placement when the decal was computed: a body moved by
+                       its placement since (a joint) is drawn moved (decal_ui), no recompute
+  FaceRecord           the face as it was at the last good compute (where its surface's own
+                       frame stood under the decal, its corners, area): how the face moved
+                       since is found from it, and the decal moves the same way
   Surface              Plane, Cylinder (the picture wraps round the axis) or Other (laid
                        straight onto the frame's plane)
   ImageFile            the picture, kept inside the design file
@@ -41,6 +46,11 @@ OPTION_PROPS = {
     "flip_v": "FlipVertical",
 }
 TANGENT_DEG = 2.0  # faces meeting within this angle are one surface for Chain Faces
+RECORD = "FaceRecord"
+GONE = (
+    "The face this decal was on is gone (a step removed or replaced it). Double-click the "
+    "decal and click a face to put it there, or delete it."
+)
 
 
 class DecalError(ValueError):
@@ -99,10 +109,22 @@ class DecalFeature:
         add("App::PropertyVectorList", "MeshUV", "Picture coordinates", True, True)
         add("App::PropertyVectorList", "MeshNormals", "Normals", True, True)
         add("App::PropertyIntegerList", "MeshTriangles", "Triangles", True, True)
+        add("App::PropertyString", RECORD, "The face at the last compute (followed)", True, True)
+        add("App::PropertyPlacement", "BodyPlace", "The body's placement then", True, True)
         bodies.mark(obj, TYPE)
 
     def onDocumentRestored(self, obj):
+        old = "BodyPlace" not in obj.PropertiesList
         self.ensure_properties(obj)
+        try:
+            body = obj.Body
+            if old and body is not None and bodies.alive(body):
+                # saved before decals followed their body: computed where the body stood
+                obj.BodyPlace = App.Placement(body.Placement)
+            if not getattr(obj, RECORD, ""):
+                remember_face(obj)  # saved before faces were followed: its face as saved
+        except Exception as exc:
+            log("decal %s: not brought up to date: %s" % (obj.Label, exc))
 
     def execute(self, obj):
         build(obj)
@@ -128,6 +150,99 @@ def body_shape(body):
     return shape
 
 
+def drawn_place(obj):
+    """How the decal's coordinates (its body's shape's when it was computed) lie in the ones
+    it is drawn in (its own component's): the way the body moved by its own placement since
+    (a joint or Component Drag moves a body at the root that way, without a recompute: the
+    picture goes along at once), and the way from the body's component to the decal's when
+    they differ."""
+    from . import components
+
+    body = obj.Body
+    if body is None or not bodies.alive(body):
+        return App.Placement()
+    place = drawn_place_in_home(obj)
+    own = components.container_of(obj)
+    home = components.container_of(body)
+    if own is not home:
+        start = home.getGlobalPlacement() if home is not None else App.Placement()
+        end = own.getGlobalPlacement() if own is not None else App.Placement()
+        place = end.inverse().multiply(start).multiply(place)
+    return place
+
+
+def copy_places(obj):
+    """Where the decal is drawn again: on each copy of its body in an instance of its
+    component (Copy / Paste, Move's Create Copy, a component pattern: instances.py), as
+    placements in the coordinates it is drawn in. A decal belongs to its component, so every
+    occurrence of the component shows it."""
+    from . import components, instances
+
+    body = obj.Body
+    if body is None or not bodies.alive(body):
+        return []
+    own = components.container_of(obj)
+    home = components.container_of(body)
+    to_own = own.getGlobalPlacement().inverse() if own is not None else App.Placement()
+    start = home.getGlobalPlacement() if home is not None else App.Placement()
+    start = start.multiply(drawn_place_in_home(obj))
+    places = []
+    for feature in body.InList:
+        try:
+            if not instances.is_copy_feature(feature) or feature.Source is not body:
+                continue
+            copy = instances.copy_body(feature)
+            if copy is None or not _shown(copy):
+                continue
+            pattern = feature.Pattern
+            if pattern is not None:  # the copy is the source's solid moved by the pattern
+                moves = list(getattr(pattern, "Moves", []) or [])
+                if feature.Index >= len(moves):
+                    continue
+                world = moves[feature.Index]
+            else:  # the source's solid in its component, put where the copy's component is
+                root = feature.Root
+                back = root.getGlobalPlacement().inverse() if root is not None else None
+                world = copy.getGlobalPlacement()
+                if back is not None:
+                    world = world.multiply(back)
+            places.append(to_own.multiply(world).multiply(start))
+        except Exception:
+            continue
+    return places
+
+
+def _shown(obj):
+    """The object and every component it is in are shown."""
+    from . import components
+
+    current = obj
+    while current is not None:
+        if not getattr(current, "Visibility", True):
+            return False
+        current = components.container_of(current)
+    return True
+
+
+def drawn_place_in_home(obj):
+    """How the decal's coordinates lie in its body's component's: the way the body moved
+    by its own placement since the decal was computed."""
+    body = obj.Body
+    then = getattr(obj, "BodyPlace", None)
+    if body is None or then is None:
+        return App.Placement()
+    return body.Placement.multiply(then.inverse())
+
+
+def global_place(obj):
+    """How the decal's coordinates lie in the design (the handles are drawn with it)."""
+    from . import components
+
+    own = components.container_of(obj)
+    start = own.getGlobalPlacement() if own is not None else App.Placement()
+    return start.multiply(drawn_place(obj))
+
+
 def _normal_at(face, point):
     u, v = face.Surface.parameter(point)
     return face.normalAt(u, v)
@@ -142,34 +257,51 @@ def surface_kind(face):
     return "Other"
 
 
-def find_face(shape, origin, normal, hint=""):
-    """The face the decal sits on: `hint` when it still holds the decal's origin with the
-    same normal, else the face nearest to the origin with that normal (faces are renamed when
-    the body changes). (name, face) or (None, None)."""
-    candidates = []
+def _named_faces(shape, hint=""):
+    """[(name, face)] of the shape, `hint` first (the face the decal was on last time)."""
+    faces = [("Face%d" % (i + 1), f) for i, f in enumerate(shape.Faces)]
     if hint:
-        try:
-            candidates.append((hint, shape.getElement(hint)))
-        except Exception:
-            pass
-    candidates += [("Face%d" % (i + 1), f) for i, f in enumerate(shape.Faces)]
+        first = [nf for nf in faces if nf[0] == hint]
+        faces = first + [nf for nf in faces if nf[0] != hint]
+    return faces
+
+
+def _tolerance(shape):
+    return 1e-3 * max(1.0, shape.BoundBox.DiagonalLength)
+
+
+def _on_surface(face, point, tol):
+    """The point lies on the face's surface (inside the face or not: a hole may be under it)."""
+    try:
+        surface = face.Surface
+        return (surface.value(*surface.parameter(point)) - point).Length <= tol
+    except Exception:
+        return False
+
+
+def find_face(shape, origin, normal, hint="", slack=0.0):
+    """The face the decal's middle sits on: `hint` when it still holds it with the same normal,
+    else the face nearest to it with that normal (faces are renamed when the body changes).
+    `slack`: how far off the face the middle may be while still on its surface (a hole cut
+    under it, the face trimmed). (name, face) or (None, None)."""
+    tol = _tolerance(shape)
     best, best_d = (None, None), None
     point = App.Vector(origin)
-    for name, face in candidates:
+    for name, face in _named_faces(shape, hint):
         try:
             d = face.distToShape(_point_shape(point))[0]
         except Exception:
             continue
-        if d > 1e-3 * max(1.0, shape.BoundBox.DiagonalLength):
+        if d > max(tol, slack) or (d > tol and not _on_surface(face, point, tol)):
             continue
         try:
             if _normal_at(face, point).dot(normal) < 0.99:
                 continue
         except Exception:
             continue
-        if name == hint:
+        if name == hint and d <= tol:
             return name, face
-        if best_d is None or d < best_d:
+        if best_d is None or d < best_d - 1e-9:
             best, best_d = (name, face), d
     return best
 
@@ -180,12 +312,22 @@ def _point_shape(point):
     return Part.Vertex(point)
 
 
-def _moved_plane(obj, shape, normal):
-    """A flat face moved along its normal (the body was made thicker): the face with the same
-    normal under the decal; the decal's frame goes onto it."""
+def _slack(obj):
+    """How far the decal's middle may be off its face (a hole under it): half its smaller side."""
+    try:
+        return 0.5 * min(obj.BaseWidth * obj.ScaleX, obj.BaseHeight * obj.ScaleY)
+    except Exception:
+        return 0.0
+
+
+def _moved_plane(obj, shape, normal, slack=0.0):
+    """A flat face moved along its normal (pushed / pulled, the body made thicker): the face
+    with the same normal under the decal's middle, nearest first. (name, face, the middle
+    put onto it) or (None, None, None)."""
     anchor = obj.Anchor
-    best, best_d = (None, None), None
-    for i, face in enumerate(shape.Faces):
+    tol = _tolerance(shape)
+    best, best_d = (None, None, None), None
+    for name, face in _named_faces(shape, obj.FaceName):
         if surface_kind(face) != "Plane":
             continue
         try:
@@ -197,17 +339,312 @@ def _moved_plane(obj, shape, normal):
         offset = (anchor.Base - face.CenterOfMass).dot(fn)
         projected = anchor.Base - fn * offset
         try:
-            if face.distToShape(_point_shape(projected))[0] > 1e-4:
+            if face.distToShape(_point_shape(projected))[0] > max(tol, slack):
                 continue
         except Exception:
             continue
-        if best_d is None or abs(offset) < best_d:
-            best, best_d = ("Face%d" % (i + 1), face, projected), abs(offset)
-    if best[0] is None:
-        return None, None
-    name, face, projected = best
-    obj.Anchor = App.Placement(projected, anchor.Rotation)
-    return name, face
+        if best_d is None or abs(offset) < best_d - 1e-9:
+            best, best_d = (name, face, projected), abs(offset)
+    return best
+
+
+def _resized_cylinder(obj, shape, slack=0.0):
+    """A cylinder made thicker or thinner (Press Pull on its side, a new radius): the face on
+    a cylinder about the same axis under the decal's middle. (name, face, the middle put onto
+    it, the new radius) or (None, None, None, None)."""
+    if obj.Radius <= 0:
+        return None, None, None, None
+    tol = _tolerance(shape)
+    axis = App.Vector(obj.AxisDirection).normalize()
+    base = App.Vector(obj.AxisPoint)
+    rel = obj.Anchor.Base - base
+    radial = rel - axis * rel.dot(axis)
+    if radial.Length < 1e-9:
+        return None, None, None, None
+    radial.normalize()
+    best, best_d = (None, None, None, None), None
+    for name, face in _named_faces(shape, obj.FaceName):
+        if surface_kind(face) != "Cylinder":
+            continue
+        surface = face.Surface
+        if abs(App.Vector(surface.Axis).normalize().dot(axis)) < 0.9999:
+            continue
+        off = App.Vector(surface.Center) - base
+        if (off - axis * off.dot(axis)).Length > tol:
+            continue  # not the same axis
+        point = base + axis * rel.dot(axis) + radial * surface.Radius
+        try:
+            if face.distToShape(_point_shape(point))[0] > max(tol, slack):
+                continue
+            outward = _normal_at(face, point)
+        except Exception:
+            continue
+        side = obj.Anchor.Rotation.multVec(App.Vector(0, 0, 1))
+        if outward.dot(side) < 0.99:
+            continue
+        change = abs(surface.Radius - obj.Radius)
+        if best_d is None or change < best_d - 1e-9:
+            best, best_d = (name, face, point, surface.Radius), change
+    return best
+
+
+# -- following the face ----------------------------------------------------------------------
+def _frame(origin, x, z):
+    """A placement at `origin` whose Z is `z` and whose X is `x` laid square to it."""
+    z = App.Vector(z).normalize()
+    x = App.Vector(x) - z * App.Vector(x).dot(z)
+    if x.Length < 1e-9:
+        x = App.Vector(1, 0, 0) if abs(z.x) < 0.9 else App.Vector(0, 1, 0)
+        x = x - z * x.dot(z)
+    x.normalize()
+    y = z.cross(x)
+    matrix = App.Matrix(
+        x.x, y.x, z.x, origin.x, x.y, y.y, z.y, origin.y, x.z, y.z, z.z, origin.z, 0, 0, 0, 1
+    )
+    return App.Placement(matrix)
+
+
+def _surface_frame(face, uv):
+    """The frame the face's own surface has at the parameters `uv`: its point there, its
+    first parameter direction and its normal. A move of the shape (Move/Copy, a moved
+    component's body) moves this frame with it and keeps the parameters."""
+    surface = face.Surface
+    u, v = uv
+    du, dv = surface.tangent(u, v)
+    x = du if du.Length > 1e-9 else dv
+    return _frame(surface.value(u, v), x, surface.normal(u, v))
+
+
+def _plc_list(place):
+    q = place.Rotation.Q
+    return [place.Base.x, place.Base.y, place.Base.z, q[0], q[1], q[2], q[3]]
+
+
+def _plc(values):
+    return App.Placement(App.Vector(*values[:3]), App.Rotation(*values[3:7]))
+
+
+def face_record(face, point, shape=None):
+    """What is remembered of the face the decal lies on (all in the body shape's coordinates):
+    the surface's frame under the decal's middle `point` and its parameters there, the face's
+    middle, area, corners and outward normal; the body's volume and middle (`shape`)."""
+    uv = face.Surface.parameter(point)
+    corners = [_v(p.Point) for p in face.Vertexes]
+    rec = {
+        "v": 1,
+        "kind": surface_kind(face),
+        "uv": [uv[0], uv[1]],
+        "frame": _plc_list(_surface_frame(face, uv)),
+        "com": _v(face.CenterOfMass),
+        "area": face.Area,
+        "normal": _v(face.normalAt(uv[0], uv[1])),
+        "corners": corners[:24],
+        "count": len(corners),
+    }
+    mass = _mass(shape) if shape is not None else None
+    if mass is not None:
+        rec["bvol"], rec["bcom"] = mass[0], _v(mass[1])
+    return rec
+
+
+def _mass(shape):
+    """(volume, middle) of the body's solids, or None."""
+    try:
+        solids = list(shape.Solids)
+        total = sum(s.Volume for s in solids)
+        if not solids or total <= 1e-12:
+            return None
+        middle = App.Vector()
+        for s in solids:
+            middle = middle + s.CenterOfMass * (s.Volume / total)
+        return total, middle
+    except Exception:
+        return None
+
+
+def _record(obj):
+    try:
+        data = json.loads(getattr(obj, RECORD, "") or "{}")
+        return data if data.get("v") == 1 else None
+    except Exception:
+        return None
+
+
+def _congruent(rec, face, place, tol):
+    """`face` is the remembered face moved by `place`: the same kind and area, its middle,
+    corners and normal where `place` takes the remembered ones."""
+    if surface_kind(face) != rec["kind"]:
+        return False
+    if abs(face.Area - rec["area"]) > 1e-5 * max(rec["area"], 1e-9) + 1e-9:
+        return False
+    if (place.multVec(_vec(rec["com"])) - face.CenterOfMass).Length > tol:
+        return False
+    have = [p.Point for p in face.Vertexes]
+    if len(have) != rec.get("count", len(have)):
+        return False
+    for corner in rec["corners"]:
+        moved = place.multVec(_vec(corner))
+        if not any((moved - p).Length <= tol for p in have):
+            return False
+    try:  # facing the same way under the decal's middle
+        point = place.multVec(_plc(rec["frame"]).Base)
+        u, v = face.Surface.parameter(point)
+        if place.Rotation.multVec(_vec(rec["normal"])).dot(face.normalAt(u, v)) < 0.9999:
+            return False
+    except Exception:
+        return False
+    return True
+
+
+def _rigid(rec, face, tol):
+    """How the remembered face was moved to become `face` (a placement), or None when `face`
+    is not the remembered face moved (another face, or the face changed shape)."""
+    if surface_kind(face) != rec["kind"]:
+        return None
+    if abs(face.Area - rec["area"]) > 1e-5 * max(rec["area"], 1e-9) + 1e-9:
+        return None
+    try:
+        place = _surface_frame(face, rec["uv"]).multiply(_plc(rec["frame"]).inverse())
+    except Exception:
+        return None
+    return place if _congruent(rec, face, place, tol) else None
+
+
+def _likeliest(obj, rec, shape, movers, tol):
+    """The face among those the remembered face could have become (a box's top and bottom are
+    alike: a turn takes one onto the other): (name, face, placement, the body moved as a
+    whole). When the body moved as a whole (the same volume, its middle moved the same way:
+    Move/Copy, a placement) the face of the same name, which a move keeps; else the least
+    motion (a face pushed out along its normal does not turn)."""
+    whole = None
+    if "bvol" in rec:
+        mass = _mass(shape)
+        if mass is not None and abs(mass[0] - rec["bvol"]) <= 1e-6 * max(rec["bvol"], 1e-9):
+            whole = mass[1]
+
+    def together(place):
+        return whole is not None and (place.multVec(_vec(rec["bcom"])) - whole).Length <= tol
+
+    def key(mover):
+        name, _face, place = mover
+        moved = together(place)
+        return (
+            0 if moved else 1,
+            0 if moved and name == obj.FaceName else 1,
+            round(place.Rotation.Angle, 6),
+            place.Base.Length,
+        )
+
+    name, face, place = min(movers, key=key)
+    return name, face, place, together(place)
+
+
+def follow(obj, shape):
+    """The face the decal is stuck to in `shape` (its body as it is now) and how that face
+    moved since the decal was last computed: (name, face, how) with how one of
+      ("same", None)               the face did not move (renamed, cut or grown in place)
+      ("moved", placement)         the face moved as a whole (the body moved, the face
+                                   pushed out unchanged): the decal moves the same way
+      ("plane", point)             a flat face pushed or pulled along its normal (changed)
+      ("cylinder", (point, r))     a cylinder made thicker or thinner
+    or (None, None, None) when the face is gone."""
+    rec = _record(obj)
+    tol = _tolerance(shape)
+    faces = _named_faces(shape, obj.FaceName)
+    if rec is not None:
+        identity = App.Placement()
+        for name, face in faces:  # the same face where it was
+            try:
+                if _congruent(rec, face, identity, tol):
+                    return name, face, ("same", None)
+            except Exception:
+                continue
+        movers = []
+        for name, face in faces:  # the same face, moved
+            place = _rigid(rec, face, tol)
+            if place is not None:
+                movers.append((name, face, place))
+        if movers:
+            name, face, place, whole = _likeliest(obj, rec, shape, movers, tol)
+            if whole or place.Rotation.Angle < 1e-9:
+                return name, face, ("moved", place)
+            # Turned, though the body did not move as a whole: a face rebuilt by a later
+            # step whose surface starts elsewhere (a pushed face does not turn). Where the
+            # decal sits is trusted first; the turn only when nothing else fits.
+            found = _in_place(obj, shape)
+            return found if found[1] is not None else (name, face, ("moved", place))
+    return _in_place(obj, shape)
+
+
+def _in_place(obj, shape):
+    """follow() without a remembered face, or when it does not tell: the face under the
+    decal's middle, a flat face pushed / pulled under it, a cylinder made thicker / thinner."""
+    anchor = obj.Anchor
+    normal = anchor.Rotation.multVec(App.Vector(0, 0, 1))
+    slack = _slack(obj)
+    name, face = find_face(shape, anchor.Base, normal, obj.FaceName, slack)
+    if face is not None:
+        return name, face, ("same", None)
+    if obj.Surface == "Plane":
+        name, face, point = _moved_plane(obj, shape, normal, slack)
+        if face is not None:
+            return name, face, ("plane", point)
+    if obj.Surface == "Cylinder":
+        name, face, point, radius = _resized_cylinder(obj, shape, slack)
+        if face is not None:
+            return name, face, ("cylinder", (point, radius))
+    return None, None, None
+
+
+def _take(obj, how):
+    """Move the decal's frame (and its cylinder) the way its face moved."""
+    kind, data = how
+    anchor = obj.Anchor
+    if kind == "moved":
+        if data.isIdentity():
+            return
+        obj.Anchor = data.multiply(anchor)
+        if obj.Surface == "Cylinder":
+            obj.AxisPoint = data.multVec(obj.AxisPoint)
+            obj.AxisDirection = data.Rotation.multVec(obj.AxisDirection)
+    elif kind == "plane":
+        obj.Anchor = App.Placement(data, anchor.Rotation)
+    elif kind == "cylinder":
+        point, radius = data
+        obj.Anchor = App.Placement(point, anchor.Rotation)
+        obj.Radius = float(radius)
+
+
+def stale(obj):
+    """True when the decal does not match its body any more and must be computed again: its
+    face moved or changed since it was computed, or a red decal whose face is back."""
+    try:
+        shape = body_shape(obj.Body)
+        _name, face, how = follow(obj, shape)
+    except Exception:
+        return False
+    red = "Invalid" in list(obj.State)
+    if red or not obj.MeshPoints:
+        # red with its face back; or not drawn and not red (a redo that took its face away
+        # restores the empty mesh, not the red mark): computed again, it is flagged
+        return face is not None or not red
+    return face is None or how[0] != "same"
+
+
+def remember_face(obj, face=None, shape=None):
+    """Store where the decal's face is now (FaceRecord), for follow() the next time."""
+    if face is None:
+        shape = shape if shape is not None else body_shape(obj.Body)
+        normal = obj.Anchor.Rotation.multVec(App.Vector(0, 0, 1))
+        _name, face = find_face(shape, obj.Anchor.Base, normal, obj.FaceName, _slack(obj))
+        if face is None:
+            return False
+    if shape is None:
+        shape = body_shape(obj.Body)
+    text = json.dumps(face_record(face, obj.Anchor.Base, shape), sort_keys=True)
+    if getattr(obj, RECORD, "") != text:
+        setattr(obj, RECORD, text)
+    return True
 
 
 def chained(shape, face):
@@ -239,24 +676,31 @@ def chained(shape, face):
 
 
 # -- the frame -----------------------------------------------------------------------------------
-def frame_at(face, point):
+def frame_at(face, point, turn=None):
     """(Anchor placement, surface kind, cylinder data or None) of a decal laid at `point` of
-    `face`: Z = the outward normal there; on a wall the picture stands upright."""
+    `face`: Z = the outward normal there; on a wall the picture stands upright. `turn`: the
+    rotation from the face's coordinates (its body's own) to the design's, whose up the
+    picture takes."""
+    turn = turn if turn is not None else App.Rotation()
+    back = turn.inverted()
+    up = back.multVec(App.Vector(0, 0, 1))
+    right = back.multVec(App.Vector(1, 0, 0))
     normal = _normal_at(face, point)
     kind = surface_kind(face)
     cylinder = None
     if kind == "Cylinder":
         surface = face.Surface
         axis = App.Vector(surface.Axis).normalize()
-        if axis.z < -1e-9 or (
-            abs(axis.z) < 1e-9 and (axis.y < -1e-9 or abs(axis.y) < 1e-9 and axis.x < 0)
+        seen = turn.multVec(axis)  # as the design sees it
+        if seen.z < -1e-9 or (
+            abs(seen.z) < 1e-9 and (seen.y < -1e-9 or abs(seen.y) < 1e-9 and seen.x < 0)
         ):
             axis = axis * -1.0  # the picture's up along +Z (or +Y / +X)
         y = axis
         x = y.cross(normal).normalize()
         cylinder = {"point": App.Vector(surface.Center), "axis": axis, "radius": surface.Radius}
     else:
-        hint = core.upright_hint(_v(normal))
+        hint = core.upright_hint(_v(normal), _v(up), _v(right))
         x_t, y_t, _z = core.frame_axes(_v(normal), hint)
         x, y = _vec(x_t), _vec(y_t)
     z = normal
@@ -317,21 +761,18 @@ def uv_function(obj):
 
 
 def mesh(obj, shape=None):
-    """(points, uv, normals, triangles) of the decal on its body as it is now; DecalError
-    when its face is gone."""
+    """(points, uv, normals, triangles) of the decal on its body as it is now, its frame
+    moved the way its face moved (follow()); DecalError when its face is gone. Returns the
+    face too: (points, uv, normals, triangles, face)."""
     shape = shape if shape is not None else body_shape(obj.Body)
-    anchor = obj.Anchor
-    normal = anchor.Rotation.multVec(App.Vector(0, 0, 1))
-    name, face = find_face(shape, anchor.Base, normal, obj.FaceName)
-    if face is None and obj.Surface == "Plane":
-        name, face = _moved_plane(obj, shape, normal)
+    name, face, how = follow(obj, shape)
     if face is None:
-        raise DecalError(
-            "The face under the decal is gone (an earlier step changed it). Edit the decal and "
-            "click a face again, or delete it."
-        )
+        raise DecalError(GONE)
+    _take(obj, how)
     if name != obj.FaceName:
         obj.FaceName = name
+    anchor = obj.Anchor
+    normal = anchor.Rotation.multVec(App.Vector(0, 0, 1))
     faces = chained(shape, face) if obj.ChainFaces else [face]
     uv_of = uv_function(obj)
     size = max(obj.BaseWidth * obj.ScaleX, obj.BaseHeight * obj.ScaleY, 1.0)
@@ -360,29 +801,42 @@ def mesh(obj, shape=None):
         tris += [(a + base, b + base, c + base) for a, b, c in t2]
     lift = max(0.005, 1e-4 * shape.BoundBox.DiagonalLength)
     points = core.lifted(points, normals, lift)
-    return points, uvs, normals, tris
+    return points, uvs, normals, tris, face
 
 
 def build(obj):
-    """Recompute the drawn mesh (FeaturePython execute)."""
-    points, uvs, normals, tris = mesh(obj)
-    obj.MeshPoints = [_vec(p) for p in points]
-    obj.MeshUV = [App.Vector(u, v, 0) for u, v in uvs]
-    obj.MeshNormals = [_vec(n) for n in normals]
+    """Recompute the drawn mesh (FeaturePython execute). A decal whose face is gone is not
+    drawn (and its step is red with the reason)."""
+    try:
+        points, uvs, normals, tris, face = mesh(obj)
+    except DecalError:
+        _set_mesh(obj, [], [], [], [])
+        raise
+    _set_mesh(obj, points, uvs, normals, tris)
+    remember_face(obj, face)
+    then = getattr(obj, "BodyPlace", None)
+    if then is not None and not then.isSame(obj.Body.Placement, 1e-12):
+        obj.BodyPlace = App.Placement(obj.Body.Placement)  # the mesh is where the body is now
+
+
+def _set_mesh(obj, points, uvs, normals, tris):
     flat = []
     for tri in tris:
         flat += list(tri)
+    if not points and not obj.MeshPoints:
+        return  # nothing drawn already: no change (an undo step stays clean)
+    obj.MeshPoints = [_vec(p) for p in points]
+    obj.MeshUV = [App.Vector(u, v, 0) for u, v in uvs]
+    obj.MeshNormals = [_vec(n) for n in normals]
     obj.MeshTriangles = flat
 
 
 # -- making one ----------------------------------------------------------------------------------
-def make(body, face_name, point, image_path, pixels, label=None):
-    """A decal on `face_name` of `body` at `point` (the body's component's coordinates) with
-    the picture `image_path` of `pixels` (w, h). Returns it (recomputed)."""
-    if not image_path or not os.path.isfile(image_path):
-        raise DecalError("The image was not found: %s" % (image_path or "(no file)"))
-    if os.path.splitext(image_path)[1].lower() not in IMAGE_EXTENSIONS:
-        raise DecalError("Choose a PNG, JPEG, TIFF or BMP image.")
+def _laid(body, face_name, point):
+    """(face, Anchor, surface kind, cylinder data) of a decal laid on `face_name` of `body`
+    where `point` (the body's component's coordinates, a click) is."""
+    from . import components
+
     shape = body_shape(body)
     try:
         face = shape.getElement(face_name)
@@ -393,12 +847,13 @@ def make(body, face_name, point, image_path, pixels, label=None):
         point = face.Surface.value(*face.Surface.parameter(point))  # exactly on the face
     except Exception:
         pass
-    anchor, kind, cylinder = frame_at(face, point)
-    doc = body.Document
-    obj = doc.addObject("App::FeaturePython", "Decal")
-    DecalFeature(obj)
-    obj.Label = label or unique_label(doc, os.path.splitext(os.path.basename(image_path))[0])
-    obj.Body = body
+    home = components.container_of(body)
+    turn = home.getGlobalPlacement().Rotation if home is not None else App.Rotation()
+    anchor, kind, cylinder = frame_at(face, point, turn)
+    return face, anchor, kind, cylinder
+
+
+def _set_frame(obj, face_name, anchor, kind, cylinder):
     obj.FaceName = face_name
     obj.Anchor = anchor
     obj.Surface = kind
@@ -406,6 +861,22 @@ def make(body, face_name, point, image_path, pixels, label=None):
         obj.AxisPoint = cylinder["point"]
         obj.AxisDirection = cylinder["axis"]
         obj.Radius = cylinder["radius"]
+
+
+def make(body, face_name, point, image_path, pixels, label=None):
+    """A decal on `face_name` of `body` at `point` (the body's component's coordinates) with
+    the picture `image_path` of `pixels` (w, h). Returns it (recomputed)."""
+    if not image_path or not os.path.isfile(image_path):
+        raise DecalError("The image was not found: %s" % (image_path or "(no file)"))
+    if os.path.splitext(image_path)[1].lower() not in IMAGE_EXTENSIONS:
+        raise DecalError("Choose a PNG, JPEG, TIFF or BMP image.")
+    face, anchor, kind, cylinder = _laid(body, face_name, point)
+    doc = body.Document
+    obj = doc.addObject("App::FeaturePython", "Decal")
+    DecalFeature(obj)
+    obj.Label = label or unique_label(doc, os.path.splitext(os.path.basename(image_path))[0])
+    obj.Body = body
+    _set_frame(obj, face_name, anchor, kind, cylinder)
     obj.ImageFile = image_path
     obj.PixelWidth, obj.PixelHeight = int(pixels[0]), int(pixels[1])
     width, height = core.default_size(pixels, face_size(face, kind, cylinder))
@@ -424,6 +895,54 @@ def make(body, face_name, point, image_path, pixels, label=None):
         % (obj.Label, body.Label, face_name, kind, width, height)
     )
     return obj
+
+
+def relay(obj, body, face_name, point):
+    """Put a decal onto another face (Edit Decal, a face clicked: its own face was deleted, or
+    the user wants it elsewhere). The picture keeps its options and size; its middle goes
+    where the face was clicked (X / Y Distance back to 0)."""
+    _face, anchor, kind, cylinder = _laid(body, face_name, point)
+    if obj.Body is not body:
+        obj.Body = body
+    _set_frame(obj, face_name, anchor, kind, cylinder)
+    obj.XDistance = 0.0
+    obj.YDistance = 0.0
+    setattr(obj, RECORD, "")  # found again where it was clicked, then followed from there
+    carry(body)
+    log("decal %s put on %s %s (%s)" % (obj.Label, body.Label, face_name, kind))
+    return obj
+
+
+def carry(body):
+    """A body put into another component takes its decals along (a decal belongs to its
+    body's component and is drawn in it: Fusion's decal moves with the component). Returns
+    how many moved."""
+    from . import components
+
+    if body is None or not bodies.alive(body):
+        return 0
+    target = components.container_of(body)
+    moved = 0
+    for obj in decals(body.Document):
+        if obj.Body is not body:
+            continue
+        current = components.container_of(obj)
+        if current is target:
+            continue
+        try:
+            if current is not None:
+                current.removeObject(obj)
+            if target is not None:
+                target.addObject(obj)
+            moved += 1
+        except Exception as exc:
+            log("decal %s: not moved with %s: %s" % (obj.Label, body.Label, exc))
+    if moved:
+        log(
+            "%d decal(s) moved with %s to %s"
+            % (moved, body.Label, target.Label if target is not None else "the root")
+        )
+    return moved
 
 
 def unique_label(doc, base):
