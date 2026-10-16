@@ -8,9 +8,11 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 work stopped (CI #136: one red scenario in shard 3, `inspect_analysis_curvature`) and what to do
 first. Then report to Luca with the quick update of the first green CI.
 
-**Work branch (Luca, 2026-10-16 late):** `claude/amazing-lamport-zkxex4` is the main branch from
-now on (it started at 967a630c8c, the head of the old `claude/inspiring-cerf-ragp6j`, which is
-no longer pushed to). Luca may ask for a better name; tests run on any branch name.
+**Work branch: `develop` (Luca, 2026-10-16).** Every session commits and pushes to `develop`,
+whatever branch name the session was given (Claude Code makes up names like
+`claude/amazing-lamport-zkxex4`). `develop` started at d6ad0dd7; the older
+`claude/inspiring-cerf-ragp6j` and `claude/amazing-lamport-zkxex4` are no longer pushed to.
+Quick updates come from green "SciForge tests" runs on `develop`.
 
 ---
 
@@ -90,6 +92,11 @@ no longer pushed to). Luca may ask for a better name; tests run on any branch na
   (Autodesk help, forum answers) and naming the source in the parity docs (decision of
   2026-10-13 stands); Luca's bug reports are the priority list. Screenshots he sends can be
   looked at (images, not video).
+- **2026-10-16: no `.f3d` (Fusion's own file format); STEP is the way in.** Luca: "obviously if
+  we cant open f3d files then dont. Sure, we should be able to open step files." `.f3d` is
+  Autodesk's closed format (reverse engineering it is forbidden, outline 2.5). STEP open /
+  insert already exists (exchange-2); it brings the shapes, not the timeline. Outline 12 Q6
+  closed.
 
 ## Status by phase (outline section 10)
 
@@ -123,7 +130,7 @@ no longer pushed to). Luca may ask for a better name; tests run on any branch na
 - [ ] Spike 9.2: Fillet robustness benchmark + feasibility report
 - [ ] Answers to the open questions in outline section 12 (2026-10-16: Q1 recordings = no;
       Q3/Q4 settled by practice: GitHub Actions builds everything; Q5 settled: LGPL, repo
-      public. Open: Q1 Fusion scripting access, Q2 first real objects, Q6 `.f3d`)
+      public. Q6 closed: no `.f3d`, STEP only. Open: Q1 Fusion scripting access, Q2 first real objects)
 
 ### Phase 1: The modeling core (started)
 
@@ -5519,7 +5526,7 @@ MEMORY, remove the worktree, report once to Luca.
 3. Full Windows build: patches #4, #6, #7 compile (run #2/#3, `plate_hole_grid` PASS). Run #3's
    .7z was held back by the Shell Both tag bug (fixed 2026-10-12): a Windows-only build of
    the fix gives Luca the download.
-4. Get answers to outline section 12 (Q2 and Q6 still open; no parity captures: Luca declined,
+4. Get answers to outline section 12 (Q2 still open; no parity captures: Luca declined,
    2026-10-16).
 5. Spike 9.2 (Fillets): 100+ case benchmark from real part workflows, success-rate metric.
 6. Branding pass: done on `sf/app` (2026-10-13), to be merged and then proven by a full

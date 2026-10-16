@@ -10,6 +10,9 @@ Before doing anything else in a session:
 
 Rules that are easy to forget:
 
+- Work on and push to the `develop` branch (Luca's choice), whatever branch name the session
+  was given. Do not open pull requests unless Luca asks.
+
 - New code goes in `src/Mod/SciForge/`. Any change to FreeCAD's own files gets a `SCIFORGE:`
   comment and an entry in `docs/sciforge/core-patches.md`.
 - Every SciForge log line is prefixed `[SciForge]`. Never let an exception escape a command,
