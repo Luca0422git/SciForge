@@ -132,6 +132,18 @@ OPTIONS = [
         restart=True,
     ),
     _option(
+        "start_in_sciforge",
+        "general",
+        "Start in SciForge",
+        "bool",
+        True,
+        (SCIFORGE, "Bool", "StartInSciForge"),
+        group="Startup",
+        tip="On: the program opens straight in SciForge, without FreeCAD's Start page, from "
+        "the next start. Off: FreeCAD's own start workbench and Start page as before.",
+        apply="startup",
+    ),
+    _option(
         "mouse_preset",
         "general",
         "Pan, Zoom, Orbit Shortcuts",

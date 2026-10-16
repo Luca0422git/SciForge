@@ -12,6 +12,7 @@ must stay), leaves SciForge (FreeCAD must be restored), saves screenshots and
 writes result.json into SCIFORGE_SMOKE_OUT. FreeCAD's own exit code is not
 reliable for this, so the runner script reads result.json to decide pass/fail.
 """
+
 import json
 import os
 import traceback
@@ -603,6 +604,40 @@ def finish():
     QtCore.QTimer.singleShot(200, QtWidgets.QApplication.instance().quit)
 
 
+def step_started():
+    """A fresh profile opens straight in SciForge, without FreeCAD's Start page (Luca,
+    2026-10-16); the Preferences option gives FreeCAD's own start back."""
+    from sciforge import preferences_ui, shell, start_in
+
+    wb = Gui.activeWorkbench()
+    check("FreeCAD opens in SciForge", wb is not None and wb.name() == "SciForgeWorkbench")
+    check("SciForge's interface is on at start", shell.is_on())
+    ribbon = shell.ribbon()
+    check("Ribbon shown at start", ribbon is not None and ribbon.isVisible())
+    check("FreeCAD toolbars hidden at start", len(visible_toolbars()) <= 3, visible_toolbars())
+    area = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    titles = [w.windowTitle() for w in area.subWindowList()] if area is not None else []
+    check("No Start page", not any("Start" in t for t in titles), titles)
+    general = App.ParamGet(start_in.GENERAL)
+    check(
+        "AutoloadModule is SciForge",
+        general.GetString("AutoloadModule") == "SciForgeWorkbench",
+        general.GetString("AutoloadModule"),
+    )
+    preferences_ui.save({"start_in_sciforge": False})
+    check(
+        "Option off: FreeCAD's own start workbench back",
+        general.GetString("AutoloadModule") != "SciForgeWorkbench"
+        and not App.ParamGet(start_in.BACKUP).GetStrings(),
+        general.GetString("AutoloadModule"),
+    )
+    preferences_ui.save({"start_in_sciforge": True})
+    check("Option on again: opens in SciForge", start_in.is_set())
+    # the rest of this test starts from FreeCAD's own interface, as before
+    Gui.activateWorkbench("PartDesignWorkbench")
+    later(1000, step_activate)
+
+
 App.Console.PrintError = _ErrorCatcher()
 # Wait for the main window and start-up modules to settle first.
-later(2000, step_activate)
+later(2000, step_started)

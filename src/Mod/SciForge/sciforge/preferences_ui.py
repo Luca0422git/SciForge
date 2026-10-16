@@ -207,6 +207,10 @@ def _apply(kind):
             panel = versions_ui._state.get("panel")
             if versions_ui._alive(panel):
                 panel.set_folder(versions_ui.project_folder())
+        elif kind == "startup":  # Start in SciForge (counts from the next start)
+            from . import start_in
+
+            start_in.apply()
         elif kind == "components":  # Active component visibility (components-2)
             from . import component_look
 
