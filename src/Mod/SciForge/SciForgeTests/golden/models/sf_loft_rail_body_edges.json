@@ -1,0 +1,138 @@
+{
+  "id": "sf_loft_rail_body_edges",
+  "title": "Loft with two rails that are edges of a body (a wedge's slanted edges): a frustum",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "rails"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 40,
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "w",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              5,
+              0
+            ],
+            [
+              10,
+              40
+            ],
+            [
+              12,
+              40
+            ],
+            [
+              12,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "wedge",
+      "profile": "w",
+      "distance": 1,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "rails": [
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              5,
+              0,
+              40
+            ],
+            "at": {
+              "axis": "y",
+              "value": "max"
+            },
+            "count": 1
+          }
+        },
+        {
+          "edge": {
+            "type": "line",
+            "parallel": [
+              5,
+              0,
+              40
+            ],
+            "at": {
+              "axis": "y",
+              "value": "min"
+            },
+            "count": 1
+          }
+        }
+      ],
+      "operation": "new_body"
+    }
+  ],
+  "expect": {
+    "volume": 9333.333333333334,
+    "rel_tol": 0.001,
+    "solids": 1,
+    "valid": true,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      40
+    ],
+    "abs_tol": 0.02,
+    "source": "analytic",
+    "note": "the wedge's slanted edges run from (5, +-0.5, 0) to (10, +-0.5, 40) on the loft's side: the sections touch them as the plain loft does: a frustum 10 -> 20 over 40, h / 3 (A1 + A2 + sqrt(A1 A2))"
+  }
+}

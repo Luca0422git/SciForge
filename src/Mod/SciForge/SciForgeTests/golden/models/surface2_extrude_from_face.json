@@ -1,0 +1,118 @@
+{
+  "id": "surface2_extrude_from_face",
+  "title": "Surface Extrude From Object: a line extruded 15 from a box's top face, then Offset 5",
+  "tags": [
+    "surface",
+    "extrude",
+    "from-object"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "b",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            -5,
+            35,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "box",
+      "profile": "b",
+      "distance": 10
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            30,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "refs3": [
+        {
+          "step": "box",
+          "faces": {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "start": "object",
+        "distance": 15
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 450.0,
+        "faces": 1,
+        "bbox": [
+          0,
+          0,
+          10,
+          30,
+          0,
+          25
+        ],
+        "source": "analytic",
+        "note": "the 30 long line starts on the top face (z 10) and goes up 15"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "w1",
+      "set": {
+        "start_offset": 5
+      }
+    }
+  ],
+  "expect": {
+    "area": 450.0,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      15,
+      30,
+      0,
+      30
+    ],
+    "source": "analytic",
+    "note": "Offset 5 moves the start on from the face: z 15 .. 30"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "id": "sf_loft_merge_slot",
+  "title": "Loft Tangent Edges Merge: a slot lofted to the same slot 30 up, Keep then Merge",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "merge"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "slot": [
+            -10,
+            0,
+            10,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "slot": [
+            -10,
+            0,
+            10,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "faces": 6,
+        "volume": 8356.194490192345,
+        "source": "analytic",
+        "note": "Keep: a side face per profile edge (2 flat, 2 half cylinders) + 2 caps"
+      }
+    },
+    {
+      "op": "sf_loft_edit",
+      "target": "l1",
+      "set": {
+        "merge": true
+      }
+    }
+  ],
+  "expect": {
+    "faces": 3,
+    "solids": 1,
+    "valid": true,
+    "bbox": [
+      -15,
+      -5,
+      0,
+      15,
+      5,
+      30
+    ],
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "Merge: the four tangent edges loft into one smooth side face + 2 caps (the volume is in sf_loft_merge_slot_volume)"
+  }
+}

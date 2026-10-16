@@ -1,0 +1,121 @@
+{
+  "id": "surface2_loft_two_rails",
+  "title": "Surface Loft: two 20 long lines 30 apart between two bulging arc rails (flat)",
+  "tags": [
+    "surface",
+    "loft",
+    "rails"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "a",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            20,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "b",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            20,
+            0
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            20.0,
+            15.0,
+            25.0,
+            143.13010235415598,
+            216.86989764584402
+          ]
+        },
+        {
+          "arc": [
+            0.0,
+            15.0,
+            25.0,
+            -36.86989764584402,
+            36.86989764584402
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "l1",
+      "kind": "loft",
+      "refs": [
+        {
+          "sketch": "a",
+          "at": [
+            10,
+            0
+          ]
+        },
+        {
+          "sketch": "b",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "sketch": "r",
+          "at": [
+            -5.0,
+            15.0
+          ]
+        },
+        {
+          "sketch": "r",
+          "at": [
+            25.0,
+            15.0
+          ]
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "area": 804.3763859916055,
+    "rel_tol": 0.001,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      -5,
+      0,
+      0,
+      25,
+      0,
+      30
+    ],
+    "abs_tol": 0.02,
+    "source": "analytic",
+    "note": "Every section is moved and stretched to touch both rails (arcs r 25 through (0,0,0), (-5,0,15), (0,0,30) and the mirror at x 20): the flat region of the rectangle 20 x 30 and two circular segments R^2 (theta - sin theta) / 2, theta = 2 asin(15/25). SciForge fits sections 8 times between the profiles."
+  }
+}

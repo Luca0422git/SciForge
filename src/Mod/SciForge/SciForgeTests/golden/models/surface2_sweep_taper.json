@@ -1,0 +1,82 @@
+{
+  "id": "surface2_sweep_taper",
+  "title": "Surface Sweep Taper Angle 10: a circle r 5 swept 20 up a straight path opens out",
+  "tags": [
+    "surface",
+    "sweep",
+    "taper"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s",
+      "plane": "XY",
+      "curves": [
+        {
+          "circle": [
+            0,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "p",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "sweep",
+      "refs": [
+        {
+          "sketch": "s",
+          "at": [
+            5,
+            0
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "sketch": "p",
+          "at": [
+            0,
+            10
+          ]
+        }
+      ],
+      "options": {
+        "taper": 10
+      }
+    }
+  ],
+  "expect": {
+    "area": 863.0085892477495,
+    "rel_tol": 0.0002,
+    "solids": 0,
+    "bbox": [
+      -8.5265396141693,
+      -8.5265396141693,
+      0,
+      8.5265396141693,
+      8.5265396141693,
+      20
+    ],
+    "abs_tol": 0.002,
+    "source": "analytic",
+    "note": "a cone's side from r 5 to 5 + 20 tan 10 over 20: pi (r1 + r2) slant"
+  }
+}

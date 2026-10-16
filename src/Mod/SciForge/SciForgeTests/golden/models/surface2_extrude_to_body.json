@@ -1,0 +1,142 @@
+{
+  "id": "surface2_extrude_to_body",
+  "title": "Surface Extrude To Object: a line extruded up to a cylinder body, and to its face",
+  "tags": [
+    "surface",
+    "extrude",
+    "to-object"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "c",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "circle": [
+            15,
+            30,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "cyl",
+      "profile": "c",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            30,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s2",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            5,
+            30,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "step": "cyl"
+        }
+      ],
+      "options": {
+        "extent": "to_object"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 362.34382007756335,
+        "faces": 1,
+        "bbox": [
+          0,
+          0,
+          0,
+          30,
+          0,
+          16.771243444677047
+        ],
+        "source": "analytic",
+        "note": "up to the cylinder's underside z = 30 - sqrt(400 - (x-15)^2): 900 - (15 sqrt 175 + 400 asin 0.75)"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "w2",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s2",
+          "at": [
+            15,
+            5
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "step": "cyl",
+          "faces": {
+            "type": "cylinder",
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "extent": "to_object"
+      }
+    }
+  ],
+  "expect": {
+    "area": 362.34382007756335,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      5,
+      0,
+      30,
+      5,
+      16.771243444677047
+    ],
+    "source": "analytic",
+    "note": "the same to the cylinder's face (the line 5 aside lies under it the same way)"
+  }
+}

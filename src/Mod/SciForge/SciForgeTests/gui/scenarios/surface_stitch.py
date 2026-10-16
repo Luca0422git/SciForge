@@ -6,14 +6,15 @@ Selection (on) takes every face joined to it, the six faces leave the solid: six
 bodies (one face each, area 2 (40 30 + 40 10 + 30 10) = 3800 in all, no solid left), the
 surface icon in the browser. Undo: the box is back; Redo.
 SURFACE > Stitch: click the top, then the front surface: they are drawn stitched, 6 edges
-left open (4 + 4 - the shared one). Click the front again: it is dropped (the click lands
-on the stitched preview); click it once more. The right surface in the 3D view, the back,
-left and bottom ones in the browser (they face away): "Closed", the six make a solid of
-40 x 30 x 10 = 12000; OK: one solid body, the other five used up. A solid feature after
-it: Fillet the top front edge, radius 3: 12000 - 40 r^2 (1 - pi/4). Undo twice: the six
-surfaces again; Redo twice. Edit the Stitch from the timeline: the six read back,
-Tolerance 0.5, OK: still the filleted solid. Refusal: Stitch, click the solid: the dialog
-says it is a solid and takes nothing; Esc.
+left open (4 + 4 - the shared one, drawn red), the shared one drawn green. Click the front
+again: it is dropped (the click lands on the stitched preview); click it once more. The
+right surface in the 3D view, the back, left and bottom ones in the browser (they face
+away): "Closed", every edge green, the six make a solid of 40 x 30 x 10 = 12000; OK: one
+solid body, the other five used up. A solid feature after it: Fillet the top front edge,
+radius 3: 12000 - 40 r^2 (1 - pi/4). Undo twice: the six surfaces again; Redo twice. Edit
+the Stitch from the timeline: the six read back, Tolerance 0.5, OK: still the filleted
+solid. Refusal: Stitch, click the solid: the dialog says it is a solid and takes nothing;
+Esc.
 """
 
 import math
@@ -163,6 +164,15 @@ def two_stitched():
     )
     text = p.open_label.text()
     h.check("6 edges left open", text.startswith("6 edges") and "open" in text, text)
+    # Fusion draws the stitched edges green: the top's front edge and the front's top edge
+    stitched = [e.BoundBox for e in p.stitched]
+    h.check(
+        "the shared edge is drawn green (once from each surface)",
+        len(stitched) == 2
+        and all(abs(b.YMax) < 1e-6 and abs(b.ZMin - 10) < 1e-6 for b in stitched)
+        and "stitched" in p.overlay.groups,
+        stitched,
+    )
     h.check(
         "the top body previews both (1200 + 400)",
         st.near(st.area(s["top"]), 1600.0),
@@ -222,6 +232,7 @@ def closed():
     h.check("six surfaces picked", len(p.picks["bodies"]) == 6, p.picks["bodies"])
     text = p.open_label.text()
     h.check("Closed: a solid", text.startswith("Closed"), text)
+    h.check("every edge stitched (green): 6 x 4", len(p.stitched) == 24, len(p.stitched))
     h.check(
         "the preview is the 12000 solid",
         st.near(st.volume(s["top"]), BOX, 1e-4),

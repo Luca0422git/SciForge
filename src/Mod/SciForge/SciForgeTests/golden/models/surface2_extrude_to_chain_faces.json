@@ -1,0 +1,116 @@
+{
+  "id": "surface2_extrude_to_chain_faces",
+  "title": "Surface Extrude To Object with Chain Faces: up to a box's filleted underside (fillet + bottom)",
+  "tags": [
+    "surface",
+    "extrude",
+    "to-object"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "b",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            30,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "box",
+      "profile": "b",
+      "distance": 20,
+      "start": "offset",
+      "start_offset": 10
+    },
+    {
+      "op": "fillet",
+      "id": "fil",
+      "edges": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "y",
+            "value": "min"
+          },
+          {
+            "axis": "z",
+            "value": "min"
+          }
+        ],
+        "count": 1
+      },
+      "radius": 5
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            15,
+            2,
+            15,
+            18
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            10
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "step": "fil",
+          "faces": {
+            "type": "cylinder",
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "extent": "to_object"
+      }
+    }
+  ],
+  "expect": {
+    "area": 160.95623577,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      15,
+      2,
+      0,
+      15,
+      18,
+      11
+    ],
+    "abs_tol": 0.001,
+    "rel_tol": 1e-06,
+    "source": "analytic",
+    "note": "Chain Faces takes the fillet (r 5 along the bottom front edge, centre y 5, z 15) and the bottom face (z 10) joined smoothly to it. The line x 15, y 2 .. 18 rises to z = 15 - sqrt(25 - (5 - y)^2) under the fillet and to 10 under the bottom: 45 - (6 + 12.5 asin 0.6) + 130; highest at y 2: z 11"
+  }
+}

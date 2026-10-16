@@ -1,0 +1,96 @@
+{
+  "id": "surface2_revolve_to_plane",
+  "title": "Surface Revolve Type To: a line 10 from the Z axis turned to the YZ plane, then to XZ",
+  "tags": [
+    "surface",
+    "revolve",
+    "to-object"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            10,
+            0,
+            10,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "r1",
+      "kind": "revolve",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            10
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "axis": "Z"
+        }
+      ],
+      "refs3": [
+        {
+          "plane": "YZ"
+        }
+      ],
+      "options": {
+        "type": "to"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 314.1592653589793,
+        "faces": 1,
+        "source": "analytic",
+        "note": "a quarter of a cylinder r 10, h 20 (the YZ plane is a quarter turn either way: the positive way)"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "r2",
+      "kind": "revolve",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            10
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "axis": "Z"
+        }
+      ],
+      "refs3": [
+        {
+          "plane": "XZ"
+        }
+      ],
+      "options": {
+        "type": "to"
+      }
+    }
+  ],
+  "expect": {
+    "area": 628.3185307179587,
+    "faces": 1,
+    "solids": 0,
+    "source": "analytic",
+    "note": "to the XZ plane the profile lies on: its other half, half a turn"
+  }
+}

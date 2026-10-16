@@ -1,0 +1,65 @@
+{
+  "id": "sf_loft_merge_slot_volume",
+  "title": "Loft Tangent Edges Merge: the merged slot's volume (OpenCASCADE measures it wrong)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "merge",
+    "kernel"
+  ],
+  "xfail": "OpenCASCADE's volume of a smooth spline side that runs over tangent joints is several % off (8822 for 8356 mm^3; its mesh 8355): BRepGProp integrates such a face without splitting it at its knots",
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "slot": [
+            -10,
+            0,
+            10,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "slot": [
+            -10,
+            0,
+            10,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "merge": true
+    }
+  ],
+  "expect": {
+    "volume": 8356.194490192345,
+    "rel_tol": 0.001,
+    "source": "analytic",
+    "note": "a straight slot prism: (20 x 10 + pi 5^2) x 30"
+  }
+}

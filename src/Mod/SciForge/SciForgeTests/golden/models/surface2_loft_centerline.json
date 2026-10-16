@@ -1,0 +1,112 @@
+{
+  "id": "surface2_loft_centerline",
+  "title": "Surface Loft of two circles r 5 along a quarter-circle centerline r 30, then Direction",
+  "tags": [
+    "surface",
+    "loft",
+    "centerline",
+    "end-conditions"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "a",
+      "plane": "XY",
+      "curves": [
+        {
+          "circle": [
+            30,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "b",
+      "plane": "YZ",
+      "curves": [
+        {
+          "circle": [
+            0,
+            30,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "c",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            0,
+            0,
+            30,
+            0,
+            90
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "l1",
+      "kind": "loft",
+      "refs": [
+        {
+          "sketch": "a",
+          "at": [
+            35,
+            0
+          ]
+        },
+        {
+          "sketch": "b",
+          "at": [
+            0,
+            35
+          ]
+        }
+      ],
+      "refs3": [
+        {
+          "sketch": "c",
+          "at": [
+            21.213203435596427,
+            21.213203435596423
+          ]
+        }
+      ],
+      "options": {
+        "guide": "centerline"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 1480.4406601634037,
+        "rel_tol": 0.0002,
+        "source": "analytic",
+        "note": "the circles held square to the arc: a quarter torus R 30, r 5"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "l1",
+      "set": {
+        "start_condition": "direction"
+      }
+    }
+  ],
+  "expect": {
+    "area": 1480.4406601634037,
+    "rel_tol": 0.002,
+    "solids": 0,
+    "source": "analytic",
+    "note": "Direction at the first circle (straight off its plane, along the arc): the loft still follows the centerline's stations, the same quarter torus"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "id": "surface2_extrude_from_curved_face",
+  "title": "Surface Extrude From Object: a line extruded 10 up from a cylinder below it",
+  "tags": [
+    "surface",
+    "extrude",
+    "from-object"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "c",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "circle": [
+            15,
+            -30,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "cyl",
+      "profile": "c",
+      "distance": 20,
+      "direction": "symmetric"
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            30,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "refs3": [
+        {
+          "step": "cyl",
+          "faces": {
+            "type": "cylinder",
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "start": "object",
+        "distance": 10
+      }
+    }
+  ],
+  "expect": {
+    "area": 300.0,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      -16.771243444677047,
+      30,
+      0,
+      0
+    ],
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "Each line starts on the cylinder's top (axis along Y at x 15, z -30, r 20: z = -30 + sqrt(400 - (x - 15)^2), the crossing nearest the profile) and goes up 10: a band 10 high over the 30 long line, area 30 x 10 whatever the start curve"
+  }
+}

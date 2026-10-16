@@ -1,0 +1,157 @@
+{
+  "id": "surface2_extrude_all",
+  "title": "Surface Extrude Extent All: through two boxes above and below, Flip, Two Sides",
+  "tags": [
+    "surface",
+    "extrude",
+    "all"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            30,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 5,
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            -5,
+            35,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "b2",
+      "plane": "XY",
+      "offset": -10,
+      "geometry": [
+        {
+          "rect": [
+            -5,
+            -5,
+            35,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "box1",
+      "profile": "b1",
+      "distance": 20
+    },
+    {
+      "op": "extrude",
+      "id": "box2",
+      "profile": "b2",
+      "distance": 5,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "step": "box1"
+        },
+        {
+          "step": "box2"
+        }
+      ],
+      "options": {
+        "extent": "all"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 750.0,
+        "bbox": [
+          0,
+          0,
+          0,
+          30,
+          0,
+          25
+        ],
+        "source": "analytic",
+        "note": "One Side: up to the top of the higher box (z 25)"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "w1",
+      "set": {
+        "flip": true
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 300.0,
+        "bbox": [
+          0,
+          0,
+          -10,
+          30,
+          0,
+          0
+        ],
+        "source": "analytic",
+        "note": "Flip: down to the bottom of the lower box (z -10)"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "w1",
+      "set": {
+        "direction": "two_sides"
+      }
+    }
+  ],
+  "expect": {
+    "area": 1050.0,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      -10,
+      30,
+      0,
+      25
+    ],
+    "source": "analytic",
+    "note": "Two Sides: both ways, -10 .. 25"
+  }
+}

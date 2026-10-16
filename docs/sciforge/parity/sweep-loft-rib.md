@@ -33,6 +33,40 @@ them, Esc) and `modeling2_sweep_formula` (Distance and Taper as formulas, a para
 later, edit, undo / redo, save / reopen); goldens `sf_sweep_join_two_bodies`,
 `sf_loft_cut_two_bodies`, `sf_sweep_distance_parameter`, `sf_sweep_taper_parameter`.
 
+## Wave 5: Loft part 2 (branch `sf/surface-2`, 2026-10-16)
+
+Sources: **Autodesk** Loft reference and "Loft a solid body" (SLD-LOFT-SOLID, search excerpts):
+"select an end condition or continuity for the first and last profiles"; Guide Type Rails /
+Centerline; Tangent Edges Merge "merges edges of tangent faces into a single face", Keep
+"maintains edges between adjacent tangent faces"; Closed "connects the first and last
+profiles". **Autodesk** API `LoftFeatureInput.isTangentEdgesMerged`: true merges the faces so
+the edge between them no longer exists (its default was not readable). **Autodesk** Form loft
+reference: rails must intersect each section and end on or beyond the first and last.
+**Forum** ([Centerline cannot be tangent to profiles](https://forums.autodesk.com/t5/fusion-design-validate-document/error-trying-to-loft-centerline-cannot-be-tangent-to-profiles/td-p/11064817),
+[Rails cannot be tangent to profiles](https://forums.autodesk.com/t5/fusion-design-validate-document/lofting-error-rails-cannot-be-tangent-to-profiles/td-p/12317597),
+[Introduction to Loft using rail curves](https://forums.autodesk.com/t5/fusion-design-validate-document/introduction-to-loft-using-rail-curves-in-fusion/td-p/7296238)):
+one centerline only; it guides the shape in general while rails force it; rails and the
+centerline must be smooth chains. **Autodesk** parameters help: every value field takes a
+parameter or a formula. **Guess** where marked.
+
+| Fusion (source) | SciForge |
+|---|---|
+| Tangent Edges Merge: profile curves joined smoothly (a slot's lines and arcs) loft into one side face (Autodesk) | Same check box (it was greyed). The tangent runs of each profile are joined into one polynomial B-spline curve first, so OpenCASCADE lofts one face per run. Off (Keep) by default: see the gaps. A merged loft is always SciForge's own loft (`MergeTangentEdges` property) |
+| End conditions with rails or a centerline (Autodesk: offered for the first and last profile whatever the guide) | Same: Direction, Tangent, Curvature and Point Tangent now also with rails and with a centerline. The rail or centerline leads the loft between the profiles, the condition sets how it leaves each end (the columns of the side faces are interpolated again through the profiles and the fitted sections, with the end derivative) |
+| End conditions on a closed loft (Guess: the loop has no last end) | The Last Profile row goes away; Direction on the first profile sets how the loop passes through it (both sides the same, so the loop is smooth there). Tangent or Curvature on a closed loft's first profile (an edge of a body) is refused with the reason: the loop runs through it, it cannot end on faces there |
+| Rails that are edges of bodies (Autodesk: "rails are 2D or 3D curves", edges included) | Same: a click on an edge of another body in the Rails box takes it as a rail (it used to be read as a body for Objects To Cut); Chain Selection takes the edges joined smoothly to it |
+| Rails between profiles in planes that are not parallel (a turn) (Autodesk) | Same (it was refused): the sections are fitted to the rails as they turn, stretched toward the rails at 8 places between each pair of profiles. Within 1 % of the true shape (see the gaps) |
+| A centerline that runs on past the profiles (Guess: the loft ends at the profiles) | The loft runs between the first and the last profile; the rest of the line is not used |
+| Takeoff Weight, Takeoff Angle and Tangency Weight take a parameter or formula (Autodesk) | Same: a parameter or a formula with parameters ("w", "w * 2") goes on the loft as an expression and is read back when the loft is edited; a plain number or sum ("0.5 * 2") is a value, as in every SciForge dialog |
+
+Tests: scenario `surface2_solid_loft` (Merge, a rail on another body with Direction ends, a
+parameter for the weight, a number over it, a centerline with ends, Closed refusal, undo /
+redo, Esc: 77 checks);
+goldens `sf_loft_merge_slot`, `sf_loft_merge_slot_volume` (expected failure: OpenCASCADE's
+volume), `sf_loft_rails_ends`, `sf_loft_centerline_ends`, `sf_loft_closed_direction`,
+`sf_loft_rail_body_edges`, `sf_loft_rails_turning`. The surface loft has the same options
+(`parity/surface.md`, part 2).
+
 ## Sweep (CREATE > Sweep)
 
 | Fusion | SciForge |
@@ -70,11 +104,11 @@ A path lying in the profile's own plane is refused with the reason.
 |---|---|
 | Profiles: click sketch areas, flat faces or points, in loft order | Same. A point may be the first or the last profile (a cone or a dome) |
 | The profile list: reorder, remove | Same: a list with up, down and remove buttons |
-| Guide Type Rails / Centerline | Same. Rails: each section is moved (one rail), or moved and scaled (two rails), so it touches the rails. Centerline: the profiles stay square to the line |
+| Guide Type Rails / Centerline | Same. Rails (sketch curves or edges of any body): each section is moved (one rail), or moved and scaled (two rails), so it touches the rails. Centerline: the profiles stay square to the line |
 | Chain Selection for rails and centerline | Same |
 | Closed (the last profile lofts back to the first) | Same. With only two profiles the dialog says why it cannot close |
-| Tangent Edges Merge | Shown but greyed; see the gaps below |
-| End conditions of the first and the last profile: a sketch profile Connected / Direction (Takeoff Weight, Takeoff Angle), an edge or face of a body Connected (G0) / Tangent (G1) / Curvature (G2) (Tangency Weight), a point Sharp / Point Tangent (a dome; Tangency Weight) | Same choices (rows First Profile / Last Profile under the list; Fusion puts them in the list). Not with rails, a centerline or Closed: greyed with the reason (Fusion users report Direction has no effect with rails). See "End conditions" below |
+| Tangent Edges Merge | Same since wave 5, off by default; see the gaps below |
+| End conditions of the first and the last profile: a sketch profile Connected / Direction (Takeoff Weight, Takeoff Angle), an edge or face of a body Connected (G0) / Tangent (G1) / Curvature (G2) (Tangency Weight), a point Sharp / Point Tangent (a dome; Tangency Weight) | Same choices (rows First Profile / Last Profile under the list; Fusion puts them in the list), also with rails, a centerline or Closed since wave 5 (a closed loft: the first profile only). See "End conditions" below |
 | Operation Join / Cut / Intersect / New Body / New Component | Same, with the automatic choice and the miss check used by Sweep |
 | Edit from the timeline | Same |
 
@@ -138,25 +172,31 @@ There are also 42 golden models: `sf_sweep_*` (15), `sf_loft_*` (14), `sf_rib_*`
 formula is in the model's note.
 
 ## Known gaps
-- **Tangent Edges Merge (Loft).** The loft keeps one side face per profile curve (Fusion's
-  "Keep"). A merged side is one smooth B-spline face, and OpenCASCADE's volume of such a face
-  came out up to 10 % wrong here: a slot lofted to the same slot gave 7551 instead of
-  8356 mm³, while the meshed shape gave 8356. Inspect and the mass would then be wrong.
+- **Tangent Edges Merge (Loft)** is built (wave 5) but off by default. A merged side is one
+  smooth B-spline face closed round the profile, and OpenCASCADE's volume of such a face is
+  several percent wrong: the merged slot gives 8824 instead of 8356 mm³ (+5.6 %, golden
+  `sf_loft_merge_slot_volume`, an expected failure), while its mesh gives 8356. With Merge on,
+  Inspect's volume and mass of the loft are off by that much; the shape is right.
 - **Path + Guide Surface (Sweep)** keeps the profile's angle to the surface by the faces'
   normal at the nearest point of the path (Fusion's exact rule is not documented); a path far
   from the surface still uses the nearest faces. Two Sides is not offered for this type.
-- **Loft end conditions** with rails or a centerline, or on a closed loft, are not made
-  (greyed). The weights and the takeoff angle take plain numbers, not parameters. How long
-  the end derivative is for a weight (weight x the distance to the next profile), the sign
-  of the takeoff angle (positive opens the loft out) and Point Tangent's scale are
-  SciForge's guesses at Fusion's rule. Values are typed; Fusion also has a drag arrow.
+- **Loft end conditions.** How long the end derivative is for a weight (weight x the
+  distance to the next profile), the sign of the takeoff angle (positive opens the loft out)
+  and Point Tangent's scale are SciForge's guesses at Fusion's rule. Values are typed; Fusion
+  also has a drag arrow. With rails, the condition holds at the profile and the rails take
+  over within the first fitted section (an eighth of the way to the next profile).
 - **Volumes of round lofts.** OpenCASCADE measures the volume of B-spline faces up to about
   1 % wrong (a cylinder lofted between two spline circles: +0.9 %; its mesh is right). A
   plain loft between circles stays exact (OpenCASCADE makes a cone); with end conditions the
   sides are splines, so Inspect's volume of such a loft can be off by that much.
-- **Loft rails.** Rails need profiles in parallel planes, and no holes or points among the
-  profiles. A rail loft is close to Fusion's but not exact: the sections are fitted to the
-  rails at 8 places between each pair of profiles. The golden tolerance is 2e-3.
+- **Loft rails.** No holes or points among the profiles. A rail loft is close to Fusion's but
+  not exact: the sections are fitted to the rails at 8 places between each pair of profiles
+  (golden tolerance 2e-3 between parallel profiles; a quarter turn round two arc rails comes
+  within 1 %: 3889 against 3927 mm³, `sf_loft_rails_turning`). Between parallel profiles two
+  rails scale a section evenly; between turning profiles (and in the surface loft) they
+  stretch it only toward the rails, Fusion's Profile Scaling being unknown for a loft. With
+  more than two rails the solid loft follows the first two (the surface loft refuses them).
+  A closed loft cannot follow rails or a centerline (refused with the reason).
 - **Twist** works with Orientation Perpendicular only (it is greyed under Parallel).
 - **Objects To Cut** (Sweep, Loft): as for Revolve, editing an older step does not roll the
   timeline back, so a body a later Join merged away cannot be clicked in the row.

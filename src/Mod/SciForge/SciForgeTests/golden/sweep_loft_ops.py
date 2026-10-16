@@ -241,7 +241,7 @@ def _loft_profile(builder, spec, where):
     return profiles_of(builder, spec, where)[0]
 
 
-LOFT_KEYS = ("guide", "closed", "operation") + (
+LOFT_KEYS = ("guide", "closed", "merge", "operation") + (
     "start_condition",
     "start_weight",
     "start_angle",

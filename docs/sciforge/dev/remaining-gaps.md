@@ -51,10 +51,17 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 - **shell-draft-scale.md**: (Parting Line, Two Side, Symmetric, several bodies per step and
   Scale of sketches by sf/modify-2.) Left: Move Parting Line (kernel), components not scaled,
   non-uniform scale of a sketch.
-- **sweep-loft-rib.md**: (Sweep formulas by sf/modeling-2.) No Loft Tangent Edges Merge. End
-  conditions not with rails, a centerline or a closed loft.
-- **surface.md**: surface Extrude has no From Object or All. Surface Revolve has no Type To.
-  Surface Sweep has no rail or taper, surface Loft no rails or end conditions.
+- **sweep-loft-rib.md**: (Sweep formulas by sf/modeling-2; solid Loft Tangent Edges Merge, end
+  conditions with rails / a centerline, rails on other bodies' edges, parameters for the end
+  values, by sf/surface-2.) Left: Tangent Edges Merge is off by default (OpenCASCADE's volume
+  of a merged side is 5.6 % off); three or more rails are refused; a closed loft with rails or
+  a centerline is refused; no start-point matching for closed lofts; turning rail lofts are
+  about 1 % off.
+- **surface.md**: (Surface Extrude From Object / All / To Object with Chain Faces, Revolve
+  To, Sweep with a guide rail, profile scaling, taper and twist, Loft rails / centerline / end
+  conditions / Merge, Stitch's green edges, by sf/surface-2.) Left: Sweep Path + Guide Rail
+  extents; Extrude All counts the bodies visible when the step was made; no taper from a
+  slanted or curved start; Patch per-edge continuity and Tangency Weight; Extend Align Edges.
 - **text-emboss.md**: the text frame cannot be resized by dragging its corner.
 - **insert-export.md**: (STEP / IGES open and insert as components, STEP export with
   structure, IGES / DXF / mesh export, SVG / DXF / Canvas manipulators, Insert Design as a

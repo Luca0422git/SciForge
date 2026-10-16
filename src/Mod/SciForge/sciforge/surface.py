@@ -52,7 +52,13 @@ NUMBERS = {
         "taper2": "Taper2",
     },
     "revolve": {"angle": "Angle", "angle2": "Angle2"},
-    "sweep": {"distance": "Ratio", "distance2": "Ratio2", "twist": "Angle"},
+    "sweep": {"distance": "Ratio", "distance2": "Ratio2", "twist": "Angle", "taper": "Taper"},
+    "loft": {
+        "start_weight": "Weight",
+        "end_weight": "Weight2",
+        "start_angle": "Angle",
+        "end_angle": "Angle2",
+    },
     "patch": {"weight": "Weight"},
     "ruled": {"distance": "Distance", "angle": "Angle"},
     "offset": {"distance": "Distance"},
@@ -72,14 +78,15 @@ PROPERTY_TYPES = {
     "Ratio": "App::PropertyFloat",
     "Ratio2": "App::PropertyFloat",
     "Weight": "App::PropertyFloat",
+    "Weight2": "App::PropertyFloat",
     "Tolerance": "App::PropertyLength",
 }
 # What each kind keeps in its three link lists.
 ROLES = {
-    "extrude": ("profile", "to_object", None),
-    "revolve": ("profile", "axis", None),
-    "sweep": ("profile", "path", None),
-    "loft": ("sections", None, None),
+    "extrude": ("profile", "to_object (All: the bodies it goes through)", "start_object"),
+    "revolve": ("profile", "axis", "to_object"),
+    "sweep": ("profile", "path", "rail"),
+    "loft": ("sections", "rails", "centerline"),
     "patch": ("boundary", "interior", None),
     "ruled": ("edges", "direction", None),
     "offset": ("faces", None, None),
@@ -419,6 +426,41 @@ def _base(obj, what="surface"):
     return bodies.global_shape(base)
 
 
+def target_of_ref(obj, sub, chain=False):
+    """What a picked object is for Extrude's To Object / From Object: ("plane", point,
+    normal) for a plane or a flat face, ("point", point) for a point, ("shape", shape) for a
+    curved face or a whole body (design coordinates). chain: a face and the faces joined
+    smoothly to it (Fusion's Chain Faces)."""
+    import Part
+
+    if chain and sub.startswith("Face") and obj.TypeId not in PLANE_TYPES:
+        from . import shelling
+
+        try:
+            names = shelling.tangent_faces(obj.Shape, [sub])
+        except Exception:
+            names = [sub]
+        if len(names) > 1:
+            return ("shape", Part.makeCompound([element_of(obj, n) for n in names]))
+    if obj.TypeId in PLANE_TYPES:
+        return ("plane",) + tuple(plane_of_ref(obj, sub))
+    if obj.TypeId in POINT_TYPES:
+        return ("point", App.Vector(obj.getGlobalPlacement().Base))
+    if sub.startswith("Vertex"):
+        return ("point", element_of(obj, sub).Point)
+    if sub.startswith("Face"):
+        face = element_of(obj, sub)
+        if face.Surface.TypeId == "Part::GeomPlane":
+            return ("plane",) + tuple(plane_of_ref(obj, sub))
+        return ("shape", face)
+    if sub.startswith("Edge") or curves.is_sketch(obj):
+        raise SurfaceError("Pick a plane, a face, a body or a point (not a curve).")
+    shape = whole_shape(obj)
+    if not shape.Faces:
+        raise SurfaceError("%s has no faces to extrude to." % obj.Label)
+    return ("shape", shape if shape.Solids else Part.makeCompound(shape.Faces))
+
+
 def _c_extrude(obj, leader, o, refs):
     from . import surface_geom as g
 
@@ -427,14 +469,23 @@ def _c_extrude(obj, leader, o, refs):
         raise NeedsPick("Select the profile: sketch curves or edges of a body.")
     normal = sketch_normal(profile)
     target = None
+    through = None
     if o["extent"] == "to_object":
         if not refs[1]:
-            raise NeedsPick("Select the object to extrude to: a plane or a flat face.")
-        target = plane_of_ref(*refs[1][0])
-    return g.extrude_curves(edges_of(profile), normal, o, target)
+            raise NeedsPick("Select the object to extrude to: a plane, a face, a body or a point.")
+        target = target_of_ref(*refs[1][0], chain=bool(o.get("chain_faces", True)))
+    elif o["extent"] == "all":
+        through = [whole_shape(b) for b, _s in refs[1]]
+    start = None
+    if o["start"] == "object":
+        if not refs[2]:
+            raise NeedsPick("Select where the extrusion starts: a plane, a face or a point.")
+        start = target_of_ref(*refs[2][0])
+    return g.extrude_curves(edges_of(profile), normal, o, target, start, through)
 
 
 def _c_revolve(obj, leader, o, refs):
+    from . import revolve
     from . import surface_geom as g
 
     if not refs[0]:
@@ -442,7 +493,18 @@ def _c_revolve(obj, leader, o, refs):
     if not refs[1]:
         raise NeedsPick("Select the axis: a sketch line, a straight edge or an axis.")
     point, direction = axis_of_ref(refs[1][0])
-    return g.revolve_curves(edges_of(refs[0]), point, direction, o)
+    directions = None
+    if o["type"] == "to":
+        if not refs[2]:
+            raise NeedsPick(
+                "Select the object to revolve to: a plane or flat face through the axis, an "
+                "edge or a point."
+            )
+        try:
+            directions = revolve.target_directions(refs[2][0], point, direction)
+        except Exception as exc:
+            raise SurfaceError(problem_text(exc))
+    return g.revolve_curves(edges_of(refs[0]), point, direction, o, directions)
 
 
 def _c_sweep(obj, leader, o, refs):
@@ -456,18 +518,79 @@ def _c_sweep(obj, leader, o, refs):
         path = curves.Path(edges_of(refs[1]))
     except curves.CurveError as exc:
         raise SurfaceError(str(exc))
-    return g.sweep_curves(edges_of(refs[0]), path, o)
+    rail = None
+    if o.get("type") == "rail":
+        if not refs[2]:
+            raise NeedsPick("Select the guide rail: sketch curves or edges of a body.")
+        try:
+            rail = curves.Path(edges_of(refs[2]), start_near=path.start)
+        except curves.CurveError as exc:
+            raise SurfaceError("Guide rail: %s" % exc)
+    return g.sweep_curves(edges_of(refs[0]), path, o, rail)
 
 
 def _c_loft(obj, leader, o, refs):
+    from . import loft_ends
     from . import surface_geom as g
 
     meta = bodies.load_meta(leader, META)
     sections = loft_groups(refs[0], meta.get("groups"))
-    shapes = []
-    for group in sections:
-        shapes.append(section_shape(group))
-    return g.loft_sections(shapes, bool(o.get("closed")))
+    shapes = [section_shape(group) for group in sections]
+    profiles = None
+    if loft_ends.active(o):
+        profiles = [curve_section(group, shape) for group, shape in zip(sections, shapes)]
+    rails = None
+    centerline = None
+    near = shapes[0].BoundBox.Center if shapes else None
+    if o.get("guide", "rails") == "rails" and refs[1]:
+        rails = rail_paths(edges_of(refs[1]), near)
+    if o.get("guide") == "centerline" and refs[2]:
+        try:
+            centerline = curves.Path(edges_of(refs[2]), start_near=near)
+            centerline = loft_ends.between_profiles(centerline, near, shapes[-1].BoundBox.Center)
+        except curves.CurveError as exc:
+            raise SurfaceError("Centerline: %s" % exc)
+    return g.loft_surface(shapes, o, rails, centerline, profiles)
+
+
+def rail_paths(edges, near=None):
+    """Each connected run of rail curves is one rail (a curves.Path)."""
+    import Part
+
+    try:
+        groups = Part.sortEdges(edges, 1e-5)
+    except Exception:
+        groups = [edges]
+    paths = []
+    for group in groups:
+        try:
+            paths.append(curves.Path(group, start_near=near))
+        except curves.CurveError as exc:
+            raise SurfaceError("Rail: %s" % exc)
+    return paths
+
+
+def curve_section(group, shape):
+    """What a surface loft profile is, for its end conditions (loft_ends.CurveSection)."""
+    from . import loft_ends
+    from . import surface_geom as g
+
+    if shape.ShapeType == "Vertex":
+        return loft_ends.CurveSection(shape, "point", profile=group[0])
+    if all(curves.is_sketch(obj) for obj, _sub in group):
+        normal = group[0][0].getGlobalPlacement().Rotation.multVec(App.Vector(0, 0, 1))
+        return loft_ends.CurveSection(shape, "sketch", normal=normal, profile=group[0])
+    pairs = []
+    for obj, sub in group:
+        if not sub.startswith("Edge") or curves.is_sketch(obj):
+            continue
+        edge, faces, _shape = _edge_faces(obj, sub)
+        if faces:
+            pairs.append((edge, faces[0]))
+    flat = g.plane_of([shape])
+    return loft_ends.CurveSection(
+        shape, "edge", normal=flat[1] if flat else None, guide_pairs=pairs, profile=group[0]
+    )
 
 
 def loft_groups(flat, sizes):

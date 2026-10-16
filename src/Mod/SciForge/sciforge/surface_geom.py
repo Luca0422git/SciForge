@@ -5,7 +5,7 @@ No document and no Qt: every function takes shapes in design coordinates and ret
 shape, so the feature (surface.py), the golden-model builder and headless tests share it.
 Problems raise surface_core.SurfaceError with a message that says why and what to try.
 
-    extrude_curves, revolve_curves, sweep_curves, loft_sections     CREATE from curves
+    extrude_curves, revolve_curves, sweep_curves, loft_surface      CREATE from curves
     patch, ruled, offset_faces, thicken, fill_cells                  CREATE from a design
     trim, untrim, extend, stitch, unstitch, reverse                  MODIFY a surface body
     cells_for_trim, boundary_cells                                   the pieces to click
@@ -301,6 +301,26 @@ def _open_count(shape):
         return 0
 
 
+def stitched_edges(shapes, result, limit=400):
+    """Stitch: the open edges of the surfaces `shapes` that `result` (their stitch) closed,
+    the ones Fusion draws green. An edge counts as closed when its middle lies on none of
+    the edges the result leaves open. At most `limit` edges are looked at (a preview)."""
+    still = free_edges(result)
+    left = compound(still) if still else None
+    found = []
+    for shape in shapes:
+        for edge in free_edges(shape):
+            if len(found) >= limit:
+                return found
+            try:
+                mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+                if left is None or left.distToShape(Part.Vertex(mid))[0] > 1e-3:
+                    found.append(edge)
+            except Exception:
+                continue
+    return found
+
+
 def shells_or_faces(shape):
     """The connected pieces of a surface: its shells, plus faces in no shell."""
     pieces = list(shape.Shells)
@@ -319,10 +339,18 @@ def surface_result(shape):
 
 
 # -- CREATE: Extrude -----------------------------------------------------------------------------
-def extrude_curves(edges, normal, options, to_object=None):
+def extrude_curves(edges, normal, options, to_object=None, start=None, through=None):
     """Fusion's surface Extrude of open or closed curves along `normal` (the sketch's).
-    options: start / start_offset, direction / distance / distance2 / measurement, taper /
-    taper2, extent ('distance' | 'to_object' with `to_object` = (point, normal) of a plane)."""
+
+    options: start ('profile' | 'offset' | 'object') / start_offset, direction / distance /
+    distance2 / measurement, taper / taper2, extent ('distance' | 'to_object' | 'all'), flip.
+    to_object / start: the picked object, as surface.target_of_ref gives it:
+      ("plane", point, normal) | ("point", point) | ("shape", shape)
+    through: the shapes of the visible bodies Extent All goes through.
+
+    Start From Object: a plane or flat face parallel to the profile, or a point, starts the
+    extrusion at that height (Offset moves it on); a slanted plane or a curved face starts
+    every line of the extrusion where it meets the object, nearest the profile."""
     o = core.with_defaults("extrude", options)
     core.check_values("extrude", o)
     n = unit(normal)
@@ -332,27 +360,365 @@ def extrude_curves(edges, normal, options, to_object=None):
     flat = plane_of(wires)
     if flat is not None and abs(abs(flat[1].dot(n)) - 1.0) > 1e-6:
         flat = None  # curves in a plane not square to the direction: still fine
-    shift = n * (float(o["start_offset"]) if o["start"] == "offset" else 0.0)
+    origin = App.Vector(wires[0].Vertexes[0].Point)
+    lift = float(o["start_offset"]) if o["start"] in ("offset", "object") else 0.0
+    height = lift
+    if o["start"] == "object":
+        if start is None:
+            raise NeedsPick("Select where the extrusion starts: a plane, a face or a point.")
+        level = _start_height(start, n, origin)
+        if level is None:
+            face = _start_face(start, n, lift, wires)
+            return _extrude_from_face(wires, n, origin, face, o, to_object, through)
+        height = level + lift
+    shift = n * height
     if o["extent"] == "to_object":
         if to_object is None:
-            raise NeedsPick("Select the object to extrude to: a plane or a flat face.")
-        return _extrude_to_plane(wires, n, shift, to_object)
-    start, end = core.extrude_range(o["direction"], o["distance"], o["distance2"], o["measurement"])
+            raise NeedsPick("Select the object to extrude to: a plane, a face, a body or a point.")
+        if to_object[0] == "plane":
+            return _extrude_to_plane(wires, n, shift, (to_object[1], to_object[2]))
+        if to_object[0] == "point":
+            return _extrude_to_plane(wires, n, shift, (to_object[1], n))
+        return _extrude_to_shape(wires, n, origin, height, to_object[1])
+    if o["extent"] == "all":
+        up, down = _reach_of(through, origin + shift, n)
+        up, down = core.all_lengths(o["direction"], o.get("flip"), up, down)
+        start_, end = -down, up
+    else:
+        start_, end = core.extrude_range(
+            o["direction"], o["distance"], o["distance2"], o["measurement"]
+        )
     faces = []
     for wire in wires:
         base = wire.copy()
         base.translate(shift)
         taper_one = float(o["taper"])
         taper_two = float(o["taper2"]) if o["direction"] == "two_sides" else taper_one
-        if start < -1e-9 and end > 1e-9 and abs(taper_one) < 1e-9 and abs(taper_two) < 1e-9:
-            base.translate(n * start)  # both ways, straight: one face per curve, as Fusion
-            faces.extend(base.extrude(n * (end - start)).Faces)
+        if start_ < -1e-9 and end > 1e-9 and abs(taper_one) < 1e-9 and abs(taper_two) < 1e-9:
+            base.translate(n * start_)  # both ways, straight: one face per curve, as Fusion
+            faces.extend(base.extrude(n * (end - start_)).Faces)
             continue
         if end > 1e-9:
             faces.extend(_extrude_piece(base, n, end, taper_one, flat).Faces)
-        if start < -1e-9:
-            faces.extend(_extrude_piece(base, n, start, taper_two, flat).Faces)
+        if start_ < -1e-9:
+            faces.extend(_extrude_piece(base, n, start_, taper_two, flat).Faces)
     return surface_result(sew(faces))
+
+
+def _start_height(start, n, origin):
+    """How far (along n) a start object that is parallel to the profile lies from it, or None
+    when the object is slanted or curved (each line then starts where it meets it)."""
+    kind = start[0]
+    if kind == "point":
+        return (vec(start[1]) - origin).dot(n)
+    if kind == "plane":
+        if abs(abs(unit(start[2]).dot(n)) - 1.0) < 1e-7:
+            return (vec(start[1]) - origin).dot(n)
+        return None
+    shape = start[1]
+    faces = shape.Faces
+    if len(faces) == 1 and faces[0].Surface.TypeId == "Part::GeomPlane":
+        face = faces[0]
+        if abs(abs(face_normal_at(face, face_point(face)).dot(n)) - 1.0) < 1e-7:
+            return (face_point(face) - origin).dot(n)
+    return None
+
+
+def _start_face(start, n, lift, wires):
+    """The slanted plane (a big square) or the curved faces the extrusion starts on, moved
+    on by the offset."""
+    if start[0] == "plane":
+        size = reach(wires, (vec(start[1]) - bound_box(wires).Center).Length)
+        face = plane_face(start[1], start[2], size)
+    else:
+        shape = start[1]
+        if shape.Solids or not shape.Faces:
+            raise SurfaceError("Start from a plane, a face or a point (not a whole body).")
+        face = compound([f.copy() for f in shape.Faces])
+    if abs(lift) > 1e-12:
+        face = face.copy()
+        face.translate(n * lift)
+    return face
+
+
+def _hits(shape, point, n, size):
+    """Where the line through `point` along n meets `shape`: the lengths along n (sorted)."""
+    line = Part.LineSegment(point - n * size, point + n * size).toShape()
+    try:
+        section = line.section(shape)
+    except Exception:
+        return []
+    found = []
+    for vertex in section.Vertexes:
+        t = (vertex.Point - point).dot(n)
+        if not any(abs(t - x) < 1e-7 for x in found):
+            found.append(t)
+    return sorted(found)
+
+
+def _samples(wires, count=8):
+    """Points along the curves (inside each edge, where a line of the extrusion runs)."""
+    points = []
+    for wire in wires:
+        for edge in wire.Edges:
+            a, b = edge.FirstParameter, edge.LastParameter
+            for k in range(count + 1):
+                f = 0.02 + 0.96 * k / float(count)
+                points.append(edge.valueAt(a + (b - a) * f))
+    return points
+
+
+def _split_band(faces, cutters):
+    """The band's faces cut where the cutters cross them (pieces of the band only)."""
+    cutters = [c for c in cutters if c is not None and not c.isNull()]
+    if not cutters:
+        return list(faces)
+    args = list(faces) + cutters
+    try:
+        _result, pieces_map = args[0].generalFuse(args[1:])
+    except Exception as exc:
+        raise SurfaceError("The extrusion cannot be cut at the object (%s)." % exc)
+    pieces = []
+    for i, face in enumerate(faces):
+        found = [f for shape in (pieces_map[i] if i < len(pieces_map) else []) for f in shape.Faces]
+        pieces.extend(found or [face])
+    return pieces
+
+
+def _ruled_band(wires, n, origin, cutters, keep, size):
+    """The curves carried along n both ways, cut by the cutters; keeps the pieces whose middle
+    lies where keep(foot, height) says (foot: where its line meets the profile's plane,
+    height: how far along n it is from there)."""
+    faces = []
+    for wire in wires:
+        base = wire.copy()
+        base.translate(n * -size)
+        faces.extend(base.extrude(n * (2.0 * size)).Faces)
+    kept = []
+    for piece in _split_band(faces, cutters):
+        q = face_point(piece)
+        t = (q - origin).dot(n)
+        if keep(q - n * t, t):
+            kept.append(piece)
+    if not kept:
+        raise SurfaceError("Nothing is left between the start and the end. Check the picks.")
+    return surface_result(sew(kept))
+
+
+def _nearest_hit(shape, foot, n, size):
+    hits = _hits(shape, foot, n, size)
+    return min(hits, key=abs) if hits else None
+
+
+def _extrude_from_face(wires, n, origin, start, o, target, through):
+    """Start From Object on a slanted plane or a curved face: every line of the extrusion
+    starts where it meets the object nearest the profile."""
+    if abs(float(o["taper"])) > 1e-9 or (
+        o["direction"] == "two_sides" and abs(float(o["taper2"])) > 1e-9
+    ):
+        raise SurfaceError(
+            "A taper needs a start parallel to the profile (Profile Plane, Offset, or a plane, "
+            "flat face or point parallel to it). Set the taper to 0."
+        )
+    shapes = [start] + list(wires) + ([target[1]] if target and target[0] == "shape" else [])
+    size = reach(shapes + list(through or []), 0.0)
+    for p in _samples(wires):
+        if _nearest_hit(start, p, n, size) is None:
+            raise SurfaceError(
+                "The start object does not lie across the whole profile along the extrusion: "
+                "part of it would start nowhere. Pick a bigger face or a plane."
+            )
+
+    def start_of(foot):
+        return _nearest_hit(start, foot, n, size)
+
+    if o["extent"] == "distance":
+        lo, hi = core.extrude_range(o["direction"], o["distance"], o["distance2"], o["measurement"])
+        cutters = [start]
+        for amount in (lo, hi):
+            if abs(amount) > 1e-9:
+                moved = start.copy()
+                moved.translate(n * amount)
+                cutters.append(moved)
+
+        def keep(foot, t):
+            h = start_of(foot)
+            return h is not None and h + lo + 1e-7 < t < h + hi - 1e-7
+
+        return _ruled_band(wires, n, origin, cutters, keep, size)
+    if o["extent"] == "to_object":
+        if target is None:
+            raise NeedsPick("Select the object to extrude to: a plane, a face, a body or a point.")
+        end = _target_shape(target, n, size)
+        side = _side_towards(wires, end, start_of, n, size)
+
+        def keep(foot, t):
+            h = start_of(foot)
+            if h is None:
+                return False
+            return _between(h, t, _hits(end, foot, n, size), side)
+
+        return _ruled_band(wires, n, origin, [start, end], keep, size)
+    up, down = _levels(through, n)
+    base = origin.dot(n)
+    top, bottom = up - base, down - base
+    heights = [h for h in (start_of(p) for p in _samples(wires)) if h is not None]
+    room_up = max(top - h for h in heights)
+    room_down = max(h - bottom for h in heights)
+    room_up, room_down = core.all_lengths(o["direction"], o.get("flip"), room_up, room_down)
+    cutters = [start]
+    if room_up > 1e-7:
+        cutters.append(plane_face(origin + n * top, n, size))
+    if room_down > 1e-7:
+        cutters.append(plane_face(origin + n * bottom, n, size))
+
+    def keep(foot, t):
+        h = start_of(foot)
+        if h is None:
+            return False
+        if room_up > 1e-7 and h + 1e-7 < t < top - 1e-7:
+            return True
+        return room_down > 1e-7 and bottom + 1e-7 < t < h - 1e-7
+
+    return _ruled_band(wires, n, origin, cutters, keep, size)
+
+
+def _between(h, t, ends, side):
+    """True when height t lies past h (the start) and before the first crossing of the end
+    object on `side` (+1 along n, -1 against it)."""
+    if side > 0:
+        ahead = [e for e in ends if e > h + 1e-7]
+        return bool(ahead) and h + 1e-7 < t < min(ahead) - 1e-7
+    behind = [e for e in ends if e < h - 1e-7]
+    return bool(behind) and max(behind) + 1e-7 < t < h - 1e-7
+
+
+def _target_shape(target, n, size):
+    if target[0] == "plane":
+        return plane_face(target[1], target[2], size)
+    if target[0] == "point":
+        return plane_face(target[1], n, size)
+    return target[1]
+
+
+def _side_towards(wires, end, start_of, n, size):
+    """+1 when the end object lies along n from the start, -1 when against it (the side most
+    of the profile meets it first; ahead when both)."""
+    votes = 0.0
+    for p in _samples(wires, 4):
+        h = start_of(p)
+        if h is None:
+            continue
+        hits = _hits(end, p, n, size)
+        ahead = [e - h for e in hits if e > h + 1e-7]
+        behind = [h - e for e in hits if e < h - 1e-7]
+        if ahead and (not behind or min(ahead) <= min(behind)):
+            votes += 1.0
+        elif behind:
+            votes -= 1.0
+    if votes == 0.0:
+        raise SurfaceError(
+            "The extrusion never reaches that object. Pick one the profile's lines run into."
+        )
+    return 1.0 if votes > 0 else -1.0
+
+
+def _extrude_to_shape(wires, n, origin, height, shape):
+    """To Object on a curved face (its surface carried on, Fusion's To Selected Face) or a body
+    (where the extrusion first meets it)."""
+    size = reach(list(wires) + [shape], abs(height))
+
+    def start_of(_foot):
+        return height
+
+    targets = [shape]
+    if not shape.Solids and len(shape.Faces) == 1:
+        bigger = extended_face(shape.Faces[0])
+        if bigger is not None:
+            targets.append(bigger)
+    problem = None
+    for end in targets:
+        try:
+            side = _side_towards(wires, end, start_of, n, size)
+        except SurfaceError as exc:
+            problem = exc
+            continue
+        if not all(_reaches(end, p, n, size, height, side) for p in _samples(wires)):
+            problem = SurfaceError(
+                "Part of the profile never reaches that object along the extrusion. Pick a "
+                "bigger face, a body that covers the whole profile, or a plane."
+            )
+            continue
+
+        def keep(foot, t, end=end, side=side):
+            return _between(height, t, _hits(end, foot, n, size), side)
+
+        start_plane = plane_face(origin + n * height, n, size)
+        return _ruled_band(wires, n, origin, [start_plane, end], keep, size)
+    raise problem
+
+
+def _reaches(end, p, n, size, height, side):
+    hits = _hits(end, p, n, size)
+    if side > 0:
+        return any(e > height + 1e-7 for e in hits)
+    return any(e < height - 1e-7 for e in hits)
+
+
+def extended_face(face):
+    """The face's surface carried on past its edges (Fusion's To Selected Face), or None when
+    it cannot be (a free-form surface)."""
+    surface = face.Surface
+    u0, u1, v0, v1 = face.ParameterRange
+    size = max(face.BoundBox.DiagonalLength, 1.0) * 4.0
+    kind = surface.TypeId
+    try:
+        if kind == "Part::GeomPlane":
+            return plane_face(face_point(face), face_normal_at(face, face_point(face)), size * 4)
+        if kind in ("Part::GeomCylinder", "Part::GeomCone"):
+            return surface.toShape(u0, u1, v0 - size, v1 + size)
+        if kind in ("Part::GeomSphere", "Part::GeomToroid"):
+            return surface.toShape()
+        if kind == "Part::GeomSurfaceOfExtrusion":
+            return surface.toShape(u0, u1, v0 - size, v1 + size)
+    except Exception:
+        return None
+    return None
+
+
+def _reach_of(shapes, point, n):
+    """How far the shapes reach from `point` along n and against it (mm; <= 0: nothing that
+    way)."""
+    shapes = [s for s in shapes or [] if s is not None and not s.isNull()]
+    if not shapes:
+        raise SurfaceError(
+            "There is no visible body for All to extrude through. Show one, or use Distance."
+        )
+    size = reach(shapes, (point - bound_box(shapes).Center).Length)
+    found = []
+    for d in (n, n * -1.0):
+        far = plane_face(point + d * size, d, size * 2.0)
+        best = None
+        for shape in shapes:
+            try:
+                gap = shape.distToShape(far)[0]
+            except Exception:
+                continue
+            best = gap if best is None else min(best, gap)
+        found.append(size - best if best is not None else 0.0)
+    return found[0], found[1]
+
+
+def _levels(shapes, n):
+    """The highest and the lowest level (along n, from the origin) the shapes reach, or
+    None for none."""
+    shapes = [s for s in shapes or [] if s is not None and not s.isNull()]
+    if not shapes:
+        raise SurfaceError(
+            "There is no visible body for All to extrude through. Show one, or use Distance."
+        )
+    up, down = _reach_of(shapes, App.Vector(0, 0, 0), n)
+    return up, -down
 
 
 def _extrude_piece(wire, n, length, taper, flat):
@@ -451,7 +817,10 @@ def _halfspace(point, keep_dir, around):
 
 
 # -- CREATE: Revolve -------------------------------------------------------------------------------
-def revolve_curves(edges, center, axis, options):
+def revolve_curves(edges, center, axis, options, to_directions=None):
+    """Fusion's surface Revolve. Type To: `to_directions` are the half-planes (unit vectors
+    from the axis) the picked object marks (revolve.target_directions); the curves turn the
+    shorter way to the nearest one."""
     o = core.with_defaults("revolve", options)
     core.check_values("revolve", o)
     wires = wires_of(edges)
@@ -460,7 +829,17 @@ def revolve_curves(edges, center, axis, options):
     a = unit(axis)
     c = vec(center)
     _check_axis(wires, c, a)
-    start, sweep = core.revolve_range(o["type"], o["direction"], o["angle"], o["angle2"])
+    if o["type"] == "to":
+        if not to_directions:
+            raise NeedsPick(
+                "Select the object to revolve to: a plane or flat face through the axis, an "
+                "edge or a point."
+            )
+        start_dir = _radial_of(wires, c, a)
+        angle = core.stop_angle(tuple(start_dir), [tuple(unit(w)) for w in to_directions], tuple(a))
+        start, sweep = 0.0, angle
+    else:
+        start, sweep = core.revolve_range(o["type"], o["direction"], o["angle"], o["angle2"])
     faces = []
     for wire in wires:
         base = wire.copy()
@@ -471,6 +850,31 @@ def revolve_curves(edges, center, axis, options):
         except Exception as exc:
             raise SurfaceError("The curves cannot be turned about that axis (%s)." % exc)
     return surface_result(sew(faces))
+
+
+def revolve_to_angle(edges, center, axis, to_directions):
+    """The signed angle a Type To revolve turns (for the dialog's handle)."""
+    wires = wires_of(edges)
+    a = unit(axis)
+    start_dir = _radial_of(wires, vec(center), a)
+    return core.stop_angle(tuple(start_dir), [tuple(unit(w)) for w in to_directions], tuple(a))
+
+
+def _radial_of(wires, c, a):
+    """The direction from the axis to the curves (their middle, else their farthest point)."""
+    middle = bound_box(wires).Center
+    r = (middle - c) - a * (middle - c).dot(a)
+    if r.Length > SAME:
+        return unit(r)
+    best = None
+    for wire in wires:
+        for p in wire.discretize(64):
+            q = (p - c) - a * (p - c).dot(a)
+            if best is None or q.Length > best.Length:
+                best = q
+    if best is None or best.Length <= SAME:
+        raise SurfaceError("The profile lies on the axis: there is nothing to revolve.")
+    return unit(best)
 
 
 def _check_axis(wires, c, a):
@@ -497,9 +901,11 @@ def _check_axis(wires, c, a):
 
 
 # -- CREATE: Sweep ---------------------------------------------------------------------------------
-def sweep_curves(profile_edges, path, options):
-    """`path`: a curves.Path. The profile curves (open or closed) are carried along it from
-    where they sit (sweep.Plan: Distance, Distance Two)."""
+def sweep_curves(profile_edges, path, options, rail=None):
+    """`path`, `rail`: curves.Path. The profile curves (open or closed) are carried along the
+    path from where they sit (sweep.Plan: Distance, Distance Two). Single Path: Orientation,
+    Twist Angle and Taper Angle (Perpendicular); Path + Guide Rail: the rail turns the profile
+    and, with Profile Scaling Scale / Stretch, resizes it to keep reaching the rail."""
     from . import curves, sweep as sweep_core
 
     o = core.with_defaults("sweep", options)
@@ -513,27 +919,80 @@ def sweep_curves(profile_edges, path, options):
     except Exception:
         point = path.start
     s_p = path.length_at(point)
+    with_rail = o["type"] == "rail"
+    if with_rail and rail is None:
+        raise NeedsPick("Select the guide rail: sketch curves or edges of a body.")
+    if with_rail and rail.closed != path.closed:
+        raise SurfaceError("The guide rail must be open or closed like the path.")
     try:
         plan = sweep_core.Plan(
             path,
             s_p,
-            {"distance": o["distance"], "distance2": o["distance2"], "type": "single"},
+            {
+                "distance": o["distance"],
+                "distance2": o["distance2"],
+                "type": "rail" if with_rail else "single",
+            },
         )
     except Exception as exc:
         raise SurfaceError(str(exc))
+    perpendicular = o["orientation"] == "perpendicular"
     faces = []
     for spine, sign in plan.side_paths():
         aux = None
-        if abs(float(o["twist"])) > 1e-9 and o["orientation"] == "perpendicular":
-            turn = float(o["twist"]) * spine.length / max(plan.side1 + plan.side2, 1e-9) * sign
-            radius = max(1.0, bound_box(wires).DiagonalLength)
-            aux = curves.twist_guide(spine, turn, radius)
-        for wire in wires:
-            faces.extend(_pipe(spine.wire(), wire, o["orientation"], aux).Faces)
+        sections_for = None
+        try:
+            if with_rail:
+                part = sweep_core._rail_part(rail, path, plan, spine, sign)
+                aux = part.wire()
+                if o["scaling"] != "none":
+                    count = 2 if (spine.is_straight() and part.is_straight()) else STATIONS
+                    sections_for = sweep_core._rail_sections(
+                        spine, part, o["orientation"], o["scaling"], count
+                    )
+            else:
+                if abs(float(o["twist"])) > 1e-9 and perpendicular:
+                    total = max(plan.side1 + plan.side2, 1e-9)
+                    turn = float(o["twist"]) * spine.length / total * sign
+                    radius = max(1.0, bound_box(wires).DiagonalLength)
+                    aux = curves.twist_guide(spine, turn, radius)
+                if abs(float(o["taper"])) > 1e-9 and perpendicular:
+                    sections_for = _taper_sections(spine, wires, o, aux)
+            for wire in wires:
+                sections = sections_for(wire) if sections_for else [wire]
+                faces.extend(_pipe(spine.wire(), sections, o["orientation"], aux).Faces)
+        except sweep_core.SweepError as exc:
+            raise SurfaceError(str(exc))
     return surface_result(sew(faces))
 
 
-def _pipe(spine, wire, orientation, aux=None):
+STATIONS = 9  # sections along a guide rail that does not keep a straight course
+
+
+def _taper_sections(spine, wires, o, aux):
+    """Taper Angle: the end section scaled about the path's end so that the profile's nearest
+    point to the path moves out by length * tan(angle) (its farthest when the path runs
+    through the profile)."""
+    from . import sweep as sweep_core
+
+    start = spine.start
+    reach_ = min(w.distToShape(Part.Vertex(start))[0] for w in wires)
+    if reach_ < 1e-6:
+        reach_ = max((p - start).Length for w in wires for p in w.discretize(64))
+    factor = core.taper_factor(spine.length, o["taper"], reach_)
+
+    def sections(wire):
+        end = sweep_core._transported(spine.wire(), wire, o["orientation"], aux, 2)[-1]
+        scaled = end.copy()
+        scaled.scale(factor, spine.end)
+        return [wire, scaled]
+
+    return sections
+
+
+def _pipe(spine, sections, orientation, aux=None):
+    if not isinstance(sections, (list, tuple)):
+        sections = [sections]
     try:
         mk = Part.BRepOffsetAPI.MakePipeShell(spine)
         mk.setTolerance(1e-6, 1e-4, 1e-2)
@@ -544,7 +1003,8 @@ def _pipe(spine, wire, orientation, aux=None):
             mk.setTrihedronMode(App.Vector(0, 0, 0), App.Vector(0, 0, 1))
         else:
             mk.setFrenetMode(False)
-        mk.add(wire, False, False)
+        for section in sections:
+            mk.add(section, False, False)
         if not mk.isReady():
             raise SurfaceError("The sweep cannot be set up with this profile and path.")
         mk.build()
@@ -559,14 +1019,21 @@ def _pipe(spine, wire, orientation, aux=None):
 
 
 # -- CREATE: Loft ----------------------------------------------------------------------------------
+RAIL_STATIONS = 8  # sections fitted to the rails between two profiles (as the solid loft)
+
+
 def loft_sections(sections, closed=False):
     """`sections`: wires (open or closed curves) or Part.Vertex (a point at either end)."""
-    if len(sections) < 2:
+    return loft_surface(sections, {"closed": bool(closed)})
+
+
+def _check_loft_items(items, closed):
+    if len(items) < 2:
         raise NeedsPick("Select at least two profiles, in loft order.")
     kinds = set()
-    for i, s in enumerate(sections):
+    for i, s in enumerate(items):
         if s.ShapeType == "Vertex":
-            if 0 < i < len(sections) - 1:
+            if 0 < i < len(items) - 1:
                 raise SurfaceError("A point can only be the first or the last profile.")
             continue
         kinds.add(s.isClosed())
@@ -575,16 +1042,270 @@ def loft_sections(sections, closed=False):
             "Some profiles are closed and some are open. Loft open curves with open curves, "
             "closed with closed."
         )
-    if closed and len(sections) < 3:
+    if closed and len(items) < 3:
         raise SurfaceError("A closed loft needs at least three profiles.")
+
+
+def loft_surface(items, options, rails=None, centerline=None, profiles=None):
+    """Fusion's surface Loft. items: the profiles in loft order (wires, or Part.Vertex at
+    either end); options: closed, merge (Tangent Edges Merge), guide (rails | centerline),
+    start_ / end_condition, _weight, _angle (loft_ends); rails: curves.Path list;
+    centerline: a curves.Path; profiles: loft_ends.CurveSection per item (what each profile
+    is, for the end conditions)."""
+    from . import loft_ends
+
+    o = core.with_defaults("loft", options)
+    core.check_values("loft", o)
+    closed = bool(o.get("closed"))
+    if closed:
+        o["end_condition"] = "free"  # the loop goes on from the last profile to the first
+    items = list(items)
+    guide_rails = o["guide"] == "rails" and bool(rails)
+    guide_line = o["guide"] == "centerline" and centerline is not None
+    if (guide_rails or guide_line) and closed:
+        raise SurfaceError(
+            "A closed loft cannot follow %s. Clear Closed or the %s."
+            % (("rails", "rails") if guide_rails else ("a centerline", "centerline"))
+        )
+    _check_loft_items(items, closed)
+    if o.get("merge"):
+        items = [s if s.ShapeType == "Vertex" else loft_ends.merged_wire(s) for s in items]
+    ends = loft_ends.active(o)
+    if ends:
+        if profiles is None or len(profiles) != len(items):
+            raise SurfaceError("internal: the end conditions need the profiles")
+        try:
+            loft_ends.check(profiles, o, closed=closed)
+        except loft_ends.EndError as exc:
+            raise SurfaceError(str(exc))
     try:
-        shape = Part.makeLoft(list(sections), False, False, bool(closed))
+        if guide_line:
+            return surface_result(_loft_centerline(items, centerline, o, profiles, ends))
+        if guide_rails:
+            stations, kinds = _rail_stations(items, rails)
+            if ends:
+                return surface_result(_loft_rows(stations, kinds, profiles, o))
+            return surface_result(_thru_shell(stations, False))
+        if ends:
+            kinds = list(range(len(items)))
+            if closed:
+                rows = [_profile_row(profiles[k], items[k]) for k in kinds]
+                rows.append(rows[0])
+                return surface_result(
+                    loft_ends.thru_rows(
+                        rows,
+                        profiles[0],
+                        profiles[0],
+                        o,
+                        solid=False,
+                        closed=True,
+                        first_next=profiles[1],
+                    )
+                )
+            return surface_result(_loft_rows(items, kinds, profiles, o))
+        return surface_result(_thru_shell(items, closed))
+    except loft_ends.EndError as exc:
+        raise SurfaceError(str(exc))
+
+
+def _thru_shell(items, closed):
+    try:
+        return Part.makeLoft(list(items), False, False, bool(closed))
     except Exception as exc:
         raise SurfaceError(
             "The profiles cannot be lofted (%s). Check their order and that each is one "
             "connected curve." % exc
         )
-    return surface_result(shape)
+
+
+def _profile_row(section, item):
+    from . import loft_ends
+
+    row = loft_ends.profile_row(section)
+    if row.point is None:
+        row.item = loft_ends.polynomial_wire(item)
+    return row
+
+
+def _loft_rows(items, kinds, profiles, o):
+    """The loft through items (profiles: kinds[k] = their index; stations: None) with the end
+    conditions of the first and the last profile (an open surface)."""
+    from . import loft_ends
+
+    rows = []
+    for item, kind in zip(items, kinds):
+        if kind is None:
+            rows.append(loft_ends.station_row(item))
+        else:
+            rows.append(_profile_row(profiles[kind], item))
+    return loft_ends.thru_rows(
+        rows,
+        profiles[0],
+        profiles[-1],
+        o,
+        solid=False,
+        first_next=profiles[1],
+        last_next=profiles[-2],
+    )
+
+
+def _loft_centerline(items, centerline, o, profiles, ends):
+    """The profiles lofted along the centerline (held square to it, like a sweep)."""
+    from . import loft_ends
+
+    try:
+        mk = Part.BRepOffsetAPI.MakePipeShell(centerline.wire())
+        mk.setTolerance(1e-6, 1e-4, 1e-2)
+        mk.setFrenetMode(False)
+        for item in items:
+            mk.add(item, False, False)
+        if not mk.isReady():
+            raise SurfaceError("The loft cannot follow this centerline.")
+        if ends:
+            count = RAIL_STATIONS * (len(items) - 1) + len(items)
+            stations = loft_ends.simulated(mk, count)
+            if len(stations) < 2:
+                raise SurfaceError("The loft cannot follow this centerline.")
+            kinds = [None] * len(stations)
+            stations[0], stations[-1] = items[0], items[-1]
+            kinds[0], kinds[-1] = 0, len(items) - 1
+            return _loft_rows(stations, kinds, profiles, o)
+        mk.build()
+        return mk.shape()
+    except SurfaceError:
+        raise
+    except Exception as exc:
+        raise SurfaceError(
+            "The profiles cannot follow this centerline (%s). The centerline must run through "
+            "the profiles in their order." % (str(exc) or type(exc).__name__)
+        )
+
+
+def _rail_stations(items, rails):
+    """The profiles plus, between each pair, RAIL_STATIONS sections of the plain loft moved
+    (one rail), or moved, turned and stretched along the line between the rails (two rails;
+    the other way they keep the plain loft's size) so that they touch the rails.
+    Returns (items, kinds): kinds[k] is the profile index, or None for a station."""
+    from . import curves
+
+    if any(s.ShapeType == "Vertex" for s in items):
+        raise SurfaceError("Rails need curves as profiles at both ends, not points.")
+    if len(rails) > 2:
+        raise SurfaceError(
+            "SciForge's loft follows one or two rails (%d picked). Take the others away."
+            % len(rails)
+        )
+    base = _thru_shell(items, False)
+    faces = list(base.Faces)
+    if not faces:
+        raise SurfaceError("The profiles cannot be lofted.")
+    closed = items[0].isClosed()
+    vs = [_profile_params(face, items) for face in faces]
+    contacts = []  # contacts[j][i] = (share along profile i, length along rail j)
+    for j, rail in enumerate(rails):
+        row = []
+        for i, wire in enumerate(items):
+            try:
+                gap, pairs, _info = rail.wire().distToShape(wire)
+            except Exception:
+                gap, pairs = 1.0, []
+            size = max(1.0, wire.BoundBox.DiagonalLength)
+            if gap > 1e-3 * size or not pairs:
+                raise SurfaceError(
+                    "Rail %d does not touch profile %d. A rail must run through every profile."
+                    % (j + 1, i + 1)
+                )
+            point = pairs[0][1]
+            path = _anchored(curves, _station(faces, [v[i] for v in vs]), faces, [v[i] for v in vs])
+            row.append((path.length_at(point) / max(path.length, 1e-12), rail.length_at(point)))
+        lengths = [r[1] for r in row]
+        steps = [b - a for a, b in zip(lengths, lengths[1:])]
+        if any(d <= 1e-9 for d in steps):
+            raise SurfaceError(
+                "Rail %d must run from the first profile to the last, through them in order."
+                % (j + 1)
+            )
+        contacts.append(row)
+    out, kinds = [], []
+    for i in range(len(items) - 1):
+        out.append(items[i])
+        kinds.append(i)
+        for k in range(1, RAIL_STATIONS + 1):
+            t = k / float(RAIL_STATIONS + 1)
+            here = [v[i] + (v[i + 1] - v[i]) * t for v in vs]
+            wire = _station(faces, here)
+            path = _anchored(curves, wire, faces, here)
+            pairs = []
+            for j, rail in enumerate(rails):
+                share = core.lerp_fraction(contacts[j][i][0], contacts[j][i + 1][0], t, closed)
+                q = path.point_at(share * path.length)
+                along = contacts[j][i][1] + (contacts[j][i + 1][1] - contacts[j][i][1]) * t
+                pairs.append((q, rail.point_at(along)))
+            if len(pairs) == 1:
+                matrix = core.similarity(
+                    tuple(pairs[0][0]), tuple(pairs[0][0]), tuple(pairs[0][1]), tuple(pairs[0][1])
+                )
+            else:
+                matrix = core.stretch_similarity(
+                    tuple(pairs[0][0]), tuple(pairs[1][0]), tuple(pairs[0][1]), tuple(pairs[1][1])
+                )
+            out.append(wire.transformGeometry(_matrix(matrix)))
+            kinds.append(None)
+    out.append(items[-1])
+    kinds.append(len(items) - 1)
+    return out, kinds
+
+
+def _matrix(rows):
+    m = App.Matrix()
+    for i in range(3):
+        for j in range(4):
+            setattr(m, "A%d%d" % (i + 1, j + 1), rows[i][j])
+    return m
+
+
+def _profile_params(face, items):
+    """The v of each profile on one side face of the plain loft."""
+    from . import loft_ends
+
+    surface = face.Surface
+    u0, u1, v0, v1 = face.ParameterRange
+    um = (u0 + u1) / 2.0
+    first = surface.value(um, v0)
+    reverse = (
+        items[-1].distToShape(Part.Vertex(first))[0]
+        < items[0].distToShape(Part.Vertex(first))[0] - 1e-9
+    )
+    order = list(reversed(items)) if reverse else list(items)
+    values = [v0]
+    for item in order[1:-1]:
+        row = loft_ends.Row(item, item.BoundBox.Center)
+        values.append(loft_ends._nearest_v(surface, row, um, values[-1], v1))
+    values.append(v1)
+    return list(reversed(values)) if reverse else values
+
+
+def _station(faces, vs):
+    """The section of the loft's side faces at their v values (one per face)."""
+    edges = []
+    for face, v in zip(faces, vs):
+        u0, u1, _v0, _v1 = face.ParameterRange
+        edges.append(face.Surface.vIso(v).toShape(u0, u1))
+    groups = Part.sortEdges(edges, 1e-5)
+    if len(groups) != 1:
+        raise SurfaceError("internal: a section of the loft falls apart")
+    return Part.Wire(groups[0])
+
+
+def _anchored(curves, wire, faces, vs):
+    """The station wire as a curves.Path starting where the first side face starts at that
+    v (the same place on every station, so shares along them match)."""
+    u0, _u1, _v0, _v1 = faces[0].ParameterRange
+    anchor = faces[0].Surface.value(u0, vs[0])
+    path = curves.Path(list(wire.Edges), start_near=anchor)
+    if path.closed:
+        path = path.restarted(path.length_at(anchor))
+    return path
 
 
 # -- CREATE: Patch ---------------------------------------------------------------------------------

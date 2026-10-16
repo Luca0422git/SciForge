@@ -168,8 +168,8 @@ def dialog_open():
         and p.merge.isVisible(),
     )
     h.check(
-        "Tangent Edges Merge is greyed and says why",
-        not p.merge.isEnabled() and "SciForge" in p.merge.toolTip(),
+        "Tangent Edges Merge can be ticked and starts off (Keep)",
+        p.merge.isEnabled() and not p.merge.isChecked(),
     )
     h.fit()
     h.click(V(5, -5, 10))

@@ -1,0 +1,94 @@
+{
+  "id": "surface2_loft_tangent_end",
+  "title": "Surface Loft from a wall's top edge to a line, Tangent (G1) at the edge",
+  "tags": [
+    "surface",
+    "loft",
+    "end-conditions"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "w",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            20,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "b",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            10,
+            20,
+            10
+          ]
+        }
+      ],
+      "offset": 30
+    },
+    {
+      "op": "sf_surface",
+      "id": "wall",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "w",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "l1",
+      "kind": "loft",
+      "refs": [
+        {
+          "step": "wall",
+          "edges": {
+            "at": {
+              "axis": "z",
+              "value": "max"
+            },
+            "count": 1
+          }
+        },
+        {
+          "sketch": "b",
+          "at": [
+            10,
+            10
+          ]
+        }
+      ],
+      "options": {
+        "start_condition": "tangent"
+      }
+    }
+  ],
+  "expect": {
+    "area": 456.2525090410281,
+    "rel_tol": 0.0001,
+    "faces": 1,
+    "solids": 0,
+    "source": "analytic",
+    "note": "Every cross-section (y, z) is the cubic leaving (0, 10) straight up (the wall carried on) with a derivative 1 x sqrt(10^2 + 20^2) (weight x distance to the line) and reaching (10, 30) with no bend (a natural end): Bezier (0, 10), (0, 10 + chord / 3), its midpoint with the end, (10, 30); area 20 x its length (Simpson)"
+  }
+}

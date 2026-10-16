@@ -1,0 +1,113 @@
+{
+  "id": "sf_loft_rails_ends",
+  "title": "Loft with two straight rails and Direction at both profiles (a straight prism)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "rails",
+    "end-conditions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 40,
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            -5,
+            0,
+            -5,
+            40
+          ]
+        },
+        {
+          "line": [
+            5,
+            0,
+            5,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "rails": [
+        {
+          "sketch": "r",
+          "at": [
+            -5,
+            20
+          ]
+        },
+        {
+          "sketch": "r",
+          "at": [
+            5,
+            20
+          ]
+        }
+      ],
+      "start_condition": "direction",
+      "end_condition": "direction"
+    }
+  ],
+  "expect": {
+    "volume": 4000.0,
+    "rel_tol": 1e-05,
+    "solids": 1,
+    "valid": true,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      5,
+      5,
+      40
+    ],
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "the rails run straight up the sides and Direction (angle 0, weight 1) leaves and meets the squares square to them: every column is the straight line, 10 x 10 x 40"
+  }
+}
