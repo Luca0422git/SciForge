@@ -224,7 +224,10 @@ def update(force=True, pointer=None):
             except Exception:
                 direction = None  # not a 3D view: nothing is picked there
         turned = None if direction is None else tuple(round(c, 2) for c in direction)
-        at = _coin_pos(pointer) if now == IDLE else None
+        # where the pointer is decides only for the face's own areas (Auto project): with
+        # nothing open, and in a dialog that takes those areas as the face (Press Pull:
+        # its click picked the area by a depth tie with the face, and nothing happened)
+        at = _coin_pos(pointer) if now == IDLE or (now == PROFILES and _faces_wanted()) else None
         sig = (gdoc.Document.Name, now, turned)
         moment = time.monotonic()
         recent = sig == _state["sig"] and moment - _state["at"] < FULL_EVERY_S
@@ -263,7 +266,7 @@ def update(force=True, pointer=None):
             through_here = through
             over = None
             if at is not None and vobj.Visibility:
-                over = _over_face_area(view, sketch, at)
+                over = _over_face_area(view or gdoc.ActiveView, sketch, at)
                 face_areas = face_areas or over is not None
             if over:
                 shift, through_here = 0.0, True  # the face's own area: the face's click
@@ -279,6 +282,17 @@ def update(force=True, pointer=None):
         if not _state["warned"]:
             _state["warned"] = True
             warn("sketch areas: %s" % exc)
+
+
+def _faces_wanted():
+    """The open dialog takes a click on a face's own sketch area as the face."""
+    try:
+        from . import taskui
+
+        panel = taskui.current()
+        return bool(getattr(panel, "face_areas_are_faces", False))
+    except Exception:
+        return False
 
 
 def _coin_pos(pointer):

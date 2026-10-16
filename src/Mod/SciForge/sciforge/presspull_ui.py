@@ -252,6 +252,10 @@ class PressPullPanel(Panel):
         else:
             self.message.setText("Make a solid first (Create Sketch, then Extrude).")
 
+    # a click on a sketch area only the face's projected edges bound (Auto project) is
+    # a click on the face (sketch_area_pick lets it through)
+    face_areas_are_faces = True
+
     def picks_sketch_areas(self):
         """Sketch areas (profiles) can be clicked until faces or edges are picked; otherwise a click
         goes through them to what is behind (sketch_area_pick)."""

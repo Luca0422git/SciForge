@@ -38,7 +38,6 @@ PLATE = 20000.0
 COLUMN = 6.0 * (120.0 - 28.0875277)
 BLOCK = 4400.0
 ROD_POINT = V(30 + 5 * math.cos(math.radians(45)), 15, 30 + 5 * math.sin(math.radians(45)))
-XY_CLICK = V(-10, -25, 0)
 
 
 def near(a, b, tol=1e-5):
@@ -92,7 +91,7 @@ def plate_sketch():
 
 
 def plate_plane():
-    h.click(XY_CLICK)
+    pl.click_square("XY_Plane")  # where the square shows (was -10, -25, 0)
 
 
 def plate_draw():

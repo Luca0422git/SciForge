@@ -354,7 +354,9 @@ h.run(
         q5_cleared,
         q5_face_profile,
         q5_cancelled,
-        *x.face_sketch("q6", V(12, 2, 10), (15, 18, 25, 28)),
+        # the plate's top where it shows, away from the origin squares (at 12, 2 the XZ
+        # square stands in front of the face and takes the click, as it shows)
+        *x.face_sketch("q6", V(45, 3, 10), (15, 18, 25, 28)),
         q6_q,
         q6_area,
         q6_extrude,
