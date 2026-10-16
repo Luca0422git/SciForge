@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Real-input helpers for the Revolve scenarios (scenarios/revolve*.py). Kept outside
 scenarios/ because every file there is run as a scenario."""
+
 import FreeCAD as App
 from PySide import QtCore, QtGui, QtWidgets
 from PySide6 import QtTest
@@ -79,10 +80,20 @@ def shown(body):
 
 # -- QA helpers (scenarios/revolve_qa*.py) ------------------------------------------------------
 def regions(sketch):
-    """[(sub, face in global coordinates)] of a sketch's closed areas."""
+    """[(sub, face in global coordinates)] of a sketch's closed areas that are profiles
+    (not the face's own area Auto project makes: extrude.profile_regions)."""
     from sciforge import extrude
 
-    return extrude.regions(sketch)
+    return extrude.profile_regions(sketch)
+
+
+def taken(sketch):
+    """[(sub, face in global coordinates)] of the areas Revolve takes by itself from a
+    sketch (extrude.taken_by_itself: with the face's edges projected, what was drawn)."""
+    from sciforge import extrude
+
+    names = set(extrude.taken_by_itself(sketch))
+    return [(sub, face) for sub, face in extrude.regions(sketch) if sub in names]
 
 
 def pappus(face, point, direction, angle=360.0):

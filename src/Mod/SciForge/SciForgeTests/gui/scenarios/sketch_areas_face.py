@@ -114,12 +114,6 @@ def cancel():
 # -- Luca's case: a sketch on the top face ----------------------------------------------
 def sketch_on_top():
     h.check("the box is there", near(h.solid_volume(), 12000.0), h.solid_volume())
-    # Preferences > Design > Auto project off (as in Fusion's default): this scenario is
-    # about the face outside the drawn areas; with the face's edges projected that is a
-    # profile too (scenario sketch_projected_profiles)
-    App.ParamGet("User parameter:BaseApp/Preferences/Mod/SciForge/SketchInference").SetBool(
-        "AutoProject", False
-    )
     h.ribbon("Create Sketch")
 
 
@@ -145,7 +139,11 @@ def finish():
 def finished():
     sk = s["sk"]
     h.check("left the sketch", h.in_sketch() is None)
-    faces = 0 if sk.InternalShape.isNull() else len(sk.InternalShape.Faces)
+    from sciforge import extrude
+
+    # (its areas as profiles: the face around A and B, which only the face's own projected
+    # edges bound (Auto project), is the face's, not a profile)
+    faces = len(extrude.profile_regions(sk))
     h.check("the finished sketch stays visible with its two areas",
             sk.ViewObject.Visibility and faces == 2, (sk.ViewObject.Visibility, faces))
     s["A"], s["B"] = area_name(A, sk), area_name(B, sk)

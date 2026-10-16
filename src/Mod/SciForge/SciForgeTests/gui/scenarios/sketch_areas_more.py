@@ -2,8 +2,7 @@
 """More sketch-area picking (sketch_areas.py has the basics), only real input.
 
 1. A sketch on the top face of a block (Luca: "when I create a sketch on an item") with
-   two overlapping circles: three areas (the lens and two crescents), and the face around
-   them (its edges are projected: Auto project). Inside the open
+   two overlapping circles: three areas (the lens and two crescents). Inside the open
    sketch: click the lens, Shift+click the left crescent, E: both are extruded (one
    circle's worth). Clicking the lens in the dialog drops it: the crescent only.
 2. Switching SciForge off gives FreeCAD's own preferences back (no sketch areas made);
@@ -18,7 +17,6 @@ Hand-derived: block 40 x 30 x 10 = 12000. Circles r 8, centres 8 apart: each 64 
 lens 2 r^2 acos(d / 2r) - (d / 2) sqrt(4 r^2 - d^2); a crescent = circle - lens.
 (The older sketch and the plate lie beside the block: there only the picked profiles are
 checked, an extrude there would be a separate solid.)"""
-
 import math
 import time
 
@@ -140,13 +138,7 @@ def draw_circles():
 
 def pick_lens():
     ses = session()
-    # (Auto project, on by default: the face's edges are projected and the face around
-    # the circles is a fourth area, as in Fusion with its Auto project option on)
-    h.check(
-        "four areas shaded (lens, two crescents, the face around them)",
-        ses and ses.shading.count == 4,
-        ses and ses.shading.count,
-    )
+    h.check("three areas shaded (lens, two crescents)", ses and ses.shading.count == 3)
     si.click(s["lens"])
 
 

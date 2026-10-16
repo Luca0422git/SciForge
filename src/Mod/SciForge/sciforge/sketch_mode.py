@@ -2336,7 +2336,8 @@ class ProfileShading:
         placement = sketch.getGlobalPlacement()
         self.transform.translation.setValue(*placement.Base)
         self.transform.rotation.setValue(*placement.Rotation.Q)
-        faces = sketch_regions.sketch_regions(sketch)
+        # (the area only the face's projected edges bound is the face's: not shaded)
+        faces = sketch_regions.profile_regions(sketch)
         self.count = len(faces)
         points, index = [], []
         self.shaded = []  # (face, [(x, y)], triangles) per area: what can be picked

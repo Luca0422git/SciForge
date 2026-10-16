@@ -38,9 +38,10 @@ def sketch_edges(sketch, include_construction=False, projected=True):
     return edges
 
 
-def _projected_edges(sketch):
+def _projected_edges(sketch, only=None):
     """Projected part edges that are "defining" (Fusion: projected geometry makes
-    profiles; Include 3D Geometry and construction projections do not)."""
+    profiles; Include 3D Geometry and construction projections do not). `only`: a set of
+    curve ids (the face's own edges Auto project made) to keep, None for all."""
     edges = []
     try:
         import Sketcher
@@ -52,12 +53,63 @@ def _projected_edges(sketch):
         try:
             if geometry.TypeId in TYPES_WITHOUT_AREA:
                 continue
-            if not Sketcher.ExternalGeometryFacade(geometry).testFlag("Defining"):
+            facade = Sketcher.ExternalGeometryFacade(geometry)
+            if not facade.testFlag("Defining"):
+                continue
+            if only is not None and facade.Id not in only:
                 continue
             edges.append(geometry.toShape())
         except Exception:
             continue
     return edges
+
+
+def outline_only(face, projected, tolerance=1e-6):
+    """True when the face's outer outline lies wholly on the `projected` edges (sketch
+    coordinates): an area only the projected face's edges bound (the face itself, less
+    what is drawn inside it), not a shape the person drew against them."""
+    import Part
+
+    if not projected:
+        return False
+    try:
+        outline = face.OuterWire.Edges
+    except Exception:
+        return False
+    for edge in outline:
+        try:
+            first, last = edge.ParameterRange
+            probes = [edge.valueAt(first + (last - first) * k) for k in (0.25, 0.5, 0.75)]
+        except Exception:
+            return False
+        for point in probes:
+            vertex = Part.Vertex(point)
+            if not any(p.distToShape(vertex)[0] <= tolerance for p in projected):
+                return False
+    return True
+
+
+def face_areas(sketch, faces):
+    """The indices of `faces` (the sketch's areas, sketch coordinates) that only the
+    face's own edges Auto project made bound (not curves projected with P): with Auto
+    project the face a sketch lies on is one more area of it; SciForge leaves that area
+    to the face (a click there takes the face, Press Pull and Extrude work on the face as
+    without the projected edges). Areas drawn against the
+    projected edges (a rectangle from a projected corner) stay profiles."""
+    from . import sketch_auto_project
+
+    ids = sketch_auto_project.auto_ids(sketch)
+    projected = _projected_edges(sketch, only=ids) if ids else []
+    if not projected:
+        return []
+    return [i for i, f in enumerate(faces) if outline_only(f, projected)]
+
+
+def profile_regions(sketch):
+    """The sketch's areas (sketch_regions) without the face's own (face_areas)."""
+    faces = sketch_regions(sketch)
+    left = set(face_areas(sketch, faces))
+    return [f for i, f in enumerate(faces) if i not in left]
 
 
 def drawn_regions(sketch, faces):
@@ -86,13 +138,16 @@ def inner_point(face):
     """A point inside the face (its centre can be in a hole of it), or None."""
     try:
         centre = face.CenterOfMass
-        if face.isInside(centre, 1e-6, False):
+        if face.isInside(centre, 1e-6, True):
             return centre
         u0, u1, v0, v1 = face.ParameterRange
-        for i in range(1, 12):
-            for j in range(1, 12):
-                point = face.valueAt(u0 + (u1 - u0) * i / 12.0, v0 + (v1 - v0) * j / 12.0)
-                if face.isInside(point, 1e-6, False):
+        # odd fractions: a grid point never falls on a drawn line at a round number
+        for i in range(12):
+            for j in range(12):
+                u = u0 + (u1 - u0) * (i + 0.4142) / 12.0
+                v = v0 + (v1 - v0) * (j + 0.6180) / 12.0
+                point = face.valueAt(u, v)
+                if face.isInside(point, 1e-6, True):
                     return point
     except Exception:
         return None

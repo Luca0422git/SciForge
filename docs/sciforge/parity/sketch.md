@@ -46,6 +46,56 @@ component: a sketch line on the plane, a 3D line from its end); unit tests `test
 `test_sketch3d_core.py`, `test_sketch_chamfer_core.LineAndArc`,
 `test_browser_core` (curves under their sketch), `test_selection_core` (work geometry boxed).
 
+## Sketch, part 3: snapping, 45 degrees, glyphs, Auto project, profiles on faces, z-fighting (branch `sf/sketch-3`, 2026-10-16)
+
+Luca's list (CI #131's quick update): "When sketching on a face of a body, the edges of the
+face should already be projected" (F8); "Projected edges should have the same snap points as
+sketch elements (endpoint, midpoint)", "lines are often not connected because it's slightly
+off the corner", "circles and arcs ... should show their middle ... and you should be able to
+snap to them" (F5); "Sketching lines should have snap points at 90 and 45 degree angles (and
+all flipsides)" (F6: always on, Ctrl = no snaps, his choice); "the little sketch icons for the
+midpoint etc. from Fusion, the triangle for the midpoint" (F7); "When lines are connected to a
+projection on a face, any shape that is sketched will not be selectable to extrude; only the
+whole face" (F9); "Faces that are sketched on have z-fighting" (F10).
+
+Sources (autodesk.com only through search excerpts from the sandbox): **Autodesk**:
+[Fusion API, FusionProductPreferences](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/FusionProductPreferences.htm)
+(isAutoProjectGeometry: "Auto project geometry on active sketch plane";
+isAutoProjectEdgesOnReference), [Cannot snap to circle quadrant in Autodesk Fusion](https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Cannot-snap-to-circle-quadrant-in-Autodesk-Fusion.html),
+[Mastering sketch constraints](https://www.autodesk.com/products/fusion-360/blog/mastering-sketch-constraints-autodesk-fusion-tutorial/);
+**Course**: [Product Design Online, Learn Fusion 360 in 30 days, day 17 (the 12 sketch
+constraints)](https://productdesignonline.com/day-17-of-learn-fusion-360-in-30-days-for-complete-beginners-2023-edition-learn-all-12-fusion-360-sketch-constraints/)
+(the midpoint triangle glyph); **Forum**: [Help with unwanted auto projected geometry](https://forums.autodesk.com/t5/fusion-design-validate-document/help-with-unwanted-auto-projected-geometry/td-p/7742224),
+[Beginner needs help with pink/purple sketches to become faces](https://forums.autodesk.com/t5/fusion-design-validate-document/beginner-needs-help-with-pink-purple-sketches-to-become-faces/td-p/8455824).
+**Guess**: no source found.
+
+| Fusion (source) | SciForge |
+|---|---|
+| A sketch can snap to end points, midpoints (the triangle glyph; Shift brings hidden midpoints) and centres of sketch curves (Autodesk blog, Course) | One snap engine for every tool (`sketch_infer_core.snap_points`, unit tested): ends, middles of lines and arcs, centres of circles, arcs and ellipses, ends of conic arcs and splines, sketch points and the origin. Within `SnapPixels` (8 screen pixels, never less than FreeCAD's own pick radius) the point lands exactly there. FreeCAD's tools (Line, Rectangle, Circle, ...): the pointer FreeCAD gets is moved onto the snap point (`sketch_infer.Inference._plan`), so FreeCAD lights it up and adds its own Coincident / Symmetric; after the click SciForge makes the point exact and adds what FreeCAD did not (`_snap_constraints`). SciForge's own tools (`sketch_draw.DrawTool.snap`) the same. Shift for hidden midpoints: not built (every midpoint is offered) |
+| Projected geometry snaps like sketch geometry; snapping to a model corner auto-projects it (Autodesk preference "Auto project edges on reference") | Projected (purple) curves give the same snap points (geo -3, -4, ...). Snapping to an edge of the part that is not projected: not built (FreeCAD only picks projected curves while drawing) |
+| No direct snap to a circle's quadrant (Autodesk support article: draw a construction line through the centre) | **Beyond Fusion** (Luca asked): the 0 / 90 / 180 / 270 degree points of circles and arcs snap (the point is put exactly there and kept on the circle: PointOnObject). Where two curves cross (lines, circles, arcs) the point lands on the crossing and is kept on both (two PointOnObject); Fusion shows an intersection glyph (an X): **Guess** that it snaps there |
+| (A scaled Windows screen) | The cause of "slightly off the corner": FreeCAD's pick radius counts device pixels, SciForge counted screen (logical) pixels and left the snap to FreeCAD within 5 of them: on a 150 % screen FreeCAD reached only 3.3, so between 3.3 and 5 pixels nothing snapped and the line ended a hair beside the corner (on the projected line, PointOnObject). Reproduced with `QT_SCALE_FACTOR=1.5` (a click 4 px off a projected corner: the line started at (0.297, 0)); fixed: `sketch_snaps` and `sketch_projected_profiles` pass at 150 % too |
+| Lines are inferred level and upright (and perpendicular, parallel, tangent); no 45 degree inference (Autodesk blog, Forum) | **Beyond Fusion** (Luca: "always on, Ctrl = no snaps"): a line (a slot's centre line, a Midpoint Line) within `DiagonalDegrees` (4) of 45, 135, 225 or 315 degrees snaps there; after the click an Angle constraint (from the sketch's X axis) holds it. Level / upright and perpendicular come first. Ctrl frees the point as before |
+| Glyphs while drawing: the midpoint triangle (Course), an intersection X (Guess), the constraint glyphs after the click | SciForge's own pictograms at the snap point while the pointer is there, in the guide colour: end / coincident = a small square, middle = a small triangle, centre = a circle with a dot, quadrant = a diamond, crossing = an X, 45 degrees = a small arc from level to the line with "45". Fusion's exact look is not documented (**Guess**); after the click FreeCAD's constraint glyphs take over |
+| "Auto project geometry on active sketch plane": a new sketch on a face gets the face's edges projected; the option exists in Preferences, off by default today (Autodesk API, Forum) | Preferences > General > Design > Sketch: "Auto project the face's edges when sketching on a face", **on** by default (Luca's wish). Create Sketch on a flat face projects the face's edges as purple, profile-making curves (`sketch_auto_project.py`, one external reference to the face). The face is taken from the step the sketch hangs on (the earliest step with that face, `sketch_ui._earliest`): suppressing a later hole leaves the sketch alone (referencing the hole's face broke the sketch: fixsketch_hole D); edges a later step added (that hole) are projected with P |
+| Projected geometry is purple and bounds profiles together with sketch lines (Forum) | Same (FreeCAD's "defining" external geometry). P on an edge or face already in the sketch adds nothing (FreeCAD failed on a face linked twice: "Link to Face5 already exists"); P on a face whose outline is in but not a later hole adds only the hole's edge (`sketch_mode.projection_refused`) |
+| A shape drawn against projected edges is a profile of its own (Forum) | Same: the root cause of "only the whole face" was the end a hair off the projected corner (the loop never closed); with exact snapping and Coincident at the corner the drawn area is its own profile (`sketch_projected_profiles`, goldens `sketch_face_projected_corner` / `_rest`) |
+| With Auto project on, the face around what is drawn is a profile too: a click there picks that profile, E right after drawing takes nothing by itself (Guess, follows from the projected outline making profiles) | SciForge's choice, so the face keeps working as before: an area that only the face's own edges bound (the curves Auto project made, ids kept in the sketch's hidden `SciForgeAutoProjected`) is the face's: it is not shaded or offered as a profile, and a click there takes the face (Press Pull / Extrude of the face, `sketch_area_pick` lets the click through, `profile_pick` leaves it out). Areas drawn against the projected edges (a rectangle from a projected corner, a U onto the edges) and areas of curves projected with P stay profiles. Extrude and Revolve still take by themselves the areas inside the one area the drawn curves close on their own (a circle on a face: the disc; a rectangle from a face's edge; a rectangle over a rim split by its inner edges: every piece inside it), as without the projected edges (`extrude.taken_by_itself`). A drawn shape that crosses a projected edge is split into two profiles there (as in Fusion) |
+| Sketch faces drawn cleanly on the face they lie on | A finished sketch's areas (FreeCAD's SoSketchFaces) and Extrude's shaded profiles are drawn with a polygon offset in front of the faces (factor -1, units -1; FreeCAD pushes faces back by +1): no more z-fighting in commands or after a zoom. The front shift that lets a click pick a sketch area on a face is brought up to date after a wheel zoom too |
+
+Settings (`BaseApp/Preferences/Mod/SciForge/SketchInference`): `SnapPixels` (8), `DiagonalDegrees`
+(4; 0 = off), `AutoProject` (on, also in Preferences).
+
+Tests: `sketch_snaps` (projected corner, projected middle, circle quadrant and centre, arc
+middle, crossing, SciForge's Midpoint Line, Ctrl, undo / redo; also run at 150 %),
+`sketch_projected_profiles` (Auto project, a rectangle from the projected corner, lines onto
+projected edges, three areas, E takes the drawn one, a click adds another, undo / redo; also at
+150 %), `sketch_glyphs` (glyphs added), `sketch_face_zfight` (screen pixels over a sketched
+face: idle, after a wheel zoom, at a slant, inside Fillet and Extrude; the sandbox's software
+renderer never showed the stripes, so it guards the drawing); unit tests `test_sketch_infer_core` (SnapPoints, Crossings,
+SnapAfterTheClick, Diagonal, Glyphs); goldens `sketch_face_projected_corner`,
+`sketch_face_projected_rest`.
+
 ## A sketch on a face of an edited part (fix, branch `sf/fix-sketch-face`, 2026-10-16)
 
 Luca (CI #117's quick update): "sketching on an edited object will revert it to a previous
@@ -313,3 +363,8 @@ SciForge's Trim and P SciForge's Project (`config.PREFERRED`).
 | A projected edge or corner that FreeCAD's naming loses when its body changes (vertical edges and corners of a padded sketch that got wider) | Stock FreeCAD 1.1.4 drops the reference (Report: "missing element reference"), the projected curve stays where it was; project it again (Fusion follows). Reproduced without SciForge; a repair by geometry is not built (FreeCAD offers no Python call to re-point one external reference in place) |
 | Linetype Centerline (Fusion: a centerline revolves profiles and gives diameter dimensions) | Not built: FreeCAD has construction and normal curves only |
 | Sketch double-click chain for curves touching across line types | The chain keeps to the clicked curve's line type (Guess) |
+| Shift to show hidden midpoints | Every midpoint is offered (no hidden ones) |
+| Snapping to an edge or corner of the part that is not projected projects it (Autodesk "Auto project edges on reference") | Not built: FreeCAD's tools only pick the sketch's own and projected curves while drawing |
+| A rectangle drawn over a projected rounded outline (FreeCAD 1.1.4 limit) | FreeCAD's sketch areas (WireJoiner, "tight bound") make no area where an arc ends tangent on the middle of a line: a rounded-rectangle outline with a sharp rectangle drawn over it loses the big area (reproduced headless without SciForge: areas 1.93 x 4 instead of also 5634). The sketch's shading shows it, Extrude cannot take it and says why. Workaround: pick the projected outline's own areas, or keep the drawn line off the rounded edge. A fix is in FreeCAD's C++ (WireJoiner); not done (no core change in this round). `pi5_case` draws its lid over the rim with Auto project off for that reason |
+| Auto project from a face changed by a later step (a fillet on its edges, a hole in it) | The outline is the face of the step the sketch hangs on (stable when the later step is suppressed): a fillet's rounded corners or a later hole are not in it; P adds them |
+| Fusion's exact glyph pictures | SciForge's own (Guess) |

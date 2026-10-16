@@ -452,20 +452,15 @@ def selected_profile(body):
 
 
 def single_region(sketch):
-    """[(sketch, area)] when the sketch has exactly one closed area, else []. A text counts
-    as one profile (a sketch holding only a text gives the text). With the face's edges
-    projected (Auto project) the areas inside the one area the sketch's own curves close
-    (a disc on a face; a rectangle drawn over a rim, split by its inner edges): what was
-    drawn, as without the projected curves (sketch_regions.drawn_regions)."""
+    """[(sketch, area)] the sketch's areas Extrude takes by itself (its one area; with the
+    face's edges projected, what was drawn: extrude.taken_by_itself), else []. A text
+    counts as one profile (a sketch holding only a text gives the text)."""
     try:
-        found = [(sketch, name) for name, _face in extrude.regions(sketch)]
-        if len(found) > 1 and not text.texts_of(sketch):
-            from . import sketch_regions
-
-            local = list(sketch.InternalShape.Faces)
-            drawn = sketch_regions.drawn_regions(sketch, local) if len(local) == len(found) else []
-            if drawn:
-                return [found[i] for i in drawn]
+        texts = text.texts_of(sketch)
+        if texts:
+            found = [(sketch, name) for name, _face in extrude.profile_regions(sketch)]
+        else:
+            return [(sketch, name) for name in extrude.taken_by_itself(sketch)]
     except Exception:
         return []
     found += [(obj, "") for obj in text.texts_of(sketch)]

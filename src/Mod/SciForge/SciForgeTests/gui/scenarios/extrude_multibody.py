@@ -148,6 +148,12 @@ def a_sketch():
 
 
 def a_pick_top():
+    # Auto project off for this sketch: its rectangle crosses Body1's edge, and the projected
+    # edge would split it into two areas (as in Fusion with Auto project on); this scenario
+    # is about the bodies an extrusion goes through
+    App.ParamGet("User parameter:BaseApp/Preferences/Mod/SciForge/SketchInference").SetBool(
+        "AutoProject", False
+    )
     h.click(V(5, 10, 10))  # Body1's top face
 
 

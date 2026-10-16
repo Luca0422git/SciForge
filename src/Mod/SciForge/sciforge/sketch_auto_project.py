@@ -47,10 +47,43 @@ def auto_project(sketch, target):
         log("sketch: the face's edges were not projected (%s: %s)" % (target[1], exc))
         return 0
     count = len(sketch.ExternalGeo) - before
+    remember(sketch, list(sketch.ExternalGeo)[before:])
     log(
         "sketch: %d edge(s) of %s.%s projected (Auto project)" % (count, target[0].Label, target[1])
     )
     return count
+
+
+PROPERTY = "SciForgeAutoProjected"
+
+
+def remember(sketch, geos):
+    """Keep the ids of the curves Auto project made (a hidden property of the sketch, kept
+    in the file): the area only they bound is the face itself (sketch_regions.face_areas),
+    while curves the person projects with P make profiles as usual."""
+    try:
+        import Sketcher
+
+        ids = [Sketcher.ExternalGeometryFacade(g).Id for g in geos]
+        if PROPERTY not in sketch.PropertiesList:
+            sketch.addProperty(
+                "App::PropertyIntegerList",
+                PROPERTY,
+                "SciForge",
+                "Ids of the projected curves Auto project made (the face's own edges)",
+            )
+            sketch.setEditorMode(PROPERTY, 2)
+        setattr(sketch, PROPERTY, ids)
+    except Exception as exc:
+        log("sketch: Auto project ids not kept: %s" % exc)
+
+
+def auto_ids(sketch):
+    """The ids of the curves Auto project made in this sketch (remember), or set()."""
+    try:
+        return set(getattr(sketch, PROPERTY, ()) or ())
+    except Exception:
+        return set()
 
 
 def missing_edges(sketch, obj, sub):

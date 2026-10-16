@@ -221,6 +221,10 @@ class ProfilePicker:
             except Exception as exc:
                 warn("no profile for %s: %s" % (sketch.Label, exc))
                 continue
+            # the areas only the face's projected edges bound are the face's (Auto
+            # project): a click there takes the face (extrude.face_areas)
+            own = extrude.face_areas(sketch)
+            found = [(sub, face) for sub, face in found if sub not in own]
             for sub, face in found:
                 self.regions.append((sketch, sub, face, self._add_face(face, self.root)))
             if on_curve is not None and _visible(sketch):

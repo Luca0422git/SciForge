@@ -170,7 +170,9 @@ def p18_finish():
 
 
 def p18_revolve():
-    areas = ri.regions(s["sk"])
+    # (the face's edges are projected (Auto project): the rest of the front face is an
+    # area too; Revolve takes the drawn rectangle by itself)
+    areas = ri.taken(s["sk"])
     h.check("P18 one area", len(areas) == 1, areas)
     if areas:
         s["ring"] = ri.pappus(areas[0][1], V(0, 0, 10), V(1, 0, 0))

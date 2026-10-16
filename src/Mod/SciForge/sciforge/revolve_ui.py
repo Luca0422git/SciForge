@@ -960,12 +960,12 @@ def selected(body):
 
 
 def _single_region(sketch):
-    """[(sketch, area)] when the sketch has exactly one closed area, else []."""
+    """[(sketch, area)] the sketch's areas Revolve takes by itself (its one area; with the
+    face's edges projected, what was drawn: extrude.taken_by_itself), else []."""
     try:
-        found = extrude.regions(sketch)
+        return [(sketch, name) for name in extrude.taken_by_itself(sketch)]
     except Exception:
         return []
-    return [(sketch, found[0][0])] if len(found) == 1 else []
 
 
 def newest_single_region(body):
@@ -977,10 +977,10 @@ def newest_single_region(body):
     for obj in reversed(body.Group):
         if extrude.is_sketch(obj) and obj.Name not in used:
             try:
-                found = extrude.regions(obj)
+                found = extrude.taken_by_itself(obj)
             except Exception:
                 return None
-            return (obj, found[0][0]) if len(found) == 1 else None
+            return (obj, found[0]) if len(found) == 1 else None
     return None
 
 
@@ -1434,7 +1434,31 @@ class RevolvePanel(Panel):
         if not info or not str(info.get("Component", "")).startswith("Edge"):
             return False
         obj = self.doc.getObject(str(info.get("Object", "")))
-        return extrude.is_sketch(obj)
+        if extrude.is_sketch(obj):
+            return True
+        return self._edge_on_border(position, info)
+
+    def _edge_on_border(self, position, info):
+        """A part edge under the mouse that runs along the border of the area there (a
+        sketch on a face with its edges projected: the face's edges border the areas):
+        the edge, as an axis. An edge crossing the middle of an area is still the area's
+        click."""
+        import Part
+
+        try:
+            hit = self.picker.region_at(position) if self.picker is not None else None
+            if hit is None:
+                return False
+            point = App.Vector(info["x"], info["y"], info["z"])
+            view = Gui.ActiveDocument.ActiveView
+            a = profile_pick.ray_plane(view, position, point, view.getViewDirection())
+            b = profile_pick.ray_plane(
+                view, (position[0] + 3, position[1]), point, view.getViewDirection()
+            )
+            tol = (a[0] - b[0]).Length if a and b else 0.5
+            return hit[2].OuterWire.distToShape(Part.Vertex(point))[0] <= tol
+        except Exception:
+            return False
 
     def _something_else_at(self, position):
         """True if a profile area or anything of the model is under the mouse."""
