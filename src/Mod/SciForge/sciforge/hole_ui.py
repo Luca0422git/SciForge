@@ -753,6 +753,8 @@ class HolePanel(Panel):
             text = "Make a solid first (Create Sketch, then Extrude)."
         elif self.extent.currentData() == "to" and not self.options.get("to"):
             text = TO_WAITING  # what the dialog waits for, not a problem
+        elif single and hole.on_freeform_face(target):
+            text = text + "\n" + hole.FREEFORM_NOTE
         self.what.setText(text)
         self._update_visibility()
 

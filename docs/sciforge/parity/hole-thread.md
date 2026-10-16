@@ -75,6 +75,7 @@ save / reopen, BSPT, Esc); goldens `hole_taper_npt`, `hole_taper_bspt_through`,
 | Fastener types beyond socket head, hex head and countersunk screws (button heads, washers) | Not in the tables yet |
 | Cosmetic thread texture | Drawn as dashed lines (helix, and a circle at a tapped hole's mouth) |
 | Depth to the tip instead of the shoulder | FreeCAD measures to the shoulder; Fusion's default to be confirmed with Luca |
+| A hole that follows a **freeform** face (a loft, sweep, patch: Luca's square-to-hexagon loft) | Placed square to the face where clicked, once; it does not follow the face when earlier steps change it (cylinders, cones, spheres and tori do, through `HoleOnFace`). Luca, 2026-10-16: "call it a limitation and continue". The dialog says so when the face is freeform (`hole.on_freeform_face`, scenario `limits_notes` B) |
 
 ## Tests
 

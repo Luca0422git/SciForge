@@ -581,6 +581,28 @@ def on_flat_face(hole):
         return True
 
 
+FREEFORM_NOTE = (
+    "\u26a0 Freeform face (a loft, sweep or patch): the hole is placed square to the face once "
+    "and does not follow the face when earlier steps change it. Holes on such shapes are a "
+    "known limitation."
+)
+
+
+def on_freeform_face(hole):
+    """True when a Single Hole sits on a face that is neither flat nor a cylinder, cone,
+    sphere or torus (a loft, sweep, patch): it is placed once there and does not follow the
+    face later (Luca, 2026-10-16: "holes on complex shapes is rough ... call it a
+    limitation")."""
+    spot = placed_face(hole) if hole is not None else None
+    if spot is None:
+        return False
+    try:
+        kind = spot[0].Shape.getElement(spot[1]).Surface.TypeId
+    except Exception:
+        return False
+    return kind != "Part::GeomPlane" and kind not in CURVED_KINDS
+
+
 def references(hole):
     """[((obj, "EdgeN"), distance), ...] of a Single Hole."""
     sketch = helper_sketch(hole)
