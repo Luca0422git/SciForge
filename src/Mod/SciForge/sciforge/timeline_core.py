@@ -84,6 +84,9 @@ KINDS = {
     "mesh_erase_fill": ("Erase And Fill", "mesh_erase_fill"),
     "mesh_delete_faces": ("Delete Faces", "mesh_delete_faces"),
     "mesh_face_groups": ("Generate Face Groups", "mesh_face_groups"),
+    "mesh_direct_edit": ("Mesh Base Feature", "mesh_direct_edit"),
+    "mesh_create_group": ("Create Face Group", "mesh_create_group"),
+    "mesh_combine_groups": ("Combine Face Groups", "mesh_combine_groups"),
     "tessellate": ("Tessellate", "mesh_tessellate"),
     "insert_step": ("Insert STEP", "insert_step"),
     "base": ("Base Feature", "base_feature"),
@@ -194,6 +197,9 @@ KIND_BY_SCIFORGE_TYPE = {
     "MeshEraseFill": "mesh_erase_fill",
     "MeshDeleteFaces": "mesh_delete_faces",
     "MeshFaceGroups": "mesh_face_groups",
+    "MeshDirectEdit": "mesh_direct_edit",
+    "MeshCreateFaceGroup": "mesh_create_group",
+    "MeshCombineFaceGroups": "mesh_combine_groups",
     "Tessellate": "tessellate",
     "InsertSTEP": "insert_step",
     "Joint": "joint",
@@ -685,9 +691,12 @@ def marker_for_slot(timeline, slot):
     """(tips or None, marker_before or None) for the marker dropped after ``slot``
     steps: the Tips for the solid steps before it, and the step right after it when it
     stands before a sketch/plane that follows the last of those. tips is None when the
-    Tips stay as they are (only marker_before may change)."""
+    Tips stay as they are (only marker_before may change). A design without solid steps
+    (mesh bodies only) has no Tips to set: the note alone places the marker there."""
     solids = _solid_indexes(timeline)
     if not solids:
+        if 0 <= slot < len(timeline.items):
+            return None, timeline.items[slot].name
         return None, None
     count = len([i for i in solids if i < slot])
     last = solids[count - 1] if count else -1

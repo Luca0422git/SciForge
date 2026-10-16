@@ -140,6 +140,7 @@ def settle(doc):
             _pass_through_failures(doc)
             _clear_empty_bodies(doc)
             remember_references(doc)
+        follow_mesh_steps(doc)  # after an undo, a step added or deleted: mesh steps' sides
     finally:
         _settling.discard(doc.Name)
 
@@ -474,11 +475,30 @@ def is_component(obj):
 # component, a captured move of one, a pattern of components (it sets SciForgeRolls).
 ROLLING_TYPES = {"ComponentMove"}
 ROLLS = "SciForgeRolls"
+# The MESH tab's steps (Insert Mesh, Tessellate, Repair, Remesh ... Direct Edit) sit outside
+# the bodies too and roll back with the marker like every Fusion feature (mesh-inspect-2):
+# a mesh step the marker stands before is marked ROLLED_BACK (also headless), hidden, not
+# listed, uses nothing up (bodies.is_active_step), and its body shows as the step before it
+# left it.
+MESH_TYPES = ("Mesh::Feature", "Mesh::FeaturePython")
+ROLLED_BACK = "SciForgeRolledBack"
+
+
+def is_mesh_step(obj):
+    """A MESH tab step of the timeline (not a Separate's piece, not a plain FreeCAD mesh)."""
+    try:
+        return (
+            obj.TypeId in MESH_TYPES
+            and bool(getattr(obj, "SciForgeType", ""))
+            and not is_helper(obj)
+        )
+    except Exception:
+        return False
 
 
 def rolls_back(obj):
     try:
-        if is_component(obj):
+        if is_component(obj) or is_mesh_step(obj):
             return True
         return getattr(obj, "SciForgeType", "") in ROLLING_TYPES or bool(getattr(obj, ROLLS, False))
     except Exception:
@@ -941,6 +961,7 @@ def show_marker_state(doc):
     except Exception:
         return
     _follow_root_steps(doc, tl)
+    follow_mesh_steps(doc, tl)
     if not App.GuiUp:
         return
     for item in tl.items:
@@ -1003,6 +1024,49 @@ def _follow_root_steps(doc, tl=None):
                     hide_by_marker(body, hide)
         except Exception:
             pass
+
+
+def follow_mesh_steps(doc, tl=None):
+    """Mesh steps follow the history marker (Fusion rolls every feature back): a step the
+    marker stands before is marked ROLLED_BACK and hidden with its pieces (GUI), so the body
+    shows as the step before it left it (nothing active uses that one up any more:
+    bodies.sync_consumed shows it again). Rolled forward, each is shown as it was. True when
+    a step changed sides. Never raises."""
+    try:
+        found = [o for o in doc.Objects if is_mesh_step(o)]
+        if not found:
+            return False
+        tl = tl or timeline(doc, deps=False)
+        rolled = {i.name for i in tl.items if i.state == "rolled_back"}
+        changed = False
+        for obj in found:
+            back = obj.Name in rolled
+            for member in [obj] + _mesh_pieces(obj):
+                if bool(getattr(member, ROLLED_BACK, False)) != back:
+                    _add_prop(member, "App::PropertyBool", ROLLED_BACK, "After the history marker")
+                    setattr(member, ROLLED_BACK, back)
+                    changed = True
+                if App.GuiUp:
+                    hide_by_marker(member, back)
+        if changed:
+            from . import bodies as body_tools
+
+            body_tools.sync_consumed(doc)
+        return changed
+    except Exception as exc:
+        from . import _remember
+
+        _remember("info", "timeline: mesh steps and the marker: %s" % exc)
+        return False
+
+
+def _mesh_pieces(step):
+    try:
+        from . import mesh
+
+        return mesh.pieces_of(step)
+    except Exception:
+        return []
 
 
 def _pattern_bodies(step):

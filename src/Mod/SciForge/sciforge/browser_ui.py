@@ -180,11 +180,13 @@ def _component_rename(obj, text):
 
 
 def _marker_hidden(doc):
-    """Components the history marker hides (made after it): timeline_ops.hide_by_marker."""
+    """Components the history marker hides (made after it): timeline_ops.hide_by_marker; and
+    mesh steps after it (timeline_ops.follow_mesh_steps): their body is listed as it was."""
     return {
         o.Name
         for o in doc.Objects
-        if o.TypeId == "App::Part" and getattr(o, ops.ROLLED_HIDDEN, False)
+        if (o.TypeId == "App::Part" and getattr(o, ops.ROLLED_HIDDEN, False))
+        or getattr(o, ops.ROLLED_BACK, False)
     }
 
 

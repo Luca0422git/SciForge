@@ -23,6 +23,7 @@ import math
 
 from . import log, warn
 from . import mesh_core as core
+from . import mesh_edit_core as edit_core
 from .mesh_core import MeshError
 
 
@@ -58,12 +59,19 @@ KINDS = {
     "MeshEraseFill": ("EraseFill", "Erase And Fill"),
     "MeshDeleteFaces": ("DeleteFaces", "Delete Faces"),
     "MeshFaceGroups": ("FaceGroups", "Generate Face Groups"),
+    "MeshDirectEdit": ("MeshBaseFeature", "Mesh Base Feature"),
+    "MeshCreateFaceGroup": ("CreateFaceGroup", "Create Face Group"),
+    "MeshCombineFaceGroups": ("CombineFaceGroups", "Combine Face Groups"),
     "Tessellate": ("Tessellate", "Tessellate"),
 }
 PIECE = "MeshPiece"  # a body made beside a step's own (not a timeline step)
 STEP_LABEL = "SciForgeStepLabel"
 WARNING = "SciForgeWarning"
 HOLD = set()  # "doc/name" of steps whose dialog has Preview off: they pass their body through
+# "doc/name" of a Direct Edit step -> the edit its dialog previews (a move being dragged):
+# shown on the body, not kept until the dialog commits it
+PENDING = {}
+ROLLED_BACK = "SciForgeRolledBack"  # set by timeline_ops.follow_mesh_steps
 
 
 def _key(obj):
@@ -100,15 +108,24 @@ def step_of(obj):
     return obj
 
 
+def rolled_back(obj):
+    """True for a mesh step (or piece) the history marker stands before: at the marker it
+    does not exist yet (timeline_ops.follow_mesh_steps)."""
+    try:
+        return bool(getattr(obj, ROLLED_BACK, False))
+    except Exception:
+        return False
+
+
 def mesh_bodies(doc, include_hidden=True):
     """The mesh bodies of the design as the browser lists them: every mesh object no later
-    step uses up (shown or not)."""
+    step uses up (shown or not) and that exists at the history marker."""
     if doc is None:
         return []
     used = bodies.consumed(doc)
     found = []
     for obj in doc.Objects:
-        if not is_mesh(obj) or obj.Name in used:
+        if not is_mesh(obj) or obj.Name in used or rolled_back(obj):
             continue
         if not include_hidden and not bodies.is_shown(obj):
             continue
@@ -1111,6 +1128,13 @@ def ensure_properties(obj, step_kind):
         _enum(obj, "ReduceType", group, "Adaptive or Uniform", core.REDUCE_TYPES, "Adaptive")
     elif step_kind == "MeshSmooth":
         _add(obj, "App::PropertyFloat", "Smoothness", group, "0 .. 1", core.DEFAULT_SMOOTHNESS)
+        _add(obj, "App::PropertyIntegerList", "Groups", group, "Face groups (none: every face)")
+    elif step_kind == "MeshDirectEdit":
+        _add(obj, "App::PropertyStringList", "Edits", group, "The edits, in order (one per line)")
+    elif step_kind == "MeshCreateFaceGroup":
+        _add(obj, "App::PropertyVectorList", "Picks", group, "Centres of the faces of the group")
+    elif step_kind == "MeshCombineFaceGroups":
+        _add(obj, "App::PropertyVectorList", "Picks", group, "A face of each group joined")
     elif step_kind == "MeshPlaneCut":
         _enum(obj, "CutType", group, "Trim, Split Body or Split Faces", core.CUT_TYPES, "Trim")
         _enum(obj, "FillType", group, "How the cut is closed", core.FILL_TYPES, core.DEFAULT_FILL)
@@ -1373,7 +1397,17 @@ def compute(obj, step_kind):
         )
         return result, None, "%d -> %d faces" % (before, result.CountFacets)
     if step_kind == "MeshSmooth":
-        return smooth_mesh(source, obj.Smoothness), _source_groups(obj), "%d faces" % before
+        groups = _source_groups(obj)
+        chosen = list(getattr(obj, "Groups", []) or [])
+        if chosen and groups:
+            return smooth_groups(source, groups, chosen, obj.Smoothness)
+        return smooth_mesh(source, obj.Smoothness), groups, "%d faces" % before
+    if step_kind == "MeshDirectEdit":
+        return _direct_edit(obj, source)
+    if step_kind == "MeshCreateFaceGroup":
+        return _create_face_group(obj, source)
+    if step_kind == "MeshCombineFaceGroups":
+        return _combine_face_groups(obj, source)
     if step_kind == "MeshPlaneCut":
         origin, normal = cut_plane(obj)
         kept, other, groups = plane_cut_mesh(
@@ -1426,6 +1460,196 @@ def _cache(obj):
     if not hasattr(proxy, "_cache"):
         proxy._cache = {}
     return proxy._cache
+
+
+# ----------------------------------------------------------------------------- Direct Edit
+def edit_state(mesh, groups=None):
+    """The mesh_edit_core working copy of a mesh (and its face groups)."""
+    points, facets = topology(mesh)
+    return edit_core.EditState(points, facets, groups)
+
+
+def state_mesh(state):
+    return from_topology(state.points, state.facets)
+
+
+def direct_edits(obj):
+    """The edits a Direct Edit step keeps (dicts), in order; unreadable lines left out."""
+    found = []
+    for text in list(getattr(obj, "Edits", []) or []):
+        edit = edit_core.decode(text)
+        if edit is not None:
+            found.append(edit)
+    return found
+
+
+def set_direct_edits(obj, edits):
+    texts = [edit_core.encode(e) for e in edits]
+    if list(obj.Edits) != texts:
+        obj.Edits = texts
+
+
+def pending(obj):
+    try:
+        return PENDING.get(_key(obj))
+    except Exception:
+        return None
+
+
+def set_pending(obj, edit):
+    """The edit a Direct Edit dialog previews (None: none). The caller recomputes."""
+    key = _key(obj)
+    if edit is None:
+        PENDING.pop(key, None)
+    else:
+        PENDING[key] = edit
+
+
+def _stamp(mesh, groups):
+    box = mesh.BoundBox
+    return (
+        mesh.CountFacets,
+        mesh.CountPoints,
+        round(mesh.Area, 9),
+        round(box.XMin, 9),
+        round(box.YMax, 9),
+        round(box.ZMax, 9),
+        hash(tuple(groups)) if groups else 0,
+    )
+
+
+def replayed(obj, source, edits):
+    """(state after `edits`, faces lost, edits skipped) on the body `source` as the step
+    before leaves it. The state after the last replay is kept, so a new edit (or a move
+    being dragged) plays only what is new."""
+    groups = _source_groups(obj)
+    stamp = _stamp(source, groups)
+    texts = tuple(edit_core.encode(e) for e in edits)
+    cache = _cache(obj)
+    kept = cache.get("direct")
+    if kept is not None and kept[0] == stamp and texts[: len(kept[1])] == kept[1]:
+        state, lost, skipped = kept[2].copy(), kept[3], list(kept[4])
+        rest = edits[len(kept[1]) :]
+        offset = len(kept[1])
+    else:
+        state, lost, skipped = edit_state(source, groups), 0, []
+        rest = edits
+        offset = 0
+    more_lost, more_skipped = edit_core.replay(state, rest)
+    lost += more_lost
+    skipped += [offset + i for i in more_skipped]
+    cache["direct"] = (stamp, texts, state.copy(), lost, list(skipped))
+    return state, lost, skipped
+
+
+def _direct_edit(obj, source):
+    edits = direct_edits(obj)
+    state, lost, skipped = replayed(obj, source, edits)
+    extra = pending(obj)
+    if extra is not None:
+        state = state.copy()
+        try:
+            edit_core.apply(state, extra)
+        except MeshError:
+            pass
+    info = "%d edit%s, %d faces" % (len(edits), "" if len(edits) == 1 else "s", len(state.facets))
+    if lost:
+        info += "; %d picked faces are gone (the body changed before this step)" % lost
+    if skipped:
+        info += "; %d edit%s could not be done any more" % (
+            len(skipped),
+            "" if len(skipped) == 1 else "s",
+        )
+    return state_mesh(state), state.result_groups(), info
+
+
+def _create_face_group(obj, source):
+    picks = [tuple(p) for p in obj.Picks]
+    if not picks:
+        raise MeshError("Pick the faces of the new face group (click them on the body).")
+    state = edit_state(source, _source_groups(obj))
+    which, lost = state.find(picks)
+    if not which:
+        raise MeshError("The picked faces are no longer on the body: pick them again.")
+    edit_core.new_group(state, which)
+    count = core.group_count(state.groups)
+    info = "%d faces in the new face group, %d face groups" % (len(which), count)
+    if lost:
+        info += "; %d picked faces are gone (the body changed before this step)" % lost
+    return source, state.result_groups(), info
+
+
+def groups_at(state, picks):
+    """The face group of the face under each pick, in pick order (picks lost left out)."""
+    found = []
+    for pick in picks:
+        which, _lost = state.find([pick])
+        if which:
+            group = state.groups[which[0]]
+            if group not in found:
+                found.append(group)
+    return found
+
+
+def _combine_face_groups(obj, source):
+    groups = _source_groups(obj)
+    if core.group_count(groups) < 2:
+        raise MeshError(
+            "The body has no face groups to combine: PREPARE > Generate Face Groups first "
+            "(or Create Face Group)."
+        )
+    state = edit_state(source, groups)
+    chosen = groups_at(state, [tuple(p) for p in obj.Picks])
+    joined = edit_core.combine_groups(state.facets, state.groups, chosen)
+    joined = edit_core.renumber(joined)
+    return (
+        source,
+        joined,
+        "%d face groups combined, %d face groups"
+        % (
+            len(chosen),
+            core.group_count(joined),
+        ),
+    )
+
+
+def smooth_groups(mesh, groups, chosen, smoothness):
+    """Smooth on face groups: only the faces of the chosen groups are smoothed, their rim
+    stays where it is."""
+    state = edit_state(mesh, groups)
+    wanted = set(chosen)
+    which = [i for i, g in enumerate(state.groups) if g in wanted]
+    if not which:
+        raise MeshError("The picked face groups are no longer on the body: pick them again.")
+    edit_core.smooth_facets(state, which, smoothness)
+    return state_mesh(state), state.result_groups(), "%d faces smoothed" % len(which)
+
+
+def insert_before_rolled(step):
+    """Fusion adds a new step at the history marker and the steps after it build on it:
+    a mesh step made while the marker stands before a later step of the same body becomes
+    what that later step works on. Returns the steps that now read `step`."""
+    source = getattr(step, "Source", None)
+    if source is None or kind(step) == "Tessellate":
+        return []
+    moved = []
+    for user in list(source.InList):
+        if user is step or not is_step(user) or kind(user) == "Tessellate":
+            continue
+        if not rolled_back(user):
+            continue
+        if getattr(user, "Source", None) is source:
+            user.Source = step
+            moved.append(user)
+        elif kind(user) == "MeshCombine" and source in list(user.Tools):
+            user.Tools = [step if t is source else t for t in user.Tools]
+            moved.append(user)
+    if moved:
+        log(
+            "%s goes in at the history marker: %s now build%s on it"
+            % (step.Label, ", ".join(u.Name for u in moved), "s" if len(moved) == 1 else "")
+        )
+    return moved
 
 
 def _piece(obj):
@@ -1571,6 +1795,9 @@ ICONS = {
     "MeshEraseFill": "mesh_erase_fill",
     "MeshDeleteFaces": "mesh_delete_faces",
     "MeshFaceGroups": "mesh_face_groups",
+    "MeshDirectEdit": "mesh_direct_edit",
+    "MeshCreateFaceGroup": "mesh_create_group",
+    "MeshCombineFaceGroups": "mesh_combine_groups",
     "Tessellate": "mesh_tessellate",
     PIECE: "insert_mesh",
 }
@@ -1658,9 +1885,21 @@ def new_step(doc, step_kind, source, label=None):
         except Exception:
             pass
     _copy_look(source, obj)
+    place_at_marker(obj)
     if App.GuiUp:
         log("%s step added to %s" % (KINDS.get(step_kind, (name, name))[1], obj.Label))
     return obj
+
+
+def place_at_marker(obj):
+    """A step made while the timeline is rolled back goes in at the history marker (Fusion),
+    not after the steps the marker stands before (where it would be rolled back at once)."""
+    try:
+        from . import timeline_ops
+
+        timeline_ops.place_root_step(obj)
+    except Exception as exc:
+        log("timeline: %s stays at the end (%s)" % (obj.Label, exc))
 
 
 def new_piece(doc, step, index, label):
