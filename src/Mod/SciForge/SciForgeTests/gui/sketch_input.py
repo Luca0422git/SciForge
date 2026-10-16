@@ -354,15 +354,23 @@ def browser_double_click(text):
 
 def double_click_widget(widget, pos):
     """The events a mouse sends for a double click: press, release, double-click,
-    release (QTest.mouseDClick skips some of them for item views)."""
+    release (QTest.mouseDClick skips some of them for item views). All four go straight to
+    `widget`: QTest's press is routed by its window from the position, and after another
+    scenario left a different window layout in a CI shard's profile (a wider browser) it
+    reached the 3D view instead, so the browser saw a double-click without its press and
+    never reported it (revolve_qa_to P25, CI #135)."""
     left, none = QtCore.Qt.LeftButton, QtCore.Qt.NoModifier
-    QtTest.QTest.mousePress(widget, left, none, pos)
-    QtTest.QTest.mouseRelease(widget, left, none, pos)
+    local = QtCore.QPointF(pos)
     global_pos = QtCore.QPointF(widget.mapToGlobal(pos))
-    event = QtGui.QMouseEvent(
-        QtCore.QEvent.MouseButtonDblClick, QtCore.QPointF(pos), global_pos, left, left, none
-    )
-    QtWidgets.QApplication.sendEvent(widget, event)
+    for kind, buttons in (
+        (QtCore.QEvent.MouseButtonPress, left),
+        (QtCore.QEvent.MouseButtonRelease, QtCore.Qt.NoButton),
+        (QtCore.QEvent.MouseButtonDblClick, left),
+        (QtCore.QEvent.MouseButtonRelease, QtCore.Qt.NoButton),
+    ):
+        event = QtGui.QMouseEvent(kind, local, global_pos, left, buttons, none)
+        QtWidgets.QApplication.sendEvent(widget, event)
+        QtWidgets.QApplication.processEvents()
     release = QtGui.QMouseEvent(
         QtCore.QEvent.MouseButtonRelease,
         QtCore.QPointF(pos),

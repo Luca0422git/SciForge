@@ -126,13 +126,21 @@ class SketchSelect:
         if geo is None:
             return False
         self.swallow_release = True
-        QtCore.QTimer.singleShot(0, lambda: self.select_chain(geo))
+        QtCore.QTimer.singleShot(0, lambda: self.select_chain(geo, pos))
         return True
 
-    def select_chain(self, geo):
+    def select_chain(self, geo, pos=None):
         session = self.session
         if session.closed:
             return
+        try:
+            # A dimension's text drawn over its curve wins: FreeCAD's preselection can lag
+            # behind a quick move-and-double-click (CI #135), so look again now that the
+            # event has been handled, and edit the dimension instead.
+            if pos is not None and session.double_clicked(pos):
+                return
+        except Exception as exc:
+            warn("sketch chain selection: %s" % exc)
         try:
             sketch = session.sketch
             keys = core.chain(curves_of(sketch), geo)
