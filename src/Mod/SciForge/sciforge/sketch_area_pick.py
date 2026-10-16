@@ -31,6 +31,7 @@ are touched; "ignored" = pickable as FreeCAD has it). They are brought up to dat
 before a mouse event reaches the 3D view (a Qt event filter that only looks at mouse
 buttons and moves), so FreeCAD's picking always sees the state of that moment.
 """
+
 import time
 
 import FreeCAD as App
@@ -41,6 +42,7 @@ from .compat import QtCore, QtWidgets
 
 FRONT = "SciForgeSketchFront"  # SoTranslation: the sketch a hair toward the camera
 PICK = "SciForgeSketchAreaPick"  # SoPickStyle: the areas let clicks through or not
+OFFSET = "SciForgeSketchAreaOffset"  # SoPolygonOffset: the areas drawn in front of faces
 FULL_EVERY_S = 0.15  # mouse moves: every sketch is looked at again at most this often
 
 IDLE = "idle"  # no command, no sketch open: sketches before the faces they lie on
@@ -52,14 +54,15 @@ _state = {"on": False, "filter": None, "nodes": {}, "warned": False, "sig": None
 
 
 class _Entry:
-    """SciForge's two nodes in one sketch's display, and what they are set to (reading a
+    """SciForge's nodes in one sketch's display, and what they are set to (reading a
     Coin field through pivy is slow: it is only written when the value changes)."""
 
-    __slots__ = ("front", "pick", "shift", "through")
+    __slots__ = ("front", "pick", "offset", "shift", "through")
 
-    def __init__(self, front, pick):
+    def __init__(self, front, pick, offset=None):
         self.front = front
         self.pick = pick
+        self.offset = offset
         self.shift = 0.0
         self.through = False
 
@@ -118,7 +121,7 @@ def _make(root):
     front = coin.SoTranslation()
     front.setName(FRONT)
     root.insertChild(front, index)
-    pick = None
+    pick = offset = None
     faces = _faces_node(root)
     if faces is not None:
         pick = coin.SoPickStyle()
@@ -126,7 +129,17 @@ def _make(root):
         pick.style = coin.SoPickStyle.UNPICKABLE
         pick.style.setIgnored(True)  # pickable, as FreeCAD has it
         faces.insertChild(pick, 0)
-    return _Entry(front, pick)
+        # FreeCAD draws a finished sketch's areas with no offset, at the very depth of
+        # the face the sketch lies on, which FreeCAD pushes back by the default offset:
+        # the two fought for the pixels (z-fighting) whenever the front shift below was 0
+        # (inside a command) or out of date (a zoom). Pulled forward like the profile
+        # shading of an open sketch (sketch_mode.ProfileShading).
+        offset = coin.SoPolygonOffset()
+        offset.setName(OFFSET)
+        offset.factor.setValue(-1.0)
+        offset.units.setValue(-1.0)
+        faces.insertChild(offset, 0)
+    return _Entry(front, pick, offset)
 
 
 def _nodes(sketch, vobj, make):
@@ -165,8 +178,9 @@ def _remove_nodes():
             if root.findChild(entry.front) >= 0:
                 root.removeChild(entry.front)
             faces = _faces_node(root) if entry.pick is not None else None
-            if faces is not None and faces.findChild(entry.pick) >= 0:
-                faces.removeChild(entry.pick)
+            for node in (entry.pick, entry.offset):
+                if faces is not None and node is not None and faces.findChild(node) >= 0:
+                    faces.removeChild(node)
         except Exception as exc:
             warn("sketch areas: %s" % exc)
     _state["nodes"] = {}
@@ -262,9 +276,16 @@ class _MouseFilter(QtCore.QObject):
                     update(force=False)
             elif kind in self.BUTTONS:
                 update()
+            elif kind == QtCore.QEvent.Wheel:
+                # the zoom happens after this event: the shift follows the new distance
+                QtCore.QTimer.singleShot(0, _update_now)
         except Exception:
             pass
         return False
+
+
+def _update_now():
+    update()
 
 
 # -- on / off (with sketch_mode) ---------------------------------------------------------

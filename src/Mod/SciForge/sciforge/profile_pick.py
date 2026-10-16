@@ -198,7 +198,13 @@ class ProfilePicker:
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
         self.root.addChild(pick)
+        # drawn a hair in front of the part's faces: FreeCAD pushes those back with the
+        # default offset (factor 1, units 1); the same push here made the shaded areas of
+        # a sketch on a face fight the face for the same pixels (Luca: "Faces that are
+        # sketched on have z-fighting")
         offset = coin.SoPolygonOffset()
+        offset.factor.setValue(-1.0)
+        offset.units.setValue(-1.0)
         self.root.addChild(offset)
         self.face_root = coin.SoSeparator()  # picked body faces
         self.root.addChild(self.face_root)
