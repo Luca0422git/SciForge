@@ -763,6 +763,7 @@ class SketchSession:
 
         self.line = LineChain(self)
         self.tool = None  # SciForge's own drawing tool while one runs (sketch_draw.py)
+        self.check = None  # Fusion's floating green check (sketch_check.py), made below
         self.infer = None
         try:
             from .sketch_infer import Inference
@@ -788,6 +789,12 @@ class SketchSession:
             self.gl.installEventFilter(self.filter)
         if self.viewer is not None:
             self.viewer.installEventFilter(self.keys)
+        try:
+            from .sketch_check import FloatingCheck
+
+            self.check = FloatingCheck(self)  # ends a line chain / a spline (Fusion)
+        except Exception as exc:
+            warn("sketch check: %s" % exc)
         try:
             QtWidgets.QApplication.instance().focusChanged.connect(self._focus_changed)
         except Exception as exc:
@@ -1409,9 +1416,10 @@ class SketchSession:
             pass
         self.close_editor(commit=True)
         remove_stray_editors(self.gl)
-        for part in (self.polygon, self.areas, self.shading, self.display, self.fixed):
+        for part in (self.polygon, self.areas, self.shading, self.display, self.fixed, self.check):
             try:
-                part.remove()
+                if part is not None:
+                    part.remove()
             except Exception as exc:
                 warn("sketch mode: %s" % exc)
         try:
