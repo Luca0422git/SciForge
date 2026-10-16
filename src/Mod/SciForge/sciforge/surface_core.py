@@ -47,9 +47,19 @@ LOOP_LABELS = {"all": "All Edges", "internal": "Internal Edges", "external": "Ex
 THICKEN_TYPES = ("sharp", "rounded")
 THICKEN_LABELS = {"sharp": "Sharp", "rounded": "Rounded"}
 ORIENTATIONS = ("perpendicular", "parallel")
-REVOLVE_TYPES = ("angle", "full")
-EXTENTS = ("distance", "to_object")
-STARTS = ("profile", "offset")
+REVOLVE_TYPES = ("angle", "to", "full")
+EXTENTS = ("distance", "to_object", "all")
+STARTS = ("profile", "offset", "object")
+SWEEP_TYPES = ("single", "rail")
+SCALINGS = ("scale", "stretch", "none")
+SCALING_LABELS = {"scale": "Scale", "stretch": "Stretch", "none": "None"}
+GUIDES = ("rails", "centerline")
+# Loft end conditions (loft_ends_core.CONDITIONS): which ones a profile offers depends on
+# what it is (a sketch curve: Connected / Direction; an edge of a body: Connected / Tangent
+# / Curvature; a point: Sharp / Point Tangent).
+END_CONDITIONS = ("free", "direction", "tangent", "curvature", "point_tangent")
+MAX_END_WEIGHT = 20.0
+MAX_TAPER = 89.0
 
 # Stitch: Autodesk staff on the Autodesk Community ("Stitch problem" thread): the dialog
 # starts at 1.0 mm. The tolerance is what may be closed, never more than 10 mm here.
@@ -76,6 +86,7 @@ KINDS = {
             "distance2": 0.0,
             "taper": 0.0,
             "taper2": 0.0,
+            "flip": False,
             "chain": True,
             "operation": "new_body",
         },
@@ -108,6 +119,7 @@ KINDS = {
             "orientation": "perpendicular",
             "twist": 0.0,
             "taper": 0.0,
+            "scaling": "scale",
             "chain": True,
             "operation": "new_body",
         },
@@ -118,7 +130,19 @@ KINDS = {
         "type": "SurfaceLoft",
         "create": True,
         "operations": CREATE_OPERATIONS,
-        "defaults": {"closed": False, "chain": True, "operation": "new_body"},
+        "defaults": {
+            "guide": "rails",
+            "closed": False,
+            "merge": False,
+            "start_condition": "free",
+            "start_weight": 1.0,
+            "start_angle": 0.0,
+            "end_condition": "free",
+            "end_weight": 1.0,
+            "end_angle": 0.0,
+            "chain": True,
+            "operation": "new_body",
+        },
     },
     "patch": {
         "title": "Patch",
@@ -344,19 +368,24 @@ def check_values(kind, options):
     if kind == "extrude":
         if o.get("direction") not in DIRECTIONS:
             raise SurfaceError("Pick One Side, Two Sides or Symmetric.")
+        if o.get("start", "profile") not in STARTS:
+            raise SurfaceError("Pick Profile Plane, Offset or From Object.")
+        if o.get("extent", "distance") not in EXTENTS:
+            raise SurfaceError("Pick Distance, To Object or All.")
         d1 = _finite(o.get("distance", 0.0), "Distance")
         d2 = _finite(o.get("distance2", 0.0), "Distance Two")
         taper = _finite(o.get("taper", 0.0), "Taper Angle")
+        taper2 = _finite(o.get("taper2", 0.0), "Taper Angle Two")
         _finite(o.get("start_offset", 0.0), "Offset")
         if o.get("extent", "distance") == "distance":
             total = abs(d1) + (abs(d2) if o.get("direction") == "two_sides" else 0.0)
             if total < 1e-7:
                 raise NeedsPick("Drag the arrow or type a distance.")
-        if abs(taper) >= 89.0:
+        if abs(taper) >= MAX_TAPER or abs(taper2) >= MAX_TAPER:
             raise SurfaceError("The taper angle must be between -89 and 89 degrees.")
     elif kind == "revolve":
         if o.get("type") not in REVOLVE_TYPES:
-            raise SurfaceError("Pick Angle or Full.")
+            raise SurfaceError("Pick Angle, To or Full.")
         if o.get("direction") not in DIRECTIONS:
             raise SurfaceError("Pick One Side, Two Sides or Symmetric.")
         a1 = _finite(o.get("angle", 0.0), "Angle")
@@ -372,13 +401,36 @@ def check_values(kind, options):
             if total > 360.0 + 1e-9:
                 raise SurfaceError("A revolve turns at most 360 degrees in all.")
     elif kind == "sweep":
+        if o.get("type", "single") not in SWEEP_TYPES:
+            raise SurfaceError("Pick Single Path or Path + Guide Rail.")
         for key, what in (("distance", "Distance"), ("distance2", "Distance Two")):
             value = _finite(o.get(key, 1.0), what)
             if not 0.0 <= value <= 1.0:
                 raise SurfaceError("%s is a share of the path: type a number from 0 to 1." % what)
         _finite(o.get("twist", 0.0), "Twist Angle")
+        taper = _finite(o.get("taper", 0.0), "Taper Angle")
+        if abs(taper) >= MAX_TAPER:
+            raise SurfaceError("The taper angle must be between -89 and 89 degrees.")
         if o.get("orientation") not in ORIENTATIONS:
             raise SurfaceError("Pick Perpendicular or Parallel.")
+        if o.get("scaling", "scale") not in SCALINGS:
+            raise SurfaceError("Pick Scale, Stretch or None.")
+    elif kind == "loft":
+        if o.get("guide", "rails") not in GUIDES:
+            raise SurfaceError("Pick Rails or Centerline.")
+        for end, what in (("start", "first"), ("end", "last")):
+            if o.get(end + "_condition", "free") not in END_CONDITIONS:
+                raise SurfaceError("Pick an end condition for the %s profile." % what)
+            weight = _finite(o.get(end + "_weight", 1.0), "The weight")
+            angle = _finite(o.get(end + "_angle", 0.0), "The takeoff angle")
+            if o.get(end + "_condition", "free") == "free":
+                continue
+            if not 0.0 < weight <= MAX_END_WEIGHT:
+                raise SurfaceError(
+                    "The weight must be more than 0 and at most %g." % MAX_END_WEIGHT
+                )
+            if not -MAX_TAPER <= angle <= MAX_TAPER:
+                raise SurfaceError("The takeoff angle must be between -89 and 89 degrees.")
     elif kind == "patch":
         if o.get("continuity") not in CONTINUITY:
             raise SurfaceError("Pick Connected, Tangent or Curvature.")
@@ -460,6 +512,134 @@ def revolve_range(rtype, direction, angle, angle2=0.0):
     if direction == "two_sides":
         return -a2, a1 + a2
     return (0.0, a1) if a1 >= 0 else (a1, -a1)
+
+
+def stop_angle(start, directions, axis):
+    """Revolve Type To: the signed degrees (right-handed about `axis`) from the profile's
+    direction `start` (from the axis, square to it) to the nearest of `directions` (the
+    half-planes the object marks), the shorter way round; half a turn either way goes the
+    positive way, like the solid revolve (revolve.stop_angle). All unit 3-tuples."""
+    best = None
+    for w in directions:
+        cross = (
+            start[1] * w[2] - start[2] * w[1],
+            start[2] * w[0] - start[0] * w[2],
+            start[0] * w[1] - start[1] * w[0],
+        )
+        angle = math.degrees(
+            math.atan2(
+                sum(a * c for a, c in zip(axis, cross)), sum(a * b for a, b in zip(start, w))
+            )
+        )
+        if abs(angle) < 1e-6:
+            continue
+        shorter = best is None or abs(angle) < abs(best) - 1e-9
+        if shorter or (abs(abs(angle) - abs(best)) <= 1e-9 and angle > best):
+            best = angle
+    if best is None:
+        raise SurfaceError(
+            "The object is where the profile already is. Pick one the revolve turns to."
+        )
+    return best
+
+
+def all_lengths(direction, flip, reach_up, reach_down):
+    """Extent All: (length along the normal, length against it) from the start plane, given
+    how far the visible bodies reach each way (mm, <= 0: nothing that way). One Side goes
+    the normal's way (Flip: the other); Two Sides and Symmetric go both ways."""
+    up = max(0.0, float(reach_up))
+    down = max(0.0, float(reach_down))
+    if direction == "one_side":
+        up, down = (0.0, down) if flip else (up, 0.0)
+    if up < 1e-7 and down < 1e-7:
+        raise SurfaceError(
+            "No visible body lies that way: All extrudes through the visible bodies. "
+            + ("Flip it, or use Distance." if direction == "one_side" else "Use Distance.")
+        )
+    return up, down
+
+
+def taper_factor(length, angle_deg, reach):
+    """How much a tapered sweep's end section is scaled: a profile point `reach` from the
+    path moves out by length * tan(angle) (Fusion: the taper tilts the sweep's sides)."""
+    reach = float(reach)
+    if reach < 1e-9:
+        raise SurfaceError("The profile sits on the path: there is nothing to taper.")
+    factor = 1.0 + float(length) * math.tan(math.radians(float(angle_deg))) / reach
+    if factor <= 1e-3:
+        raise SurfaceError(
+            "The taper angle shrinks the profile to nothing before the end of the path. Use a "
+            "smaller angle or a shorter distance."
+        )
+    return factor
+
+
+def lerp_fraction(a, b, t, closed):
+    """A place on a profile (0..1 along it) between `a` and `b` at share t; on a closed
+    profile the shorter way round (0 and 1 are the same place)."""
+    a, b = float(a), float(b)
+    if closed:
+        d = (b - a) % 1.0
+        if d > 0.5:
+            d -= 1.0
+        return (a + d * t) % 1.0
+    return a + (b - a) * t
+
+
+def similarity(q1, q2, r1, r2):
+    """The turn + even scale + move (a 3 x 4 matrix as rows) taking q1 to r1 and q2 to r2,
+    turning the least: a loft section moved so that it touches two rails. With q1 == q2
+    (one rail) it is a plain move."""
+
+    def sub(a, b):
+        return [x - y for x, y in zip(a, b)]
+
+    def dot(a, b):
+        return sum(x * y for x, y in zip(a, b))
+
+    def cross(a, b):
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+    a = sub(q2, q1)
+    b = sub(r2, r1)
+    la, lb = math.sqrt(dot(a, a)), math.sqrt(dot(b, b))
+    if la < 1e-12:
+        move = sub(r1, q1)
+        return [[1.0, 0.0, 0.0, move[0]], [0.0, 1.0, 0.0, move[1]], [0.0, 0.0, 1.0, move[2]]]
+    if lb < 1e-12:
+        raise SurfaceError("The rails meet here, so the profile would shrink to nothing.")
+    an = [x / la for x in a]
+    bn = [x / lb for x in b]
+    axis = cross(an, bn)
+    s = math.sqrt(dot(axis, axis))
+    c = dot(an, bn)
+    if s < 1e-12:
+        if c > 0:
+            rot = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        else:  # half a turn about any axis square to a
+            helper = [1.0, 0.0, 0.0] if abs(an[0]) < 0.9 else [0.0, 1.0, 0.0]
+            k = cross(an, helper)
+            lk = math.sqrt(dot(k, k))
+            k = [x / lk for x in k]
+            rot = [[2 * k[i] * k[j] - (1.0 if i == j else 0.0) for j in range(3)] for i in range(3)]
+    else:
+        k = [x / s for x in axis]
+        kx, ky, kz = k
+        v = 1.0 - c
+        rot = [
+            [c + kx * kx * v, kx * ky * v - kz * s, kx * kz * v + ky * s],
+            [ky * kx * v + kz * s, c + ky * ky * v, ky * kz * v - kx * s],
+            [kz * kx * v - ky * s, kz * ky * v + kx * s, c + kz * kz * v],
+        ]
+    scale = lb / la
+    m = [[rot[i][j] * scale for j in range(3)] for i in range(3)]
+    moved = [sum(m[i][j] * q1[j] for j in range(3)) for i in range(3)]
+    shift = sub(r1, moved)
+    return [m[i] + [shift[i]] for i in range(3)]
+
+
+def apply_matrix(m, p):
+    return tuple(sum(m[i][j] * p[j] for j in range(3)) + m[i][3] for i in range(3))
 
 
 def thicken_offsets(direction, thickness):

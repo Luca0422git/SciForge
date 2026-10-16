@@ -19,11 +19,16 @@ Options (dict, see DEFAULTS):
              loft_ends.py. Not with rails, a centerline or Closed.
   start_weight, end_weight          Takeoff / Tangency Weight (default 1)
   start_angle, end_angle            Takeoff Angle in degrees (Direction, default 0)
-
-Fusion's Tangent Edges Merge is not built: the loft keeps one side face per profile curve
-(Fusion's "Keep"). Merging them means one smooth B-spline side, and OpenCASCADE's volume of
-such a face came out up to 10 % wrong here (a slot lofted to the same slot: 7551 instead of
-8356 mm^3, while the triangulated shape gave 8356), so Inspect and the mass would lie.
+             With rails or a centerline the conditions bend the loft between the end
+             profile and SciForge's first station only (the rails lead it elsewhere; Fusion
+             users report Direction has little effect with rails). On a closed loft only the
+             first profile takes one (Direction): the loop passes through it that way.
+  merge      Fusion's Tangent Edges Merge: profile edges joined smoothly loft into one side
+             face (loft_ends.merged_wire); off (Fusion's Keep, SciForge's default): one face
+             per profile edge. OpenCASCADE measures the volume of such a merged spline side
+             several % wrong (a slot lofted to the same slot: 8822 instead of 8356 mm^3, its
+             mesh 8355; golden sf_loft_merge_slot_volume records it), which is why SciForge
+             starts with Keep.
 
 What is built:
   FreeCAD's own AdditiveLoft / SubtractiveLoft when it builds exactly the same thing (no
@@ -53,6 +58,7 @@ DEFAULTS = {
     "end_condition": "free",
     "end_weight": 1.0,
     "end_angle": 0.0,
+    "merge": False,
     "bodies": None,  # Objects To Cut: a list, "auto", None (as for Extrude and Revolve)
 }
 END_KEYS = tuple(k for k in DEFAULTS if k.startswith(("start_", "end_")))
@@ -86,7 +92,7 @@ def options_with_defaults(options):
         raise LoftError("unknown guide type %r" % merged["guide"])
     if merged["operation"] not in OPERATIONS:
         raise LoftError("unknown operation %r" % merged["operation"])
-    for name in ("closed", "chain"):
+    for name in ("closed", "chain", "merge"):
         merged[name] = bool(merged[name])
     for end in ("start", "end"):
         if merged[end + "_condition"] not in loft_ends.core.CONDITIONS:
@@ -212,12 +218,15 @@ def check_profiles(profiles):
 
 
 # -- building the solid -------------------------------------------------------------------------
-def _ends(section, index):
-    """What OpenCASCADE lofts through for this section: a wire or a vertex."""
+def _ends(section, index, merge=False):
+    """What OpenCASCADE lofts through for this section: a wire or a vertex (merge: its runs
+    of tangent edges joined into one edge each, Fusion's Tangent Edges Merge)."""
     import Part
 
     if section.point is not None:
         return Part.Vertex(section.point)
+    if merge:
+        return loft_ends.merged_wire(section.wires[index])
     return section.wires[index]
 
 
@@ -254,7 +263,9 @@ def _thru(items, closed):
     return _solid(shape)
 
 
-def _along(centerline, items):
+def _along(centerline, items, stations=0):
+    """The loft along the centerline (its sections held square to it). stations > 0: the
+    `stations` sections OpenCASCADE's sweep passes through instead (for end conditions)."""
     import Part
 
     try:
@@ -265,6 +276,8 @@ def _along(centerline, items):
             mk.add(item, False, False)
         if not mk.isReady():
             raise LoftError("The loft cannot follow this centerline.")
+        if stations:
+            return _simulated(mk, stations)
         mk.build()
         if not mk.makeSolid():
             raise LoftError("The loft does not close into a solid along the centerline.")
@@ -317,8 +330,17 @@ def _similarity(c1, c2, r1, r2, normal):
     return m
 
 
-def _rail_loft(sections, rails):
-    """A loft through the profiles plus extra sections that touch the rails."""
+def _simulated(mk, count):
+    """The sections a pipe shell passes through at `count` places (wires)."""
+    found = loft_ends.simulated(mk, count)
+    if len(found) < 2:
+        raise LoftError("The loft cannot follow this centerline.")
+    return found
+
+
+def _rail_loft(sections, rails, merge=False, options=None):
+    """A loft through the profiles plus extra sections that touch the rails (options with
+    end conditions: those bend its ends, loft_ends.thru_rows)."""
     if any(s.point is not None for s in sections):
         raise LoftError("Rails need profiles with an area at both ends (no points).")
     if any(len(s.wires) > 1 for s in sections):
@@ -346,10 +368,13 @@ def _rail_loft(sections, rails):
                 )
             row.append(s.wires[0].distToShape(_vertex(hit))[1][0][0])
         contacts.append(row)
-    base = _thru([s.wires[0] for s in sections], False)
+    wires = [_ends(s, 0, merge) for s in sections]
+    base = _thru(wires, False)
     items = []
+    kinds = []  # the profile it is (an index), or None for a station
     for i in range(len(sections) - 1):
-        items.append(sections[i].wires[0])
+        items.append(wires[i])
+        kinds.append(i)
         for k in range(1, RAIL_STATIONS + 1):
             t = k / float(RAIL_STATIONS + 1)
             h = heights[i] + (heights[i + 1] - heights[i]) * t
@@ -376,8 +401,38 @@ def _rail_loft(sections, rails):
             else:
                 m = _similarity(pairs[0][0], pairs[1][0], pairs[0][1], pairs[1][1], normal)
             items.append(wire.transformGeometry(m))
-    items.append(sections[-1].wires[0])
+            kinds.append(None)
+    items.append(wires[-1])
+    kinds.append(len(sections) - 1)
+    if options is not None and loft_ends.active(options):
+        return _with_ends(sections, items, kinds, options)
     return _thru(items, False)
+
+
+def _with_ends(sections, items, kinds, options):
+    """The loft through `items` (profiles and stations) with the end conditions of the first
+    and the last profile."""
+    rows = []
+    for item, kind in zip(items, kinds):
+        if kind is None:
+            rows.append(loft_ends.station_row(item))
+        else:
+            row = loft_ends.profile_row(sections[kind])
+            if row.point is None:
+                row.item = loft_ends.polynomial_wire(item)
+            rows.append(row)
+    try:
+        return loft_ends.thru_rows(
+            rows,
+            sections[0],
+            sections[-1],
+            options,
+            solid=True,
+            first_next=sections[1],
+            last_next=sections[-2],
+        )
+    except loft_ends.EndError as exc:
+        raise LoftError(str(exc))
 
 
 def _vertex(point):
@@ -392,41 +447,65 @@ def tool_shape(profiles, rail_refs, centerline_refs, options):
     sections = sections_of(profiles)
     guide = options["guide"]
     ends = loft_ends.active(options)
-    if ends and (
-        options["closed"]
-        or (guide == "centerline" and curves.normalize(centerline_refs))
-        or (guide == "rails" and curves.normalize(rail_refs))
-    ):
-        raise LoftError(
-            "End conditions work on an open loft without rails or a centerline. Set them to "
-            "Connected, or take the rails / centerline / Closed away."
-        )
-    if guide == "centerline" and curves.normalize(centerline_refs):
-        if options["closed"]:
-            raise LoftError("A closed loft cannot follow a centerline. Clear Closed or the line.")
+    merge = options["merge"]
+    centerline = guide == "centerline" and bool(curves.normalize(centerline_refs))
+    rails = guide == "rails" and bool(curves.normalize(rail_refs))
+    if centerline and options["closed"]:
+        raise LoftError("A closed loft cannot follow a centerline. Clear Closed or the line.")
+    if rails and options["closed"]:
+        raise LoftError("A closed loft cannot follow rails. Clear Closed or the rails.")
+    if options["closed"] and len(sections) < 3:
+        raise LoftError("A closed loft needs at least three profiles.")
+    if ends:
+        try:
+            loft_ends.check(sections, options, closed=options["closed"])
+        except loft_ends.EndError as exc:
+            raise LoftError(str(exc))
+    count = len(sections[[s.point is None for s in sections].index(True)].wires)
+    if centerline:
         try:
             line = curves.Path(curves.refs_edges(centerline_refs), start_near=sections[0].center)
         except curves.CurveError as exc:
             raise LoftError("Centerline: %s" % exc)
-        count = len(sections[[s.point is None for s in sections].index(True)].wires)
-        solids = [_along(line, [_ends(s, k) for s in sections]) for k in range(count)]
+        if not ends:
+            solids = [_along(line, [_ends(s, k, merge) for s in sections]) for k in range(count)]
+            return _holes(solids)
+        solids = []
+        for k in range(count):
+            items = [_ends(s, k, merge) for s in sections]
+            total = RAIL_STATIONS * (len(sections) - 1) + len(sections)
+            stations = _along(line, items, stations=total)
+            kinds = [None] * len(stations)
+            stations[0], stations[-1] = items[0], items[-1]
+            kinds[0], kinds[-1] = 0, len(sections) - 1
+            solids.append(_with_ends(sections, stations, kinds, options))
         return _holes(solids)
-    if guide == "rails" and curves.normalize(rail_refs):
-        if options["closed"]:
-            raise LoftError("A closed loft cannot follow rails. Clear Closed or the rails.")
-        return _rail_loft(sections, _rail_groups(rail_refs, sections[0].center))
-    if options["closed"] and len(sections) < 3:
-        raise LoftError("A closed loft needs at least three profiles.")
-    count = len(sections[[s.point is None for s in sections].index(True)].wires)
+    if rails:
+        return _rail_loft(
+            sections, _rail_groups(rail_refs, sections[0].center), merge, options if ends else None
+        )
     if ends:
         try:
-            loft_ends.check(sections, options)
-            solids = [loft_ends.thru(sections, k, options) for k in range(count)]
+            if options["closed"]:
+                solids = [_closed_with_ends(sections, k, options, merge) for k in range(count)]
+            else:
+                solids = [loft_ends.thru(sections, k, options, merge) for k in range(count)]
         except loft_ends.EndError as exc:
             raise LoftError(str(exc))
         return _holes(solids)
-    solids = [_thru([_ends(s, k) for s in sections], options["closed"]) for k in range(count)]
+    solids = [
+        _thru([_ends(s, k, merge) for s in sections], options["closed"]) for k in range(count)
+    ]
     return _holes(solids)
+
+
+def _closed_with_ends(sections, index, options, merge):
+    """A closed loft whose first profile sets the direction it passes through it with."""
+    rows = [loft_ends.profile_row(s, index, merge) for s in sections]
+    rows.append(rows[0])
+    return loft_ends.thru_rows(
+        rows, sections[0], sections[0], options, solid=True, closed=True, first_next=sections[1]
+    )
 
 
 def _holes(solids):
@@ -533,6 +612,7 @@ class LoftFeature:
         if add("App::PropertyEnumeration", "Operation", "Join, cut or intersect"):
             obj.Operation = ["Join", "Cut", "Intersect"]
         add("App::PropertyBool", "Closed", "Loft the last profile back to the first")
+        add("App::PropertyBool", "MergeTangentEdges", "One side face per run of tangent edges")
         if add("App::PropertyBool", "Refine", "Merge coplanar faces, like Fusion"):
             obj.Refine = True
         for end, what in (("Start", "leaves the first"), ("End", "meets the last")):
@@ -585,6 +665,10 @@ class LoftFeature:
                 result = result.removeSplitter()
             except Exception:
                 pass
+            if result.ShapeType == "Solid" and result.Volume < 0:
+                # removeSplitter can hand back a sewn loft (end conditions) turned inside out
+                result = result.copy()
+                result.reverse()
         if result.isNull() or not result.Solids or result.Volume < TOL:
             if operation == "Cut":
                 raise LoftError("This cut would remove the whole body.")
@@ -640,6 +724,7 @@ def fp_options(obj):
         "guide": obj.GuideType.lower(),
         "operation": obj.Operation.lower(),
         "closed": bool(obj.Closed),
+        "merge": bool(getattr(obj, "MergeTangentEdges", False)),
     }
     for end in ("start", "end"):
         cap = end.capitalize()
@@ -688,6 +773,8 @@ def native_type(profiles, rail_refs, centerline_refs, options, body):
         return None
     if loft_ends.active(options):
         return None  # FreeCAD's Loft has no end conditions
+    if options.get("merge"):
+        return None  # nor Tangent Edges Merge
     if options["guide"] == "rails" and curves.normalize(rail_refs):
         return None
     if options["guide"] == "centerline" and curves.normalize(centerline_refs):
@@ -872,6 +959,8 @@ def _update(feature, profiles, rail_refs, centerline_refs, options, hide=True):
             feature.Operation = operation
         if feature.Closed != options["closed"]:
             feature.Closed = options["closed"]
+        if bool(getattr(feature, "MergeTangentEdges", False)) != options["merge"]:
+            feature.MergeTangentEdges = options["merge"]
         feature.Refine = True
         for end in ("start", "end"):
             cap = end.capitalize()
@@ -888,6 +977,7 @@ def _update(feature, profiles, rail_refs, centerline_refs, options, hide=True):
             "operation": options["operation"],
             "guide": options["guide"],
             "closed": options["closed"],
+            "merge": options["merge"],
             "chain": options["chain"],
             "profiles": _refs_json(profiles),
             "rails": _refs_json(rail_refs),

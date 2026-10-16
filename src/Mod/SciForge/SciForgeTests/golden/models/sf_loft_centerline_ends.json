@@ -1,0 +1,95 @@
+{
+  "id": "sf_loft_centerline_ends",
+  "title": "Loft along a straight centerline with Direction at the first profile (a prism)",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "centerline",
+    "end-conditions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 40,
+      "geometry": [
+        {
+          "center_rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "c",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        }
+      ],
+      "centerline": {
+        "sketch": "c",
+        "at": [
+          0,
+          20
+        ]
+      },
+      "start_condition": "direction"
+    }
+  ],
+  "expect": {
+    "volume": 4000.0,
+    "rel_tol": 1e-05,
+    "solids": 1,
+    "valid": true,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      5,
+      5,
+      40
+    ],
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "Direction square off the first square along the straight centerline: the prism 10 x 10 x 40"
+  }
+}

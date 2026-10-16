@@ -1239,10 +1239,10 @@ LOFT_END_KEYS = {
 }
 STEP_KEYS["sf_loft"] = (
     {"id", "profiles"},
-    {"rails", "centerline", "guide", "closed", "operation", "comment"} | LOFT_END_KEYS,
+    {"rails", "centerline", "guide", "closed", "merge", "operation", "comment"} | LOFT_END_KEYS,
 )
 STEP_KEYS["sf_loft_edit"] = ({"target", "set"}, {"comment"})
-LOFT_SET = {"guide", "closed", "operation"} | LOFT_END_KEYS
+LOFT_SET = {"guide", "closed", "merge", "operation"} | LOFT_END_KEYS
 STEP_KEYS["sf_rib"] = (
     {"id", "curves"},
     {
@@ -1271,6 +1271,8 @@ def _check_loft_options(here, options):
         _fail(here, "'operation' must be one of %s" % (SWEEP_CHOICES["operation"],))
     if "closed" in options and not isinstance(options["closed"], bool):
         _fail(here, "'closed' is true or false")
+    if "merge" in options and not isinstance(options["merge"], bool):
+        _fail(here, "'merge' (Tangent Edges Merge) is true or false")
     for end in ("start", "end"):
         condition = options.get(end + "_condition", "free")
         if condition not in LOFT_CONDITIONS:

@@ -1,0 +1,130 @@
+{
+  "id": "surface2_sweep_rail",
+  "title": "Surface Sweep Path + Guide Rail: a 10 high line along 40, its top on a rising rail",
+  "tags": [
+    "surface",
+    "sweep",
+    "rail"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "p",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "g",
+      "plane": "YZ",
+      "curves": [
+        {
+          "line": [
+            0,
+            10,
+            40,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "sweep",
+      "refs": [
+        {
+          "sketch": "s",
+          "at": [
+            0,
+            5
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "sketch": "p",
+          "at": [
+            0,
+            20
+          ]
+        }
+      ],
+      "refs3": [
+        {
+          "sketch": "g",
+          "at": [
+            20,
+            15
+          ]
+        }
+      ],
+      "options": {
+        "type": "rail"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 600.0,
+        "faces": 1,
+        "bbox": [
+          0,
+          0,
+          0,
+          0,
+          40,
+          20
+        ],
+        "source": "analytic",
+        "note": "Scale: the line grows to reach the rail, 10 + y / 4 high: 400 + 200"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "w1",
+      "set": {
+        "scaling": "none"
+      }
+    }
+  ],
+  "expect": {
+    "area": 400.0,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      0,
+      40,
+      10
+    ],
+    "source": "analytic",
+    "note": "Profile Scaling None: the rail only turns the profile (here not at all)"
+  }
+}

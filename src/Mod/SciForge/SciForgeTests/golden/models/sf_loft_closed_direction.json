@@ -1,0 +1,99 @@
+{
+  "id": "sf_loft_closed_direction",
+  "title": "Closed loft of four squares round the Z axis with Direction at the first one",
+  "tags": [
+    "loft",
+    "fusion-loft",
+    "closed",
+    "end-conditions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "center_rect": [
+            30,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "center_rect": [
+            30,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "center_rect": [
+            -30,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s4",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "center_rect": [
+            -30,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_loft",
+      "id": "l1",
+      "profiles": [
+        {
+          "profile": "s1"
+        },
+        {
+          "profile": "s2"
+        },
+        {
+          "profile": "s3"
+        },
+        {
+          "profile": "s4"
+        }
+      ],
+      "closed": true,
+      "operation": "new_body",
+      "start_condition": "direction"
+    }
+  ],
+  "expect": {
+    "solids": 1,
+    "valid": true,
+    "source": "analytic",
+    "note": "a ring through the four squares, passing through the first one square to it (one closed solid; its shape between the squares is the loft's own)"
+  }
+}
