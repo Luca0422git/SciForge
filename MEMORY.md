@@ -4,6 +4,10 @@ This file is the project's memory across work sessions. **Read it first, every s
 `docs/sciforge/feature-outline.md` (the spec). Update it at the end of every session: what was
 done, what was learned, what is next. Newest session goes at the top of the log.
 
+**Start here (2026-10-16):** search this file for "HANDOFF 2026-10-16 evening": it says where the
+work stopped (CI #136: one red scenario in shard 3, `inspect_analysis_curvature`) and what to do
+first. Then report to Luca with the quick update of the first green CI.
+
 ---
 
 ## Where things live
@@ -5236,6 +5240,56 @@ Behaviour spec with sources, what was built and what was not: `docs/sciforge/par
   **Rule:** a new mouse filter on the 3D view must ask `handles3d.dragging()` /
   `just_used()` and be tested against `bodies_move`, `insert_mesh`, `shell_draft_scale`,
   `revolve_basic`, `primitives_box` and `inspect_construct_planes`.
+
+## HANDOFF 2026-10-16 evening (read this first; the session that wrote it ended here)
+
+**State:** every wave 5 branch is merged and pushed (sketch-2, exchange-2, surface-2, polish-2,
+mesh-inspect-2; see "Wave 5 merges" below), plus Luca's four bug fixes. Last green CI with a
+quick update Luca has: **CI #131** on 2273d4e0ab (the four bug fixes, before wave 5). Luca has NOT
+yet received a quick update with wave 5.
+
+**CI #136 on df45605c2c: 6 of 7 jobs green, shard 3 red. First job of the next session:**
+- `inspect_analysis_curvature` fails on CI in both the run and its one re-run (deterministic):
+  "Fillet dialog with seven edges" gets six; the step's edge click at pixel (1150, 422) finds
+  `Extrude.Edge8` under the mouse but the edge is not added to the Fillet's selection. It passes
+  locally alone. It passed on CI #135 (09ff769153), i.e. before df45605c2c. Prime suspect: the
+  runner change in df45605c2c (below) gives every scenario FreeCAD's default window layout, so
+  the 3D view is now 1538 wide on CI (it was narrower when a saved layout leaked in): a click
+  point or a timing that only worked in the old layout. Reproduce with the whole shard locally:
+  `--only scenarios --shard 3/4` (run ONE shard at a time: two at once make load failures, e.g.
+  extrude_multibody_edit's "drag answered quickly" and surface2_solid_loft edge clicks).
+- `exchange2_manip` P9 "X Distance followed 0.0" failed only in the re-run: probably a drag
+  flake, but check it with the shard.
+- Do not re-run CI to make it green: the one allowed re-run is spent; fix, push, and CI runs.
+
+**What CI #135 found and what was done (commits 37f9991087, df45605c2c):**
+1. `sketch_dim_box_closes` E (CI only): a double-click on a dimension's text right after the
+   move found no preselection yet, and sketch-2's chain selection took the double-click (the
+   text lies over its line). `sketch_select.select_chain` now asks
+   `session.double_clicked(pos)` again once the event is handled: a dimension wins. Fixed on CI.
+2. `revolve_qa_to` P25 (in a shard): the browser double-click on a sketch did nothing. Bisected
+   (8 runs) to *any scenario, then exchange2_link, then revolve_qa_to*. Cause: FreeCAD saves the
+   main window layout (`User parameter:BaseApp/Preferences/MainWindow` / `MainWindowState`) in
+   the shared shard profile; after exchange2_link showed the Data Panel, the layout lists
+   `SciForgeDataPanelDock`, the next session's browser comes out 362 px wide instead of 256, and
+   a press on a browser row is not taken by the browser: Qt passes it on to the 3D view's widgets
+   (seen with an application event filter installed first: press on the browser viewport, then
+   QWidget / QGraphicsView / QMainWindow / QMdiSubWindow; `itemDoubleClicked` never fires).
+   Not explained yet: WHICH code takes the press there (no SciForge filter returns True for it;
+   no popup, no mouse grabber). Fix in the test runner: `run_tests.sh` removes
+   `MainWindowState` from the profile's user.cfg before each scenario. Fixed on CI.
+   **Open product question (for Luca's real use):** could a saved layout with the Data Panel
+   docked make his browser ignore clicks after a restart? Tried and NOT working: removing the
+   dock on the main window's Close / aboutToQuit and re-storing `MainWindowState` (FreeCAD
+   still saved the dock). If Luca reports browser clicks doing nothing, start here.
+3. `sketch_input.double_click_widget` now sends press / release / double-click / release with
+   sendEvent to the widget (QTest routed the press by window position). Kept: harmless and more
+   direct.
+
+**Debugging lessons from this hunt:** a wait loop `until ! pgrep -f "pattern"` matches its own
+command line and never ends: wait on the command itself. Debug in a scratch worktree
+(`git worktree add --detach <scratch>/dbgwt HEAD`), never in the main tree while a run uses it.
+Print long FreeCAD parameters in full (a 120-character cut hid the dock names).
 
 ## HANDOFF 2026-10-14 night (Opus took over the paused session; read this first)
 
