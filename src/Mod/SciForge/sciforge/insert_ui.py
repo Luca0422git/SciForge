@@ -343,7 +343,7 @@ class _PlaneHandles:
         self._camera_timer = QtCore.QTimer()
         self._camera_timer.setInterval(250)
         self._camera_timer.timeout.connect(self._camera_moved)
-        self._camera_timer.start()
+        self._half_used = 1.0  # where the scale arrow sits (mm from the middle)
 
     def _camera_state(self):
         try:
@@ -421,6 +421,7 @@ class _PlaneHandles:
         a = math.radians(ccw)
         xr = x * math.cos(a) + y * math.sin(a)
         half = max(self.handle_half(), size * 1.2)
+        self._half_used = half
         try:
             move_x = taskui.ArrowDragger(
                 point, x, 0.0, size, lambda d: self._handle_drag("x", d), self._handle_release
@@ -454,6 +455,8 @@ class _PlaneHandles:
         self.handles = [move_x, move_y, scale, turn]
         self.handle_by = {"x": move_x, "y": move_y, "scale": scale, "angle": turn}
         self._camera_seen = self._camera_state()
+        if not self._camera_timer.isActive():
+            self._camera_timer.start()
         boxes = self.value_boxes
         boxes.attach(move_x, "x", lambda: self.dx.widget.text(), self._typed(self.dx))
         boxes.attach(move_y, "y", lambda: self.dy.widget.text(), self._typed(self.dy))
@@ -494,7 +497,7 @@ class _PlaneHandles:
             self._drag_start = dict(
                 dx=self.dx.value(),
                 dy=self.dy.value(),
-                half=max(1e-6, self.handle_half()),
+                half=max(1e-6, self._half_used),
                 **self._scale_start()
             )
         start = self._drag_start

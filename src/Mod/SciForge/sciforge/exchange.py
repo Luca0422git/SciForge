@@ -56,10 +56,6 @@ def _units(doc, parents, shown_only, check_self=True):
     return out
 
 
-def has_components(doc):
-    return bool(components.list_components(doc))
-
-
 # -- the mirror document -----------------------------------------------------------------------
 def _view_colours(obj):
     return insert._view_colours(obj)
@@ -167,7 +163,7 @@ class _Mirror:
                 container.addObject(link)
 
 
-def _mirror_document(doc, scope, target, chosen, shown_only=True):
+def _mirror_document(doc, scope, target, chosen, shown_only=True, frame=None):
     """(throw-away document, [top objects]) holding what is exported, as described in the
     module's doc. scope: "design", "component" (target) or "bodies" (chosen, flat)."""
     active = App.ActiveDocument.Name if App.ActiveDocument is not None else None
@@ -179,7 +175,7 @@ def _mirror_document(doc, scope, target, chosen, shown_only=True):
             for body in chosen or []:
                 if export.is_mesh_body(body) or not bodies.has_solid(body):
                     continue
-                tops.append(_part_feature(tmp, body.Label, [body], App.Placement()))
+                tops.append(_part_feature(tmp, body.Label, [body], frame or App.Placement()))
         else:
             if scope == "component":
                 if target is None or not components.is_component(target):
@@ -274,10 +270,13 @@ def export_cad(doc, kind, path, scope="design", target=None, chosen=None):
     folder = os.path.dirname(path)
     if folder and not os.path.isdir(folder):
         os.makedirs(folder, exist_ok=True)
+    frame = None
     if kind == "iges" and scope != "bodies":
         chosen = _bodies_of_scope(doc, scope, target)
+        if scope == "component":  # in the component's own coordinates, as STEP is
+            frame = component_frame(target)
         scope = "bodies"
-    tmp, tops, active = _mirror_document(doc, scope, target, chosen)
+    tmp, tops, active = _mirror_document(doc, scope, target, chosen, frame=frame)
     try:
         if kind == "iges":
             _write_iges(tops, path)

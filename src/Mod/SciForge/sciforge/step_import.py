@@ -33,14 +33,6 @@ class Made:
         self.bodies = []
         self.built = {}  # file key -> component
 
-    def objects(self):
-        """What the user sees as the result (selected after an insert)."""
-        if self.top is not None:
-            return [self.top]
-        roots = [c for c in self.components + self.instances if components.container_of(c) is None]
-        roots += [b for b in self.bodies if components.container_of(b) is None]
-        return roots
-
 
 # -- reading -----------------------------------------------------------------------------------
 def read_tree(path):

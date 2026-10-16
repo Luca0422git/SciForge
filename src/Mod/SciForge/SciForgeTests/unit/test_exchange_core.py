@@ -110,12 +110,11 @@ class Structure(unittest.TestCase):
         asm = N("Wheel", core.ASSEMBLY, children=[N("Wheel", core.PART, link="W", pieces=["w"])])
         self.assertEqual(len(core.normalize(asm)["children"]), 1)
 
-    def test_counts(self):
-        self.assertEqual(core.count_nodes([robot()]), (5, 1, 3))
-        self.assertEqual(core.occurrences([robot()])["W"], 2)
+    def test_describe(self):
         self.assertEqual(
             core.describe(4, 1, 3, "robot.step"), "robot.step: 4 components, 1 copy, 3 bodies"
         )
+        self.assertEqual(core.describe(0, 0, 1, "a.igs"), "a.igs: 1 body")
 
     def test_body_names(self):
         self.assertEqual(core.body_labels(2), ["Body1", "Body2"])

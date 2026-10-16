@@ -12,7 +12,8 @@ P1  Ctrl+O, robot.step: a new design "robot" (unsaved) with Base, Drive, and in 
     Wheel:2; the timeline has a step per component and the bodies' steps.
 P2  The copy follows its original: the Wheel's body made 2 mm thicker (its base shape)
     shows in Wheel:2 at the next compute.
-P3  Saved and opened again: the same components, copy, bodies and colours.
+P3  Saved, closed and opened again with Ctrl+O: the same components, copy, bodies and
+    colours.
 P4  File > Open (the application menu) of two_parts.step (two free parts): components Plate
     and Peg, one body each, blue and red.
 P5  An IGES file (written by SciForge's IGES export of two boxes): the solids as two bodies
@@ -140,10 +141,28 @@ def p3_save_reopen():
     s["saved"] = path
     Gui.getDocument(doc.Name).Modified = False
     App.closeDocument(doc.Name)
-    App.openDocument(path)
+    # a click on the tab of the design left open (its 3D view takes the keys again)
+    from PySide import QtWidgets as QW
+
+    area = Gui.getMainWindow().findChild(QW.QMdiArea)
+    for sub in area.subWindowList():
+        if sub.windowTitle().startswith("Start :"):
+            area.setActiveSubWindow(sub)
 
 
-p3_save_reopen.wait_ms = 2500
+p3_save_reopen.wait_ms = 1500
+
+
+def p3_ctrl_o():
+    h.check(
+        "P3 the design is closed",
+        "Robot" not in [App.getDocument(n).Label for n in App.listDocuments()],
+    )
+    x.use_open_file(s["saved"])  # File > Open (Ctrl+O) of the saved design
+    ctrl_o()
+
+
+p3_ctrl_o.wait_ms = 2500
 
 
 def p3_check():
@@ -374,6 +393,7 @@ h.run(
         p2_thicker,
         p2_check,
         p3_save_reopen,
+        p3_ctrl_o,
         p3_check,
         p4_open_menu,
         p4_check,

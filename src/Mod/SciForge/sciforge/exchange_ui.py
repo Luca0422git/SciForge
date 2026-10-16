@@ -87,7 +87,7 @@ def open_file(path):
     if kind == "design":
         from . import versions_ui
 
-        return versions_ui.open_design(path)
+        return versions_ui.open_design(path)  # an open one comes to the front
     from . import step_import
 
     name = core.base_name(path)

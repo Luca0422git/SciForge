@@ -151,37 +151,6 @@ def body_labels(count, at_root=False, part_name=None):
     return ["Body%d" % (i + 1) for i in range(count)]
 
 
-def count_nodes(tops):
-    """(components, instances, solids) a file brings in (for the message after it)."""
-    comps = instances = solids = 0
-    for t in tops:
-        stack = [normalize(t)]
-        while stack:
-            n = stack.pop()
-            if n.get("link"):
-                instances += 1
-                continue
-            comps += 1
-            solids += len(n["pieces"])
-            stack.extend(n["children"])
-    return comps, instances, solids
-
-
-def occurrences(tops):
-    """{key: number of occurrences} of every definition in the file (a part used twice
-    has 2)."""
-    found = {}
-    stack = list(tops)
-    while stack:
-        n = stack.pop()
-        key = n.get("link") or n.get("key")
-        if key:
-            found[key] = found.get(key, 0) + 1
-        if not n.get("link"):
-            stack.extend(n.get("children") or [])
-    return found
-
-
 def describe(comps, instances, solids, name):
     parts = []
     if comps:
