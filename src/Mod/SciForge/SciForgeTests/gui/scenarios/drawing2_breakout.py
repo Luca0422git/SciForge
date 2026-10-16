@@ -215,10 +215,21 @@ def b_check():
     hatch = drawing_breakout.hatch_of(view)
     tags = drawing._get(view, "SciForgeBreakoutTags", []) or []
     h.check("the floor hatched", len(hatch) > 0 and len(tags) == len(hatch), (hatch, tags))
-    inside = all(
-        -30.01 <= x <= -9.99 and -5.01 <= y <= 5.01 for seg in hatch for x, y in (seg[:2], seg[2:])
+    # the boundary as clicked (corners land a fraction of a mm from the aimed ones: the
+    # sheet's scale follows the window, and a 13 px shorter view moved one by 0.14 mm)
+    drawn = (data() or {}).get("points") or []
+    h.check(
+        "the corners where they were clicked",
+        len(drawn) == 4
+        and all(abs(a[0] - b[0]) < 0.5 and abs(a[1] - b[1]) < 0.5 for a, b in zip(drawn, BOUNDARY)),
+        drawn,
     )
-    h.check("the hatching inside the boundary", inside, hatch)
+    lo = min((p[0] for p in drawn), default=-30.0) - 0.01
+    hi = max((p[0] for p in drawn), default=-10.0) + 0.01
+    inside = all(
+        lo <= x <= hi and -5.01 <= y <= 5.01 for seg in hatch for x, y in (seg[:2], seg[2:])
+    )
+    h.check("the hatching inside the boundary", inside, (hatch, drawn))
     state["hatch"] = hatch
     h.check("more lines than before", len(view.getVisibleEdges()) > state["before"])
     h.shot("b-breakout")
