@@ -76,6 +76,9 @@ DEFAULTS = {
     "PerpendicularDegrees": ("Float", 4.0),
     "Parallel": ("Bool", False),  # Fusion: unconfirmed
     "ParallelDegrees": ("Float", 3.0),
+    # a line within this angle of 45, 135, 225 or 315 degrees snaps there and gets a 45
+    # degree Angle (beyond Fusion, which infers level and upright only); 0: off
+    "DiagonalDegrees": ("Float", 4.0),
     "TangentArc": ("Bool", True),  # press-and-drag from the line's start makes an arc
     "DragPixels": ("Float", 6.0),  # a press that moves less is a click
     # how close (screen pixels) the pointer must be to an end, middle, centre, quadrant
@@ -413,6 +416,7 @@ class Inference:
             perp_deg=setting("PerpendicularDegrees"),
             parallel=setting("Parallel"),
             parallel_deg=setting("ParallelDegrees"),
+            diag_deg=setting("DiagonalDegrees"),
             grid=_grid_size(self.session),
         )
         # hovering a point acquires it (Fusion keeps the last 3), a line likewise
@@ -782,6 +786,8 @@ class Inference:
                     constraints.append(Sketcher.Constraint("Perpendicular", line, result.other))
                 elif result.kind == core.PARALLEL and result.other is not None:
                     constraints.append(Sketcher.Constraint("Parallel", line, result.other))
+                elif result.kind == core.DIAGONAL:
+                    constraints.append(diagonal_constraint(geos[line], line))
         constraints = [c for c in constraints if c is not None]
         if not moves and not constraints and not drops:
             return
@@ -1159,6 +1165,19 @@ class TangentArc:
                 commands.tell("Line: click the end of the arc to go on from it.")
         except Exception as exc:
             warn("tangent arc: %s" % exc)
+
+
+def diagonal_constraint(geo, index):
+    """The Angle constraint that holds line `index` (its geometry `geo`) at the multiple
+    of 45 degrees it was drawn at, measured from the sketch's X axis (FreeCAD's angle of
+    a single line), or None."""
+    import Sketcher
+
+    try:
+        d = core.sub(_xy(geo.EndPoint), _xy(geo.StartPoint))
+        return Sketcher.Constraint("Angle", index, core.diagonal_angle(d))
+    except Exception:
+        return None
 
 
 def describe(i, geo):

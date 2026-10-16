@@ -29,6 +29,7 @@ import math
 
 HORIZONTAL, VERTICAL = "h", "v"
 PERPENDICULAR, PARALLEL = "perp", "parallel"
+DIAGONAL = "diag"  # 45, 135, 225 or 315 degrees (beyond Fusion: Luca's wish)
 # a guide keeps one coordinate of a point: "x" = straight above/below it (a vertical
 # guide line), "y" = level with it (a horizontal guide line)
 SAME_X, SAME_Y = "x", "y"
@@ -87,6 +88,7 @@ class Options:
         self.perp_deg = 4.0  # 90 degrees to a touching line within this angle snaps
         self.parallel = False  # parallel to a hovered line (Fusion: unconfirmed)
         self.parallel_deg = 3.0
+        self.diag_deg = 4.0  # 45 / 135 / 225 / 315 degrees within this angle snaps
         self.min_len_px = 10.0  # shorter lines have no direction to infer from
         self.grid = None  # grid spacing (mm) when grid snap is on, else None
         for name, value in values.items():
@@ -113,8 +115,8 @@ class Result:
     point     the exact sketch point (the line tool gets the screen pixel nearest to it;
               the exact value is set after the click)
     guides    Guide objects the point lies on
-    kind      None, HORIZONTAL, VERTICAL, PERPENDICULAR or PARALLEL (the new line's
-              direction)
+    kind      None, HORIZONTAL, VERTICAL, DIAGONAL, PERPENDICULAR or PARALLEL (the new
+              line's direction)
     direction the unit direction of the new line for `kind`
     other     the other line's geometry index (PERPENDICULAR / PARALLEL)
     on_line   True when the point lies on `other` (a line ending on another line)
@@ -616,10 +618,28 @@ def _axis_kind(d, tol):
     return None
 
 
+def diagonal(d, tol):
+    """The unit direction at 45, 135, 225 or 315 degrees that d is within tol (radians)
+    of, or None."""
+    ang = math.atan2(d[1], d[0])
+    nearest = (math.floor(ang / (math.pi / 2)) + 0.5) * (math.pi / 2)
+    if abs(ang - nearest) <= tol:
+        return (math.cos(nearest), math.sin(nearest))
+    return None
+
+
+def diagonal_angle(d):
+    """The multiple of 45 degrees (radians, -pi..pi) nearest to the direction d."""
+    ang = math.atan2(d[1], d[0])
+    snapped = round(ang / (math.pi / 4)) * (math.pi / 4)
+    return snapped - 2 * math.pi if snapped > math.pi + 1e-12 else snapped
+
+
 def _direction(raw, start, lines, parallel_lines, px, opt):
     """(kind, unit direction, other line, corner, along) the new line snaps to, or None.
     Level/upright first (FreeCAD adds that constraint itself), then perpendicular to a
-    line through the start, then parallel to a hovered line (when switched on)."""
+    line through the start, then 45 degrees (and 135, 225, 315: beyond Fusion), then
+    parallel to a hovered line (when switched on)."""
     d = sub(raw, start)
     kind = _axis_kind(d, math.radians(opt.hv_deg))
     if kind == HORIZONTAL:
@@ -644,6 +664,10 @@ def _direction(raw, start, lines, parallel_lines, px, opt):
             best = (deviation, geo, n, along)
     if best is not None:
         return (PERPENDICULAR, best[2], best[1], start, best[3])
+    if opt.diag_deg > 0:
+        diag = diagonal(d, math.radians(opt.diag_deg))
+        if diag is not None:
+            return (DIAGONAL, diag, None, None, None)
     if opt.parallel:
         best = None
         for geo, a, b in parallel_lines:
@@ -738,7 +762,9 @@ def grid_off(result, grid, px):
     would pull a fixed coordinate (or a slanted direction) off the inference. Otherwise
     it stays on, so the free coordinate lands exactly on the grid as before. A snap
     point is exact already (the grid must not pull it off)."""
-    if result.snap is not None or result.kind in (PERPENDICULAR, PARALLEL) or result.on_line:
+    if result.snap is not None or result.kind in (PERPENDICULAR, PARALLEL, DIAGONAL):
+        return True
+    if result.on_line:
         return True
     if not grid or grid <= 0:
         return False

@@ -1110,6 +1110,7 @@ class DrawTool:
             pick_px=pick_pixels(),
             hv_deg=sketch_infer.setting("HVDegrees"),
             perp_deg=sketch_infer.setting("PerpendicularDegrees"),
+            diag_deg=sketch_infer.setting("DiagonalDegrees"),
             parallel=False,
             grid=sketch_infer._grid_size(self.session),
         )
@@ -1323,6 +1324,12 @@ class DrawTool:
                     out.append(Sketcher.Constraint("Vertical", line))
                 elif result.kind == icore.PERPENDICULAR and result.other is not None:
                     out.append(Sketcher.Constraint("Perpendicular", line, result.other))
+                elif result.kind == icore.DIAGONAL:
+                    try:
+                        geo = self.sketch.Geometry[line]
+                        out.append(sketch_infer.diagonal_constraint(geo, line))
+                    except Exception:
+                        pass
         return out
 
     # -- shared preview hints ----------------------------------------------------------------

@@ -604,3 +604,56 @@ class SnapAfterTheClick(unittest.TestCase):
     def test_freecads_grid_is_off_for_a_snap(self):
         r = core.snap_result(core.SnapPoint(core.QUADRANT, (5.0, 0.0), geo=1))
         self.assertTrue(core.grid_off(r, 1.0, PX))
+
+
+class Diagonal(unittest.TestCase):
+    """45 / 135 / 225 / 315 degrees (beyond Fusion: Luca's wish; always on, Ctrl frees)."""
+
+    def test_3_degrees_off_45_snaps_to_45(self):
+        start = (0.0, 0.0)
+        raw = rot((40.0, 0.0), 48.0)
+        r = run(raw, start=start)
+        self.assertEqual(r.kind, core.DIAGONAL)
+        self.assertAlmostEqual(math.degrees(math.atan2(r.point[1], r.point[0])), 45.0)
+
+    def test_all_four_diagonals(self):
+        for deg in (135.0, 225.0, 315.0):
+            r = run(rot((40.0, 0.0), deg + 2.5), start=(0.0, 0.0))
+            self.assertEqual(r.kind, core.DIAGONAL, deg)
+            ang = math.degrees(math.atan2(r.direction[1], r.direction[0])) % 360.0
+            self.assertAlmostEqual(ang, deg)
+
+    def test_beyond_the_tolerance_stays_free(self):
+        self.assertIsNone(run(rot((40.0, 0.0), 51.0), start=(0.0, 0.0)))
+
+    def test_its_own_tolerance_and_off(self):
+        raw = rot((40.0, 0.0), 51.0)
+        self.assertEqual(run(raw, start=(0.0, 0.0), diag_deg=7.0).kind, core.DIAGONAL)
+        self.assertIsNone(run(rot((40.0, 0.0), 46.0), start=(0.0, 0.0), diag_deg=0.0))
+
+    def test_level_and_upright_come_first(self):
+        self.assertEqual(run(rot((40.0, 0.0), 3.0), start=(0.0, 0.0)).kind, core.HORIZONTAL)
+
+    def test_the_grid_is_off_for_a_diagonal(self):
+        r = run(rot((40.0, 0.0), 44.0), start=(0.0, 0.0), grid=1.0)
+        self.assertTrue(core.grid_off(r, 1.0, PX))
+
+    def test_placed_exactly_on_the_diagonal_after_the_click(self):
+        r = run(rot((40.0, 0.0), 44.0), start=(0.0, 0.0))
+        placed = (r.point[0] + 0.05, r.point[1] - 0.05)
+        p = core.exact_point(r, placed, PX)
+        self.assertAlmostEqual(p[0], p[1])
+
+    def test_meets_a_guide(self):
+        a = ((3, 2), (20.0, 50.0))
+        r = run(rot((30.0, 0.0), 46.0), start=(0.0, 0.0), acquired=[a])
+        self.assertEqual(r.kind, core.DIAGONAL)
+        self.assertAlmostEqual(r.point[0], 20.0)
+        self.assertAlmostEqual(r.point[1], 20.0)
+        self.assertEqual([g.axis for g in r.guides], [core.SAME_X])
+
+    def test_the_angle_constraint_value(self):
+        self.assertAlmostEqual(core.diagonal_angle((1.0, 1.0)), math.pi / 4)
+        self.assertAlmostEqual(core.diagonal_angle((-1.0, 1.02)), 3 * math.pi / 4)
+        self.assertAlmostEqual(core.diagonal_angle((-1.0, -1.0)), -3 * math.pi / 4)
+        self.assertAlmostEqual(core.diagonal_angle((1.0, -0.98)), -math.pi / 4)
