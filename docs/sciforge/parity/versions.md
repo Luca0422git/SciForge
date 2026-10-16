@@ -53,8 +53,8 @@ a design in the Data Panel > Version History). Nothing from Fusion is copied but
 | A new design: the Save dialog asks for a **Name** and a **Location** (a project or a folder in it; New Folder, New Project), Save. No version description on the first save. | Same: Name (a free name is suggested), Location (the project folder by default, `...` for another folder, **New Folder** makes one and selects it), Save. The file is `<Name>.FCStd` in that folder; it becomes **v1**. A name that is taken, an empty name or a folder that cannot be written is said in the dialog, which stays open. |
 | A saved design: Ctrl+S ("Save (Version)") opens the Save dialog with a **Version Description** box; Enter saves without one. Every save is the next version (v1, v2, ...). There is no setting to skip the box. | Same: the Version Description box, Enter saves. Every save records the next version with the description, the date, the size and who saved. SciForge adds the switch Fusion lacks: *Ask for a version description on every save* (on by default) in Project and Recovery Settings. |
 | The design tab shows the design as saved / changed. | The title in the application bar loses its `*`. |
-| Milestone checkbox, Save dependent files | Not built: Milestone is for collaborative hubs; a linked design is saved on its own. |
-| Automatic version on close (Preferences > General) | Not built (gap): closing a changed design still asks FreeCAD's Save / Discard / Cancel. |
+| Milestone checkbox, Save dependent files | **Milestone** box in the Version Description dialog (polish-2, section below). Save dependent files: not built (a linked design is saved on its own). |
+| Automatic version on close (Preferences > General, on) | Built (polish-2, section below): closing a changed design saves a version; off, SciForge asks. |
 | File > Save As: a new design in the chosen location. | Same (`SciForge_SaveAs`, in the application menu and UTILITIES): the Name/Location dialog with "<Name> copy" suggested; the copy is v1 where it is saved; the original keeps its versions. |
 
 FreeCAD's own File > Save (in the application menu) records a version too: every finished
@@ -98,7 +98,7 @@ Where the versions live:
 | Hub > projects > folders first, then designs as cards: thumbnail, name, version number. | The project folder (chosen in the settings or with the panel's `...` button; `Documents/SciForge Designs` until then): folders first, then designs as cards with FreeCAD's own thumbnail (`Document/SaveThumbnail`, on by default), the name and the version badge (v3). A breadcrumb (Project / Robots / Arm) and an Up arrow; list view as an option. |
 | Double-click a folder opens it; double-click a design opens it. | Same; a design already open comes to the front instead. |
 | New Folder above the panel. | **New Folder** in the panel's toolbar (and the right-click menu): "New Folder", "New Folder 2", ... |
-| Right-click a design: Open, Version History, Insert into Current Design, Rename, Move, Copy, Delete. | Open, Version History, Insert into Current Design, Rename, Delete (to the project's `.sciforge-trash` folder, after a question), Show in Folder. Move / Copy: not built (do it in the file manager; the panel refreshes). |
+| Right-click a design: Open, Version History, Insert into Current Design, Rename, Move, Copy, Delete. | Open, Version History, Milestones, Insert into Current Design, Rename, **Move...**, **Copy...** (polish-2, section below), Delete (to the project's `.sciforge-trash` folder, after a question), Show in Folder. |
 | Grid / list view in the panel's settings. | A toggle button. |
 
 The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` backups.
@@ -116,8 +116,9 @@ The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` ba
   from Autodesk's help text, not a screenshot: SciForge uses Name, Location, New Folder, Save.
 - Fusion's version list shows who saved and comments; SciForge shows Version, Date,
   Description, Size (who saved is kept in the index / commit author, not shown).
-- Milestone, Automatic version on close, Move / Copy in the Data Panel, the Out-of-Date icon
-  (SciForge names the tab "<Name> v2" instead) are not built.
+- Milestone, Automatic version on close, Move / Copy in the Data Panel and the Out-of-Date
+  icon are built (polish-2). Not built: moving a whole folder, dragging a card onto a
+  folder (use Move...), Fusion's "Get Latest Version" of one reference (Get Latest takes all).
 - Compare is SciForge's own addition (Fusion has none).
 - Fusion inserts a whole design as one component; SciForge links each body (components are
   plan item "Components").
@@ -126,3 +127,46 @@ The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` ba
   closed on purpose (Discard) and when it is saved.
 - Fusion refuses a recovery interval under 5 minutes; SciForge allows 1 (small designs save
   in well under a second).
+
+## Milestones, closing, Move / Copy, out of date (branch `sf/polish-2`, 2026-10-16)
+
+Sources (read through search summaries, help.autodesk.com not reachable from the sandbox):
+**Autodesk** "Fusion data panel guide" (version control: track changes, restore, set
+milestones); **Forum** "F360 Not Prompting for Version Description/Milestone on Save" (the save
+prompt has the description and Milestone), "V2.0.5966 Milestones"; **Autodesk** support "How to
+turn automatic save off or on in Fusion" (Preferences > General > Automatic Version On Close:
+closing a changed design makes a version; users find it on without having set it) and the
+forum "Closing without saving?" (Autodesk: that checkbox; off, there is no version on close)
+and "Cannot close design without saving in offline mode" (Autodesk: with it off, closing asks
+Save / Don't Save); **Autodesk** help "Move designs" and "Copy designs" (right-click > Move /
+Copy, pick the project and folder or make one; a moved design keeps its versions; a copy is a
+separate design and its references still point at the original's); **Autodesk** help "Update
+designs" and "Open older versions of designs" (the Out-of-Date icon in the application bar
+when an older version is open or a reference has a newer version; Get Latest).
+**Guess**: the wording of the dialogs, the flag mark of a milestone, the description of an
+automatic version ("Automatic version on close") and of a copy's v1 ("Copy of Wheel v2").
+
+| Fusion | SciForge |
+|---|---|
+| Milestone in the save prompt | The Version Description dialog has a **Milestone** box (off). A git version keeps it as a tag `sciforge-milestone-<commit>` on its commit (an ordinary git tag), a copy-kept version as `"milestone": true` in `index.json`. |
+| Milestones listed with the versions | Version History: a **Milestone** column (a flag), **Milestones only**, **Mark as Milestone** / **Remove Milestone** on the selected version; Data Panel right-click > **Milestones** opens the history showing only those. Open works on any of them (read-only, as before). |
+| Automatic version on close (on) | Closing the last view of a saved design with changes (its tab's close, Ctrl+F4) saves it as the next version without a question ("Automatic version on close"), then it closes. Preferences > General > Automatic version on close (on by default) switches it. |
+| Off: Save / Don't Save / Cancel | The **Close** dialog: Version Description (Enter saves) + Save / Don't Save / Cancel. A design never saved: Save... opens the Save dialog (Name, Location), then it closes. An older version opened read-only: only Don't Save / Cancel (save it first with Save As Latest or Save As New Design). Quitting SciForge asks about each changed design in turn (Cancel keeps SciForge open). Designs closed by SciForge itself or by scripts are never asked about. |
+| Move: the design and its versions to another folder | Right-click > **Move...**: the project's folders (New Folder makes one); Move. git: a `git mv` and a commit "[SciForge] moved ..." that is no version (the history follows the design: `GitStore._log` walks back through such commits); copies: the `<Design>.versions` folder goes along. The design's own links and Derives keep pointing at the same designs (their relative paths are rewritten in its Document.xml), and the project's designs that insert or derive it are pointed at its new place. Refused with the reason: the design open, a design that uses it open, the name taken there, the same folder. Rename now keeps git versions the same way and points the project's designs that use the design at its new name (refused while one of them is open). |
+| Copy: a separate design | Right-click > **Copy...**: a copy in the folder picked ("Wheel 2" when the name is taken), its own v1 ("Copy of Wheel v2"); its links still point at the same designs. |
+| Out-of-Date icon, Get Latest | An orange **Out-of-Date** button beside the design's name in the application bar while something of the active design has a newer saved version: an inserted design saved again (its file's saved date differs from the one read), a Derive's source saved again (or a Derive of an older version), or the design is an older version opened read-only. Its menu says what is newer and offers **Get Latest** (reads the inserted designs again, updates the Derives) or **Open the Newest Version**. |
+
+Code: `versions.py` (`set_milestone`, `MILESTONE_TAG`, `GitStore._log` / `_moved_from`,
+`count_versions`, `move_design`, `copy_design`, `retarget_xml`, `referrers`,
+`project_folders`), `versions_ui.py` (`VersionDialog` Milestone, `HistoryDialog`,
+`CloseDialog`, `_CloseWatch`, `save_version_now`, `MoveCopyDialog`, `move_design`,
+`copy_design`, `out_of_date`, `get_latest`), `ribbon_ui.py` (the button), `prefs_core.py`.
+Tests: unit `MilestoneTests`, `MoveCopyTests`; scenarios `polish2_versions` (milestones at save
+and in the history, open a milestone, automatic version on close, the Close dialog's Cancel /
+Save / Don't Save, a design never saved, quitting) and `polish2_data_panel` (Move with the
+versions and the referring design, Copy, a refused move, Get Latest of an inserted design,
+an older version's button).
+
+Not built: Move / Copy of whole folders; dragging cards between folders; Fusion's per-reference
+"Get Latest Version" (Get Latest takes every newer reference at once); FreeCAD's own Close All
+Documents still asks FreeCAD's question (its Save makes a version all the same).

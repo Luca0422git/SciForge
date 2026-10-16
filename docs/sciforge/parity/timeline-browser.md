@@ -24,7 +24,7 @@ by Luca.**
 | Errors red, warnings yellow, reason on hover | Same, also in the browser (sketches, planes) | Reasons are rewritten in plain words ("Its profile is gone (deleted?). Edit it and pick a new profile."). While a design has red or suppressed steps, recomputes run with the Report view's error output muted (the timeline shows them instead). |
 | Double-click edits | `taskui.edit_object` (each feature's own dialog via `EDITORS`, else FreeCAD's) | |
 | Rename | In place (Enter keeps, Esc cancels, F2) | `Label`; a renamed step shows its own name, others "Extrude 2". |
-| Groups | Group Features / Expand / Collapse / Rename / Ungroup / Suppress / Delete | `SciForgeGroup` / `SciForgeGroupName` on each member (undo works). Dragging a step out of its group takes it out; dropping it between two grouped steps puts it in. |
+| Groups | Group Features / Expand / Collapse / Rename / Ungroup / Suppress / Delete / Roll History Marker Here; drag a group's folder to move the whole group (2026-10-16, section below) | `SciForgeGroup` / `SciForgeGroupName` on each member (undo works). Dragging a step out of its group takes it out; dropping it between two grouped steps puts it in. A group dragged as a whole: `timeline_core.plan_group_move`, `timeline_ops.move_group`. |
 | Undo/Redo | Every action is one undo step; after Undo/Redo the design is recomputed so no stale red steps remain | |
 | Step names never change ("Extrude 3" stays Extrude 3 when moved or when a step is added before it) | Same, but deleting an earlier step renumbers the later ones of that kind | Steps of a kind are numbered in the order they were made (FreeCAD's object `ID`; FreeCAD's label numbers also count cancelled previews). A step SciForge rebuilds as another kind (extrude -> cut) is a new object: among default labels of one kind the label order decides, and the label is kept. |
 | The marker can stand anywhere, also just before a sketch (that sketch is then not drawn), and at the very beginning (Move to Beginning: an empty design) | Same (2026-10-14: also before the first step; Go to beginning and Play start from the empty design) | The Tips say which solids are active; `Document.Meta["SciForge.MarkerBefore"]` names the sketch/plane right after the marker (ignored when it no longer fits the Tips, e.g. after an undo). Sketches/planes after the marker are hidden and shown again when it passes them (`SciForgeRolledHidden`). |
@@ -69,11 +69,13 @@ Suppressed sketches and planes are greyed and struck through, not shown as warni
 
 ## Known gaps
 
-- Extrude while rolled back before a fillet/chamfer: the Extrude dialog cannot switch to Cut
-  ("... is used by Fillet"), because `extrude.dependents()` counts the fillet's `Base`, which
-  only follows the history chain (owner: extrude; fix: skip `Base` when it is the step's
-  `BaseFeature`, as `timeline_ops.uses()` does). A Join works.
-- Groups cannot be dragged as a whole yet (their steps can).
+- (Done before polish-2, listed here until then: an Extrude made while rolled back before a
+  fillet switches to Cut; `extrude.dependents()` skips the fillet's `Base` when it is its
+  `BaseFeature`; scenario `timeline_rolled_cut`.)
+- Fusion has no drop of a step into a group by dragging (Autodesk staff: delete the group and
+  group again); SciForge lets a step dragged between two grouped steps join the group
+  (kept, a convenience). A group cannot go inside another group (SciForge has no nested
+  groups; refused with the reason).
 - Steps outside any body (plain Part features) are shown in the timeline but never rolled back.
 - Saved named views are stored in the document's `Meta`, which Undo does not cover.
 - Errors from a recompute run while the design already has red or suppressed steps are not
@@ -81,6 +83,27 @@ Suppressed sketches and planes are greyed and struck through, not shown as warni
   healthy design still prints, so the test harness still catches new bugs.
 - Bodies have no "New Body" command of their own yet; Extrude > New Body (extrude branch) and
   FreeCAD's PartDesign Body command (command search) create them.
+
+## Groups dragged as a whole, the marker over a group (branch `sf/polish-2`, 2026-10-16)
+
+Sources: **Autodesk** API `TimelineGroup` / `TimelineObject.reorder` and `rollTo` (a group is
+reordered as one object and the marker rolls to before or after it; both refuse an expanded
+group); **Autodesk** help "Use the Timeline" (the Plus / Minus button expands and collapses a
+group); **Forum** (Autodesk QA: "Delete group and expand its contents" is Fusion's ungroup;
+Autodesk staff: items cannot be dragged into a group). **Guess**: a group holding the marker
+stays open (it cannot be collapsed until the marker leaves) and cannot be dragged.
+
+| Fusion | SciForge |
+|---|---|
+| Drag a collapsed group: its features move together | Drag a group's folder (open or closed): its steps move together, keep their order and their group, and each goes to its place in its own body (several bodies at once: their creation ranks are set for the steps of the group alone). One undo step. Refused with the reason, like a step: a step of the group before something it uses, or a later step using one of the group's steps before it ("Sketch 3 uses Extrude 1, so Group 2 cannot come before it."); a drop inside another group; while the marker is inside the group. Esc while dragging drops the drag. |
+| Roll the marker to before / after a group | The marker dropped on a closed folder goes before or after it (which half); Roll History Marker Here in the group's menu puts it after the group's last step. |
+| The marker inside a group | The group shows open while the marker is inside: Collapse Group is greyed, a click on the folder keeps it open and says why. |
+
+Code: `timeline_core.group_members`, `marker_in_group`, `plan_group_move`, `_block_keys`
+(unit tests `GroupMoveTests`), `timeline_ops.move_group`, `timeline_ui._GroupButton`
+(press / drag / release / Esc) and `TimelineWidget._plan`. Scenario `polish2_timeline_groups`
+(a group dragged before an earlier step across two bodies, undo / redo, a refused drag, the
+marker inside a group, Roll History Marker Here, Esc, rename, ungroup, save and reopen).
 
 ## Marker at the beginning, one name (2026-10-14, gaps work)
 

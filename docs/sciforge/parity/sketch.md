@@ -56,6 +56,27 @@ the command without a sketch, undo / redo, the fillet radius, two typed line ang
 extruded, save / reopen with the fx dimension still following), unit tests
 `test_sketch_chamfer_core.py`.
 
+## The floating green check (branch `sf/polish-2`, 2026-10-16)
+
+Sources: **Autodesk** help "Create lines in a sketch" (click the Check icon to finish the line
+set, then start another line or press Enter to leave the tool); **Autodesk** sketch basics
+course (click the green check mark or double-click the end point to end the current chain and
+stay in the Line command; Esc leaves it); **Forum** "Sketching issue" (a user: a green tick
+appears where the next line would go; clicking it ends the chain). **Guess**: where exactly it
+sits (20 px right of and 22 px below the chain's last point, so FreeCAD's length box above
+the new line does not cover it), its look (SciForge's own round green check), and that the
+splines show it too once they have two points.
+
+| Fusion | SciForge |
+|---|---|
+| A green check beside the chain being drawn; a click ends the chain, the Line tool stays on | Same (`sketch_check.FloatingCheck`, one per open sketch): shown while the Line chain has a line and goes on from its end; a click ends the chain (`LineChain.break_chain`, as the double-click does): no line from the old end, the tool waits for a new first point. It follows the point when the view turns or zooms, never takes the keyboard, and goes with Esc, Enter, the next tool or Finish Sketch. |
+| The same check while a spline is drawn | Fit Point / Control Point Spline: shown beside the last point once two are placed; a click makes the spline from the points so far and the tool stays on for the next one. |
+| (SciForge's own multi-click tools: 3-point rectangle, slots, conic, ...) | No check: they end by themselves after their last click (Enter / OK finish them as before). |
+
+Scenario `polish2_sketch_check` (the check beside the end, on top of the view, following a
+zoom; a click ends the chain and the tool stays on; a new chain; Ctrl+Z; Esc; a spline;
+Finish Sketch).
+
 ## What the user does (and what SciForge does)
 
 | Fusion | SciForge |
@@ -63,7 +84,7 @@ extruded, save / reopen with the fx dimension still following), unit tests
 | Create Sketch: the origin planes appear; click a plane or a flat face; the camera turns to look at it | Same (`sketch_ui.py`). A curved face or an edge is refused with the reason next to the mouse and does not stay selected |
 | SKETCH tab; Finish Sketch (ribbon, palette, right click) always works, also with a tool running or a value being typed; the camera goes back | Same (`sketch_mode.finish_sketch`) |
 | L: lines joined end to end; type the length and Enter (the pointer gives the direction), or the length, Tab, the angle, Enter; the typed length becomes a dimension; a click on the first point closes the shape and the next click starts a new chain | Same: FreeCAD's line tool (on-screen Length/Angle) joined end to end by `sketch_line.py`; one Enter after a value finishes the shape (FreeCAD alone would move to the next field) |
-| Ending a line (Luca, 2026-10-13: "no way to end a line"): Esc exits the Line command; the green check or a double-click on the end point ends the chain and stays in the Line tool; a line that ends on existing geometry ends the chain too; Enter completes the tool; right-click: OK / Cancel (Autodesk's sketch basics course, the Create Lines help, forum answers) | Same (`sketch_end_line` scenario): Esc stops the tool; a double-click on the point the chain goes on from, or a line ending on another curve or point, ends the chain and the tool waits for a new first point (the origin and axes do not count); Enter with nothing typed completes the tool (with a value typed it still draws the shape); the right-click menu shows OK at 3 o'clock and Cancel at 9 o'clock while any tool runs: OK ends the tool and keeps what was drawn, Cancel is Esc. Not done: Fusion's floating green check near the pointer |
+| Ending a line (Luca, 2026-10-13: "no way to end a line"): Esc exits the Line command; the green check or a double-click on the end point ends the chain and stays in the Line tool; a line that ends on existing geometry ends the chain too; Enter completes the tool; right-click: OK / Cancel (Autodesk's sketch basics course, the Create Lines help, forum answers) | Same (`sketch_end_line` scenario): Esc stops the tool; a double-click on the point the chain goes on from, or a line ending on another curve or point, ends the chain and the tool waits for a new first point (the origin and axes do not count); Enter with nothing typed completes the tool (with a value typed it still draws the shape); the right-click menu shows OK at 3 o'clock and Cancel at 9 o'clock while any tool runs: OK ends the tool and keeps what was drawn, Cancel is Esc. Fusion's floating green check: section "The floating green check" (polish-2) |
 | R 2-point rectangle, C centre-diameter circle (type the diameter), polygons (6 sides, sides in the panel, size typed) | Same. Circumscribed polygon: the typed size is the radius of the circle it is drawn around (what the preview shows) |
 | D: click a curve (or two), place, a value box opens; Enter keeps it, Esc keeps the measured value | Same (`DimensionEditor`). Refuses 0, negative sizes, text and wrong units with the reason in the box; takes expressions (`10+15*2`, `=Parameters.w`) |
 | A dimension on a size that is already set: Fusion offers a driven dimension | Made a driven dimension at once (no pop-up), with a message; the sketch never ends up over-constrained |
@@ -238,7 +259,6 @@ SciForge's Trim and P SciForge's Project (`config.PREFERRED`).
 |---|---|
 | Shift to force a midpoint; guides for the arc's end-angle click and the slot's width click | Not built (`sketch_infer.py`) |
 | A typed line angle measured from the previous line, if a newer Fusion does that (the forum threads found are from 2016 to 2020 and say: from the X axis) | SciForge measures it from the X axis, as those threads describe |
-| Fusion's floating green check near the pointer while drawing a line | Not built; OK is in the right-click menu, Enter and a double-click on the end point end the line |
 | Text, 3D Sketch | Not built on `sf/sketch-tools` (Text is another branch's) |
 | Chamfer: a drag arrow on the corner, a chamfer between a line and an arc | The pointer gives the size as it moves (no arrow to drag); lines only |
 | Project to Surface: the projected curves in the sketch, listed in the browser and the timeline | FreeCAD sketches are flat: the curves are a "Projected Curves" object next to the sketch, not listed in SciForge's browser or timeline yet (click it in the 3D view to select or delete it) |

@@ -6,6 +6,36 @@ negative taper narrows) and everyday Fusion behaviour. Implemented in
 `profile_pick.py` picking, `presspull_core.py` geometry, `presspull_ui.py` dialog, `preview.py`
 dialog helpers). Status: **built and tested with real clicks, not yet signed off by Luca**.
 
+## Value boxes on the remaining handles (branch `sf/polish-2`, 2026-10-16)
+
+Fusion shows the value beside every manipulator while a command is open, and a number typed
+with the mouse over the view goes into the box of the handle in use. Sources: **Autodesk**
+help "Scale sketch geometry" (type the scale factor or drag the manipulator handle, OK or
+Enter ends the tool); **Forum** (Autodesk support: the value changes while dragging, zoom in
+for finer steps); the rule that every handle carries its box is SciForge's reading of
+Fusion's dialogs (`value_box_dialogs` scenarios); **Guess**: where exactly each box sits and
+that Move shows no box before a handle is used. Handles that had none get one, owned by their dialog
+(`taskui.ValueBoxes`) and kept beside the handle by `taskui.BoxCarrier`:
+
+| Handle | The box shows / takes | Code |
+|---|---|---|
+| Move's triad (Free Move, Translate) | One box beside the handle in use (last dragged, or under the mouse): an arrow's X / Y / Z Distance, a turn handle's X / Y / Z Angle, the Pivot X / Y / Z while Set Pivot moves the manipulator. It never covers the triad's other arrows, arcs and balls (`BoxCarrier.box_avoid`): the mouse over one moves the box to it. No box before a handle is used (Guess). | `move_ui.Triad` (also Components' Move) |
+| Insert Mesh's manipulator (the same triad) | X / Y / Z Distance on an arrow, X / Y / Z Angle on a turn handle | `insert_ui.InsertMeshPanel` |
+| Move, Rotate | The Angle beside the blue turning handle | `move_ui.MovePanel._make_turn_handle` |
+| Scale's arrow(s) | Scale Factor (Uniform) or X / Y / Z Scale (Non Uniform), formulas too | `scale_ui` |
+| Draft's angle disc | The draft Angle, formulas too | `draft_ui` |
+| Construct (Offset Plane, Plane at Angle, Tangent Plane, along a path) | Distance / Angle, or the fraction along the path while Distance Type is Proportional | `construct_ui` |
+| Section Analysis | Distance, X Angle, Y Angle beside their three handles | `section_ui` |
+| Sweep's Distance balls | Distance (a share of the path, 0..1), formulas too | `sweep_ui`, `curve_pick.PathHandle` |
+
+Typed in a box: Tab or a click elsewhere takes the value; Enter takes it and finishes the
+command (OK), as everywhere in SciForge (Fusion: Enter in the box completes the command).
+Every value box now also keeps out from under FreeCAD's floating command dialog over the
+right of the view (it could be placed there, hidden; `ArrowValueBox._covered`). Scenario
+`polish2_value_boxes` (Move typed in the X arrow's box, digits typed over the view into the Z
+arrow's box, the Z turn handle's angle and Enter, Scale's factor, Draft's angle, Insert
+Mesh's Z arrow, undo / redo, Esc / Cancel).
+
 ## Click a face to end the extrude (Luca's request, branch `sf/fix-extrude-to-face`, 2026-10-16)
 
 Luca: "when extruding, clicking on a face should bring that extrusion to the same height as
@@ -190,10 +220,10 @@ sketches, a profile in another body) a hidden SubShapeBinder carries it into the
   (also from scripts and old steps that have no bodies list; 2026-10-13, sources in
   `parity/revolve.md`); one whose profiles only partly touch keeps the far piece in the body,
   like Fusion's multi-lump bodies (guess).
-- Value boxes: Move's triad, Scale's arrows (they set factor - 1 times a length, not a field)
-  and Draft's angle disc have none. Which handle a typed digit goes to (last dragged or hovered,
-  hover = within the handle plus 14 px) is SciForge's guess. The red colour and transparency of
-  the cut preview, and the blue of the highlighted bodies, are SciForge's choice, not measured.
+- Value boxes: every handle has one since polish-2 (section at the top). Which handle a typed
+  digit goes to (last dragged or hovered, hover = within the handle plus 14 px) is SciForge's
+  guess. The red colour and transparency of the cut preview, and the blue of the highlighted
+  bodies, are SciForge's choice, not measured.
 - Chamfer with Distance and Angle: the arrow sits on the face toward the viewer but still sets
   Distance 1 (measured on the reference face).
 - Several bodies (R8): the list is not checked again when an earlier step changes; patterns and
