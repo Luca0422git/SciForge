@@ -371,12 +371,29 @@ def _history(feature):
         obj = getattr(obj, "BaseFeature", None)
 
 
+MOVING_STEPS = ("MoveCopy", "Align", "Scale")  # SciForgeType of steps that move the solid
+
+
+def moves_solid(step):
+    """True for a step that moves, turns or scales its body's whole solid (Move/Copy, Align,
+    Scale): every face after it is that step's own, even one that still lies in the plane it
+    lay in before (a part moved along its top face). A sketch on such a face hangs on the
+    step, so it goes along when the step is edited to lift or tilt the part (Fusion: the
+    sketch is on the moved face); on the face before the move it stayed behind."""
+    return getattr(step, "SciForgeType", "") in MOVING_STEPS
+
+
 def earliest_face(base, face_name, point):
     """(step, 'FaceN'): the earliest step in `base`'s history that already has the flat face
     `face_name` of `base` where `point` (body coordinates) is: the step that made the face,
     not the hole drilled in it just before. A hole hangs its sketch (and its To target) on
     that step, so suppressing, deleting or editing an unrelated earlier hole leaves it alone,
-    as in Fusion; a step that moved the face (Press Pull, a taller extrude) stops the search."""
+    as in Fusion; a step that moved the face (Press Pull, a taller extrude) stops the search,
+    and so does a step that moved the whole solid (Move, Align, Scale: see moves_solid) or
+    the start of the body (a copied body's first step: its base lies outside the body).
+    Only the reference goes back to the earlier step: the design is still shown and built as
+    it is now (sketch_ui.show_design_at; Luca: "sketching on an edited object will revert it
+    to a previous state")."""
     try:
         face = base.Shape.getElement(face_name)
     except Exception:
@@ -385,7 +402,12 @@ def earliest_face(base, face_name, point):
         return base, face_name
     normal = face_normal_at(face, point)
     best = (base, face_name)
+    body = owner_body(base)
+    newer = base
     for obj in _history(base):
+        if moves_solid(newer) or owner_body(obj) is not body:
+            break
+        newer = obj
         try:
             if obj.Shape.isNull():
                 break
@@ -406,13 +428,19 @@ def earliest_face(base, face_name, point):
 def earliest_edge(base, edge_name):
     """(step, 'EdgeN'): the earliest step in `base`'s history with the same straight edge
     (or the longer edge it lies on): a reference measured from it then does not depend on
-    the holes drilled in between (see earliest_face)."""
+    the holes drilled in between (see earliest_face; a step that moves the solid or the
+    start of the body stops it too)."""
     try:
         edge = base.Shape.getElement(edge_name)
     except Exception:
         return base, edge_name
     best = (base, edge_name)
+    body = owner_body(base)
+    newer = base
     for obj in _history(base):
+        if moves_solid(newer) or owner_body(obj) is not body:
+            break
+        newer = obj
         try:
             name = base_edge_like(obj, edge)
         except Exception:

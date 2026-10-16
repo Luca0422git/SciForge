@@ -277,7 +277,9 @@ def _earliest(target):
     """A flat face clicked on the part belongs to the step that made it, not to the last
     step that touched the part: a sketch on the top of a block with a hole drilled in it
     hangs on the block, so suppressing or deleting the unrelated hole leaves the sketch
-    (and what is built on it) alone, as in Fusion (found by the hole QA)."""
+    (and what is built on it) alone, as in Fusion (found by the hole QA). Only the reference
+    goes back: while the sketch is open the design is drawn as it is now (show_design_at),
+    and what is made from the sketch builds on the body's newest step."""
     obj, name = target
     if not name.startswith("Face"):
         return target
@@ -309,8 +311,82 @@ def _point_on(face):
 
 def open_sketch(sketch):
     Gui.Selection.clearSelection()
+    _no_support_shown(sketch)
     Gui.ActiveDocument.setEdit(sketch.Name)
+    show_design_at(sketch)  # (again from sketch_mode for sketches opened elsewhere)
     log("sketch %s opened" % sketch.Label)
+
+
+def _no_support_shown(sketch):
+    """FreeCAD shows the step a sketch is attached to while it is open ("Show support"), and
+    a PartDesign body shows one step at a time: a sketch on a face an early step made
+    (_earliest) showed the part as it was before every later edit (Luca: "sketching on an
+    edited object will revert it to a previous state"). Fusion never shows another state
+    of the design than the one at the sketch's place (show_design_at)."""
+    try:
+        vp = sketch.ViewObject
+        if vp is not None and getattr(vp, "ShowSupport", False):
+            vp.ShowSupport = False
+    except Exception as exc:
+        warn("sketch: %s" % exc)
+
+
+def design_step(sketch):
+    """(body, step): the sketch's body and the step whose solid it shows while the sketch is
+    open: the design as it is at the sketch's place in the timeline (timeline_core.
+    shown_while_sketching). step None: nothing solid there yet. body None: not in a body, or
+    its Tip is no solid step (FreeCAD's own "Set tip" on a sketch): left as it is drawn."""
+    from . import timeline_core, timeline_ops
+
+    body = sketch.getParentGeoFeatureGroup()
+    if body is None or body.TypeId != "PartDesign::Body":
+        return None, None
+    if body.Tip is not None and "BaseFeature" not in body.Tip.PropertiesList:
+        return None, None
+    users = {o.Name for o in sketch.InListRecursive}
+    try:
+        tl = timeline_ops.timeline(sketch.Document, deps=False)
+        index = {item.name: item.index for item in tl.items}
+    except Exception:
+        index = {}
+    chain, seen = [], set()
+    step = body.Tip
+    while step is not None and step.Name not in seen and "BaseFeature" in step.PropertiesList:
+        if step.getParentGeoFeatureGroup() is not body:
+            break  # a copied body starts from a step outside it
+        seen.add(step.Name)
+        chain.append((step.Name, index.get(step.Name), step.Name in users))
+        step = step.BaseFeature
+    name = timeline_core.shown_while_sketching(chain, index.get(sketch.Name))
+    return body, (sketch.Document.getObject(name) if name else None)
+
+
+def show_design_at(sketch):
+    """While a sketch is open its body shows the design as it is at the sketch's place in
+    the timeline, as Fusion does: a new sketch shows every edit made so far (also when it
+    hangs on a face an earlier step made), a sketch edited from the timeline the steps
+    before it (FreeCAD already hides the steps that use the sketch). Done through the
+    sketch's TempoVis, so Finish Sketch puts every step back as it was shown before."""
+    try:
+        vp = sketch.ViewObject
+        tv = getattr(vp, "TempoVis", None) if vp is not None else None
+        if tv is None:
+            return  # FreeCAD changed nothing either (its Show module is missing)
+        body, step = design_step(sketch)
+        if body is None:
+            return
+        solids = [
+            o
+            for o in body.Group
+            if o.isDerivedFrom("PartDesign::Feature") and o.ViewObject is not None
+        ]
+        if step is not None and step.ViewObject is not None and not step.ViewObject.Visibility:
+            tv.show([step])  # PartDesign hides the step shown before (TempoVis notes it)
+        others = [o for o in solids if o is not step and o.ViewObject.Visibility]
+        if others:
+            tv.hide(others)
+    except Exception as exc:
+        warn("sketch: could not show the design at the sketch: %s" % exc)
 
 
 def edit_sketch(sketch):

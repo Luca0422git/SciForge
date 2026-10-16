@@ -4,6 +4,35 @@ Source: Fusion's documented behaviour and everyday use. Not yet checked against 
 screen captures (outline 2.4). Implemented in `src/Mod/SciForge/sciforge/sketch_*.py` on top of
 FreeCAD 1.1.4's Sketcher. Status: **first pass + QA pass, not yet signed off**.
 
+## A sketch on a face of an edited part (fix, branch `sf/fix-sketch-face`, 2026-10-16)
+
+Luca (CI #117's quick update): "sketching on an edited object will revert it to a previous
+state, making it impossible to sketch on edited faces". Cause: Create Sketch hangs a sketch on
+the earliest step that already has the clicked flat face (`hole.earliest_face`, made for the
+hole QA), and FreeCAD's sketch "Show support" showed that step while the sketch was open; a
+PartDesign body draws one step at a time, so the part was drawn as its first extrude (no
+fillet, hole, join, shell, draft, Press Pull, Offset Face, the move undone). Researched before
+the fix; autodesk.com cannot be opened from the sandbox, so the rows come from web-search
+excerpts. **Forum**: Autodesk Community threads named in the row. **Guess**: no source found.
+
+| Fusion (source) | SciForge |
+|---|---|
+| A new feature, a sketch too, goes in at the history marker: at the end of the timeline unless the marker was rolled back (Forum: Autodesk's Jeff Strater and Phil Eichmiller in "Are revisions to Timeline inserted or appended?") | Same (`timeline_ops.MarkerInserts`, unchanged) |
+| While a new sketch is open the design is the one at the marker: every edit made so far stays (follows from the row above; Fusion never draws another state) | Same since this fix: FreeCAD's "Show support" is off for every sketch SciForge opens (`sketch_ui.open_sketch`) and `sketch_ui.show_design_at` draws the body's step at the sketch's place (the Tip for a new sketch), through the sketch's TempoVis so Finish Sketch puts every step back. Also for sketches opened elsewhere (`sketch_mode._start`) |
+| Editing a sketch rolls the design back to where the sketch was made: later features are not computed, a component moved after the sketch shows where it was, it cannot be avoided (Forum: Autodesk staff in "sketches and bodies are disappearing during edit sketch" (to prevent circular references) and in "Component keeps reverting to an earlier shape when I start a sketch") | The body draws its newest step that comes before the sketch in the timeline and does not use it (`timeline_core.shown_while_sketching`, unit tested); FreeCAD already hides the steps that use the sketch. Only the drawing rolls back, the marker stays where it is. Not done: other bodies' later steps stay drawn |
+| A sketch on a face keeps its face when an unrelated later step is suppressed or deleted (Guess, from Fusion's face naming; the hole QA) | Unchanged: the sketch hangs on the earliest step that already has the flat face (a hole drilled in it later, a fillet on its edges, a join that made it larger do not count). Its extrude still builds on the body's newest step |
+| A sketch on a planar face has its origin at the component's origin projected onto the plane; moving the body along that plane does not take the sketch along, only projected geometry follows (Forum: "Sketch Origin from Offset plane problem\bug"; "Constrain extrusion to origin": keep a part and its sketches in a component to move them together) | FreeCAD's flat-face attachment does the same (the origin projected onto the plane), whichever step the sketch hangs on |
+| A sketch on a face of a moved part is on the moved face: an edit of the move that lifts or tilts the part takes the sketch along (Guess: the sketch's plane is the face) | `earliest_face` never goes back past a step that moves the whole solid (Move/Copy, Align, Scale): the sketch hangs on that step (before: on the face before the move, and the boss sank into the part when the move was edited to lift it). Suppressing that move then takes the sketch along, as for a sketch on a Press Pull face (SciForge's suppress rule) |
+| A sketch on a copied body belongs to that body (Guess) | `earliest_face` stays inside the body: a copy's first step, not the copy step outside the body |
+
+Tests: scenarios `fixsketch_fillet` (fillet, chamfer, the front face, undo / redo, edit from
+the timeline, suppress), `fixsketch_presspull` (Offset Face, Press Pull, undo / redo, save and
+reopen, edit after reopening), `fixsketch_move` (Move, the Move edited to lift the part,
+undo / redo, Create Copy), `fixsketch_join` (the first extrude edited, a Join, top and front
+faces, undo / redo, edit), `fixsketch_shell_draft` (Shell, Draft, undo / redo, edit),
+`fixsketch_hole` (Hole, Project of the hole's edge while sketching, suppress, edit, undo /
+redo); unit tests `test_timeline_core.ShownWhileSketchingTests`.
+
 ## Wave 4: sketch Chamfer, the fillet radius, typed line angles (branch `sf/modeling-2`, 2026-10-14)
 
 Researched before building. Autodesk's hosts cannot be opened from the sandbox, so the

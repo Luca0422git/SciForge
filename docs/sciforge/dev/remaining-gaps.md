@@ -7,7 +7,11 @@ docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusio
 ## By area
 
 - **sketch.md**: (Chamfer types with typed values and dimensions by sf/modeling-2; the typed
-  line angle from the X axis matches Fusion's forum answers.) No 3D Sketch. Project to Surface
+  line angle from the X axis matches Fusion's forum answers; a sketch on an edited face shows
+  the part as it is now, and an older sketch edited from the timeline shows its own body
+  rolled back, by sf/fix-sketch-face.) Editing an older sketch rolls back only its own body in
+  the drawing (Fusion rolls back the other bodies too); suppressing a Move also suppresses a
+  sketch on its face. No 3D Sketch. Project to Surface
   curves sit outside the sketch (not in the browser or timeline). Chamfer lines only.
 - **extrude-presspull.md**: (To Object extend options, Offset and a following Start: Object by
   sf/modeling-2; a clicked face or corner sets the height, and a held arrow snaps to it, by
