@@ -17,6 +17,7 @@ the dialog, which then stays open. Double-click the step in the timeline to edit
 The dialog base (PlacedPanel), the placing tool (Placer) and the drag handle
 (LinearHandle) are shared with the Coil dialog (coil_ui.py).
 """
+
 import math
 import time
 
@@ -702,11 +703,11 @@ def base_face_holding(base, face_global):
         return None
 
 
-def design_reach(body):
-    """How far the visible bodies of the design reach from `body`'s origin, along its axes
-    (0 for an empty design)."""
+def design_box(body):
+    """(xmin, xmax, ymin, ymax, zmin, zmax) round the visible bodies of the design, along
+    `body`'s axes (None for an empty design)."""
     inverse = body.getGlobalPlacement().inverse()
-    reach = 0.0
+    low, high = None, None
     for obj in body.Document.Objects:
         try:
             if obj.TypeId != "PartDesign::Body" or not obj.ViewObject.Visibility:
@@ -719,21 +720,25 @@ def design_reach(body):
                 for y in (b.YMin, b.YMax):
                     for z in (b.ZMin, b.ZMax):
                         p = inverse.multVec(App.Vector(x, y, z))
-                        reach = max(reach, abs(p.x), abs(p.y), abs(p.z))
+                        if low is None:
+                            low, high = App.Vector(p), App.Vector(p)
+                        low = App.Vector(min(low.x, p.x), min(low.y, p.y), min(low.z, p.z))
+                        high = App.Vector(max(high.x, p.x), max(high.y, p.y), max(high.z, p.z))
         except Exception:
             continue
-    return reach
+    if low is None:
+        return None
+    return (low.x, high.x, low.y, high.y, low.z, high.z)
 
 
 def design_plane_picker(view, body, on_pick):
-    """The origin squares of Create Sketch (sketch_ui.PlanePicker), big enough to reach
-    round the whole design: the picker sizes them from the active body alone, so after a
-    small second body (a cylinder beside the part) they shrank to 20 mm round the origin
-    and a click on the plane beside the part hit nothing (found by the primitives QA).
-    Fusion's origin planes span the design."""
-    from pivy import coin
-
-    from . import sketch_ui
+    """The origin squares of Create Sketch (sketch_ui.PlanePicker), sized from the whole
+    design: the picker sizes them from the active body alone, so after a small second body
+    (a cylinder beside the part) they shrank to 20 mm round the origin and a click on the
+    plane beside the part hit nothing (found by the primitives QA). Same rule as the
+    picker's (origin_look.square_size_for: about 0.6 x the design, sticking out of a part
+    that covers the origin; Luca found 1.3 x too big)."""
+    from . import origin_look, sketch_ui
 
     class DesignPlanes(sketch_ui.PlanePicker):
         def _geometry_at(self, position):
@@ -746,14 +751,12 @@ def design_plane_picker(view, body, on_pick):
 
     picker = DesignPlanes(view, body, on_pick)
     try:
-        size = 2.0 * 1.15 * design_reach(body)
-        if size > picker.size + 1e-6:
-            root = picker.root
-            while root.getNumChildren() > 2:  # its pick style and offset stay, the squares go
-                root.removeChild(root.getNumChildren() - 1)
-            picker.size = size
-            picker.hovered = None
-            picker.materials = {role: picker._square(coin, role) for role in picker.objects}
+        box = design_box(body)
+        if box is not None:
+            sizes = origin_look.square_sizes_for(box)
+            grown = {k: max(v, picker.sizes.get(k, 0.0)) for k, v in sizes.items()}
+            if grown != picker.sizes:
+                picker.resize(grown)
     except Exception as exc:
         warn("origin planes: %s" % exc)
     return picker

@@ -28,6 +28,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -86,7 +87,7 @@ def coil_waits():
 
 
 def coil_xy():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
 def coil_centre():
@@ -304,7 +305,7 @@ def box_start():
 
 
 def box_plane():
-    h.click(V(10, -12, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def box_corner():

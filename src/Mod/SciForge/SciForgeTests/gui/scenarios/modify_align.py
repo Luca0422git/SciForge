@@ -297,8 +297,8 @@ h.run(
     "modify_align",
     t.watched(
         [s.new_design("Align")]
-        + s.box_steps("table", (0, 0, 60, 40), 10, V(12, -8, 0))
-        + s.box_steps("block", (80, 0, 100, 10), 5, V(12, -8, 0), new_body=True)
+        + s.box_steps("table", (0, 0, 60, 40), 10, V(6, -6, 0))
+        + s.box_steps("block", (80, 0, 100, 10), 5, V(6, -6, 0), new_body=True)
         + [
             a_key,
             a_appearance,

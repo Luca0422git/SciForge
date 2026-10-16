@@ -326,8 +326,8 @@ h.run(
     "modify_remove",
     t.watched(
         [s.new_design("Remove")]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
-        + s.box_steps("b1", (50, 0, 60, 10), 10, V(12, -8, 0), new_body=True)
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
+        + s.box_steps("b1", (50, 0, 60, 10), 10, V(6, -6, 0), new_body=True)
         + s.box_steps("b2", (70, 0, 80, 10), 10, V(5, -5, 0), new_body=True)
         + [
             a_names,

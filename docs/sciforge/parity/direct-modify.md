@@ -44,6 +44,11 @@ checked in Luca's Fusion).
     body with origin plane".
 11. Autodesk shortcut list (autodesk.com/shortcuts/fusion-360), CAD Forum's Fusion shortcut
     table.
+15. Autodesk support article "How to align the center of a face in Fusion" (a face resolves to
+    its centre); Autodesk help, Point At Vertex / snap points ("vertices, face centers, edge
+    points, edge centers, and sketch points"); Autodesk help, Move > Point to Point ("hover
+    over a face, then hold Ctrl to lock that face" for choosing among its snap points)
+    (view-3, 2026-10-16; read through search excerpts).
 12. Autodesk help, Remove (`SLD-REMOVE`); Community "What is the difference between Delete and
     Remove a Component or Body?", "Delete unwanted body after body split".
 13. Autodesk Community: "Delete Face" (ideas: the solid Delete heals, the Patch workspace does
@@ -142,6 +147,10 @@ Community "Can't modify from existing radius with press pull"
 | A4 | An Align item in the timeline, double-click to edit. | Autodesk (10) |
 | A5 | Two faces picked end up in one plane, facing each other (a block's bottom put on a top face sits on it). | Forum (10: "the faces end up aligned"), Guess (facing each other) |
 | A6 | Key: none. Fusion's A is Appearance (the SciForge ribbon showed "A" beside Align). | Autodesk (11) |
+| A7 | A plain face pick resolves to the face's centre; a circle to its centre. | Autodesk (15) |
+| A8 | Hovering a face or an edge offers its snap points: face centre, edge middles, corners, circle centres; the click takes the one under the pointer. | Autodesk (15: snap points of Point At Vertex / Point to Point), Guess (that Align shows the same dots) |
+| A9 | Ctrl held keeps the face under the pointer, so a point on its boundary can be reached without the edge or corner taking over. | Autodesk (15: Move Point to Point); Guess for Align |
+| A10 | Luca (2026-10-16): "the align tool should have the option to select what part of the face you should align to. there should be a middle point, edge point, etc." | Luca |
 
 ### Remove (SOLID > MODIFY)
 
@@ -166,6 +175,7 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | `silhouette.py`, `silhouette_ui.py` | Silhouette Split |
 | `align_core.py`, `align.py`, `align_ui.py` | Align (the maths is Qt-free and unit tested) |
 | `remove.py`, `remove_ui.py` | Remove |
+| `align_ui.py` (`_snap_hover_class`), `align.snap_points` | Align's snap dots (view-3): the dots of the face or edge under the pointer (joints' snap points, `joints._shape_snaps`, drawn by `joints_ui.SnapHover`); the click takes the dot within 14 px of the pointer, else the face's centre / the edge's middle; the face's normal keeps setting the direction (`align.at_point`); Ctrl held keeps the face's dots (the click then takes that face at its lit dot). Scenario `modify_align_points` (corner onto an edge's middle, the centre far from the dots, an edge's end, Ctrl, edit, undo, Esc) |
 | `modify_common.py` | what the Modify dialogs share (a click on a solid without history makes it a body; the origin squares) |
 
 ### The model: how a design "without history" is kept in FreeCAD
@@ -237,6 +247,7 @@ Pull after it. Unit tests: `test_direct_core.py`, `test_align_core.py`,
 | Split Shelled Body on a closed shelled body: the parting surface between inner and outer outline | a non-flat outline is swept along the view direction to make the parting surface; inner outlines hidden behind the outer surface are not used | OpenCASCADE's outline (`HLRBRep`, `reflectLines` "OutLine") gives the visible outline only |
 | Silhouette Split along a direction where the outline is only existing edges (a box seen along its diagonal) | refused with the reason | the outline then is the box's own edges: nothing to split |
 | Rolling the timeline marker back before a component's Align puts the component back | the component stays where the Align put it (Undo or deleting the Align step does put it back) | the step lives outside the bodies and only recorded the move; the marker moves bodies' steps |
+| Align's snap points on a sketch's points and on joint origins | faces and edges of bodies and solids only (a sketch point or a construction point is picked as before) | the dots come from the faces' and edges' geometry |
 | Remove of a component | its bodies get Remove steps and hide; the component's row stays in the browser | the browser module lists components whatever their bodies do |
 | A STEP file opened from the Data Panel / Open opens as a design without history | FreeCAD's import adds plain solids to the open (parametric) design; they become bodies on the first edit | opening files is the insert / versions modules' area |
 | the plain solids FreeCAD's STEP import makes are listed in the timeline with the importer's name (e.g. "Open CASCADE STEP translator 7.8 2") until edited | as said | the timeline module lists every plain solid; when one is made a body it is hidden behind the body's Base Feature |

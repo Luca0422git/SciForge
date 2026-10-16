@@ -280,7 +280,7 @@ h.run(
     "direct_history",
     t.watched(
         [s.new_design("History")]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
         + ps.make_cut("hole", (20, 15), 5, 10)
         + [
             a_part_made,

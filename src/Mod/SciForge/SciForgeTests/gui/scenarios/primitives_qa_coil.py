@@ -32,6 +32,7 @@ from PySide6 import QtTest
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as ti
 
@@ -88,7 +89,7 @@ def new_design():
 
 
 def c1_rod_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def c1_rod_centre():
@@ -347,7 +348,7 @@ def c2_redone():
 
 # == C3: OK too early, typed sizes, wrong values, delete ========================================
 def c3_plane():
-    h.click(V(30, -30, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def c3_centre():
@@ -382,7 +383,7 @@ def c3_nothing():
 
 
 def c3_plane2():
-    h.click(V(30, -30, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def c3_centre2():

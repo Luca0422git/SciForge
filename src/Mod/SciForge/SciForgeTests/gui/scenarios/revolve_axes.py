@@ -33,6 +33,7 @@ from PySide import QtCore
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import revolve_input as ri
 
 V = App.Vector
@@ -76,7 +77,7 @@ def create_sketch():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw_box():
@@ -114,7 +115,7 @@ def sketch_square():
 
 def pick_xz():
     h.fit()
-    h.click(V(5, 0, 24))
+    pl.click_square("XZ_Plane")  # where the square shows (was 5, 0, 24)
 
 
 def draw_square():
@@ -327,7 +328,7 @@ def sketch_ring():
 
 def pick_xz_2():
     h.fit()
-    h.click(V(5, 0, 24))
+    pl.click_square("XZ_Plane")  # where the square shows (was 5, 0, 24)
 
 
 def draw_ring():

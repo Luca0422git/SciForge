@@ -29,6 +29,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -86,7 +87,7 @@ def cylinder_waits():
 
 
 def cylinder_xy():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
 def cylinder_centre():
@@ -344,7 +345,7 @@ def torus_start():
 def torus_xy():
     p = torus_panel()
     h.check("Torus waits for a plane", p is not None and p.state == "plane")
-    h.click(V(12, -12, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -12, 0)
 
 
 def torus_centre():
@@ -455,7 +456,7 @@ def sphere_cancel_start():
 def sphere_cancel_plane():
     p = sphere_panel()
     h.check("Sphere waits for a plane", p is not None and p.state == "plane")
-    h.click(V(0, -5, 15))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, -5, 15)
 
 
 def sphere_cancel_centre():

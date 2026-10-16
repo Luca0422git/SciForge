@@ -641,8 +641,8 @@ def e_closed():
 h.run(
     "extrude_multibody_edit",
     [s.new_design("MultiBodyEdit")]
-    + s.box_steps("box1", (0, 0, 20, 20), 10, V(12, -8, 0))
-    + s.box_steps("box2", (30, 0, 50, 20), 5, V(12, -8, 0), new_body=True)
+    + s.box_steps("box1", (0, 0, 20, 20), 10, V(6, -6, 0))
+    + s.box_steps("box2", (30, 0, 50, 20), 5, V(6, -6, 0), new_body=True)
     + [
         a_sketch,
         a_pick_top,
@@ -681,8 +681,8 @@ h.run(
         b_kept,
         s.new_design("UsedUp"),
     ]
-    + s.box_steps("dbox1", (0, 0, 20, 20), 10, V(12, -8, 0))
-    + s.box_steps("dbox2", (25, 5, 30, 10), 5, V(12, -8, 0), new_body=True)
+    + s.box_steps("dbox1", (0, 0, 20, 20), 10, V(6, -6, 0))
+    + s.box_steps("dbox2", (25, 5, 30, 10), 5, V(6, -6, 0), new_body=True)
     + [
         d_box2_title,
         d_sketch,

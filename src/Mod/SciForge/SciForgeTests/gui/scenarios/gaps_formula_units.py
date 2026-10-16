@@ -27,6 +27,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import shell_draft_steps as sd
@@ -131,7 +132,7 @@ def f2_start():
 
 def f2_xy():
     h.fit()
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def f2_front():

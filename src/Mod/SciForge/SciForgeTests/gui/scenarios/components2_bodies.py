@@ -28,6 +28,7 @@ from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import component2_steps as c
 from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 
 V = App.Vector
@@ -170,7 +171,7 @@ def d_click_body():
 
 
 def d_click_yz():
-    h.click(V(0, -24, 20))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, -24, 20)
 
 
 def d_show_squares():
@@ -183,7 +184,7 @@ def d_show_squares():
 def d_click_xz():
     p = s.panel()
     h.check("the squares again", p is not None and p.plane_picker is not None)
-    h.click(V(15, 0, 18))
+    pl.click_square("XZ_Plane")  # where the square shows (was 15, 0, 18)
 
 
 def d_preview():
@@ -239,7 +240,7 @@ def f_show_squares():
 
 
 def f_click_xz():
-    h.click(V(8, 0, 12))  # the squares are sized from the quarter body being edited
+    pl.click_square("XZ_Plane")  # where the square shows (was 8, 0, 12)
 
 
 def f_preview():
@@ -331,8 +332,8 @@ h.run(
     "components2_bodies",
     t.watched(
         [new_design]
-        + s.box_steps("body1", (0, 0, 40, 30), 10, V(12, -8, 0))
-        + s.box_steps("body2", (30, 10, 60, 20), 10, V(12, -8, 0), new_body=True)
+        + s.box_steps("body1", (0, 0, 40, 30), 10, V(6, -6, 0))
+        + s.box_steps("body2", (30, 10, 60, 20), 10, V(6, -6, 0), new_body=True)
         + [
             setup,
             a_open,

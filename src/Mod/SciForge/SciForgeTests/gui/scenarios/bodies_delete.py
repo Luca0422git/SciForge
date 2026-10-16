@@ -249,7 +249,7 @@ def g_cancelled():
 h.run(
     "bodies_delete",
     [s.new_design("Delete")]
-    + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + ps.make_cut("hole", (20, 15), 5, 10)
     + ps.make_boss("boss", (8, 8), 3, 5, V(34, 6, 10))
     + [
@@ -278,7 +278,7 @@ h.run(
         e_undo,
         e_undone,
     ]
-    + s.box_steps("other", (50, 0, 60, 10), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("other", (50, 0, 60, 10), 10, V(6, -6, 0), new_body=True)
     + [
         f_select_body,
         f_delete,

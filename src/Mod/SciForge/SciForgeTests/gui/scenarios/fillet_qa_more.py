@@ -30,6 +30,7 @@ from PySide6 import QtTest
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
@@ -219,7 +220,7 @@ def p17_sketch():
 
 def p17_plane():
     h.fit()
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def p17_draw():

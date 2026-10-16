@@ -253,7 +253,7 @@ def cleanup():
 h.run(
     "fixdecal_face_change",
     [new_design]
-    + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [add_cylinder]
     + f.decal_steps("f1_flat", f.TOP)
     + f.decal_steps("f1_wrapped", f.SIDE)

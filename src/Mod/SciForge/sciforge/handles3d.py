@@ -312,22 +312,13 @@ class _Handle(BoxCarrier):
         self.drop_box()
 
 
-def _stepped_angle(callback):
-    def stepped(value, *rest):
-        return callback(increments.angular(value), *rest)
-
-    return stepped
-
-
 def angle_handle(*args, **kwargs):
     """revolve_ui.AngleHandle (the blue ball turning about a line) whose drag also ends on a
     release FreeCAD's selection kept (see ReleaseWatch)."""
     from .revolve_ui import AngleHandle
 
-    # Incremental Move (navigation bar): the dialog gets the angle in steps of the increment
-    for key in ("on_drag", "on_release"):
-        if kwargs.get(key) is not None:
-            kwargs[key] = _stepped_angle(kwargs[key])
+    # Incremental Move (navigation bar) steps, the 45-degree snap and Ctrl's free turn are
+    # the handle's own (protractor.snap_angle), as for every angle handle.
 
     class WatchedAngleHandle(AngleHandle):
         def _button(self, info):

@@ -23,7 +23,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, log, pattern, preview, ui_icon_path, warn
+from . import commands, log, origin_look, pattern, preview, ui_icon_path, warn
 from . import hole_common as common
 from . import profile_pick
 from .compat import QtCore, QtGui, QtWidgets
@@ -49,11 +49,7 @@ COMPUTE_TIPS = {
     "object at every copy); slowest",
 }
 AXES = ("X_Axis", "Y_Axis", "Z_Axis")
-AXIS_COLORS = {
-    "X_Axis": (0.92, 0.30, 0.30),
-    "Y_Axis": (0.35, 0.80, 0.35),
-    "Z_Axis": (0.35, 0.55, 1.00),
-}
+AXIS_COLORS = {key: origin_look.axis_colour(key) for key in AXES}  # X red, Y green, Z blue
 PICKED = (0.12, 0.53, 0.90)
 REF = (1.0, 0.62, 0.15)  # the picked direction / axis, drawn orange over the part
 OVERLAY_CLICK_S = 0.6  # a click the axis/plane overlay took: the selection it makes is ignored
@@ -225,6 +221,9 @@ class AxisPicker:
             sep.addChild(style)
             sep.addChild(coords)
             sep.addChild(line)
+            colour = origin_look.lighter(AXIS_COLORS[key], 0.45)  # "X" on the + half
+            spot = origin_look.axis_label_spot(start, end)
+            sep.addChild(origin_look.label_node(coin, spot, key[0], colour))
             self.root.addChild(sep)
             self.looks[key] = (material, style)
         self.hovered = None
@@ -357,7 +356,7 @@ def front_planes():
                     continue
                 point, t = hit
                 local = point - base
-                half = self.size / 2.0
+                half = self.half_of(role)
                 if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
                     if best is None or t < best[1]:
                         best = (role, t)
@@ -371,16 +370,7 @@ def front_planes():
         def _moved(self, info):
             try:
                 role = self.front_plane_at(info["Position"])
-                material = self.materials.get(role)
-                if material is not self.hovered:
-                    from .sketch_ui import HOVER, IDLE
-
-                    for m, look in ((self.hovered, IDLE), (material, HOVER)):
-                        if m is not None:
-                            m.diffuseColor.setValue(*look[0])
-                            m.emissiveColor.setValue(*[c * 0.5 for c in look[0]])
-                            m.transparency.setValue(look[1])
-                    self.hovered = material
+                self.light(role)
             except Exception as exc:
                 warn("plane hover: %s" % exc)
 

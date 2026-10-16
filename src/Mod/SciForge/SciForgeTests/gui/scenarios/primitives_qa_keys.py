@@ -30,6 +30,7 @@ from PySide import QtCore, QtWidgets
 from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -100,7 +101,7 @@ def new_design():
 
 
 def k1_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def k1_corner():
@@ -191,7 +192,7 @@ def k1_done():
 
 # == K2: Cylinder, the diameter typed after the centre click ===============================
 def k2_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def k2_centre():
@@ -259,7 +260,7 @@ def k2_done():
 
 # == K3: Sphere, the diameter typed before the centre ======================================
 def k3_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def k3_type():
@@ -303,7 +304,7 @@ def k3_done():
 
 # == K4: another command's key while a dialog is open ======================================
 def k4_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def k4_centre():
@@ -344,7 +345,7 @@ def k4_box():
 
 
 def k4_box_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def k4_box_c1():
@@ -415,7 +416,7 @@ def k4_done():
 
 # == K5: Esc in the middle of the pick =======================================================
 def k5_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def k5_centre():

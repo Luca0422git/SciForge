@@ -34,6 +34,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as ti
 
@@ -68,7 +69,7 @@ def new_design():
 
 
 def a_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def a_corner():
@@ -245,7 +246,7 @@ def c_planes_shown():
     # Where XY is in front: the squares are as big as the design, and from the iso view
     # (-15, -15, 0) lies behind the YZ square (the front square takes the click, as in
     # Fusion).
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 c_planes_shown.wait_ms = 1500
@@ -324,7 +325,7 @@ def d_coil_plane():
     # The XZ square above the part: nothing is in front of it there (left of the part, at
     # (-20, 0, 10), the YZ square is in front from the iso view since the squares are as big
     # as the design).
-    h.click(V(20, 0, 30))
+    pl.click_square("XZ_Plane")  # where the square shows (was 20, 0, 30)
 
 
 def d_coil_centre():
@@ -493,7 +494,7 @@ def e_new():
 
 
 def e_plane():
-    h.click(V(15, -15, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def e_centre():
@@ -573,7 +574,7 @@ def e_torus_kept():
 
 
 def e_coil_plane():
-    h.click(V(30, -30, 0))
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def e_coil_centre():

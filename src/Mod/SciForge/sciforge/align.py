@@ -143,6 +143,38 @@ def frame_of(obj, sub, point=None):
     return None
 
 
+def snap_points(obj, sub):
+    """The points Align offers on a face or an edge (Fusion: face centres, edge midpoints,
+    corners, circle centres), in design coordinates: [{"kind", "point" (App.Vector)}], the
+    one a plain click takes first (a face's centre, a round edge's centre, an edge's
+    middle). Same points as a joint's snaps (joints._shape_snaps)."""
+    if obj is None or not sub or not sub.startswith(("Face", "Edge")):
+        return []
+    from . import joints
+
+    try:
+        shape = _global(obj, obj.Shape)
+        snaps = joints._shape_snaps(shape, sub)
+    except Exception:
+        return []
+    if sub.startswith("Edge"):  # the middle first, as frame_of takes it (a circle: its centre)
+        snaps.sort(key=lambda s: {"circle": 0, "midpoint": 1}.get(s["kind"], 2))
+    found = []
+    for snap in snaps:
+        point = App.Vector(snap["point"])
+        if all((point - f["point"]).Length > 1e-7 for f in found):
+            found.append({"kind": snap["kind"], "point": point})
+    return found
+
+
+def at_point(frame, point):
+    """`frame` (align_core) moved to `point` (a snap the person chose), its direction kept:
+    a face's normal still says which way the part faces."""
+    if frame is None or point is None:
+        return frame
+    return core.frame(App.Vector(point), frame.get("axis"), frame.get("oriented"))
+
+
 def _global_direction(obj, vector):
     try:
         parent = obj.getParentGeoFeatureGroup()

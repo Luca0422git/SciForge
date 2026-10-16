@@ -35,6 +35,7 @@ from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 from SciForgeTests.gui import widget_input as w
 
@@ -115,7 +116,7 @@ def side_sketch():
 
 
 def side_xy():
-    h.click(V(-15, -12, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was -15, -12, 0)
 
 
 def side_draw():

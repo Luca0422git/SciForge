@@ -7,6 +7,7 @@ outside scenarios/ because every file there is run as a scenario.
 Parts are made like Luca makes them: Create Sketch on XY, a rectangle, Finish Sketch, E, the
 height, (Operation New Body for a second body), OK.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
@@ -76,7 +77,14 @@ def box_steps(name, rect, height, click, new_body=False, check_volume=None):
         h.ribbon("Create Sketch")
 
     def pick_xy():
-        h.click(click)
+        # where the XY square shows (`click` is where it was aimed at when the squares
+        # were 1.3 x the part; since view-3 they are 0.6 x and placed by plane_input)
+        from SciForgeTests.gui import plane_input as pl
+
+        if pl.square_point("XY_Plane") is not None:
+            pl.click_square("XY_Plane")
+        else:
+            h.click(click)
 
     def draw():
         sk = h.in_sketch()

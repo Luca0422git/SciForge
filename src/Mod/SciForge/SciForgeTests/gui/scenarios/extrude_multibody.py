@@ -35,6 +35,7 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 
 V = App.Vector
@@ -99,7 +100,7 @@ def box2_sketch():
 
 
 def box2_pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def box2_draw():
@@ -487,7 +488,7 @@ def g_sketch():
 
 
 def g_pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def g_draw():
@@ -561,7 +562,7 @@ def g_undone_view():
 h.run(
     "extrude_multibody",
     [s.new_design("MultiBody")]
-    + s.box_steps("box1", (0, 0, 20, 20), 10, V(12, -8, 0))
+    + s.box_steps("box1", (0, 0, 20, 20), 10, V(6, -6, 0))
     + [
         box2_sketch,
         box2_pick_xy,

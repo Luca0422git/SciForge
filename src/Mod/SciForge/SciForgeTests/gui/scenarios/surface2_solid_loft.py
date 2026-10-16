@@ -31,6 +31,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as bs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sweep_loft_steps as st
 from SciForgeTests.gui import timeline_input as tl
 
@@ -209,7 +210,7 @@ def prism_made():
 
 
 def pick_xz():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the XZ square shows
 
 
 def draw_line():

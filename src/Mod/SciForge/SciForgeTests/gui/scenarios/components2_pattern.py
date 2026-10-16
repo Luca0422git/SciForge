@@ -367,8 +367,8 @@ h.run(
     "components2_pattern",
     t.watched(
         [new_design]
-        + s.box_steps("spoke", (20, -5, 40, 5), 10, V(12, -8, 0))
-        + s.box_steps("hub", (-5, 60, 5, 70), 10, V(12, -8, 0), new_body=True)
+        + s.box_steps("spoke", (20, -5, 40, 5), 10, V(6, -6, 0))
+        + s.box_steps("hub", (-5, 60, 5, 70), 10, V(6, -6, 0), new_body=True)
         + [
             setup_component,
             setup_rename,

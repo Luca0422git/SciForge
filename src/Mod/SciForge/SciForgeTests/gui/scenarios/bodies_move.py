@@ -488,7 +488,7 @@ def g_done():
 h.run(
     "bodies_move",
     [s.new_design("Move")]
-    + s.box_steps("body", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("body", (0, 0, 40, 30), 10, V(6, -6, 0))
     + [
         a_press_m,
         a_waits,

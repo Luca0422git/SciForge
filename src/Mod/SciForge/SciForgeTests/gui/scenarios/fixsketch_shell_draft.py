@@ -24,6 +24,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import fixsketch_steps as fs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import shell_draft_steps as sd
 
 V = App.Vector
@@ -69,7 +70,7 @@ def draft():
 
 
 def draft_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draft_face():

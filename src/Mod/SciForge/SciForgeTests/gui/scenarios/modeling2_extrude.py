@@ -29,6 +29,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import widget_input as w
 
@@ -68,7 +69,7 @@ def new_design():
 
 
 def pick_xz():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def draw_section():
@@ -122,7 +123,7 @@ def sketch_profile():
 
 
 def pick_xy():
-    h.click(V(-15, -20, 0))  # the XY square, left of the block
+    pl.click_square("XY_Plane")  # where the square shows (was -15, -20, 0)
 
 
 def draw_profile():

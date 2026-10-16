@@ -505,7 +505,7 @@ def l7_cancel():
 
 
 steps = [s.new_design("JointsMotion")]
-steps += s.box_steps("plate", j.PLATE, j.PLATE_HEIGHT, V(12, -8, 0))
+steps += s.box_steps("plate", j.PLATE, j.PLATE_HEIGHT, V(6, -6, 0))
 steps += pinion_steps() + rack_steps()
 steps += [rev_press, rev_first, rev_second, rev_type, rev_ok, rev_made]
 steps += [sli_press, sli_first, sli_second, sli_type, sli_axis, sli_ok, sli_made]

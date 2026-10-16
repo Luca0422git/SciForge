@@ -17,6 +17,7 @@ from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
@@ -80,7 +81,7 @@ def create_sketch_1():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw_rect():

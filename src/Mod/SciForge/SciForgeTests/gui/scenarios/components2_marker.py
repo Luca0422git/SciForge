@@ -277,9 +277,9 @@ h.run(
     "components2_marker",
     t.watched(
         [new_design]
-        + s.box_steps("root", (0, 0, 40, 30), 10, V(12, -8, 0))
+        + s.box_steps("root", (0, 0, 40, 30), 10, V(6, -6, 0))
         + [setup_root, setup_name, setup_ok, setup_active]
-        + s.box_steps("lid", (0, 40, 40, 70), 5, V(12, -8, 0))
+        + s.box_steps("lid", (0, 40, 40, 70), 5, V(6, -6, 0))
         + [
             setup_done,
             a_dimmed,

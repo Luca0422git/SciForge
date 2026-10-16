@@ -23,6 +23,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as i
 
 V = App.Vector
@@ -224,7 +225,7 @@ def f_sketch_xz():
 
 
 def f_click_xz():
-    h.click(V(-10, 0, 18))
+    pl.click_square("XZ_Plane")  # where the XZ square shows
 
 
 def f_insert_in_sketch():

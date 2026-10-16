@@ -18,6 +18,7 @@ from PySide import QtCore
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -48,7 +49,7 @@ def create_sketch():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw():
@@ -333,7 +334,7 @@ def slope_sketch():
 
 def pick_xz():
     # The XZ square at x > 0: nothing else is between it and the camera there.
-    h.click(V(15, 0, 12))
+    pl.click_square("XZ_Plane")  # where the square shows (was 15, 0, 12)
 
 
 def draw_trapezoid():

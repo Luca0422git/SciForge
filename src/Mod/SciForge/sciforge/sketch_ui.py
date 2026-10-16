@@ -3,8 +3,9 @@
 face of the part, and the sketch opens on it. No attachment pop-ups.
 
 FreeCAD 1.1 draws its origin planes small, at a fixed size, so SciForge draws its own
-large see-through squares for XY, XZ and YZ; they light up under the mouse and a
-click is matched to them geometrically (nearest square along the mouse ray).
+see-through squares for XY, XZ and YZ (coloured and labelled by origin_look); they light
+up under the mouse and a click is matched to them geometrically (nearest square along the
+mouse ray).
 
 If a plane or flat face is already selected, the sketch opens on it at once.
 Esc / Cancel leaves without creating anything.
@@ -17,8 +18,6 @@ from . import commands, log, taskui, ui_icon, warn
 from .compat import QtCore, QtWidgets
 
 PLANE_TYPES = ("App::Plane", "PartDesign::Plane")
-IDLE = ((0.96, 0.74, 0.38), 0.72)  # (colour, transparency)
-HOVER = ((0.45, 0.77, 1.0), 0.45)
 # role -> (normal, in-plane u, in-plane v) in body coordinates
 PLANES = {
     "XY_Plane": (App.Vector(0, 0, 1), App.Vector(1, 0, 0), App.Vector(0, 1, 0)),
@@ -38,11 +37,68 @@ def origin_planes(body):
     return found
 
 
+def local_box(body, shapes=None):
+    """(xmin, xmax, ymin, ymax, zmin, zmax) of `shapes` (default: the body's) in the body's
+    own axes (its shape is placed in its parent's frame)."""
+    inverse = body.Placement.inverse()
+    low = high = None
+    for shape in shapes or [body.Shape]:
+        b = shape.BoundBox
+        for x in (b.XMin, b.XMax):
+            for y in (b.YMin, b.YMax):
+                for z in (b.ZMin, b.ZMax):
+                    p = inverse.multVec(App.Vector(x, y, z))
+                    if low is None:
+                        low, high = App.Vector(p), App.Vector(p)
+                    low = App.Vector(min(low.x, p.x), min(low.y, p.y), min(low.z, p.z))
+                    high = App.Vector(max(high.x, p.x), max(high.y, p.y), max(high.z, p.z))
+    if low is None:
+        return (0.0,) * 6
+    return (low.x, high.x, low.y, high.y, low.z, high.z)
+
+
+def design_box(body):
+    """local_box of every visible body of the design (the other bodies hide the squares
+    too: after a Split Body the piece split off stands where the squares were free), in
+    `body`'s axes; the body's own box when the design has nothing else."""
+    from . import bodies
+
+    inverse = body.getGlobalPlacement().inverse()
+    low = high = None
+    for obj in body.Document.Objects:
+        try:
+            if obj.TypeId != "PartDesign::Body" or not obj.ViewObject.Visibility:
+                continue
+            shape = obj.Shape
+            if shape.isNull() or not shape.Solids:
+                continue
+            b = bodies.global_shape(obj).BoundBox
+        except Exception:
+            continue
+        for x in (b.XMin, b.XMax):
+            for y in (b.YMin, b.YMax):
+                for z in (b.ZMin, b.ZMax):
+                    p = inverse.multVec(App.Vector(x, y, z))
+                    if low is None:
+                        low, high = App.Vector(p), App.Vector(p)
+                    low = App.Vector(min(low.x, p.x), min(low.y, p.y), min(low.z, p.z))
+                    high = App.Vector(max(high.x, p.x), max(high.y, p.y), max(high.z, p.z))
+    if low is None:
+        return local_box(body)
+    return (low.x, high.x, low.y, high.y, low.z, high.z)
+
+
 class PlanePicker:
-    """The three big origin squares; on_pick(plane object) when one is clicked."""
+    """The three origin squares; on_pick(plane object) when one is clicked. Each has the
+    colour of the axis it faces (XY blue, XZ green, YZ red), a label, and lights up under
+    the mouse (origin_look). LIVE lists the pickers on show (tests aim at their squares)."""
+
+    LIVE = []
 
     def __init__(self, view, body, on_pick, on_face=None):
         from pivy import coin
+
+        from . import origin_look
 
         self.view = view
         self.on_pick = on_pick
@@ -50,17 +106,24 @@ class PlanePicker:
         self.placement = body.getGlobalPlacement()
         self.objects = origin_planes(body)
         empty = body.Shape.isNull() or not body.Shape.Solids
+        self.center = None  # the part's centre: the labels go to the corners away from it
         if empty:
-            self.size = 100.0
+            self.sizes = dict.fromkeys(("XY", "XZ", "YZ"), origin_look.square_size(0.0, True))
         else:
             box = body.Shape.BoundBox
-            self.size = max(20.0, 1.3 * max(box.XLength, box.YLength, box.ZLength))
+            self.sizes = origin_look.square_sizes_for(design_box(body))
+            # the shape is in the body's parent's frame (a component): to the design's
+            self.center = self.placement.multVec(body.Placement.inverse().multVec(box.Center))
+        self.size = max(self.sizes.values())  # the largest (each square has its own)
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
         self.root.addChild(pick)
         self.root.addChild(coin.SoPolygonOffset())
+        self.squares = coin.SoSeparator()
+        self.root.addChild(self.squares)
         self.materials = {}
+        self.looks = {}
         for role in self.objects:
             self.materials[role] = self._square(coin, role)
         self.hovered = None
@@ -69,6 +132,7 @@ class PlanePicker:
             ("SoMouseButtonEvent", view.addEventCallback("SoMouseButtonEvent", self._button)),
             ("SoLocation2Event", view.addEventCallback("SoLocation2Event", self._moved)),
         ]
+        PlanePicker.LIVE.append(self)
         if empty:  # nothing to look at yet: frame the planes, like a new Fusion design
             view.viewIsometric()
             view.fitAll()
@@ -78,31 +142,47 @@ class PlanePicker:
         rot = self.placement.Rotation
         return self.placement.Base, rot.multVec(normal), rot.multVec(u), rot.multVec(v)
 
+    def half_of(self, role):
+        """Half the side of the square of `role` (mm)."""
+        from . import origin_look
+
+        return self.sizes.get(origin_look.plane_key(role), self.size) / 2.0
+
     def _square(self, coin, role):
+        from . import origin_look
+
         base, _normal, u, v = self._frame(role)
-        h = self.size / 2.0
-        corners = [base + u * a * h + v * b * h for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-        sep = coin.SoSeparator()
-        material = coin.SoMaterial()
-        material.diffuseColor.setValue(*IDLE[0])
-        material.emissiveColor.setValue(*[c * 0.5 for c in IDLE[0]])
-        material.transparency.setValue(IDLE[1])
-        coords = coin.SoCoordinate3()
-        coords.point.setValues(0, 4, [(p.x, p.y, p.z) for p in corners])
-        faces = coin.SoFaceSet()
-        faces.numVertices.setValue(4)
-        outline = coin.SoLineSet()
-        coords_line = coin.SoCoordinate3()
-        loop = corners + [corners[0]]
-        coords_line.point.setValues(0, 5, [(p.x, p.y, p.z) for p in loop])
-        outline.numVertices.setValue(5)
-        sep.addChild(material)
-        sep.addChild(coords)
-        sep.addChild(faces)
-        sep.addChild(coords_line)
-        sep.addChild(outline)
-        self.root.addChild(sep)
-        return material
+        h = self.half_of(role)
+        signs = ((-1, -1), (1, -1), (1, 1), (-1, 1))
+        corners = [base + u * a * h + v * b * h for a, b in signs]
+        inset = origin_look.LABEL_INSET
+        spots = [base + u * a * h * inset + v * b * h * inset for a, b in signs]
+        corner = origin_look.label_corner(corners, self.center)
+        look = origin_look.SquareLook(coin, self.squares, role, corners, spots[corner])
+        self.looks[role] = look
+        return look.material
+
+    def resize(self, sizes):
+        """Draw the squares {"XY": side, ...} mm wide (primitives_ui sizes them from the
+        whole design)."""
+        from pivy import coin
+
+        self.sizes = dict(sizes)
+        self.size = max(self.sizes.values())
+        self.squares.removeAllChildren()
+        self.hovered = None
+        self.looks = {}
+        self.materials = {role: self._square(coin, role) for role in self.objects}
+
+    def light(self, role):
+        """Light the square of `role` (None: none) and dim the one lit before."""
+        material = self.materials.get(role)
+        if material is self.hovered:
+            return
+        for look in self.looks.values():
+            if look.material is self.hovered or look.material is material:
+                look.paint(look.material is material)
+        self.hovered = material
 
     def plane_at(self, position):
         """Role of the nearest origin square under the mouse, or None."""
@@ -121,21 +201,25 @@ class PlanePicker:
                 continue
             point, t = hit
             local = point - base
-            h = self.size / 2.0
+            h = self.half_of(role)
             if abs(local.dot(u)) <= h and abs(local.dot(v)) <= h:
                 if best is None or t < best[1]:
                     best = (role, t)
         return best
 
     def _geometry_at(self, position):
-        """True if the part (not the empty background) is under the mouse, or a construction
-        plane in front of the origin squares."""
+        """True if the part (not the empty background) is under the mouse and not behind
+        the origin square there, or a construction plane in front of the origin squares.
+        A square drawn in front of the part takes the click where it is drawn (the squares
+        are 0.6 x the part: where one stands up from the part, e.g. the XZ square above a
+        thin plate's front edge, the face behind it took every click and the plane could
+        not be picked at all); a face the square lies in keeps it (a tie is the part's)."""
         info = self.view.getObjectInfo(tuple(position))
         if not (info and info.get("Object")):
             return False
         component = str(info.get("Component", ""))
         if component.startswith("Face"):
-            return True
+            return self._not_behind(position, info)
         if component.startswith(("Edge", "Vertex")):
             # An edge or corner of the part hides the squares, as a face does: a click on
             # the edge of a 2 mm rim (lying on the XZ square) took the square and the
@@ -180,7 +264,7 @@ class PlanePicker:
                 return True
             base, normal, _u, _v = self._frame(square[0])
             spot = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
-            return abs((spot - base).dot(normal)) <= tolerance
+            return abs((spot - base).dot(normal)) <= tolerance + 0.02 * self.half_of(square[0])
         except Exception:
             return True
 
@@ -201,6 +285,31 @@ class PlanePicker:
                 if (spot - start).dot(direction) < square[1] + 1e-3:
                     return True
             return False
+        except Exception:
+            return True
+
+    def _not_behind(self, position, info, slack=1e-3):
+        """True if the picked point of `info` lies before the origin square under the mouse
+        or on its plane, or there is no square there. "On its plane" allows 2 % of the
+        square's half size measured square to the plane (not along the line of sight): a
+        curved face touching the plane (a tube's side on YZ) is drawn as flat facets a
+        little inside the true surface, and seen at a grazing angle that is far along the
+        line of sight."""
+        try:
+            from .profile_pick import mouse_ray
+
+            square = self._square_at(position)
+            if square is None:
+                return True
+            role, depth = square
+            spot = App.Vector(float(info["x"]), float(info["y"]), float(info["z"]))
+            base, normal, _u, _v = self._frame(role)
+            if abs((spot - base).dot(normal)) <= slack + 0.02 * self.half_of(role):
+                return True  # on the square's plane: the part keeps it
+            start, direction = mouse_ray(self.view, position)
+            return (spot - start).dot(direction) <= depth + slack + 1e-6 * abs(depth)
+        except Exception:
+            return True
         except Exception:
             return True
 
@@ -244,14 +353,7 @@ class PlanePicker:
             role = None
             if not self._geometry_at(info["Position"]):
                 role = self.plane_at(info["Position"])
-            material = self.materials.get(role)
-            if material is not self.hovered:
-                for m, look in ((self.hovered, IDLE), (material, HOVER)):
-                    if m is not None:
-                        m.diffuseColor.setValue(*look[0])
-                        m.emissiveColor.setValue(*[c * 0.5 for c in look[0]])
-                        m.transparency.setValue(look[1])
-                self.hovered = material
+            self.light(role)
         except Exception as exc:
             warn("plane hover: %s" % exc)
 
@@ -273,6 +375,8 @@ class PlanePicker:
             warn("plane pick: %s" % exc)
 
     def remove(self):
+        if self in PlanePicker.LIVE:
+            PlanePicker.LIVE.remove(self)
         for kind, callback in self.callbacks:
             try:
                 self.view.removeEventCallback(kind, callback)

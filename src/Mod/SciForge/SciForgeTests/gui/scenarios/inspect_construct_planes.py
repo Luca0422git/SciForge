@@ -198,7 +198,7 @@ def mid_click_top():
 def mid_click_xy():
     p = s.construct_panel()
     h.check("first plane taken, second box blue", p is not None and p.boxes[1].button.isChecked())
-    h.click(V(20, -10, 0))
+    h.click(V(6, -6, 0))
 
 
 def mid_preview():

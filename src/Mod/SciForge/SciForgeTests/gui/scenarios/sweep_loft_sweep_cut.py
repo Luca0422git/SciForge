@@ -27,6 +27,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sweep_loft_steps as st
 
 V = App.Vector
@@ -54,7 +55,7 @@ def new_design():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw_box():
@@ -100,7 +101,7 @@ def box_made():
 
 # -- the profile on YZ and the path on XZ -------------------------------------------------------------
 def pick_yz():
-    h.click(V(0, 12, 22))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, 12, 22)
 
 
 def draw_profile():
@@ -121,7 +122,7 @@ def path_sketch():
 
 
 def pick_xz():
-    h.click(V(24, 0, 24))
+    pl.click_square("XZ_Plane")  # where the square shows (was 24, 0, 24)
 
 
 def draw_path():
@@ -244,7 +245,7 @@ def redone():
 
 # -- second use: a face of the part along a line, with a taper ----------------------------------
 def pick_xz_2():
-    h.click(V(24, 0, 24))
+    pl.click_square("XZ_Plane")  # where the square shows (was 24, 0, 24)
 
 
 def draw_line():

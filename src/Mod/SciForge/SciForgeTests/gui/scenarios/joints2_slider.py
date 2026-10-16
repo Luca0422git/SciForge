@@ -326,7 +326,7 @@ def s5_off():
 
 
 steps = [s.new_design("JointsSlider")] + j.two_boxes()
-steps += s.box_steps("wall", WALL, WALL_HEIGHT, V(12, -8, 0), new_body=True)
+steps += s.box_steps("wall", WALL, WALL_HEIGHT, V(6, -6, 0), new_body=True)
 steps += [wall_component, wall_made]
 steps += j.pick_pair("make") + [make_motion, make_axis, make_limits, make_ok, made]
 steps += [s1_drag, s1_limited, s1_undo, s1_undone]

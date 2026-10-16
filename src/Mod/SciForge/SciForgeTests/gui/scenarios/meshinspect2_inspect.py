@@ -460,10 +460,10 @@ d_follows.wait_ms = 1500
 h.run(
     "meshinspect2_inspect",
     [s.new_design("MeshInspect2")]
-    + s.box_steps("base", (0, 0, 40, 30), 10, V(12, -8, 0))
+    + s.box_steps("base", (0, 0, 40, 30), 10, V(6, -6, 0))
     + tall_steps()
-    + s.box_steps("body2", (30, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
-    + s.box_steps("body3", (0, 50, 20, 70), 10, V(12, -8, 0), new_body=True)
+    + s.box_steps("body2", (30, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
+    + s.box_steps("body3", (0, 50, 20, 70), 10, V(6, -6, 0), new_body=True)
     + [a_start, a_first, a_second, a_compute, a_result, a_ticked, a_made, a_undone, a_redone]
     + [b_pick, b_sharp, b_drawn, b_kept]
     + [c_second_component, c_measure, c_filter, c_first, c_one, c_two, c_root_body, c_refused]

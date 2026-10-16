@@ -38,6 +38,7 @@ from PySide6 import QtTest
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import sweep_loft_steps as st
@@ -108,7 +109,7 @@ def new_design():
 
 
 def p1_xz():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def p1_line_key():
@@ -192,7 +193,7 @@ def p2_sketch():
 
 
 def p2_xz():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def p2_line_key():

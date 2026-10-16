@@ -28,6 +28,7 @@ from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import direct_steps as d
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 from SciForgeTests.gui import widget_input as wi
 
@@ -97,7 +98,7 @@ def b_click_yz():
     p = d.panel()
     h.check("the tool box waits", p is not None and p.active == "tool", p and p.active)
     h.check("the origin squares show", p is not None and p.squares.picker is not None)
-    h.click(V(0, -24, 20))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, -24, 20)
 
 
 def b_preview():

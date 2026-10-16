@@ -39,6 +39,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import sweep_loft_steps as st
 
@@ -100,7 +101,7 @@ def p1_empty():
 
 
 def p1_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def p1_circle_key():
@@ -131,7 +132,7 @@ def p1_path_sketch():
 
 
 def p1_xz():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def p1_line_key():
@@ -491,7 +492,7 @@ def p5_sketch():
 
 
 def p5_xy():
-    h.click(V(14, -10, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 14, -10, 0)
 
 
 def p5_c1():
@@ -539,7 +540,7 @@ def p5_path_sketch():
 
 
 def p5_xz():
-    h.click(V(24, 0, 10))
+    pl.click_square("XZ_Plane")  # where the square shows (was 24, 0, 10)
 
 
 def p5_line_key():

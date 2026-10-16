@@ -29,7 +29,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import bodies, drag_guard, handles3d, increments, move, move_face, profile_pick
-from . import ui_icon_path, warn
+from . import protractor, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, ValueBoxes
@@ -91,6 +91,8 @@ class Triad(BoxCarrier):
         self._last_angle = 0.0
         self._released = False
         self._last_event = 0.0
+        self._mark = None  # the snap angle a turn sits on (protractor)
+        self._wheel = protractor.Wheel()  # shown while a turn handle is held
         self.root = coin.SoAnnotation()  # on top of the part, like Fusion's manipulators
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -374,6 +376,14 @@ class Triad(BoxCarrier):
     def _drag_done(self):
         self._drag_center = None
 
+    def _wheel_frame(self, index):
+        """(centre, axis, zero, radius) of the protractor of turn handle `index`: about its
+        axis, angle 0 where the hand took it, as big as the turn handles' arcs."""
+        u, v = self._frame(index)
+        a = math.radians(self._start or 0.0)
+        zero = u * math.cos(a) + v * math.sin(a)
+        return self._origin(), AXES[index], zero, 0.6 * self.size
+
     def _moved(self, info):
         try:
             position = info["Position"]
@@ -394,7 +404,12 @@ class Triad(BoxCarrier):
                     # follow the hand past half a turn: the step nearest the last one
                     delta += 360.0 * round((self._last_angle - delta) / 360.0)
                     self._last_angle = delta
-                    self._pending = (kind, index, increments.angular(delta))
+                    # 0 / 45 / 90... pull the turn, Ctrl turns freely, Incremental Move
+                    # keeps its steps (protractor)
+                    delta, self._mark = protractor.snap_angle(
+                        self.view, delta, *self._wheel_frame(index)
+                    )
+                    self._pending = (kind, index, delta)
         except Exception as exc:
             warn("move handle: %s" % exc)
 
@@ -413,9 +428,18 @@ class Triad(BoxCarrier):
             drag_guard.end_lost_drag(self, idle=None)  # its release never came (drag_guard)
             self._paint()
             self.use(self._drag or self._hover)
+            if self._drag and self._drag[0] == "turn" and not self._wheel.shown():
+                # the protractor wheel while a turn handle is held (made here, not in the
+                # mouse callback: no nodes added while Coin traverses)
+                self._wheel.show(self.view, *self._wheel_frame(self._drag[1]))
+                self._wheel.update(0.0, 0.0)
             pending, self._pending = self._pending, None
+            if pending is not None and pending[0] == "turn":
+                self._wheel.update(pending[2], self._mark)
             if pending is not None and self.on_drag:
                 self.on_drag(*pending)
+            if not self._drag:
+                self._wheel.hide()
             if self._released and not self._drag:
                 self._released = False
                 self._drag_done()
@@ -431,6 +455,7 @@ class Triad(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        self._wheel.hide()
         try:
             handles3d.stop_watching(self)
         except Exception:

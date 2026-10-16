@@ -20,6 +20,7 @@ import FreeCADGui as Gui
 from PySide import QtWidgets
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import sketch_tools_steps as st
 
@@ -192,7 +193,7 @@ def d_component():
 
 def d_plane():
     # the component's XY plane, 100 to the right (its own origin)
-    h.click(V(112, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 112, -8, 0)
 
 
 def d_3d():

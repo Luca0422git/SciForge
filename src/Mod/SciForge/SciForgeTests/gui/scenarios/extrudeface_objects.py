@@ -29,6 +29,7 @@ from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import extrudeface_steps as x
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -54,7 +55,7 @@ def rod_sketch():
 
 
 def rod_plane():
-    h.click(V(12, 0, 8))  # the XZ square
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def rod_circle():
@@ -224,7 +225,7 @@ def block_sketch():
 
 
 def block_plane():
-    h.click(V(-8, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was -8, -8, 0)
 
 
 def block_draw():

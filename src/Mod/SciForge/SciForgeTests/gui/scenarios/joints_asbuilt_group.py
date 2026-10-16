@@ -554,7 +554,7 @@ def f_back():
 
 
 steps = [s.new_design("JointGroups")] + j.two_boxes()
-steps += s.box_steps("pin", PIN, 10, V(12, -8, 0), new_body=True)
+steps += s.box_steps("pin", PIN, 10, V(6, -6, 0), new_body=True)
 steps += [a_ground, a_grounded, a_undo, a_undone, a_redo, a_redone, a_unground, a_free]
 steps += [b_command, b_hover, b_snaps, b_click, b_offset, b_placed, b_ok, b_done]
 steps += [

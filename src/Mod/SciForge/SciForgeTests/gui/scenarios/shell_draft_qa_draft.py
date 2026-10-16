@@ -40,13 +40,13 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import shell_draft_steps as sd
 from SciForgeTests.gui import timeline_input as tl
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
 s = {}
-XY_SQUARE = V(12, -8, 0)
 FRONT = V(20, 0, 5)
 RIGHT = V(40, 15, 5)
 TOP = V(20, 15, 10)
@@ -140,7 +140,7 @@ def p1_cleared():
     h.check("P1 the Pull Direction box takes the clicks", p is not None and p.active == "plane")
     h.check("P1 the origin squares are back", p is not None and p.planes is not None)
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def p1_xy():
@@ -183,7 +183,7 @@ def p2_draft():
 
 def p2_xy():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def p2_ok():
@@ -221,7 +221,7 @@ def p3_draft():
 
 def p3_xy():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def p3_right():
@@ -333,7 +333,7 @@ def p5_draft():
 
 def p5_xy():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def p5_front():
@@ -448,7 +448,7 @@ def p7_draft():
 
 def p7_xy():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def p7_front():

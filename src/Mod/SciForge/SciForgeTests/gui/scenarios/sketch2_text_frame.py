@@ -21,6 +21,7 @@ import FreeCADGui as Gui
 from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import text_input as ti
 
@@ -45,7 +46,7 @@ def new_design():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def sketch_open():

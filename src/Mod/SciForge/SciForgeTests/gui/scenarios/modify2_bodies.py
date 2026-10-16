@@ -33,6 +33,7 @@ from SciForgeTests.gui import bodies_steps as bs
 from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import modify2_steps as m
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import shell_draft_steps as sd
@@ -295,7 +296,7 @@ def comp_sketch():
 
 
 def comp_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def comp_draw():
@@ -400,8 +401,8 @@ h.run(
         empty_shell_told,
         empty_scale_told,
     ]
-    + bs.box_steps("box1", (0, 0, 20, 20), 10, V(12, -8, 0))
-    + bs.box_steps("box2", (30, 0, 50, 20), 10, V(12, -8, 0), new_body=True)
+    + bs.box_steps("box1", (0, 0, 20, 20), 10, V(6, -6, 0))
+    + bs.box_steps("box2", (30, 0, 50, 20), 10, V(6, -6, 0), new_body=True)
     + [
         boxes_made,
         slot_sketch,

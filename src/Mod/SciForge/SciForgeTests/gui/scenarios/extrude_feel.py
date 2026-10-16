@@ -27,6 +27,7 @@ from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import blend_steps as bs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -72,7 +73,7 @@ def new_design():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def draw():

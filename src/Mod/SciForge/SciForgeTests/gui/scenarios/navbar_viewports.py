@@ -19,6 +19,7 @@ from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import nav_input as n
 from SciForgeTests.gui import widget_input as w
 
@@ -274,7 +275,7 @@ def windowed():
 
 # -- Pan in the middle of a command: the sketch stays open -----------------------------------
 def sketch_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def sketch_pan():

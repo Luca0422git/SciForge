@@ -30,6 +30,7 @@ from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 from SciForgeTests.gui import widget_input as w
 
@@ -68,7 +69,7 @@ def p12_sketch():
 
 
 def p12_pick_xy():
-    h.click(V(-15, -12, 0))  # inside the origin squares, clear of the box
+    pl.click_square("XY_Plane")  # where the square shows (was -15, -12, 0)
 
 
 def p12_draw():

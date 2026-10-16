@@ -32,6 +32,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import revolve_input as ri
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
@@ -39,7 +40,6 @@ from SciForgeTests.gui import timeline_input as ti
 V = App.Vector
 PI = math.pi
 Z_AXIS = (V(0, 0, 0), V(0, 0, 1))
-XZ_FREE = V(15, 0, -18)  # on the XZ square below and beside the part (nothing in front)
 s = {}
 
 
@@ -133,7 +133,7 @@ def p1_empty():
 
 
 def p1_plane():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def p1_rect_key():
@@ -241,7 +241,7 @@ def p2_sketch():
 
 
 def p2_plane():
-    h.click(V(11, 0, -9))  # the XZ square beside the shaft
+    pl.click_square("XZ_Plane")  # where the square shows (was 11, 0, -9)
 
 
 def p2_rect1_key():
@@ -411,7 +411,7 @@ def p4_sketch():
 
 def p4_plane():
     h.fit()  # the plane squares too
-    h.click(XZ_FREE)
+    pl.click_square("XZ_Plane")  # where the XZ square shows
 
 
 def p4_rect_key():

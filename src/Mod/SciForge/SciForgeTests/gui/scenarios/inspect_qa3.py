@@ -34,6 +34,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import timeline_input as ti
 
@@ -269,7 +270,7 @@ def m_midplane():
 def m_click_yz():
     """The YZ origin square where it shows beside the part (nothing in front of it there)."""
     h.fit()
-    h.click(V(0, 20, 20))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, 20, 20)
 
 
 def m_click_right():

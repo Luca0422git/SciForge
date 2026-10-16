@@ -235,9 +235,9 @@ h.run(
     "modify_replace_face",
     t.watched(
         [s.new_design("ReplaceFace")]
-        + s.box_steps("box", (0, 0, 40, 30), 10, V(12, -8, 0))
-        + s.box_steps("tall", (50, 0, 70, 30), 15, V(12, -8, 0), new_body=True)
-        + s.box_steps("low", (80, 0, 100, 30), 6, V(12, -8, 0), new_body=True)
+        + s.box_steps("box", (0, 0, 40, 30), 10, V(6, -6, 0))
+        + s.box_steps("tall", (50, 0, 70, 30), 15, V(6, -6, 0), new_body=True)
+        + s.box_steps("low", (80, 0, 100, 30), 6, V(6, -6, 0), new_body=True)
         + [
             a_start,
             a_waits,

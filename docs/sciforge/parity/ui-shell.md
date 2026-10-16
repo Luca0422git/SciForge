@@ -64,8 +64,9 @@ Unavailable items are greyed out. Separators group related commands.
 - Browser with Fusion's structure (browser_ui.py), marking menu (marking_menu.py), Press Pull,
   Extrude, Change Parameters, Construct presets, draggable timeline marker, ViewCube colours,
   3D Print.
-- Create Sketch: big origin plane squares light up under the mouse; click one or a flat face and
-  the sketch opens (sketch_ui.py). No attachment pop-ups.
+- Create Sketch: origin plane squares (coloured by axis and labelled since view-3) light up
+  under the mouse; click one or a flat face and the sketch opens (sketch_ui.py). No
+  attachment pop-ups.
 - Extrude: closed sketch profiles are shaded and light up under the mouse; click inside one, or
   click a flat face of the part. Blue drag arrow.
 - Starting a command finishes the one in progress (as in Fusion) instead of doing nothing.
@@ -111,6 +112,26 @@ Gaps:
 - **Pin to Shortcuts** (the S box) and the drop-down's own pinned section: not built yet.
 - Pins cannot be dragged into another order; they are added at the end of the panel's icons.
 - Document tabs cannot be dragged to reorder or torn off into their own window.
+
+## Origin planes, axes and turn handles (view-3, 2026-10-16)
+
+Luca's reports after the CI #131 quick update:
+- "the yellow axis selector is ugly, unruly, too big, gets in the way, and you can't tell
+  which face is the x y or z. none of them are labeled. give it the red green blue of all the
+  rest of the axis and make it smaller. and label them."
+- "maybe add a visual wheel of where its snapping and the angle its at" (angle snapping at
+  0 / 45 / 90 / 135..., always on, Ctrl = free: his choice when asked).
+
+| Behaviour | Source | SciForge |
+|---|---|---|
+| Origin planes in the axis colours: a plane in the colour of the axis it faces (XY blue, XZ green, YZ red), see-through, brighter with a thicker outline under the mouse, a label "XY" / "XZ" / "YZ" at the corner away from the part | Luca (Fusion draws its origin planes in one colour and unlabelled: beyond Fusion) | `origin_look.py` (colours, sizes, labels; unit `test_origin_look`), used by Create Sketch's `PlanePicker` and every tool that reuses it (Construct, Section, Draft, Insert, the patterns' Mirror Plane, Align / Split / Silhouette / Replace Face, the primitives, the surfaces) and by the Mesh plane cut's squares. Scenario `view_origin_planes` |
+| Smaller squares | Luca | 0.6 x the largest side of the design's visible bodies (was 1.3 x the active body), at least 20 mm; 100 mm in an empty design (the view is framed on them). A square the parts hide round the origin still sticks out of them by 15 % of their size (at least 5 mm), or it could not be clicked at all: XY under parts that cover the origin, XZ / YZ through parts on both sides of them (out of the parts' nearer side or above their top); the other squares stay 0.6 x (`origin_look.square_sizes_for`, one size per square). A click on a square is matched to the drawn square only. Create Sketch (and the tools sharing its picker): a square drawn in front of the part takes the click where it is drawn; a face lying in the square's plane keeps it (within 2 % of the square's half size, measured square to the plane: a tube's side seen at a grazing angle). **Guess**: Fusion picks what is in front |
+| Origin axes labelled X / Y / Z in red / green / blue | Luca | Revolve's and Construct's axis lines (`revolve_ui.AxisPicker`) and the patterns' (`pattern_ui.AxisPicker`) carry a label on their + half; the patterns use the shared colours |
+| Turn handles snap to 0 / 45 / 90 / 135 / 180 ... | Luca (Fusion: rotation increments depend on the zoom, no fixed 45 / 90 snap: Forum, [Smallest rotation unit too large](https://forums.autodesk.com/t5/fusion-support-forum/smallest-rotation-unit-too-large/td-p/11811166)): beyond Fusion | `angle_snap_core.py` (unit `test_angle_snap_core`): the angle is pulled onto the nearest multiple of 45 degrees when the hand is within 6 px of it along the ring as drawn (between 1 and 4 degrees); **Ctrl held: free**; Incremental Move (navigation bar) on: its steps instead. Every turn handle: Move's triad turns and Rotate handle, Revolve, the taper and Draft discs, Plane at Angle, Section, Emboss, the Mesh plane cut, the patterns' angle handle, Insert's and Decal's turn handles. A disc (Coin dragger) keeps the snap at the release too |
+| A protractor wheel while a turn handle is held | Luca: beyond Fusion | `protractor.ProtractorRing`: a ring in the plane the handle turns in, a tick every 15 degrees (longer at every 45, longest at every 90), the tick the angle sits on lit yellow, a dashed needle at the current angle and the angle as text ("90.0 deg"); gone when the handle is let go. Scenario `view_angle_snap` |
+
+Not built: the sketch's own Rotate (FreeCAD's `Sketcher_Rotate`, which snaps with Ctrl) keeps
+FreeCAD's behaviour; the 45-degree snap of sketch lines is the sketch area's (sf/sketch-3).
 
 ## Value fields: a formula of the wrong kind (2026-10-14, gaps work)
 

@@ -29,6 +29,7 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import fixsketch_steps as fs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -72,7 +73,7 @@ def join_sketch():
 
 
 def join_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def join_draw():

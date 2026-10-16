@@ -25,6 +25,7 @@ from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
@@ -193,7 +194,7 @@ def t4_body():
 
 
 def t4_plane():
-    h.click(V(0, -30, 25))
+    pl.click_square("YZ_Plane")  # where the square shows (was 0, -30, 25)
 
 
 def t4_ok():

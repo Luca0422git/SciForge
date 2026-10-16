@@ -20,12 +20,12 @@ import FreeCADGui as Gui
 from PySide import QtCore
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import shell_draft_steps as sd
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
 s = {}
-XY_SQUARE = V(12, -8, 0)
 FRONT = V(20, 0, 5)
 RIGHT = V(40, 15, 5)
 TOP = V(20, 15, 10)
@@ -66,7 +66,7 @@ def waiting():
 
 def click_xy():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def plane_picked():
@@ -278,7 +278,7 @@ def cancel_start():
 
 def cancel_plane():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def cancel_face():
@@ -305,7 +305,7 @@ def esc_start():
 
 def esc_plane():
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def esc_face():
@@ -340,7 +340,7 @@ def second_started():
     h.check("it still waits for the plane", p is not None and p.active == "plane")
     h.check("the part unchanged meanwhile", sd.close(h.solid_volume(), s["v"]))
     h.fit()
-    h.click(XY_SQUARE)
+    pl.click_square("XY_Plane")  # where the XY square shows
 
 
 def second_plane():

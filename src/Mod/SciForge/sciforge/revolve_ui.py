@@ -27,7 +27,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import bodies_row_ui, commands, drag_guard, extrude, handles3d, log, preview
-from . import profile_pick, revolve, ui_icon_path, warn
+from . import origin_look, profile_pick, protractor, revolve, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
 
@@ -48,12 +48,7 @@ ACTIVE_STYLE = "QPushButton { background: #1f6fbf; color: white; border: 1px sol
 HANDLE = (0.30, 0.62, 0.95)  # Fusion's manipulator blue
 HANDLE_ACTIVE = (0.55, 0.80, 1.0)
 HANDLE_TWO = (0.25, 0.75, 0.85)
-AXIS_COLORS = {
-    "X": (0.90, 0.28, 0.28),
-    "Y": (0.35, 0.78, 0.35),
-    "Z": (0.30, 0.52, 0.98),
-    "construction": (0.95, 0.62, 0.22),
-}
+AXIS_COLORS = dict(origin_look.AXIS_RGB, construction=(0.95, 0.62, 0.22))
 AXIS_HOVER = (0.55, 0.80, 1.0)
 PLANE_IDLE = ((0.55, 0.65, 0.80), 0.82)  # the origin squares offered as a To object
 PLANE_HOVER = ((0.55, 0.80, 1.0), 0.6)
@@ -199,6 +194,8 @@ class AngleHandle(BoxCarrier):
         self._last_event = 0.0
         self._hover = False
         self._painted_hover = None
+        self._mark = None  # the snap angle the drag sits on (protractor)
+        self._wheel = protractor.Wheel()
         self.root = coin.SoAnnotation()  # drawn over the part, like Fusion's handles
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -398,6 +395,10 @@ class AngleHandle(BoxCarrier):
             else:
                 value -= self._offset
             self._last_pos = (float(position[0]), float(position[1]))
+            # 0 / 45 / 90... pull the angle; Ctrl moves it freely (protractor)
+            value, self._mark = protractor.snap_angle(
+                self.view, value, self.center, self.axis, self.zero, self.radius
+            )
             self._pending = value
         except Exception as exc:
             warn("revolve handle: %s" % exc)
@@ -416,12 +417,20 @@ class AngleHandle(BoxCarrier):
                 return
             drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
+            if self._drag and not self._wheel.shown():
+                # the protractor wheel shows where the angle snaps while it is held (made
+                # here, not in the mouse callback: no nodes added while Coin traverses)
+                self._wheel.show(self.view, self.center, self.axis, self.zero, self.radius)
+                self._wheel.update(self._value, protractor.core.on_snap(self._value))
             pending = self._pending
             if pending is not None and abs(pending - self._value) > 1e-6:
                 self._value = pending
                 self._draw()
+                self._wheel.update(self._value, self._mark)
                 if self.on_drag:
                     self.on_drag(pending)
+            if not self._drag:
+                self._wheel.hide()
             if self._released and not self._drag:
                 self._released = False
                 self._pending = None
@@ -436,6 +445,7 @@ class AngleHandle(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        self._wheel.hide()
         try:
             handles3d.stop_watching(self)
         except Exception:
@@ -528,6 +538,10 @@ class AxisPicker:
         sep.addChild(style)
         sep.addChild(coords)
         sep.addChild(lineset)
+        if kind in origin_look.AXIS_RGB:  # an origin axis says which it is, on its + half
+            colour = origin_look.lighter(AXIS_COLORS[kind], 0.45)
+            spot = origin_look.axis_label_spot(start, end)
+            sep.addChild(origin_look.label_node(coin, spot, kind, colour))
         switch.addChild(sep)
         self.root.addChild(switch)
         return [ref, kind, App.Vector(start), App.Vector(end), switch, material, style]

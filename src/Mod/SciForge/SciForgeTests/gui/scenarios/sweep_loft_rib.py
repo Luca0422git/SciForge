@@ -26,6 +26,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps
 from SciForgeTests.gui import sweep_loft_steps as st
 
@@ -56,7 +57,7 @@ def new_design():
 
 
 def pick_xz():
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def draw_l():
@@ -96,7 +97,7 @@ def bracket():
 
 
 def pick_xz_2():
-    h.click(V(20, 0, 20))
+    pl.click_square("XZ_Plane")  # where the square shows (was 20, 0, 20)
 
 
 def draw_line():

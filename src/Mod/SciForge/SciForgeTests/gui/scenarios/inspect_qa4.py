@@ -642,7 +642,7 @@ STEPS = (
     + [s_sketch, s_top, s_draw, s_open, s_line, s_two_lines, s_third, s_escaped, s_again]
     + [s_right_line, s_finished]
     + [t_com, t_com_ok, t_measure, t_click_marker, t_marker, t_to_top]
-    + bs.box_steps("b2", (50, 0, 70, 30), 10, V(12, -8, 0), new_body=True)
+    + bs.box_steps("b2", (50, 0, 70, 30), 10, V(6, -6, 0), new_body=True)
     + [w_follow, w_aluminium, w_click_body2, w_material_ok, w_weighted, w_undone, w_redone]
     + [z_pull, z_face, z_15, z_ok, z_pulled, z_b1, z_b2, z_compute, z_result, z_kept]
     + [v_start, v_pick, v_hold, v_esc, v_release, v_after, v_click_selects]

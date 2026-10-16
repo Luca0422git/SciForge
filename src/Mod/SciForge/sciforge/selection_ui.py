@@ -62,6 +62,8 @@ _state = {
     "menu": None,
     "told": 0.0,
     "last": None,  # what the last box or Select Other did (tests, Diagnostics)
+    "hover_views": [],  # [(gl widget, view, callback)]: the Body priority's hover
+    "gate_restored": 0,  # how often the filters' gate came back after FreeCAD dropped it
 }
 
 
@@ -362,11 +364,36 @@ def _unpatch_gate_api():
     _state["orig_add"] = _state["orig_remove"] = None
 
 
+def _gate_lost():
+    """True when the filters' gate is no longer FreeCAD's: a FreeCAD command written in C++
+    puts in its own gate (which silently replaces ours) and takes it away when it ends,
+    leaving none. Seen when something the filters refuse got preselected under the mouse
+    while no command is open (a command's own gate may allow it)."""
+    try:
+        if not _state["on"] or _state["inner"] is not None or _state["gate"] is None:
+            return False
+        if _in_dialog() or _in_edit():
+            return False
+        pre = Gui.Selection.getPreselection()
+        names = list(getattr(pre, "SubElementNames", []) or [])
+        if not getattr(pre, "ObjectName", "") or not names or not names[0]:
+            return False
+        kind = kind_of_pick(pre.Object, names[0])
+        return kind is not None and not filters().allows(kind)
+    except Exception:
+        return False
+
+
 def _refresh_gate():
     """Our own gate is installed exactly when the filters restrict something and no
-    dialog has a gate of its own (the combined gate reads the live filters)."""
+    dialog has a gate of its own (the combined gate reads the live filters). A gate
+    FreeCAD dropped (_gate_lost) is put back."""
     if not _state["on"] or _state["inner"] is not None:
         return
+    if _gate_lost():
+        _state["gate"] = None
+        _state["gate_restored"] += 1
+        log("selection filters: FreeCAD dropped their gate; put back")
     add, remove = _state["orig_add"], _state["orig_remove"]
     if add is None or remove is None:
         return
@@ -441,14 +468,65 @@ def _kind_of_info(info):
     return core.kind_of(obj.TypeId, info.get("Component", ""), _in_body(obj))
 
 
-def _body_of_info(info):
-    parent = info.get("ParentObject")
-    if parent is not None and getattr(parent, "TypeId", "") == core.BODY_TYPE:
-        return parent
-    obj = _pick_object(info)
-    if obj is not None and obj.TypeId == core.BODY_TYPE:
-        return obj
+def _solid_owner(obj):
+    """The body, or the loose solid (a STEP import), `obj` is part of, also inside a
+    component (analysis.body_of, plus a loose solid in a component), or None."""
+    from . import analysis
+
+    found = analysis.body_of(obj)
+    if found is not None:
+        return found
+    try:
+        parent = obj.getParentGeoFeatureGroup()
+        if (
+            parent is not None
+            and parent.TypeId == "App::Part"
+            and obj.isDerivedFrom("Part::Feature")
+            and obj.Shape.Solids
+            and not getattr(obj, "SciForgeType", "")
+        ):
+            return obj
+    except Exception:
+        pass
     return None
+
+
+def _body_target(info):
+    """(body, root, sub) for what is under the pointer: the body (or loose solid) the
+    picked element belongs to, and how to select it so the 3D view shows it: the body
+    itself with "", or for one inside a component the top object of the pick and the path
+    down to the body ("Body001."). None when it is no body's."""
+    if not info:
+        return None
+    obj = _pick_object(info)
+    body = _solid_owner(obj) if obj is not None else None
+    if body is None:
+        return None
+    parent = info.get("ParentObject")
+    sub = info.get("SubName") or ""
+    if isinstance(parent, str):
+        parent = body.Document.getObject(parent)
+    if parent is None or parent is body or not sub:
+        return body, body, ""
+    names = sub.split(".")
+    for i, name in enumerate(names[:-1]):
+        if name == body.Name:
+            return body, parent, ".".join(names[: i + 1]) + "."
+    return body, body, ""
+
+
+def _body_of_info(info):
+    found = _body_target(info)
+    return found[0] if found else None
+
+
+def _body_element(info):
+    """The _Element a Body priority click or paint selects, or None."""
+    found = _body_target(info)
+    if found is None:
+        return None
+    body, root, sub = found
+    return _Element(body.Document.Name, root.Name, sub, body, "", "bodies")
 
 
 class _EventCount:
@@ -762,6 +840,11 @@ class _Element:
         try:
             if self.short:
                 return bool(Gui.Selection.isSelected(self.feature, self.short))
+            if self.sub:  # a body inside a component, selected through its path
+                for sel in Gui.Selection.getSelectionEx(self.doc, 0):
+                    if sel.ObjectName == self.obj and self.sub in sel.SubElementNames:
+                        return True
+                return False
             return bool(Gui.Selection.isSelected(self.feature))
         except Exception:
             return False
@@ -1593,17 +1676,12 @@ class _ViewFilter(QtCore.QObject):
 
     def _hover(self, gl, event):
         """With the Body priority, the whole body lights up under the mouse (FreeCAD's own
-        highlight of the face is refused by the filter gate)."""
-        if not core.only_bodies(filters()) or _in_edit():
-            return
-        view = _view_for(gl)
-        if view is None:
-            return
-        info = _info_at(view, gl, QtCore.QPointF(event.position()))
-        body = _body_of_info(info) if info else None
-        # After FreeCAD's own handling of this move (it clears the highlight when the
-        # filter gate refuses the face under the mouse).
-        QtCore.QTimer.singleShot(0, lambda: _safely(_preselect_body, body))
+        highlight of the face is refused by the filter gate). The work is done by a mouse
+        callback of the view (_watch_hover), which FreeCAD runs right after its own
+        preselection of the same move: the body is lit again before the view is drawn, so
+        it stays lit steadily (a timer after the move let it blink off and on)."""
+        if _state["on"]:
+            _watch_hover(gl)
 
     def _paint(self, obj, press, pos):
         view = _view_for(obj)
@@ -1615,10 +1693,9 @@ class _ViewFilter(QtCore.QObject):
         kind = _kind_of_info(info)
         box_kinds = core.box_kinds(filters())
         if "bodies" in box_kinds:
-            body = _body_of_info(info)
-            if body is None:
+            el = _body_element(info)
+            if el is None:
                 return
-            el = _Element(body.Document.Name, body.Name, "", body, "", "bodies")
         else:
             if kind not in box_kinds:
                 return
@@ -1715,14 +1792,13 @@ class _ViewFilter(QtCore.QObject):
         pos = QtCore.QPointF(event.position())
         info = _info_at(view, gl, pos)
         if core.only_bodies(filters()):
-            body = _body_of_info(info) if info else None
-            if body is None:
+            el = _body_element(info) if info else None
+            if el is None:
                 if info:
                     return False  # not a body's element: FreeCAD's own click
                 if shift or ctrl:
                     return True  # empty space with a modifier: nothing changes (Fusion)
                 return False  # empty space: FreeCAD clears the selection
-            el = _Element(body.Document.Name, body.Name, "", body, "", "bodies")
             plan = core.click_plan(shift, ctrl, press.in_dialog, el.is_selected())
             if plan != "keep":
                 QtCore.QTimer.singleShot(0, lambda: _safely(_apply, [el], plan, el.doc))
@@ -1739,9 +1815,7 @@ class _ViewFilter(QtCore.QObject):
                 before = _selection_keys()
                 QtCore.QTimer.singleShot(
                     0,
-                    lambda: _safely(
-                        self._unless_taken, view, gl, pos, info, before, shift, ctrl
-                    ),
+                    lambda: _safely(self._unless_taken, view, gl, pos, info, before, shift, ctrl),
                 )
         if info:
             kind = _kind_of_info(info)
@@ -1881,16 +1955,83 @@ def _safely(step, *args):
         warn("selection: %s" % exc)
 
 
-def _preselect_body(body):
+def _preselect_body(target):
+    """Light the body of `target` ((body, root, sub) or None: unlight a body lit before)."""
     try:
-        if body is None:
-            pre = Gui.Selection.getPreselection()
-            if pre.ObjectName and not pre.SubElementNames:
+        pre = Gui.Selection.getPreselection()
+        names = list(getattr(pre, "SubElementNames", []) or [])
+        if target is None:
+            if pre.ObjectName and (not names or names[0].endswith(".") or not names[0]):
                 Gui.Selection.clearPreselection()
-        else:
-            Gui.Selection.setPreselection(body, "")
+            return
+        _body, root, sub = target
+        if pre.ObjectName == root.Name and (names[0] if names else "") == sub:
+            return  # lit already
+        Gui.Selection.setPreselection(root, sub)
     except Exception:
         pass  # the body went (deleted, undone) between the move and this moment
+
+
+def _sketch_edit():
+    """A sketch is open: the Sketcher handles the mouse (other edit modes, like Coil's,
+    Pipe's or a construction's, still get the Body priority's hover)."""
+    try:
+        from . import sketch_mode
+
+        if sketch_mode.sketch_edited_anywhere():
+            return True
+        gdoc = Gui.ActiveDocument
+        vp = gdoc.getInEdit() if gdoc is not None else None
+        obj = getattr(vp, "Object", None)
+        return obj is not None and obj.TypeId.startswith("Sketcher::")
+    except Exception:
+        return False
+
+
+def _hover_moved(view, info):
+    """A mouse move over a 3D view, after FreeCAD's own preselection of it: the Body
+    priority lights the whole body (nested in a component, or a loose solid, too); a gate
+    FreeCAD dropped is noticed and put back."""
+    try:
+        if not _state["on"] or QtWidgets.QApplication.mouseButtons() != QtCore.Qt.NoButton:
+            return
+        if _state["gate"] is not None and _gate_lost():
+            _refresh_gate()
+        if not core.only_bodies(filters()) or _sketch_edit():
+            return
+        position = info.get("Position")
+        target = _body_target(view.getObjectInfo(tuple(position))) if position else None
+        _preselect_body(target)
+    except Exception as exc:
+        warn("selection hover: %s" % exc)
+
+
+def _watch_hover(gl):
+    """The hover callback on the view of GL widget `gl` (once per view)."""
+    from .orbit_ui import _is_valid, _same
+
+    views = [entry for entry in _state["hover_views"] if _is_valid(entry[0])]
+    _state["hover_views"] = views
+    if any(_same(gl, entry[0]) for entry in views):
+        return
+    view = _view_for(gl)
+    if view is None:
+        return
+    try:
+        callback = view.addEventCallback("SoLocation2Event", lambda info: _hover_moved(view, info))
+    except Exception as exc:
+        warn("selection hover: %s" % exc)
+        return
+    views.append((gl, view, callback))
+
+
+def _unwatch_hover():
+    for _gl, view, callback in _state["hover_views"]:
+        try:
+            view.removeEventCallback("SoLocation2Event", callback)
+        except Exception:
+            pass  # the view was closed
+    _state["hover_views"] = []
 
 
 def active_press():
@@ -1986,6 +2127,7 @@ def disable():
     except Exception as exc:
         warn("selection filters: %s" % exc)
     _state["inner"] = None
+    _unwatch_hover()
     _unpatch_gate_api()
 
 

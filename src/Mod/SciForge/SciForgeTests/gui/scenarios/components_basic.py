@@ -30,6 +30,7 @@ from SciForgeTests.gui import arrow_input as ai
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 
 V = App.Vector
@@ -86,7 +87,7 @@ def b_sketch():
 
 
 def b_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def b_draw():
@@ -160,7 +161,7 @@ def c_sketch():
 
 
 def c_plane():
-    h.click(V(12, -8, 0))
+    pl.click_square("XY_Plane")  # where the square shows (was 12, -8, 0)
 
 
 def c_draw():

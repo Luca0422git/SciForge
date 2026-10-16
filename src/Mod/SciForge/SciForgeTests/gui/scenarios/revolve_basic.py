@@ -25,6 +25,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import revolve_input as ri
 
 V = App.Vector
@@ -62,7 +63,7 @@ def create_sketch():
 
 def pick_xz():
     h.check("no pop-up", not h.popups(), h.popups())
-    h.click(V(12, 0, 8))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, 8)
 
 
 def draw():
@@ -298,7 +299,7 @@ def create_sketch_2():
 
 def pick_xz_2():
     h.fit()
-    h.click(V(12, 0, -10))
+    pl.click_square("XZ_Plane")  # where the square shows (was 12, 0, -10)
 
 
 def draw_2():

@@ -478,11 +478,11 @@ STEPS = (
     + [t_roll_back, t_rolled_back, t_pick, t_type, t_made, t_at_end]
     + [t_click_edge, t_click_plane, t_measured, t_closed]
     + [s_start, s_top, s_type, s_cut, s_kept]
-    + bs.box_steps("b2", (50, 0, 70, 20), 10, V(12, -8, 0), new_body=True)
+    + bs.box_steps("b2", (50, 0, 70, 20), 10, V(6, -6, 0), new_body=True)
     + [s_body2_made, s_eye_off, s_off, s_on, s_edit_drag, s_dragged, s_back_to_5, s_front]
     + [s_front_picked]
     + [s_front_cut, s_flipped, s_escaped]
-    + bs.box_steps("b3", (30, 10, 50, 40), 10, V(12, -8, 0), new_body=True)
+    + bs.box_steps("b3", (30, 10, 50, 40), 10, V(6, -6, 0), new_body=True)
     + [i_check_b3, i_b1, i_b2, i_b3, i_compute, i_result, i_coincident, i_coincident_result]
     + [i_kept, i_edit_extrude, i_extrude_ok, i_follows, i_undone]
 )
