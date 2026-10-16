@@ -60,7 +60,8 @@ parameter or a formula. **Guess** where marked.
 | Takeoff Weight, Takeoff Angle and Tangency Weight take a parameter or formula (Autodesk) | Same: a parameter or a formula with parameters ("w", "w * 2") goes on the loft as an expression and is read back when the loft is edited; a plain number or sum ("0.5 * 2") is a value, as in every SciForge dialog |
 
 Tests: scenario `surface2_solid_loft` (Merge, a rail on another body with Direction ends, a
-parameter for the weight, a number over it, a centerline with ends, Closed refusal, undo / redo, Esc: 77 checks);
+parameter for the weight, a number over it, a centerline with ends, Closed refusal, undo /
+redo, Esc: 77 checks);
 goldens `sf_loft_merge_slot`, `sf_loft_merge_slot_volume` (expected failure: OpenCASCADE's
 volume), `sf_loft_rails_ends`, `sf_loft_centerline_ends`, `sf_loft_closed_direction`,
 `sf_loft_rail_body_edges`, `sf_loft_rails_turning`. The surface loft has the same options
