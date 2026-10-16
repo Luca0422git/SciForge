@@ -103,6 +103,7 @@ def b_sketch_and_dialog():
         z = sk.getGlobalPlacement().multVec(V(0, 0, 0)).z
         h.check("B on the top face (z 10)", near(z, 10.0), z)
     h.check("B the Text dialog is open", ti.dialog() is not None)
+    s["_before"] = list(ti.texts(sk)) if sk is not None else []  # (text_steps' first step)
     h.shot("b-text-dialog")
     top_view()
 

@@ -2085,8 +2085,8 @@ class TextCommand:
 def _dialog_when_ready(sketch, tries):
     """The Text dialog in `sketch` once FreeCAD has it open (its edit mode starts later)."""
     session = _session()
-    if session is not None and session.sketch is sketch and current_layer() is not None:
-        open_dialog(session)
+    if session is not None and session.sketch is sketch:
+        open_dialog(session)  # (it makes the text layer of the sketch when there is none yet)
         return
     if tries < 30:
         QtCore.QTimer.singleShot(100, lambda: _dialog_when_ready(sketch, tries + 1))
