@@ -725,6 +725,36 @@ def own_feature_needed(options):
     return False
 
 
+def curved_face(ref):
+    """True when a To Object pick is a face that is not flat (a cylinder, a sphere...)."""
+    if object_kind(ref) != "face":
+        return False
+    try:
+        faces = _ref_shape(ref).Faces
+    except Exception:
+        return False
+    return any(face.Surface.TypeId != "Part::GeomPlane" for face in faces)
+
+
+def curved_elsewhere(options, target):
+    """True when a side ends To Object on a curved face of another body than `target` (the
+    body the extrude goes in; None: a new one). FreeCAD's Pad / Pocket "up to face" ends in
+    the wrong place there (a post up to a cylinder of another body went through it: 22494
+    mm^3 instead of 4753, golden extrude_to_cylinder_face); SciForge's own feature ends
+    exactly on the face. A curved face of the same body is right with the Pad, which stays
+    (an older Pad with later steps on it could not change its kind)."""
+    sides = [("extent", "")]
+    if options["direction"] == "two_sides":
+        sides.append(("extent2", "2"))
+    for extent, suffix in sides:
+        ref = options.get("extent_object" + suffix)
+        if options[extent] != "to_object" or not curved_face(ref):
+            continue
+        if target is None or owner_body(ref[0]) is not target:
+            return True
+    return False
+
+
 def check_options(options):
     """Raise ExtrudeError for values Fusion's dialog would reject."""
     sides = [("extent", "distance", "extent_object", "taper", "")]
@@ -1817,7 +1847,10 @@ def _structure(feature, profiles, options, participants=None):
         target = lead_body(src, participants)
     else:
         target = src
-    return target, feature_type(op, options), src
+    type_id = feature_type(op, options)
+    if type_id != INTERSECT_TYPE and curved_elsewhere(options, target):
+        type_id = INTERSECT_TYPE  # SciForge's own feature (see curved_elsewhere)
+    return target, type_id, src
 
 
 def build(profiles, options, name="Extrude", feature=None, hide=True):

@@ -6,6 +6,48 @@ negative taper narrows) and everyday Fusion behaviour. Implemented in
 `profile_pick.py` picking, `presspull_core.py` geometry, `presspull_ui.py` dialog, `preview.py`
 dialog helpers). Status: **built and tested with real clicks, not yet signed off by Luca**.
 
+## Click a face to end the extrude (Luca's request, branch `sf/fix-extrude-to-face`, 2026-10-16)
+
+Luca: "when extruding, clicking on a face should bring that extrusion to the same height as
+that face". Sources (autodesk.com and the Autodesk forum were readable only through search
+excerpts): **Autodesk** API reference `ExtrudeFeatureInput.profile`: "when an
+ObjectCollection is used all of the profiles and faces must be co-planar"; **Autodesk**
+Extrude reference: To Object ends at "a body, face, or plane". **Forum** "Extrude to Face /
+Edge / Vertex" (Autodesk Community): To Object is parametric; without it "Fusion still
+extrudes/revolves to that object but not parametrically, it only sets the extrusion distance
+... to the current value"; "the 'To Object' in Fusion supports only Face, Body and Vertex, but
+not Edge". **Forum** "Common Bug/Issue when using Extrude tool and snapping to surface or
+face": fixed "by editing the existing extrude/push/pull feature, and dragging the arrow and
+clicking on the face to snap to again". **Forum** (Press Pull): "Once you start the drag,
+clicking a face will cause the face being dragged to snap to the clicked face". **Forum**
+IdeaStation "Extrude to limit" (an Autodesk alumnus): Snap To "infers a distance value after
+indicating a parallel plane". **Forum** (Shapr3D community, a user describing Fusion): "you
+just click on any other geometry at that extent, a surface, a point, an offset, and the
+extrude calculates the distance it needs to extrude by and snaps to the distance". **Forum**
+"how do I extrude up to a body?": a curved surface is reached with the To extent. **Guess**:
+rows marked so (Fusion's own wording is never copied: the dialog's words are SciForge's).
+
+| Fusion (source) | SciForge |
+|---|---|
+| The profiles of one extrude lie in one plane (Autodesk) | Once a profile is picked, a click on a face out of the profile's plane is no profile: it says where the extrusion ends. A face in a profile's plane is picked or dropped as before; with the Profiles box empty a click on a flat face is the profile, as before (Guess: Fusion's first selection box takes the clicks until it has something) |
+| Distance extent: a picked face or point sets the distance to reach it, not parametric (Forum) | A flat face parallel to the profile, a vertex, or a parallel construction plane sets Distance to the exact number (minus for one below), Extent stays Distance, the arrow and its value box move there, and the dialog says "Up to the face: 12.5 mm" ("the point", "the plane"); typing or dragging afterwards drops the words |
+| Dragging the arrow over a face snaps to it (Forum, twice); a parallel plane gives the distance (Forum) | While the arrow is held, the mouse over a parallel flat face or a vertex makes the distance that height exactly (the preview and the value box show it, the face or point is marked in blue); let go there and it stays, the arrow jumps to it. Over anything else the arrow drags as before (two decimals). A press on the arrow let go without moving snaps to nothing. While the button is down Coin's arrow keeps following the mouse (its dragger takes its position from the mouse on every move), so the arrow itself jumps on the release |
+| Two Sides, Symmetric (Guess) | Two Sides: the side the face is on (side one is the way its distance points); Symmetric: the same distance each way (Whole Length: twice it) |
+| A face the extrusion cannot end on at one height: To Object (Autodesk; Forum for curved surfaces) | A curved or tilted face switches Extent to To Object with that face (Extend To Selected Face): "Ends on the curved face (To Object)". Symmetric cannot go To Object (Fusion's dialog): refused, with what to do. A side already To Object takes a clicked flat face as its new object (Guess). A face running along the extrusion is refused with the reason; an edge does nothing (Forum: To Object takes no edge) |
+| Press Pull on a sketch area is an Extrude (Fusion) | The same clicks and snaps in the Extrude it opens |
+| Every operation, edit from the timeline, one undo step | Join, Cut (a click below the sketch into the part turns it into a Cut by itself), New Body, bodies in (moved) components, edit from the timeline, Esc / Cancel, Undo / Redo, save / reopen (a plain length is stored) |
+
+Found on the way: **FreeCAD's Pad "up to face" on a curved face of another body ends in the
+wrong place** (a post up to a cylinder's underside came out 22494 mm^3 instead of 4753, through
+the cylinder). To Object on a curved face of another body is now SciForge's own extrude
+feature (`extrude.curved_elsewhere`, in `_structure`), which ends exactly on the face; golden
+`extrude_to_cylinder_face`. With a curved face of the same body the Pad is right and stays a
+Pad (an older one with later steps on it could not change its kind).
+
+Built in `extrude_to_face_core.py` (the rules and words, Qt-free, `test_extrude_to_face_core`),
+`extrude_to_face.py` (what is under a click or the mouse, the snap mark) and `extrude_ui.py`.
+Scenarios `extrudeface_basic`, `extrudeface_sides`, `extrudeface_objects`, `extrudeface_drag`.
+
 ## Wave 4: To Object's Extend and Offset, a Start Object that follows (branch `sf/modeling-2`, 2026-10-14)
 
 Sources: **Autodesk** Extrude reference, through search excerpts: To Object ends at "a body,
@@ -122,6 +164,16 @@ sketches, a profile in another body) a hidden SubShapeBinder carries it into the
 | Q on a sketch profile -> Extrude | Same: visible sketch areas are shaded while Press Pull waits. |
 
 ## Known gaps (honest list)
+
+- **Click a face to end the extrude** (2026-10-16): Press Pull on a *face* (an offset, not an
+  extrude) does not snap its arrow to a clicked face yet (Fusion does once the drag started,
+  Forum); the dragged arrow snaps to parallel faces and vertices, not to edges, sketch points
+  or construction planes (a plane works with a click); the arrow itself jumps to the face
+  only when let go (Coin's dragger, see the section at the top); a copy of a component (an
+  App::Link instance) gives the height of the original's place, like every face pick of the
+  extrude; a sketch area of another sketch at another height is still taken as a profile, as
+  before (Fusion keeps the profiles in one plane); a sketch area hidden behind *another*
+  body still takes a click there (the hiding test looks at the profile's own body only).
 
 - Thin Extrude, New Component and tapers with every extent are built (sections above). Thin
   Extrude's defaults (1 mm, the side an open curve's Side 1 is, sharp outer corners) are
