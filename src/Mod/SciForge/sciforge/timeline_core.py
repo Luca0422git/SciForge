@@ -855,6 +855,129 @@ def plan_move(timeline, name, slot):
     )
 
 
+def group_members(timeline, gid):
+    """The steps of timeline group ``gid``, in row order."""
+    return [i for i in timeline.items if gid and i.group == gid]
+
+
+def marker_in_group(timeline, gid):
+    """True when the history marker stands between two steps of group ``gid`` (the group is
+    then shown open and cannot be collapsed or dragged as a whole: Fusion rolls the marker
+    to before or after a collapsed group, never into it)."""
+    members = group_members(timeline, gid)
+    if not members:
+        return False
+    return members[0].index < timeline.marker <= members[-1].index
+
+
+def plan_group_move(timeline, gid, slot):
+    """Move every step of timeline group ``gid`` together so that ``slot`` steps of the row
+    (as it is now, 0..len) are before the group; the steps keep their order and their group.
+    Refused like a single step's move (a step before something it uses, either way), and
+    also when the marker is inside the group or the drop is inside another group. Returns a
+    MovePlan (``name``: the group's first step)."""
+    items = list(timeline.items)
+    block = group_members(timeline, gid)
+    if not block:
+        return MovePlan(False, "Unknown group.")
+    title = block[0].group_name or "The group"
+    start, end = block[0].index, block[-1].index + 1
+    if [i.index for i in block] != list(range(start, end)):
+        return MovePlan(False, "%s is not one run of steps." % title)
+    if start < timeline.marker < end:
+        return MovePlan(
+            False,
+            "The history marker is inside %s. Move the marker before or after the group "
+            "first, then drag the group." % title,
+        )
+    if start <= slot <= end:
+        return MovePlan(False, "", tuple(i.name for i in items), name=block[0].name)
+    others = items[:start] + items[end:]
+    target = slot if slot <= start else slot - len(block)
+    target = max(0, min(target, len(others)))
+    if 0 < target < len(others):
+        left, right = others[target - 1], others[target]
+        if left.group and left.group == right.group:
+            return MovePlan(
+                False,
+                "%s cannot go inside %s (a group cannot hold another group)."
+                % (title, left.group_name or "another group"),
+                name=block[0].name,
+            )
+    new_items = others[:target] + block + others[target:]
+    order = tuple(i.name for i in new_items)
+    pos = {n: k for k, n in enumerate(order)}
+    titles = {i.name: i.display for i in items}
+    inside = {i.name for i in block}
+    for item in new_items:
+        for dep in item.deps:
+            if (
+                dep not in pos
+                or pos[dep] < pos[item.name]
+                or (dep in inside) == (item.name in inside)
+            ):
+                continue
+            if item.name in inside:
+                reason = "%s uses %s, so %s cannot come before it." % (
+                    titles[item.name],
+                    titles[dep],
+                    title,
+                )
+            else:
+                reason = "%s uses %s, so %s cannot move after it." % (
+                    titles[item.name],
+                    titles[dep],
+                    title,
+                )
+            return MovePlan(False, reason, order, name=block[0].name)
+    body_orders = {}
+    for item in new_items:
+        if item.body is not None:
+            body_orders.setdefault(item.body, []).append(item.name)
+    body_orders = {b: tuple(v) for b, v in body_orders.items()}
+    keys = _block_keys(new_items, [i.name for i in block])
+    before_marker = [i for i in items[: timeline.marker] if i.name not in inside]
+    marker_slot = len(before_marker)
+    lands_before = target < marker_slot or (target == marker_slot and timeline.at_end)
+    count = len([i for i in before_marker if i.solid])
+    if lands_before:
+        count += len([i for i in block if i.solid])
+    return MovePlan(
+        True,
+        "",
+        order,
+        body_orders,
+        keys,
+        marker_count=count,
+        marker_at_end=timeline.at_end,
+        name=block[0].name,
+    )
+
+
+def _block_keys(new_items, names):
+    """Creation-order keys for a run of steps that moved together (``names``, in order):
+    new keys for them alone, evenly between the steps before and after them, when that
+    gives ``new_items``' order; otherwise _keys_for's general answer."""
+    wanted = [i.name for i in new_items]
+    rows = [{"name": i.name, "body": i.body, "key": i.key} for i in new_items]
+    if [r["name"] for r in merge(rows)] == wanted:
+        return {}
+    at = wanted.index(names[0])
+    lo = max([i.key for i in new_items[:at]], default=None)
+    hi = min([i.key for i in new_items[at + len(names) :]], default=None)
+    if lo is None and hi is not None:
+        lo = 0.0
+    if hi is None and lo is not None:
+        hi = lo + 1.0
+    if lo is not None and hi is not None and lo < hi:
+        step = (hi - lo) / (len(names) + 1)
+        keys = {n: lo + step * (k + 1) for k, n in enumerate(names)}
+        trial = [dict(r, key=keys[r["name"]]) if r["name"] in keys else r for r in rows]
+        if all(v > 0 for v in keys.values()) and [r["name"] for r in merge(trial)] == wanted:
+            return keys
+    return _keys_for(new_items)
+
+
 def _keys_for(new_items, moved=None):
     """Creation-order keys that make merge() give exactly ``new_items``' order (only
     needed when steps of different bodies change places). Prefer a new key for the

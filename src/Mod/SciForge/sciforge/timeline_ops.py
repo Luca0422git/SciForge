@@ -1715,6 +1715,79 @@ def move(doc, name, slot):
     return True
 
 
+def plan_group(doc, gid, slot):
+    return core.plan_group_move(timeline(doc), gid, slot)
+
+
+@_picks_paused
+def move_group(doc, gid, slot):
+    """Move a whole timeline group to ``slot`` (Fusion drags a collapsed group as one item):
+    its steps keep their order and their group, each goes to its place in its own body.
+    Same rules and refusals as move() (TimelineError with the reason), one undo step."""
+    tl = timeline(doc)
+    p = core.plan_group_move(tl, gid, slot)
+    if not p.ok:
+        if p.reason:
+            raise TimelineError(p.reason)
+        return False
+    moved = [i.name for i in core.group_members(tl, gid)]
+    places = _follower_places(doc, p.order)
+    for follower, place in places.items():
+        if place is None:
+            lead, own = getattr(follower, "Source", None), body_of(follower)
+            item = tl.find(lead.Name) if lead is not None else None
+            raise TimelineError(
+                "%s changes %s, and %s does not exist yet at that place in the timeline."
+                % (item.display if item is not None else lead.Label, own.Label, own.Label)
+            )
+    geometry = _rebase_geometry(doc, tl, p, bodies_of(places))
+    broken_before = _errors(doc)
+    first = tl.find(moved[0])
+    _transaction(doc, "Move %s" % (first.group_name or "Group"))
+    try:
+        for body_name, new in p.body_orders.items():
+            body = doc.getObject(body_name)
+            if body is None:
+                continue
+            new = list(new)
+            if [o.Name for o in body.Group if o.Name in new] == new:
+                continue
+            # The group's steps of this body, in their new order, each right after the
+            # step before it in the body's new order (the others keep their order).
+            for at, n in enumerate(new):
+                if n not in moved:
+                    continue
+                obj = doc.getObject(n)
+                prev = doc.getObject(new[at - 1]) if at > 0 else None
+                body.removeObject(obj)
+                body.insertObject(obj, prev, True)
+        for n, key in p.keys.items():
+            obj = doc.getObject(n)
+            _add_prop(obj, "App::PropertyFloat", RANK, "Place in the design timeline")
+            setattr(obj, RANK, float(key))
+        _place_followers(doc, places)
+        after = timeline(doc)
+        if p.marker_at_end:
+            _set_marker_note(doc, None)
+            tips = core.tips_for_count(after, len(after.items))
+        else:
+            tips = core.tips_for_count(after, p.marker_count)
+        _set_tips(doc, tips)
+        recompute(doc)
+        _rebase(doc, p.order, geometry, tl)
+        newly = _errors(doc) - broken_before
+        if newly:
+            item = timeline(doc).find(sorted(newly)[0])
+            what = item.display if item is not None else sorted(newly)[0]
+            raise TimelineError("%s would fail there." % what)
+    except Exception:
+        doc.abortTransaction()
+        recompute(doc)
+        raise
+    doc.commitTransaction()
+    return True
+
+
 def _is_merge(obj):
     try:
         from . import extrude_bodies

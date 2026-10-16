@@ -360,24 +360,34 @@ class _WheelScroll(QtCore.QObject):
 
 
 class _GroupButton(QtWidgets.QToolButton):
-    """A timeline group: one folder for several steps. Click opens or closes it."""
+    """A timeline group: one folder for several steps. Click opens or closes it; drag it to
+    move the whole group (Fusion moves a group as one item); Esc drops the drag."""
 
-    def __init__(self, timeline, gid, name, members, opened):
+    def __init__(self, timeline, gid, name, members, opened, holds_marker=False):
         super().__init__()
         self.timeline = timeline
         self.gid = gid
         self.name = name
         self.members = members
         self.opened = opened
+        self.holds_marker = holds_marker  # the history marker stands inside the group
+        self._press = None
+        self._dragging = False
         self.setObjectName("SciForgeGroup_" + gid)
         self.setProperty("role", "step")
+        self.setFocusPolicy(QtCore.Qt.ClickFocus)  # Esc drops a drag
         self.setIcon(ui_icon("folder"))
         self.setIconSize(QtCore.QSize(ICON, ICON))
         bad = [m for m in members if m.status == "error"]
         warned = [m for m in members if m.status == "warning"]
         self.setProperty("status", "error" if bad else ("warning" if warned else "ok"))
         lines = [name, "%d steps: %s" % (len(members), ", ".join(m.display for m in members))]
-        lines.append("Click to %s the group" % ("close" if opened else "open"))
+        if holds_marker:
+            lines.append("The history marker is inside: the group stays open")
+        else:
+            lines.append(
+                "Click to %s the group, drag it to move it" % ("close" if opened else "open")
+            )
         for m in bad + warned:
             lines.append("%s: %s" % (m.display, m.message))
         self.setToolTip("\n".join(lines))
@@ -385,7 +395,78 @@ class _GroupButton(QtWidgets.QToolButton):
         self.customContextMenuRequested.connect(
             lambda pos: self.timeline._group_menu(self, self.mapToGlobal(pos))
         )
-        self.clicked.connect(lambda: _later(self.timeline.toggle_group, self.gid))
+
+    # -- mouse: a click opens / closes, a drag moves the group ------------------------
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._press = event.globalPosition().toPoint()
+            self._dragging = False
+            self.setDown(True)
+            self.setFocus()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._press is None:
+            return
+        pos = event.globalPosition().toPoint()
+        try:
+            if not self._dragging:
+                if (
+                    pos - self._press
+                ).manhattanLength() < QtWidgets.QApplication.startDragDistance():
+                    return
+                self._dragging = True
+                self.setDown(False)
+                self.timeline.begin_drag(self)
+            self.timeline.drag_to(pos)
+        except Exception as exc:
+            warn("timeline group drag: %s" % exc)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != QtCore.Qt.LeftButton or self._press is None:
+            super().mouseReleaseEvent(event)
+            return
+        pos = event.globalPosition().toPoint()
+        dragging = self._dragging
+        self._press = None
+        self._dragging = False
+        self.setDown(False)
+        try:
+            if dragging:
+                self.timeline.end_drag(pos)
+            else:
+                _later(self.timeline.toggle_group, self.gid)
+        except Exception as exc:
+            warn("timeline group: %s" % exc)
+        event.accept()
+
+    def event(self, event):
+        if (
+            event.type() == QtCore.QEvent.ShortcutOverride
+            and event.key() == QtCore.Qt.Key_Escape
+            and self._dragging
+        ):
+            event.accept()
+            return True
+        return super().event(event)
+
+    def keyPressEvent(self, event):
+        try:
+            if event.key() == QtCore.Qt.Key_Escape and self._press is not None:
+                dragging = self._dragging
+                self._press = None  # Fusion: Esc drops the drag, nothing moves
+                self._dragging = False
+                self.setDown(False)
+                if dragging:
+                    self.timeline.cancel_drag()
+                return
+        except Exception as exc:
+            warn("timeline group: %s" % exc)
+            return
+        super().keyPressEvent(event)
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -661,7 +742,8 @@ class TimelineWidget(QtWidgets.QWidget):
                 continue
             start, end = members[0].index, members[-1].index + 1
             marker_before(shown[0].index)
-            header = _GroupButton(self, gid, name, shown, opened)
+            holds = core.marker_in_group(self._timeline, gid)
+            header = _GroupButton(self, gid, name, shown, opened, holds)
             self._row.addWidget(header)
             self._slots.append((header, start, start if opened else end))
             if not opened:
@@ -908,6 +990,7 @@ class TimelineWidget(QtWidgets.QWidget):
         return self._hover.name if self._hover is not None else None
 
     def begin_drag(self, button):
+        """A step's button (or a group's header: the whole group) starts being dragged."""
         self.unhover()
         line = QtWidgets.QFrame(self._inner)
         line.setProperty("role", "drop")
@@ -919,6 +1002,12 @@ class TimelineWidget(QtWidgets.QWidget):
         self._move_timeline = ops.timeline(doc) if doc is not None else self._timeline
         self._drag = (button, line)
         button.setCursor(QtCore.Qt.ClosedHandCursor)
+
+    def _plan(self, button, slot):
+        """What dropping the dragged step (or group) at ``slot`` would do."""
+        if isinstance(button, _GroupButton):
+            return core.plan_group_move(self._move_timeline, button.gid, slot)
+        return core.plan_move(self._move_timeline, button.item.name, slot)
 
     def _drop_x(self, slot):
         if not self._slots:
@@ -933,7 +1022,7 @@ class TimelineWidget(QtWidgets.QWidget):
             return
         button, line = self._drag
         slot = self._slot_at(global_pos)
-        plan = core.plan_move(self._move_timeline, button.item.name, slot)
+        plan = self._plan(button, slot)
         refused = bool(not plan.ok and plan.reason)
         line.setProperty("refused", "true" if refused else "false")
         line.style().unpolish(line)
@@ -964,9 +1053,10 @@ class TimelineWidget(QtWidgets.QWidget):
         self._drag = None
         button.unsetCursor()
         slot = self._slot_at(global_pos)
-        name = button.item.name
+        group = button.gid if isinstance(button, _GroupButton) else None
+        name = None if group else button.item.name
         doc = _doc()
-        plan = core.plan_move(self._move_timeline, name, slot)
+        plan = self._plan(button, slot)
         if not plan.ok:
             line.deleteLater()
             if plan.reason:
@@ -976,12 +1066,16 @@ class TimelineWidget(QtWidgets.QWidget):
         if doc is None or not _ready():
             return
         try:
-            ops.move(doc, name, slot)
+            if group:
+                ops.move_group(doc, group, slot)
+            else:
+                ops.move(doc, name, slot)
         except ops.TimelineError as exc:
             self._refuse(slot, str(exc), global_pos)
             return
         self.refresh(force=True)
-        self.select([name])
+        if name:
+            self.select([name])
 
     def _refuse(self, slot, reason, global_pos):
         """Fusion: a red mark where the step cannot go, and why."""
@@ -1009,6 +1103,17 @@ class TimelineWidget(QtWidgets.QWidget):
     def refusal(self):
         """The reason of the last refused move while it is shown (tests)."""
         return self._drop_hint[1] if self._drop_hint else ""
+
+    def move_group(self, gid, slot):
+        """Programmatic move of a whole group (same rules as dragging its header). Returns
+        the refusal or ''."""
+        doc = _doc()
+        try:
+            ops.move_group(doc, gid, slot)
+        except ops.TimelineError as exc:
+            return str(exc)
+        self.refresh(force=True)
+        return ""
 
     def move_step(self, name, slot):
         """Programmatic move (same rules as dragging). Returns the refusal or ''."""
@@ -1165,11 +1270,25 @@ class TimelineWidget(QtWidgets.QWidget):
 
     # -- groups ------------------------------------------------------------------
     def toggle_group(self, gid):
+        if core.marker_in_group(self._timeline, gid):
+            # Fusion's marker stands before or after a collapsed group, never in it.
+            _tell(
+                "The history marker is inside this group, so it stays open. Move the marker "
+                "before or after the group to close it."
+            )
+            self._open_groups.add(gid)  # it shows open; it stays so once the marker leaves
+            return
         if gid in self._open_groups:
             self._open_groups.discard(gid)
         else:
             self._open_groups.add(gid)
         self.refresh(force=True)
+
+    def roll_after_group(self, gid):
+        """Roll History Marker Here on a group: the marker goes right after its last step."""
+        members = core.group_members(self._timeline, gid)
+        if members:
+            self.roll_here(members[-1].name)
 
     def group_selected(self):
         doc = _doc()
@@ -1241,12 +1360,15 @@ class TimelineWidget(QtWidgets.QWidget):
         add(
             "Collapse Group" if header.opened else "Expand Group",
             lambda: self.toggle_group(header.gid),
+            not (header.opened and header.holds_marker),
         )
         menu.addSeparator()
         add(
             "Suppress Features" if any_on else "Unsuppress Features",
             lambda: self.suppress_group(header.gid, any_on),
         )
+        add("Roll History Marker Here", lambda: self.roll_after_group(header.gid))
+        menu.addSeparator()
         add("Rename", lambda: self.rename_group(header.gid))
         add("Ungroup", lambda: self.ungroup(header.gid))
         add("Delete", lambda: self.delete(members))
