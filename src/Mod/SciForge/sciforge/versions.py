@@ -45,6 +45,12 @@ MAX_AUTOSAVE_MINUTES = 120  # Fusion's maximum (two hours)
 GIT_TIMEOUT = 60  # seconds for one git call (a NAS can be slow)
 # Folders the Data Panel never lists.
 HIDDEN_FOLDERS = {".git", TRASH_FOLDER}
+# A milestone of a git version is a tag on its commit (one commit = one version of one
+# design, so the tag names the version); plain copies mark it in index.json.
+MILESTONE_TAG = "sciforge-milestone-"
+# Commits that only move or rename a design (the Data Panel's Move, Rename): not versions.
+MOVE_MESSAGE = "[SciForge] moved"
+AUTO_CLOSE_DESCRIPTION = "Automatic version on close"
 
 
 class StoreError(Exception):
@@ -226,7 +232,9 @@ class VersionInfo:
     """One saved version. `number` is what the user sees (v1, v2...); `key` is what the
     store needs to find it again (a file name or a commit hash)."""
 
-    def __init__(self, number, time_iso, description, size, key, backend, current=False):
+    def __init__(
+        self, number, time_iso, description, size, key, backend, current=False, milestone=False
+    ):
         self.number = int(number)
         self.time = time_iso or ""
         self.description = description or ""
@@ -234,6 +242,7 @@ class VersionInfo:
         self.key = key
         self.backend = backend
         self.current = bool(current)
+        self.milestone = bool(milestone)  # Fusion's milestone: a version marked as one
 
     @property
     def label(self):
@@ -248,6 +257,7 @@ class VersionInfo:
             "key": self.key,
             "backend": self.backend,
             "current": self.current,
+            "milestone": self.milestone,
         }
 
     def __repr__(self):
@@ -334,6 +344,7 @@ class PlainStore:
                         e.get("size"),
                         e["file"],
                         self.backend,
+                        milestone=bool(e.get("milestone")),
                     )
                 )
             except (KeyError, TypeError, ValueError):
@@ -347,9 +358,10 @@ class PlainStore:
         return len(self.read_index()["versions"])
 
     # changes
-    def record(self, description="", when=None):
+    def record(self, description="", when=None, milestone=False):
         """Keep the design file as it is now as the next version. A file identical to the
-        newest version is not copied twice (the new entry points at the same copy)."""
+        newest version is not copied twice (the new entry points at the same copy).
+        milestone: the version is a milestone (the Save dialog's Milestone box)."""
         if not os.path.isfile(self.design):
             raise StoreError("The design file %s is not there to be versioned." % self.design)
         data = self.read_index()
@@ -376,10 +388,27 @@ class PlainStore:
             "sha1": sha,
             "by": _user(),
         }
+        if milestone:
+            entry["milestone"] = True
         entries.append(entry)
         data["design"] = os.path.basename(self.design)
         self._write_index(data)
-        return VersionInfo(number, entry["time"], description, size, file_name, self.backend, True)
+        return VersionInfo(
+            number, entry["time"], description, size, file_name, self.backend, True, milestone
+        )
+
+    def set_milestone(self, info, on=True):
+        """Mark version `info` as a milestone (or not)."""
+        data = self.read_index()
+        for entry in data["versions"]:
+            if entry.get("number") == info.number:
+                if on:
+                    entry["milestone"] = True
+                else:
+                    entry.pop("milestone", None)
+                self._write_index(data)
+                return True
+        raise StoreError("%s was not found in the version list." % info.label)
 
     def path_of(self, info):
         return os.path.join(self.folder, info.key)
@@ -501,25 +530,56 @@ class GitStore:
         self.rel = os.path.relpath(self.design, self.root).replace(os.sep, "/")
 
     def _log(self):
-        out = _run_git(
-            ["log", "--format=%H%x1f%aI%x1f%B%x1e", "--reverse", "--", self.rel], self.root
-        )
-        found = []
-        for record in out.split("\x1e"):
-            record = record.strip("\n\r ")
-            if not record:
-                continue
-            parts = record.split("\x1f")
-            if len(parts) < 3:
-                continue
-            found.append((parts[0].strip(), parts[1].strip(), parts[2].strip()))
-        return found
+        """[(commit, date, message, path)] oldest first: the commits of the design's file,
+        followed back through SciForge's own moves and renames (the Data Panel's Move and
+        Rename commit a git mv with MOVE_MESSAGE), without those move commits. `path` is the
+        file's path in the repository at that commit. (git's own --follow also follows a
+        copy with the same content: a copied design would have taken the original's
+        versions.)"""
+        found = []  # newest first
+        path, rev = self.rel, "HEAD"
+        for _hop in range(64):
+            out = _run_git(["log", "--format=%x1e%H%x1f%aI%x1f%B", rev, "--", path], self.root)
+            records = parse_log(out)
+            if not records:
+                break
+            found.extend((c, w, m, path) for c, w, m in records)
+            oldest = records[-1]
+            if not oldest[2].startswith(MOVE_MESSAGE):
+                break
+            before = self._moved_from(oldest[0], path)
+            if not before:
+                break
+            path, rev = before, oldest[0] + "^"
+        found.reverse()
+        self._paths = {commit: where for commit, _w, _m, where in found}
+        return [r for r in found if not r[2].startswith(MOVE_MESSAGE)]
+
+    def _moved_from(self, commit, path):
+        """The path the design had before the move commit `commit` renamed it to `path`."""
+        try:
+            out = _run_git(["show", "--format=", "--name-status", "-M", commit], self.root)
+        except StoreError:
+            return None
+        for line in out.splitlines():
+            cols = line.split("\t")
+            if cols[0].startswith("R") and len(cols) >= 3 and cols[2].strip() == path:
+                return cols[1].strip()
+        return None
+
+    def _path_at(self, commit):
+        """The design file's path in the repository at `commit`."""
+        paths = getattr(self, "_paths", None)
+        if paths is None or commit not in paths:
+            self._log()
+            paths = self._paths
+        return paths.get(commit, self.rel)
 
     def _sizes(self, hashes):
         """{commit: size of the design's blob} in one git call."""
         if not hashes:
             return {}
-        lines = "\n".join("%s:%s" % (h, self.rel) for h in hashes) + "\n"
+        lines = "\n".join("%s:%s" % (h, self._path_at(h)) for h in hashes) + "\n"
         try:
             out = _run_git(["cat-file", "--batch-check=%(objectsize)"], self.root, stdin_text=lines)
         except StoreError:
@@ -532,11 +592,20 @@ class GitStore:
                 sizes[h] = 0
         return sizes
 
+    def _milestones(self):
+        """Commits marked as milestones (tags MILESTONE_TAG + commit)."""
+        try:
+            out = _run_git(["tag", "--list", MILESTONE_TAG + "*"], self.root)
+        except StoreError:
+            return set()
+        return {t.strip()[len(MILESTONE_TAG) :] for t in out.splitlines() if t.strip()}
+
     def versions(self):
         entries = self._log()
-        sizes = self._sizes([h for h, _, _ in entries])
+        sizes = self._sizes([h for h, _w, _m, _p in entries])
+        marked = self._milestones() if entries else set()
         found = []
-        for i, (commit, when, message) in enumerate(entries, start=1):
+        for i, (commit, when, message, _path) in enumerate(entries, start=1):
             found.append(
                 VersionInfo(
                     i,
@@ -545,6 +614,7 @@ class GitStore:
                     sizes.get(commit, 0),
                     commit,
                     self.backend,
+                    milestone=commit in marked,
                 )
             )
         if found:
@@ -553,13 +623,23 @@ class GitStore:
 
     def count(self):
         try:
-            return int(
-                _run_git(["rev-list", "--count", "HEAD", "--", self.rel], self.root).strip() or 0
-            )
+            return len(self._log())
         except StoreError:
             return 0
 
-    def record(self, description="", when=None):
+    def set_milestone(self, info, on=True):
+        """Mark version `info` as a milestone (a tag on its commit), or take the mark off."""
+        tag = MILESTONE_TAG + info.key
+        if on:
+            _run_git(["tag", "-f", tag, info.key], self.root)
+        else:
+            try:
+                _run_git(["tag", "-d", tag], self.root)
+            except StoreError:
+                pass  # not marked: nothing to take off
+        return True
+
+    def record(self, description="", when=None, milestone=False):
         if not os.path.isfile(self.design):
             raise StoreError("The design file %s is not there to be versioned." % self.design)
         _run_git(["add", "--", self.rel], self.root)
@@ -574,10 +654,16 @@ class GitStore:
         versions = self.versions()
         if not versions:
             raise StoreError("git recorded nothing for %s" % self.rel)
-        return versions[-1]
+        newest = versions[-1]
+        if milestone:
+            self.set_milestone(newest, True)
+            newest.milestone = True
+        return newest
 
     def extract(self, info, dest_folder, file_name=None):
-        data = _run_git(["show", "%s:%s" % (info.key, self.rel)], self.root, binary=True)
+        data = _run_git(
+            ["show", "%s:%s" % (info.key, self._path_at(info.key))], self.root, binary=True
+        )
         os.makedirs(dest_folder, exist_ok=True)
         dest = os.path.join(
             dest_folder, file_name or "%s %s%s" % (self.name, info.label, DESIGN_SUFFIX)
@@ -601,21 +687,60 @@ def _description_of(message):
     return "" if text == "Save" else text
 
 
-def repo_counts(root):
-    """{relative path: number of commits} for every file ever committed in the repository,
-    in one git call (the Data Panel's version badges)."""
+def parse_log(out):
+    """[(commit, date, message)] from `git log --format=%x1e%H%x1f%aI%x1f%B` (as git lists
+    them: newest first)."""
+    found = []
+    for record in out.split("\x1e"):
+        record = record.strip("\n\r ")
+        if not record:
+            continue
+        parts = record.split("\x1f")
+        if len(parts) < 3:
+            continue
+        found.append((parts[0].strip(), parts[1].strip(), parts[2].strip()))
+    return found
+
+
+def count_versions(log_text):
+    """{path: number of versions} from `git log --reverse -M --format=%x1e%s --name-status
+    -- .`: every commit that touches a file is one version of it, a rename carries the
+    count to the new path, and a commit that only moved a file (MOVE_MESSAGE) adds none."""
     counts = {}
+    for record in log_text.split("\x1e"):
+        lines = [line for line in record.splitlines() if line.strip()]
+        if not lines:
+            continue
+        subject, changes = lines[0], lines[1:]
+        moving = subject.startswith(MOVE_MESSAGE)
+        for line in changes:
+            cols = line.split("\t")
+            status = cols[0].strip()
+            if status.startswith("R") and len(cols) >= 3:
+                old, new = cols[1].strip(), cols[2].strip()
+                counts[new] = counts.pop(old, 0) + (0 if moving else 1)
+            elif status.startswith("C") and len(cols) >= 3:
+                counts[cols[2].strip()] = counts.get(cols[2].strip(), 0) + 1
+            elif status.startswith("D") and len(cols) >= 2:
+                if moving:
+                    counts.pop(cols[1].strip(), None)
+            elif len(cols) >= 2 and not moving:
+                counts[cols[1].strip()] = counts.get(cols[1].strip(), 0) + 1
+    return {k: v for k, v in counts.items() if v > 0}
+
+
+def repo_counts(root):
+    """{relative path: number of versions} for every file of the repository, in one git
+    call (the Data Panel's version badges); moves and renames carry their count along."""
     if not root:
-        return counts
+        return {}
     try:
-        out = _run_git(["log", "--format=", "--name-only", "--", "."], root)
+        out = _run_git(
+            ["log", "--reverse", "-M", "--format=%x1e%s", "--name-status", "--", "."], root
+        )
     except StoreError:
-        return counts
-    for line in out.splitlines():
-        line = line.strip()
-        if line:
-            counts[line] = counts.get(line, 0) + 1
-    return counts
+        return {}
+    return count_versions(out)
 
 
 # -- choosing the store ------------------------------------------------------------------
@@ -934,9 +1059,10 @@ def new_folder(parent, base="New Folder"):
     return path
 
 
-def rename_design(path, new_name):
+def rename_design(path, new_name, project_folder=None, use_git=True):
     """Rename a design and its plain version folder together; the new path. Refuses a name
-    that is taken."""
+    that is taken. In a git project folder the rename is recorded as a move (git mv), so
+    the versions follow the new name."""
     new_name = clean_name(new_name)
     if not new_name:
         raise StoreError("Give the design a name.")
@@ -944,13 +1070,283 @@ def rename_design(path, new_name):
     target = design_path(folder, new_name)
     if os.path.exists(target) and not same_path(target, path):
         raise StoreError("A design called %s is already in this folder." % new_name)
-    os.replace(path, target)
-    old_versions = os.path.join(folder, design_name(path) + VERSIONS_SUFFIX)
-    if os.path.isdir(old_versions):
-        new_versions = os.path.join(folder, new_name + VERSIONS_SUFFIX)
-        if not os.path.exists(new_versions):
-            os.replace(old_versions, new_versions)
+    _relocate(path, target, project_folder, use_git, None)
     return target
+
+
+# -- Move and Copy of designs (the Data Panel) -----------------------------------------
+_XLINK_FILE = re.compile(r'(<XLink\b[^>]*?\bfile=")([^"]*)(")')
+_DERIVE_PATH = re.compile(
+    r'(<Property\s+name="(SourceRelative|SourceFile)"\s+type="App::PropertyString"[^>]*>\s*'
+    r'<String\s+value=")([^"]*)(")'
+)
+
+
+def _xml_unescape(text):
+    return (
+        text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+    )
+
+
+def _xml_escape(text):
+    return (
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    )
+
+
+def link_targets(xml, holder_dir):
+    """The other designs a design's Document.xml refers to: its links (FreeCAD's XLink,
+    stored relative to the design's folder) and its Derives' sources, as absolute paths."""
+    found = []
+    for match in _XLINK_FILE.finditer(xml):
+        value = _xml_unescape(match.group(2))
+        if value:
+            found.append(os.path.normpath(os.path.join(holder_dir, value)))
+    for match in _DERIVE_PATH.finditer(xml):
+        value = _xml_unescape(match.group(3))
+        if not value:
+            continue
+        if match.group(2) == "SourceFile":
+            found.append(os.path.normpath(value))
+        else:
+            found.append(os.path.normpath(os.path.join(holder_dir, value)))
+    return found
+
+
+def retarget_xml(xml, old_dir, new_dir, moved_from=None, moved_to=None):
+    """A design's Document.xml with its references to other designs kept pointing at the
+    same files when the design goes from folder `old_dir` to `new_dir`, and at `moved_to`
+    where they pointed at `moved_from` (a referenced design that moved). Links are stored
+    relative to the design's folder (as FreeCAD does), a Derive's SourceFile absolute and
+    its SourceRelative relative. Returns (xml, number of references changed)."""
+    changed = [0]
+
+    def target_of(path):
+        if moved_from and same_path(path, moved_from):
+            return os.path.normpath(moved_to)
+        return path
+
+    def relative(target):
+        try:
+            return os.path.relpath(target, new_dir).replace(os.sep, "/")
+        except ValueError:
+            return None  # another drive (Windows): keep what was there
+
+    def xlink(match):
+        value = _xml_unescape(match.group(2))
+        if not value:
+            return match.group(0)
+        rel = relative(target_of(os.path.normpath(os.path.join(old_dir, value))))
+        if rel is None or rel == value:
+            return match.group(0)
+        changed[0] += 1
+        return match.group(1) + _xml_escape(rel) + match.group(3)
+
+    def derive(match):
+        value = _xml_unescape(match.group(3))
+        if not value:
+            return match.group(0)
+        if match.group(2) == "SourceFile":
+            new = target_of(os.path.normpath(value))
+            if same_path(new, value):
+                return match.group(0)
+        else:
+            new = relative(target_of(os.path.normpath(os.path.join(old_dir, value))))
+            if new is None or new == value:
+                return match.group(0)
+        changed[0] += 1
+        return match.group(1) + _xml_escape(new) + match.group(4)
+
+    xml = _XLINK_FILE.sub(xlink, xml)
+    xml = _DERIVE_PATH.sub(derive, xml)
+    return xml, changed[0]
+
+
+def read_design_xml(path):
+    with zipfile.ZipFile(path) as zf:
+        return zf.read("Document.xml").decode("utf-8")
+
+
+def write_design_xml(path, xml):
+    """Put a new Document.xml into a design file (whole or not at all)."""
+    folder = os.path.dirname(path) or "."
+    handle, tmp = tempfile.mkstemp(prefix=".sf-", suffix=".tmp", dir=folder)
+    os.close(handle)
+    try:
+        with zipfile.ZipFile(path) as src, zipfile.ZipFile(tmp, "w") as dst:
+            for item in src.infolist():
+                data = src.read(item.filename)
+                if item.filename == "Document.xml":
+                    data = xml.encode("utf-8")
+                dst.writestr(item, data)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def designs_in(folder):
+    """Every design file under `folder` (not in .git, the trash or version folders)."""
+    found = []
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in HIDDEN_FOLDERS and not d.startswith(".") and not d.endswith(VERSIONS_SUFFIX)
+        ]
+        found.extend(os.path.join(root, f) for f in files if is_design(f))
+    return found
+
+
+def referrers(path, folder):
+    """The designs under `folder` that refer to the design `path` (links, Derives)."""
+    found = []
+    for other in designs_in(folder):
+        if same_path(other, path):
+            continue
+        try:
+            xml = read_design_xml(other)
+        except Exception:
+            continue
+        if any(same_path(t, path) for t in link_targets(xml, os.path.dirname(other))):
+            found.append(other)
+    return found
+
+
+def _git_root_for(path, project_folder, use_git):
+    if not use_git or not project_folder or not inside(project_folder, path):
+        return None
+    if not git_available():
+        return None
+    root = repo_root(project_folder)
+    return root if root is not None and inside(root, path) else None
+
+
+def _tracked(root, rel):
+    try:
+        return bool(_run_git(["ls-files", "--", rel], root).strip())
+    except StoreError:
+        return False
+
+
+def _relocate(path, target, project_folder, use_git, fallback_root):
+    """Move a design file and its plain versions; in a git project folder with git mv and a
+    move commit (not a version), so its versions follow it."""
+    old_store = PlainStore(path, fallback_root)
+    root = _git_root_for(path, project_folder, use_git)
+    rel_old = os.path.relpath(path, root).replace(os.sep, "/") if root else None
+    if root and inside(root, target) and _tracked(root, rel_old):
+        rel_new = os.path.relpath(target, root).replace(os.sep, "/")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        _run_git(["mv", "--", rel_old, rel_new], root)
+        _run_git(
+            _identity_args()
+            + [
+                "commit",
+                "-q",
+                "-m",
+                "%s %s to %s" % (MOVE_MESSAGE, rel_old, rel_new),
+                "--only",
+                "--",
+                rel_old,
+                rel_new,
+            ],
+            root,
+        )
+    else:
+        os.replace(path, target)
+    if os.path.isdir(old_store.folder):
+        new_store = PlainStore(target, fallback_root)
+        if not os.path.exists(new_store.folder):
+            os.makedirs(os.path.dirname(new_store.folder), exist_ok=True)
+            os.replace(old_store.folder, new_store.folder)
+
+
+def move_design(path, dest_folder, project_folder=None, use_git=True, fallback_root=None):
+    """The Data Panel's Move: the design goes to `dest_folder` with its versions; its own
+    links and Derives keep pointing at the same designs, and the designs of the project
+    that refer to it are pointed at its new place. Returns (new path, [designs updated]).
+    Refuses (StoreError) a name taken in the destination."""
+    path = os.path.abspath(path)
+    dest_folder = os.path.abspath(dest_folder)
+    if not os.path.isfile(path):
+        raise StoreError("The design %s is not there." % path)
+    if same_path(os.path.dirname(path), dest_folder):
+        raise StoreError("%s is in that folder already." % design_name(path))
+    target = os.path.join(dest_folder, os.path.basename(path))
+    if os.path.exists(target):
+        raise StoreError(
+            "A design called %s is already in %s."
+            % (design_name(path), os.path.basename(dest_folder))
+        )
+    users = referrers(path, project_folder) if project_folder else []
+    _relocate(path, target, project_folder, use_git, fallback_root)
+    try:
+        xml, n = retarget_xml(read_design_xml(target), os.path.dirname(path), dest_folder)
+        if n:
+            write_design_xml(target, xml)
+    except Exception:
+        pass  # a file FreeCAD did not write: it moves as it is
+    updated = []
+    for other in users:
+        try:
+            folder = os.path.dirname(other)
+            xml, n = retarget_xml(read_design_xml(other), folder, folder, path, target)
+            if n:
+                write_design_xml(other, xml)
+                updated.append(other)
+        except Exception:
+            continue
+    return target, updated
+
+
+def copy_design(path, dest_folder):
+    """The Data Panel's Copy: a separate design in `dest_folder` (its own versions start at
+    v1, recorded by the caller); its links and Derives still point at the same designs.
+    A name taken there gets a number ("Bracket 2"). Returns the new path."""
+    path = os.path.abspath(path)
+    dest_folder = os.path.abspath(dest_folder)
+    if not os.path.isfile(path):
+        raise StoreError("The design %s is not there." % path)
+    name = unique_name(dest_folder, design_name(path), DESIGN_SUFFIX)
+    target = os.path.join(dest_folder, name + DESIGN_SUFFIX)
+    atomic_copy(path, target)
+    try:
+        xml, n = retarget_xml(read_design_xml(target), os.path.dirname(path), dest_folder)
+        if n:
+            write_design_xml(target, xml)
+    except Exception:
+        pass
+    return target
+
+
+def project_folders(project_folder):
+    """[(label, path)] of the project folder and every folder in it, for the Move / Copy
+    dialog: "Project", "Project / Robots", "Project / Robots / Arm"..."""
+    found = [("Project", os.path.abspath(project_folder))]
+    for root, dirs, _files in os.walk(project_folder):
+        dirs[:] = sorted(
+            (
+                d
+                for d in dirs
+                if d not in HIDDEN_FOLDERS
+                and not d.startswith(".")
+                and not d.endswith(VERSIONS_SUFFIX)
+            ),
+            key=str.lower,
+        )
+        for d in dirs:
+            full = os.path.join(root, d)
+            rel = os.path.relpath(full, project_folder).replace(os.sep, " / ")
+            found.append(("Project / " + rel, full))
+    return found[:1] + sorted(found[1:], key=lambda row: row[0].lower())
 
 
 def trash_design(path, project_folder):

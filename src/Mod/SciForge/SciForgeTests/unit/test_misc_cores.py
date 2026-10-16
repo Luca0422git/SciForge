@@ -62,6 +62,57 @@ class DeriveCore(unittest.TestCase):
             "2 bodies, 1 sketch and 1 parameter",
         )
 
+    def test_expand_keeps_the_structure(self):
+        # Arm (with Body1 and the component Hand, which holds Body2) and a loose Body3
+        items = {
+            "component:Arm": {
+                "parent": None,
+                "children": ["component:Hand"],
+                "bodies": ["body:Body1"],
+            },
+            "component:Hand": {
+                "parent": "component:Arm",
+                "children": [],
+                "bodies": ["body:Body2", "body:Gone"],
+            },
+            "body:Body1": {},
+            "body:Body2": {},
+            "body:Body3": {},
+            "sketch:S": {},
+        }
+        comps, inside, flat = derive_core.expand(["component:Arm", "body:Body3", "sketch:S"], items)
+        self.assertEqual(comps, ["component:Arm", "component:Hand"])
+        self.assertEqual(
+            inside,
+            {
+                "body:Body1": "component:Arm",
+                "component:Hand": "component:Arm",
+                "body:Body2": "component:Hand",
+            },
+        )
+        self.assertEqual(flat, ["body:Body3", "sketch:S"])
+        # Hand ticked too (already inside Arm) and Body1 ticked alone: no duplicates
+        comps, inside, flat = derive_core.expand(
+            ["component:Hand", "component:Arm", "body:Body1"], items
+        )
+        self.assertEqual(comps, ["component:Arm", "component:Hand"])
+        self.assertEqual(flat, [])
+        # Hand alone: a top component of its own
+        comps, inside, flat = derive_core.expand(["component:Hand"], items)
+        self.assertEqual((comps, inside), (["component:Hand"], {"body:Body2": "component:Hand"}))
+        self.assertEqual(derive_core.expand(["body:Nope"], items), ([], {}, []))
+        self.assertEqual(derive_core.summary(["component:Arm", "body:B"]), "1 component and 1 body")
+        self.assertEqual(derive_core.parse_item("component:Arm"), ("component", "Arm"))
+
+    def test_version_words(self):
+        self.assertEqual(derive_core.version_words(0, 5), "Latest (v5)")
+        self.assertEqual(derive_core.version_words(0, 0), "Latest")
+        self.assertEqual(derive_core.version_words(2, 5), "v2")
+        words = derive_core.state_words(derive_core.NEWER, "Wheel", 2)
+        self.assertIn("v2 of Wheel", words)
+        self.assertIn("newer version exists", words)
+        self.assertIn("saved again", derive_core.state_words(derive_core.NEWER, "Wheel"))
+
     def test_unique_parameter_names(self):
         self.assertEqual(derive_core.unique_name("width", []), "width")
         self.assertEqual(derive_core.unique_name("width", ["width"]), "width_1")
@@ -289,7 +340,11 @@ class PrefsCore(unittest.TestCase):
         proxy = prefs_core.writes("proxy", "none")
         self.assertEqual(proxy[0], (prefs_core.ADDONS, "String", "proxy_type", "none"))
         self.assertEqual(proxy[1][2], "proxy_settings_migrated_2025")
-        self.assertEqual(prefs_core.writes("version_on_close", True), [])
+        self.assertEqual(
+            prefs_core.writes("version_on_close", False),
+            [(prefs_core.FILES, "Bool", "VersionOnClose", False)],
+        )
+        self.assertEqual(prefs_core.writes("default_appearance", "x"), [])
         self.assertEqual(prefs_core.writes("decimals", None)[0][3], None)
 
     def test_restore_plan_and_groups(self):
@@ -297,7 +352,8 @@ class PrefsCore(unittest.TestCase):
         self.assertEqual(plan["mouse_preset"], "fusion")
         self.assertIs(plan["reverse_zoom"], False)
         self.assertIs(plan["capture_history"], True)
-        self.assertNotIn("version_on_close", plan)
+        self.assertIs(plan["version_on_close"], True)  # Fusion's default
+        self.assertNotIn("default_appearance", plan)
         groups = [g for g, _opts in prefs_core.groups("general")]
         self.assertEqual(groups, ["Language", "Navigation", "Saving and Recovery"])
         self.assertEqual(prefs_core.changed({"a": 1, "b": 2}, {"a": 1, "b": 3}), ["b"])

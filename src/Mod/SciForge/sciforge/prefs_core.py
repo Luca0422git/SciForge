@@ -186,11 +186,11 @@ OPTIONS = [
         "general",
         "Automatic version on close",
         "bool",
-        False,
-        None,
+        True,
+        (FILES, "Bool", "VersionOnClose"),
         group="Saving and Recovery",
-        available=False,
-        why="Not built yet: closing a changed design asks to save it.",
+        tip="On (Fusion's default): closing a saved design with changes saves them as a new "
+        "version. Off: closing it asks whether to save a version first.",
     ),
     _option(
         "ask_description",

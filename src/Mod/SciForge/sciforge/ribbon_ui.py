@@ -279,6 +279,16 @@ class RibbonWidget(QtWidgets.QWidget):
         self.title = QtWidgets.QLabel("")
         self.title.setProperty("role", "document")
         row.addWidget(self.title)
+        # Fusion's Out-of-Date icon: something of the design has a newer saved version
+        # (versions_ui.out_of_date); its menu has Get Latest.
+        self.out_of_date = QtWidgets.QToolButton()
+        self.out_of_date.setObjectName("SciForgeOutOfDate")
+        self.out_of_date.setAutoRaise(True)
+        self.out_of_date.setToolTip("Out of date: a newer version exists. Click for Get Latest")
+        self.out_of_date.clicked.connect(self._out_of_date_menu)
+        self.out_of_date.hide()
+        self._out_of_date_ticks = 0
+        row.addWidget(self.out_of_date)
         row.addStretch(1)
         search = QtWidgets.QToolButton()
         search.setIcon(ui_icon("nav_zoom"))
@@ -403,3 +413,39 @@ class RibbonWidget(QtWidgets.QWidget):
                 self.title.setText(text)
         except Exception:
             pass
+        self._out_of_date_ticks += 1
+        if self._out_of_date_ticks % 3 == 0:  # every 2 s: it reads files' dates
+            self.refresh_out_of_date()
+
+    def refresh_out_of_date(self):
+        """Show the Out-of-Date button while the active design has something newer."""
+        try:
+            import FreeCAD as App
+
+            from . import versions_ui
+
+            items = versions_ui.out_of_date(App.ActiveDocument) if App.ActiveDocument else []
+            if items and self.out_of_date.icon().isNull():
+                self.out_of_date.setIcon(versions_ui.out_of_date_icon())
+            self.out_of_date.setToolTip(
+                "Out of date: %s. Click for Get Latest." % "; ".join(w for _k, _n, w in items)
+                if items
+                else ""
+            )
+            self.out_of_date.setVisible(bool(items))
+        except Exception as exc:
+            warn("out of date: %s" % exc)
+
+    def _out_of_date_menu(self):
+        try:
+            import FreeCAD as App
+
+            from . import versions_ui
+
+            menu = QtWidgets.QMenu(self.out_of_date)
+            menu.setObjectName("SciForgeOutOfDateMenu")
+            versions_ui.out_of_date_menu(menu, App.ActiveDocument)
+            menu.exec_(self.out_of_date.mapToGlobal(QtCore.QPoint(0, self.out_of_date.height())))
+            self.refresh_out_of_date()
+        except Exception as exc:
+            warn("out of date: %s" % exc)

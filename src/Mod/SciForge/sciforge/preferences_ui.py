@@ -262,6 +262,7 @@ def reset_for_tests():
         "default_material",
         "orientation",
         "active_component_visibility",
+        "version_on_close",
     ):
         opt = core.option(key)
         try:
