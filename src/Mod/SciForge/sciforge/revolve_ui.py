@@ -27,7 +27,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import bodies_row_ui, commands, drag_guard, extrude, handles3d, log, preview
-from . import origin_look, profile_pick, revolve, ui_icon_path, warn
+from . import origin_look, profile_pick, protractor, revolve, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
 
@@ -194,6 +194,8 @@ class AngleHandle(BoxCarrier):
         self._last_event = 0.0
         self._hover = False
         self._painted_hover = None
+        self._mark = None  # the snap angle the drag sits on (protractor)
+        self._wheel = protractor.Wheel()
         self.root = coin.SoAnnotation()  # drawn over the part, like Fusion's handles
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -393,6 +395,10 @@ class AngleHandle(BoxCarrier):
             else:
                 value -= self._offset
             self._last_pos = (float(position[0]), float(position[1]))
+            # 0 / 45 / 90... pull the angle; Ctrl moves it freely (protractor)
+            value, self._mark = protractor.snap_angle(
+                self.view, value, self.center, self.axis, self.zero, self.radius
+            )
             self._pending = value
         except Exception as exc:
             warn("revolve handle: %s" % exc)
@@ -411,12 +417,20 @@ class AngleHandle(BoxCarrier):
                 return
             drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
+            if self._drag and not self._wheel.shown():
+                # the protractor wheel shows where the angle snaps while it is held (made
+                # here, not in the mouse callback: no nodes added while Coin traverses)
+                self._wheel.show(self.view, self.center, self.axis, self.zero, self.radius)
+                self._wheel.update(self._value, protractor.core.on_snap(self._value))
             pending = self._pending
             if pending is not None and abs(pending - self._value) > 1e-6:
                 self._value = pending
                 self._draw()
+                self._wheel.update(self._value, self._mark)
                 if self.on_drag:
                     self.on_drag(pending)
+            if not self._drag:
+                self._wheel.hide()
             if self._released and not self._drag:
                 self._released = False
                 self._pending = None
@@ -431,6 +445,7 @@ class AngleHandle(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        self._wheel.hide()
         try:
             handles3d.stop_watching(self)
         except Exception:

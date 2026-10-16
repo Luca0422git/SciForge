@@ -30,7 +30,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_pick, taskui
-from . import bodies, extrude_bodies, extrude_to_face, text, ui_icon_path, warn
+from . import bodies, extrude_bodies, extrude_to_face, protractor, text, ui_icon_path, warn
 from . import extrude_bodies_core as bodies_core
 from . import extrude_to_face_core as to_face
 from .compat import QtCore, QtWidgets
@@ -174,6 +174,7 @@ class AngleDragger(BoxCarrier):
         self.on_release = on_release
         self._last = self.angle()
         self._was_active = False
+        self._wheel = protractor.Wheel()  # shown while the disc is held
         self.view.getSceneGraph().addChild(self.root)
         self._timer = QtCore.QTimer()
         self._timer.setInterval(self.POLL_MS)
@@ -268,16 +269,47 @@ class AngleDragger(BoxCarrier):
         return value
 
     def set_angle(self, degrees):
+        self._turn_to(degrees)
+        self._last = degrees
+
+    def _turn_to(self, degrees):
         from pivy import coin
 
         half = math.radians(degrees) / 2.0
         self.dragger.rotation.setValue(coin.SbRotation(0, 0, math.sin(half), math.cos(half)))
-        self._last = degrees
+
+    def _snap(self, value, held=True):
+        """While the disc is held (and at its release): 0 / 45 / 90... pull it (Ctrl: free;
+        Incremental Move: its steps) and the protractor wheel shows it. The disc is turned
+        onto the snapped angle; its next mouse move starts again from where the press began
+        (Coin), so nothing adds up."""
+        if held and not self._wheel.shown():
+            self._wheel.show(self.view, self.pivot, self.axis, self.zero, self.radius)
+        if held:  # the release keeps what Ctrl was while the disc was held
+            self._free = protractor.ctrl_held()
+        snapped, mark = protractor.snap_angle(
+            self.view,
+            value,
+            self.pivot,
+            self.axis,
+            self.zero,
+            self.radius,
+            free=getattr(self, "_free", False),
+        )
+        if abs(snapped - value) > 1e-6:
+            self._turn_to(snapped)
+            value = self.angle()
+        self._wheel.update(value, mark)
+        return value
 
     def _poll(self):
         try:
             active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
             value = self.angle()
+            if active or self._was_active:  # the release keeps the snap too
+                value = self._snap(value, held=active)
+            if not active:
+                self._wheel.hide()
             if abs(value - self._last) > 1e-6:
                 self._last = value
                 if self.on_drag:
@@ -294,6 +326,7 @@ class AngleDragger(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        self._wheel.hide()
         try:
             drag_guard.before_remove(self.dragger, self.root, self.view)
             self.view.getSceneGraph().removeChild(self.root)
