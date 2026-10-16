@@ -73,7 +73,7 @@ pinion; FreeCAD's internal gear uses 0.6 m for the same reason). Root fillet rad
   outline's area (Green's theorem); backlash; every refusal and its message.
 - Golden: `sf_gear_spur_basic`, `sf_gear_edit_teeth`, `sf_gear_internal`, `sf_gear_english`
   (bbox analytic, volume baseline-freecad-1.1.4), `sf_gear_rack` (all analytic),
-  `sf_gear_cut_block` (Pocket into a block, baseline).
+  `sf_gear_cut_block` (Pocket into a block) and `sf_gear_join_block` (Join onto it), baseline.
 - Scenarios (real mouse and keyboard): `gear_spur` (main use, 24 -> 30 teeth with the
   preview, arrow drag, OK, Undo / Redo, timeline edit, Cancel, Esc), `gear_types`
   (Internal, Rack by teeth and by length, English on XZ with Symmetric, save / reopen and

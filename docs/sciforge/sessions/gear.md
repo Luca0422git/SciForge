@@ -60,8 +60,10 @@ internal + rack (approved plan, item A3). Spec with sources, what is built and t
 
 - Unit `test_gear_core.py`: 27 tests, pass (whole unit suite 1283, pass).
 - Golden: sf_gear_spur_basic, sf_gear_edit_teeth, sf_gear_internal, sf_gear_english,
-  sf_gear_rack (analytic), sf_gear_cut_block: pass.
-- Scenarios: gear_spur (59 checks), gear_types (50), gear_refuse (38): pass.
+  sf_gear_rack (analytic), sf_gear_cut_block, sf_gear_join_block: pass. `--only base`
+  (unit, every golden model: 426 pass + 2 known xfail, smoke, journey): pass.
+- Scenarios: gear_spur (59 checks), gear_types (51), gear_refuse (38): pass; the Coil's
+  primitives_coil (70) still passes (`primitives.py` changed by one line).
 
 ## Gaps
 
