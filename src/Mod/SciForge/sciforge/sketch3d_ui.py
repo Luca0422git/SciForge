@@ -427,6 +427,13 @@ class Triad:
         return False
 
     def _apply_typed(self):
+        """The typed distance, Enter (from a Qt timer: nothing gets out)."""
+        try:
+            self._apply_typed_now()
+        except Exception as exc:
+            warn("3D Sketch: %s" % exc)
+
+    def _apply_typed_now(self):
         text, self.typing = self.typing, None
         try:
             field = draw.Field("distance", draw.LENGTH)

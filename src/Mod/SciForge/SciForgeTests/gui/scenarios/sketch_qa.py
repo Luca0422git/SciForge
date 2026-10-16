@@ -894,16 +894,37 @@ def g_rect_check():
     si.menu_item("MODIFY", "Fillet")
 
 
+def fillet_tool():
+    from sciforge import sketch_draw
+
+    return sketch_draw.current_tool()
+
+
 def g_click_corner():
+    # SKETCH > MODIFY > Fillet is SciForge's own tool since sketch-2 (Fusion: the corner,
+    # then the radius box with the arc previewed; Enter makes it)
+    t = fillet_tool()
+    h.check("G: the Fillet tool runs", t is not None and t.title == "Fillet", t and t.title)
     si.click(V(30, 20, 0))
 
 
 def g_box():
-    arcs = [g for g in s["sk"].Geometry if g.TypeId == "Part::GeomArcOfCircle"]
-    h.check("G: the corner is rounded", len(arcs) == 1, s["sk"].Geometry)
-    h.check("G: the radius box opens (Fusion asks for the radius)", editor() is not None)
+    t = fillet_tool()
+    h.check(
+        "G: the radius box opens (Fusion asks for the radius)",
+        t is not None and t.step == 2 and [f.name for f in t.fields()] == ["radius"],
+        t and t.step,
+    )
     h.shot("G-fillet-box")
     si.type_text("4")
+
+
+g_box.wait_ms = 700
+
+
+def g_rounded():
+    arcs = [g for g in s["sk"].Geometry if g.TypeId == "Part::GeomArcOfCircle"]
+    h.check("G: the corner is rounded", len(arcs) == 1, s["sk"].Geometry)
 
 
 def g_radius():
@@ -1256,6 +1277,7 @@ h.run(
             g_rect_check,
             g_click_corner,
             g_box,
+            g_rounded,
             g_radius,
             g_extrude,
             g_ok,

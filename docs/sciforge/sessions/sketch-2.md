@@ -76,16 +76,19 @@ FreeCAD core file changed (no full build needed).
 
 ## Tests
 
-New scenarios (real FreeCAD 1.1.4, real input, one at a time): `sketch2_select` (82 checks),
-`sketch2_fillet`, `sketch2_text_frame`, `sketch2_box_planes` (43), `sketch2_project`,
-`sketch2_3d`, `sketch2_palette`; counts of the final run are in the report. Updated:
-`modeling2_sketch` (SciForge's fillet). Unit tests: `test_sketch_select_core.py`,
+New scenarios (real FreeCAD 1.1.4, real input, one at a time), final run: `sketch2_select`
+82 checks, `sketch2_fillet` 151, `sketch2_text_frame` 70, `sketch2_box_planes` 43,
+`sketch2_project` 95, `sketch2_3d` 175, `sketch2_palette` 64, all PASS. Updated:
+`modeling2_sketch` (131) and `sketch_qa` G (460): SKETCH > MODIFY > Fillet is SciForge's
+tool now, so the arc comes after the radius is typed (Fusion's order), not at the corner
+click. Unit tests: `test_sketch_select_core.py`,
 `test_sketch_fillet_core.py`, `test_sketch3d_core.py`, `test_sketch_chamfer_core.LineAndArc`,
 `test_browser_core` (curves under their sketch), `test_selection_core` (work geometry).
 Regression in one profile: every `sketch_*`, `sketch_text_*`, `sketch_tools_*`,
 `fixsketch_*`, `selection_*`, `emboss_*`, `timeline_browser*`, `sweep_loft_sweep`,
-`sketch_sweep`, `ribbon_sweep`, `bodies_delete`, `mesh_separate_combine`, `modeling2_sketch`,
-plus `--only base`.
+`sketch_sweep`, `ribbon_sweep`, `bodies_delete`, `mesh_separate_combine`, `modeling2_sketch`
+(68 scenarios, all PASS; `timeline_browser_qa4` failed once under load on "the marker is in
+view at the end" and passed alone), plus `--only base`; 1166 unit tests.
 
 ## Gaps (also in the parity docs)
 
@@ -105,4 +108,5 @@ Geometries), `sketch_draw.py` (`curve_at(own=)`, 3D preview points), `sketch_pal
 `text_core.py` / `text_ui.py` (frame resize), `selection_core.py` / `selection_ui.py` (planes),
 `browser_core.py` / `browser_ui.py` (curves under their sketch, Delete), `delete.py` and
 `timeline_ops.GOES_WITH_STEP` (deleted with the sketch), `sweep_ui.py` (3D curves as a path),
-`ribbon_config.py` (the Fillet and Fit Point Spline lines only).
+`ribbon_config.py` (the Fillet and Fit Point Spline lines only); scenario `sketch_qa.py`
+(G: the fillet's new order).
