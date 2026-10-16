@@ -16,7 +16,8 @@ Path M3 (edit: a rail on another body, Direction ends): double-click Loft 1, Mer
         click the Rails box, then the prism's upright edge at (15, 0): it is taken (an edge
         of another body); the loft follows it (the same straight slot); First and Last
         Profile Direction (square off the profiles): still the straight slot (8356.19,
-        OpenCASCADE measures spline sides to about 0.2 %). OK.
+        OpenCASCADE measures spline sides to about 0.2 %); Takeoff Weight typed as the
+        user parameter w (1.5): an expression on the loft, the same slot. OK.
 Path M4 (a centerline with a Direction end): edit again, Guide Type Centerline, click the
         Centerline box, then the line where it runs above the slots: the profiles held square
         to it, the loft ends at the profiles, Direction at both ends: the straight slot again.
@@ -357,11 +358,45 @@ def m3_ends():
         vol(),
     )
     h.shot("2-rail-ends")
+    from sciforge import parameters
+
+    # Change Parameters (its own dialog) made this user parameter (a plain number)
+    parameters.add_user(App.ActiveDocument, "w", "", "1.5")
+    ui.type_into(p.ends["start"]["weight"].widget, "w")
+
+
+def _weight_state(p):
+    from sciforge.compat import QtWidgets
+
+    field = p.ends["start"]["weight"]
+    edit = field.widget.findChild(QtWidgets.QLineEdit)
+    return (
+        p.formulas,
+        edit.text() if edit is not None else None,
+        p.formula_inputs["start_weight"].raw,
+        field.widget.isVisible(),
+        p.message.text(),
+    )
+
+
+def m3_formula():
+    p = wait_loft()
+    engine = dict(s["loft"].ExpressionEngine) if s.get("loft") is not None else {}
+    h.check("the weight takes a formula", "StartWeight" in engine, (engine, _weight_state(p)))
+    h.check(
+        "it evaluates to 1.5",
+        p is not None and st.near(p.ends["start"]["weight"].value(), 1.5),
+        p and p.ends["start"]["weight"].value(),
+    )
+    h.check("the same slot", st.near(vol(), SLOT, 5e-3), vol())
     h.task_button("OK")
 
 
 def m3_done():
     h.check("dialog closed", not Gui.Control.activeDialog())
+    engine = dict(s["loft"].ExpressionEngine)
+    h.check("the formula is kept", "StartWeight" in engine, engine)
+    h.check("the loft follows it", st.near(s["loft"].StartWeight, 1.5), s["loft"].StartWeight)
     h.check("kept", st.near(vol(), SLOT, 5e-3), vol())
 
 
@@ -377,6 +412,11 @@ def m4_centerline():
         return
     h.check("Direction read back", p.options["start_condition"] == "direction", p.options)
     h.check("the rail read back", len(p.rails) == 1, p.rails)
+    h.check(
+        "the weight's formula read back",
+        p.formulas.get("start_weight") == "w",
+        (p.formulas, dict(p.target.ExpressionEngine)),
+    )
     ui.choose(p.guide, "Centerline")
 
 
@@ -494,6 +534,7 @@ h.run(
         m3_rail_taken,
         m3_last_direction,
         m3_ends,
+        m3_formula,
         m3_done,
         m4_edit,
         m4_centerline,

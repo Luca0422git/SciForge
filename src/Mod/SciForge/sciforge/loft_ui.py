@@ -44,6 +44,14 @@ MERGE_TIP = (
 )
 
 
+END_PROPS = {
+    "start_weight": "StartWeight",
+    "start_angle": "StartAngle",
+    "end_weight": "EndWeight",
+    "end_angle": "EndAngle",
+}
+
+
 def profile_text(index, profile):
     obj, sub = profile
     if sub.startswith("Vertex"):
@@ -99,6 +107,7 @@ class LoftPanel(Panel):
         self.rails = []
         self.centerline = []
         self.options = dict(loft.DEFAULTS)
+        self.formulas = {}  # end value -> the formula typed for it
         self.user_picked_operation = feature is not None
         self.error = ""
         self.dirty = False
@@ -114,6 +123,10 @@ class LoftPanel(Panel):
                 self.profiles, self.rails, self.centerline, read = loft.read(feature)
                 stored = read.pop("bodies", None)
                 self.options.update(read)
+                for key, prop in END_PROPS.items():
+                    text = preview.formula_of(feature, prop)
+                    if text:
+                        self.formulas[key] = text
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
             self._show_sketches()
@@ -212,6 +225,7 @@ class LoftPanel(Panel):
         self.merge.setToolTip(MERGE_TIP)
         form.addRow("", self.merge)
         self.ends = {}
+        self.formula_inputs = {}
         for end, title in END_TITLES:
             row = {"kind": None}
             row["combo"] = QtWidgets.QComboBox()
@@ -232,6 +246,11 @@ class LoftPanel(Panel):
             form.addRow(row["angle_label"], row["angle"].widget)
             row["combo"].activated.connect(self._end_picked)
             self.ends[end] = row
+            # Fusion's value fields take a parameter or a formula ("w * 2"): the loft then
+            # follows the parameter (an expression on the loft's property)
+            for name in ("weight", "angle"):
+                key = "%s_%s" % (end, name)
+                self.formula_inputs[key] = preview.FormulaInput(self, key, row[name])
         self.operation = curve_pick.combo(OPERATION_LABELS, self.options["operation"])
         self.operation.setObjectName("SciForgeLoft_operation")
         form.addRow("Operation", self.operation)
@@ -348,6 +367,34 @@ class LoftPanel(Panel):
         if self._quiet:
             return
         self._changed()
+
+    # preview.FormulaInput calls these for the weight and angle fields
+    def formula_typed(self, key, text, value):
+        self.formulas[key] = text
+        log("loft: %s = %s" % (key.replace("_", " "), text))
+        self._changed()
+
+    def formula_cleared(self, key):
+        if self.formulas.pop(key, None) is not None:
+            self._changed()
+
+    def formula_failed(self, key, message):
+        log("loft: %s: %s" % (key.replace("_", " "), message))
+        self.message.setText("⚠ " + message)
+
+    def _apply_formulas(self):
+        """The formulas typed for the end values, as expressions on the loft (SciForge's own
+        loft only: FreeCAD's has no end conditions)."""
+        if self.target is None or not loft.is_own(self.target):
+            return
+        for key, prop in END_PROPS.items():
+            text = self.formulas.get(key, "")
+            if self.options.get(key.split("_")[0] + "_condition", "free") == "free":
+                text = ""
+            try:
+                preview.set_formula(self.target, prop, text)
+            except Exception as exc:
+                warn("loft formula: %s" % exc)
 
     def _collect(self):
         self.options["guide"] = self.guide.currentData()
@@ -747,6 +794,7 @@ class LoftPanel(Panel):
                 feature=self.target,
                 hide=False,
             )
+            self._apply_formulas()
             self.error = self._misses()
         except (loft.LoftError, curves.CurveError, ValueError) as exc:
             self.error = str(exc)

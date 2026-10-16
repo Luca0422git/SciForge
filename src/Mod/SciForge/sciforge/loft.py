@@ -385,7 +385,6 @@ def _rail_loft(sections, rails, merge=False, options=None):
             if not cut:
                 continue
             wire = max(cut, key=lambda w: w.BoundBox.DiagonalLength)
-            center = origin + normal * h
             pairs = []
             for j, rail in enumerate(rails):
                 guess = contacts[j][i] + (contacts[j][i + 1] - contacts[j][i]) * t
@@ -981,14 +980,22 @@ def _update(feature, profiles, rail_refs, centerline_refs, options, hide=True):
         if bool(getattr(feature, "MergeTangentEdges", False)) != options["merge"]:
             feature.MergeTangentEdges = options["merge"]
         feature.Refine = True
+        driven = {path for path, _expr in feature.ExpressionEngine}  # a formula drives it
         for end in ("start", "end"):
             cap = end.capitalize()
             if getattr(feature, cap + "Condition") != options[end + "_condition"]:
                 setattr(feature, cap + "Condition", options[end + "_condition"])
-            if abs(getattr(feature, cap + "Weight") - options[end + "_weight"]) > 1e-12:
-                setattr(feature, cap + "Weight", options[end + "_weight"])
-            if abs(getattr(feature, cap + "Angle").Value - options[end + "_angle"]) > 1e-12:
-                setattr(feature, cap + "Angle", options[end + "_angle"])
+            weight, angle = cap + "Weight", cap + "Angle"
+            if (
+                weight not in driven
+                and abs(getattr(feature, weight) - options[end + "_weight"]) > 1e-12
+            ):
+                setattr(feature, weight, options[end + "_weight"])
+            if (
+                angle not in driven
+                and abs(getattr(feature, angle).Value - options[end + "_angle"]) > 1e-12
+            ):
+                setattr(feature, angle, options[end + "_angle"])
     meta = load_meta(feature)
     meta.update(
         {
