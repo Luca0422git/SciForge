@@ -345,6 +345,11 @@ def _rail_loft(sections, rails, merge=False, options=None):
         raise LoftError("Rails need profiles with an area at both ends (no points).")
     if any(len(s.wires) > 1 for s in sections):
         raise LoftError("Rails work with profiles without holes. Cut the holes afterwards.")
+    if len(rails) > 2:
+        raise LoftError(
+            "SciForge's loft follows one or two rails (%d picked). Take the others away."
+            % len(rails)
+        )
     normal = App.Vector(sections[0].normal)
     if any(abs(abs(s.normal.dot(normal)) - 1.0) > 1e-6 for s in sections[1:]):
         return _rail_loft_turning(sections, rails, merge, options)
@@ -409,8 +414,9 @@ def _rail_loft(sections, rails, merge=False, options=None):
 
 def _rail_loft_turning(sections, rails, merge=False, options=None):
     """Rails between profiles in planes that are not parallel (a loft that turns): sections
-    of the plain loft between each pair of profiles, moved, turned and scaled evenly so that
-    they touch the rails (the surface loft's way, surface_geom._rail_stations)."""
+    of the plain loft between each pair of profiles, moved, turned and (two rails) stretched
+    toward the rails so that they touch them (the surface loft's way,
+    surface_geom._rail_stations)."""
     from . import surface_core
     from . import surface_geom
 
