@@ -81,6 +81,10 @@ if [ "${ADDON:-0}" = 1 ]; then
 fi
 export FREECAD_USER_HOME="${PROFILE}"
 export LANG=C.UTF-8
+# No compiled leftovers: Python reuses a module's .pyc when the source has the same size and
+# modification second, and a same-size edit made by git within that second (a merge, a
+# checkout) then ran the old code (sweep_loft_qa_web failed in a worktree for that reason).
+find "${MODULE}" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 run_unit() {
     echo "== [SciForge] unit tests"
