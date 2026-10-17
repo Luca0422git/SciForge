@@ -20,6 +20,7 @@ START = "User parameter:BaseApp/Preferences/Mod/Start"
 OPTION = ("User parameter:BaseApp/Preferences/Mod/SciForge", "StartInSciForge")
 BACKUP = "User parameter:BaseApp/Preferences/Mod/SciForge/StartupBackup"
 WORKBENCH = "SciForgeWorkbench"
+THEME_DONE = "FirstStartThemeApplied"  # (in OPTION's group)
 
 # (path, kind, name, SciForge's value), as theme.VIEWER_SETTINGS
 SETTINGS = [
@@ -118,6 +119,9 @@ def _first_start_theme():
     window = App.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
     if "StyleSheet" in window.GetStrings():
         return  # a theme was chosen (by the Start page, a pack, the user)
+    marks = App.ParamGet(OPTION[0])
+    if marks.GetBool(THEME_DONE, False):
+        return  # applied once already (SciForge's own look stays on)
     name = "FreeCAD Dark" if _system_dark() else "FreeCAD Light"
     path = os.path.join(App.getResourceDir(), "Gui", "PreferencePacks", name, name + ".cfg")
     if not os.path.isfile(path):
@@ -132,6 +136,15 @@ def _first_start_theme():
     top = ET.SubElement(out, "FCParamGroup", Name="Root")
     for child in list(base[0]):
         top.append(child)
+    # Its colours only, not its window style (MainWindow: StyleSheet, QtStyle, Theme) nor
+    # its accent colours (Themes): a change to either makes FreeCAD load its stylesheet
+    # again a moment later, over SciForge's own look (the first start came out with a
+    # light ribbon and greyed icons). SciForge's look has its own colours.
+    for prefs in top.findall("FCParamGroup"):
+        if prefs.get("Name") == "Preferences":
+            for group in prefs.findall("FCParamGroup"):
+                if group.get("Name") in ("MainWindow", "Themes"):
+                    prefs.remove(group)
     handle, temp = tempfile.mkstemp(suffix=".cfg")
     os.close(handle)
     try:
@@ -139,11 +152,8 @@ def _first_start_theme():
         App.ParamGet("User parameter:BaseApp").Insert(temp)
     finally:
         os.remove(temp)
-    themes = App.ParamGet("User parameter:BaseApp/Preferences/Themes")
-    if "ThemeAccentColor1" not in themes.GetUnsigneds():
-        for i in (1, 2, 3):  # (the Start page's defaults)
-            themes.SetUnsigned("ThemeAccentColor%d" % i, 1434171135)
-    log("the %s theme applied (a fresh profile; FreeCAD's Start page would have)" % name)
+    marks.SetBool(THEME_DONE, True)
+    log("the %s theme's colours applied (a fresh profile; FreeCAD's Start page would have)" % name)
 
 
 def at_launch():
