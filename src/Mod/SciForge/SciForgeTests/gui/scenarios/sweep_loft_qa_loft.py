@@ -106,7 +106,10 @@ def a_centre():
 
 
 def a_radius():
-    si.click(V(8, 0, 0))
+    # Ctrl: placed freely, as a person drawing "about 8" does. Without it the sketch grid's
+    # snap can take the point to the 10 mm line (it did once the document tabs moved to the
+    # top and the 3D view became 13 px shorter: the grid's spacing follows the zoom)
+    si.click_held(V(8, 0, 0), QtCore.Qt.ControlModifier)
 
 
 def a_finish():
