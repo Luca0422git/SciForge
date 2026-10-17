@@ -153,6 +153,13 @@ run_gui_base() {
     run_gui_script smoke smoke_gui.py gui.log result.json
     # The journey uses SciForge like a person: real clicks and drags on the 3D view.
     run_gui_script journey journey_gui.py journey.log journey-result.json
+    # FreeCAD opened twice with one profile: the second start restores the window layout the
+    # first one saved, after SciForge is on (Luca, 2026-10-17: only the browser was left)
+    local phase
+    for phase in 1 2; do
+        SCIFORGE_RESTART_PHASE="${phase}" run_gui_script restart restart_gui.py \
+            "restart-${phase}.log" "restart-${phase}.json"
+    done
     return 0
 }
 
