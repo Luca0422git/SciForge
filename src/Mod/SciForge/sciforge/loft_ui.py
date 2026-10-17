@@ -81,6 +81,20 @@ def selected():
     return loft.normalize(found)
 
 
+def _picked_points():
+    """{(object name, short element name): the clicked 3D point} of the current selection."""
+    points = {}
+    try:
+        for sel in Gui.Selection.getSelectionEx():
+            for name, point in zip(sel.SubElementNames, sel.PickedPoints):
+                obj, short = profile_pick.resolve(sel.Object, name)
+                if obj is not None:
+                    points[(obj.Name, short)] = point
+    except Exception:
+        pass
+    return points
+
+
 class LoftPanel(Panel):
     title = "Loft"
     icon = "loft"
@@ -530,6 +544,7 @@ class LoftPanel(Panel):
             picks = [(o, s) for o, s in profile_pick.picks() if o.Document is self.doc]
             if not picks:
                 return
+            self._points = _picked_points()
             Gui.Selection.clearSelection()
             if self.picker is not None and self.picker.clicked_region_recently():
                 return
@@ -565,6 +580,18 @@ class LoftPanel(Panel):
                 self._toggle_profile((obj, short))
             return
         if short.startswith("Face"):
+            if self.active in ("rails", "centerline"):
+                # a rail is an edge: a click on a face a hair from one of its edges takes the
+                # edge (an edge lying on another body's face, as a prism's edge touching the
+                # slot's round end, is drawn at the same depth and the face took the click)
+                point = getattr(self, "_points", {}).get((obj.Name, short))
+                ref = (obj, short)
+                if self._own_body(obj):  # as the body is before the loft
+                    ref = curve_pick.base_element(base, obj, short)
+                edge = self._edge_beside(ref[0], ref[1], point) if ref else None
+                if edge is not None:
+                    self._toggle_curve(self.active, (ref[0], edge))
+                    return
             ref = curve_pick.base_element(base, obj, short)
             if ref is None:
                 self.message.setText("⚠ That face belongs to this loft itself.")
@@ -574,6 +601,30 @@ class LoftPanel(Panel):
                 self.message.setText("⚠ Only flat faces can be lofted. Pick a flat face.")
                 return
             self._toggle_profile(ref)
+
+    def _edge_beside(self, obj, short, point):
+        """The name of the edge of face `short` of `obj` within 6 pixels of the clicked
+        `point`, or None."""
+        import Part
+
+        if point is None:
+            return None
+        view = Gui.ActiveDocument.ActiveView
+        try:
+            x, y = view.getPointOnViewport(point)
+            reach = (view.getPointOnFocalPlane(x, y) - view.getPointOnFocalPlane(x + 6, y)).Length
+        except Exception:
+            reach = 0.5
+        face = obj.Shape.getElement(short)
+        best, near = None, reach
+        for edge in face.Edges:
+            for i, candidate in enumerate(obj.Shape.Edges):
+                if not candidate.isSame(edge):
+                    continue
+                d = extrude._to_global(edge, obj).distToShape(Part.Vertex(point))[0]
+                if d <= near:
+                    best, near = "Edge%d" % (i + 1), d
+        return best
 
     def _own_body(self, obj):
         """True for an object of the body the loft is built in (or its preview body)."""

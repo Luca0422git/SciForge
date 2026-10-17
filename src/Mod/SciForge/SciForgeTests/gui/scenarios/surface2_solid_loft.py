@@ -13,7 +13,7 @@ Path M1 (Merge): CREATE > Loft, click inside both slots: one side face per profi
         smoothly, loft into one side face (3 faces). OK: "Loft 1".
 Path M2 (undo / redo).
 Path M3 (edit: a rail on another body, Direction ends): double-click Loft 1, Merge off;
-        click the Rails box, then the prism's upright edge at (15, 0): it is taken (an edge
+        click the Rails box, then the prism beside its upright edge at (15, 0): it is taken (an edge
         of another body); the loft follows it (the same straight slot); First and Last
         Profile Direction (square off the profiles): still the straight slot (8356.19,
         OpenCASCADE measures spline sides to about 0.2 %); Takeoff Weight typed as the
@@ -325,7 +325,10 @@ def m3_click_edge():
     p = panel()
     h.check("the Rails box takes the clicks", p is not None and p.active == "rails", p and p.active)
     h.fit()
-    h.check("clicked the prism's upright edge", h.click_edge(V(15, 0, 20)))
+    # on the prism's side face a hair (0.15 mm, about 2 px) from its upright edge: the edge
+    # lies on the slot's round end, where the face of either body can take a click on the
+    # edge itself; the Rails box takes the edge beside the click
+    h.click(V(15.13, -0.065, 10))
 
 
 def m3_rail_taken():
