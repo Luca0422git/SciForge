@@ -152,20 +152,26 @@ def spot(
     if past_tip:
         ways = ways[2:] + ways[:2]
     step = 0.6 * max(width, height)  # further out when the spots beside the arrow are taken
-    best = None
+    spots = []
     for k in range(4):
         for (nx, ny), (ox, oy), reach in ways:
             cx, cy = ox + nx * (reach + k * step), oy + ny * (reach + k * step)
             left = max(EDGE, min(cx - width / 2.0, view_w - width - EDGE))
             top = max(EDGE, min(cy - height / 2.0, view_h - height - EDGE))
             rect = (left, top, width, height)
-            clear = clearance(tail, tip, rect) - radius
+            handles = clearance(tail, tip, rect) - radius
             for other_tail, other_tip, other_radius in avoid:
-                clear = min(clear, clearance(other_tail, other_tip, rect) - float(other_radius))
-            for other in avoid_rects:
-                clear = min(clear, rect_gap(rect, other))
-            if clear >= 1.0:
+                handles = min(handles, clearance(other_tail, other_tip, rect) - float(other_radius))
+            boxes = min((rect_gap(rect, other) for other in avoid_rects), default=1e9)
+            if min(handles, boxes) >= 1.0:
                 return int(round(left)), int(round(top))
-            if k == 0 and (best is None or clear > best[0]):
-                best = (clear, left, top)
-    return int(round(best[1])), int(round(best[2]))
+            spots.append((handles, boxes, k, left, top))
+    # Nothing fits at all: a box over another box costs less than a box over a handle (the
+    # handle can no longer be grabbed there: CI #145-#149, Insert Canvas's crowded handles
+    # with wider fonts). The nearest spot clear of every handle, else the least covering.
+    free = [s for s in spots if s[0] >= 1.0]
+    if free:
+        best = max(free, key=lambda s: (s[1], -s[2]))
+    else:
+        best = max(spots, key=lambda s: (s[0], -s[2]))
+    return int(round(best[3])), int(round(best[4]))

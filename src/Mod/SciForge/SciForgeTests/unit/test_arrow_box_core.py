@@ -161,6 +161,15 @@ class Spot(unittest.TestCase):
         size = core.handle_size(0.7, hi=12.0 / 6.0)
         self.assertLessEqual(2 * core.REACH * size, 6.0 + 1e-9)
 
+    def test_crowded_box_never_covers_its_own_arrow(self):
+        """No spot is free (other boxes fill the view except a strip round the arrow, which
+        ends at the view's edge): the box then sits over another box, never over its own
+        arrow, which could not be grabbed there (CI #145-#149, Insert Canvas's handles)."""
+        tail, tip, radius = (1400, 400), (1495, 400), 6
+        others = [(0, 0, 1500, 392), (0, 408, 1500, 392), (0, 392, 1400, 16)]
+        corner = core.spot((1447, 400), tail, tip, radius, BOX, VIEW, avoid_rects=others)
+        self.assertGreaterEqual(core.clearance(tail, tip, rect(corner)) - radius, 1.0, corner)
+
     def test_clearance(self):
         self.assertEqual(core.clearance((0, 0), (100, 0), (40, -5, 10, 10)), 0.0)  # crosses
         self.assertEqual(core.clearance((0, 0), (100, 100), (40, 40, 10, 10)), 0.0)  # inside

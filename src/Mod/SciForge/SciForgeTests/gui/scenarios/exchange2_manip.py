@@ -129,6 +129,12 @@ def drag_arrow(key, mm):
             start = point
             break
     end = start + arrow.direction * mm
+    under = h.covered(h.screen_point(start))
+    print(
+        "[SciForge] exchange2_manip: %s arrow grabbed at %s (%s)"
+        % (key, h.screen_point(start), under.metaObject().className() if under else "the view"),
+        flush=True,
+    )
     h.drag(h.screen_point(start), h.screen_point(end), steps=16)
 
 
