@@ -14,6 +14,7 @@ Path X3, a circle on the XZ plane beside the plate, Two Sides: side one 10 widen
 Numbers by hand: frustum of a square a x a growing by d per side over h: h/3 (a^2 + b^2 +
 ab) with b = a + 2d; a cone frustum: pi h / 3 (r1^2 + r1 r2 + r2^2).
 """
+
 import math
 
 import FreeCAD as App
@@ -170,7 +171,17 @@ def x1_e():
 
 def x1_offset():
     p = xpanel()
-    h.check("X1 the lid's area picked by itself", p is not None and len(p.profiles) == 1)
+    # the whole drawn rectangle, 60 x 50 (with the plate's edges projected, Auto project,
+    # it is two areas: the plate's outline and the ring round it)
+    area = 0.0
+    for sketch, sub in p.profiles if p is not None else []:
+        if sub.startswith("InternalFace"):
+            area += sketch.InternalShape.Faces[int(sub[len("InternalFace") :]) - 1].Area
+    h.check(
+        "X1 the lid's area picked by itself",
+        p is not None and p.profiles and near(area, 60.0 * 50.0),
+        (area, p and p.profiles),
+    )
     if p is None:
         return
     h.check("X1 choose Start: Offset", ui.choose(p.start, "Offset"))
