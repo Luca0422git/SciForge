@@ -29,6 +29,7 @@ import FreeCAD as App
 from PySide import QtCore, QtGui, QtWidgets
 from PySide6 import QtTest
 
+from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
@@ -399,6 +400,13 @@ def g_profile():
     h.click(V(35, -30, 0))
 
 
+def g_distance():
+    # A distance first, as a person does: the taper's curved handle is as long as the
+    # extrusion, and at the start (0) it is 1 mm, a few pixels, where one pixel of mouse
+    # turns it about 6 degrees (the drag missed 45 once the 3D view was 13 px shorter)
+    h.check("distance 20", arrows.give_distance("20"))
+
+
 def g_taper_press():
     p = s.panel()
     taper = getattr(p, "draggers", {}).get("taper") if p is not None else None
@@ -516,6 +524,7 @@ h.run(
         g_finish,
         g_extrude,
         g_profile,
+        g_distance,
         g_taper_press,
         g_taper_turn,
         g_taper_held,
