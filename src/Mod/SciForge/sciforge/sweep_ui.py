@@ -85,7 +85,9 @@ def selected(body):
 
 
 def newest_single_region(body):
-    """The only area of the newest sketch with an area that no feature uses yet."""
+    """The only area of the newest sketch with an area that no feature uses yet (with the
+    face's edges projected, Auto project: what the sketch's own curves close,
+    extrude.taken_by_itself)."""
     if body is None:
         return None
     used = profile_pick.used_sketches(body.Document)
@@ -93,12 +95,12 @@ def newest_single_region(body):
         if not extrude.is_sketch(obj) or obj.Name in used:
             continue
         try:
-            found = extrude.profile_regions(obj)
+            if not extrude.profile_regions(obj):
+                continue  # an open sketch (a path) does not stop the search
+            found = extrude.taken_by_itself(obj)
         except Exception:
             return None
-        if not found:
-            continue  # an open sketch (a path) does not stop the search
-        return (obj, found[0][0]) if len(found) == 1 else None
+        return (obj, found[0]) if len(found) == 1 else None
     return None
 
 

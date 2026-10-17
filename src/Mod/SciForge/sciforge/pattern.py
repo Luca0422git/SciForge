@@ -1716,7 +1716,7 @@ def path_edges(ref):
     if sub.startswith("Edge"):
         return [_element(obj, sub)]
     if obj.TypeId == SKETCH and not sub:
-        edges = list(obj.Shape.Edges)
+        edges = _drawn_edges(obj) or list(obj.Shape.Edges)
         if not edges:
             raise PatternError("%s has no curves to follow." % obj.Label)
         groups = Part.sortEdges(edges)
@@ -1724,6 +1724,23 @@ def path_edges(ref):
             raise PatternError("The sketch has separate curves. Pick one edge as the path.")
         return Part.Wire(groups[0]).OrderedEdges
     raise PatternError("Pick an edge or a sketch curve as the path.")
+
+
+def _drawn_edges(sketch):
+    """The edges of a sketch's own (not construction) curves, placed as its Shape is: the
+    path a whole sketch gives. Its projected curves are left out: a sketch on a face has
+    the face's edges projected (Auto project) and they are no part of the path drawn."""
+    edges = []
+    try:
+        for i, geo in enumerate(sketch.Geometry):
+            if sketch.getConstruction(i) or geo.TypeId == "Part::GeomPoint":
+                continue
+            edge = geo.toShape()
+            edge.Placement = sketch.Shape.Placement
+            edges.append(edge)
+    except Exception:
+        return []
+    return edges
 
 
 def _objects_center(options, tools):
