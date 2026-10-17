@@ -221,7 +221,10 @@ def a_written():
     cut = dark_share(image, dpi, x - 8, y + 8, x + 8, y + 18)
     hole = dark_share(image, dpi, x - 8, y + 1.5, x + 8, y + 4.5)  # (between its lines)
     blank = dark_share(image, dpi, 300, 120, 340, 150)
-    h.check("the cut faces are hatched", cut > 0.04, cut)
+    # 45 degree lines cover about 4 % of the window; how much of a line falls in it
+    # depends on where the view lands on the sheet (0.0395 with the tabs at the top):
+    # half of that, against 0 for the hole and the empty paper below
+    h.check("the cut faces are hatched", cut > 0.02, cut)
     h.check("the hole is not", hole < 0.01, (hole, cut))
     h.check("empty paper is empty", blank == 0.0, blank)
     if shutil.which("pdftotext"):
