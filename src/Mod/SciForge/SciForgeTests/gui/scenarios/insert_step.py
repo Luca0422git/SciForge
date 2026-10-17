@@ -167,7 +167,9 @@ def d_sketch():
 
 def d_click_plate():
     h.fit()
-    h.click(V(8, 8, 5))
+    # the plate's top away from the origin squares (at 8, 8 the XZ square stands in front
+    # of the plate and takes the click, as it shows) and from the peg
+    h.click(V(34, 24, 5))
 
 
 def d_check():
