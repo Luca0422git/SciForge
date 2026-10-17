@@ -99,6 +99,11 @@ def startup():
             _hide_toolbars_soon()
             _hide_menubar()
             _hide_panels()
+            # ... and hid SciForge's own bars: the layout saved when SciForge last closed
+            # has the ribbon and the timeline hidden (Luca, 2026-10-17: the second start
+            # showed only the browser and an empty view, nothing to click)
+            for delay in (0, 150, 600, 1500):
+                QtCore.QTimer.singleShot(delay, _show_own_bars)
         if name and name != SCIFORGE_WB and not _state["on"]:
             from . import shortcuts, sketch_mode, theme, versions_ui
 
@@ -233,6 +238,24 @@ def _show_ribbon():
         holder.addWidget(_state["ribbon"])
         main.addToolBar(QtCore.Qt.TopToolBarArea, holder)
     holder.show()
+
+
+def _show_own_bars():
+    """The ribbon, the timeline and the browser shown again (SciForge on)."""
+    if not _state["on"]:
+        return
+    try:
+        holder = _main().findChild(QtWidgets.QToolBar, "SciForgeRibbonBar")
+        if holder is None or holder.isHidden():
+            _show_ribbon()
+        from . import timeline_ui
+
+        dock = timeline_ui._ensure_dock()
+        if dock.isHidden():
+            timeline_ui.show()
+        _safely(lambda: __import__("sciforge.browser_ui").browser_ui.show())
+    except Exception as exc:
+        warn("showing SciForge's bars at start: %s" % exc)
 
 
 def _hide_ribbon():
