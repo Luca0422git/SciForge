@@ -142,3 +142,15 @@ joints / fixpattern / sketch_tools helpers do the same.
 `revolve_ui.py`, `mesh_cut_ui.py`, `move_ui.py`, `extrude_ui.py`, `handles3d.py`,
 `align.py`, `align_ui.py`, `selection_ui.py`; test helpers `bodies_steps` callers and
 `joints_steps.py` (the XY pick point moved from (12, -8, 0) to (6, -6, 0)).
+
+## Follow-up on the integrated code (branch `sf/fix-vw`, 2026-10-17)
+
+- A face of the part keeps the click where a see-through origin square is drawn in front
+  of it again (the depth rule of view-3 is dropped): 0.6 x a wide design makes the XZ square
+  stand far above a flat part, and it took clicks meant for the top face (modeling2_bodies
+  part 5: the top sketch went onto XZ; patterns_circ: the hole's sketch on the disc's top
+  went onto XZ). In exchange the vertical squares stick out *beside* a part lying on both
+  sides of them (not above it, where the top face is behind them).
+- Revolve's angle handle seen edge-on: the drag adds small steps; they were added to the
+  snapped angle and pulled back onto it every time, so the handle never moved
+  (revolve_qa_bodies P19). The steps now add to the hand's own (unsnapped) angle.

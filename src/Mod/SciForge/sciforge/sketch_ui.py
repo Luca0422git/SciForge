@@ -208,18 +208,19 @@ class PlanePicker:
         return best
 
     def _geometry_at(self, position):
-        """True if the part (not the empty background) is under the mouse and not behind
-        the origin square there, or a construction plane in front of the origin squares.
-        A square drawn in front of the part takes the click where it is drawn (the squares
-        are 0.6 x the part: where one stands up from the part, e.g. the XZ square above a
-        thin plate's front edge, the face behind it took every click and the plane could
-        not be picked at all); a face the square lies in keeps it (a tie is the part's)."""
+        """True if the part (not the empty background) is under the mouse, or a construction
+        plane in front of the origin squares. A face of the part takes the click also where
+        a see-through square is drawn in front of it: the squares are 0.6 x the design, so
+        on a wide flat part the XZ square stands well above it and took every click on the
+        front half of its top face (modeling2_bodies, patterns_circ). The squares stick out
+        beside a part that hides them (origin_look.square_sizes_for), where they can be
+        clicked."""
         info = self.view.getObjectInfo(tuple(position))
         if not (info and info.get("Object")):
             return False
         component = str(info.get("Component", ""))
         if component.startswith("Face"):
-            return self._not_behind(position, info)
+            return True
         if component.startswith(("Edge", "Vertex")):
             # An edge or corner of the part hides the squares, as a face does: a click on
             # the edge of a 2 mm rim (lying on the XZ square) took the square and the

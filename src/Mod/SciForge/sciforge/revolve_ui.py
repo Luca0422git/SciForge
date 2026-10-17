@@ -195,6 +195,7 @@ class AngleHandle(BoxCarrier):
         self._hover = False
         self._painted_hover = None
         self._mark = None  # the snap angle the drag sits on (protractor)
+        self._raw = None  # the angle the hand asks for, before the snap
         self._wheel = protractor.Wheel()
         self.root = coin.SoAnnotation()  # drawn over the part, like Fusion's handles
         pick = coin.SoPickStyle()
@@ -370,6 +371,7 @@ class AngleHandle(BoxCarrier):
                     self._last_pos = (float(position[0]), float(position[1]))
                     start = self._absolute(position, self._value)
                     self._offset = 0.0 if start is None else start - self._value
+                    self._raw = None  # a new drag starts from the angle shown
                     # The release of a drag ending over the part is kept by FreeCAD's
                     # selection; Qt's is watched too (handles3d.ReleaseWatch).
                     handles3d.watch_release(self)
@@ -388,13 +390,16 @@ class AngleHandle(BoxCarrier):
                 self._hover = self.hit(position)
                 return
             self._last_event = time.time()
-            current = self._pending if self._pending is not None else self._value
+            # the hand's own angle, before the snap: an edge-on drag adds up small steps,
+            # and steps added to the snapped angle were pulled back onto it every time
+            current = self._raw if self._raw is not None else self._value
             value = self._absolute(position, current + self._offset)
             if value is None:
                 value = self._incremental(position, current)
             else:
                 value -= self._offset
             self._last_pos = (float(position[0]), float(position[1]))
+            self._raw = value
             # 0 / 45 / 90... pull the angle; Ctrl moves it freely (protractor)
             value, self._mark = protractor.snap_angle(
                 self.view, value, self.center, self.axis, self.zero, self.radius
