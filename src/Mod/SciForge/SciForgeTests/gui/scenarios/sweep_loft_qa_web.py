@@ -220,7 +220,9 @@ def p1_open():
         return
     h.check("P1 nothing is taken", not p.refs, p.refs)
     h.check("P1 Extend Curves on", p.extend.isChecked())
-    h.click_edge(line_mid(0))
+    # 4 mm along the first line: the two lines cross at their middles, where either one
+    # may be the one under the mouse (it was the second after another scenario ran)
+    h.click_edge(line_mid(0) + V(-4, 0, 0))
 
 
 def p1_one():
