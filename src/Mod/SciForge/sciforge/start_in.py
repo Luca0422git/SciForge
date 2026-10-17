@@ -93,11 +93,65 @@ def _panel_width():
             group.SetString("Widgets", "Tasks,")
 
 
+def _system_dark():
+    try:
+        from .compat import QtCore, QtGui
+
+        scheme = QtGui.QGuiApplication.styleHints().colorScheme()
+        return scheme == QtCore.Qt.ColorScheme.Dark
+    except Exception:
+        return False
+
+
+def _first_start_theme():
+    """What FreeCAD's Start page does on a fresh profile (Mod/Start ThemeSelectorWidget):
+    no theme chosen yet, so the FreeCAD Light preference pack (Dark when the system is
+    dark) is applied: body colour, line and sketch colours, and more. Opening in SciForge
+    skips the Start page, and a fresh install came out in FreeCAD's old Classic colours
+    (bodies lavender, not grey). A theme already chosen is left as it is."""
+    import os
+    import tempfile
+    import xml.etree.ElementTree as ET
+
+    import FreeCAD as App
+
+    window = App.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
+    if "StyleSheet" in window.GetStrings():
+        return  # a theme was chosen (by the Start page, a pack, the user)
+    name = "FreeCAD Dark" if _system_dark() else "FreeCAD Light"
+    path = os.path.join(App.getResourceDir(), "Gui", "PreferencePacks", name, name + ".cfg")
+    if not os.path.isfile(path):
+        return
+    # FreeCAD inserts the pack's BaseApp group into the user's (PreferencePack::
+    # applyConfigChanges); Python reaches BaseApp, not the top, so the file is re-rooted
+    root = ET.parse(path).getroot().find("FCParamGroup")
+    base = [g for g in root.findall("FCParamGroup") if g.get("Name") == "BaseApp"]
+    if not base:
+        return
+    out = ET.Element("FCParameters")
+    top = ET.SubElement(out, "FCParamGroup", Name="Root")
+    for child in list(base[0]):
+        top.append(child)
+    handle, temp = tempfile.mkstemp(suffix=".cfg")
+    os.close(handle)
+    try:
+        ET.ElementTree(out).write(temp, encoding="UTF-8", xml_declaration=True)
+        App.ParamGet("User parameter:BaseApp").Insert(temp)
+    finally:
+        os.remove(temp)
+    themes = App.ParamGet("User parameter:BaseApp/Preferences/Themes")
+    if "ThemeAccentColor1" not in themes.GetUnsigneds():
+        for i in (1, 2, 3):  # (the Start page's defaults)
+            themes.SetUnsigned("ThemeAccentColor%d" % i, 1434171135)
+    log("the %s theme applied (a fresh profile; FreeCAD's Start page would have)" % name)
+
+
 def at_launch():
     """From InitGui.py, before FreeCAD picks the workbench it opens in."""
     apply()
     try:
         if wanted():
+            _first_start_theme()
             _panel_width()
     except Exception as exc:
-        warn("start in SciForge: panel width: %s" % exc)
+        warn("start in SciForge: first start: %s" % exc)
