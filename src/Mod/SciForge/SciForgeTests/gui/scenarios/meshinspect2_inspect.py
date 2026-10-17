@@ -68,7 +68,10 @@ def tall_steps():
         h.ribbon("Create Sketch")
 
     def pick_xy():
-        h.click(V(12, -8, 0))
+        # where the XY square shows (0.6 x the box since view-3: (12, -8, 0) was its edge)
+        from SciForgeTests.gui import plane_input as pl
+
+        pl.click_square("XY_Plane")
 
     def draw():
         sk = h.in_sketch()

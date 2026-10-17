@@ -227,7 +227,9 @@ def section_start():
 
 def section_plane():
     h.fit()
-    pl.click_square("XZ_Plane")  # where the square shows (was 20, 0, -12)
+    # the box's front face (it lies in XZ): since view-3 the XZ square is 0.6 x the box and,
+    # from the iso view, barely shows between the box and the XY / YZ squares
+    h.click(V(20, 0, 5))
 
 
 def section_panel():

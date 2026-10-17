@@ -60,17 +60,17 @@ class SizeForBox(unittest.TestCase):
 
     def test_part_centred_on_the_origin(self):
         # a 40 x 30 x 10 box centred in x and y: XY sticks out of the nearer sides (y = +-15)
-        # by 15 % of the part (6): half 21; XZ and YZ stand 6 above its top (half 16)
+        # by 15 % of the part (6): half 21; XZ out of x = +-20 (half 26), YZ out of y = +-15
         sizes = look.square_sizes_for((-20, 20, -15, 15, 0, 10))
         self.assertAlmostEqual(sizes["XY"], 42.0)
-        self.assertAlmostEqual(sizes["XZ"], 32.0)
-        self.assertAlmostEqual(sizes["YZ"], 32.0)
+        self.assertAlmostEqual(sizes["XZ"], 52.0)
+        self.assertAlmostEqual(sizes["YZ"], 42.0)
 
     def test_thin_plate_centred(self):
-        # 30 x 20 x 5: sides at 10, margin 5 (at least 5 mm); 5 above its top
+        # 30 x 20 x 5: sides at 10, margin 5 (at least 5 mm); XZ out of x = +-15
         sizes = look.square_sizes_for((-15, 15, -10, 10, 0, 5))
         self.assertAlmostEqual(sizes["XY"], 30.0)
-        self.assertAlmostEqual(sizes["XZ"], 20.0)
+        self.assertAlmostEqual(sizes["XZ"], 40.0)
 
     def test_part_on_one_side_of_a_plane(self):
         # centred in x, all at y > 0: XZ is seen from the front, it stays 0.6 x
