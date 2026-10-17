@@ -1426,9 +1426,29 @@ harness changes every scenario, so prefer a fix in the one scenario; Luca's upda
 held back by test robustness work (build the zip directly: `git archive HEAD src/Mod/SciForge`
 + build_info.py + tools/sciforge/install_update.* + docs/sciforge/quick-update.md as README).
 
+#### Integration (2026-10-17 night): what the full local runs found
+Two full local runs (374 scenarios, 3 shards) of develop + sketch-3 + view-3 + start-1 + gear.
+Every failure was bisected before a change; the builders fixed their own (sf/fix-sk, sf/fix-vw).
+- Real product bugs: Capture Design History off lost a sketch's projected edges (FreeCAD 1.1
+  `ExternalGeometry` is read-only: addExternal + remap constraints + delExternal); Pattern on
+  Path / Sweep took the face's projected edges (Auto project) with the drawn curves; origin
+  squares in front of a face stole its click (view-3: faces take the click again, XZ/YZ stick
+  out beside the part); Revolve's edge-on angle drag stuck at the snap angle; a fresh profile's
+  first start lost SciForge's look (the theme pack's MainWindow and Themes groups made FreeCAD
+  reload its stylesheet over SciForge's: only its colours are applied now, once, mark
+  `Mod/SciForge/FirstStartThemeApplied`); Loft's Rails box takes the edge within 6 px of a click
+  on a face (an edge lying on another body's face never won the pick).
+- Test assumptions: the document tabs at the top make the 3D view 13 px shorter (769 tall):
+  the sketch grid snap took an "about 8" click to 10 (sweep_loft_qa_loft: Ctrl); the taper
+  handle is as long as the extrusion, 1 mm at 0 (view_angle_snap: a distance first);
+  sweep_loft_qa_web clicked where its two lines cross (either line could take it).
+- Traps learned: scenarios in one run share a profile (user.cfg), so the first scenario of a
+  shard runs on a fresh profile and the rest do not (the fresh one had the light look); a
+  scenario that passes alone and fails in a shard: run it after its shard predecessor and
+  diff the saved user.cfg. A "stale .pyc" theory was wrong (reverted): check a theory by
+  reproducing it before building on it.
+
 #### Open
-- Full local regression of the integrated code (3 shards) was running at the end; its result
-  decides the final fixes before Luca's complete update.
 - FreeCAD limit (C++): a sketch area is lost where an arc ends tangent on a line's middle
   (rounded outline + a rectangle over it); Extrude says so.
 - Sketch Rotate keeps FreeCAD's Ctrl snapping; Pin to Shortcuts not built.
