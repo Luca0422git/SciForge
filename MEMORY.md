@@ -1448,6 +1448,21 @@ Every failure was bisected before a change; the builders fixed their own (sf/fix
   diff the saved user.cfg. A "stale .pyc" theory was wrong (reverted): check a theory by
   reproducing it before building on it.
 
+#### After the update (2026-10-17 evening)
+- Luca's second start showed only the browser: FreeCAD restores the window layout saved at
+  the last close after SciForge is on, and it had the ribbon and timeline hidden.
+  shell.startup shows them again; base test restart_gui.py (two starts, one profile) guards
+  it. Scenarios never see this: each starts without a saved layout.
+- CI #145/#148 red, reproduced locally only with GitHub's conditions: its fonts (hide Inter
+  with a FONTCONFIG_FILE that rejects it: DejaVu Sans, as on the runner) and its slowness
+  (taskset -c 0 with a busy loop on the same core). orbit_feel: Qt sent a move with no
+  button in the middle of a drag; orbit_ui dropped the drag there (now ignored and held
+  back from FreeCAD). exchange2_manip: the press came before the arrows and value boxes had
+  settled after a Fit (the test waits for the arrow to stay put, rests on it, presses an
+  uncovered part). construct_live: 18 positions on CI, threshold 12 (the bug gave 8).
+- Rule kept: after every push, watch the CI run to the end (a scheduled check-in) and fix
+  red at once; do not leave a red run overnight.
+
 #### Open
 - FreeCAD limit (C++): a sketch area is lost where an arc ends tangent on a line's middle
   (rounded outline + a rectangle over it); Extrude says so.

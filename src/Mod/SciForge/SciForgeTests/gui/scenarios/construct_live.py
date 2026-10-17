@@ -88,11 +88,11 @@ def a_check_during():
         seen[-8:],
     )
     # The shared pace rebuilds about every 60 ms on a small part: a 0.8 s drag gives many
-    # positions (40 here). Restarting the timer on every poll gave a few jumps (8 here: only
-    # when the mouse happened to rest).
+    # positions (40 here, 18 on CI's slower machine). Restarting the timer on every poll gave
+    # a few jumps (8 here: only when the mouse happened to rest).
     h.check(
         "it followed the drag (many positions while the button was down)",
-        len({round(z, 3) for z in seen}) >= 20,
+        len({round(z, 3) for z in seen}) >= 12,
         sorted({round(z, 3) for z in seen}),
     )
     QtTest.QTest.mouseRelease(st["widget"], QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, st["end"])

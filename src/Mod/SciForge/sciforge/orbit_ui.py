@@ -534,8 +534,12 @@ class _ViewFilter(QtCore.QObject):
         if press is None:
             return False
         if not (event.buttons() & MIDDLE):
-            self.press = None  # the button went up somewhere else
-            return False
+            # A move that says no button is down, in the middle of a drag: Qt sends such
+            # moves of its own (a widget shown or hidden under the mouse), and dropping the
+            # drag there lost the rest of it (the zoom drag did not zoom, the orbit did not
+            # turn: CI #145, #148). The drag ends at its release or a new press; FreeCAD
+            # does not get that move either (it ended its pan or orbit there).
+            return True
         if press.done:
             # The second press of a double-click was acted on (Fit, the pivot): a move
             # with the button still down must not start a drag that FreeCAD never sees

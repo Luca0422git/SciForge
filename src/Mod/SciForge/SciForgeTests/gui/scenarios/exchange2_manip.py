@@ -28,6 +28,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
+from PySide6 import QtTest
 
 from SciForgeTests.gui import arrow_input as ai
 from SciForgeTests.gui import exchange_steps as x
@@ -81,17 +82,49 @@ def panel():
     return i.panel()
 
 
+def _settled_arrow(key, timeout_ms=3000):
+    """The dialog's arrow `key` once it stays put on the screen: after a Fit the handles
+    are rebuilt and their boxes moved by timers, later on a slow machine (CI #145, #148:
+    the press went where the arrow had been)."""
+    last, arrow = None, None
+    waited = 0
+    while waited <= timeout_ms:
+        p = panel()
+        arrow = p.handle_by.get(key) if p is not None else None
+        if arrow is None:
+            return None
+        now = (
+            h.screen_point(ai.arrow_point(arrow, 0.2)),
+            h.screen_point(ai.arrow_point(arrow, 0.9)),
+        )
+        if now == last:
+            return arrow
+        last = now
+        QtTest.QTest.qWait(250)
+        waited += 250
+    return arrow
+
+
 def drag_arrow(key, mm):
     p = panel()
     if p is None or key not in getattr(p, "handle_by", {}):
         h.check("handle %s shown" % key, False)
         return
-    arrow = p.handle_by[key]
-    # a visible part of the arrow, as a hand grabs it: the value box beside a handle can sit
-    # over 60 % of its length (CI #145: the press on the scale arrow went to the box)
+    arrow = _settled_arrow(key)
+    # an arrow reaching under the dialog (its width follows the machine's fonts): a person
+    # slides the view first
+    if arrow is not None and h.uncover(ai.arrow_point(arrow, 1.0)):
+        arrow = _settled_arrow(key)
+    if arrow is None:
+        h.check("handle %s shown" % key, False)
+        return
+    # a visible part of the arrow, as a hand grabs it: rests on it a moment, then presses
+    # where nothing (a value box) covers it
     start = ai.arrow_point(arrow, 0.6)
     for part in (0.6, 0.8, 0.45, 0.9, 0.3):
         point = ai.arrow_point(arrow, part)
+        h.move(h.screen_point(point))
+        QtTest.QTest.qWait(150)
         if h.covered(h.screen_point(point)) is None:
             start = point
             break
