@@ -87,7 +87,14 @@ def drag_arrow(key, mm):
         h.check("handle %s shown" % key, False)
         return
     arrow = p.handle_by[key]
+    # a visible part of the arrow, as a hand grabs it: the value box beside a handle can sit
+    # over 60 % of its length (CI #145: the press on the scale arrow went to the box)
     start = ai.arrow_point(arrow, 0.6)
+    for part in (0.6, 0.8, 0.45, 0.9, 0.3):
+        point = ai.arrow_point(arrow, part)
+        if h.covered(h.screen_point(point)) is None:
+            start = point
+            break
     end = start + arrow.direction * mm
     h.drag(h.screen_point(start), h.screen_point(end), steps=16)
 

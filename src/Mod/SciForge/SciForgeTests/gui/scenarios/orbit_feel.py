@@ -142,6 +142,10 @@ def middle_click(pos, modifiers=NONE):
     h.move(pos)
     QtTest.QTest.mouseClick(gl(), MIDDLE, modifiers, pos)
     process()
+    # a hand lets the double-click time pass before its next press: a middle press within it
+    # is a double-click (Fit, or with Shift the orbit centre), and on CI's slower machine the
+    # next step's drag came that soon (CI #145: the Ctrl+Shift zoom drag fitted instead)
+    QtTest.QTest.qWait(QtWidgets.QApplication.doubleClickInterval() + 100)
 
 
 def middle_double_click(pos, modifiers=NONE, wobble=0):
