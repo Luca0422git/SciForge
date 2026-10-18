@@ -130,11 +130,22 @@ def drag_arrow(key, mm):
             break
     end = start + arrow.direction * mm
     under = h.covered(h.screen_point(start))
-    print(
-        "[SciForge] exchange2_manip: %s arrow grabbed at %s (%s)"
-        % (key, h.screen_point(start), under.metaObject().className() if under else "the view"),
-        flush=True,
-    )
+    px, ex = h.screen_point(start), h.screen_point(end)
+    s["grab"] = {
+        "key": key,
+        "at": (px.x(), px.y()),
+        "to": (ex.x(), ex.y()),
+        "under": under.metaObject().className() if under else "the view",
+        "arrow": [
+            tuple((q.x(), q.y()))
+            for q in (h.screen_point(ai.arrow_point(arrow, f)) for f in (0.0, 0.5, 1.0))
+        ],
+        "boxes": {
+            k: (b.x(), b.y(), b.width(), b.height(), b.isVisible())
+            for k, b in sorted(getattr(getattr(p, "value_boxes", None), "boxes", {}).items())
+        },
+    }
+    print("[SciForge] exchange2_manip: grab %s" % s["grab"], flush=True)
     h.drag(h.screen_point(start), h.screen_point(end), steps=16)
 
 
@@ -445,7 +456,13 @@ p8_fit.wait_ms = 800
 
 def p8_escape():
     obj = i.canvases()[0]
-    h.check("P8 the scale arrow scaled it", obj.ScaleX > 1.1, obj.ScaleX)
+    p = panel()
+    field = getattr(p, "scale", None) if p is not None else None
+    h.check(
+        "P8 the scale arrow scaled it",
+        obj.ScaleX > 1.1,
+        (obj.ScaleX, field.value() if hasattr(field, "value") else None, s.get("grab")),
+    )
     h.check("P8 in proportion", abs(obj.ScaleX - obj.ScaleY) < 1e-9, (obj.ScaleX, obj.ScaleY))
     h.press(QtCore.Qt.Key_Escape)
 
