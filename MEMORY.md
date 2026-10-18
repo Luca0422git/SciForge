@@ -1462,6 +1462,9 @@ Every failure was bisected before a change; the builders fixed their own (sf/fix
   uncovered part). construct_live: 18 positions on CI, threshold 12 (the bug gave 8).
 - Rule kept: after every push, watch the CI run to the end (a scheduled check-in) and fix
   red at once; do not leave a red run overnight.
+- CI #152 (377a81bd, 2026-10-18): every job green (base, 4 scenario groups, Windows golden),
+  the first fully green run since the improvement-list update. Luca got the zip of 377a81bd
+  (adds the middle-drag and value-box fixes, WHATS_NEW items 31-32).
 
 #### Open
 - FreeCAD limit (C++): a sketch area is lost where an arc ends tangent on a line's middle
