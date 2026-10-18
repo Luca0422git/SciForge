@@ -16,10 +16,13 @@ taskui.ArrowValueBox uses spot(); the unit tests check it without FreeCAD.
 
 import math
 
-# The arrow FreeCAD draws (Coin's SoTranslate1Dragger), in arrow sizes from its middle:
-# a thin bar to 1.0 on both sides, then a cone head from 1.0 to 1.5, 0.25 wide (radius).
-REACH = 1.5
-HEAD = 0.25
+# Coin's own SoTranslate1Dragger arrow (a head at both ends), measured in "arrow sizes"
+# (the size is a length in mm) from its middle: a thin bar to 1.0 on both sides, then a
+# cone head from 1.0 to 1.5, 0.25 wide (radius). SciForge's own arrows no longer look like
+# this (they are drawn in pixels, handle_look_core); these two numbers stay for
+# ArrowValueBox.place() and handle_size(), which still work in such sizes.
+REACH = 1.5  # middle to either tip: the whole arrow is 2 * REACH sizes long
+HEAD = 0.25  # half the width of a head (its cone's radius), in sizes
 GAP = 6.0  # pixels between the arrow (its heads included) and the box
 EDGE = 2.0  # pixels kept free at the view's border
 # A drag arrow's size on the screen: Fusion's arrows look the same size whatever the part

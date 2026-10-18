@@ -59,17 +59,52 @@ def value_box(key, panel=None):
         return None
 
 
-def head_point(dragger, reach=0.9):
-    """A 3D point on the arrow's head (where a person grabs it)."""
-    distance = dragger.distance()
-    side = 1.0 if distance >= 0 else -1.0
-    return dragger.origin + dragger.direction * (distance + side * reach * dragger.size)
+def arrow_ends(handle):
+    """(foot, tip) in 3D of a drag arrow as it is drawn now (sciforge.handle_look: it
+    stands at its value's point and points the way the value goes; its length follows the
+    zoom). Any SciForge arrow: taskui.ArrowDragger, handles3d.LinearHandle, the primitives'."""
+    _anchor, foot, tip, _radius = handle.box_geometry()
+    return App.Vector(foot), App.Vector(tip)
 
 
-def arrow_point(dragger, reach):
-    """A 3D point on the arrow, `reach` arrow sizes from its middle along its direction (the
-    bar ends at 1, the cone of the head runs from 1 to 1.5; negative: the other head)."""
-    return dragger.origin + dragger.direction * (dragger.distance() + reach * dragger.size)
+def arrow_point(dragger, share):
+    """A 3D point on the arrow, `share` of its length from its foot (0) to its tip (1)."""
+    foot, tip = arrow_ends(dragger)
+    return foot + (tip - foot) * share
+
+
+def head_point(dragger, share=None):
+    """A 3D point on the arrow's head (where a person grabs it): `share` of the arrow's
+    length from its foot, by default handle_look_core.HEAD_AIM."""
+    if share is None:
+        from sciforge import handle_look_core
+
+        share = handle_look_core.HEAD_AIM
+    return arrow_point(dragger, share)
+
+
+def screen_length(handle):
+    """The drawn arrow's length on the screen (pixels): its tip and foot projected."""
+    foot, tip = (h.screen_point(q) for q in arrow_ends(handle))
+    return ((foot.x() - tip.x()) ** 2 + (foot.y() - tip.y()) ** 2) ** 0.5
+
+
+def drawn_scale(handle, point=None):
+    """(mm per pixel the last frame drew the handle with, mm per pixel the handle's own
+    maths uses at `point`, by default the arrow's foot): they agree when what is drawn is
+    what is grabbed. None when unknown."""
+    try:
+        from sciforge import handle_look
+
+        scales = getattr(handle, "scales", None) or [
+            getattr(handle, "pixels", None) or getattr(handle, "scale", None)
+        ]
+        drawn = scales[0].drawn_mm_per_px() if scales and scales[0] is not None else None
+        if point is None:
+            point = arrow_ends(handle)[0]
+        return drawn, handle_look.mm_per_px(handle.view, point)
+    except Exception:
+        return None
 
 
 def on_top(pos):

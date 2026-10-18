@@ -3,7 +3,8 @@
 
 - DistanceField: unit-aware number field (types "5", "5 mm", "0.2 in", "=width*2"),
   optionally bound to a property so expressions/parameters work like in FreeCAD.
-- ArrowDragger: the arrow you drag in the 3D view to set a distance (Coin3D).
+- ArrowDragger: the arrow you drag in the 3D view to set a distance (Coin3D; its look and
+  its screen size are handle_look's).
 - ArrowValueBox: the small value box next to an arrow (Fusion shows the distance there
   while you drag, and you can type a new one in it).
 - BoxCarrier: what any drag handle (an arrow, a turning disc, a ball on a line) needs to
@@ -1028,6 +1029,12 @@ class ArrowDragger(BoxCarrier):
 
     on_drag(distance) is called while dragging, on_release(distance) at the end.
 
+    It looks like Fusion's distance arrow (handle_look): a small blue arrow standing at
+    origin + direction * distance, pointing the way the distance goes (back along the line
+    for a minus), the same size on the screen whatever the part or the zoom, lighter under
+    the mouse and while dragged, with a thin light line back to `origin`. `size` is no
+    longer used (it was the arrow's size in mm): kept so the dialogs need not change.
+
     The arrow is watched with a Qt timer instead of Coin dragger callbacks: Coin
     calls those in the middle of its mouse handling, where rebuilding the part
     (or swapping Extrude for Cut) changes the scene under its feet, and pivy runs
@@ -1047,6 +1054,8 @@ class ArrowDragger(BoxCarrier):
     ):
         from pivy import coin
 
+        from . import handle_look
+
         self.coin = coin
         self.view = Gui.ActiveDocument.ActiveView
         self.origin = App.Vector(origin)
@@ -1058,23 +1067,57 @@ class ArrowDragger(BoxCarrier):
         # SoTranslate1Dragger moves along its local X axis; turn X onto `direction`.
         rot = App.Rotation(App.Vector(1, 0, 0), direction)
         place.rotation.setValue(*rot.Q)
-        self.root = on_top_root(coin, place)  # over the part and grabbable through it
-        scale = coin.SoScale()
-        scale.scaleFactor.setValue(size, size, size)
+        # over the part and grabbable through it (taskui.on_top_root, in the 3D-annotation
+        # pass so the arrow is shaded right); `place` stays child 0
+        self.root = handle_look.top_root(coin, place, pickable=True)
+        self.guide = handle_look.Line(coin)  # the thin line from the profile to the arrow
+        guide = coin.SoSeparator()
+        unpickable = coin.SoPickStyle()
+        unpickable.style = coin.SoPickStyle.UNPICKABLE
+        guide.addChild(unpickable)
+        guide.addChild(self.guide.node)
+        self.root.addChild(guide)
         self.dragger = coin.SoTranslate1Dragger()
-        self.size = size
-        self.dragger.translation.setValue(distance / size, 0, 0)
-        color = coin.SoMaterial()  # Fusion's manipulator blue instead of Coin's white
-        color.diffuseColor.setValue(0.30, 0.62, 0.95)
-        color.emissiveColor.setValue(0.10, 0.25, 0.45)
-        color.setOverride(True)
-        self.root.addChild(scale)
-        self.root.addChild(color)
+        self.dragger.translation.setValue(float(distance), 0, 0)  # mm along local X
+        # The arrow points along local +X (the shapes are built along +Y), turned round
+        # for a minus distance; it is drawn in pixels (handle_look.PixelScale).
+        self.flip = coin.SoRotationXYZ()
+        self.flip.axis.setValue(coin.SoRotationXYZ.Z)
+        self.scales = []  # the drawn arrows' (SoShapeScale: right on every frame)
+        self.grabs = []  # what Coin picks: kept right by the poll (handle_look.PixelScale)
+        self.paints = []
+        here = self.origin + self.direction * float(distance)
+        for part, hot in (("translator", False), ("translatorActive", True)):
+            arrow, paint = handle_look.arrow_shape(coin)
+            paint.set(hot)
+            scale = handle_look.PixelScale(
+                coin, handle_look.unpickable(coin, arrow), self.view, here
+            )
+            grab = handle_look.PixelScale(
+                coin, handle_look.grab_shape(coin), self.view, here, plain=True
+            )
+            sep = coin.SoSeparator()
+            sep.addChild(self.flip)
+            turn = coin.SoRotationXYZ()  # +Y (the shapes' axis) onto +X
+            turn.axis.setValue(coin.SoRotationXYZ.Z)
+            turn.angle.setValue(-math.pi / 2.0)
+            sep.addChild(turn)
+            sep.addChild(scale.node)
+            sep.addChild(grab.node)
+            self.dragger.setPart(part, sep)
+            self.scales.append(scale)
+            self.grabs.append(grab)
+            self.paints.append(paint)
+        self.dragger.setPart("feedback", coin.SoSeparator())
+        self.dragger.setPart("feedbackActive", coin.SoSeparator())
         self.root.addChild(self.dragger)
         self.on_drag = on_drag
         self.on_release = on_release
         self._last = self.distance()
         self._was_active = False
+        self._hover = False
+        self._drawn = None
+        self._draw()
         self.view.getSceneGraph().addChild(self.root)
         self._timer = QtCore.QTimer()
         self._timer.setInterval(self.POLL_MS)
@@ -1084,25 +1127,51 @@ class ArrowDragger(BoxCarrier):
             self.attach_box(value_box)  # an ArrowValueBox that follows the arrow
 
     def distance(self):
-        return self.dragger.translation.getValue()[0] * self.size
+        return float(self.dragger.translation.getValue()[0])
 
     def set_distance(self, distance):
-        self.dragger.translation.setValue(distance / self.size, 0, 0)
+        self.dragger.translation.setValue(float(distance), 0, 0)
         self._last = self.distance()
+        self._draw()
+        try:
+            self._follow_zoom()
+        except Exception as exc:
+            warn("drag: %s" % exc)
 
     def anchor(self):
-        """The 3D point the value box sits next to: the arrow's middle, which is where the
-        extrusion ends. (Its heads stick out on both sides; for a cut the far one is inside
-        the part, so the box goes beside the middle, clear of both heads.)"""
+        """Where the arrow stands: origin + direction * distance (where the extrusion
+        ends); the arrow points on from there."""
         return self.origin + self.direction * self.distance()
 
-    def box_geometry(self):
-        """Coin's arrow: a bar REACH sizes each way from the middle, heads HEAD sizes wide."""
-        from . import arrow_box_core
+    @property
+    def size(self):
+        """The arrow's length (mm) at its place in the view now (handle_look_core.ARROW_PX
+        on the screen)."""
+        from . import handle_look
 
-        anchor = self.anchor()
-        reach = self.direction * (arrow_box_core.REACH * self.size)
-        return anchor, anchor - reach, anchor + reach, arrow_box_core.HEAD * self.size
+        return handle_look.mm(self.view, self.anchor(), handle_look.core.ARROW_PX)
+
+    def pointing(self):
+        """The way the arrow points: `direction`, turned round for a minus distance."""
+        return self.direction * (-1.0 if self.distance() < 0 else 1.0)
+
+    def tip(self):
+        return self.anchor() + self.pointing() * self.size
+
+    def head_point(self):
+        """A point on the arrow's head (where a person grabs it)."""
+        from . import handle_look_core
+
+        return self.anchor() + self.pointing() * (handle_look_core.HEAD_AIM * self.size)
+
+    def box_geometry(self):
+        """The arrow from where it stands to its tip, as wide as its head."""
+        from . import handle_look
+
+        foot = self.anchor()
+        tip = self.tip()
+        width = handle_look.mm(self.view, foot, handle_look.core.half_width_px("arrow"))
+        return (foot + tip) * 0.5, foot, tip, width
 
     def box_active(self):
         try:
@@ -1113,8 +1182,19 @@ class ArrowDragger(BoxCarrier):
     def _show_value(self):
         self.follow_box()
 
+    def _draw(self):
+        """Point the arrow the way the distance goes and run the guide line to it."""
+        distance = self.distance()
+        if self._drawn is not None and abs(distance - self._drawn) < 1e-12:
+            return
+        self._drawn = distance
+        self.flip.angle.setValue(math.pi if distance < 0 else 0.0)
+        self.guide.set_points([(0.0, 0.0, 0.0), (distance, 0.0, 0.0)])
+
     def _poll(self):
         try:
+            from . import handle_look
+
             # a release FreeCAD never passed on ends the drag here (drag_guard)
             active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
             # Incremental Move (navigation bar): the value goes in steps of the increment
@@ -1126,9 +1206,22 @@ class ArrowDragger(BoxCarrier):
             if self._was_active and not active and self.on_release:
                 self.on_release(value)
             self._was_active = active
+            self._draw()
+            # lighter under the mouse (the dragged arrow is the dragger's own lit part)
+            hover = not active and handle_look.hovered(self.view, self.anchor(), self.tip())
+            if hover != self._hover:
+                self._hover = hover
+                self.paints[0].set(hover)
+            self._follow_zoom()
             self._show_value()
         except Exception as exc:
             warn("drag: %s" % exc)
+
+    def _follow_zoom(self):
+        """Keep the picked shape (and a drawing without SoShapeScale) at the view's scale."""
+        anchor = self.anchor()
+        for scale in self.scales + self.grabs:
+            scale.update(self.view, anchor)
 
     def remove(self):
         try:

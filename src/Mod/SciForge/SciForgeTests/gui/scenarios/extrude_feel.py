@@ -184,6 +184,12 @@ live_drag.wait_ms = 50 * 20 + 300 + 1200
 
 def live_checks():
     drag, samples = s.get("drag"), s.get("samples", [])
+    # Each of the 50 moves rebuilds the preview, so the drag takes 2-3 s rather than the
+    # 1.3 s of its timers (measured 2.5-2.9 s): wait for its release before checking.
+    if drag is not None and not drag.done and s.get("drag_waits", 0) < 40:
+        s["drag_waits"] = s.get("drag_waits", 0) + 1
+        h.state["queue"].insert(0, live_checks)
+        return
     h.check("the held drag ran to the end", drag is not None and drag.done, drag and drag.error)
     held = [x for x in samples if x["active"]]
     h.check("R2: the arrow was grabbed (button held)", len(held) > 10, len(held))

@@ -20,7 +20,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import drag_guard, increments, warn
+from . import drag_guard, handle_look, increments, warn
 from .compat import QtCore
 from .taskui import BoxCarrier
 
@@ -163,7 +163,9 @@ def _rotation_y_to(direction):
 
 class _Handle(BoxCarrier):
     """What LinearHandle and PathHandle share: callbacks, polling, hover colour, and a
-    value box when the dialog gives one (taskui.BoxCarrier)."""
+    value box when the dialog gives one (taskui.BoxCarrier). They look like Fusion's
+    handles and keep their size on the screen (handle_look): `size` is now worked out from
+    the zoom at the handle, not given in mm."""
 
     POLL_MS = 30
     GRAB_PIXELS = 12.0
@@ -181,12 +183,9 @@ class _Handle(BoxCarrier):
         self._hover = False
         self._painted = None
         self._last_event = 0.0
-        self.root = coin.SoAnnotation()
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        self.root.addChild(pick)
-        self.material = coin.SoMaterial()
-        self.root.addChild(self.material)
+        self.root = handle_look.top_root(coin)  # over the part, never picked by Coin
+        self.paint = None  # the handle's handle_look paint (set by the subclass)
+        self.pixels = None  # its handle_look.PixelScale
         self.callbacks = []
         self._timer = QtCore.QTimer()
         self._timer.setInterval(self.POLL_MS)
@@ -206,9 +205,17 @@ class _Handle(BoxCarrier):
         if self._painted == state:
             return
         self._painted = state
-        color = BLUE_ACTIVE if state else BLUE
-        self.material.diffuseColor.setValue(*color)
-        self.material.emissiveColor.setValue(color[0] * 0.5, color[1] * 0.5, color[2] * 0.5)
+        if self.paint is not None:
+            self.paint.set(state)
+
+    def screen_point(self):
+        """The 3D point the handle's drawing is scaled at (where it stands)."""
+        return None
+
+    def _follow_zoom(self):
+        point = self.screen_point()
+        if self.pixels is not None and point is not None:
+            self.pixels.update(self.view, point)
 
     def hit(self, position):
         return False
@@ -278,6 +285,7 @@ class _Handle(BoxCarrier):
                 return
             drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
+            self._follow_zoom()
             pending = self._pending
             if pending is not None and abs(pending - self.value()) > 1e-9:
                 self._apply(pending)
@@ -355,7 +363,9 @@ def angle_handle(*args, **kwargs):
 
 class LinearHandle(_Handle):
     """A blue arrow at origin + direction * value, pointing along `direction`. Drag it to
-    change `value` (signed, mm). on_drag(value) while dragging, on_release(value) after."""
+    change `value` (signed, mm). on_drag(value) while dragging, on_release(value) after.
+    `size` (the old arrow size in mm) is no longer used: the arrow is
+    handle_look_core.ARROW_PX long on the screen (self.size is that length in mm now)."""
 
     def __init__(
         self, origin, direction, value, size, on_drag=None, on_release=None, view=None, step=0.0
@@ -364,7 +374,7 @@ class LinearHandle(_Handle):
         self.origin = App.Vector(origin)
         self.direction = App.Vector(direction)
         self.direction.normalize()
-        self.size = float(size)
+        self.size_hint = float(size)
         self.step = float(step)
         self._value = float(value)
         self._offset = 0.0
@@ -372,32 +382,19 @@ class LinearHandle(_Handle):
         coin = self.coin
         self.place = coin.SoTransform()
         self.root.addChild(self.place)
-        self.root.addChild(self._arrow())
+        arrow, self.paint = handle_look.arrow_shape(coin)  # along +Y, in pixels
+        self.pixels = handle_look.PixelScale(coin, arrow, self.view, self.base_point())
+        self.root.addChild(self.pixels.node)
         self._draw()
         self._start()
 
-    def _arrow(self):
-        coin = self.coin
-        s = self.size
-        sep = coin.SoSeparator()
-        ball = coin.SoSphere()
-        ball.radius.setValue(0.12 * s)
-        sep.addChild(ball)
-        move = coin.SoTranslation()
-        move.translation.setValue(0.0, 0.35 * s, 0.0)
-        sep.addChild(move)
-        shaft = coin.SoCylinder()
-        shaft.radius.setValue(0.05 * s)
-        shaft.height.setValue(0.7 * s)
-        sep.addChild(shaft)
-        tip_move = coin.SoTranslation()
-        tip_move.translation.setValue(0.0, 0.35 * s + 0.15 * s, 0.0)
-        sep.addChild(tip_move)
-        tip = coin.SoCone()
-        tip.bottomRadius.setValue(0.16 * s)
-        tip.height.setValue(0.3 * s)
-        sep.addChild(tip)
-        return sep
+    @property
+    def size(self):
+        """The arrow's length (mm) at its place in the view now."""
+        return handle_look.mm(self.view, self.base_point(), handle_look.core.ARROW_PX)
+
+    def screen_point(self):
+        return self.base_point()
 
     def base_point(self):
         return self.origin + self.direction * self._value
@@ -406,11 +403,11 @@ class LinearHandle(_Handle):
         return self.base_point() + self.direction * self.size
 
     def box_geometry(self):
-        """The ball (0.12 sizes) at the base, the shaft and the head up to the tip."""
+        """The arrow from its foot (the value's point) to its tip, as wide as its head."""
         base = self.base_point()
-        anchor = base + self.direction * (0.5 * self.size)
-        tail = base - self.direction * (0.12 * self.size)
-        return anchor, tail, self.tip_point(), 0.16 * self.size
+        tip = self.tip_point()
+        width = handle_look.mm(self.view, base, handle_look.core.half_width_px("arrow"))
+        return (base + tip) * 0.5, base, tip, width
 
     def value(self):
         return self._value
@@ -440,7 +437,8 @@ class LinearHandle(_Handle):
             px, py = float(position[0]), float(position[1])
             ax, ay = _screen(self.view, self.base_point())
             bx, by = _screen(self.view, self.tip_point())
-            return _segment_distance(px, py, ax, ay, bx, by) <= self.GRAB_PIXELS
+            reach = handle_look.core.grab_px("arrow", at_least=self.GRAB_PIXELS)
+            return _segment_distance(px, py, ax, ay, bx, by) <= reach
         except Exception:
             return False
 
@@ -486,22 +484,26 @@ class LinearHandle(_Handle):
 
 class PathHandle(_Handle):
     """A blue ball on `edge` (a Part.Edge in global coordinates) at curve parameter
-    `parameter`; drag it along the edge. Values are curve parameters."""
+    `parameter`; drag it along the edge. Values are curve parameters. The ball keeps its
+    size on the screen (handle_look); `size` (its old size in mm) is no longer used."""
 
     def __init__(self, edge, parameter, size, on_drag=None, on_release=None, view=None):
         super().__init__(view, on_drag, on_release)
         self.edge = edge
-        self.size = float(size)
+        self.size_hint = float(size)
         self._value = float(parameter)
         coin = self.coin
         self.place = coin.SoTranslation()
         self.root.addChild(self.place)
-        ball = coin.SoSphere()
-        ball.radius.setValue(0.12 * self.size)
-        self.root.addChild(ball)
+        ball, self.paint = handle_look.ball_shape(coin)
+        self.pixels = handle_look.PixelScale(coin, ball, self.view, self.point())
+        self.root.addChild(self.pixels.node)
         self._probe = None
         self._draw()
         self._start()
+
+    def screen_point(self):
+        return self.point()
 
     def value(self):
         return self._value
@@ -520,7 +522,9 @@ class PathHandle(_Handle):
 
     def box_geometry(self):
         point = self.point()
-        return point, point, point, 0.12 * self.size
+        return point, point, point, handle_look.mm(
+            self.view, point, handle_look.core.half_width_px("ball")
+        )
 
     def _apply(self, value):
         self._value = float(value)
@@ -533,9 +537,8 @@ class PathHandle(_Handle):
     def hit(self, position):
         try:
             bx, by = _screen(self.view, self.point())
-            return math.hypot(float(position[0]) - bx, float(position[1]) - by) <= max(
-                self.GRAB_PIXELS, 6.0
-            )
+            reach = handle_look.core.grab_px("ball", at_least=self.GRAB_PIXELS)
+            return math.hypot(float(position[0]) - bx, float(position[1]) - by) <= reach
         except Exception:
             return False
 

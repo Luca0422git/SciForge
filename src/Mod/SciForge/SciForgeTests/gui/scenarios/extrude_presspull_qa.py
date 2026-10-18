@@ -365,11 +365,9 @@ def p3_auto_cut():
 
 
 def _arrow_drag(p, pixels):
-    origin = p.dragger.root.getChild(0).translation.getValue().getValue()
-    place = p.dragger.root.getChild(0)
-    axis = place.rotation.getValue().multVec(p.dragger.coin.SbVec3f(1, 0, 0)).getValue()
-    head = V(*origin) + V(*axis) * (p.dragger.distance() + p.dragger.size * 0.9)
-    a = h.screen_point(head)
+    # On the arrow's head as it is drawn now: it points the way the distance goes (down,
+    # into the part, for the -5 pocket). The old arrow had a head on both sides.
+    a = h.screen_point(arrows.head_point(p.dragger))
     h.drag(a, QtCore.QPoint(a.x(), a.y() - pixels), steps=20)
 
 
