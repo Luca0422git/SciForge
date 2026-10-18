@@ -138,7 +138,11 @@ class _ViewMouse(QtCore.QObject):
         if stroke is None:
             return False
         if not (event.buttons() & LEFT):
-            self.stroke = None
+            if QtWidgets.QApplication.mouseButtons() & LEFT:
+                # A move Qt made up in the middle of the drag (a widget shown or hidden under
+                # the mouse): dropping the stroke there lost the box (CI #153).
+                return True
+            self.stroke = None  # the button went up somewhere else
             return False
         pos = QtCore.QPointF(event.position())
         if not stroke.moved:

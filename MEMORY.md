@@ -1465,6 +1465,13 @@ Every failure was bisected before a change; the builders fixed their own (sf/fix
 - CI #152 (377a81bd, 2026-10-18): every job green (base, 4 scenario groups, Windows golden),
   the first fully green run since the improvement-list update. Luca got the zip of 377a81bd
   (adds the middle-drag and value-box fixes, WHATS_NEW items 31-32).
+- CI #153 (same code as #152) red: meshinspect2_direct's first box drag took nothing.
+  Reproduced locally 4 of 4 with the CI conditions. Qt sent one move with no button just
+  after the press, and Direct Edit dropped its stroke there (the same bug as orbit_ui).
+  Fixed in mesh_direct_ui._moved the way sketch3d_ui/text_ui do it: when
+  QApplication.mouseButtons() still holds the button, ignore the move. My first guess (a
+  drop-down list left open) was wrong; logging the events showed it. sketch_infer.py:1016
+  still resets on such a move (it has not failed; watch it).
 
 #### Open
 - FreeCAD limit (C++): a sketch area is lost where an arc ends tangent on a line's middle
