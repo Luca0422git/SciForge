@@ -118,35 +118,50 @@ def drag_arrow(key, mm):
     if arrow is None:
         h.check("handle %s shown" % key, False)
         return
-    # a visible part of the arrow, as a hand grabs it: rests on it a moment, then presses
-    # where nothing (a value box) covers it
-    start = ai.arrow_point(arrow, 0.6)
-    for part in (0.6, 0.8, 0.45, 0.9, 0.3):
+    # a visible part of the arrow, as a hand grabs it: rests on it a moment, presses where
+    # nothing (a value box) covers it, and grabs again a little further along when the drag
+    # moved nothing (P8's scale arrow is about 20 px long and a few thick: on CI's machine a
+    # press a pixel off its middle line missed it, CI #145-#151)
+    value = _handle_value(p, key)
+    tries = []
+    for part in (0.6, 0.75, 0.45, 0.9, 0.3):
         point = ai.arrow_point(arrow, part)
-        h.move(h.screen_point(point))
+        px = h.screen_point(point)
+        h.move(px)
         QtTest.QTest.qWait(150)
-        if h.covered(h.screen_point(point)) is None:
-            start = point
+        under = h.covered(px)
+        if under is not None:
+            tries.append((part, (px.x(), px.y()), under.metaObject().className()))
+            continue
+        end = point + arrow.direction * mm
+        h.drag(px, h.screen_point(end), steps=16)
+        QtTest.QTest.qWait(300)
+        tries.append(
+            (part, (px.x(), px.y()), "moved" if _handle_value(p, key) != value else "missed")
+        )
+        if _handle_value(p, key) != value:
             break
-    end = start + arrow.direction * mm
-    under = h.covered(h.screen_point(start))
-    px, ex = h.screen_point(start), h.screen_point(end)
+        arrow = _settled_arrow(key) or arrow
     s["grab"] = {
         "key": key,
-        "at": (px.x(), px.y()),
-        "to": (ex.x(), ex.y()),
-        "under": under.metaObject().className() if under else "the view",
+        "tries": tries,
         "arrow": [
             tuple((q.x(), q.y()))
             for q in (h.screen_point(ai.arrow_point(arrow, f)) for f in (0.0, 0.5, 1.0))
         ],
-        "boxes": {
-            k: (b.x(), b.y(), b.width(), b.height(), b.isVisible())
-            for k, b in sorted(getattr(getattr(p, "value_boxes", None), "boxes", {}).items())
-        },
     }
     print("[SciForge] exchange2_manip: grab %s" % s["grab"], flush=True)
-    h.drag(h.screen_point(start), h.screen_point(end), steps=16)
+
+
+def _handle_value(p, key):
+    """What the dialog shows for the handle `key` (moves when its drag took)."""
+    try:
+        if key == "scale":
+            return round(p.scale_value(), 6)
+        field = {"x": p.dx, "y": p.dy, "angle": p.angle}[key]
+        return round(field.value(), 6)
+    except Exception:
+        return None
 
 
 def drag_turn(degrees):
@@ -457,11 +472,10 @@ p8_fit.wait_ms = 800
 def p8_escape():
     obj = i.canvases()[0]
     p = panel()
-    field = getattr(p, "scale", None) if p is not None else None
     h.check(
         "P8 the scale arrow scaled it",
         obj.ScaleX > 1.1,
-        (obj.ScaleX, field.value() if hasattr(field, "value") else None, s.get("grab")),
+        (obj.ScaleX, _handle_value(p, "scale") if p is not None else None, s.get("grab")),
     )
     h.check("P8 in proportion", abs(obj.ScaleX - obj.ScaleY) < 1e-9, (obj.ScaleX, obj.ScaleY))
     h.press(QtCore.Qt.Key_Escape)
