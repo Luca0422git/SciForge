@@ -278,6 +278,13 @@ INSERT = group(
             "insert_step",
             note="A STEP or IGES file as a component: its parts, copies, names, colours.",
         ),
+        SEP,
+        item(
+            "Hardware...",
+            "SciForge_Hardware",
+            "hardware",
+            note="A real-size screw, nut, washer, heat-set insert or magnet, and its hole.",
+        ),
     ],
 )
 

@@ -1,0 +1,85 @@
+{
+  "id": "hardware_button_head_m4",
+  "title": "An M4x10 ISO 7380 button head on the top face: plain clearance hole, the dome on the face",
+  "tags": [
+    "hardware",
+    "screw",
+    "button"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_hardware",
+      "id": "hw1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "standard": "iso7380",
+      "size": "4",
+      "length": 10,
+      "hardware_bbox": [
+        16.2,
+        11.2,
+        0,
+        23.8,
+        18.8,
+        12.01792354577798
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "hw1": {
+          "volume": 174.6481604802753,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11840.956871912016,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Clearance 4.5 through all: V = 12000 - pi 2.25^2 10. Head ISO 7380 M4: a spherical cap dk 7.6 x k 2.2 on the face; the hexagon socket's part inside the dome by quadrature (hardware_core.dome_socket). The socket takes the dome's top: the part is highest at the middle of a socket flat, 1.25 from the axis: 2.2 - R + sqrt(R^2 - 1.25^2), R = (3.8^2 + 2.2^2) / 4.4."
+  }
+}

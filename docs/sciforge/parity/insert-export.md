@@ -64,7 +64,7 @@ Community answer; Guess = no source found, to check in real Fusion)
 | Insert DXF: "the DXF origin is placed at the sketch origin" | Autodesk (help "Insert a DXF file") | Same; its manipulator sits at the DXF's origin (where it turns and scales about); its Z Angle turns counter-clockwise (**Guess**: no source for DXF) |
 | Canvas: the manipulator "stays anchored to the image's center"; no way to move the pivot | Forum (Autodesk support answer, "Dynamic Manipulator") | Same handles at the picture's middle (Z Angle counter-clockwise, **Guess**); Edit Canvas has them too; the scale handle scales X and Y together; Calibrate's scale is kept (the handles start from it) |
 | The manipulator keeps its size on the screen when zooming | Guess (every Fusion manipulator does) | The handles are made again when the view is zoomed, panned or turned |
-| McMaster-Carr insert | Autodesk (Insert > Insert McMaster-Carr Component) | Not built: it needs McMaster's online catalogue inside the program; a STEP downloaded from mcmaster.com goes in with Insert STEP |
+| McMaster-Carr insert | Autodesk (Insert > Insert McMaster-Carr Component) | Not built: it needs McMaster's online catalogue inside the program; a STEP downloaded from mcmaster.com goes in with Insert STEP. Standard screws, nuts, washers, heat-set inserts and magnets come from SciForge's own offline library: INSERT > Hardware... (parity/hardware.md) |
 
 ### Known gaps of Part 2 (also listed in Known gaps below)
 
@@ -241,7 +241,7 @@ export. Fusion has no such command (its nearest is File > Export, one format at 
 
 | Fusion behaviour | Why not (yet) |
 |---|---|
-| Insert McMaster-Carr | needs McMaster's online catalogue in the program (SciForge is offline): a downloaded STEP goes in with Insert STEP. Derive, Decal, Insert Component: their own docs (parity/misc.md, Part 2) |
+| Insert McMaster-Carr | needs McMaster's online catalogue in the program (SciForge is offline): a downloaded STEP goes in with Insert STEP; standard hardware: INSERT > Hardware... (parity/hardware.md). Derive, Decal, Insert Component: their own docs (parity/misc.md, Part 2) |
 | STEP body names inside components after a round trip; an inserted design's own components; a linked copy locked against edits; the out-of-date icon | Part 2, Known gaps |
 | Convert Mesh "Organic", surface fitting of round faces (Prismatic keeps them faceted) | FreeCAD has no mesh-to-surface fitting |
 | Export: SAT, SMT, F3D, FBX, USD; DWG without a converter | no FreeCAD writers; DWG needs LibreDWG / ODA / QCAD installed (untested here) |

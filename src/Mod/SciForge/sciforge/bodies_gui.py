@@ -35,6 +35,7 @@ ICONS = {
     "ChamferSets": "chamfer",
     "SilhouetteSplit": "silhouette_split",
     "MoveFace": "move",  # Move/Copy of faces (modify-2, move_face.py)
+    "Hardware": "hardware",  # INSERT > Hardware... (hardware.py)
 }
 
 

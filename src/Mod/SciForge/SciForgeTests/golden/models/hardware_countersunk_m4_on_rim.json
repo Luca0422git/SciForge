@@ -1,0 +1,104 @@
+{
+  "id": "hardware_countersunk_m4_on_rim",
+  "title": "A d4.5 through hole, then an M4x12 ISO 10642 screw clicked on its rim: the countersink is added, head flush",
+  "tags": [
+    "hardware",
+    "screw",
+    "countersink",
+    "rim"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "extent": "all",
+      "diameter": 4.5,
+      "tap_type": "simple",
+      "drill_point": "flat"
+    },
+    {
+      "op": "sf_hardware",
+      "id": "hw1",
+      "edge": {
+        "type": "circle",
+        "radius": 2.25,
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "standard": "iso10642",
+      "size": "4",
+      "length": 12,
+      "make_hole": true,
+      "hardware_bbox": [
+        15.52,
+        10.52,
+        -2,
+        24.48,
+        19.48,
+        10
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "hw1": {
+          "volume": 197.29445799592958,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11794.192545764954,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "ISO 273 normal for M4 4.5 (the same as the hole there), 90 degree countersink to the head's theoretical 8.96: a cone of height (4.48 - 2.25) on the hole: V = 12000 - (pi h/3 (R^2 + R r + r^2) + pi r^2 (10 - h)). The screw: frustum 8.96 to 4 over k 2.48, minus the socket (s 2.5, t 1.5), shank 4 x (12 - 2.48); head top flush at z 10."
+  }
+}

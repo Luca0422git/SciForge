@@ -1,0 +1,83 @@
+{
+  "id": "hardware_nut_top",
+  "title": "An M3 ISO 4032 hex nut on the top face: clearance hole, nut on the face",
+  "tags": [
+    "hardware",
+    "nut"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_hardware",
+      "id": "hw1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        20,
+        15,
+        10
+      ],
+      "standard": "iso4032",
+      "size": "3",
+      "hardware_bbox": [
+        16.824573519457058,
+        12.25,
+        10,
+        23.175426480542942,
+        17.75,
+        12.4
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "hw1": {
+          "volume": 45.90884398536536,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11909.207972311255,
+    "faces": 7,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Clearance 3.4 through all: V = 12000 - pi 1.7^2 10. Nut s 5.5, m 2.4: ((sqrt3/2) 5.5^2 - pi 1.5^2) 2.4; corners on x (5.5/sqrt3 from the axis)."
+  }
+}

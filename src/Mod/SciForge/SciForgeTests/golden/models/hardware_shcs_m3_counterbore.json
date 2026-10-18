@@ -1,0 +1,88 @@
+{
+  "id": "hardware_shcs_m3_counterbore",
+  "title": "Insert an M3x10 ISO 4762 screw on the top face: counterbored clearance hole",
+  "tags": [
+    "hardware",
+    "screw",
+    "counterbore"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_hardware",
+      "id": "hw1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        12,
+        8,
+        10
+      ],
+      "standard": "iso4762",
+      "size": "3",
+      "length": 10,
+      "hardware_bbox": [
+        9.25,
+        5.25,
+        -3.4,
+        14.75,
+        10.75,
+        9.6
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "hw1": {
+          "volume": 134.92426162834022,
+          "solids": 1
+        },
+        "e1": {
+          "volume": 11827.254815553384
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11827.254815553384,
+    "faces": 9,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      10
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "ISO 273 normal for M3: 3.4 through; DIN 974-1 counterbore 6.5 x 3.4 (k 3 + 0.4): V = 12000 - pi 1.7^2 10 - pi (3.25^2 - 1.7^2) 3.4. The screw (ISO 4762 M3: dk 5.5, k 3, socket s 2.5 x t 1.3): pi 2.75^2 3 - (sqrt3/2) 2.5^2 1.3 + pi 1.5^2 10; its head sits on the counterbore's floor (z 6.6 to 9.6), the shank 10 below it."
+  }
+}
