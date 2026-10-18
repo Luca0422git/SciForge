@@ -1486,6 +1486,12 @@ Every failure was bisected before a change; the builders fixed their own (sf/fix
   face for sketch" Report lines still appear; the harness ignores them (IGNORED_ERRORS).
   Limit: added areas have no topological names; after an edit that reorders them an
   extrude may need its profile picked again (picks.py repairs what it can).
+- Luca 2026-10-18: Split Body shows the splitting tool in red like Fusion (built by a
+  helper agent on sf/split-preview, reviewed and taken over): split.tool_preview draws the
+  same plane/cylinder the split cuts with (split.tool_shape(fit=True)), sized by
+  split_core to the body + 10% rim (Guess); Extend off: the face only; a body tool: its
+  faces. Reuses cut_preview.CutPreview. Scenario split_preview, unit test_split_core.
+  Autodesk's help pages are blocked from the sandbox: the red look is Luca's word (Guess).
 
 #### Open
 - Sketch Rotate keeps FreeCAD's Ctrl snapping; Pin to Shortcuts not built.
