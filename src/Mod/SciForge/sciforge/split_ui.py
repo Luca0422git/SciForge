@@ -11,14 +11,17 @@ all of them split the body in one step. A body or face selected before the comma
 taken at once. The
 pieces are previewed live (each new body shows); OK / Enter keeps them (one undo step),
 Cancel / Esc throws them away, the reason is said in the dialog when the tool does not cut
-the body. Double-click the Split Body in the timeline to change it. Document side: split.py.
+the body. The splitting tool is drawn in red, see-through, as Fusion does: with Extend
+Splitting Tool its whole plane (or cylinder) across the body, so the person sees where the
+cut goes; without it only the face itself (split.tool_preview). Double-click the Split Body
+in the timeline to change it. Document side: split.py.
 """
 
 import time
 
 import FreeCAD as App
 
-from . import bodies, split, ui_icon_path, warn
+from . import bodies, cut_preview, split, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 
 OVERLAY_CLICK_S = 0.8
@@ -39,6 +42,7 @@ class SplitPanel(BodyPanel):
         self.plane_picker = None
         self._planes_wanted = True
         self._overlay_time = 0.0
+        self.tool_view = None  # the red splitting tool (cut_preview.CutPreview)
         super().__init__(
             doc, "Split Body" if feature is None else "Edit Split Body", feature is not None
         )
@@ -46,6 +50,7 @@ class SplitPanel(BodyPanel):
         self._show_picks()
         if feature is not None:
             self._go("tool")
+            self._update_tool_preview()  # no recompute until a change: the tool shows now
         else:
             self._go("body")
             self.start_from_selection()
@@ -239,6 +244,29 @@ class SplitPanel(BodyPanel):
             else 0
         )
         self.note.setText("%d bodies" % count if count else "")
+        self._update_tool_preview()
+
+    def _update_tool_preview(self):
+        """The splitting tool in red over the part (extended across the body with Extend
+        Splitting Tool), redrawn after every change of the picks or the option; a picture
+        only, clicks go through it."""
+        if self._closed:
+            return
+        try:
+            shape = split.tool_preview(self.options, self.target)
+        except Exception as exc:
+            warn("Split Body tool preview: %s" % exc)
+            shape = None
+        try:
+            if shape is None:
+                if self.tool_view is not None:
+                    self.tool_view.clear()
+                return
+            if self.tool_view is None:
+                self.tool_view = cut_preview.CutPreview(self.view)
+            self.tool_view.show(shape)
+        except Exception as exc:
+            warn("Split Body tool preview: %s" % exc)
 
     def preview_steps(self):
         if self.target is None or not bodies.alive(self.target):
@@ -255,6 +283,12 @@ class SplitPanel(BodyPanel):
         return ""
 
     def remove_handles(self):
+        view, self.tool_view = self.tool_view, None
+        if view is not None:
+            try:
+                view.clear()
+            except Exception:
+                pass
         if self.plane_picker is not None:
             try:
                 self.plane_picker.remove()

@@ -28,7 +28,7 @@ and delete.py), as in Fusion.
 import FreeCAD as App
 import Part
 
-from . import bodies
+from . import bodies, split_core
 
 TYPE = "PartDesign::FeaturePython"
 PIECE_TYPE = "Part::FeaturePython"
@@ -74,19 +74,21 @@ def is_piece(obj):
 
 
 # -- geometry ---------------------------------------------------------------------------------
-def tool_shape(tool, extend, around):
+def tool_shape(tool, extend, around, fit=False):
     """The splitting tool in design coordinates. `around`: the shape to split (an endless
-    plane is made big enough to cross all of it)."""
+    plane is made big enough to cross all of it). fit: the dialog's red preview of the tool
+    (split_core): the same plane or cylinder, only as big as `around` and the picked face
+    (or sketch curve) together, plus a margin."""
     obj, sub = tool
     size = max(around.BoundBox.DiagonalLength, 1.0) * 4.0 + _far(obj, around)
     if obj.TypeId in PLANE_TYPES:
         place = obj.getGlobalPlacement()
         normal = place.Rotation.multVec(App.Vector(0, 0, 1))
-        return _plane_face(place.Base, normal, around, size)
+        return _plane_face(place.Base, normal, around, size, fit)
     if obj.TypeId == "Sketcher::SketchObject":
         if not sub.startswith("Edge"):
             raise SplitError("Pick a curve of the sketch (a line, an arc...).")
-        return _sketch_tool(obj, sub, extend, around, size)
+        return _sketch_tool(obj, sub, extend, around, size, fit)
     if bodies.is_body(obj) or (not sub and obj.isDerivedFrom("Part::Feature")):
         shape = bodies.global_shape(obj)
         if shape.isNull() or not shape.Solids:
@@ -96,37 +98,66 @@ def tool_shape(tool, extend, around):
         raise SplitError("Split with a plane, a face or a body.")
     face = _global_face(obj, sub)
     surface = face.Surface
+    if fit:
+        around = _with(around, face)  # the extension still holds the face itself
     if extend:
         if surface.TypeId == "Part::GeomPlane":
             normal = face.normalAt(*_mid_uv(face))
-            return _plane_face(face.CenterOfMass, normal, around, size)
+            return _plane_face(face.CenterOfMass, normal, around, size, fit)
         if surface.TypeId == "Part::GeomCylinder":
             axis = App.Vector(surface.Axis).normalize()
-            center = App.Vector(surface.Center)
-            base = center - axis * size
-            return Part.makeCylinder(surface.Radius, 2 * size, base, axis).Faces[0]
+            return _cylinder_face(
+                surface.Radius, App.Vector(surface.Center), axis, around, size, fit
+            )
     return face
 
 
-def _sketch_tool(sketch, sub, extend, around, size):
+def _sketch_tool(sketch, sub, extend, around, size, fit=False):
     """A sketch curve cuts straight through, along the sketch's normal (Fusion). Extend
     Splitting Tool: a line is taken as its whole plane, an arc as its whole cylinder."""
     edge = _global_face(sketch, sub)
     normal = sketch.getGlobalPlacement().Rotation.multVec(App.Vector(0, 0, 1))
     curve = edge.Curve
+    if fit:
+        around = _with(around, edge)
     if extend and curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment"):
         start = edge.valueAt(edge.FirstParameter)
         end = edge.valueAt(edge.LastParameter)
         if (end - start).Length < 1e-9:
             raise SplitError("That sketch line has no length.")
         side = (end - start).normalize().cross(normal)
-        return _plane_face(start, side, around, size)
+        return _plane_face(start, side, around, size, fit)
     if extend and hasattr(curve, "Radius") and hasattr(curve, "Center"):
-        center = App.Vector(curve.Center)
-        return Part.makeCylinder(curve.Radius, 2 * size, center - normal * size, normal).Faces[0]
+        return _cylinder_face(curve.Radius, App.Vector(curve.Center), normal, around, size, fit)
+    low, high = -size, size
+    if fit:
+        low, high = split_core.cover_axis(_box(around), edge.valueAt(edge.FirstParameter), normal)
     swept = edge.copy()
-    swept.translate(normal * -size)
-    return swept.extrude(normal * (2 * size))
+    swept.translate(normal * low)
+    return swept.extrude(normal * (high - low))
+
+
+def _cylinder_face(radius, center, axis, around, size, fit=False):
+    """The whole cylinder through a round face (or a sketch arc), along its axis: as long as
+    the body plus a margin with fit, else far past it."""
+    axis = App.Vector(axis).normalize()
+    low, high = -size, size
+    if fit:
+        low, high = split_core.cover_axis(_box(around), center, axis)
+    return Part.makeCylinder(radius, high - low, center + axis * low, axis).Faces[0]
+
+
+def _with(around, shape):
+    """`around` and `shape` together (only their size counts: the preview's cover)."""
+    try:
+        return Part.makeCompound([around, shape])
+    except Exception:
+        return around
+
+
+def _box(shape):
+    b = shape.BoundBox
+    return (b.XMin, b.YMin, b.ZMin, b.XMax, b.YMax, b.ZMax)
 
 
 def _far(obj, around):
@@ -142,8 +173,13 @@ def _mid_uv(face):
     return (u0 + u1) / 2.0, (v0 + v1) / 2.0
 
 
-def _plane_face(point, normal, around, size):
+def _plane_face(point, normal, around, size, fit=False):
     plane = Part.Plane(App.Vector(point), App.Vector(normal))
+    if fit:  # the preview: just over the body's outline in this plane (split_core)
+        box = _box(around)
+        uvs = [plane.parameter(App.Vector(*c)) for c in split_core.corners(box)]
+        u0, u1, v0, v1 = split_core.cover_uv(uvs, split_core.margin(box))
+        return plane.toShape(u0, u1, v0, v1)
     # Centre the face on the shape: the projection of its centre onto the plane.
     center = around.BoundBox.Center
     u, v = plane.parameter(center)
@@ -368,6 +404,38 @@ def preview_pieces(options, feature=None):
         )
     meta = bodies.load_meta(feature, META) if feature is not None else {}
     return order(pieces, meta.get("centers"))
+
+
+def tool_preview(options, feature=None):
+    """The splitting tool(s) as the dialog draws them in red (design coordinates): with
+    Extend Splitting Tool a face's whole plane or cylinder, cut down to the body to split
+    plus a margin (split_core); without it the face itself; a body as the tool: its faces.
+    The same planes and cylinders the split cuts with, so the picture shows where the cut
+    goes. None while there is nothing to show; a tool that cannot be made is left out."""
+    options = with_defaults(options)
+    body = options["body"]
+    if body is None or not options["tools"]:
+        return None
+    if feature is not None and bodies.alive(feature):
+        base = feature.BaseFeature
+    else:
+        base = body.Tip
+    if base is None:
+        return None
+    around = bodies.global_shape(base)
+    if around.isNull():
+        return None
+    shapes = []
+    for tool in options["tools"]:
+        try:
+            shape = tool_shape(tool_link(tool), bool(options["extend"]), around, fit=True)
+        except Exception:
+            continue
+        if shape is not None and not shape.isNull():
+            shapes.append(shape)
+    if not shapes:
+        return None
+    return shapes[0] if len(shapes) == 1 else Part.makeCompound(shapes)
 
 
 def build(options, feature=None, name="SplitBody"):
