@@ -152,8 +152,9 @@ def is_text(obj):
 def ensure_regions(sketch):
     """Turn on the sketch's regions (FreeCAD's MakeInternals): every closed area becomes
     an "InternalFaceN" that a Pad can use as its profile."""
-    from . import preview
+    from . import preview, sketch_area_fill
 
+    sketch_area_fill.install()  # the areas FreeCAD cannot make are added after its compute
     if not sketch.MakeInternals:
         sketch.MakeInternals = True
         with preview.quiet():  # a sketch FreeCAD cannot make areas from just has none

@@ -1,0 +1,95 @@
+{
+  "id": "sketch_face_line_through_circle",
+  "title": "Block 100x40x20, sketch on its top with the face's edges projected, a line across the face and a circle r6 on it: both halves of the circle extruded 10",
+  "tags": [
+    "sketch",
+    "auto-project",
+    "regions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "auto_project": true,
+      "geometry": [
+        {
+          "line": [
+            25,
+            0,
+            25,
+            40
+          ]
+        },
+        {
+          "circle": [
+            25,
+            20,
+            6
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "regions": [
+        [
+          22,
+          20
+        ],
+        [
+          28,
+          20
+        ]
+      ],
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 81130.97335529233,
+    "area": 13976.991118430775,
+    "faces": 8,
+    "bbox": [
+      0,
+      0,
+      0,
+      100,
+      40,
+      30
+    ],
+    "source": "analytic",
+    "note": "Luca 2026-10-18: the line across the face (to find its middle) made FreeCAD 1.1.4 make no sketch area at all, so the circle could not be picked (sciforge/sketch_area_fill.py adds the areas). V = 100*40*20 + pi*6^2*10; A = block 13600 + cylinder side 2*pi*6*10 (its top replaces as much of the block top); faces: 6 block faces, the cylinder side and its top (Refine merges the two halves)"
+  }
+}

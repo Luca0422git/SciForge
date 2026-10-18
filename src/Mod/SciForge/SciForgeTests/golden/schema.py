@@ -102,7 +102,7 @@ STEP_KEYS["blend_chamfer"] = (
     {"chamfer_type", "distance2", "angle", "flip", "edges", "faces", "features", "comment"},
 )
 
-GEOMETRY_KINDS = ("rect", "center_rect", "circle", "polyline", "polygon", "slot")
+GEOMETRY_KINDS = ("rect", "center_rect", "circle", "polyline", "polygon", "slot", "line")
 EXPECT_KEYS = {
     "volume",
     "area",
@@ -192,6 +192,9 @@ def _check_geometry(where, geometry):
         elif kind == "slot":
             if not isinstance(value, list) or len(value) != 5:
                 _fail(here, "'slot' takes [x1, y1, x2, y2, width]")
+        elif kind == "line":
+            if not isinstance(value, list) or len(value) != 4:
+                _fail(here, "'line' takes [x0, y0, x1, y1]")
 
 
 def _check_ref(where, spec):

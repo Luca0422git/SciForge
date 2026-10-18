@@ -1,0 +1,91 @@
+{
+  "id": "sketch_face_line_through_circle_half",
+  "title": "Same sketch: only the left half of the circle extruded 10",
+  "tags": [
+    "sketch",
+    "auto-project",
+    "regions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "auto_project": true,
+      "geometry": [
+        {
+          "line": [
+            25,
+            0,
+            25,
+            40
+          ]
+        },
+        {
+          "circle": [
+            25,
+            20,
+            6
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "regions": [
+        [
+          22,
+          20
+        ]
+      ],
+      "distance": 10
+    }
+  ],
+  "expect": {
+    "volume": 80565.48667764616,
+    "area": 13908.495559215387,
+    "faces": 9,
+    "bbox": [
+      0,
+      0,
+      0,
+      100,
+      40,
+      30
+    ],
+    "source": "analytic",
+    "note": "Each half of the circle is its own profile, as in Fusion. V = 100*40*20 + pi*6^2*10/2; A = 13600 + half cylinder side pi*6*10 + the flat side along the line 12*10; faces: 6 block faces, half cylinder side, flat side, top"
+  }
+}

@@ -1472,10 +1472,22 @@ Every failure was bisected before a change; the builders fixed their own (sf/fix
   QApplication.mouseButtons() still holds the button, ignore the move. My first guess (a
   drop-down list left open) was wrong; logging the events showed it. sketch_infer.py:1016
   still resets on such a move (it has not failed; watch it).
+- Luca 2026-10-18: a line across a face (to find its middle) and a circle on it: Extrude
+  took the whole face. FreeCAD 1.1.4's sketch areas (WireJoiner tight bound, C++) make NO
+  area when a line crosses a circle inside another area (also the old "arc tangent on a
+  line's middle" limit). Its FaceMakerRing is fine with the right loops. Fix without a core
+  change: sketch_area_fill.py, a document observer (slotRecomputedObject runs after the
+  sketch and before the steps that use it) adds the areas sketch_regions finds to
+  sketch.InternalShape (FreeCAD's own areas first, so InternalFaceN numbers stay), then
+  purgeTouched. Saved with the file. Installed by extrude.ensure_regions and
+  timeline_ops.install_guard. Golden sketch_face_line_through_circle(_half),
+  sketch_line_through_circle_overhang (fail without the fix); scenario
+  sketch_line_through_circle. FreeCAD's own "<WireJoiner> ... failed" / "Failed to make
+  face for sketch" Report lines still appear; the harness ignores them (IGNORED_ERRORS).
+  Limit: added areas have no topological names; after an edit that reorders them an
+  extrude may need its profile picked again (picks.py repairs what it can).
 
 #### Open
-- FreeCAD limit (C++): a sketch area is lost where an arc ends tangent on a line's middle
-  (rounded outline + a rectangle over it); Extrude says so.
 - Sketch Rotate keeps FreeCAD's Ctrl snapping; Pin to Shortcuts not built.
 
 ### Session log: Raspberry Pi 5 case from scratch (branch `develop`, 2026-10-16)

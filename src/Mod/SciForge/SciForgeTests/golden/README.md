@@ -123,7 +123,7 @@ Conventions:
 
 `rect [x0, y0, x1, y1]`, `center_rect [cx, cy, w, h]`, `circle [cx, cy, r]`,
 `polyline [[x, y], ...]` (closed), `polygon {center, radius, sides, rotation}`,
-`slot [x1, y1, x2, y2, width]`.
+`slot [x1, y1, x2, y2, width]`, `line [x0, y0, x1, y1]` (one open line).
 
 Give geometry a `name` to get Fusion-style dimensions you can `edit` later:
 `<name>.width`, `<name>.height`, `<name>.x`, `<name>.y` for rectangles, and `<name>.diameter`,

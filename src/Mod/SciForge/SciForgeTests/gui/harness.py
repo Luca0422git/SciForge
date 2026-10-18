@@ -39,6 +39,11 @@ state = {"name": "scenario", "errors_seen": 0}
 IGNORED_ERRORS = (
     re.compile(r"Migrating Start Workbench"),
     re.compile(r"Cannot find icon"),
+    # FreeCAD 1.1.4's sketch areas give up on a line through a circle inside another
+    # area; SciForge adds the areas then (sciforge/sketch_area_fill.py, which warns if it
+    # cannot)
+    re.compile(r"<WireJoiner>"),
+    re.compile(r"Failed to make face for sketch"),
 )
 
 

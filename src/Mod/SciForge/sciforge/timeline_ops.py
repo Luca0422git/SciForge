@@ -292,10 +292,11 @@ _guard = {"observer": None}
 
 
 def install_guard(defer=None):
-    from . import picks
+    from . import picks, sketch_area_fill
 
     install_marker_inserts()
     picks.install()  # picked edges / faces kept when FreeCAD loses their names
+    sketch_area_fill.install()  # sketch areas FreeCAD cannot make (a line through a circle)
     if _guard["observer"] is None:
         _guard["observer"] = RecomputeGuard(defer)
         App.addDocumentObserver(_guard["observer"])

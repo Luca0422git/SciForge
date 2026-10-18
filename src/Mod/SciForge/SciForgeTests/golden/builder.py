@@ -153,6 +153,9 @@ class Builder:
                 _polyline(sketch, pts)
             elif "slot" in item:
                 _slot(sketch, *item["slot"])
+            elif "line" in item:  # one open line (a line across a face to find its middle)
+                x0, y0, x1, y1 = item["line"]
+                sketch.addGeometry(Part.LineSegment(_v(x0, y0), _v(x1, y1)))
         self.objects[step["id"]] = sketch
         self.ops[step["id"]] = "sketch"
         self.doc.recompute()

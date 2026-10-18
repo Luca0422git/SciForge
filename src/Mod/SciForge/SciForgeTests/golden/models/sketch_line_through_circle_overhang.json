@@ -1,0 +1,73 @@
+{
+  "id": "sketch_line_through_circle_overhang",
+  "title": "Rectangle 40x30, a line past both its sides through a circle r5: both halves of the circle extruded 8",
+  "tags": [
+    "sketch",
+    "regions"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        },
+        {
+          "line": [
+            10,
+            -5,
+            10,
+            35
+          ]
+        },
+        {
+          "circle": [
+            10,
+            15,
+            5
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "regions": [
+        [
+          8,
+          15
+        ],
+        [
+          12,
+          15
+        ]
+      ],
+      "distance": 8
+    }
+  ],
+  "expect": {
+    "volume": 628.3185307179587,
+    "area": 408.4070449666731,
+    "faces": 3,
+    "bbox": [
+      5,
+      10,
+      0,
+      15,
+      20,
+      8
+    ],
+    "source": "analytic",
+    "note": "A line through a circle inside another area: FreeCAD 1.1.4 made no sketch area (sciforge/sketch_area_fill.py adds them). A cylinder r5 h8: V = pi*25*8; A = 2*pi*25 + 2*pi*5*8; faces: bottom, top, side (Refine merges the halves)"
+  }
+}
