@@ -47,7 +47,7 @@ def sketch_rect_on(point, x0, y0, x1, y1):
 
     def pick():
         h.fit()
-        h.click(point)
+        pl.click_on_plane(point)
 
     def draw():
         sk = h.in_sketch()

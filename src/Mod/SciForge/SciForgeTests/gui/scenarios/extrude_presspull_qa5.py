@@ -25,6 +25,7 @@ from PySide import QtCore, QtWidgets
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import versions_input as vi
 from SciForgeTests.gui import widget_input as w
 
@@ -87,7 +88,7 @@ def block_steps(tag, name):
         h.ribbon("Create Sketch")
 
     def pick():
-        h.click(V(12, -8, 0))
+        pl.click_on_plane(V(12, -8, 0))
 
     def draw():
         sk = h.in_sketch()
@@ -343,7 +344,7 @@ def p27_new():
 
 
 def p27_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def p27_draw():

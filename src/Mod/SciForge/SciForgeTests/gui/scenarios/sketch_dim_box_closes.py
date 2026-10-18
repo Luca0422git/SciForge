@@ -30,6 +30,7 @@ from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import dialog_input
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
@@ -71,7 +72,7 @@ def a_new():
 
 
 def a_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def a_circle():
@@ -229,7 +230,7 @@ def d_new():
 
 
 def d_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def d_lines():

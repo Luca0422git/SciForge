@@ -113,7 +113,7 @@ def region_click(sketch, which):
     point = ri.visible_point(face, shape)
     h.check("a visible spot inside the area", point is not None)
     if point is not None:
-        h.click(point)
+        pl.click_on_plane(point)
 
 
 # == Path 1: beginner ============================================================================

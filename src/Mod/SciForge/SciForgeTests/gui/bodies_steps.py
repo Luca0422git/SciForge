@@ -15,6 +15,7 @@ from PySide6 import QtTest
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 
@@ -84,7 +85,7 @@ def box_steps(name, rect, height, click, new_body=False, check_volume=None):
         if pl.square_point("XY_Plane") is not None:
             pl.click_square("XY_Plane")
         else:
-            h.click(click)
+            pl.click_on_plane(click)
 
     def draw():
         sk = h.in_sketch()

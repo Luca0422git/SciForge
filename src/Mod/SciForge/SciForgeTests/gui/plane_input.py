@@ -70,3 +70,32 @@ def click_square(role="XY_Plane"):
         return None
     h.click(point)
     return point
+
+
+def click_on_plane(point):
+    """Click `point`, a spot on an origin plane a scenario aims at (V(12, -8, 0): on XY):
+    where it shows the square or the part, there; when the square no longer covers it
+    (the squares are small since 2026-10-18 and lie in their + quarter), on that plane's
+    square where it shows, as a person does."""
+    p = picker()
+    role = _plane_of(point)
+    if p is None or role is None:
+        h.click(point)
+        return point
+    pixel = h.view().getPointOnViewport(point)
+    pixel = (int(round(float(pixel[0]))), int(round(float(pixel[1]))))
+    if p._geometry_at(pixel) or _takes(p, pixel, role):
+        h.click(point)
+        return point
+    return click_square(role)
+
+
+def _plane_of(point, tol=1e-9):
+    """The origin plane `point` lies in ("XY_Plane" for z = 0 ...), or None."""
+    if abs(point.z) <= tol:
+        return "XY_Plane"
+    if abs(point.y) <= tol:
+        return "XZ_Plane"
+    if abs(point.x) <= tol:
+        return "YZ_Plane"
+    return None

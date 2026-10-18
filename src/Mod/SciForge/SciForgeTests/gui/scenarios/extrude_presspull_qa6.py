@@ -263,7 +263,7 @@ def p28_new():
 
 
 def p28_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def p28_draw():

@@ -70,7 +70,7 @@ def a_waits():
 
 
 def a_click_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 a_click_xy.wait_ms = 1200

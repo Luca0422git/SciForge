@@ -37,6 +37,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import shell_draft_steps as sd
 
@@ -209,7 +210,7 @@ def create_sketch_xy():
 
 def pick_xy():
     h.check("Create Sketch opens no pop-up", not h.popups(), h.popups())
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def draw_outline():

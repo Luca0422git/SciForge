@@ -24,6 +24,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as i
 
 V = App.Vector
@@ -52,7 +53,7 @@ def sketch():
 
 
 def pick_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 def draw():

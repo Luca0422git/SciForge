@@ -577,7 +577,7 @@ def sketch_steps(tag, point, draw):
 
     def pick():
         h.fit()
-        h.click(point)
+        pl.click_on_plane(point)
 
     def drawing():
         sk = h.in_sketch()

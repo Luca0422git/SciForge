@@ -21,6 +21,7 @@ from PySide import QtCore
 from SciForgeTests.gui import bodies_steps as bst
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
@@ -121,7 +122,7 @@ def sketch_on(tag, point, state, support=None, body_after=None):
         h.ribbon("Create Sketch")
 
     def pick():
-        h.click(point)
+        pl.click_on_plane(point)
 
     def opened():
         sk = h.in_sketch()

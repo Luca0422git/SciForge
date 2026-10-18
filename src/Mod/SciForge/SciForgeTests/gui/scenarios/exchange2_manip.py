@@ -33,6 +33,7 @@ from PySide6 import QtTest
 from SciForgeTests.gui import arrow_input as ai
 from SciForgeTests.gui import exchange_steps as x
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as i
 from SciForgeTests.gui import timeline_input as t
 
@@ -187,7 +188,7 @@ def p1_open():
 
 
 def p1_click_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 p1_click_xy.wait_ms = 1500
@@ -379,7 +380,7 @@ def p7_canvas():
 
 
 def p7_click_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 p7_click_xy.wait_ms = 1500
@@ -499,7 +500,7 @@ def p9_dxf():
 
 
 def p9_click_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 p9_click_xy.wait_ms = 1500

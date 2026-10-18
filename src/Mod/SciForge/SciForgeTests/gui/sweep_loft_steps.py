@@ -12,6 +12,7 @@ from PySide import QtCore, QtGui, QtWidgets
 from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
@@ -262,7 +263,7 @@ def region_click(sketch, which=None, occluder=None):
     point = ri.visible_point(face, occluder) if face is not None else None
     h.check("a visible spot inside the area of %s" % sketch.Label, point is not None)
     if point is not None:
-        h.click(point)
+        pl.click_on_plane(point)
     return point
 
 
