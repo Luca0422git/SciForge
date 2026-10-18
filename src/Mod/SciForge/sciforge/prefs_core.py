@@ -33,7 +33,27 @@ PAGES = [
     # SciForge's own: every command's keyboard shortcut in one list (Fusion only changes them
     # one at a time from a command's three-dot menu; its users keep asking for a list)
     ("keyboard", "Keyboard Shortcuts", None),
+    # SciForge's own: where 3D Print (UTILITIES > MAKE) sends the design. Fusion keeps its
+    # print utility in the 3D Print dialog only; the dialog remembers its choices here too.
+    ("print", "3D Print", None),
 ]
+
+# 3D Print's Send to choices (slicer_core has the slicers) and its formats (export.py's
+# PRINT_FORMATS: the unit tests keep the two lists the same).
+PRINT_FORMATS = ["3MF", "STL (Binary)", "STL (ASCII)", "OBJ"]
+
+
+def _send_to_choices():
+    from . import slicer_core
+
+    return (
+        [("", "The first slicer found", True, "")]
+        + [(e["id"], e["name"], True, "") for e in slicer_core.SLICERS]
+        + [
+            (slicer_core.OTHER, "Other (the program below)", True, ""),
+            (slicer_core.FILE_ONLY, slicer_core.FILE_ONLY_LABEL, True, ""),
+        ]
+    )
 
 # Fusion's Pan, Zoom, Orbit Shortcuts presets: (value, label, FreeCAD navigation style or None
 # when SciForge cannot give it, why not).
@@ -439,6 +459,51 @@ OPTIONS = [
         group="Design",
         choices=[(schema, label, True, "") for _short, label, schema in UNIT_SCHEMAS],
         tip="A design's own units: Document Settings > Units in its browser.",
+    ),
+    # -- 3D Print (SciForge's own page) -----------------------------------------------------
+    _option(
+        "print_send_to",
+        "print",
+        "Send to",
+        "choice",
+        "",
+        (SCIFORGE, "String", "PrintSendTo"),
+        group="Slicer",
+        choices=_send_to_choices(),
+        tip="Where 3D Print sends the design: a slicer SciForge found on this computer, the "
+        "program below, or only a saved file. The 3D Print dialog changes it too.",
+    ),
+    _option(
+        "slicer_program",
+        "print",
+        "Program (Other)",
+        "file",
+        "",
+        (SCIFORGE, "String", "SlicerProgram"),
+        group="Slicer",
+        tip="Your slicer's program (its .exe, a shortcut to it, or an AppImage), for a slicer "
+        "SciForge does not find by itself.",
+    ),
+    _option(
+        "print_format",
+        "print",
+        "Format",
+        "choice",
+        "3MF",
+        (SCIFORGE, "String", "PrintFormat"),
+        group="File",
+        choices=[(f, f, True, "") for f in PRINT_FORMATS],
+        tip="3MF keeps every body as its own named object, in millimetres; STL is one mesh.",
+    ),
+    _option(
+        "print_save_copy",
+        "print",
+        "Also save a copy next to the design",
+        "bool",
+        False,
+        (SCIFORGE, "Bool", "PrintSaveCopy"),
+        group="File",
+        tip="When sending to a slicer, a copy of the file goes beside the design file too.",
     ),
     # -- Network ----------------------------------------------------------------------------
     _option(

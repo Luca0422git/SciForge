@@ -1894,6 +1894,21 @@ def _():
     )
 
 
+@icon("print_3d")
+def _():
+    # 3D Print / Send to Slicer: a printer frame, its head with a nozzle, and a blue part
+    # growing on the bed under it
+    return (
+        line(8, 8, 8, 40, STROKE, 2.4)
+        + line(40, 8, 40, 40, STROKE, 2.4)
+        + line(8, 9, 40, 9, STROKE, 2.4)
+        + rect(17, 12, 14, 7, DBLUE[1], 1.5)
+        + poly([(21, 19), (27, 19), (24, 23.5)], WHITE)
+        + block(0, 0, 0, 8, 8, 7, BLUE, 24, 31, 0.9)
+        + rect(6, 38, 36, 4, GREY[2], 1.2)
+    )
+
+
 @icon("calibrate")
 def _():
     # Two points on a picture with a measured distance between them

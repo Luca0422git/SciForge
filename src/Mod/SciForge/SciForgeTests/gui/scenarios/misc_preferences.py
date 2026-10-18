@@ -205,6 +205,7 @@ def p1_window():
             "Default Units > Design",
             "Network",
             "Keyboard Shortcuts",  # SciForge's own: every command's key in one list
+            "3D Print",  # SciForge's own: where 3D Print sends the design
         ],
         titles,
     )

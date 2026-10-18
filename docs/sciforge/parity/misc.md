@@ -153,7 +153,7 @@ middle, its corners, area, normal, and the body's volume and middle) and moves t
 Fusion's window: the pages on the left, the page's options on the right, **Restore Defaults**
 at the lower left, OK / Cancel / Apply (Autodesk). SciForge's pages: General (with Design and
 API under it), Material, Graphics, Unit and Value Display, Default Units (with Design),
-Network. Options SciForge cannot honour are shown **greyed with the reason** (as the ribbon greys
+Network, and SciForge's own Keyboard Shortcuts and 3D Print. Options SciForge cannot honour are shown **greyed with the reason** (as the ribbon greys
 what is not built). Restore Defaults puts every option back (OK or Apply keeps it, Cancel does
 not); options that are FreeCAD's own go back to FreeCAD's default. The options that change the
 mouse are applied while SciForge is on; the user's own FreeCAD values come back when it is off.
@@ -178,6 +178,7 @@ mouse are applied while SciForge is on; the user's own FreeCAD values come back 
 | Unit and Value Display: precision | General precision (FreeCAD's decimals; restart said); angular precision greyed | Autodesk (page), Guess (rows) |
 | Default Units > Design | Default units for new designs (Millimeter, Centimeter, Meter, Inch, Foot): FreeCAD's unit schema of new documents | Autodesk |
 | Network: proxy | System / none / custom host and port (FreeCAD's Add-on Manager, the only part that goes online) | Guess |
+| — (Fusion keeps its print utility in the 3D Print dialog only) | **3D Print** page (SciForge's own): Send to (the first slicer found / a slicer / Other / Save file only), Program (Other), Format, Also save a copy next to the design; lists the slicers found on the computer. The 3D Print dialog remembers its choices here (`parity/insert-export.md`) | SciForge |
 
 Not listed at all (out of scope): Default workspace (Design only), Data Collection and Use
 (SciForge collects nothing), Preview Features, Render / Manufacture / Simulation / Electronics

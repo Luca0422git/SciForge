@@ -10,8 +10,9 @@ B  Refinement Low: fewer triangles; High: more; Custom with Surface Deviation 0.
    Normal Deviation 45: fewer than Low.
 C  Medium again; OK: cyl.3mf written (the stood-in save dialog), its volume within 2 % of the
    body, watertight; the folder was opened.
-D  3D Print again, Send to 3D Print Utility with the stand-in slicer, OK: the slicer got the
-   3MF file (slicer.log names it); no folder opened this time.
+D  3D Print again, Send to "Other... (pick the program)" (the picker cancelled), the stand-in
+   slicer's path typed into Program, OK: the slicer got the 3MF file (slicer.log names it);
+   no folder opened this time.
 E  3D Print with nothing ticked: the dialog says so and stays; Cancel.
 """
 
@@ -52,7 +53,13 @@ def sketch():
 
 
 def pick_xy():
-    h.click(i.XY_CLICK)
+    # where the XY square shows (small since cf6d1d74; bodies_steps.box_steps aims the same way)
+    from SciForgeTests.gui import plane_input as pl
+
+    if pl.square_point("XY_Plane") is not None:
+        pl.click_square("XY_Plane")
+    else:
+        h.click(i.XY_CLICK)
 
 
 def draw():
@@ -185,7 +192,7 @@ def c_medium_ok():
     if d is None:
         return
     b.choose(d.refinement.level, "Medium")
-    i.set_check(d.send, False)
+    b.choose(d.send_to, "Save file only")
     i.dialog_button(d, "OK")
 
 
@@ -221,7 +228,7 @@ def d_send():
     d = dialog()
     if d is None:
         return
-    i.set_check(d.send, True)
+    b.choose(d.send_to, "Other... (pick the program)")
     h.check("program row enabled", d.program.isEnabled())
     b.type_into(d.program, state["slicer"])
     i.dialog_button(d, "OK")
@@ -262,7 +269,7 @@ def e_untick_ok():
     d = dialog()
     if d is None:
         return
-    i.set_check(d.send, False)
+    b.choose(d.send_to, "Save file only")
     i.check_list_item(d.bodies, 0, False)
     i.dialog_button(d, "OK")
 

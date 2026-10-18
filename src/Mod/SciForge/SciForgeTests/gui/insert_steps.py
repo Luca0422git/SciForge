@@ -63,13 +63,15 @@ def no_file():
     insert_ui.FILE_PICKER = None
 
 
-def record_exports(save_path=None, folder=None):
-    """Export dialogs: the save dialog answers `save_path`, the folder dialog `folder`; the
-    folder opener and the slicer starter are recorded in opened_folders / started_programs."""
+def record_exports(save_path=None, folder=None, program=None):
+    """Export dialogs: the save dialog answers `save_path`, the folder dialog `folder`, the
+    program picker (3D Print's Other...) `program` (None: the person cancels it); the folder
+    opener and the slicer starter are recorded in opened_folders / started_programs."""
     from sciforge import export_ui
 
     export_ui.SAVE_DIALOG = (lambda title, start, filt, p=save_path: p) if save_path else None
     export_ui.FOLDER_DIALOG = (lambda title, start, f=folder: f) if folder else None
+    export_ui.PROGRAM_DIALOG = lambda start, p=program: p
     export_ui.OPEN_FOLDER = opened_folders.append
     export_ui.START_PROGRAM = lambda command: started_programs.append(list(command)) or True
 
