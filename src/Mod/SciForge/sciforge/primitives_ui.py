@@ -703,42 +703,10 @@ def base_face_holding(base, face_global):
         return None
 
 
-def design_box(body):
-    """(xmin, xmax, ymin, ymax, zmin, zmax) round the visible bodies of the design, along
-    `body`'s axes (None for an empty design)."""
-    inverse = body.getGlobalPlacement().inverse()
-    low, high = None, None
-    for obj in body.Document.Objects:
-        try:
-            if obj.TypeId != "PartDesign::Body" or not obj.ViewObject.Visibility:
-                continue
-            shape = obj.Shape
-            if shape.isNull() or not shape.Solids:
-                continue
-            b = shape.BoundBox
-            for x in (b.XMin, b.XMax):
-                for y in (b.YMin, b.YMax):
-                    for z in (b.ZMin, b.ZMax):
-                        p = inverse.multVec(App.Vector(x, y, z))
-                        if low is None:
-                            low, high = App.Vector(p), App.Vector(p)
-                        low = App.Vector(min(low.x, p.x), min(low.y, p.y), min(low.z, p.z))
-                        high = App.Vector(max(high.x, p.x), max(high.y, p.y), max(high.z, p.z))
-        except Exception:
-            continue
-    if low is None:
-        return None
-    return (low.x, high.x, low.y, high.y, low.z, high.z)
-
-
 def design_plane_picker(view, body, on_pick):
-    """The origin squares of Create Sketch (sketch_ui.PlanePicker), sized from the whole
-    design: the picker sizes them from the active body alone, so after a small second body
-    (a cylinder beside the part) they shrank to 20 mm round the origin and a click on the
-    plane beside the part hit nothing (found by the primitives QA). Same rule as the
-    picker's (origin_look.square_size_for: about 0.6 x the design, sticking out of a part
-    that covers the origin; Luca found 1.3 x too big)."""
-    from . import origin_look, sketch_ui
+    """The origin squares of Create Sketch (sketch_ui.PlanePicker) for the primitives: a
+    click on anything of the part is the part's."""
+    from . import sketch_ui
 
     class DesignPlanes(sketch_ui.PlanePicker):
         def _geometry_at(self, position):
@@ -749,17 +717,7 @@ def design_plane_picker(view, body, on_pick):
             info = self.view.getObjectInfo(tuple(position))
             return bool(info and info.get("Object"))
 
-    picker = DesignPlanes(view, body, on_pick)
-    try:
-        box = design_box(body)
-        if box is not None:
-            sizes = origin_look.square_sizes_for(box)
-            grown = {k: max(v, picker.sizes.get(k, 0.0)) for k, v in sizes.items()}
-            if grown != picker.sizes:
-                picker.resize(grown)
-    except Exception as exc:
-        warn("origin planes: %s" % exc)
-    return picker
+    return DesignPlanes(view, body, on_pick)
 
 
 def circle_points(cx, cy, r, steps=72):

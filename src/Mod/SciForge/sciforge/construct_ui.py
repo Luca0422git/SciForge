@@ -212,9 +212,7 @@ def _origin_planes_class():
                 if hit is None:
                     continue
                 point, t = hit
-                local = point - base
-                half = self.half_of(role)
-                if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
+                if self.on_square(role, point - base):
                     if best is None or t < best[1]:
                         best = (role, t)
             if best is None:
@@ -278,9 +276,7 @@ def _square_depth(picker, position):
         if hit is None:
             continue
         point, t = hit
-        local = point - base
-        half = picker.half_of(role)
-        if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
+        if picker.on_square(role, point - base):
             if best is None or t < best:
                 best = t
     return best

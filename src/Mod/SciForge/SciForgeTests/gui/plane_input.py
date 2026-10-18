@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Aim at an origin square the way a person does: at a spot of it that shows and that no
-part covers (the squares are 0.6 x the part since view-3, so a fixed point beside the part
-can miss them). Kept outside scenarios/ because every file there is run as a scenario."""
+part covers (the squares are small, in the + quarter of their plane and moved beside a part
+that would hide them, so a fixed point can miss them). Kept outside scenarios/ because every file there is run as a scenario."""
 
 import FreeCAD as App
 from PySide import QtWidgets
@@ -32,8 +32,6 @@ def square_point(role="XY_Plane", picker_=None):
     p = picker_ or picker()
     if p is None:
         return None
-    base, _normal, u, v = p._frame(role)
-    half = p.half_of(role)
     pa, pb = PREFER.get(role, (0.5, 0.5))
     steps = [i / 10.0 for i in range(-9, 10)]
     spots = sorted(
@@ -43,7 +41,7 @@ def square_point(role="XY_Plane", picker_=None):
     widget = h.gl_widget()
     margin = 20
     for a, b in spots:
-        point = base + u * (a * half) + v * (b * half)
+        point = p.spot(role, a, b)
         pixel = view.getPointOnViewport(point)
         qt = h.screen_point(point)
         inside = margin < qt.x() < widget.width() - margin
