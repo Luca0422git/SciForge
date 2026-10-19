@@ -676,6 +676,32 @@ UTIL_ADDINS = group(
         item("Add-on Manager", "Std_AddonMgr", "new_component"),
     ],
 )
+# SciForge's own: the AI panel (Luca, 2026-10-19: reachable from an open design) and
+# FreeCAD's own workbenches (his pass-through: a bug of SciForge never stops a project)
+UTIL_AI = group(
+    "u_ai",
+    "AI",
+    ["AI"],
+    [
+        item("AI", "SciForge_AIPanel", "ai_panel", note="Chat, your AIs, AI control on / off"),
+        item("Add an AI App", "SciForge_AddAI", "ai", note="Claude Desktop, Gemini CLI, others"),
+        item("AI Chat", "SciForge_AIChat", "ai"),
+        item("AI Activity", "SciForge_AIActivity", "ai"),
+    ],
+)
+UTIL_FREECAD = group(
+    "u_freecad",
+    "FREECAD",
+    ["FreeCAD Tools"],
+    [
+        item(
+            "FreeCAD Tools",
+            "SciForge_FreeCADTools",
+            "freecad_tools",
+            note="FreeCAD's own workbenches; your designs stay open.",
+        ),
+    ],
+)
 UTIL_UTILITY = group(
     "u_utility",
     "UTILITY",
@@ -1059,7 +1085,11 @@ TABS = [
             SELECT,
         ],
     },
-    {"id": "utilities", "title": "UTILITIES", "groups": [UTIL_MAKE, UTIL_ADDINS, UTIL_UTILITY]},
+    {
+        "id": "utilities",
+        "title": "UTILITIES",
+        "groups": [UTIL_MAKE, UTIL_ADDINS, UTIL_AI, UTIL_FREECAD, UTIL_UTILITY],
+    },
     {
         "id": "sketch",
         "title": "SKETCH",
@@ -1132,9 +1162,12 @@ FILE_MENU = [
         note="Keep designs in your Dropbox, OneDrive, Google Drive or NAS folder",
     ),
     SEP,
+    item("AI Panel", "SciForge_AIPanel", "ai_panel", note="Chat, your AIs, AI control on / off"),
     item("Add an AI App", "SciForge_AddAI", "ai", note="Claude Desktop, Gemini CLI, others"),
     item("AI Activity", "SciForge_AIActivity", "ai"),
     item("AI Chat", "SciForge_AIChat", "ai", note="Chat with an AI that builds here"),
+    SEP,
+    item("FreeCAD Tools", "SciForge_FreeCADTools", "freecad_tools", note="FreeCAD's workbenches"),
 ]
 
 # Quick-access buttons at the top left, like Fusion's application bar.

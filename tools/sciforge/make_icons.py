@@ -1548,6 +1548,38 @@ def _():
     )
 
 
+@icon("ai_panel")
+def _():
+    # The AI panel (UTILITIES > AI): a side panel with chat lines and a spark
+    return (
+        rect(6, 7, 36, 34, "none", 3, 'stroke="%s" stroke-width="2.4"' % STROKE)
+        + line(27, 7, 27, 41, STROKE, 2.0)
+        + line(11, 16, 22, 16, STROKE, 2.2)
+        + line(11, 23, 20, 23, STROKE, 2.2)
+        + line(11, 30, 22, 30, STROKE, 2.2)
+        + path("M35 13 L36.8 18.2 L42 20 L36.8 21.8 L35 27 L33.2 21.8 L28 20 L33.2 18.2 Z", "none", 0, POINT)
+    )
+
+
+@icon("panel_close")
+def _():
+    # A panel's close button: a plain X, like the browser's
+    return line(14, 14, 34, 34, STROKE, 2.6) + line(34, 14, 14, 34, STROKE, 2.6)
+
+
+@icon("freecad_tools")
+def _():
+    # FreeCAD's own tools: a wrench over a gear
+    teeth = ""
+    for i in range(8):
+        a = i * math.pi / 4
+        teeth += line(
+            24 + 13 * math.cos(a), 24 + 13 * math.sin(a),
+            24 + 17 * math.cos(a), 24 + 17 * math.sin(a), STROKE, 3.4,
+        )
+    return circle(24, 24, 11.5, "none", STROKE, 2.6) + teeth + circle(24, 24, 4.5, POINT)
+
+
 @icon("recent")
 def _():
     # A clock (Home's Recent designs)

@@ -16,7 +16,6 @@ import queue
 import threading
 
 import FreeCAD as App
-import FreeCADGui as Gui
 
 from .. import commands, log, secrets_store, warn
 from ..compat import QtCore, QtWidgets
@@ -24,8 +23,6 @@ from . import bridge, chat_core, providers
 
 PREFS = "User parameter:BaseApp/Preferences/Mod/SciForge/AI"
 TOOL_WAIT = 180.0  # seconds the worker waits for one tool call (a question may be open)
-
-_panel = {"dock": None}
 
 
 def secrets_folder():
@@ -174,6 +171,7 @@ class ChatPanel(QtWidgets.QWidget):
             if not value:
                 ok = secrets_store.delete(key_name(name), secrets_folder())
                 commands.tell("Key removed." if ok else "No key was kept.")
+                QtCore.QTimer.singleShot(0, _ais_changed)
                 return ok
             ok = secrets_store.store(key_name(name), value, secrets_folder())
             commands.tell(
@@ -182,6 +180,7 @@ class ChatPanel(QtWidgets.QWidget):
                 else "The key could not be kept."
             )
             log("AI chat: key %s for %s" % ("kept" if ok else "NOT kept", name))
+            QtCore.QTimer.singleShot(0, _ais_changed)
             return ok
         except Exception as exc:
             warn("AI chat: %s" % exc)
@@ -374,33 +373,26 @@ class ChatPanel(QtWidgets.QWidget):
             )
 
 
-def _dock():
-    dock = _panel["dock"]
+def _ais_changed():
+    """A key kept or removed: the AI panel's and Home's lists of AIs again."""
     try:
-        if dock is not None:
-            dock.isVisible()
-            return dock
-    except RuntimeError:
-        pass
-    main = Gui.getMainWindow()
-    dock = QtWidgets.QDockWidget("AI chat", main)
-    dock.setObjectName("SciForgeAIChatDock")
-    dock.setWidget(ChatPanel())
-    main.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
-    _panel["dock"] = dock
-    return dock
+        from .. import ai_ui
+
+        ai_ui._refresh_home()
+    except Exception as exc:
+        warn("AI chat: %s" % exc)
 
 
 def panel():
-    dock = _panel["dock"]
-    try:
-        return dock.widget() if dock is not None else None
-    except RuntimeError:
-        return None
+    """The Chat tab of the AI panel while the panel exists, else None."""
+    from .. import ai_panel_ui
+
+    page = ai_panel_ui.panel()
+    return page.chat if page is not None else None
 
 
 def show():
-    dock = _dock()
-    dock.show()
-    dock.raise_()
-    return dock
+    """The AI panel on its Chat tab."""
+    from .. import ai_panel_ui
+
+    return ai_panel_ui.show("chat")

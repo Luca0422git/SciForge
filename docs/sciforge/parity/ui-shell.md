@@ -299,3 +299,20 @@ Gaps (not built, and why):
   class, in other areas).
 - Environment names other than Theme, Photo Booth and Dark Sky, the grid colours, the 1-2-5
   spacing steps and the increments' defaults need a look at real Fusion.
+
+## Look, FreeCAD's own tools (2026-10-19, Luca's list on `sf/home-cloud-ai`)
+
+| Fusion | SciForge |
+|---|---|
+| Fusion's default is a light (white) interface; a dark theme can be chosen in Preferences. | SciForge's own default is dark. **Preferences > General > Look**: Dark (SciForge's own) or Light (white, like Fusion's default); Home has a **Preferences** button. The switch is live: the window's style, SciForge's panels (their own style sheets are translated colour by colour, `theme.translate`), the icons (light strokes drawn dark grey, grey solids a step darker: copies in `<user data>/SciForge/icons-light/`), the 3D view's background and the sketch colours (fully defined curves black, a light grid). A few icons of FreeCAD's own menus change at the next start. Light palette: `theme.LIGHT` (SciForge's own choice; Fusion's exact colours are not published). |
+| No equivalent (Fusion is closed). | **UTILITIES > FREECAD > FreeCAD Tools** (also the app menu, and the File menu): FreeCAD's workbenches (Part Design, Part, TechDraw, FEM, CAM...). Choosing one switches to FreeCAD's own interface with all its menus and toolbars; the open designs stay open (they are FreeCAD documents). A **Back to SciForge** bar at the top returns (FreeCAD's own workbench list has SciForge too). Luca: "there should be a way to passthrough FreeCADs tools and workflow", so a gap or bug of SciForge never stops a project. **Beyond Fusion.** |
+
+Tests: scenarios `look_light.py` (Home > Preferences > Look: Light and back to Dark: style,
+3D background, sketch colours, icons, Home and the AI panel) and `freecad_tools.py`
+(UTILITIES > FreeCAD Tools > Part Design, FreeCAD's interface with the design open, Back to
+SciForge, the app menu).
+
+Known: FreeCAD's right-hand overlay (where the Tasks panel with the command dialogs floats
+over the 3D view) draws a thin frame. It shows while a command dialog is open, and all the
+time while a panel of SciForge's own is docked on the right (the AI panel): FreeCAD gives
+the overlay a style sheet of its own (`overlay:...qss`), which SciForge's does not override.

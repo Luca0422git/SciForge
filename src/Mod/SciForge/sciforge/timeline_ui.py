@@ -563,6 +563,7 @@ class TimelineWidget(QtWidgets.QWidget):
     def _tool(self, icon, tip, slot, size):
         button = QtWidgets.QToolButton()
         button.setIcon(ui_icon(icon))
+        button.setProperty("sciforgeIcon", icon)  # (redrawn when the look changes)
         button.setIconSize(QtCore.QSize(size, size))
         button.setToolTip(tip)
         button.setAutoRaise(True)

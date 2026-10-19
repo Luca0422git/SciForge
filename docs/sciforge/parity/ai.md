@@ -109,3 +109,20 @@ error words; the real services were not called from the sandbox.
    box with 3 mm rounded edges: the steps appear, Undo removes them one by one.
 2. The same with ChatGPT and Gemini keys, and with Ollama (`ollama pull qwen3:8b`, then
    Local or other, `http://localhost:11434/v1`, List).
+
+## The AI panel (2026-10-19, Luca: reachable in a design, a clear X, a switch, the AIs added)
+
+One panel at the right for everything AI (`sciforge/ai_panel_ui.py`): **UTILITIES > AI**
+(its own icon; a second click closes it), File > AI Panel, Home's **Open AI panel**.
+
+| What | SciForge |
+|---|---|
+| Close | Its title bar: **AI** and an **X** (drawn like the browser's). |
+| AI control | A switch at the top: the same option as Preferences > AI. It replaces the Stop AI control button. Home has the same switch. |
+| Your AIs | The AI apps set up (Claude Desktop, Gemini CLI) and the chat AIs with a key kept (Claude, ChatGPT, Gemini) or a local model's address, each with its badge: SciForge's own coloured square with letters (Cl, Ge, GPT, Lo), never a company's logo. As many as there are (the list scrolls). Double-click: a chat AI opens the Chat tab with it chosen; an app opens Add an AI on it. **+ Add an AI** under the list. Home lists the same AIs. |
+| Chat, Activity | Two tabs: the chat panel and the activity list (Undo last AI step). File > AI Chat and AI Activity open the panel on their tab. A call from an AI app opens the panel on Activity when it was closed. |
+
+Tests: scenario `ai_panel.py` (UTILITIES > AI opens and closes it, the X, the switch and
+Home's, two chat keys listed with badges on the panel and Home, double-click picks Claude,
+Home closes the browser and opens Preferences); `ai_bridge.py` Path 8 turns AI control off
+with the switch.

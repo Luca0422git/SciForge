@@ -357,7 +357,9 @@ class PrefsCore(unittest.TestCase):
         self.assertEqual(prefs_core.option("start_in_sciforge")["apply"], "startup")
         self.assertNotIn("default_appearance", plan)
         groups = [g for g, _opts in prefs_core.groups("general")]
-        self.assertEqual(groups, ["Language", "Startup", "Navigation", "Saving and Recovery"])
+        self.assertEqual(
+            groups, ["Language", "Startup", "Appearance", "Navigation", "Saving and Recovery"]
+        )
         self.assertEqual(prefs_core.changed({"a": 1, "b": 2}, {"a": 1, "b": 3}), ["b"])
 
 

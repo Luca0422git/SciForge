@@ -334,8 +334,43 @@ def disable():
 BACKUP = "User parameter:BaseApp/Preferences/Mod/SciForge/SketchBackup"
 
 
+# The light look (theme.py): the colours made for the dark 3D view that would vanish on a
+# light one. Fully constrained curves black, as Fusion's on its white background.
+LIGHT = {
+    "GridLineColor": _rgba("#e1e4e8"),
+    "GridDivLineColor": _rgba("#c4c9d0"),
+    "FullyConstraintElementColor": _rgba("#1f2329"),
+    "FullyConstrainedColor": _rgba("#1f2329"),
+    "ConstrainedDimColor": _rgba("#1f2329"),
+    "ConstrainedIcoColor": _rgba("#2e7d32"),
+    "NonDrivingConstrDimColor": _rgba("#3d5f85"),
+    "CursorTextColor": _rgba("#1f2329"),
+    "CursorCrosshairColor": _rgba("#1f2329"),
+}
+
+
 def _all_params():
-    return PARAMS + [(SNAP, "Bool", "SnapToGrid", option("snap"))]
+    from . import theme
+
+    light = theme.is_light()
+    params = [
+        (group, kind, name, LIGHT[name] if light and name in LIGHT else value)
+        for group, kind, name, value in PARAMS
+    ]
+    return params + [(SNAP, "Bool", "SnapToGrid", option("snap"))]
+
+
+def theme_changed():
+    """The look was switched: the sketch colours of the new look, at once (the user's own
+    values kept by enable() stay kept)."""
+    if not _state["on"]:
+        return
+    for group, kind, name, value in _all_params():
+        if name in LIGHT:
+            try:
+                getattr(App.ParamGet(group), "Set" + kind)(name, value)
+            except Exception as exc:
+                warn("sketch colours: %s" % exc)
 
 
 def _save_and_apply(params):

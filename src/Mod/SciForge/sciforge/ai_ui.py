@@ -5,7 +5,8 @@ docs/sciforge/parity/ai.md). The bridge itself is sciforge/ai/bridge.py.
   * Add an AI (Home's AI card, File > Add an AI App): sets SciForge up in Claude Desktop or
     Gemini CLI (their settings file is changed, with a backup), builds a Claude Desktop
     extension file, or shows the command line for other apps (Claude Code, Codex...).
-  * The AI activity panel: every call an AI app made, Undo last AI step, Stop AI control.
+  * The activity list: every call an AI app made, Undo last AI step (the Activity tab of
+    the AI panel, ai_panel_ui.py).
 """
 
 import os
@@ -138,27 +139,22 @@ def _open_file(path):
 
 
 def _refresh_home():
+    """Home's AI column and the AI panel as things are now."""
     try:
-        from . import home_ui
+        from . import ai_panel_ui, home_ui
 
         page = home_ui.view()
         if page is not None:
             page.update_ai()
+        ai_panel_ui.refresh()
     except Exception as exc:
         warn("AI: %s" % exc)
 
 
 def status_words():
-    """Home's AI card: AI control on / off, the apps set up, when last used."""
-    lines = ["AI control: %s" % ("on" if bridge.allowed() else "off (Preferences > AI)")]
-    try:
-        done = configured()
-    except Exception:
-        done = {}
-    names = dict(APPS)
-    for app in ("claude", "gemini"):
-        if done.get(app):
-            lines.append("%s: set up" % names[app])
+    """Home's AI column: AI control on / off and when last used (the AIs added are listed
+    under it with their badges)."""
+    lines = ["AI control: %s" % ("on" if bridge.allowed() else "off")]
     used = bridge.last_used()
     if used:
         lines.append("Last used %s" % time.strftime("%H:%M", time.localtime(used)))
@@ -329,21 +325,13 @@ class ActivityPanel(QtWidgets.QWidget):
         self.undo_button.setObjectName("SciForgeAIUndo")
         self.undo_button.clicked.connect(undo_last)
         row.addWidget(self.undo_button)
-        self.stop_button = QtWidgets.QPushButton("Stop AI control")
-        self.stop_button.setObjectName("SciForgeAIStop")
-        self.stop_button.clicked.connect(stop)
-        row.addWidget(self.stop_button)
+        row.addStretch(1)
         column.addLayout(row)
         self.refresh()
 
     def refresh(self):
         try:
-            self.state.setText(
-                "AI control is on: an AI app can build in SciForge."
-                if bridge.running()
-                else "AI control is off."
-            )
-            self.stop_button.setEnabled(bridge.running())
+            self.state.setText("What the AIs did here, newest first:")
             self.list.clear()
             for stamp, tool, text, is_error in reversed(bridge.activity()):
                 short = " ".join(text.split())  # one line each (get_design answers pages)
@@ -363,45 +351,30 @@ class ActivityPanel(QtWidgets.QWidget):
             warn("AI activity: %s" % exc)
 
 
-_panel = {"dock": None}
-
-
-def _dock():
-    dock = _panel["dock"]
-    try:
-        if dock is not None:
-            dock.isVisible()
-            return dock
-    except RuntimeError:
-        pass
-    main = Gui.getMainWindow()
-    dock = QtWidgets.QDockWidget("AI activity", main)
-    dock.setObjectName("SciForgeAIActivityDock")
-    dock.setWidget(ActivityPanel())
-    main.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
-    _panel["dock"] = dock
-    return dock
-
-
 def panel():
-    dock = _panel["dock"]
-    try:
-        return dock.widget() if dock is not None else None
-    except RuntimeError:
-        return None
+    """The Activity tab of the AI panel while the panel exists, else None."""
+    from . import ai_panel_ui
+
+    page = ai_panel_ui.panel()
+    return page.activity if page is not None else None
 
 
 def show_activity():
-    dock = _dock()
-    dock.show()
-    dock.raise_()
-    dock.widget().refresh()
-    return dock
+    """The AI panel on its Activity tab."""
+    from . import ai_panel_ui
+
+    return ai_panel_ui.show("activity")
 
 
 def _after_call():
-    """Every AI call: the panel shows it (opened the first time), Home's card too."""
-    show_activity()
+    """Every AI call: the AI panel shows it (opened on Activity when it was closed; left on
+    its tab when it shows: the chat's own calls come here too), Home's card too."""
+    from . import ai_panel_ui
+
+    if ai_panel_ui.is_shown():
+        ai_panel_ui.refresh()
+    else:
+        show_activity()
     _refresh_home()
 
 
@@ -429,11 +402,8 @@ def stop():
     """Stop AI control at once (the option goes off; calls are refused)."""
     try:
         bridge.set_allowed(False)
-        p = panel()
-        if p is not None:
-            p.refresh()
         _refresh_home()
-        commands.tell("AI control is off. Switch it on again in Preferences > AI.")
+        commands.tell("AI control is off. Switch it on again in the AI panel or Preferences > AI.")
     except Exception as exc:
         warn("AI: stop: %s" % exc)
 
@@ -473,7 +443,7 @@ class ActivityCommand:
     def GetResources(self):
         return {
             "MenuText": "AI Activity",
-            "ToolTip": "What AI apps did in SciForge; Undo the last AI step; Stop AI control",
+            "ToolTip": "What AI apps did in SciForge; Undo the last AI step (the AI panel)",
             "Pixmap": ui_icon_path("ai"),
         }
 

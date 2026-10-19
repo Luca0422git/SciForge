@@ -202,7 +202,7 @@ def _tile_pixmap(png, pinned=False, dim=False):
     """The tile's picture: the design's own thumbnail (or a plain solid), a blue pin badge
     at the top right when pinned, greyed when the design is not there."""
     canvas = QtGui.QPixmap(THUMB, THUMB)
-    canvas.fill(QtGui.QColor("#2f3540"))
+    canvas.fill(QtGui.QColor(theme.FIELD))
     painter = QtGui.QPainter(canvas)
     try:
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
@@ -257,6 +257,20 @@ QSS = """
 #SciForgeHomeClear, #SciForgeHomeConnect, #SciForgeHomePlaceMenu {{ color: {accent};
     background: transparent; border: none; }}
 """
+
+
+def _colours():
+    """The theme's colours by name, for the style sheets."""
+    return dict(
+        view=theme.VIEW,
+        chrome=theme.CHROME,
+        active=theme.ACTIVE,
+        line=theme.LINE,
+        hover=theme.HOVER,
+        text=theme.TEXT,
+        text_dim=theme.TEXT_DIM,
+        accent=theme.ACCENT,
+    )
 
 
 def _no_tab_focus(widget):
@@ -385,16 +399,7 @@ class HomeView(QtWidgets.QWidget):
         super().__init__()
         self.setObjectName("SciForgeHome")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self.setStyleSheet(
-            QSS.format(
-                view=theme.VIEW,
-                chrome=theme.CHROME,
-                active=theme.ACTIVE,
-                text=theme.TEXT,
-                text_dim=theme.TEXT_DIM,
-                accent=theme.ACCENT,
-            )
-        )
+        self.setStyleSheet(QSS.format(**_colours()))
         self.generation = 0  # tiles of an older listing ignore late answers
         self.tiles = {}  # tile id -> QListWidgetItem waiting for its picture
         self.pinned = set()
@@ -417,47 +422,115 @@ class HomeView(QtWidgets.QWidget):
 
     # -- pieces
     def _ai(self):
-        """The AI helpers column: AI control on / off, the apps set up, + Add an AI."""
+        """The AI column: AI control on / off (a switch), the AIs added with their badges
+        (as many as there are: the list scrolls), + Add an AI, Open AI panel."""
+        from . import ai_panel_ui
+
         side = QtWidgets.QFrame()
         side.setObjectName("SciForgeHomeAI")
-        side.setFixedWidth(230)
+        side.setFixedWidth(250)
         side.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         column = QtWidgets.QVBoxLayout(side)
         column.setContentsMargins(14, 18, 14, 12)
-        title = QtWidgets.QLabel("AI helpers")
+        title = QtWidgets.QLabel("AI")
         title.setObjectName("SciForgeHomeTitle")
         column.addWidget(title)
+        self.ai_toggle = QtWidgets.QCheckBox("AI control")
+        self.ai_toggle.setObjectName("SciForgeAIToggle")
+        self.ai_toggle.setToolTip(
+            "Allow AI apps (Claude Desktop, Gemini CLI...) to control SciForge. "
+            "The same switch as Preferences > AI."
+        )
+        self.ai_toggle.setStyleSheet(ai_panel_ui._qss())
+        self.ai_toggle.toggled.connect(self._ai_toggled)
+        column.addWidget(self.ai_toggle, 0, QtCore.Qt.AlignLeft)
         self.ai_status = QtWidgets.QLabel("")
         self.ai_status.setObjectName("SciForgeHomeAIStatus")
         self.ai_status.setWordWrap(True)
         column.addWidget(self.ai_status)
+        self.ai_list = QtWidgets.QListWidget()
+        self.ai_list.setObjectName("SciForgeHomeAIs")
+        self.ai_list.setIconSize(QtCore.QSize(26, 26))
+        self.ai_list.setToolTip("The AIs you added. Double-click one to use it.")
+        self.ai_list.itemDoubleClicked.connect(self._ai_used)
+        column.addWidget(self.ai_list, 1)
         self.add_ai_button = QtWidgets.QPushButton("+ Add an AI")
         self.add_ai_button.setObjectName("SciForgeHomeAddAI")
         self.add_ai_button.setToolTip("Let Claude Desktop, Gemini CLI or another AI app build here")
         self.add_ai_button.clicked.connect(lambda *_: QtCore.QTimer.singleShot(0, _add_ai))
         column.addWidget(self.add_ai_button)
-        self.ai_activity_button = QtWidgets.QPushButton("AI activity")
-        self.ai_activity_button.setObjectName("SciForgeHomeAIActivity")
-        self.ai_activity_button.clicked.connect(
-            lambda *_: QtCore.QTimer.singleShot(0, _ai_activity)
-        )
-        column.addWidget(self.ai_activity_button)
-        self.chat_button = QtWidgets.QPushButton("Open chat panel")
-        self.chat_button.setObjectName("SciForgeHomeAIChat")
-        self.chat_button.setToolTip("Chat with an AI that builds here, with your own key")
-        self.chat_button.clicked.connect(lambda *_: QtCore.QTimer.singleShot(0, _ai_chat))
-        column.addWidget(self.chat_button)
-        column.addStretch(1)
+        self.ai_panel_button = QtWidgets.QPushButton("Open AI panel")
+        self.ai_panel_button.setObjectName("SciForgeHomeAIPanel")
+        self.ai_panel_button.setIcon(ui_icon("ai_panel"))
+        self.ai_panel_button.setProperty("sciforgeIcon", "ai_panel")
+        self.ai_panel_button.setToolTip("Chat, your AIs, what they did (also UTILITIES > AI)")
+        self.ai_panel_button.clicked.connect(lambda *_: QtCore.QTimer.singleShot(0, _ai_chat))
+        column.addWidget(self.ai_panel_button)
         self.update_ai()
         return side
 
     def update_ai(self):
+        """The switch, the words and the AIs as they are now."""
         try:
-            from . import ai_ui
+            from . import ai_panel_ui, ai_ui
+            from .ai import bridge
 
+            self.ai_toggle.blockSignals(True)
+            self.ai_toggle.setChecked(bridge.allowed())
+            self.ai_toggle.blockSignals(False)
             self.ai_status.setText("\n".join(ai_ui.status_words()))
+            self.ai_list.clear()
+            found = ai_panel_ui.entries()
+            for entry in found:
+                item = QtWidgets.QListWidgetItem(
+                    ai_panel_ui.badge(entry["badge"]), "%s\n%s" % (entry["name"], entry["status"])
+                )
+                item.setData(QtCore.Qt.UserRole, (entry["kind"], entry["id"]))
+                self.ai_list.addItem(item)
+            if not found:
+                item = QtWidgets.QListWidgetItem("No AI added yet")
+                item.setFlags(QtCore.Qt.NoItemFlags)
+                self.ai_list.addItem(item)
         except RuntimeError:
             pass
+        except Exception as exc:
+            warn("home: AI: %s" % exc)
+
+    def ai_names(self):
+        """The AIs listed (tests)."""
+        return [
+            self.ai_list.item(i).text().split("\n")[0]
+            for i in range(self.ai_list.count())
+            if self.ai_list.item(i).data(QtCore.Qt.UserRole)
+        ]
+
+    def _ai_toggled(self, on):
+        try:
+            from . import ai_ui
+            from .ai import bridge
+
+            bridge.set_allowed(on)
+            log("AI control %s (Home)" % ("on" if on else "off"))
+            ai_ui._refresh_home()
+        except Exception as exc:
+            warn("home: AI: %s" % exc)
+
+    def _ai_used(self, item):
+        """Double-click an AI: the AI panel, with it."""
+        try:
+            from . import ai_panel_ui
+
+            data = item.data(QtCore.Qt.UserRole) if item is not None else None
+            if not data:
+                return
+            kind, name = data
+            if kind == "chat":
+                page = ai_panel_ui.show("chat").widget()
+                index = page.chat.provider.findData(name)
+                if index >= 0:
+                    page.chat.provider.setCurrentIndex(index)
+            else:
+                QtCore.QTimer.singleShot(0, lambda: ai_panel_ui._add_ai(name))
         except Exception as exc:
             warn("home: AI: %s" % exc)
 
@@ -488,6 +561,17 @@ class HomeView(QtWidgets.QWidget):
         )
         self.connect_button.clicked.connect(lambda *_: QtCore.QTimer.singleShot(0, _connect))
         top.addWidget(self.connect_button)
+        self.preferences_button = QtWidgets.QPushButton("Preferences")
+        self.preferences_button.setObjectName("SciForgeHomePreferences")
+        self.preferences_button.setIcon(ui_icon("tl_settings"))
+        self.preferences_button.setProperty("sciforgeIcon", "tl_settings")
+        self.preferences_button.setToolTip(
+            "SciForge's Preferences: the look (dark or light), navigation, units, AI..."
+        )
+        self.preferences_button.clicked.connect(
+            lambda *_: QtCore.QTimer.singleShot(0, _preferences)
+        )
+        top.addWidget(self.preferences_button)
         top.addStretch(1)
         self.search = QtWidgets.QLineEdit()
         self.search.setObjectName("SciForgeHomeSearch")
@@ -1057,6 +1141,13 @@ def _ai_chat():
     chat_ui.show()
 
 
+def _preferences():
+    try:
+        Gui.runCommand("SciForge_Preferences")
+    except Exception as exc:
+        warn("home: preferences: %s" % exc)
+
+
 def _ai_activity():
     from . import ai_ui
 
@@ -1307,6 +1398,37 @@ def _opened(name):
         warn("home: %s" % exc)
 
 
+def theme_changed():
+    """The look was switched: Home's tiles drawn again (their background is the look's)."""
+    page = view()
+    if page is not None:
+        page.refresh()
+        page.update_ai()
+        sub = subwindow()
+        if sub is not None:
+            sub.setWindowIcon(ui_icon("qa_home"))
+
+
+def _follow_browser():
+    """The browser closes while Home is in front (Luca: "make sure thats closed on the home
+    screen as well") and comes back on a design, unless the person had closed it."""
+    try:
+        from . import browser_ui, shell
+
+        dock = browser_ui._state.get("dock")
+        if dock is None or not shell.is_on():
+            return
+        if is_active():
+            if dock.isVisible():
+                dock.hide()
+                _state["browser_hidden"] = True
+        elif _state.get("browser_hidden"):
+            _state["browser_hidden"] = False
+            dock.show()
+    except RuntimeError:
+        pass
+
+
 def _follow_active(*_args):
     """The navigation bar (orbit, pan, zoom...) floats over the 3D view: not over Home. The
     ribbon's commands neither (Luca: "on the home screen, lets hide the toolbar")."""
@@ -1316,6 +1438,7 @@ def _follow_active(*_args):
         ribbon = shell.ribbon()
         if ribbon is not None:
             ribbon.set_home(is_active())
+        _follow_browser()
         nav = navbar_ui.bar()
         if nav is None:
             return

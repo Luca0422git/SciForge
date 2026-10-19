@@ -176,6 +176,7 @@ def build_menu(parent, entries, available, context=None):
             menu.addMenu(submenu)
             continue
         action = menu.addAction(ui_icon(entry["icon"]), _menu_text(entry))
+        action.setProperty("sciforgeIcon", entry["icon"] or "")  # (redrawn for a new look)
         resolved = resolve(entry["command"], available)
         options.add(action, entry)
         if resolved:
@@ -286,6 +287,7 @@ class GroupWidget(QtWidgets.QWidget):
     def _big_button(self, entry, available):
         button = QtWidgets.QToolButton()
         button.setIcon(ui_icon(entry["icon"]))
+        button.setProperty("sciforgeIcon", entry["icon"] or "")  # (redrawn for a new look)
         button.setIconSize(QtCore.QSize(BIG, BIG))
         button.setFixedSize(BIG + 12, BIG + 12)
         button.setAutoRaise(True)
@@ -437,6 +439,7 @@ class RibbonWidget(QtWidgets.QWidget):
         for entry in cfg.QUICK_ACCESS:
             button = QtWidgets.QToolButton()
             button.setIcon(ui_icon(entry["icon"]))
+            button.setProperty("sciforgeIcon", entry["icon"] or "")  # (redrawn for a new look)
             button.setIconSize(QtCore.QSize(SMALL, SMALL))
             button.setAutoRaise(True)
             button.setToolTip(
@@ -472,6 +475,7 @@ class RibbonWidget(QtWidgets.QWidget):
         row.addStretch(1)
         search = QtWidgets.QToolButton()
         search.setIcon(ui_icon("nav_zoom"))
+        search.setProperty("sciforgeIcon", "nav_zoom")
         search.setIconSize(QtCore.QSize(SMALL, SMALL))
         search.setAutoRaise(True)
         search.setToolTip("Search commands  (S)")
@@ -514,6 +518,9 @@ class RibbonWidget(QtWidgets.QWidget):
         menu.setObjectName("SciForgeAppMenu")
         try:
             self._fill_file_menu(menu.addMenu(ui_icon("document"), "File"))
+            from . import freecad_tools_ui
+
+            menu.addMenu(freecad_tools_ui.menu(menu))  # FreeCAD's workbenches (pass-through)
             menu.addSeparator()
         except Exception as exc:
             warn("file menu: %s" % exc)

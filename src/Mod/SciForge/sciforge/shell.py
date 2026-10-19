@@ -57,6 +57,8 @@ def on_workbench(name):
     """Called for every workbench change (Qt signal) and from SciForge's Activated()."""
     try:
         name = str(name)
+        # the bar Back to SciForge: in FreeCAD's own interface only (freecad_tools_ui)
+        _safely(lambda: __import__("sciforge.freecad_tools_ui").freecad_tools_ui.follow(name))
         if name == SCIFORGE_WB:
             enable()
             _set_sketch_mode(False)
@@ -108,7 +110,9 @@ def startup():
             # General > Show Home at start)
             QtCore.QTimer.singleShot(0, lambda: _safely(_home_at_start))
         if name and name != SCIFORGE_WB and not _state["on"]:
-            from . import shortcuts, sketch_mode, theme, versions_ui
+            from . import freecad_tools_ui, shortcuts, sketch_mode, theme, versions_ui
+
+            freecad_tools_ui.follow(name)  # (FreeCAD started in another workbench)
 
             theme.restore()
             sketch_mode.give_back_left_over()
@@ -119,6 +123,31 @@ def startup():
             )
     except Exception as exc:
         warn("startup check: %s" % exc)
+
+
+def theme_changed():
+    """The look was switched (theme.set_theme): every button and menu entry that names its
+    icon (the ribbon's, the navigation bar's, the timeline's) drawn again in the new look,
+    the timeline and browser listed again."""
+    if not _state["on"]:
+        return
+    from . import ui_icon
+
+    for widget in QtWidgets.QApplication.allWidgets():
+        try:
+            if isinstance(widget, QtWidgets.QAbstractButton):
+                name = widget.property("sciforgeIcon")
+                if name:
+                    widget.setIcon(ui_icon(name))
+            elif isinstance(widget, QtWidgets.QMenu):
+                for action in widget.actions():
+                    name = action.property("sciforgeIcon")
+                    if name:
+                        action.setIcon(ui_icon(name))
+        except RuntimeError:
+            pass
+    _safely(lambda: __import__("sciforge.timeline_ui").timeline_ui.widget().refresh(force=True))
+    _safely(lambda: __import__("sciforge.browser_ui").browser_ui.widget().refresh(force=True))
 
 
 def _set_sketch_mode(on):

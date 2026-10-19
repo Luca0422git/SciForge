@@ -158,6 +158,23 @@ OPTIONS = [
         "closing the last design comes back to it. Off: an empty window, as before.",
     ),
     _option(
+        "theme",
+        "general",
+        "Look",
+        "choice",
+        "dark",
+        (SCIFORGE, "String", "Theme"),
+        group="Appearance",
+        choices=[
+            ("dark", "Dark (SciForge's own)", True, ""),
+            ("light", "Light (white, like Fusion's default)", True, ""),
+        ],
+        tip="SciForge's colours. Dark: SciForge's own look. Light: the white look of Fusion's "
+        "default. The window changes at once; a few icons of FreeCAD's own menus change at "
+        "the next start.",
+        apply="theme",
+    ),
+    _option(
         "mouse_preset",
         "general",
         "Pan, Zoom, Orbit Shortcuts",

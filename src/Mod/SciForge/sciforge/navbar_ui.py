@@ -24,6 +24,7 @@ class NavBar(QtWidgets.QWidget):
         for entry in cfg.NAV_BAR:
             button = QtWidgets.QToolButton()
             button.setIcon(ui_icon(entry.get("icon")))
+            button.setProperty("sciforgeIcon", entry.get("icon") or "")  # (theme.py redraws it)
             button.setIconSize(QtCore.QSize(20, 20))
             button.setAutoRaise(True)
             if "submenu" in entry:

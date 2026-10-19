@@ -12,7 +12,7 @@ Path 4, "make a 40 x 30 x 10 box with 3 mm rounded edges": create_sketch, extrud
 Path 5, get_design and screenshot (a PNG the AI can look at).
 Path 6, a command dialog open in SciForge: a changing call is refused ("SciForge is busy").
 Path 7, the AI activity panel lists the calls; Undo last AI step takes the fillet away.
-Path 8, Stop AI control: the next call answers that SciForge is not reachable.
+Path 8, the AI panel's switch turns AI control off: the next call answers that SciForge is not reachable.
 Path 9, Home > + Add an AI: Gemini CLI set up (its settings file in a test folder), removed.
 """
 
@@ -333,15 +333,17 @@ def fillet_undone():
 
 # -- Path 8 -------------------------------------------------------------------------------------
 def stop_control():
-    from sciforge import ai_ui
+    from sciforge import ai_panel_ui
 
-    wi.click(ai_ui.panel().stop_button)
+    page = ai_panel_ui.panel()
+    h.check("the AI panel's switch shows AI control on", page.toggle.isChecked())
+    wi.click(page.toggle)
 
 
 def stopped():
     from sciforge.ai import bridge
 
-    h.check("Stop AI control switched it off", not bridge.allowed() and not bridge.running())
+    h.check("the switch turned AI control off", not bridge.allowed() and not bridge.running())
     s["after"] = mcp().call("get_design", {})
 
 

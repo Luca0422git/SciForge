@@ -210,6 +210,9 @@ def _apply(kind):
             from . import home_ui
 
             home_ui.refresh_soon()  # (Home's "This computer" is the project folder)
+        elif kind == "theme":  # Look: dark or light, at once
+            if theme.current() != ("light" if theme.is_light() else "dark"):
+                theme.set_theme(theme.current())
         elif kind == "ai":  # Allow AI apps to control SciForge (the bridge on / off)
             from . import ai_ui
             from .ai import bridge
