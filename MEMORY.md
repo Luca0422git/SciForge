@@ -284,7 +284,9 @@ Quick updates come from green "SciForge tests" runs on `develop`.
       Export dialog (STEP / STL binary+ASCII / 3MF / OBJ, whole design or ticked bodies,
       Unit Type, One File Per Body, Refinement Low/Medium/High/Custom, triangle count), 3D
       Print (formats, refinement, save + open folder, or Send to 3D Print Utility = the
-      slicer, remembered), Export Everything (STEP+STL+3MF+OBJ+PNG+README beside the design,
+      slicer, remembered; since 2026-10-18 **Send to Slicer**: slicers found on the computer,
+      Other..., Save file only, Save a copy, Preferences > 3D Print, `slicer_core.py`),
+      Export Everything (STEP+STL+3MF+OBJ+PNG+README beside the design,
       folder opened). `make3d*.py` replaced by `export.py` / `export_ui.py`. Ribbon: INSERT
       group wired (+ Insert STEP), MESH tab, UTILITIES > MAKE, a File menu on the quick-access
       Menu button (`ribbon_config.FILE_MENU`). 9 scenarios (`insert_*.py`, `export_*.py`,
@@ -1369,6 +1371,33 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### 2026-10-18: Send to Slicer (branch `sf/slicer`, merged into develop 2026-10-19)
+- Research (Autodesk help "3D print a design" and support / forum pages through search
+  excerpts; the help site does not resolve from the sandbox): Fusion's 3D Print has
+  Preparation Type Manufacturing / Export / Print Utility; Print Utility = an Application
+  drop-down of the utilities Fusion found, or Custom (point at the program). Forums: a slicer
+  already open sometimes got nothing (FUS-171507); Custom with the .exe or a shortcut works.
+  Sources and the Fusion / SciForge table: `docs/sciforge/parity/insert-export.md` (3D Print).
+- Built: `slicer_core.py` (no Qt / FreeCAD: finds PrusaSlicer, Bambu Studio, OrcaSlicer,
+  UltiMaker Cura in Program Files / %LOCALAPPDATA%\Programs, on the PATH, Flatpak,
+  AppImages, /Applications; the Send to list; the command line incl. .lnk / .app; units;
+  file names; never overwrites a copy); `export_ui.PrintDialog` rebuilt around a **Send to**
+  drop-down (found slicers, "Other... (pick the program)", "Save file only"), a plain "no
+  slicer found" note, "Also save a copy next to the design", slicers always get mm;
+  Preferences > **3D Print** page (Send to, Program, Format, Save a copy, the slicers found);
+  original `print_3d` icon. Test seams: `export_ui.SLICER_ENV`, `PROGRAM_DIALOG`.
+- Tests: unit `test_slicer_core.py` (29); scenario `send_to_slicer.py` (106 checks, fake
+  slicers = shell scripts logging their arguments); export_print / mesh_print / smoke /
+  misc_preferences updated for the new drop-down and page.
+- Local runs: send_to_slicer 106, export_print 45, export_formats 55, export_everything 29,
+  exchange2_export 89, mesh_print 34, misc_preferences 84, ribbon_sweep 216 (all pass); unit
+  1380 OK; golden 432 + 2 xfail; smoke pass. export_print's own XY click aimed at the old big
+  origin square (cf6d1d74 made them small): it now aims through `plane_input` like box_steps.
+- At the merge, export_print's XY click went through `plane_input.click_on_plane` like the
+  rest of develop (the journey and insert scenarios were already rerouted there).
+- Open: try with the real slicers on Windows (Luca); more slicers (Creality Print, Elegoo...)
+  are one entry each in `slicer_core.SLICERS`.
 
 ### Session log: Luca's improvement list (branch `develop`, 2026-10-16/17)
 

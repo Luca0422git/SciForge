@@ -255,6 +255,22 @@ def save(values, remove=()):
     return restart
 
 
+def _slicers_text():
+    """What the 3D Print page says about this computer's slicers."""
+    try:
+        from . import export_ui, slicer_core
+
+        found = export_ui.found_slicers()
+        if not found:
+            return slicer_core.NONE_FOUND
+        return "Found on this computer: " + "; ".join(
+            "%s (%s)" % (name, program) for _sid, name, program in found
+        )
+    except Exception as exc:
+        warn("preferences: slicers not listed (%s)" % exc)
+        return ""
+
+
 def reset_for_tests():
     """The test harness (harness.run): every option that changes how clicks, views or new
     designs behave back to its default, so a scenario never inherits another's choice."""
@@ -268,6 +284,10 @@ def reset_for_tests():
         "active_component_visibility",
         "version_on_close",
         "sketch_auto_project",
+        "print_send_to",
+        "slicer_program",
+        "print_format",
+        "print_save_copy",
     ):
         opt = core.option(key)
         try:
@@ -584,6 +604,12 @@ class PreferencesDialog(QtWidgets.QDialog):
         if pid == "keyboard":
             self.keyboard = KeyboardPage(inner)
             layout.addWidget(self.keyboard, 1)
+        if pid == "print":
+            self.print_note = QtWidgets.QLabel(_slicers_text())
+            self.print_note.setObjectName("SciForgePreferencesSlicers")
+            self.print_note.setWordWrap(True)
+            self.print_note.setStyleSheet("color: #c3cad4;")
+            layout.addWidget(self.print_note)
         if pid == "network":
             note = QtWidgets.QLabel(
                 "SciForge never sends anything anywhere: there is no account and no data "

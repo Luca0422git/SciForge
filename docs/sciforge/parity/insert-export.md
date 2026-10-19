@@ -13,14 +13,15 @@ Code (all in `src/Mod/SciForge/sciforge/`):
 | `insert.py` | no Qt: mesh units / flip / centre / ground maths, mesh bodies (`Mesh::Feature`), `ConvertMeshFeature` (a `PartDesign::FeaturePython` step), STEP into bodies, SVG / DXF curves into sketch geometry (fixed), canvases (`Image::ImagePlane`), calibrate maths |
 | `insert_ui.py` | the dialogs: Insert Mesh (with the move manipulator), Convert Mesh, Insert SVG / DXF, Canvas / Edit Canvas, Calibrate; the Insert STEP command; browser hooks |
 | `export.py` | no Qt: refinement presets, mesh writing (STL binary / ASCII, 3MF with body names, OBJ with groups), STEP writing, Export Everything's file plan and README |
-| `export_ui.py` | the Export dialog, the 3D Print dialog, the Export Everything command |
+| `export_ui.py` | the Export dialog, the 3D Print dialog (Send to Slicer), the Export Everything command |
+| `slicer_core.py` | no Qt / FreeCAD: finding the slicers (Windows, Linux, macOS rules), the Send to list, the command line, units and file names (unit tests `test_slicer_core.py`) |
 | `ribbon_config.py` | INSERT group, MESH tab (Insert Mesh, Convert Mesh), UTILITIES > MAKE (3D Print, Export, Export Everything), `FILE_MENU` (the quick-access Menu's File entries) |
 | `browser_core.py` / `browser_ui.py` | mesh bodies in the Bodies folder, the Canvases folder, right-click entries (Convert Mesh, Edit Canvas, Calibrate) |
 | `timeline_core.py` | the step kinds Insert Mesh, Convert Mesh, Insert STEP |
 
 Tests: scenarios `insert_mesh.py` (Insert Mesh + Convert Mesh, 65 checks), `insert_step.py`
 (22), `insert_svg.py` (38), `insert_dxf.py` (35), `insert_canvas.py` (48), `export_formats.py`
-(53), `export_print.py` (41), `export_everything.py` (27), `insert_reopen.py` (save / reopen with
+(53), `export_print.py` (41), `send_to_slicer.py` (106: fake slicers, no slicer found, Other..., Save a copy, Cancel, Preferences > 3D Print), `export_everything.py` (27), `insert_reopen.py` (save / reopen with
 a mesh, a converted body and a canvas, 24); unit tests `test_insert_core.py`,
 `test_export_core.py`; fixtures in `SciForgeTests/fixtures/` (made by `make_fixtures.py`).
 
@@ -128,6 +129,19 @@ says nothing, and the Fusion API reference for defaults:
   Refinement Settings, Send to 3D Print Utility; API `STLExportOptions` (the default
   refinement is Medium; Surface Deviation = the greatest distance between the true surface and
   the triangles, Normal Deviation = the greatest angle between neighbouring triangle normals).
+- 3D Print to a slicer (Send to Slicer, 2026-10-18; help pages unreachable from the sandbox,
+  read through search excerpts): help "3D print a design" (SLD-3D-PRINT.htm, and its French
+  copy): Preparation Type Manufacturing / Export / Print Utility; Print Utility: "select the
+  Application ... from the dropdown list of 3D print utilities that Fusion has found", else
+  "select Custom" and specify the program's location. Support article "How to export an
+  STL/3MF file from Fusion": untick Send to 3D Print Utility to save a file. Forums: Autodesk
+  Community "Send 3d print to cura" (Cura is picked up when installed), "Recent update broke
+  send to 3D Printer" and "Version Fusion 2.0.20256 print utility fails if target slicer is
+  open" (FUS-171507: Bambu Studio, OrcaSlicer, PrusaSlicer got nothing while already open;
+  Custom pointed at the .exe or a Windows shortcut works), "Send to 3D print utility always
+  reverts to checked", "Save As Mesh - behaviour changed"; Bambu Lab forum "Can't send files
+  from Fusion 360 anymore" (Custom = bambu-studio.exe). Install folders of the four slicers:
+  their Windows installers' defaults (**from memory; Guess** where a version changes them).
 - Fusion inserts STEP files through its Data Panel (upload, then Insert into Current Design,
   which opens a Move dialog) or opens them as a design: SciForge has no cloud panel, so
   **Insert STEP** picks the file at once (support article "How to insert a mesh body" for the
@@ -227,7 +241,14 @@ says nothing, and the Fusion API reference for defaults:
 | Selection: bodies | the bodies list, ticked from the selection (else all shown bodies) |
 | Preparation Type Export; Format 3MF / STL (Binary) / STL (ASCII) / OBJ | the formats (Manufacturing left out: no CAM) |
 | Refinement Low / Medium / High / Custom with Surface Deviation, Normal Deviation (Maximum Edge Length, Aspect Ratio), Preview Mesh, Number of Triangles | Low = 0.127 mm / 30 deg, Medium = 0.0508 mm / 15 deg, High = 0.0254 mm / 10 deg **(the numbers Fusion shows for a mm design, from memory: thousandths of an inch; unconfirmed)**, Custom takes the two fields; Number of Triangles; no Maximum Edge Length / Aspect Ratio (FreeCAD's mesher has no such settings) and no Preview Mesh overlay (gaps) |
-| Send to 3D Print Utility (the slicer), or a file | same: tick it and name the slicer program once (remembered), OK writes a temporary 3MF / STL and starts the slicer with it; unticked, OK asks where to save and opens the folder |
+| Preparation Type Print Utility: Application = a drop-down of the 3D print utilities Fusion found on the computer, or Custom (then point it at the program); older versions: a "Send to 3D Print Utility" check box with the same list (sources below) | **Send to** drop-down (Send to Slicer, 2026-10-18): the slicers SciForge finds (PrusaSlicer, Bambu Studio, OrcaSlicer, UltiMaker Cura), then "Other... (pick the program)" (Fusion's Custom: choosing it opens the program picker; Program row with "…") and "Save file only" (Fusion's Export). One drop-down instead of Preparation Type + Application: same choices, parity level B |
+| How Fusion finds the utilities (not documented) | **(SciForge's own rules)** Windows: Program Files, Program Files (x86), `%LOCALAPPDATA%\Programs` (`Prusa3D\PrusaSlicer\prusa-slicer.exe`, `Bambu Studio\bambu-studio.exe`, `OrcaSlicer\orca-slicer.exe`, the newest `UltiMaker Cura <version>\UltiMaker-Cura.exe`); Linux: the PATH, Flatpak (`/var/lib/flatpak/exports/bin`, `~/.local/share/flatpak/exports/bin`), AppImages in `~/Applications`, `~/Downloads`, `~/bin`; macOS: `/Applications/*.app`. No registry, nothing started. `slicer_core.py` |
+| Nothing found | **(SciForge's own)** the dialog says plainly that no slicer was found and offers Other... and Save file only (it starts at Save file only); OK on Other... without a program says so and writes nothing |
+| OK with a utility: the file goes to the slicer (forum users: Fusion hands it an STL / 3MF; a slicer already running sometimes got an empty plate, Autodesk ticket FUS-171507) | OK writes the file to SciForge's temporary print folder (files older than 7 days cleaned up) and starts the slicer with the file's path as its argument (detached: SciForge carries on). A Windows shortcut (.lnk) or batch file is started the way a double click does (`cmd /c start`), a macOS .app with `open -a` |
+| The file the slicer gets | one object per body named after the body, placed as in the design; **always millimetres when sending** (Unit Type greyed at Millimeter: slicers work in mm and an STL has no unit; 3MF says `unit="millimeter"`). Named after the body for one body, after the design for several |
+| (Fusion has no such option: Guess) | **Also save a copy next to the design** (SciForge's own, Luca's request): the same file beside the design file (or the last export folder for an unsaved design); never overwrites (`name-2.3mf`...), since slicers save their projects as .3mf too |
+| Fusion remembers the utility (forum: "Send to 3D Print Utility always reverts to checked"; after 2.0.20256 the Preparation Type was not remembered for some users) | Send to, the Other program, Format and Save a copy are remembered on OK (Cancel keeps the old ones) and shown on **Preferences > 3D Print** (SciForge's own page: Send to, Program (Other), Format, Also save a copy; it also lists the slicers found) |
+| Save file only (Export) | OK asks where to save (the Unit Type chosen is used) and opens the folder |
 
 ### Export Everything (UTILITIES > MAKE; File menu)
 
@@ -246,6 +267,8 @@ export. Fusion has no such command (its nearest is File > Export, one format at 
 | Convert Mesh "Organic", surface fitting of round faces (Prismatic keeps them faceted) | FreeCAD has no mesh-to-surface fitting |
 | Export: SAT, SMT, F3D, FBX, USD; DWG without a converter | no FreeCAD writers; DWG needs LibreDWG / ODA / QCAD installed (untested here) |
 | 3D Print: Maximum Edge Length, Aspect Ratio, Preview Mesh overlay, Manufacturing preparation | FreeCAD's mesher has no edge length / aspect settings; no CAM |
+| 3D Print: utilities Fusion lists that SciForge does not look for (PreForm, Meshmixer, Print Studio...) and slicers beyond the four (Creality Print, Elegoo, SuperSlicer...) | pick them with Other...; more can be added to `slicer_core.SLICERS` (one entry each) |
+| A slicer that is already open getting the file | up to the slicer (PrusaSlicer / OrcaSlicer / Bambu Studio open a second window or hand the file to the open one, depending on their own "single instance" setting); untested with the real programs, only with stand-ins |
 | The exact refinement numbers of Low / Medium / High | from memory of Fusion's dialog, to confirm |
 | An inserted mesh in the timeline rolls back with the marker | mesh bodies sit outside the PartDesign bodies, so the history marker never hides them |
 | Canvas: "Render as" options | not built (rendering is out of scope) |

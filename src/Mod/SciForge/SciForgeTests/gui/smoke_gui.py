@@ -541,7 +541,7 @@ def step_print():
     Gui.runCommand("SciForge_3DPrint")
     dialog = export_ui.PrintDialog.last
     dialog.open_folder.setChecked(False)
-    dialog.send.setChecked(False)
+    dialog.set_target("file")  # Save file only
     path = os.path.join(OUT_DIR, "print-test.3mf")
     ok = dialog.save(path)
     body = commands.active_body()

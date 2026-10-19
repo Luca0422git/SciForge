@@ -505,3 +505,59 @@ def set_slicer_program(path):
         App.ParamGet(PREF_PATH).SetString("SlicerProgram", path or "")
     except Exception as exc:
         warn("slicer program not remembered (%s)" % exc)
+
+
+def _pref_string(name, default=""):
+    try:
+        import FreeCAD as App
+
+        return App.ParamGet(PREF_PATH).GetString(name, default)
+    except Exception:
+        return default
+
+
+def _set_pref_string(name, value):
+    try:
+        import FreeCAD as App
+
+        App.ParamGet(PREF_PATH).SetString(name, value or "")
+    except Exception as exc:
+        warn("3D Print: %s not remembered (%s)" % (name, exc))
+
+
+def print_send_to():
+    """3D Print's Send to choice last time (a slicer id, "other", "file"; "" = the first
+    slicer found). Preferences > 3D Print shows the same value."""
+    return _pref_string("PrintSendTo", "")
+
+
+def set_print_send_to(key):
+    _set_pref_string("PrintSendTo", key)
+
+
+def print_format():
+    fmt = _pref_string("PrintFormat", "3MF")
+    return fmt if fmt in PRINT_FORMATS else "3MF"
+
+
+def set_print_format(fmt):
+    if fmt in PRINT_FORMATS:
+        _set_pref_string("PrintFormat", fmt)
+
+
+def print_save_copy():
+    try:
+        import FreeCAD as App
+
+        return App.ParamGet(PREF_PATH).GetBool("PrintSaveCopy", False)
+    except Exception:
+        return False
+
+
+def set_print_save_copy(on):
+    try:
+        import FreeCAD as App
+
+        App.ParamGet(PREF_PATH).SetBool("PrintSaveCopy", bool(on))
+    except Exception as exc:
+        warn("3D Print: Save a copy not remembered (%s)" % exc)

@@ -4,18 +4,24 @@ Make > 3D Print, Save As Mesh). The file work is in export.py. Spec and sources:
 docs/sciforge/parity/insert-export.md."""
 
 import os
+import shutil
+import sys
+import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, commands, export, log, ui_icon, ui_icon_path, warn
+from . import bodies, commands, export, log, slicer_core, ui_icon, ui_icon_path, warn
 from .compat import QtCore, QtGui, QtWidgets
 
-# Tests replace these: the folder opener, the slicer starter and the file / folder dialogs.
+# Tests replace these: the folder opener, the slicer starter, the file / folder / program
+# dialogs, and where 3D Print looks for slicers (SLICER_ENV: {"PATH": ..., "HOME": ...}).
 OPEN_FOLDER = None
 START_PROGRAM = None
 SAVE_DIALOG = None
 FOLDER_DIALOG = None
+PROGRAM_DIALOG = None
+SLICER_ENV = None
 PREFS = "User parameter:BaseApp/Preferences/Mod/SciForge"
 NOTE_STYLE = "color: #9fb3c8;"
 
@@ -35,7 +41,9 @@ def start_program(command):
     """Start the slicer with the file (detached, so SciForge goes on)."""
     if START_PROGRAM is not None:
         return START_PROGRAM(command)
-    ok = QtCore.QProcess.startDetached(command[0], command[1:])
+    ok = QtCore.QProcess.startDetached(command[0], list(command[1:]))
+    if isinstance(ok, tuple):  # some PySide versions also give the process id
+        ok = ok[0]
     if not ok:
         raise export.ExportError("The slicer could not be started: %s" % command[0])
     return ok
@@ -511,40 +519,121 @@ class ExportDialog(_MeshDialog):
 
 
 # ============================================================================ 3D Print
+def _runnable(path):
+    """A program that can be started: a file (executable outside Windows) or a macOS .app."""
+    try:
+        if not path:
+            return False
+        if os.path.isdir(path):
+            return path.lower().endswith(".app")
+        if not os.path.isfile(path):
+            return False
+        return sys.platform.startswith("win") or os.access(path, os.X_OK)
+    except Exception:
+        return False
+
+
+def found_slicers():
+    """[(id, name, program)] of the slicers on this computer (slicer_core's rules: the usual
+    install folders and the PATH; nothing is started). Tests set SLICER_ENV to look in a
+    folder of their own instead of the machine's."""
+    try:
+        if SLICER_ENV is not None:
+            env, home = dict(SLICER_ENV), SLICER_ENV.get("HOME", "")
+        else:
+            env, home = dict(os.environ), os.path.expanduser("~")
+        return slicer_core.find_slicers(
+            sys.platform, env, _runnable, os.path.isdir, os.listdir, home
+        )
+    except Exception as exc:
+        warn("3D Print: looking for slicers failed (%s)" % exc)
+        return []
+
+
+def print_folder():
+    """The temporary folder the file for the slicer is written to (old files cleaned up)."""
+    folder = os.path.join(App.getUserCachePath(), "SciForge", "print")
+    os.makedirs(folder, exist_ok=True)
+    try:
+        entries = []
+        for name in os.listdir(folder):
+            full = os.path.join(folder, name)
+            if os.path.isfile(full):
+                entries.append((name, os.path.getmtime(full)))
+        for name in slicer_core.stale_files(entries, time.time()):
+            try:
+                os.remove(os.path.join(folder, name))
+            except OSError:
+                pass  # still open in a slicer: next time
+    except Exception as exc:
+        warn("3D Print: old print files not cleaned up (%s)" % exc)
+    return folder
+
+
+def _program_dialog(start):
+    if PROGRAM_DIALOG is not None:
+        return PROGRAM_DIALOG(start)
+    if sys.platform.startswith("win"):
+        filter_text = "Programs (*.exe *.lnk *.bat *.cmd);;All files (*)"
+    else:
+        filter_text = "All files (*)"
+    path, _ = QtWidgets.QFileDialog.getOpenFileName(
+        Gui.getMainWindow(), "Your slicer program", start, filter_text
+    )
+    return path or None
+
+
 class PrintDialog(_MeshDialog):
-    """Fusion's 3D Print (Utilities > Make): Selection, Format, Unit Type, Refinement with
-    its options, Number of Triangles, Output: a file (and open its folder) or straight to
-    the slicer you chose once (Send to 3D Print Utility)."""
+    """Fusion's 3D Print (Utilities > Make): Selection, where the design goes (Fusion's Print
+    Utility list of the utilities it found, with Custom; or Export = a file only), Format,
+    Unit Type, Refinement with its options, Number of Triangles. Sending writes a temporary
+    file and starts the slicer with it; Save file only asks where to save and opens the
+    folder. The choices are remembered (Preferences > 3D Print)."""
 
     def __init__(self, doc, parent=None):
-        super().__init__(doc, "3D Print", "insert_mesh")
+        super().__init__(doc, "3D Print", "print_3d")
         form = self.form
+        self.last_file = None
+        self.last_copy = None
+        self._picking = False
+        self.found = found_slicers()
         self.bodies = BodyList(doc, self.schedule_count)
         form.addRow("Selection", self.bodies)
+        self.send_to = QtWidgets.QComboBox()
+        for key, label in slicer_core.send_to_entries(self.found):
+            self.send_to.addItem(label, key)
+        form.addRow("Send to", self.send_to)
+        program_row = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(program_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.other_program = export.slicer_program()
+        self.program = QtWidgets.QLineEdit()
+        self.program.setPlaceholderText("Your slicer's program (.exe, shortcut or AppImage)")
+        self.program.textEdited.connect(lambda *_: self._program_typed())
+        self.browse = QtWidgets.QToolButton()
+        self.browse.setText("…")
+        self.browse.setToolTip("Pick your slicer's program")
+        self.browse.clicked.connect(lambda *_: self._browse_program())
+        row.addWidget(self.program, 1)
+        row.addWidget(self.browse)
+        self.program_caption = QtWidgets.QLabel("Program")
+        form.addRow(self.program_caption, program_row)
+        self.found_note = QtWidgets.QLabel("")
+        self.found_note.setWordWrap(True)
+        self.found_note.setStyleSheet(NOTE_STYLE)
+        form.addRow(self.found_note)
         self.format = QtWidgets.QComboBox()
         self.format.addItems(export.PRINT_FORMATS)
+        self.format.setCurrentText(export.print_format())
         self.format.currentIndexChanged.connect(lambda *_: self.schedule_count())
         form.addRow("Format", self.format)
         self.unit = QtWidgets.QComboBox()
         self.unit.addItems(export.UNIT_NAMES)
         form.addRow("Unit Type", self.unit)
         self.refinement = _RefinementRows(form, self.schedule_count)
-        self.send = QtWidgets.QCheckBox("Send to 3D Print Utility (your slicer)")
-        self.send.setChecked(bool(export.slicer_program()))
-        self.send.toggled.connect(lambda *_: self._send_changed())
-        form.addRow(self.send)
-        program_row = QtWidgets.QWidget()
-        row = QtWidgets.QHBoxLayout(program_row)
-        row.setContentsMargins(0, 0, 0, 0)
-        self.program = QtWidgets.QLineEdit(export.slicer_program())
-        self.program.setPlaceholderText("The slicer program (PrusaSlicer, Cura, Bambu Studio...)")
-        browse = QtWidgets.QToolButton()
-        browse.setText("…")
-        browse.clicked.connect(self._browse_program)
-        row.addWidget(self.program, 1)
-        row.addWidget(browse)
-        self.program_caption = QtWidgets.QLabel("Print Utility")
-        form.addRow(self.program_caption, program_row)
+        self.save_copy = QtWidgets.QCheckBox("Also save a copy next to the design")
+        self.save_copy.setChecked(export.print_save_copy())
+        form.addRow(self.save_copy)
         self.open_folder = QtWidgets.QCheckBox("Open the folder after saving")
         self.open_folder.setChecked(True)
         form.addRow(self.open_folder)
@@ -555,50 +644,134 @@ class PrintDialog(_MeshDialog):
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
-        self._send_changed()
+        start = slicer_core.default_target(
+            self.found, export.print_send_to(), self.other_program
+        )
+        self.send_to.setCurrentIndex(max(0, self.send_to.findData(start)))
+        self.send_to.currentIndexChanged.connect(lambda *_: self._send_to_changed(True))
+        self._send_to_changed(False)
         if self.bodies.count() == 0:
             self.say("There is no body to print yet.")
         self.schedule_count()
 
-    def _send_changed(self):
-        sending = self.send.isChecked()
-        self.program.setEnabled(sending)
-        self.program_caption.setEnabled(sending)
-        self.open_folder.setEnabled(not sending)
+    # -- Send to ------------------------------------------------------------------------
+    def target(self):
+        return self.send_to.currentData() or slicer_core.FILE_ONLY
+
+    def set_target(self, key):
+        """Choose a Send to entry by its key (a slicer id, OTHER, FILE_ONLY)."""
+        index = self.send_to.findData(key)
+        if index >= 0:
+            self.send_to.setCurrentIndex(index)
+        return index >= 0
+
+    def sending(self):
+        return self.target() != slicer_core.FILE_ONLY
+
+    def current_program(self):
+        if self.target() == slicer_core.OTHER:
+            return self.program.text().strip()
+        return slicer_core.program_for(self.target(), self.found)
+
+    def _send_to_changed(self, picked):
+        try:
+            target = self.target()
+            other = target == slicer_core.OTHER
+            sending = self.sending()
+            self.program.setText(
+                self.other_program if other else slicer_core.program_for(target, self.found)
+            )
+            self.program.setEnabled(other)
+            self.browse.setEnabled(other)
+            self.program_caption.setEnabled(sending)
+            self.save_copy.setEnabled(sending)
+            self.open_folder.setEnabled(not sending)
+            # slicers get millimetres (an STL has no unit); a saved file keeps the Unit Type
+            self.unit.setEnabled(not sending)
+            self.unit.setToolTip(
+                "A slicer always gets millimetres." if sending else "The unit the file counts in."
+            )
+            if sending:
+                self.unit.setCurrentText("Millimeter")
+            if not self.found:
+                self.found_note.setText(slicer_core.NONE_FOUND)
+            else:
+                self.found_note.setText(
+                    "Found on this computer: %s." % ", ".join(n for _i, n, _p in self.found)
+                )
+            self.say("")
+            if other and picked and not self.program.text().strip():
+                self._browse_program()  # Fusion's Custom: point it at the program
+        except Exception as exc:
+            warn("3D Print: %s" % exc)
+
+    def _program_typed(self):
+        if self.target() == slicer_core.OTHER:
+            self.other_program = self.program.text().strip()
 
     def _browse_program(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Your slicer program", self.program.text() or os.path.expanduser("~")
-        )
-        if path:
-            self.program.setText(path)
+        if self._picking:
+            return
+        self._picking = True
+        try:
+            start = self.program.text().strip() or os.path.expanduser("~")
+            path = _program_dialog(start)
+            if path:
+                self.other_program = path
+                if self.target() != slicer_core.OTHER:
+                    self.set_target(slicer_core.OTHER)
+                self.program.setText(path)
+                self.say("")
+        except Exception as exc:
+            warn("3D Print: %s" % exc)
+        finally:
+            self._picking = False
 
+    # -- OK -------------------------------------------------------------------------------
     def default_path(self):
         chosen = self.bodies.chosen()
-        name = chosen[0].Label if len(chosen) == 1 else _design_name(self.doc)
-        return os.path.join(
-            _home(self.doc),
-            export.safe_name(name, "part") + export.extension_of(self.format.currentText()),
-        )
+        name = slicer_core.print_name(_design_name(self.doc), [b.Label for b in chosen])
+        return os.path.join(_home(self.doc), name + export.extension_of(self.format.currentText()))
+
+    def _remember(self, target):
+        export.set_print_send_to(target)
+        export.set_print_format(self.format.currentText())
+        if target == slicer_core.OTHER:
+            export.set_slicer_program(self.program.text().strip())
+        if self.sending():
+            export.set_print_save_copy(self.save_copy.isChecked())
+
+    def _temp_path(self, fmt):
+        path = os.path.join(print_folder(), os.path.basename(self.default_path()))
+        if os.path.exists(path):
+            try:
+                os.remove(path)  # our own file from last time
+            except OSError:  # still open in the slicer (Windows locks it)
+                path = slicer_core.free_path(path, os.path.exists)
+        return path
 
     def save(self, path=None):
-        """OK: write the file (asked for unless `path` is given) and open the folder, or
-        hand it to the slicer. Returns True when done."""
+        """OK: hand the file to the slicer (written to a temporary folder, a copy beside the
+        design when asked), or write it where the save dialog says (unless `path` is given)
+        and open the folder. Returns True when done."""
         try:
             chosen = [b for b in self.bodies.chosen() if export.can_export(b)]
             if not chosen:
                 raise export.ExportError("Tick at least one body to print.")
             fmt = self.format.currentText()
-            sending = self.send.isChecked()
+            target = self.target()
+            sending = self.sending()
+            program = ""
             if sending:
-                command_program = self.program.text().strip()
-                export.slicer_command(command_program, "x")  # checks the program is set
-                export.set_slicer_program(command_program)
+                program = self.current_program()
+                problem = slicer_core.check_program(program, _runnable, os.path.isdir)
+                if problem:
+                    if not self.found and not program:
+                        problem = slicer_core.NONE_FOUND
+                    raise export.ExportError(problem)
             if path is None:
                 if sending:
-                    folder = os.path.join(App.getUserCachePath(), "SciForge", "print")
-                    os.makedirs(folder, exist_ok=True)
-                    path = os.path.join(folder, os.path.basename(self.default_path()))
+                    path = self._temp_path(fmt)
                 else:
                     path = _save_dialog(
                         "Save for 3D printing",
@@ -607,19 +780,35 @@ class PrintDialog(_MeshDialog):
                     )
                     if not path:
                         return False
+            self._remember(target)
             level, surface, normal = self.refinement.values()
+            unit = slicer_core.send_unit(self.unit.currentText(), sending)
             written = export.export_mesh_files(
-                self.doc, chosen, fmt, path, level, surface, normal, unit=self.unit.currentText()
+                self.doc, chosen, fmt, path, level, surface, normal, unit=unit
             )
             file_path, count = written[0]
             self.last_file = file_path
-            log("3D print: %s (%d triangles)" % (file_path, count))
+            self.last_copy = None
+            log("3D print: %s (%d triangles, %s)" % (file_path, count, unit))
             if sending:
-                start_program(export.slicer_command(self.program.text().strip(), file_path))
+                name = slicer_core.slicer_name(target, self.found, program)
+                if self.save_copy.isChecked():
+                    folder = slicer_core.copy_folder(self.doc.FileName, _home(self.doc))
+                    copy = slicer_core.free_path(
+                        os.path.join(folder, os.path.basename(file_path)), os.path.exists
+                    )
+                    shutil.copyfile(file_path, copy)
+                    self.last_copy = copy
+                    log("3D print: a copy saved as %s" % copy)
+                exe, args = slicer_core.launch_command(program, [file_path], sys.platform)
+                start_program([exe] + args)
+                log("3D print: sent to %s (%s)" % (name, program))
+                commands.tell("Sent to %s: %s" % (name, os.path.basename(file_path)))
             else:
                 _remember_folder(file_path)
                 if self.open_folder.isChecked():
                     open_folder(os.path.dirname(file_path))
+                commands.tell("Saved %s" % file_path)
             self.accept()
             return True
         except export.ExportError as exc:
@@ -699,8 +888,8 @@ class ExportCommand(_Command):
 
 class PrintCommand(_Command):
     text = "3D Print"
-    tip = "Bodies as 3MF, STL or OBJ for your slicer"
-    icon = "insert_mesh"
+    tip = "Send the bodies to your slicer (PrusaSlicer, Bambu Studio, OrcaSlicer, Cura...)"
+    icon = "print_3d"
 
     def run(self, doc):
         PrintDialog(doc).show()
