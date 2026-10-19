@@ -36,6 +36,7 @@ GAP = 0.1  # the gap between the origin and a square (fraction of its side)
 CLEAR = 0.25  # the gap between a part and a square moved beside it (fraction of its side)
 # the box axes (0 x, 1 y, 2 z) along a square's u and v (sketch_ui.PLANES)
 PLANE_AXES = {"XY": (0, 1), "XZ": (0, 2), "YZ": (1, 2)}
+NORMAL_AXIS = {"XY": 2, "XZ": 1, "YZ": 0}  # the box axis a plane faces
 LABEL_POINTS = 16.0
 LABEL_INSET = 0.86  # the label sits this far out towards a corner (fraction of the half size)
 
@@ -114,8 +115,10 @@ def square_corners(key, side, box=None, viewer_u=1.0):
         beyond, before = (uhi + clear, v0), (ulo - clear - side, v0)
         found += [beyond, before] if viewer_u >= 0.0 else [before, beyond]
         found += [(u0, vhi + clear), (u0, vlo - clear - side)]
-    if ulo < u0 + side and uhi > u0 and vlo < v0 + side and vhi > v0:
-        return found  # the part's outline covers the + quarter
+    n = NORMAL_AXIS[plane_key(key)]
+    reaches = float(box[2 * n]) <= 1e-6 and float(box[2 * n + 1]) >= -1e-6  # the part meets the plane
+    if reaches and ulo < u0 + side and uhi > u0 and vlo < v0 + side and vhi > v0:
+        return found  # the part covers the + quarter in the plane
     # free in the plane, but the part can still be in front of it or behind it on the
     # screen: the picker falls back on the places round the part then
     return [(u0, v0)] + found

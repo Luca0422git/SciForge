@@ -78,11 +78,19 @@ class SquareCorner(unittest.TestCase):
         self.assertEqual(look.square_corner("YZ", 20.0, box, viewer_u=-1.0), (-45.0, 2.0))
         self.assertEqual(look.square_corner("YZ", 20.0, box, viewer_u=1.0), (25.0, 2.0))
 
+    def test_part_above_the_plane_keeps_the_square_first(self):
+        # a wall z 20..30 over the XY quarter does not meet XY: the usual place comes
+        # first (the picker checks the screen), the places round it after
+        box = (-50, 50, -1, 1, 20, 30)
+        self.assertEqual(look.square_corner("XY", 20.0, box), (2.0, 2.0))
+        self.assertGreater(len(look.square_corners("XY", 20.0, box)), 1)
+
     def test_part_below_the_plane_keeps_the_vertical_squares(self):
         # all under z = 0: XZ and YZ (their + quarters are above z = 0) stay put
         box = (-20, 20, -15, 15, -10, -1)
         self.assertEqual(look.square_corner("XZ", 20.0, box), (2.0, 2.0))
-        self.assertEqual(look.square_corner("XY", 20.0, box), (25.0, 2.0))
+        # nor does it meet XY (all under z = 0): the usual place first, the screen decides
+        self.assertEqual(look.square_corner("XY", 20.0, box), (2.0, 2.0))
 
     def test_part_size_for_the_pick_tolerances(self):
         self.assertAlmostEqual(look.part_size((0, 100, 0, 60, 0, 20)), 60.0)
