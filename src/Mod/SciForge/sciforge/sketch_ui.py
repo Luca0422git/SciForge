@@ -266,7 +266,38 @@ class PlanePicker:
                     if self._shows(role, corner, side):
                         found[role] = corner
                         break
+                else:
+                    found[role] = self._seen_corner(role, side) or options[0]
         return found
+
+    def _seen_corner(self, role, side):
+        """(u, v) of a square of `role` that shows when the view looks away from the origin
+        (zoomed on a part far from it): on the part of its plane in view, nearest the
+        origin; None when the plane shows nowhere to click."""
+        from . import profile_pick
+
+        try:
+            base, normal, u, v = self._frame(role)
+            width, height = (int(n) for n in self.view.getSize())
+            _point, look = profile_pick.mouse_ray(self.view, (width // 2, height // 2))
+            if abs(App.Vector(*look).dot(normal)) < 0.2:
+                return None  # seen almost edge on: too thin to click
+            spots = []
+            for i in range(1, 10):
+                for j in range(1, 10):
+                    pixel = (int(width * i / 10.0), int(height * j / 10.0))
+                    hit = profile_pick.ray_plane(self.view, pixel, base, normal)
+                    if hit is None:
+                        continue
+                    local = hit[0] - base
+                    corner = (local.dot(u) - side / 2.0, local.dot(v) - side / 2.0)
+                    spots.append((local.Length, corner))
+            for _far, corner in sorted(spots):
+                if self._shows(role, corner, side):
+                    return corner
+        except Exception as exc:
+            warn("origin planes: %s" % exc)
+        return None
 
     def _shows(self, role, corner, side):
         """True if a square at `corner` can be clicked: its middle and four points round
