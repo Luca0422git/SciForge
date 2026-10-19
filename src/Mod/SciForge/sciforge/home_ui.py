@@ -256,6 +256,7 @@ QSS = """
 #SciForgeHomeRecovery {{ background: #5a4a2a; border-radius: 3px; }}
 #SciForgeHomeClear, #SciForgeHomeConnect, #SciForgeHomePlaceMenu {{ color: {accent};
     background: transparent; border: none; }}
+#SciForgeHomePlaceMenu {{ font-size: 16px; font-weight: bold; padding: 0px 6px; }}
 """
 
 
@@ -271,6 +272,23 @@ def _colours():
         text_dim=theme.TEXT_DIM,
         accent=theme.ACCENT,
     )
+
+
+class _Painted(QtWidgets.QWidget):
+    """A panel that paints its own background in a colour of the look (theme.py), whatever
+    the Qt style: on Luca's Windows the AI column came out white in the dark look, its
+    style sheet's background not drawn (it was here, on Linux)."""
+
+    def __init__(self, colour_name):
+        super().__init__()
+        self.colour_name = colour_name
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        try:
+            painter.fillRect(self.rect(), QtGui.QColor(getattr(theme, self.colour_name)))
+        finally:
+            painter.end()
 
 
 def _no_tab_focus(widget):
@@ -348,7 +366,7 @@ class _Row(QtWidgets.QWidget):
         self.title.setObjectName("SciForgeHomeTitle")
         head.addWidget(self.title)
         # where the place is on this computer (This computer: where designs are saved)
-        self.path_label = QtWidgets.QLabel(path)
+        self.path_label = QtWidgets.QLabel(os.path.normpath(path) if path else "")
         self.path_label.setObjectName("SciForgeHomePath")
         self.path_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         self.path_label.setVisible(bool(path))
@@ -364,7 +382,7 @@ class _Row(QtWidgets.QWidget):
             self.clear_button.clicked.connect(page.clear_list)
             head.addWidget(self.clear_button)
         else:
-            self.menu_button = QtWidgets.QPushButton("⋯")
+            self.menu_button = QtWidgets.QPushButton("...")
             self.menu_button.setObjectName("SciForgeHomePlaceMenu")
             self.menu_button.setCursor(QtCore.Qt.PointingHandCursor)
             self.menu_button.setToolTip("Show in Folder, and more")
@@ -426,10 +444,9 @@ class HomeView(QtWidgets.QWidget):
         (as many as there are: the list scrolls), + Add an AI, Open AI panel."""
         from . import ai_panel_ui
 
-        side = QtWidgets.QFrame()
+        side = _Painted("CHROME")
         side.setObjectName("SciForgeHomeAI")
         side.setFixedWidth(250)
-        side.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         column = QtWidgets.QVBoxLayout(side)
         column.setContentsMargins(14, 18, 14, 12)
         title = QtWidgets.QLabel("AI")

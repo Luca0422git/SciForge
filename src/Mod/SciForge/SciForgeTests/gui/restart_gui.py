@@ -5,8 +5,8 @@ the browser and an empty view). Run twice with one profile by run_tests.sh:
     SCIFORGE_SMOKE_OUT=/dir SCIFORGE_RESTART_PHASE=1 FreeCAD restart_gui.py
     SCIFORGE_SMOKE_OUT=/dir SCIFORGE_RESTART_PHASE=2 FreeCAD restart_gui.py
 
-Each start checks that SciForge's ribbon, document tabs bar and timeline are shown and that
-it opened on its Home tab, then closes the window as a person does (FreeCAD saves its window
+Each start checks that SciForge's ribbon, document tabs bar and timeline are shown, that
+it opened on its Home tab with the browser closed and its AI column in the look's colour, then closes the window as a person does (FreeCAD saves its window
 layout then), and writes restart-<phase>.json. The first start saves a design and closes
 it; the second start's Home lists it first in Recent.
 """
@@ -43,6 +43,19 @@ def run():
         from sciforge import home_ui
 
         check("it opens on the Home tab", home_ui.view() is not None and home_ui.is_active())
+        from sciforge import browser_ui, theme
+
+        dock = browser_ui._state.get("dock")
+        # (Luca, 2026-10-19: the browser was open on Home at start)
+        check("the browser is closed on Home at start", dock is None or not dock.isVisible())
+        page = home_ui.view()
+        side = page.findChild(QtWidgets.QWidget, "SciForgeHomeAI") if page else None
+        colour = None
+        if side is not None:
+            image = side.grab().toImage()
+            colour = image.pixelColor(image.width() // 2, 4).name()
+        # (... and Home's AI column white in the dark look on Windows)
+        check("Home's AI column is in the look's colour", colour == theme.CHROME, colour)
         design = os.path.join(OUT_DIR, "RestartDesign.FCStd")
         if PHASE == "1":
             if os.path.exists(design):

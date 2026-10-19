@@ -301,6 +301,10 @@ def _show_own_bars():
         if dock.isHidden():
             timeline_ui.show()
         _safely(lambda: __import__("sciforge.browser_ui").browser_ui.show())
+        # ... except what Home hides while it is in front (the browser, the ribbon's
+        # commands): these passes come after Home was shown at start, and the browser
+        # stayed open on Home (Luca, 2026-10-19)
+        _safely(lambda: __import__("sciforge.home_ui").home_ui._follow_active())
     except Exception as exc:
         warn("showing SciForge's bars at start: %s" % exc)
 

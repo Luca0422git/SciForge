@@ -132,6 +132,13 @@ def entries():
 class _TitleBar(QtWidgets.QWidget):
     """The panel's title bar: its name and an X that closes it (like the browser's)."""
 
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        try:
+            painter.fillRect(self.rect(), QtGui.QColor(theme.CHROME))
+        finally:
+            painter.end()
+
     def __init__(self, dock):
         super().__init__()
         self.setObjectName("SciForgeAITitle")
@@ -154,6 +161,15 @@ class _TitleBar(QtWidgets.QWidget):
 
 
 class AIPanel(QtWidgets.QWidget):
+    def paintEvent(self, event):
+        """Its background in the look's colour whatever the Qt style (Home's AI column came
+        out white on Windows from its style sheet alone)."""
+        painter = QtGui.QPainter(self)
+        try:
+            painter.fillRect(self.rect(), QtGui.QColor(theme.CHROME))
+        finally:
+            painter.end()
+
     def __init__(self):
         super().__init__()
         self.setObjectName("SciForgeAIPanel")
