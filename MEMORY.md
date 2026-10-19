@@ -29,6 +29,7 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | The Home tab (recent designs, places) | `src/Mod/SciForge/sciforge/home_core.py`, `home_ui.py`; spec `docs/sciforge/parity/home.md` |
 | Places (clouds, NAS) | `sciforge/locations_core.py`, `locations_ui.py`; spec `docs/sciforge/parity/cloud.md` |
 | AI connector (MCP server, bridge, Add an AI) | `sciforge/ai/`, `sciforge/ai_ui.py`; spec `docs/sciforge/parity/ai.md` |
+| AI chat panel (own API key; providers, loop, keys) | `sciforge/ai/chat_ui.py`, `ai/chat_core.py`, `ai/providers/`, `sciforge/secrets_store.py` |
 | Every change to FreeCAD's own code (tagged `SCIFORGE:`) | `docs/sciforge/core-patches.md` |
 | CI workflows (SciForge's own) | `.github/workflows/sciforge-*.yml` |
 | Tooling scripts for CI / local runs | `tools/sciforge/` |
@@ -1361,6 +1362,11 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 (See outline section 12. Also:)
 
+- Merge `sf/home-cloud-ai` (Home, places, AI connector, chat panel: M0-M4) into `develop`?
+  The brief says to ask after M3; not merged without your OK.
+- M5 (signing in to Dropbox / Google Drive / OneDrive from inside SciForge) needs your app
+  registrations (brief section 3.5).
+
 - Primitives (`docs/sciforge/parity/primitives.md`): which defaults does your Fusion show for
   Torus Position, Coil Rotation (Clockwise?) and Section Position, and is Section Size of a
   square/triangle section the circle round it or its side?
@@ -1373,6 +1379,30 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Home, cloud and AI, M4 chat panel (`sf/home-cloud-ai`, 2026-10-19 night)
+
+#### Built
+- `ai/providers/` (Anthropic Messages, OpenAI Responses, Gemini, OpenAI-compatible for
+  Ollama / LM Studio; each its one DEFAULT_MODEL, models from the provider's endpoint),
+  `ai/chat_core.py` (the loop: at most 25 requests per message, Stop between steps, cost
+  note), `secrets_store.py` (DPAPI / Keychain / Secret Service / owner-only file),
+  `ai/chat_ui.py` (right dock: worker thread for the network, tool calls handed to the GUI
+  thread by a queue the panel's timer empties). File > **AI Chat**, Home's **Open chat
+  panel**. The chat's calls go through `bridge.call(..., from_chat=True)`: no "Allow this AI
+  app?" question, every other rule the same.
+- Not done: answers are not streamed (shown whole). Not verified: OpenAI's default model
+  name and Gemini's error words (no real service called from the sandbox).
+
+#### Found by the scenario
+- chat_core sends "text" / "progress" / "error" events as plain strings, the panel read
+  them as dicts: every message vanished. The panel takes both now.
+- A fake model that answers at once reaches the 25-request limit before a test can press
+  Stop: the fake now takes 0.3 s per answer (a real one takes seconds).
+
+#### Tests
+- Unit 1526 OK; scenarios ai_chat (20), ai_bridge (43), home_screen (66), every timeline
+  scenario pass. Full sweep: see FULL_SWEEP_RESULT below.
 
 ### Session log: Home, cloud and AI, M2 places + M3 AI connector (`sf/home-cloud-ai`, 2026-10-19)
 
@@ -5687,9 +5717,12 @@ changes are Python only, so that quick update on top of it is the whole product 
   (`grid_ui.put("Subdivisions", 10); grid_ui.apply_subdivisions()`, as sketch_face does).
 - DXF coordinates are written with a few decimals: compare slopes and angles with a tolerance
   scaled to the line's length, never exactly (drawing_export's hatching, CI only).
-- `timeline_browser_qa4`'s "marker is in view" checks fail under heavy CPU load (several builders
-  running scenarios at once) and pass alone (twice on 2026-10-14): re-run it alone before
-  concluding anything.
+- `timeline_browser_qa4`'s "marker is in view" checks failed under heavy CPU load (twice on
+  2026-10-14) and every time after M2. **Root cause found and fixed 2026-10-19**: `marker()`
+  took the first marker among the row's children, and the old row's widgets wait for
+  deleteLater (Qt runs it only back in the event loop that asked), so the view followed the
+  OLD marker. The timeline now keeps the marker of its latest rebuild (`_current_marker`).
+  Trap for any widget row rebuilt with deleteLater: never find "the" widget by findChildren.
 - A Join whose profile touches nothing makes a New Body (Fusion; sf/gaps): tests that counted
   one body's volume count the total (`revolve_qa_more` P13/P14).
 - A body whose steps all lie after the history marker does not exist at the marker
