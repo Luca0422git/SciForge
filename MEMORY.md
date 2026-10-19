@@ -27,6 +27,8 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | Golden-model benchmark suite (step lists + runner) | `src/Mod/SciForge/SciForgeTests/golden/` |
 | Design steps the golden models and the AI tools both run (builder, `*_ops.py`, selectors) | `src/Mod/SciForge/sciforge/ai/ops/` |
 | The Home tab (recent designs, places) | `src/Mod/SciForge/sciforge/home_core.py`, `home_ui.py`; spec `docs/sciforge/parity/home.md` |
+| Places (clouds, NAS) | `sciforge/locations_core.py`, `locations_ui.py`; spec `docs/sciforge/parity/cloud.md` |
+| AI connector (MCP server, bridge, Add an AI) | `sciforge/ai/`, `sciforge/ai_ui.py`; spec `docs/sciforge/parity/ai.md` |
 | Every change to FreeCAD's own code (tagged `SCIFORGE:`) | `docs/sciforge/core-patches.md` |
 | CI workflows (SciForge's own) | `.github/workflows/sciforge-*.yml` |
 | Tooling scripts for CI / local runs | `tools/sciforge/` |
@@ -1371,6 +1373,52 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Home, cloud and AI, M2 places + M3 AI connector (`sf/home-cloud-ai`, 2026-10-19)
+
+Luca (going to bed): "work into M3 and continue all the tests... a fully fledged out product
+by the time I wake up". M2 and M3 built; the brief says: after M3, ask Luca to merge into
+`develop` (not done: his call).
+
+#### M2 places (phase A: the cloud apps' sync folders)
+- `locations_core.py` (pure, 21 tests), `locations_ui.py`, Home / Data Panel / Save dialog.
+  Spec and sources: `docs/sciforge/parity/cloud.md` (search summaries only: vendors' pages
+  blocked in the sandbox; "To check on a real PC" list there).
+- Traps: OneDrive conflict names are "Name-COMPUTER" and computer names hold hyphens
+  (DESKTOP-AB12C): split at every hyphen, and only believe a computer-like name in a OneDrive
+  folder with the original beside it ("Bracket-V2" is not a conflict). Drive letters are
+  scanned only in the wizard (a disconnected network drive can hold Windows for seconds; the
+  store rule runs at every save). "This computer" is never "Offline" (its folder is made
+  when needed: a fresh install showed Offline).
+- Scenario `cloud_place` (46 checks): fake Dropbox via `locations_ui.DETECT` (the real
+  info.json parser), `COMPUTER = "LAPTOP"`.
+
+#### M3 AI connector
+- Pure parts (a helper agent, reviewed): `ai/tools_core.py` (16 tools, schemas, validate,
+  to_steps into the golden step language, titles), `ai/mcp_core.py` + `ai/sciforge_mcp.py`
+  (stdio MCP server, stdlib only, no FreeCAD), `ai/bridge_core.py`, `ai/installers.py`
+  (Claude Desktop / Gemini CLI settings with backup, .mcpb, command lines), 75 unit tests.
+- Mine: `ai/bridge.py` (127.0.0.1 + key, calls queued to the GUI thread by a 50 ms timer, one
+  transaction per call "AI: ...", consent question per session, busy refusal, overwrite
+  question), `ai_ui.py` (Add an AI, AI activity dock, Undo last AI step, Stop), Home's AI
+  column, Preferences > AI (`allow_ai`, off), `core.Builder.attach(doc, body)` (+ `learn()`:
+  existing objects by Name and Label). Spec: `docs/sciforge/parity/ai.md`.
+- **Trap: SIGPIPE.** FreeCAD's embedded Python does not ignore SIGPIPE (ordinary Python
+  does): writing to a closed pipe or socket killed FreeCAD (exit 141, empty log). The bridge
+  ignores it when it starts (`_ignore_broken_pipes`); a scenario writing to a subprocess must
+  too.
+- **Trap: the AppImage's PYTHONHOME** (its own 3.11) breaks any other Python started from
+  SciForge: `ai_ui.server_env()` drops it; `python_exe()` never names a Python inside an
+  AppImage mount (its path changes at every start).
+- Scenario `ai_bridge` (43 checks): the real MCP server as a subprocess, spoken to from a
+  thread (SciForge answers on the GUI thread that also runs the steps); the consent box is
+  clicked. A sketch opened with setEdit adds an undo entry of its own: "Undo last AI step"
+  then rightly refuses (the newest step is not the AI's); the busy test uses a plain task
+  dialog instead.
+
+#### Tests
+- Unit 1463 OK; scenarios cloud_place, ai_bridge, home_screen, versions_*, polish2_*,
+  exchange2_link pass. Full sweep of all scenarios: FULL_SWEEP_RESULT
 
 ### Session log: Home, cloud and AI, M1 the Home tab (branch `sf/home-cloud-ai`, 2026-10-19)
 

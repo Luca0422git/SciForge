@@ -61,6 +61,30 @@ class Builder:
         self.objects = {}  # step id -> FreeCAD object
         self.ops = {}  # step id -> op name
 
+    @classmethod
+    def attach(cls, doc, body):
+        """A builder on a design that is already open (the AI tools): its steps go into
+        `body`, and the objects already there can be named by their Name or Label."""
+        from sciforge import picks
+
+        picks.install()
+        builder = cls.__new__(cls)
+        builder.doc = doc
+        builder.body = body
+        builder.objects = {}
+        builder.ops = {}
+        builder.learn()
+        return builder
+
+    def learn(self):
+        """Know every object of the design by its Name and Label (new ones keep their id)."""
+        for obj in self.doc.Objects:
+            for key in (obj.Name, obj.Label):
+                if key not in self.objects:
+                    self.objects[key] = obj
+                    if obj.TypeId == "Sketcher::SketchObject":
+                        self.ops[key] = "sketch"
+
     # -- helpers --------------------------------------------------------
     def _origin(self, role):
         for feature in self.body.Origin.OriginFeatures:

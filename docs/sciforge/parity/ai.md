@@ -1,0 +1,71 @@
+# Parity spec: AI apps building in SciForge (brief home-cloud-ai.md, milestone M3)
+
+An AI app Luca chats with (Claude Desktop, Gemini CLI, Claude Code, Codex...) gets SciForge's
+tools through MCP (the Model Context Protocol) and builds in the open design while he
+watches. Fusion has an AI assistant of its own but no connector for outside AI apps: this is
+**beyond Fusion**; the design steps are the same code as SciForge's dialogs.
+
+Implemented in `src/Mod/SciForge/sciforge/`:
+- `ai/tools_core.py`: the 16 tools (get_design, screenshot, measure, create_sketch, extrude,
+  revolve, fillet, chamfer, hole, pattern, shell, set_parameter, undo, redo, save, export),
+  their JSON Schemas and descriptions for the model, the checks of their arguments (plain
+  sentences: "radius must be a number above 0"), and how each becomes design steps.
+- `ai/ops/`: the design steps (milestone M0: the golden models' code, so 434 reference parts
+  prove what an AI builds).
+- `ai/mcp_core.py`, `ai/sciforge_mcp.py`: the MCP server an AI app starts (stdio; MCP
+  versions 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05). It runs with FreeCAD's own
+  Python on Windows (python3 elsewhere), imports no FreeCAD, and passes each call to:
+- `ai/bridge_core.py`, `ai/bridge.py`: the bridge inside SciForge: 127.0.0.1 only, a random
+  port and key in `<user data>/SciForge/ai/bridge.json`; calls run on SciForge's own thread.
+- `ai/installers.py`, `ai_ui.py`: Add an AI (Claude Desktop, Gemini CLI, a Claude Desktop
+  extension `.mcpb`, the command line for other apps), the AI activity panel, Home's card.
+
+Status: **built and tested with the real MCP server speaking to SciForge (scenario
+`ai_bridge`, 43 checks); not yet tried with Claude Desktop or Gemini CLI on Windows.**
+
+Tests: scenario `ai_bridge.py` (9 paths: the server starts and lists the tools, AI control
+off by default, switched on and the first call asks, the 40 x 30 x 10 box with 3 mm rounded
+edges in three calls (each one Undo step), get_design and a PNG screenshot, refused while a
+command dialog is open, the activity panel and Undo last AI step, Stop AI control, Add an AI
+for Gemini CLI and the Claude extension); unit tests `test_ai_tools_core.py`,
+`test_ai_mcp_core.py`, `test_ai_bridge_core.py`, `test_ai_mcp_server.py` (the real server
+against a fake bridge), `test_ai_installers.py`, `test_ai_ops_layout.py`.
+
+## Sources (checked 2026-10-19)
+
+- MCP specification, github.com/modelcontextprotocol/modelcontextprotocol: stdio transport
+  (one JSON-RPC message per line), lifecycle and version negotiation, tools/list and
+  tools/call, image content, batching removed (2025-06-18 changelog), schema 2025-11-25.
+- MCPB (Claude Desktop extensions), github.com/modelcontextprotocol/mcpb MANIFEST.md:
+  manifest_version 0.3, server type python, `${__dirname}`.
+- Gemini CLI, github.com/google-gemini/gemini-cli docs/tools/mcp-server.md: `mcpServers` in
+  `~/.gemini/settings.json`, `/mcp` lists them.
+- Claude Code, code.claude.com/docs/en/mcp: `claude mcp add ... -- <command>`; Codex CLI:
+  `codex mcp add NAME -- CMD` (openai/codex source).
+- Claude Desktop's settings file `claude_desktop_config.json` (`%APPDATA%\Claude\` on
+  Windows); the Linux path `~/.config/Claude/` is **not verified**.
+- FreeCAD's user data folder (where bridge.json is): src/App/ApplicationDirectories.cpp.
+
+## Behaviour
+
+| What | SciForge |
+|---|---|
+| Off unless switched on | Preferences > AI > **Allow AI apps to control SciForge** (off). Off: nothing listens; the AI app's calls answer "SciForge is not running, or 'Allow AI apps to control SciForge' is off". |
+| Add an AI | Home's **+ Add an AI**, File > **Add an AI App**: Claude Desktop (**Set up** adds SciForge to its settings file, a backup kept; quit and restart Claude Desktop), **Install as Claude extension...** (a `.mcpb` file opened with Claude Desktop), Gemini CLI (Set up; `/mcp` lists it), another app (the command line to copy). Setting one up switches AI control on. **Remove** takes SciForge out again (backup kept). A settings file that is not valid JSON is never touched. |
+| The first call of a session | SciForge asks: "An AI app wants to control SciForge... Allow it for this session?" **Allow** / **Deny** (Deny is the default button). Denied: every call of the session is refused, in words. |
+| Building | Each design-changing call is **one Undo step** named after it ("AI: Extrude 10 mm", "AI: Fillet 3 mm"), in the timeline like a step made by hand, built with the dialogs' code. A new step gets a readable id (Sketch1, Extrude1, Fillet1) the AI uses in later calls. A call that fails changes nothing and answers why ("extrude 'Extrude2': no sketch area contains [5, 5]"). With no design open, the first step starts one. |
+| Seeing | **get_design**: bodies (volume, bounding box), the timeline with ids, parameters, sketches and their closed areas. **screenshot**: a PNG of the view (iso, front, top...) the AI looks at. **measure**: distance and angle between two picks. |
+| Busy | While a command dialog, a sketch or a question is open in SciForge, changing calls answer "SciForge is busy: ... Finish or cancel it first." |
+| Files | **save** saves the design (a version) or to a path; **export** STEP / STL / 3MF. Writing over an existing file always asks the person (Allow / Deny). There is no tool that runs code. |
+| AI activity | A panel (right) lists every call with its answer, newest first, errors in red; **Undo last AI step** (only when the newest step is the AI's) and **Stop AI control** (switches the option off at once). Home's card shows AI control on / off, the apps set up and when it was last used. |
+| Security | The bridge listens on 127.0.0.1 only; every call carries the random key from bridge.json (owner-only file), compared in constant time; a request from a web page (an Origin header) is refused; keys are never logged. |
+
+## To check on a real PC (Windows, Luca)
+
+1. File > Add an AI App > Claude Desktop > Set up; restart Claude Desktop; ask "make me a
+   40 x 30 x 10 box with 3 mm rounded edges": SciForge asks once, the box appears, three
+   steps in the timeline, Undo removes them one by one.
+2. The same with Install as Claude extension.
+3. Gemini CLI: Set up, `/mcp` lists sciforge.
+4. The screenshot tool's picture shows the part (in the sandbox, without a graphics card,
+   the off-screen picture left an empty frame on the 3D view: look whether it does on a PC).

@@ -228,7 +228,8 @@ _STATUS = QtCore.Qt.UserRole + 1  # home_core.OK / MISSING / ONLINE
 
 QSS = """
 #SciForgeHome {{ background: {view}; }}
-#SciForgeHomeSide {{ background: {chrome}; }}
+#SciForgeHomeSide, #SciForgeHomeAI {{ background: {chrome}; }}
+#SciForgeHomeAIStatus {{ color: {text_dim}; padding: 4px 0px 8px 0px; }}
 #SciForgeHomeSide QListWidget {{ background: {chrome}; border: none; font-size: 13px; }}
 #SciForgeHomeSide QListWidget::item {{ padding: 6px 10px; }}
 #SciForgeHomeSide QListWidget::item:selected {{ background: {active}; }}
@@ -274,6 +275,7 @@ class HomeView(QtWidgets.QWidget):
         row.setSpacing(0)
         row.addWidget(self._side())
         row.addWidget(self._main(), 1)
+        row.addWidget(self._ai())
         self.poll = QtCore.QTimer(self)
         self.poll.setInterval(50)
         self.poll.timeout.connect(self._answers)
@@ -384,6 +386,46 @@ class HomeView(QtWidgets.QWidget):
                 lambda *_: QtCore.QTimer.singleShot(0, lambda: locations_ui.disconnect(location_id))
             )
         return menu
+
+    def _ai(self):
+        """The AI helpers column: AI control on / off, the apps set up, + Add an AI."""
+        side = QtWidgets.QFrame()
+        side.setObjectName("SciForgeHomeAI")
+        side.setFixedWidth(230)
+        side.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        column = QtWidgets.QVBoxLayout(side)
+        column.setContentsMargins(14, 18, 14, 12)
+        title = QtWidgets.QLabel("AI helpers")
+        title.setObjectName("SciForgeHomeTitle")
+        column.addWidget(title)
+        self.ai_status = QtWidgets.QLabel("")
+        self.ai_status.setObjectName("SciForgeHomeAIStatus")
+        self.ai_status.setWordWrap(True)
+        column.addWidget(self.ai_status)
+        self.add_ai_button = QtWidgets.QPushButton("+ Add an AI")
+        self.add_ai_button.setObjectName("SciForgeHomeAddAI")
+        self.add_ai_button.setToolTip("Let Claude Desktop, Gemini CLI or another AI app build here")
+        self.add_ai_button.clicked.connect(lambda *_: QtCore.QTimer.singleShot(0, _add_ai))
+        column.addWidget(self.add_ai_button)
+        self.ai_activity_button = QtWidgets.QPushButton("AI activity")
+        self.ai_activity_button.setObjectName("SciForgeHomeAIActivity")
+        self.ai_activity_button.clicked.connect(
+            lambda *_: QtCore.QTimer.singleShot(0, _ai_activity)
+        )
+        column.addWidget(self.ai_activity_button)
+        column.addStretch(1)
+        self.update_ai()
+        return side
+
+    def update_ai(self):
+        try:
+            from . import ai_ui
+
+            self.ai_status.setText("\n".join(ai_ui.status_words()))
+        except RuntimeError:
+            pass
+        except Exception as exc:
+            warn("home: AI: %s" % exc)
 
     def _main(self):
         main = QtWidgets.QWidget()
@@ -921,6 +963,18 @@ def _compare(path, twin):
     from . import versions_ui
 
     versions_ui.compare_files(path, twin)
+
+
+def _add_ai():
+    from . import ai_ui
+
+    ai_ui.add_ai()
+
+
+def _ai_activity():
+    from . import ai_ui
+
+    ai_ui.show_activity()
 
 
 def _connect():

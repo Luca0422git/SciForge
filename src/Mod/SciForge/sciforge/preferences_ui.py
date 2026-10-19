@@ -210,6 +210,12 @@ def _apply(kind):
             from . import home_ui
 
             home_ui.refresh_soon()  # (Home's "This computer" is the project folder)
+        elif kind == "ai":  # Allow AI apps to control SciForge (the bridge on / off)
+            from . import ai_ui
+            from .ai import bridge
+
+            bridge.apply()
+            ai_ui._refresh_home()
         elif kind == "startup":  # Start in SciForge (counts from the next start)
             from . import start_in
 

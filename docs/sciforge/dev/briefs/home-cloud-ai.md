@@ -372,10 +372,10 @@ SciForgeTests/gui/scenarios/home_screen.py, cloud_place.py, ai_bridge.py, ai_cha
   **Done 2026-10-19** (`sciforge/ai/ops/`; 434 models: 432 pass + 2 known xfail; MEMORY.md log).
 - **M1 Home screen** (local project folder + recent designs + New/Open + recovery banner).
   **Built 2026-10-19** (`home_core.py`, `home_ui.py`, parity `home.md`; MEMORY.md log).
-- **M2 Places, phase A**: sync-folder and NAS places for all four providers, plain-store
+- **M2 Places, phase A** (**built 2026-10-19**, parity `cloud.md`): sync-folder and NAS places for all four providers, plain-store
   versions in cloud places, "changed on another computer", conflict copies, open-elsewhere
   notes, Home and Data Panel place switcher.
-- **M3 AI bridge + MCP server**: the tool set, safety prompts, activity panel, Claude Desktop
+- **M3 AI bridge + MCP server** (**built 2026-10-19**, parity `ai.md`): the tool set, safety prompts, activity panel, Claude Desktop
   and Gemini CLI buttons, "Other app" command line.
   -> **Fundamentals done: ask Luca to merge `sf/home-cloud-ai` into `develop`.**
 - **M4 Chat panel**: Anthropic first, then OpenAI, Gemini, OpenAI-compatible (local).

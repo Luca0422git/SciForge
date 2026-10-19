@@ -33,6 +33,9 @@ PAGES = [
     # SciForge's own: every command's keyboard shortcut in one list (Fusion only changes them
     # one at a time from a command's three-dot menu; its users keep asking for a list)
     ("keyboard", "Keyboard Shortcuts", None),
+    # SciForge's own: AI apps (Claude Desktop, Gemini CLI...) building in SciForge (brief
+    # home-cloud-ai.md M3); off unless switched on
+    ("ai", "AI", None),
 ]
 
 # Fusion's Pan, Zoom, Orbit Shortcuts presets: (value, label, FreeCAD navigation style or None
@@ -490,6 +493,20 @@ OPTIONS = [
         minimum=1,
         maximum=65535,
         apply="proxy",
+    ),
+    # -- AI (M3) -------------------------------------------------------------------------------
+    _option(
+        "allow_ai",
+        "ai",
+        "Allow AI apps to control SciForge",
+        "bool",
+        False,
+        ("User parameter:BaseApp/Preferences/Mod/SciForge/AI", "Bool", "AllowControl"),
+        group="AI apps",
+        tip="On: an AI app set up with File > Add an AI App can build, change and save "
+        "designs; SciForge asks you the first time in each session, and every step is one "
+        "Undo. Off: nothing reaches SciForge.",
+        apply="ai",
     ),
 ]
 

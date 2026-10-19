@@ -24,6 +24,8 @@ NOT_REPEATABLE = {
     "SciForge_FilesSettings",
     "SciForge_Home",
     "SciForge_ConnectPlace",
+    "SciForge_AddAI",
+    "SciForge_AIActivity",
 }
 
 

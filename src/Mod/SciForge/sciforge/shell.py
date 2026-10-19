@@ -186,6 +186,8 @@ def enable():
     _safely(lambda: __import__("sciforge.home_ui").home_ui.enable())
     # Places (clouds, NAS): changed on another computer, open-elsewhere notes.
     _safely(lambda: __import__("sciforge.locations_ui").locations_ui.enable())
+    # AI apps: the bridge on when Preferences > AI allows it (off by default).
+    _safely(lambda: __import__("sciforge.ai_ui").ai_ui.enable())
     log("interface on")
 
 
@@ -204,6 +206,7 @@ def disable():
     for step in (
         lambda: __import__("sciforge.home_ui").home_ui.disable(),
         lambda: __import__("sciforge.locations_ui").locations_ui.disable(),
+        lambda: __import__("sciforge.ai_ui").ai_ui.disable(),
         lambda: __import__("sciforge.preferences_ui").preferences_ui.disable(),
         lambda: __import__("sciforge.drawing_ui").drawing_ui.disable(),
         lambda: __import__("sciforge.versions_ui").versions_ui.disable(),

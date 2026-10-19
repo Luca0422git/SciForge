@@ -1131,6 +1131,9 @@ FILE_MENU = [
         "folder",
         note="Keep designs in your Dropbox, OneDrive, Google Drive or NAS folder",
     ),
+    SEP,
+    item("Add an AI App", "SciForge_AddAI", "ai", note="Claude Desktop, Gemini CLI, others"),
+    item("AI Activity", "SciForge_AIActivity", "ai"),
 ]
 
 # Quick-access buttons at the top left, like Fusion's application bar.

@@ -1540,6 +1540,14 @@ def _():
     )
 
 
+@icon("ai")
+def _():
+    # A speech bubble with a spark (AI apps)
+    return path("M7 9 H41 V31 H22 L13 39 V31 H7 Z", STROKE, 2.4) + path(
+        "M24 13 L26 19 L32 20 L26 22 L24 28 L22 22 L16 20 L22 19 Z", "none", 0, POINT
+    )
+
+
 @icon("recent")
 def _():
     # A clock (Home's Recent designs)
