@@ -10,6 +10,9 @@ Path 1, such files left in This computer's folder (three saves of one design, on
   kept in .sciforge/unfinished-saves.
 Path 2, a save of an open design left that way: SciForge finishes it (the rename), tells
   the listeners FreeCAD did not: Home lists it first in Recent.
+Path 3, a folder where renames are refused (as Luca's; marked so here, Linux cannot refuse
+  them): SciForge's save writes the design directly (FreeCAD's BackupPolicy off for it),
+  no temporary file is left, FreeCAD's setting is as before afterwards.
 """
 
 import os
@@ -126,6 +129,46 @@ def rescued():
 
     h.check("SciForge finished the save", s["done"] and versions.complete_save(s["design"]))
     h.check("Home lists it first in Recent", names("recent")[:1] == ["Rescued"], names("recent"))
+
+
+rescued.wait_ms = 1000
+
+
+# -- Path 3 -------------------------------------------------------------------------------
+def save_where_renames_are_refused():
+    from sciforge import commands, versions_ui
+
+    s["policy"] = App.ParamGet(versions_ui.DOC_PARAMS).GetBool("BackupPolicy", True)
+    s["direct"] = os.path.join(s["project"], "Direct")
+    os.makedirs(s["direct"])
+    key = os.path.normcase(os.path.abspath(s["direct"]))
+    versions_ui._rename_checked.add(key)
+    versions_ui._direct.add(key)
+    doc = App.newDocument("Direct")
+    commands.ensure_body()
+    s["direct_file"] = os.path.join(s["direct"], "Direct.FCStd")
+    versions_ui._first_save(doc.Name, s["direct_file"])
+    s["direct_doc"] = doc.Name
+    doc.getObject("Body").addObject(doc.addObject("PartDesign::AdditiveBox", "Box"))
+    doc.recompute()
+    versions_ui._save_version(doc.Name, "second save")
+
+
+save_where_renames_are_refused.wait_ms = 1500
+
+
+def saved_directly():
+    from sciforge import versions, versions_ui
+
+    h.check("the design was written", versions.complete_save(s["direct_file"]))
+    left = [n for n in os.listdir(s["direct"]) if ".FCStd." in n]
+    h.check("no temporary file left", left == [], left)
+    h.check(
+        "FreeCAD's BackupPolicy as before",
+        App.ParamGet(versions_ui.DOC_PARAMS).GetBool("BackupPolicy", True) == s["policy"],
+    )
+    doc = App.getDocument(s["direct_doc"])
+    h.check("the design is saved (no star)", not versions_ui.is_modified(doc))
     for name in list(App.listDocuments()):
         App.closeDocument(name)
     App.newDocument("Scratch")  # (the harness ends on a design)
@@ -137,6 +180,16 @@ def rescued():
         shutil.rmtree(folder, ignore_errors=True)
 
 
-rescued.wait_ms = 1000
+saved_directly.wait_ms = 1000
 
-h.run("unfinished_save", [setup, designs_listed, save_left_unfinished, rescued])
+h.run(
+    "unfinished_save",
+    [
+        setup,
+        designs_listed,
+        save_left_unfinished,
+        rescued,
+        save_where_renames_are_refused,
+        saved_directly,
+    ],
+)

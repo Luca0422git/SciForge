@@ -560,6 +560,71 @@ def _mtime(path):
         return 0.0
 
 
+DOC_PARAMS = "User parameter:BaseApp/Preferences/Document"
+_direct = set()  # folders where renames are refused: FreeCAD writes the design itself
+
+
+def _folder_key(path):
+    return os.path.normcase(os.path.dirname(os.path.abspath(path)))
+
+
+_rename_checked = set()
+
+
+def _renames_refused(folder):
+    """Can a file be renamed in `folder`? Checked once per folder and session with a
+    small file of its own (Luca's Documents: creating files worked, renaming did not, so
+    every FreeCAD save there stayed "<design>.FCStd.<uuid>")."""
+    key = os.path.normcase(os.path.abspath(folder))
+    if key in _rename_checked:
+        return key in _direct
+    _rename_checked.add(key)
+    first = os.path.join(folder, ".sciforge-rename-check")
+    second = first + "-done"
+    try:
+        with open(first, "w") as handle:
+            handle.write("SciForge checks that files can be renamed here.")
+        try:
+            os.replace(first, second)
+        except OSError as exc:
+            _direct.add(key)
+            warn(
+                "renaming is refused in %s (%s): FreeCAD writes saves there directly"
+                % (folder, exc)
+            )
+        for leftover in (first, second):
+            try:
+                if os.path.exists(leftover):
+                    os.remove(leftover)
+            except OSError:
+                pass
+    except OSError:
+        pass  # (no file can be made there: the save itself will say so)
+    return key in _direct
+
+
+def _freecad_save(save, path):
+    """FreeCAD's save; in a folder where renames are refused, with FreeCAD's
+    "BackupPolicy" off for it: FreeCAD then writes the design file itself, with no
+    temporary file to rename."""
+    folder = os.path.dirname(os.path.abspath(path))
+    if os.path.isdir(folder):
+        _renames_refused(folder)
+    if _folder_key(path) not in _direct:
+        return save()
+    group = App.ParamGet(DOC_PARAMS)
+    had = "BackupPolicy" in group.GetBools()
+    old = group.GetBool("BackupPolicy", True)
+    group.SetBool("BackupPolicy", False)
+    try:
+        return save()
+    finally:
+        if had:
+            group.SetBool("BackupPolicy", old)
+        else:
+            group.RemBool("BackupPolicy")
+
+
 def _finish_interrupted(doc, path, started, tries=40):
     """FreeCAD wrote the save to "<design>.FCStd.<uuid>" but could not rename it to the
     design (another program held the new file: Google Drive backing the folder up, an
@@ -568,12 +633,18 @@ def _finish_interrupted(doc, path, started, tries=40):
     for attempt in range(tries):
         done = core.finish_save(path, since=started)
         if done:
-            log("save finished by SciForge (FreeCAD's last rename was refused): %s" % path)
+            if "copied instead" in core.FINISH["last_error"]:
+                _direct.add(_folder_key(path))  # (the next saves there: no rename)
+            log(
+                "save finished by SciForge (FreeCAD's last rename was refused: %s): %s"
+                % (core.FINISH["last_error"] or "it went through on a later try", path)
+            )
             _saved_by_sciforge(doc, path)
             return True
         if done is None:
             return False
         time.sleep(0.25)
+    warn("save could not be finished: %s: %s" % (path, core.FINISH["last_error"]))
     return False
 
 
@@ -602,7 +673,7 @@ def _first_save(doc_name, path, after=None, save_as=False):
         )
         started = time.time()
         try:
-            doc.saveAs(path)  # returns None in FreeCAD 1.1.4, raises when it fails
+            _freecad_save(lambda: doc.saveAs(path), path)  # None (1.1.4); raises on failure
             failed = None
         except Exception as exc:
             failed = exc
@@ -637,7 +708,7 @@ def _save_version(doc_name, description, after=None, milestone=False):
         started = time.time()
         # FreeCAD's save() returns None (1.1.4) and raises when it fails: the file tells.
         try:
-            doc.save()
+            _freecad_save(doc.save, doc.FileName)
             failed = None
         except Exception as exc:
             failed = exc
@@ -676,7 +747,7 @@ def save_version_now(doc, description=""):
         before = _mtime(path)
         started = time.time()
         try:
-            doc.save()
+            _freecad_save(doc.save, path)
             failed = None
         except Exception as exc:
             failed = exc

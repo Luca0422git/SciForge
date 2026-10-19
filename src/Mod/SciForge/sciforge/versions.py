@@ -81,6 +81,7 @@ TEMP_SAVE = re.compile(
     re.IGNORECASE,
 )
 UNFINISHED_FOLDER = os.path.join(".sciforge", "unfinished-saves")
+FINISH = {"last_error": ""}  # why the last finish_save could not rename (for the log)
 
 
 def unfinished_saves(folder):
@@ -141,17 +142,40 @@ def finish_save(design, since=None, settle=0.0, now=None):
         return None  # the design is newer: that temporary file is an older, finished save
     try:
         os.replace(newest, design)
-    except OSError:
-        return False
+    except OSError as exc:
+        # The rename stays refused on some computers (Luca's Documents, Google Drive backing
+        # it up: a minute later Python could not rename either) while writing a new file
+        # works, as FreeCAD's own temporary file shows: the save is written under the
+        # design's name instead, and the temporary file removed when allowed.
+        FINISH["last_error"] = "rename refused (%s); copied instead" % exc
+        try:
+            shutil.copyfile(newest, design)  # (written, never renamed)
+        except OSError as exc2:
+            FINISH["last_error"] = "rename refused (%s), copy refused (%s)" % (exc, exc2)
+            return False
+        if not complete_save(design):
+            FINISH["last_error"] += "; the copy is not complete"
+            return False
+        try:
+            os.remove(newest)
+        except OSError:
+            pass  # (left beside the design: Home lists designs only)
+        _keep_aside(folder, [t for t in temps if t != newest])
+        return True
+    _keep_aside(folder, [t for t in temps if t != newest])
+    return True
+
+
+def _keep_aside(folder, temps):
+    """The older temporary saves of a design go to .sciforge/unfinished-saves (kept)."""
     for temp in temps:
-        if temp != newest and os.path.exists(temp):
+        if os.path.exists(temp):
             try:
                 keep = os.path.join(folder, UNFINISHED_FOLDER)
                 os.makedirs(keep, exist_ok=True)
                 os.replace(temp, os.path.join(keep, os.path.basename(temp)))
             except OSError:
-                pass
-    return True
+                pass  # (stays beside the design; Home lists designs only)
 
 
 # STEP / IGES files in a project folder (uploaded): the Data Panel lists them; opening one

@@ -1188,8 +1188,14 @@ def _finish_unfinished_saves(root, max_depth=6):
         folder, depth = todo.pop()
         try:
             for design in versions.unfinished_saves(folder):
-                if versions.finish_save(design, settle=10.0):
+                done = versions.finish_save(design, settle=10.0)
+                if done:
                     log("home: finished a save FreeCAD left unfinished: %s" % design)
+                elif done is False:
+                    warn(
+                        "home: a save FreeCAD left unfinished could not be finished: %s: %s"
+                        % (design, versions.FINISH["last_error"])
+                    )
             if depth < max_depth:
                 subfolders, _designs = versions.list_folder(folder)
                 todo.extend((sub["path"], depth + 1) for sub in subfolders)
