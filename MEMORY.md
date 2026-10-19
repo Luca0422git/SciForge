@@ -1409,8 +1409,13 @@ open point: answered, always).
 - Scenario `home_screen.py`: 66 checks, pass. `restart_gui.py`: both starts on Home, the
   second lists the first's design: pass. Unit 1369, golden 432 + 2 xfail, smoke, journey:
   pass.
-- Full scenario sweep (all 377, two shards locally, ~4 h on this sandbox): still running at this
-  commit; result in the next MEMORY update
+- Full scenario sweep, all 377 scenarios locally: **all pass** (one failure on the way:
+  home_screen switched off AskDescription in the shared profile and mesh_edit_reopen,
+  later in the shard, missed its Save dialog; fixed: home_screen leaves the profile's
+  settings as found; the pair re-run in one profile passes). Then smoke (79), journey (25),
+  restart, unit 1369, golden 432 + 2 xfail on the final M1 commit: pass.
+- Sandbox lesson: a background command stops after 2 h; two shards of the full sweep do
+  not fit. Split the scenarios into lists of ~50 (`--scenario a,b,...`, two at once).
 
 #### Next
 - M2 places (clouds, NAS): `home_core` already keeps `location_id` / `rel`; `home_ui.places()`
