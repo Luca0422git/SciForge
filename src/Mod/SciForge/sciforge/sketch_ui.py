@@ -123,7 +123,7 @@ class PlanePicker:
         self.slack_half = origin_look.part_size(self.box) / 2.0
         if empty:  # nothing to look at yet: the origin in view, like a new Fusion design
             view.viewIsometric()
-            _show_round_origin(view, self.placement.Base, origin_look.EMPTY_SPAN)
+            _show_round_origin(view, self.placement, origin_look.EMPTY_SIZE)
         self.size = self._screen_side()
         self.facing = self._facing()
         self.corners = self._places()
@@ -553,32 +553,33 @@ class PlanePicker:
             pass
 
 
-def _show_round_origin(view, origin, span):
-    """Point the view (as it looks now) at `origin` showing about `span` mm across, like a
-    new Fusion design (the grid round the origin, the small origin squares in its middle)."""
+def _show_round_origin(view, placement, size):
+    """Frame the view (as it looks now) on the room round the origin a new design starts
+    with: the space the old `size` mm squares centred on the origin filled (the zoom a new
+    design always had; only the squares are small now). An invisible cube of that size is
+    fitted and taken away again."""
     try:
-        cam = view.getCameraNode()
-        direction = cam.orientation.getValue().multVec(_coin_vec(0, 0, -1))
-        d = App.Vector(direction[0], direction[1], direction[2])
-        if cam.getTypeId().getName() == "OrthographicCamera":
-            cam.height.setValue(float(span))
-            distance = 10.0 * float(span)
-        else:
-            import math
+        from pivy import coin
 
-            angle = float(cam.heightAngle.getValue())
-            distance = 0.5 * float(span) / max(math.tan(angle / 2.0), 1e-3)
-        eye = origin - d * distance
-        cam.position.setValue(eye.x, eye.y, eye.z)
-        cam.focalDistance.setValue(distance)
+        temp = coin.SoSeparator()
+        style = coin.SoDrawStyle()
+        style.style = coin.SoDrawStyle.INVISIBLE
+        move = coin.SoTransform()
+        base = placement.Base
+        move.translation.setValue(base.x, base.y, base.z)
+        cube = coin.SoCube()
+        for field in (cube.width, cube.height, cube.depth):
+            field.setValue(float(size))
+        for node in (style, move, cube):
+            temp.addChild(node)
+        root = view.getSceneGraph()
+        root.addChild(temp)
+        try:
+            view.fitAll()
+        finally:
+            root.removeChild(temp)
     except Exception as exc:
         warn("origin planes: the view was not set: %s" % exc)
-
-
-def _coin_vec(x, y, z):
-    from pivy import coin
-
-    return coin.SbVec3f(x, y, z)
 
 
 def _curve_object(obj):

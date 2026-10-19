@@ -30,11 +30,10 @@ IDLE_OUTLINE = 1.0
 HOVER_OUTLINE = 3.0
 SIZE_FACTOR = 0.6  # square side / largest side of the part (the Mesh plane cut's squares)
 MIN_SIZE = 20.0  # mm: a tiny part still gets squares you can click
-EMPTY_SIZE = 100.0  # mm: an empty design
+EMPTY_SIZE = 100.0  # mm: an empty design is framed on the room 100 mm squares took
 SCREEN_SIDE = 120.0  # px: side of an origin square on the screen (Guess, from Luca's picture)
 GAP = 0.1  # the gap between the origin and a square (fraction of its side)
 CLEAR = 0.25  # the gap between a part and a square moved beside it (fraction of its side)
-EMPTY_SPAN = 300.0  # mm: what a new, empty design shows round the origin (Fusion: +-150)
 # the box axes (0 x, 1 y, 2 z) along a square's u and v (sketch_ui.PLANES)
 PLANE_AXES = {"XY": (0, 1), "XZ": (0, 2), "YZ": (1, 2)}
 LABEL_POINTS = 16.0

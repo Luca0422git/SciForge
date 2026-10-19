@@ -5,20 +5,20 @@ green blue of all the rest of the axis and make it smaller. and label them."). O
 input.
 
   A  New design, Create Sketch: three squares, XY blue, XZ green, YZ red (the colour of the
-     axis each one faces), see-through, labelled "XY", "XZ", "YZ"; 100 mm in an empty design.
+     axis each one faces), see-through, labelled "XY", "XZ", "YZ"; small like Fusion's
+     (origin_look.SCREEN_SIDE px on the screen, Luca 2026-10-18).
   B  The mouse over the XY square: it alone gets brighter, less see-through and a thicker
      outline; off it again: back to the idle look. Esc cancels: nothing made.
   C  A 20 x 20 x 20 box (Create Sketch on XY, rectangle 0..20, Extrude 20).
-  D  Create Sketch with the box there: the squares are 20 mm (0.6 x 20 = 12, at least 20; they
-     were 1.3 x = 26), the labels sit at the corners away from the box; a click at
-     (-12, 0, 5), inside the old square but outside the new one, picks nothing; a click on
-     the XZ square at (8, 0, -8) (under the box) opens the sketch on XZ. A rectangle
-     x 25..30, z 0..5; Finish Sketch.
+  D  Create Sketch with the box there: the squares keep their size on the screen, the labels
+     sit at the corners away from the box; a click just beside a square picks nothing; a
+     click on the XZ square where it shows opens the sketch on XZ. A rectangle x 25..30,
+     z 0..5; Finish Sketch.
   E  Revolve: the origin axes it offers are labelled X, Y, Z in red, green, blue; Esc.
   F  CONSTRUCT > Offset Plane (Construct's own copy of the squares): the same colours and
      labels; the mouse lights the XY square; Esc.
-  G  SOLID > CREATE > Box (the primitives' squares, sized from the whole design): the same
-     rule (20 mm), coloured and labelled; Esc.
+  G  SOLID > CREATE > Box (the primitives' squares): the same size rule, coloured and
+     labelled; Esc.
   H  The patterns' axis lines use the same colours (pattern_ui.AXIS_COLORS).
   I  Components: a component made from the body moved 40 mm along X and activated; Create
      Sketch there:
@@ -38,6 +38,7 @@ from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as t
 
 V = App.Vector
+BESIDE = {}  # the spot beside the XZ square that D clicks
 state = {}
 
 
@@ -96,7 +97,18 @@ def transparency(entry):
     return float(entry.material.transparency.getValues()[0])
 
 
-def check_squares(where, size):
+def side_px(p, role):
+    """The square's longest side on the screen (px): its 4 corners projected."""
+    corners = [p.spot(role, a, b) for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    pts = [h.screen_point(c) for c in corners]
+    return max(
+        ((pts[i].x() - pts[(i + 1) % 4].x()) ** 2 + (pts[i].y() - pts[(i + 1) % 4].y()) ** 2)
+        ** 0.5
+        for i in range(4)
+    )
+
+
+def check_squares(where):
     p = picker()
     if not h.check("%s: origin squares shown" % where, p is not None):
         return None
@@ -117,7 +129,14 @@ def check_squares(where, size):
         sorted(texts(p.root)) == ["XY", "XZ", "YZ"],
         texts(p.root),
     )
-    h.check("%s: %g mm squares" % (where, size), abs(p.size - size) < 1e-6, p.size)
+    want = lk.SCREEN_SIDE
+    sizes = [round(side_px(p, r), 1) for r in ("XY_Plane", "XZ_Plane", "YZ_Plane")]
+    # seen at an angle a side looks shorter; never longer
+    h.check(
+        "%s: small squares, about %d px on the screen" % (where, want),
+        all(0.45 * want <= s <= 1.05 * want for s in sizes),
+        sizes,
+    )
     return p
 
 
@@ -127,13 +146,15 @@ def a_sketch():
 
 
 def a_squares():
-    check_squares("empty design", 100.0)
+    check_squares("empty design")
     h.shot("A-squares")
 
 
 # -- B ------------------------------------------------------------------------------------------
 def b_hover():
-    h.move(h.screen_point(V(30, -20, 0)))
+    p = picker()
+    if p is not None:
+        h.move(h.screen_point(p.spot("XY_Plane", 0.2, 0.2)))
 
 
 def b_lit():
@@ -177,7 +198,7 @@ def d_sketch():
 
 
 def d_squares():
-    p = check_squares("with a 20 mm box", 20.0)
+    p = check_squares("with a 20 mm box")
     if p is None:
         return
     # the labels go to the corners away from the box (its centre is at 10, 10, 10)
@@ -190,21 +211,43 @@ def d_squares():
     spots = []
     paths = search.getPaths()
     for i in range(paths.getLength()):
-        spots.append(tuple(paths[i].getTail().translation.getValue().getValue()))
+        spots.append(V(*paths[i].getTail().translation.getValue().getValue()))
+    centre = V(10, 10, 10)
+    middles = [p.spot(r, 0, 0) for r in ("XY_Plane", "XZ_Plane", "YZ_Plane")]
     h.check(
         "labels at the corners away from the box",
-        len(spots) == 3 and all(sum(c) < 0 for c in spots),
-        spots,
+        len(spots) == 3
+        and all(
+            min((s - m).Length for m in middles) < p.size
+            and (s - centre).Length > min((m - centre).Length for m in middles)
+            for s in spots
+        ),
+        [tuple(round(c, 1) for c in s) for s in spots],
     )
     h.shot("D-squares-with-part")
-    pl.click_on_plane(V(-12, 0, 5))
+    BESIDE["point"] = beside_spot(p, "XZ_Plane")
+    h.check("a spot just beside the XZ square, with nothing there", BESIDE["point"] is not None)
+    if BESIDE["point"] is not None:
+        h.click(BESIDE["point"])
+
+
+def beside_spot(p, role):
+    """A point just outside the `role` square where no square and nothing of the part is."""
+    view = h.view()
+    for a, b in ((1.5, 0.0), (-1.5, 0.0), (0.0, 1.5), (0.0, -1.5), (1.5, 1.5), (-1.5, -1.5)):
+        point = p.spot(role, a, b)
+        x, y = view.getPointOnViewport(point)
+        pixel = (int(round(float(x))), int(round(float(y))))
+        if p.plane_at(pixel) is None and not p._geometry_at(pixel):
+            return point
+    return None
 
 
 def d_outside():
     sk = h.in_sketch()
     h.check("a click beside the smaller square picks nothing", sk is None, sk)
     h.check("Create Sketch still waits", picker() is not None)
-    pl.click_on_plane(V(8, 0, -8))
+    pl.click_square("XZ_Plane")
 
 
 def d_on_xz():
@@ -260,7 +303,7 @@ def f_offset_plane():
 
 
 def f_squares():
-    p = check_squares("Construct", 20.0)
+    p = check_squares("Construct")
     if p is not None:
         h.move(h.screen_point(V(5, -5, 0)))
 
@@ -282,7 +325,7 @@ def g_box():
 
 
 def g_squares():
-    check_squares("Box", 20.0)
+    check_squares("Box")
     h.press(QtCore.Qt.Key_Escape)
 
 
@@ -328,7 +371,7 @@ def i_sketch():
 
 
 def i_squares():
-    p = check_squares("in a component", 20.0)
+    p = check_squares("in a component")
     if p is not None:
         h.check("squares at the component's origin", same(p.placement.Base, (40, 0, 0)))
         pl.click_on_plane(V(45, -5, 0))
