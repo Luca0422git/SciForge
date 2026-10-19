@@ -58,8 +58,9 @@ def local_box(body, shapes=None):
 
 
 def design_box(body):
-    """local_box of every visible body of the design (the other bodies hide the squares
-    too: after a Split Body the piece split off stands where the squares were free), in
+    """local_box of every visible body of the design, solid or surface (the other bodies hide
+    the squares too: after a Split Body the piece split off stands where the squares were
+    free; a surface body stands in front of them), in
     `body`'s axes; the body's own box when the design has nothing else."""
     from . import bodies
 
@@ -70,8 +71,8 @@ def design_box(body):
             if obj.TypeId != "PartDesign::Body" or not obj.ViewObject.Visibility:
                 continue
             shape = obj.Shape
-            if shape.isNull() or not shape.Solids:
-                continue
+            if shape.isNull() or not (shape.Solids or shape.Faces):
+                continue  # (a surface body hides the squares too)
             b = bodies.global_shape(obj).BoundBox
         except Exception:
             continue
