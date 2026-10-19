@@ -153,13 +153,86 @@ def own_background(widget):
         return None
 
 
+def _make_opaque(widget):
+    """Undo what FreeCAD's overlay does to every widget in it but its own task boxes
+    (Gui/OverlayWidgets.cpp, OverlayTabWidget::_setOverlayMode: WA_TranslucentBackground
+    and WA_NoSystemBackground): on Windows a SciForge panel in the Tasks overlay came out
+    white, or see-through on hover (Luca, 2026-10-19, the sketch palette)."""
+    from PySide import QtCore, QtGui, QtWidgets
+
+    try:
+        colour = own_background(widget)
+        for each in [widget] + widget.findChildren(QtWidgets.QWidget):
+            each.setAttribute(QtCore.Qt.WA_TranslucentBackground, False)
+            each.setAttribute(QtCore.Qt.WA_NoSystemBackground, False)
+        if colour:
+            palette = widget.palette()
+            palette.setColor(QtGui.QPalette.Window, QtGui.QColor(colour))
+            widget.setPalette(palette)
+            widget.setAutoFillBackground(True)
+        widget.update()
+    except RuntimeError:
+        pass
+
+
+def in_overlay(widget):
+    """Whether `widget` is inside one of FreeCAD's overlay panels (Gui::Overlay...)."""
+    try:
+        parent = widget.parentWidget()
+        while parent is not None:
+            if parent.metaObject().className().startswith("Gui::Overlay"):
+                return True
+            parent = parent.parentWidget()
+    except RuntimeError:
+        pass
+    return False
+
+
+def keep_opaque(widget):
+    """Keep `widget` (and what is in it) opaque: FreeCAD's overlay applies its see-through
+    settings again whenever it changes (hover, transparency, layout); each time it also
+    re-parents the widgets (setWindowFlags), which is when this undoes them again."""
+    from PySide import QtCore
+
+    class Watch(QtCore.QObject):
+        def eventFilter(self, obj, event):
+            try:
+                kind = event.type()
+                if kind == QtCore.QEvent.ChildAdded:
+                    child = event.child()
+                    if child is not None and child.isWidgetType():
+                        child.installEventFilter(self)
+                if kind in (
+                    QtCore.QEvent.ParentChange,
+                    QtCore.QEvent.Show,
+                    QtCore.QEvent.ChildAdded,
+                ):
+                    QtCore.QTimer.singleShot(0, lambda: _make_opaque(widget))
+            except RuntimeError:
+                pass
+            return False
+
+    from PySide import QtWidgets
+
+    watch = Watch(widget)
+    for each in [widget] + widget.findChildren(QtWidgets.QWidget):
+        each.installEventFilter(watch)
+    _make_opaque(widget)
+    return watch
+
+
 class OwnBackground:
     """Mix-in for a panel (a QFrame) whose style sheet gives it a background: it paints
-    that background itself. On Luca's Windows such panels came out white (and see-through
-    on hover) inside FreeCAD's Tasks overlay: the sketch palette, Home's AI column; their
-    style sheet's background was not drawn there (it was on Linux)."""
+    that background itself and stays opaque (keep_opaque). On Luca's Windows such panels
+    came out white, or see-through on hover, inside FreeCAD's Tasks overlay (the sketch
+    palette): FreeCAD's overlay makes every widget in it translucent but its own task
+    boxes."""
 
     def paintEvent(self, event):
+        if getattr(self, "_sf_opaque", None) is None:
+            # only inside FreeCAD's overlay (a floating box, the sketch's dimension box,
+            # sets its own window attributes and must keep them)
+            self._sf_opaque = keep_opaque(self) if in_overlay(self) else False
         colour = own_background(self)
         if colour:
             from PySide import QtGui

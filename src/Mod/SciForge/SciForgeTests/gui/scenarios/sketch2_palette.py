@@ -17,7 +17,7 @@ clicks on the palette and in the view.
 
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtWidgets
+from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import plane_input as pl
@@ -112,6 +112,45 @@ def b_setup():
 
 
 b_setup.wait_ms = 2000
+
+
+def b_overlay():
+    """What FreeCAD's overlay does to every widget in it but its own task boxes, on Luca's
+    Windows (Gui/OverlayWidgets.cpp, _setOverlayMode): the palette came out white, or
+    see-through on hover. Not done here by FreeCAD, so done as it does it."""
+    palette = Gui.getMainWindow().findChild(QtWidgets.QFrame, "SciForgeSketchPalette")
+    s["palette"] = palette
+    for w in [palette] + palette.findChildren(QtWidgets.QWidget):
+        w.setWindowFlags(w.windowFlags() | QtCore.Qt.FramelessWindowHint)
+        w.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        w.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+    palette.show()  # (re-parented widgets are hidden until shown, as FreeCAD does)
+    for w in palette.findChildren(QtWidgets.QWidget):
+        if not w.isHidden() or w.parentWidget() is palette:
+            w.show()
+
+
+b_overlay.wait_ms = 500
+
+
+def b_overlay_undone():
+    from sciforge import theme
+
+    palette = s["palette"]
+    see_through = [
+        w.metaObject().className()
+        for w in [palette] + palette.findChildren(QtWidgets.QWidget)
+        if w.testAttribute(QtCore.Qt.WA_TranslucentBackground)
+        or w.testAttribute(QtCore.Qt.WA_NoSystemBackground)
+    ]
+    h.check("the palette made itself opaque again", see_through == [], see_through)
+    image = palette.grab().toImage()
+    colour = image.pixelColor(image.width() - 4, image.height() - 4).name()
+    h.check(
+        "... in its own colour",
+        colour == theme.own_background(palette),
+        (colour, theme.own_background(palette)),
+    )
 
 
 def b_before():
@@ -333,6 +372,8 @@ h.run(
         [
             a_empty,
             b_setup,
+            b_overlay,
+            b_overlay_undone,
             b_before,
             b_slice,
             b_off,
