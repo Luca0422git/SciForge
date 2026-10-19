@@ -133,8 +133,9 @@ def setup():
     from sciforge import home_core, home_ui
 
     s["project"] = tempfile.mkdtemp(prefix="sciforge-home-project-")
+    # (given back at the end: a CI shard's later scenarios share this profile)
+    s["old_project"] = App.ParamGet(FILES).GetString("ProjectFolder", "")
     App.ParamGet(FILES).SetString("ProjectFolder", s["project"])
-    App.ParamGet(FILES).SetBool("AskDescription", False)
     os.makedirs(os.path.join(s["project"], "Robots"))
     state = home_core.empty()
     state["merged_mru"] = True  # (an earlier scenario's designs are not this one's)
@@ -484,6 +485,10 @@ def no_home_with_option_off():
     preferences_ui.save({"show_home": True})
     h.check("the option is on again", home_ui.show_at_start())
     App.newDocument("Scratch")  # (the harness ends on a design)
+    if s.get("old_project"):
+        App.ParamGet(FILES).SetString("ProjectFolder", s["old_project"])
+    else:
+        App.ParamGet(FILES).RemString("ProjectFolder")
 
 
 h.run(
