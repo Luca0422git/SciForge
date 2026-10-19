@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for Fusion's sketch tools, built with the same SciForge code the
-SKETCH tab uses (registered on builder.Builder when builder.py is imported).
+"""Design steps for Fusion's sketch tools, built with the same SciForge code the
+SKETCH tab uses (registered on core.Builder when the package is imported).
 
   {"op": "sketch_polygon", "sketch": "s1", "center": [x, y], "point": [x, y],
    "sides": 6, "circumscribed": true, "diameter": 5.5, "name": "nut"}
@@ -19,7 +19,7 @@ import FreeCAD as App
 import Part
 import Sketcher
 
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 
 
 def _sketch(builder, step):

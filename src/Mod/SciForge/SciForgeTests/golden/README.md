@@ -15,6 +15,14 @@ SCIFORGE_GOLDEN_FILTER=fillet tools/sciforge/run_tests.sh --only golden   # just
 
 In a SciForge build: `FreeCADCmd -c "from SciForgeTests.golden import runner; runner.main()"`.
 
+## Where the code is
+
+The steps are built by SciForge's own design-step code in `sciforge/ai/ops/` (`core.py`, the
+`*_ops.py` files, `selectors.py`): the same code the AI tools run, so these models prove what
+an AI builds. This folder holds what only the tests need: the model files, `runner.py`,
+`schema.py` (format checks), `builder.py` (the design-step builder plus the checks) and
+`checks.py` (the `*_expect` steps, `expect_bodies`, `reopen_check`).
+
 ## Results
 
 | Result | Meaning |
@@ -62,46 +70,46 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `sketch` | `id`, `plane` (XY/XZ/YZ), `offset`, `geometry` | Create Sketch (on an offset plane) |
 | `extrude` | `id`, `profile`, `distance`, `operation` (join/cut/new_body), `direction` (one_side/symmetric/two_sides), `distance2`, `extent` (distance/through_all), `taper`, `flip` | Extrude |
 | `revolve` | `id`, `profile`, `axis` (X/Y/Z/sketch_h/sketch_v), `angle`, `operation` | Revolve |
-| `sf_revolve` | `id`, `profile` (+ `regions`) or `face`, `axis` (X/Y/Z, `{"sketch", "at"}`, `{"sketch", "construction"}`, `{"sketch", "axis": "H"/"V"}`, `{"edge": selector}`), `type` (angle/full), `direction` (one_side/two_sides/symmetric), `angle`, `angle2`, `operation` (auto = the dialog's own choice) | Revolve dialog (`sciforge/revolve.py`, details in `golden/revolve_ops.py`) |
+| `sf_revolve` | `id`, `profile` (+ `regions`) or `face`, `axis` (X/Y/Z, `{"sketch", "at"}`, `{"sketch", "construction"}`, `{"sketch", "axis": "H"/"V"}`, `{"edge": selector}`), `type` (angle/full), `direction` (one_side/two_sides/symmetric), `angle`, `angle2`, `operation` (auto = the dialog's own choice) | Revolve dialog (`sciforge/revolve.py`, details in `sciforge/ai/ops/revolve_ops.py`) |
 | `sf_revolve_edit` | `target`, `set` {revolve options} | double-click a revolve in the timeline and change it |
 | `fillet` | `id`, `edges` (selector), `radius` | Fillet |
 | `chamfer` | `id`, `edges`, `distance`, `distance2` or `angle` | Chamfer |
 | `blend_fillet` | `id`, `radius`, and `edges` / `faces` (every sharp edge around them) / `features` (step ids: the edges each made) | Fillet dialog (`sciforge/blend.py`, the F command's code) |
 | `blend_chamfer` | `id`, `distance`, `chamfer_type` (equal/two/angle), `distance2`, `angle`, `flip`, and `edges` / `faces` / `features` | Chamfer dialog |
-| `blend_insert` | `id`, `kind` (fillet/chamfer), the options above, `edges` / `faces` | Fillet / Chamfer made with the timeline marker rolled back (after a `roll`): later blends keep their edges (`golden/blend_ops.py`) |
+| `blend_insert` | `id`, `kind` (fillet/chamfer), the options above, `edges` / `faces` | Fillet / Chamfer made with the timeline marker rolled back (after a `roll`): later blends keep their edges (`sciforge/ai/ops/blend_ops.py`) |
 | `blend_edit` | `target`, `add_edges` / `add_faces` (selectors on the shape it is applied to), `set` {options} | double-click a Fillet / Chamfer in the timeline, pick more edges, change sizes; later blends keep their edges |
-| `fillet_sets` | `id`, `kind` (fillet/chamfer), `tangent_chain`, `sets`: rows of `edges` / `faces` / `features` plus `radius`, `radius_type` (constant/chord/variable), `chord`, `start`, `end`, `points` [[position, radius]] (chamfer rows: `chamfer_type`, `distance`, `distance2`, `angle`, `flip`) | Fillet / Chamfer dialog with several selection sets ("+"), Chord Length, Variable, Tangent Chain off (`golden/fillet2_ops.py`, `sciforge/fillet_sets.py`) |
+| `fillet_sets` | `id`, `kind` (fillet/chamfer), `tangent_chain`, `sets`: rows of `edges` / `faces` / `features` plus `radius`, `radius_type` (constant/chord/variable), `chord`, `start`, `end`, `points` [[position, radius]] (chamfer rows: `chamfer_type`, `distance`, `distance2`, `angle`, `flip`) | Fillet / Chamfer dialog with several selection sets ("+"), Chord Length, Variable, Tangent Chain off (`sciforge/ai/ops/fillet2_ops.py`, `sciforge/fillet_sets.py`) |
 | `rule_fillet` | `id`, `radius`, `rule` (all/between), `faces` / `features` (step ids), `faces2` / `features2`, `rounds`, `fillets` | Fillet dialog, Type Rule Fillet |
 | `full_round` | `id`, `faces` (one selector per full round, each picking its centre face) | Fillet dialog, Type Full Round Fillet |
 | `blend_radius_expect` | `at` [x, y, z] (a corner of a 90 degree edge before the round), `radius`, `tol` | check: the radius of the round there (a Variable fillet's radius points) |
 | `shell` | `id`, `faces` (faces to remove), `thickness`, `direction` (inside/outside) | Shell |
 | `hole` | `id`, `sketch` (hole centres = its circles' centres), `diameter`, `depth` or `through_all`, `counterbore {diameter, depth}` or `countersink {diameter, angle}` | Hole |
-| `emboss` | `id`, `sketch` (every closed area of it is a profile), `faces` (selector), `depth`, `effect` (emboss/deboss), `h`, `v`, `angle`, `tangent_chain` | Emboss dialog (`sciforge/emboss.py`, details in `golden/emboss_ops.py`) |
+| `emboss` | `id`, `sketch` (every closed area of it is a profile), `faces` (selector), `depth`, `effect` (emboss/deboss), `h`, `v`, `angle`, `tangent_chain` | Emboss dialog (`sciforge/emboss.py`, details in `sciforge/ai/ops/emboss_ops.py`) |
 | `pattern_rect` | `id`, `features`, `direction`, `count`, `spacing`, optional second direction `direction2`, `count2`, `spacing2` | Rectangular Pattern |
 | `pattern_circ` | `id`, `features`, `axis`, `count`, `angle` | Circular Pattern |
 | `mirror` | `id`, `features`, `plane` | Mirror |
-| `rectangular_pattern` | `id`, one of `features` (step ids) / `faces` (selector) / `body: true`, `direction` (X/Y/Z or `{"edge": sel}` / `{"face": sel}`), `quantity`, `distance`, `distribution` (extent/spacing), `direction_type` (one/symmetric), `direction2`, `quantity2`, `distance2`, `direction_type2`, `expressions` | Rectangular Pattern dialog (`golden/pattern_ops.py`, `sciforge/pattern.py`: the dialog's code). Bodies make new bodies; the model is then measured over every body |
+| `rectangular_pattern` | `id`, one of `features` (step ids) / `faces` (selector) / `body: true`, `direction` (X/Y/Z or `{"edge": sel}` / `{"face": sel}`), `quantity`, `distance`, `distribution` (extent/spacing), `direction_type` (one/symmetric), `direction2`, `quantity2`, `distance2`, `direction_type2`, `expressions` | Rectangular Pattern dialog (`sciforge/ai/ops/pattern_ops.py`, `sciforge/pattern.py`: the dialog's code). Bodies make new bodies; the model is then measured over every body |
 | `circular_pattern` | `id`, what (as above), `axis` (X/Y/Z, edge or round face), `quantity`, `type` (full/angle/symmetric), `angle` | Circular Pattern dialog |
 | `path_pattern` | `id`, what, `path` `{"sketch": id}` or `{"sketch": id, "edge": n}`, `quantity`, `distance`, `distribution`, `direction_type`, `orientation` (identical/path) | Pattern on Path dialog |
 | `fusion_mirror` | `id`, what, `plane` (XY/XZ/YZ or `{"face": sel}`), `operation` (join/new_body, bodies) | Mirror dialog |
 | `pattern_edit` | `target`, `set` {dialog field: value} | double-click a pattern in the timeline and change its fields |
 | `edit` | `target`, `set` {option: value} or `constraint` + `value` | double-click a timeline item and change it |
 | `check` | `expect` | measure the part at this point (before an edit, for example) |
-| `sketch_polygon` | `sketch`, `center`, `point` (middle of an edge, or a corner), `sides`, `circumscribed`, `diameter`, `name` | Circumscribed / Inscribed Polygon in a sketch (golden/sketch_ops.py) |
+| `sketch_polygon` | `sketch`, `center`, `point` (middle of an edge, or a corner), `sides`, `circumscribed`, `diameter`, `name` | Circumscribed / Inscribed Polygon in a sketch (sciforge/ai/ops/sketch_ops.py) |
 | `sketch_trim` | `sketch`, `points` (one Trim click each) | Trim (T) in a sketch |
-| `extrude` + `bodies` | `"auto"` (every body in the extrusion's way) or a list of step ids (their bodies) | the Extrude dialog's "Bodies to Cut / Join / Intersect" row (`golden/extrude_bodies_ops.py`) |
+| `extrude` + `bodies` | `"auto"` (every body in the extrusion's way) or a list of step ids (their bodies) | the Extrude dialog's "Bodies to Cut / Join / Intersect" row (`sciforge/ai/ops/extrude_bodies_ops.py`) |
 | `use_body` | `step` | the next sketches go into that step's body |
 | `expect_bodies` | `bodies` {step id: {`volume`, `solids`}}, `used_up` [step ids], `followers` {step id: n}, `steps` {step id: times listed in the timeline} | check several bodies at this point |
 | `reopen_check` | `bodies` (as above) | save, open the file as a second design, check the bodies there |
 | `expect_move_refused` | `target`, `before` or `after`, `reason` | dragging a step before / after another in the timeline is refused (a multi-body extrude moves with its hidden steps; only a move before a body it changes exists is refused) |
-| `history_off` / `history_on` | (none) | the design's menu: Do Not Capture Design History (every body one frozen step) / Capture Design History (`golden/direct_ops.py`, `sciforge/direct.py`) |
+| `history_off` / `history_on` | (none) | the design's menu: Do Not Capture Design History (every body one frozen step) / Capture Design History (`sciforge/ai/ops/direct_ops.py`, `sciforge/direct.py`) |
 | `replace_face` | `id`, `faces` (selector), `of` (step: its body; default the current one), `tangent_chain`, `target` (a pick: XY/XZ/YZ, `{"face": sel, "of": id}`) | Replace Face (measured: that body) |
 | `split_face` | `id`, `faces`, `of`, `tool` (a pick: plane, face, `{"body": id}`), `extend`, `split_type` (surface/vector/closest), `direction` (a pick: X/Y/Z, a face, an edge) | Split Face |
 | `silhouette_split` | `id`, `body`, `direction` (a pick), `operation` (faces/body/shelled) | Silhouette Split (measured: the body and the new ones) |
 | `align_bodies` | `id`, `from`, `to` (picks: `{"face" / "edge" / "vertex": sel, "of": id}`, planes, axes), `flip`, `turns` (0..3 Angle clicks) | Align with Objects: Bodies (measured: the moved body) |
 | `modify_edit` | `target` (one of the four above), `set` {option: value or pick} | double-click it in the timeline and change it |
 | `remove_bodies` | `steps` | Remove (a timeline step); measured from then on: the bodies still in the design |
-| `components_from_bodies` | `id`, `bodies`, `label` | right-click a body > Create Components from Bodies (`golden/component_ops.py`); measured from then on: that component, in design coordinates |
+| `components_from_bodies` | `id`, `bodies`, `label` | right-click a body > Create Components from Bodies (`sciforge/ai/ops/component_ops.py`); measured from then on: that component, in design coordinates |
 | `component_move` | `id`, `components`, `move_type` (free/translate/rotate), `dx` .. `rz`, `pivot`, `axis`, `angle`, `capture` | Move/Copy with Move Object Components (capture: a Move step in the timeline) |
 | `component_paste` | `id`, `component`, `new` (Paste New), `dx`, `dy`, `dz` | Copy, Paste (a linked instance) or Paste New, then moved |
 | `component_pattern` | `id`, `component`, `kind` (rectangular/circular), `axis` / `direction` / `direction2` (X/Y/Z), `quantity`, `quantity2`, `distance`, `distance2`, `angle`, `circular_type`, `distribution` | Pattern Type Components (measured: the component and its copies) |
@@ -109,7 +117,7 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 | `roll` + `before` | a step id | the history marker dropped right before that step (a component's step or its captured move) |
 | `split_body` + `tools` | a list of tools (as `tool`) | Split Body with several splitting tools, one step |
 
-| `sf_surface` | `id`, `kind` (extrude/revolve/sweep/loft/patch/ruled/offset/boundary_fill/thicken/trim/untrim/extend/stitch/unstitch/reverse_normal), `refs` / `refs2` / `refs3` (the dialog's boxes in order: `{"sketch", "at": [x, y]}` a sketch curve, chained; `{"sketch"}` all its curves; `{"plane"}`; `{"axis"}`; `{"step"}` that step's body; `{"step", "faces" / "edges": selector}`), `options` (the dialog's fields, `surface_core.KINDS`), `remove` [{`step`, `at`: [x, y, z]}] (Trim's pieces), `cells` [[x, y, z]] (Boundary Fill), `bodies` (Reverse Normal), `target` (a Join / Cut body) | the SURFACE tab's tools (`golden/surface_ops.py`, `sciforge/surface.py`: the dialogs' code). A surface result is measured by its area and faces (no volume) |
+| `sf_surface` | `id`, `kind` (extrude/revolve/sweep/loft/patch/ruled/offset/boundary_fill/thicken/trim/untrim/extend/stitch/unstitch/reverse_normal), `refs` / `refs2` / `refs3` (the dialog's boxes in order: `{"sketch", "at": [x, y]}` a sketch curve, chained; `{"sketch"}` all its curves; `{"plane"}`; `{"axis"}`; `{"step"}` that step's body; `{"step", "faces" / "edges": selector}`), `options` (the dialog's fields, `surface_core.KINDS`), `remove` [{`step`, `at`: [x, y, z]}] (Trim's pieces), `cells` [[x, y, z]] (Boundary Fill), `bodies` (Reverse Normal), `target` (a Join / Cut body) | the SURFACE tab's tools (`sciforge/ai/ops/surface_ops.py`, `sciforge/surface.py`: the dialogs' code). A surface result is measured by its area and faces (no volume) |
 | `sf_surface_edit` | `target`, `set` {options} | double-click a surface step in the timeline and change its fields |
 
 Conventions:
@@ -131,7 +139,7 @@ Give geometry a `name` to get Fusion-style dimensions you can `edit` later:
 
 ### Selectors (which edges or faces a user would click)
 
-Never use names like `Edge7`. Describe the geometry instead (full list in `selectors.py`):
+Never use names like `Edge7`. Describe the geometry instead (full list in `sciforge/ai/ops/selectors.py`):
 
 ```json
 {"type": "line", "at": {"axis": "z", "value": "max"}, "count": 4}          // the 4 top edges

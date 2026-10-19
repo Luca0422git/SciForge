@@ -106,8 +106,11 @@ Picking:
   "nothing selected yet" start. Import `QtTest` from `PySide6` (FreeCAD's `PySide` shim has
   none); a scenario that does not load fails with "the scenario file loads".
 - **Golden models** (`SciForgeTests/golden/models/*.json`, format in its README) for any new
-  geometry, with hand-derived expected volume/area/faces/bbox. Extend `builder.py`/`schema.py`
-  with a new op if needed (builder must call your Qt-free module, the same code the GUI uses).
+  geometry, with hand-derived expected volume/area/faces/bbox. A new op goes in
+  `sciforge/ai/ops/` (an `*_ops.py` file registered at the end of `core.py`; it must call your
+  Qt-free module, the same code the GUI uses: the AI tools run these ops too) and its format
+  check in `SciForgeTests/golden/schema.py`. A step that only checks a measurement
+  (`*_expect`) goes in `SciForgeTests/golden/checks.py`, never in `sciforge/`.
 - **Unit tests** for pure logic.
 
 Run (FreeCAD is already unpacked at the path below in this sandbox):

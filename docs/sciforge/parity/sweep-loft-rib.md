@@ -169,7 +169,7 @@ volume is checked against a hand-derived formula.
 
 There are also 42 golden models: `sf_sweep_*` (15), `sf_loft_*` (14), `sf_rib_*` (6) and
 `sf_web_*` (7). Their ops are `sf_curves`, `sf_sweep(_edit)`, `sf_loft(_edit)` and
-`sf_rib(_edit)` in `golden/sweep_loft_ops.py`. Every expected value is analytic and its
+`sf_rib(_edit)` in `sciforge/ai/ops/sweep_loft_ops.py`. Every expected value is analytic and its
 formula is in the model's note.
 
 ## Known gaps

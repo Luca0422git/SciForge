@@ -100,7 +100,7 @@ save / reopen, BSPT, Esc); goldens `hole_taper_npt`, `hole_taper_bspt_through`,
   Sketch for a beginner, H inside H, OK during a slow recompute, marking menu OK / Cancel,
   Suppress).
 - Golden models `hole_*` and `thread_*` (ops `hole_at`, `hole_points`, `thread` in
-  `golden/hole_ops.py`; the same code as the dialogs). From the QA: `hole_to_face_follows`
+  `sciforge/ai/ops/hole_ops.py`; the same code as the dialogs). From the QA: `hole_to_face_follows`
   (To keeps the hole on its face after an edit), `hole_second_survives_first` (deleting the
   first of two holes leaves the second on its face), `thread_second_after_modeled` (a thread
   whose face an earlier thread split keeps working).

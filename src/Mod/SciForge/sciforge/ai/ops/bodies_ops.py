@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for the body tools (Combine, Split Body, Move/Copy, Delete Face), built
+"""Design steps for the body tools (Combine, Split Body, Move/Copy, Delete Face), built
 with the same SciForge code as their dialogs (sciforge/combine.py, split.py, move.py,
-delete.py). Registered on builder.Builder when builder.py is imported.
+delete.py). Registered on core.Builder when the package is imported.
 
 Bodies are named by a step that made them (its body): "e1" is the body of extrude e1.
 
@@ -40,7 +40,7 @@ Bodies are named by a step that made them (its body): "e1" is the body of extrud
 import Part
 
 from . import selectors
-from .builder import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
+from .core import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
 
 MOVE_KEYS = ("move_type", "dx", "dy", "dz", "rx", "ry", "rz", "angle", "px", "py", "pz", "copy")
 

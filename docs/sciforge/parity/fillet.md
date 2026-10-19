@@ -203,7 +203,7 @@ edges are covered by the selection fall-through (`parity/selection.md`).
 - Golden models `blend_*` (ops `blend_fillet`, `blend_chamfer` in the builder; same code as the
   dialogs): face pick, feature pick (inside + outside round), tangent chain on a slot, edit,
   Press Pull on a dialog-made fillet, two distances + flip, distance and angle; and
-  (`golden/blend_ops.py`: ops `blend_insert`, `blend_edit`) a chamfer inserted before a
+  (`sciforge/ai/ops/blend_ops.py`: ops `blend_insert`, `blend_edit`) a chamfer inserted before a
   fillet with the marker rolled back, a fillet edited to trim a later chamfer's edge.
 - Unit tests: `SciForgeTests/unit/test_blend_core.py`.
 - Part 2 scenarios (real input; volumes and sizes measured on the part):
@@ -225,7 +225,7 @@ edges are covered by the selection fall-through (`parity/selection.md`).
   a body inside a component made by Extrude > New Component), `fillet2_edit_later.py` (a
   plain fillet with a chamfer after it edited to two sets: the step changes kind in place,
   the chamfer keeps its edge, one undo step; Press Pull on set 2's round edits its radius).
-- Part 2 golden models (`golden/fillet2_ops.py`: ops `fillet_sets`, `rule_fillet`,
+- Part 2 golden models (`sciforge/ai/ops/fillet2_ops.py`: ops `fillet_sets`, `rule_fillet`,
   `full_round`, `blend_radius_expect`): `fillet2_two_sets` (saved and reopened),
   `fillet2_chord_90_120`, `fillet2_variable_points` (radius read off the part at 3 places),
   `fillet2_tangent_chain_off`, `fillet2_sets_tangent_chain_each`, `fillet2_rule_all_edges`,

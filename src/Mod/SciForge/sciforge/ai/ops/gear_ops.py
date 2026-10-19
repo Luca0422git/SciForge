@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for the Gear tool (SOLID > CREATE > Gear), built with the same
-SciForge code its dialog uses (sciforge/gear.py), registered on builder.Builder when
-builder.py is imported. The step format is checked by gear_schema.py.
+"""Design steps for the Gear tool (SOLID > CREATE > Gear), built with the same
+SciForge code its dialog uses (sciforge/gear.py), registered on core.Builder when
+the package is imported. The step format is checked by
+SciForgeTests/golden/gear_schema.py.
 
   {"op": "sf_gear", "id": "g1", "plane": "XY", "x": 0, "y": 0, "type": "spur",
    "standard": "metric", "module": 2, "teeth": 24, "pressure_angle": 20,
@@ -18,7 +19,7 @@ builder.py is imported. The step format is checked by gear_schema.py.
       double-click the gear in the timeline and change these options
 """
 
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 from .primitive_ops import _plane, _settle
 
 GEAR_KEYS = (

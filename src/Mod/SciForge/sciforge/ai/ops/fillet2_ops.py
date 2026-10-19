@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for the Fillet / Chamfer options of SciForge's own fillet step
+"""Design steps for the Fillet / Chamfer options of SciForge's own fillet step
 (sciforge/fillet_sets.py, the code the F and Chamfer dialogs use). Registered on
-builder.Builder when builder.py is imported.
+core.Builder when the package is imported.
 
   {"op": "fillet_sets", "id": "f1", "kind": "fillet" | "chamfer", "tangent_chain": true,
    "sets": [{"edges": sel, "faces": sel, "features": [step ids], "tangent_chain": false,
@@ -15,15 +15,10 @@ builder.Builder when builder.py is imported.
       Rule Fillet: the edges are found again from the faces / steps at every compute.
   {"op": "full_round", "id": "fr1", "faces": [sel, ...]}
       Full Round Fillet: each selector picks one centre face (the side faces are found).
-  {"op": "blend_radius_expect", "at": [x, y, z], "radius": r, "tol": 0.01}
-      The round on a 90 degree edge passes (sqrt(2) - 1) R from the old corner `at`: the
-      radius measured there must be `radius` (a Variable fillet's radius points).
 """
 
-import math
-
 from . import selectors
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 
 ROW_KEYS = (
     "radius",
@@ -143,22 +138,6 @@ def op_full_round(self, step):
     return _build(self, step, spec, flat)
 
 
-def op_blend_radius_expect(self, step):
-    import FreeCAD as App
-    import Part
-
-    shape = self.body.Shape
-    point = App.Vector(*step["at"])
-    measured = shape.distToShape(Part.Vertex(point))[0] / (math.sqrt(2.0) - 1.0)
-    if abs(measured - float(step["radius"])) > float(step.get("tol", 0.01)):
-        raise BuildError(
-            "blend_radius_expect at %s: radius %.4f, expected %g"
-            % (step["at"], measured, step["radius"])
-        )
-    return None
-
-
 Builder.op_fillet_sets = op_fillet_sets
 Builder.op_rule_fillet = op_rule_fillet
 Builder.op_full_round = op_full_round
-Builder.op_blend_radius_expect = op_blend_radius_expect

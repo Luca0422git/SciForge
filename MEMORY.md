@@ -25,6 +25,7 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | This memory / progress log | `MEMORY.md` |
 | SciForge's own module (workbench, timeline, search, ...) | `src/Mod/SciForge/` |
 | Golden-model benchmark suite (step lists + runner) | `src/Mod/SciForge/SciForgeTests/golden/` |
+| Design steps the golden models and the AI tools both run (builder, `*_ops.py`, selectors) | `src/Mod/SciForge/sciforge/ai/ops/` |
 | Every change to FreeCAD's own code (tagged `SCIFORGE:`) | `docs/sciforge/core-patches.md` |
 | CI workflows (SciForge's own) | `.github/workflows/sciforge-*.yml` |
 | Tooling scripts for CI / local runs | `tools/sciforge/` |
@@ -1369,6 +1370,53 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Home, cloud and AI, M0 groundwork (branch `sf/home-cloud-ai`, 2026-10-19)
+
+Brief: `docs/sciforge/dev/briefs/home-cloud-ai.md`. This branch only (Luca: work and push
+only on `sf/home-cloud-ai`; it merges into `develop` after M1-M3). M0 = move the golden
+builder's step code into product code, golden models still green.
+
+#### Done
+- `SciForgeTests/golden/builder.py`, `selectors.py` and all 18 `*_ops.py` moved (git mv,
+  history kept) to `src/Mod/SciForge/sciforge/ai/ops/` (`builder.py` became `core.py`).
+  Product code there; the golden models now prove the code the AI tools will run.
+- Moved *all* the step files, not only the AI's first tool set: they import each other
+  (`core.op_extrude` uses `sweep_loft_ops.curves_of` and `extrude_bodies_ops`,
+  `revolve_ops` uses `inspect_ops._ref`, `gear_ops` uses `primitive_ops`), so a partial move
+  would have split one web of code across product and tests.
+- What only tests need stays in `SciForgeTests/golden/`: `builder.py` is now
+  `class Builder(core.Builder)` plus the test setups `reopen` and `age`; the new
+  `checks.py` holds the 11 measuring checks (`expect_bodies`, `reopen_check`,
+  `expect_move_refused`, `construct/measure/section/com/interference/blend_radius_expect`,
+  `expect_component`, `expect_radius`), cut out unchanged.
+- Kept in product: `measure_bodies` / `measure_components` and the `shape()` overrides
+  (which bodies "the design" is): body-tool steps set them, and `get_design` can use them.
+- `sciforge/ai/__init__.py` and `ops/__init__.py` import nothing: `sciforge.ai` must load
+  outside FreeCAD for the MCP server (M3). Import `sciforge.ai.ops.core` inside FreeCAD.
+- Install rules (`src/Mod/SciForge/CMakeLists.txt`): the package glob is now recursive and
+  the install is `INSTALL(DIRECTORY sciforge ...)` so sub-folders keep their place
+  (`INSTALL(FILES)` would have flattened `ai/ops/core.py` into `sciforge/`).
+  `check_install.sh`: all 1491 files installed. The quick update copies folders already.
+- New unit test `test_ai_ops_layout.py`: product code never imports `SciForgeTests`, the two
+  `__init__` files import nothing, every `*_ops.py` is registered by `core.py`, no
+  `*_expect` check in product code.
+- Docs: golden README ("Where the code is"), `dev/feature-guide.md` (where a new op goes),
+  5 parity docs' paths. Old session logs keep the old paths (history).
+
+#### Tests
+- Golden before and after the move, compared model by model: 434 models, 432 pass + 2 known
+  xfail (`plate_hole_grid`, `sf_loft_merge_slot_volume`) both times; measurements equal
+  (one volume differs in the 16th digit, solver noise). The brief's "434 pass" means 434
+  models. Unit: 1353 OK. Scenario `extrude_multibody_edit` (imports the golden builder): pass.
+
+#### Next (M1, Home screen)
+- `sciforge/recent.py` already exists: read it before writing `home_core.py`.
+- `core.Builder.__init__` always adds a new Body: the AI tools (M3) need a way to work on an
+  existing design (an existing body, its step ids from labels).
+- Black 26 locally reformats 4 moved files (`inspect_ops`, `primitive_ops`, `shell_draft_ops`,
+  `runner.py`) differently from the repo's pinned black 25.11: they were like that before;
+  left untouched.
 
 ### Session log: Luca's improvement list (branch `develop`, 2026-10-16/17)
 

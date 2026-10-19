@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for Fusion's Shell, Draft and Scale, built with the same SciForge code
+"""Design steps for Fusion's Shell, Draft and Scale, built with the same SciForge code
 the dialogs use (sciforge/shelling.py, drafting.py, scale.py), registered on
-builder.Builder when builder.py is imported.
+core.Builder when the package is imported.
 
   {"op": "sf_shell", "id": "sh1", "faces": selector | "body": true,
    "inside": 2, "outside": 1, "direction": "inside" | "outside" | "both",
@@ -25,7 +25,7 @@ builder.Builder when builder.py is imported.
 import FreeCAD as App
 
 from . import selectors
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 
 _PLANE_ROLE = {"XY": "XY_Plane", "XZ": "XZ_Plane", "YZ": "YZ_Plane"}
 SHELL_OPTIONS = ("inside", "outside", "direction", "shell_type")

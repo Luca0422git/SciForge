@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for Fusion's Revolve, built with the same SciForge code the Revolve
-dialog uses (sciforge/revolve.py), registered on builder.Builder when builder.py is
+"""Design steps for Fusion's Revolve, built with the same SciForge code the Revolve
+dialog uses (sciforge/revolve.py), registered on core.Builder when the package is
 imported.
 
   {"op": "sf_revolve", "id": "r1", "profile": "s1", "axis": "Z",
@@ -36,7 +36,7 @@ import FreeCAD as App
 import Part
 
 from . import selectors
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 
 OPTION_KEYS = ("type", "direction", "angle", "angle2", "operation")
 

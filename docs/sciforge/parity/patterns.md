@@ -181,7 +181,7 @@ two-direction patterns are right on stock FreeCAD and in old files too (golden
   `patterns_qa_features.py` (two steps picked in the wrong order, a Faces pattern following the
   hole, a fillet's face refused in words, the copied body deleted).
 - Golden models (ops `rectangular_pattern`, `circular_pattern`, `path_pattern`,
-  `fusion_mirror`, `pattern_edit` in `golden/pattern_ops.py`, the dialogs' code):
+  `fusion_mirror`, `pattern_edit` in `sciforge/ai/ops/pattern_ops.py`, the dialogs' code):
   `pattern_rect_hole_grid_fusion`, `pattern_rect_symmetric_bosses`,
   `pattern_circ_faces_bolt_circle`, `pattern_circ_symmetric_holes`, `mirror_features_yz_fusion`,
   `mirror_body_join_face`, `mirror_body_new_body`, `mirror_faces_hole`, `mirror_fillet_feature`,

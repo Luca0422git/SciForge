@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model step for Fusion's Emboss, built with the same SciForge code as the Emboss
-dialog (sciforge/emboss.py). Registered on builder.Builder when builder.py is imported.
+"""Design step for Fusion's Emboss, built with the same SciForge code as the Emboss
+dialog (sciforge/emboss.py). Registered on core.Builder when the package is imported.
 
   {"op": "emboss", "id": "em1", "sketch": "s2", "faces": <face selector>,
    "depth": 1, "effect": "emboss" | "deboss", "h": 0, "v": 0, "angle": 0,
@@ -11,7 +11,7 @@ dialog (sciforge/emboss.py). Registered on builder.Builder when builder.py is im
 """
 
 from . import selectors
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 
 OPTIONS = ("depth", "effect", "h", "v", "angle", "tangent_chain")
 

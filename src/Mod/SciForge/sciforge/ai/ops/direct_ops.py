@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for direct modeling and the Modify tools of outline 7.13 / 7.3 / 7.7
+"""Design steps for direct modeling and the Modify tools of outline 7.13 / 7.3 / 7.7
 (Capture Design History, Replace Face, Split Face, Silhouette Split, Align, Remove), built
 with the same SciForge code as their dialogs (sciforge/direct.py, replace_face.py,
-split_face.py, silhouette.py, align.py, remove.py). Registered on builder.Builder when
-builder.py is imported.
+split_face.py, silhouette.py, align.py, remove.py). Registered on core.Builder when
+the package is imported.
 
 Bodies are named by a step that made them (its body), as in bodies_ops.py. A pick ("ref")
 is one of:
@@ -41,7 +41,7 @@ is one of:
 
 from . import selectors
 from .bodies_ops import _alive, _body, _check_state, _measure, _origin
-from .builder import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
+from .core import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
 
 ELEMENTS = {"face": "faces", "edge": "edges", "vertex": "vertexes"}
 

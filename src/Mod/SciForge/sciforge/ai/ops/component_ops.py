@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for whole components (components-2): Create Components from Bodies, Move
+"""Design steps for whole components (components-2): Create Components from Bodies, Move
 of a component (Capture Position), Paste / Paste New and patterns of components, built with
 the same SciForge code as their dialogs (sciforge/components.py, component_move.py,
-instances.py, component_pattern.py). Registered on builder.Builder when builder.py is imported.
+instances.py, component_pattern.py). Registered on core.Builder when the package is imported.
 
   {"op": "components_from_bodies", "id": "k1", "bodies": ["e1"], "label": "Bracket"}
       Right-click a body > Create Components from Bodies (then renamed). Measured: k1.
@@ -34,7 +34,7 @@ A "roll" step may stand "before" a step (the history marker right before it).
 import FreeCAD as App
 import Part
 
-from .builder import _AXIS_ROLE, Builder, BuildError
+from .core import _AXIS_ROLE, Builder, BuildError
 
 MOVE_KEYS = ("move_type", "dx", "dy", "dz", "rx", "ry", "rz", "angle")
 

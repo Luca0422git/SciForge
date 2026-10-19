@@ -12,8 +12,8 @@ SET(SciForge_Init
 # failed with "cannot import name 'blend' from 'sciforge'"; the quick update copies the
 # whole folder, so it never showed there). tools/sciforge/check_install.sh checks this
 # on every push. CONFIGURE_DEPENDS: a new file is picked up without re-running CMake by
-# hand.
-FILE(GLOB SciForge_Package RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
+# hand. Recursive: sub-packages such as sciforge/ai/ops/ are included.
+FILE(GLOB_RECURSE SciForge_Package RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
     sciforge/*.py)
 FILE(GLOB SciForge_Icons RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
     sciforge/icons/*.svg)
@@ -38,7 +38,10 @@ ADD_CUSTOM_TARGET(SciForge ALL SOURCES ${SciForge_ALL})
 fc_copy_sources(SciForge "${CMAKE_BINARY_DIR}/Mod/SciForge" ${SciForge_ALL})
 
 INSTALL(FILES ${SciForge_Init} DESTINATION Mod/SciForge)
-INSTALL(FILES ${SciForge_Package} DESTINATION Mod/SciForge/sciforge)
+# DIRECTORY keeps the sub-folders (INSTALL(FILES) would put sciforge/ai/ops/core.py into
+# sciforge/). The icons have their own rules below.
+INSTALL(DIRECTORY sciforge DESTINATION Mod/SciForge
+    FILES_MATCHING PATTERN "*.py" PATTERN "__pycache__" EXCLUDE)
 INSTALL(FILES ${SciForge_Icons} DESTINATION Mod/SciForge/sciforge/icons)
 INSTALL(FILES ${SciForge_UiIcons} DESTINATION Mod/SciForge/sciforge/icons/ui)
 INSTALL(DIRECTORY SciForgeTests DESTINATION Mod/SciForge

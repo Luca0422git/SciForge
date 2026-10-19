@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Builds a golden model's steps in a real FreeCAD document (needs FreeCAD).
+"""Builds design steps in a real FreeCAD document (needs FreeCAD).
 
-Each step maps to the PartDesign feature a Fusion command corresponds to today.
-As SciForge grows its own feature types (Press/Pull, Fusion-style Extrude ...)
-this mapping is where the golden models switch over to them, so the same model
-files keep measuring parity over time.
+A step is one JSON object, {"op": "extrude", "id": "e1", "profile": "s1", ...}: the
+language of the golden models (SciForgeTests/golden/) and of the AI tools (sciforge/ai/).
+Both run the same code, so the golden models prove what the AI builds. Each step maps to
+the SciForge (or PartDesign) feature the Fusion command makes; the step list is in
+SciForgeTests/golden/README.md, the format checks in SciForgeTests/golden/schema.py.
 
-Conventions (documented for model authors in golden/README.md):
+Conventions (documented for model authors in SciForgeTests/golden/README.md):
   * Sketch planes are the body's origin planes. In FreeCAD the sketch normal is
     +Z for XY, -Y for XZ and +X for YZ; sketch x/y map to (X,Y), (X,Z), (Y,Z).
   * Extrude "distance" goes along the sketch normal; "flip": true goes the
@@ -191,7 +192,7 @@ class Builder:
             options["extent_object2"] = self._extrude_ref(step, step["to2"])
         if "start_from" in step:
             options["start_object"] = self._extrude_ref(step, step["start_from"])
-        if "bodies" in step:  # the dialog's "Bodies to Cut" row (golden/extrude_bodies_ops.py)
+        if "bodies" in step:  # the dialog's "Bodies to Cut" row (extrude_bodies_ops.py)
             options["bodies"] = self._extrude_bodies(step)
         if "thin" in step:  # Fusion's Thin Extrude: a wall along the profile
             thin = step["thin"]
@@ -538,63 +539,6 @@ class Builder:
         except timeline_ops.TimelineError as exc:
             raise BuildError("move %r: %s" % (step["target"], exc))
 
-    def op_reopen(self, step):
-        """Save the design, close it and open the file again (what was only in memory is
-        gone; what the steps keep in the file must do)."""
-        import os
-        import tempfile
-
-        names = {key: obj.Name for key, obj in self.objects.items()}
-        body = self.body.Name
-        folder = tempfile.mkdtemp(prefix="sciforge_golden_")
-        path = os.path.join(folder, self.doc.Name + ".FCStd")
-        self.doc.saveAs(path)
-        App.closeDocument(self.doc.Name)
-        self.doc = App.openDocument(path)
-        self.doc.recompute()
-        self.body = self.doc.getObject(body)
-        self.objects = {key: self.doc.getObject(name) for key, name in names.items()}
-        from sciforge import upgrade
-
-        # What the GUI does once a file is open: steps of an older SciForge are rebuilt.
-        for new in upgrade.after_open(self.doc):
-            for key, name in names.items():
-                if self.doc.getObject(name) is None and new.Label == key:
-                    self.objects[key] = new  # rebuilt as another object (same label)
-        try:
-            os.remove(path)
-            os.rmdir(folder)
-        except OSError:
-            pass
-
-    def op_age(self, step):
-        """Test setup: make a coil or pipe look as saved by SciForge before the primitives QA
-        fixes of 2026-10-11 (its old shape, its section without what the fixes added)."""
-        from sciforge import coil, pipe, primitives
-
-        feature = self.objects[step["target"]]
-        if coil.is_coil(feature):
-            _ref, options = coil.read(feature)
-            meta = primitives.load_meta(feature, coil.META)
-            section = self.doc.getObject(meta["helpers"][-1])
-            section.Taper = 0.0  # no narrowing at the far end: the old section
-            _turns, height, _pitch = coil.resolved(options)
-            feature.Angle = float(options["angle"])  # the old helix: a negative angle as is
-            feature.Reversed = height < 0
-            section.touch()
-            self.doc.recompute()
-            section.removeProperty("Taper")  # what the fixes added
-        elif pipe.is_pipe(feature):
-            meta = primitives.load_meta(feature, pipe.META)
-            helpers = [self.doc.getObject(n) for n in meta["helpers"]]
-            spine = [h for h in helpers if h is not None and h.Name.startswith("PipePath")][0]
-            section = [h for h in helpers if h is not None and h is not spine][0]
-            section.Path = spine  # the old link to the path object, no edges of its own
-            section.Edges = []
-            self.doc.recompute()
-        else:
-            raise BuildError("age %r: only a coil or a pipe" % step["target"])
-
     def op_roll(self, step):
         """Drag the history marker after a step (or to the end, or to the start)."""
         from sciforge import timeline_core, timeline_ops
@@ -764,7 +708,7 @@ from . import pattern_ops  # noqa: E402,F401  (registers the Fusion pattern / mi
 from . import shell_draft_ops  # noqa: E402,F401  (registers op_sf_shell, op_sf_draft, op_sf_scale)
 from . import bodies_ops  # noqa: E402,F401  (registers the body-tool steps: combine...)
 from . import blend_ops  # noqa: E402,F401  (registers op_blend_insert, op_blend_edit)
-from . import inspect_ops  # noqa: E402,F401  (registers op_construct*, op_*_expect)
+from . import inspect_ops  # noqa: E402,F401  (registers op_construct*, op_body_material)
 from . import primitive_ops  # noqa: E402,F401  (registers Box/Cylinder/Sphere/Torus/Coil/Pipe)
 from . import sweep_loft_ops  # noqa: E402,F401  (registers the sweep / loft / rib / web steps)
 from . import extrude_bodies_ops  # noqa: E402,F401  (extrudes through several bodies)

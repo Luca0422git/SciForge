@@ -141,7 +141,7 @@ Golden models `sf_box_*`, `sf_cylinder_*`, `sf_sphere_*`, `sf_torus_*`, `sf_coil
 (tapered and narrowing coils: `sf_coil_taper_*`), `sf_pipe_*` (mitred corners:
 `sf_pipe_corner_*`, hollow rings: `sf_pipe_ring_*`) (36, volumes worked out by hand: Pappus
 for coils and pipes), built with
-`golden/primitive_ops.py`. Unit tests `test_primitives_core.py`.
+`sciforge/ai/ops/primitive_ops.py`. Unit tests `test_primitives_core.py`.
 
 ## Known gaps
 

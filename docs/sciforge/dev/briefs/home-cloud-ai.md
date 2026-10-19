@@ -369,6 +369,7 @@ SciForgeTests/gui/scenarios/home_screen.py, cloud_place.py, ai_bridge.py, ai_cha
 ## 6. Milestones (each one mergeable, tests green, Luca told what to try)
 - **M0 Groundwork**: branch; move the golden builder's ops/selectors into `sciforge/ai/ops.py`
   with the golden models still green (434 pass, 2 known xfail).
+  **Done 2026-10-19** (`sciforge/ai/ops/`; 434 models: 432 pass + 2 known xfail; MEMORY.md log).
 - **M1 Home screen** (local project folder + recent designs + New/Open + recovery banner).
 - **M2 Places, phase A**: sync-folder and NAS places for all four providers, plain-store
   versions in cloud places, "changed on another computer", conflict copies, open-elsewhere

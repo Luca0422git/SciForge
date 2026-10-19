@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for the SURFACE tab, built with the same SciForge code the dialogs use
-(sciforge/surface.py: surface.build), registered on builder.Builder when builder.py is
+"""Design steps for the SURFACE tab, built with the same SciForge code the dialogs use
+(sciforge/surface.py: surface.build), registered on core.Builder when the package is
 imported.
 
   {"op": "sf_surface", "id": "w1", "kind": "extrude", "refs": [ref, ...], "refs2": [...],
@@ -31,7 +31,7 @@ import FreeCAD as App
 import Part
 
 from . import selectors
-from .builder import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
+from .core import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
 
 REF_KEYS = ("refs", "refs2", "refs3")
 

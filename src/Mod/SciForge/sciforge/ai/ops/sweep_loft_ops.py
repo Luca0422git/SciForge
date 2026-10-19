@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for Fusion's Sweep, Loft, Rib and Web, built with the same SciForge code
-their dialogs use (sciforge/sweep.py, loft.py, rib.py). Registered on builder.Builder when
-builder.py is imported.
+"""Design steps for Fusion's Sweep, Loft, Rib and Web, built with the same SciForge code
+their dialogs use (sciforge/sweep.py, loft.py, rib.py). Registered on core.Builder when
+the package is imported.
 
   {"op": "sf_curves", "id": "p1", "plane": "XZ", "offset": 0,
    "curves": [{"line": [x1, y1, x2, y2]}, {"arc": [cx, cy, r, a0, a1]}, {"point": [x, y]},
@@ -50,7 +50,7 @@ import FreeCAD as App
 import Part
 
 from . import selectors
-from .builder import _PLANE_ROLE, Builder, BuildError
+from .core import _PLANE_ROLE, Builder, BuildError
 
 SWEEP_KEYS = (
     "type",
@@ -315,28 +315,6 @@ def op_sf_rib_edit(self, step):
     return _edit(self, step, "sf_rib", rib, (rib.RibError, curves.CurveError))
 
 
-def op_expect_radius(self, step):
-    """The step's body stays within `max` (and beyond `min`) of the Z axis: a profile swept
-    along a curve on a cylinder with Path + Guide Surface keeps hugging it."""
-    from sciforge import bodies
-
-    obj = self.objects.get(step["step"])
-    body = bodies.body_of(obj) if obj is not None else None
-    if body is None:
-        raise BuildError("expect_radius: %r is not in a body" % step["step"])
-    points = []
-    for face in body.Shape.Faces:
-        points += [v.Point for v in face.Vertexes]
-        points += face.tessellate(0.1)[0]
-    radii = [(p.x * p.x + p.y * p.y) ** 0.5 for p in points]
-    if max(radii) > step["max"] or min(radii) < step.get("min", 0.0):
-        raise BuildError(
-            "expect_radius: %s reaches %.4f .. %.4f from the Z axis, expected %s .. %s"
-            % (body.Label, min(radii), max(radii), step.get("min", 0.0), step["max"])
-        )
-
-
-Builder.op_expect_radius = op_expect_radius
 Builder.op_sf_curves = op_sf_curves
 Builder.op_sf_sweep = op_sf_sweep
 Builder.op_sf_sweep_edit = op_sf_sweep_edit

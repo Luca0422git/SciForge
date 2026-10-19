@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for Fusion's Box, Cylinder, Sphere, Torus, Coil and Pipe, built with
+"""Design steps for Fusion's Box, Cylinder, Sphere, Torus, Coil and Pipe, built with
 the same SciForge code their dialogs use (sciforge/primitives.py, coil.py, pipe.py),
-registered on builder.Builder when builder.py is imported.
+registered on core.Builder when the package is imported.
 
   {"op": "sf_primitive", "id": "b1", "kind": "box", "plane": "XY",
    "x": 0, "y": 0, "length": 40, "width": 20, "height": 10, "operation": "auto"}
@@ -38,9 +38,6 @@ registered on builder.Builder when builder.py is imported.
   {"op": "sf_primitive_edit", "target": "b1", "set": {"height": -5}}
       double-click the step in the timeline and change these options (the step may
       change kind, e.g. AdditiveBox -> SubtractiveBox, like the dialog does)
-
-  {"op": "expect_component", "step": "c1"}
-      the step's body lies in a component of its own (operation new_component)
 """
 import math
 
@@ -48,7 +45,7 @@ import FreeCAD as App
 import Part
 
 from . import selectors
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 
 PRIMITIVE_KEYS = (
     "x",
@@ -229,23 +226,7 @@ def op_sf_primitive_edit(self, step):
     return feature
 
 
-def op_expect_component(self, step):
-    """The step's body lies in a component of its own (Fusion's New Component), and that
-    component holds nothing else."""
-    from sciforge import components
-
-    obj = self.objects.get(step["step"])
-    body = obj.getParentGeoFeatureGroup() if obj is not None else None
-    part = components.container_of(body) if body is not None else None
-    if part is None:
-        raise BuildError("expect_component: %r is not in a component" % step["step"])
-    inside = [o.Label for o in part.Group if components.is_body(o) or components.is_component(o)]
-    if inside != [body.Label]:
-        raise BuildError("expect_component: %s holds %s" % (part.Label, inside))
-
-
 Builder.op_sf_primitive = op_sf_primitive
-Builder.op_expect_component = op_expect_component
 Builder.op_sf_coil = op_sf_coil
 Builder.op_sf_path_sketch = op_sf_path_sketch
 Builder.op_sf_pipe = op_sf_pipe

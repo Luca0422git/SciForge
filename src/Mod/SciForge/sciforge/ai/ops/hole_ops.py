@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for Fusion's Hole and Thread, built with the same SciForge code as the
+"""Design steps for Fusion's Hole and Thread, built with the same SciForge code as the
 Hole (H) and Thread dialogs (sciforge/hole.py, sciforge/thread.py). Registered on
-builder.Builder when builder.py is imported.
+core.Builder when the package is imported.
 
   {"op": "hole_at", "id": "h1", "face": <face selector>, "at": [x, y, z],
    "references": [{"edge": <edge selector>, "distance": 3}, ...], <hole options>}
@@ -37,7 +37,7 @@ builder.Builder when builder.py is imported.
 import FreeCAD as App
 
 from . import selectors
-from .builder import _EDIT_PROPS, _PLANE_ROLE, Builder, BuildError
+from .core import _EDIT_PROPS, _PLANE_ROLE, Builder, BuildError
 
 HOLE_OPTIONS = (
     "extent",

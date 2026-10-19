@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps of Modify part 2, built with the same SciForge code as the dialogs
+"""Design steps of Modify part 2, built with the same SciForge code as the dialogs
 (sciforge/drafting.py, shelling.py, scale.py, move_face.py, presspull...). Registered on
-builder.Builder when builder.py is imported. The step formats are in golden/modify2_schema.py.
+core.Builder when the package is imported. The step formats are checked by
+SciForgeTests/golden/modify2_schema.py.
 """
 
 from . import selectors
-from .builder import _PLANE_ROLE, Builder, BuildError
+from .core import _PLANE_ROLE, Builder, BuildError
 
 
 def _select_faces(tip, spec, what):

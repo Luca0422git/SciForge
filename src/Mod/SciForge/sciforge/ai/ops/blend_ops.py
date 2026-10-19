@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for history edits around Fusion-style fillets and chamfers, built with
+"""Design steps for history edits around Fusion-style fillets and chamfers, built with
 the same code as the Fillet / Chamfer dialogs (sciforge/blend.py). Registered on
-builder.Builder when builder.py is imported.
+core.Builder when the package is imported.
 
   {"op": "blend_insert", "id": "c1", "kind": "fillet" | "chamfer", <options>,
    "edges": sel, "faces": sel}
@@ -18,7 +18,7 @@ builder.Builder when builder.py is imported.
 """
 
 from . import selectors
-from .builder import Builder, BuildError
+from .core import Builder, BuildError
 
 OPTIONS = ("radius", "chamfer_type", "distance", "distance2", "angle", "flip")
 

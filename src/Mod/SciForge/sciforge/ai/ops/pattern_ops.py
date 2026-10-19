@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Golden-model steps for Fusion's Rectangular Pattern, Circular Pattern, Pattern on Path and
+"""Design steps for Fusion's Rectangular Pattern, Circular Pattern, Pattern on Path and
 Mirror, built with the same SciForge code as their dialogs (sciforge/pattern.py). Registered
-on builder.Builder when builder.py is imported.
+on core.Builder when the package is imported.
 
 What is patterned (exactly one):
   "features": ["e2", ...]    steps of the body (Pattern Type Features)
@@ -30,7 +30,7 @@ What is patterned (exactly one):
 """
 
 from . import selectors
-from .builder import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
+from .core import _AXIS_ROLE, _PLANE_ROLE, Builder, BuildError
 
 COMMON = ("features", "faces", "body", "comment", "expressions")
 VALUE_KEYS = (
