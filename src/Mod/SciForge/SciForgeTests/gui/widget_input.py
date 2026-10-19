@@ -6,6 +6,7 @@ for a person's click, drag or key press.
 
     right_click(widget, pos, "Suppress Features")   # opens the menu, clicks the entry
 """
+
 from PySide import QtCore, QtGui, QtWidgets
 from PySide6 import QtTest
 
@@ -78,6 +79,24 @@ def right_click(widget, pos, choose):
     """Right-click at pos, then click the menu entry `choose` (like a person). Returns
     True if the entry was there and enabled. Esc closes the menu when choose is None."""
     result = {"ok": False}
+    QtCore.QTimer.singleShot(50, _picker(result, choose))
+    _open_menu(widget, pos, result)
+    _process()
+    return result["ok"]
+
+
+def click_menu(button, choose):
+    """Click a button that opens a menu (Home's ... of a place), then the entry `choose`.
+    Returns True if the entry was there and enabled."""
+    result = {"ok": False}
+    QtCore.QTimer.singleShot(50, _picker(result, choose))
+    click(button)
+    _process()
+    return result["ok"]
+
+
+def _picker(result, choose):
+    """Waits for the open menu, then clicks its entry `choose` (Esc when it is not there)."""
 
     def pick():
         menu = QtWidgets.QApplication.activePopupWidget()
@@ -102,10 +121,7 @@ def right_click(widget, pos, choose):
         QtTest.QTest.mouseClick(menu, LEFT, NONE, rect.center())
         result["ok"] = True
 
-    QtCore.QTimer.singleShot(50, pick)
-    _open_menu(widget, pos, result)
-    _process()
-    return result["ok"]
+    return pick
 
 
 def _open_menu(widget, pos, state):

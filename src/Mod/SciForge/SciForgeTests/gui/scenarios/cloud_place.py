@@ -7,7 +7,8 @@ info.json (read by the same rules as on a real computer: locations_core.dropbox_
 This computer's name is LAPTOP.
 
 Path 1, Home > + Connect a cloud or NAS: the wizard offers the Dropbox folder found, with a
-  SciForge folder inside; Connect: Dropbox is a place on Home (the folder made).
+  SciForge folder inside; Connect: Dropbox is a row of its own on Home, under This computer
+  (the folder made).
 Path 2, a design saved there through the Save dialog's Place row: versions kept as copies
   (Bracket.versions/), never git; its picture beside it (.sciforge/thumbs/) and this
   computer's note while it is open (.sciforge/locks/).
@@ -17,8 +18,8 @@ Path 4, Dropbox's "conflicted copy" shows a Conflict tile; its menu has Compare 
   This One; Compare opens the comparison.
 Path 5, a design open on another computer (its note): opening it asks; Open read-only:
   Ctrl+S then saves nothing.
-Path 6, the cloud folder gone (app not running): the place says Offline, its page says so.
-Path 7, Disconnect: the place leaves Home, the folder and designs stay.
+Path 6, the cloud folder gone (app not running): the place's row says Offline and why.
+Path 7, Disconnect (its row's ... menu): the place leaves Home, the folder and designs stay.
 """
 
 import json
@@ -47,32 +48,23 @@ def home():
 
 
 def place_rows():
+    """The places' rows on Home, top to bottom (their titles), Recent left out."""
     page = home()
-    return [page.places.item(i).text() for i in range(page.places.count())] if page else []
+    if page is None:
+        return []
+    order = [page.rows_layout.itemAt(i).widget() for i in range(page.rows_layout.count())]
+    return [w.title.text() for w in order if getattr(w, "row_id", "recent") != "recent"]
 
 
-def click_place(text_start):
+def tile(path, row="dropbox"):
+    """(the row's tile list viewport, the tile's centre) of a design, for real clicks."""
     page = home()
-    for i in range(page.places.count()):
-        item = page.places.item(i)
-        if item.text().startswith(text_start):
-            wi.click(page.places.viewport(), page.places.visualItemRect(item).center())
-            return True
-    return False
-
-
-def names():
-    page = home()
-    return [t.split("\n")[0] for _k, _key, _p, t, _s in page.items()] if page else []
-
-
-def tile_pos(name):
-    page = home()
-    for i in range(page.list.count()):
-        item = page.list.item(i)
-        if item.text().split("\n")[0] == name:
-            return page.list.visualItemRect(item).center()
-    return None
+    tiles_list, item = page.item_for(path, row)
+    if item is None:
+        return None, None
+    tiles_list.scrollToItem(item)
+    page.scroll.ensureWidgetVisible(tiles_list)
+    return tiles_list.viewport(), tiles_list.visualItemRect(item).center()
 
 
 def dialog(name):
@@ -131,12 +123,9 @@ def setup():
 
 # -- Path 1 -----------------------------------------------------------------------------------
 def click_connect():
-    h.check(
-        "Home offers + Connect a cloud or NAS",
-        any(r.startswith("+ Connect") for r in place_rows()),
-        place_rows(),
-    )
-    click_place("+ Connect")
+    button = home().connect_button
+    h.check("Home offers + Connect a cloud or NAS", button.isVisible(), button.text())
+    wi.click(button)
 
 
 def wizard_found_dropbox():
@@ -164,18 +153,26 @@ def dropbox_connected():
     from sciforge import locations_ui
 
     h.check("the wizard closed", dialog("SciForgeConnectDialog") is None)
-    h.check("Dropbox is a place on Home", "Dropbox" in place_rows(), place_rows())
+    h.check(
+        "Dropbox is a row on Home, under This computer",
+        place_rows()[:2] == ["This computer", "Dropbox"],
+        place_rows(),
+    )
     h.check("This computer is never shown offline", "This computer" in place_rows(), place_rows())
     h.check("its SciForge folder was made", os.path.isdir(s["root"]))
     kept = locations_ui.kept()
     h.check("it is kept (locations.json)", [p["kind"] for p in kept] == ["dropbox"], kept)
-    click_place("Dropbox")
 
 
 def dropbox_page():
-    page = home()
-    h.check("the Dropbox page is shown", page.mode == "dropbox", page.mode)
-    h.check("... empty for now", page.empty.isVisible() and "No designs" in page.empty.text())
+    row = home().row("dropbox")
+    h.check(
+        "the Dropbox row shows its folder", row is not None and row.path_label.text() == s["root"]
+    )
+    h.check(
+        "... empty for now",
+        row is not None and row.empty.isVisible() and "No designs" in row.empty.text(),
+    )
 
 
 # -- Path 2 -----------------------------------------------------------------------------------
@@ -302,25 +299,27 @@ def conflicted_copy():
     from sciforge import home_ui
 
     home_ui.show()
-    click_place("Dropbox")
 
 
 def conflict_tile():
     page = home()
-    found = [(p, t) for _k, _key, p, t, _s in page.items() if p == s["copy"]]
+    found = [(p, t) for _k, _key, p, t, _s in page.items("dropbox") if p == s["copy"]]
     text = found[0][1] if found else ""
     h.check(
         "the conflicted copy has a Conflict tile", text == "Bracket\nConflict copy, Luca's", text
     )
-    pos = page.list.visualItemRect(page.item_for(s["copy"])).center() if found else None
-    texts = [t for t, _on in wi.menu_texts(page.list.viewport(), pos)]
+    viewport, pos = tile(s["copy"])
+    texts = [t for t, _on in wi.menu_texts(viewport, pos)] if pos is not None else []
     h.check(
         "its menu: Compare with Bracket, Keep This One",
         "Compare with Bracket" in texts and "Keep This One" in texts,
         texts,
     )
     h.shot("conflict")
-    h.check("Compare is there", wi.right_click(page.list.viewport(), pos, "Compare with Bracket"))
+    h.check(
+        "Compare is there",
+        pos is not None and wi.right_click(viewport, pos, "Compare with Bracket"),
+    )
 
 
 conflict_tile.wait_ms = 2000
@@ -343,10 +342,8 @@ def note_from_desktop():
     os.makedirs(os.path.dirname(note), exist_ok=True)
     with open(note, "w", encoding="utf-8") as handle:
         json.dump(locations_core.make_note("DESKTOP-AB12C", "luca", time.time() - 600), handle)
-    page = home()
-    wi.double_click(
-        page.list.viewport(), page.list.visualItemRect(page.item_for(s["copy"])).center()
-    )
+    viewport, pos = tile(s["copy"])
+    wi.double_click(viewport, pos)
 
 
 note_from_desktop.wait_ms = 2000
@@ -405,12 +402,12 @@ def offline_shown():
         any(r.startswith("Dropbox") and "Offline" in r for r in rows),
         rows,
     )
-    click_place("Dropbox")
 
 
 def offline_page():
-    page = home()
-    h.check("its page says it is offline", "offline" in page.empty.text(), page.empty.text())
+    row = home().row("dropbox")
+    text = row.empty.text() if row is not None else ""
+    h.check("its row says it is offline", "offline" in text and row.empty.isVisible(), text)
     from sciforge import home_ui
 
     os.rename(s["away"], s["dropbox"])
@@ -419,17 +416,12 @@ def offline_page():
 
 # -- Path 7 -----------------------------------------------------------------------------------
 def disconnect():
-    page = home()
-    for i in range(page.places.count()):
-        item = page.places.item(i)
-        if item.text() == "Dropbox":
-            pos = page.places.visualItemRect(item).center()
-            h.check(
-                "Disconnect is in its menu",
-                wi.right_click(page.places.viewport(), pos, "Disconnect"),
-            )
-            return
-    h.check("Dropbox is listed before Disconnect", False, place_rows())
+    row = home().row("dropbox")
+    if row is None:
+        h.check("Dropbox is listed before Disconnect", False, place_rows())
+        return
+    home().scroll.ensureWidgetVisible(row.menu_button)
+    h.check("Disconnect is in its ... menu", wi.click_menu(row.menu_button, "Disconnect"))
 
 
 def disconnected():

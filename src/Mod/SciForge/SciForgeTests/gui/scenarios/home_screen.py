@@ -3,8 +3,9 @@
 clicks.
 
 Path 1, start: SciForge opens on its Home tab (the first document tab, the active one),
-  the ribbon and the timeline shown, the Home button at the left of the application bar,
-  no navigation bar over Home (it comes back on a design).
+  the ribbon's top bar and the timeline shown, its commands hidden on Home (Luca: "on the
+  home screen, lets hide the toolbar"), the Home button at the left of the application bar,
+  no navigation bar over Home (both come back on a design).
 Path 2, an empty list says what to do; New design starts a design with a body, Home stays
   as a tab.
 Path 3, a design saved and closed: closing the last design shows Home again, the design
@@ -15,8 +16,11 @@ Path 6, a design deleted behind SciForge's back is greyed "Not found"; its menu 
   Locate... and Remove from List, no Open; Remove from List takes it off.
 Path 7, a design moved: Locate... finds it again, still pinned.
 Path 8, search narrows the tiles; nothing found says so.
-Path 9, This computer lists the project folder (its folder and design); double-click the
-  folder goes in, Up comes back.
+Path 9, Luca's sketch: rows top to bottom, Recent then This computer. This computer shows
+  where designs are saved (its path) and every design in it, its folders' too ("in
+  Robots"), and a design saved in another folder of this computer; its ... menu: Show in
+  Folder, Change Folder.... A new design's Save dialog starts in that folder, even after a
+  save in another folder (Luca: his saves did not show in This computer).
 Path 10, a recovery copy left by an earlier session shows the banner; Recover... opens the
   Recover dialog.
 Path 11, Show Home at start off: closing the last design leaves the window empty, as before.
@@ -54,22 +58,33 @@ def current_tab():
     return bar.tabText(bar.currentIndex()) if bar is not None and bar.count() else ""
 
 
-def tiles():
+def tiles(row="recent"):
     page = home()
-    return page.items() if page is not None else []
+    return page.items(row) if page is not None else []
 
 
-def names():
-    return [text.split("\n")[0] for _k, _key, _p, text, _s in tiles()]
+def names(row="recent"):
+    return [text.split("\n")[0] for _k, _key, _p, text, _s in tiles(row)]
 
 
-def tile_pos(name):
+def at(name, row="recent"):
+    """(the row's tile list viewport, the tile's centre) for real clicks."""
     page = home()
-    for i in range(page.list.count()):
-        item = page.list.item(i)
+    tiles_list = page.row(row).list
+    for i in range(tiles_list.count()):
+        item = tiles_list.item(i)
         if item.text().split("\n")[0] == name:
-            return page.list.visualItemRect(item).center()
-    return None
+            tiles_list.scrollToItem(item)
+            page.scroll.ensureWidgetVisible(tiles_list)
+            return tiles_list.viewport(), tiles_list.visualItemRect(item).center()
+    return tiles_list.viewport(), None
+
+
+def commands_shown():
+    from sciforge import shell
+
+    ribbon = shell.ribbon()
+    return ribbon is not None and ribbon.command_area.isVisible()
 
 
 def make_box(doc, size):
@@ -113,6 +128,7 @@ def at_start():
     main = Gui.getMainWindow()
     ribbon = main.findChild(QtWidgets.QToolBar, "SciForgeRibbonBar")
     h.check("the ribbon is shown", ribbon is not None and ribbon.isVisible())
+    h.check("... its commands hidden on Home, the top bar kept", not commands_shown())
     timeline = main.findChild(QtWidgets.QDockWidget, "SciForgeTimelineDock")
     h.check("the timeline is shown", timeline is not None and timeline.isVisible())
     button = wi.quick_access("Home")
@@ -145,10 +161,10 @@ def setup():
 
 # -- Path 2 -------------------------------------------------------------------------------
 def empty_list():
-    page = home()
-    h.check("an empty list says what to do", page.empty.isVisible(), page.empty.text())
-    h.check("... New design and Open", "New design" in page.empty.text(), page.empty.text())
-    h.check("no Clear List on an empty list", not page.clear_button.isVisible())
+    recent = home().row("recent")
+    h.check("an empty list says what to do", recent.empty.isVisible(), recent.empty.text())
+    h.check("... New design and Open", "New design" in recent.empty.text(), recent.empty.text())
+    h.check("no Clear List on an empty list", not recent.clear_button.isVisible())
 
 
 def new_design():
@@ -167,6 +183,7 @@ def new_design_made():
 
     nav = navbar_ui.bar()
     h.check("the navigation bar is back on the design", nav is not None and nav.isVisible())
+    h.check("the ribbon's commands are back on the design", commands_shown())
     close_all()
 
 
@@ -194,6 +211,7 @@ def closing_the_last_design_shows_home():
     cached = home_core.thumb_file(home_ui.thumbs_dir(), key, mtime)
     h.check("the design's own picture is cached", os.path.isfile(cached), cached)
     text = [t for _k, _key, _p, t, _s in tiles()][0] if tiles() else ""
+    h.check("... and in This computer's row", "Arm" in names("local"), names("local"))
     h.check("it says where and when", "This computer, edited just now" in text, text)
     h.check("... and its version (v1: the first save)", text.endswith(", v1"), text)
     h.shot("recent")
@@ -203,7 +221,7 @@ wait_tiles(closing_the_last_design_shows_home)
 
 
 def double_click_arm():
-    wi.double_click(home().list.viewport(), tile_pos("Arm"))
+    wi.double_click(*at("Arm"))
 
 
 def arm_opened():
@@ -262,7 +280,7 @@ wait_tiles(newest_first)
 
 
 def pin_arm():
-    h.check("Pin is in Arm's menu", wi.right_click(home().list.viewport(), tile_pos("Arm"), "Pin"))
+    h.check("Pin is in Arm's menu", wi.right_click(*at("Arm"), "Pin"))
 
 
 def arm_pinned_first():
@@ -271,7 +289,7 @@ def arm_pinned_first():
     h.check("a pinned design comes first", names()[:2] == ["Arm", "Base"], names())
     entry = home_core.find(home_ui.load_state(), versions.path_key(s["arm"]))
     h.check("... and is kept pinned", entry is not None and entry["pinned"], entry)
-    texts = [t for t, _on in wi.menu_texts(home().list.viewport(), tile_pos("Arm"))]
+    texts = [t for t, _on in wi.menu_texts(*at("Arm"))]
     h.check("its menu says Unpin", "Unpin" in texts, texts)
 
 
@@ -294,7 +312,7 @@ def base_missing():
         bool(found) and found[0][4] == home_core.MISSING and "Not found" in found[0][3],
         found,
     )
-    texts = [t for t, _on in wi.menu_texts(home().list.viewport(), tile_pos("Base"))]
+    texts = [t for t, _on in wi.menu_texts(*at("Base"))]
     h.check(
         "its menu: Locate..., Remove from List, no Open",
         "Locate..." in texts and "Remove from List" in texts and "Open" not in texts,
@@ -307,7 +325,7 @@ wait_tiles(base_missing)
 
 
 def double_click_missing():
-    wi.double_click(home().list.viewport(), tile_pos("Base"))
+    wi.double_click(*at("Base"))
 
 
 def nothing_opened():
@@ -317,7 +335,7 @@ def nothing_opened():
 def remove_base():
     h.check(
         "Remove from List is there",
-        wi.right_click(home().list.viewport(), tile_pos("Base"), "Remove from List"),
+        wi.right_click(*at("Base"), "Remove from List"),
     )
 
 
@@ -342,7 +360,7 @@ def locate_arm():
     home_ui.LOCATE_PICKER = lambda: s["arm_moved"]
     h.check(
         "Locate... is there",
-        wi.right_click(home().list.viewport(), tile_pos("Arm"), "Locate..."),
+        wi.right_click(*at("Arm"), "Locate..."),
     )
 
 
@@ -370,9 +388,9 @@ def search_nothing():
 
 
 def nothing_found():
-    page = home()
-    h.check("no tile matches zzz", not names(), names())
-    h.check("... and it says so", "zzz" in page.empty.text() and page.empty.isVisible())
+    recent = home().row("recent")
+    h.check("no tile matches zzz", not names() and not names("local"), names("local"))
+    h.check("... and it says so", "zzz" in recent.empty.text() and recent.empty.isVisible())
 
 
 def search_arm():
@@ -385,46 +403,69 @@ def arm_found_by_search():
 
 
 # -- Path 9 -------------------------------------------------------------------------------
-def click_this_computer():
+def rows_in_order():
     page = home()
-    for i in range(page.places.count()):
-        item = page.places.item(i)
-        if item.text() == "This computer":
-            wi.click(page.places.viewport(), page.places.visualItemRect(item).center())
+    order = [page.rows_layout.itemAt(i).widget() for i in range(page.rows_layout.count())]
+    ids = [w.row_id for w in order if w is not None and hasattr(w, "row_id")]
+    h.check("rows top to bottom: Recent, then This computer", ids[:2] == ["recent", "local"], ids)
+    local = page.row("local")
+    h.check(
+        "This computer's row says where designs are saved", local.path_label.text() == s["project"]
+    )
+    h.check("... and is shown", local.path_label.isVisible())
+    h.check("it shows Arm, kept in its folder Robots", names("local") == ["Arm"], names("local"))
+    text = [t for _k, _key, _p, t, _st in tiles("local")]
+    h.check("... saying so", bool(text) and text[0].split("\n")[1].startswith("in Robots"), text)
+    texts = [a.text() for a in page.place_menu("local").actions() if a.text()]
+    h.check(
+        "its ... menu: Show in Folder, Change Folder...",
+        texts == ["Show in Folder", "Change Folder..."],
+        texts,
+    )
+    h.shot("rows")
 
 
-def project_listed():
-    page = home()
-    h.check("This computer lists the project folder", page.mode == "local", page.mode)
-    h.check("... its folder Robots", "Robots" in names(), names())
-    h.check("the title names the place", page.title.text() == "This computer", page.title.text())
+wait_tiles(rows_in_order)
 
 
-def into_robots():
-    wi.double_click(home().list.viewport(), tile_pos("Robots"))
+def save_elsewhere():
+    from sciforge import versions_ui
+
+    s["other"] = tempfile.mkdtemp(prefix="sciforge-home-other-")
+    doc = App.newDocument("Bracket")
+    make_box(doc, 12)
+    s["bracket"] = os.path.join(s["other"], "Bracket.FCStd")
+    versions_ui._first_save(doc.Name, s["bracket"])  # the Save dialog's save, in another folder
 
 
-def in_robots():
-    page = home()
-    h.check("double-click went into Robots", "Arm" in names(), names())
-    h.check("... the title says so", page.title.text() == "This computer / Robots")
-    h.check("... Up is offered", page.up.isVisible())
+save_elsewhere.wait_ms = 1500
 
 
-wait_tiles(in_robots)
+def new_save_starts_in_this_computer():
+    from sciforge import versions_ui
+
+    close_all()
+    doc = App.newDocument("Gear")
+    dialog = versions_ui.SaveDialog(doc)
+    h.check(
+        "a new design's Save starts in This computer's folder (not the last one used)",
+        dialog.location.text() == s["project"],
+        (dialog.location.text(), s["project"]),
+    )
+    dialog.reject()
+    dialog.deleteLater()
+    close_all()
 
 
-def click_up():
-    wi.click(home().up)
+def elsewhere_shown():
+    text = [t for _k, _key, p, t, _st in tiles("local") if p == s["bracket"]]
+    h.check(
+        "a design saved in another folder shows with This computer", len(text) == 1, names("local")
+    )
+    h.check("... saying it is another folder", bool(text) and "another folder" in text[0], text)
 
 
-def back_up():
-    h.check("Up came back", "Robots" in names(), names())
-    page = home()
-    for i in range(page.places.count()):
-        item = page.places.item(i)
-        if item.text() == "Recent":
-            wi.click(page.places.viewport(), page.places.visualItemRect(item).center())
+wait_tiles(elsewhere_shown)
 
 
 # -- Path 10 ------------------------------------------------------------------------------
@@ -485,6 +526,7 @@ def no_home_with_option_off():
     preferences_ui.save({"show_home": True})
     h.check("the option is on again", home_ui.show_at_start())
     App.newDocument("Scratch")  # (the harness ends on a design)
+    shutil.rmtree(s.get("other", ""), ignore_errors=True)
     if s.get("old_project"):
         App.ParamGet(FILES).SetString("ProjectFolder", s["old_project"])
     else:
@@ -526,12 +568,10 @@ h.run(
         nothing_found,
         search_arm,
         arm_found_by_search,
-        click_this_computer,
-        project_listed,
-        into_robots,
-        in_robots,
-        click_up,
-        back_up,
+        rows_in_order,
+        save_elsewhere,
+        new_save_starts_in_this_computer,
+        elsewhere_shown,
         leave_recovery_copy,
         banner_shown,
         recover_dialog_open,

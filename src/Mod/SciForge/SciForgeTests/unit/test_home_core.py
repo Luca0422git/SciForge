@@ -81,6 +81,39 @@ class HomeCore(unittest.TestCase):
         self.assertEqual(len(state["entries"]), 1)
         self.assertTrue(state["entries"][0]["pinned"])
 
+    def test_the_innermost_place_wins(self):
+        # Windows: Documents (This computer's folder) inside the OneDrive folder
+        places = {"onedrive": self.tmp, hc.LOCAL: self.project}
+        path = self.design("Arm.FCStd")
+        self.assertEqual(hc.place_of(path, places), (hc.LOCAL, "Arm.FCStd"))
+        other = os.path.join(self.tmp, "Other.FCStd")
+        self.assertEqual(hc.place_of(other, places), ("onedrive", "Other.FCStd"))
+
+    def test_walk_lists_every_folder_of_a_place(self):
+        self.design("Arm.FCStd")
+        self.design("Robots", "Base.FCStd")
+        os.makedirs(os.path.join(self.project, "Robots", "Old"))
+        self.design("Robots", "Old", "Gear.FCStd")
+        found = hc.walk(self.project, versions.list_folder)
+        names = [(rel, [d["name"] for d in designs]) for _folder, rel, designs in found]
+        self.assertEqual(names, [("", ["Arm"]), ("Robots", ["Base"]), ("Robots/Old", ["Gear"])])
+        self.assertEqual(len(hc.walk(self.project, versions.list_folder, max_depth=0)), 1)
+        limited = hc.walk(self.project, versions.list_folder, limit=2)
+        self.assertEqual(sum(len(d) for _f, _r, d in limited), 2)
+        older = {"name": "Old", "modified": "2026-01-01T10:00:00"}
+        newer = {"name": "New", "modified": "2026-10-19T10:00:00"}
+        self.assertEqual([d["name"] for d in hc.newest_first([older, newer])], ["New", "Old"])
+
+    def test_designs_saved_outside_every_place_are_found(self):
+        state = hc.empty()
+        inside = self.design("Arm.FCStd")
+        outside = os.path.join(self.tmp, "Downloads", "Bracket.FCStd")
+        hc.record(state, inside, 10.0, self.places)
+        hc.record(state, outside, 20.0, self.places)
+        self.assertEqual([e["name"] for e in hc.elsewhere(state, self.places)], ["Bracket"])
+        # the folder is made a place later: the design is in it now
+        self.assertEqual(hc.elsewhere(state, {hc.LOCAL: self.tmp}), [])
+
     def test_pinned_first_then_newest(self):
         state = hc.empty()
         for i, name in enumerate(("A", "B", "C")):

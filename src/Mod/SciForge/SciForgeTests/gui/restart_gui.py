@@ -54,7 +54,11 @@ def run():
             App.closeDocument(doc.Name)
         else:
             page = home_ui.view()
-            names = [text.split("\n")[0] for _k, _key, _p, text, _s in page.items()] if page else []
+            names = (
+                [text.split("\n")[0] for _k, _key, _p, text, _s in page.items("recent")]
+                if page
+                else []
+            )
             check(
                 "Home lists the design saved at the first start first",
                 names[:1] == ["RestartDesign"],

@@ -53,7 +53,6 @@ _state = {
     "checked": False,  # the start-up check for unsaved work ran in this session
     "panel": None,
     "dock": None,
-    "last_location": "",
 }
 _pending = {}  # document name -> description of the version its running save records
 _pending_milestone = {}  # document name -> True when that version is a milestone
@@ -306,12 +305,13 @@ class SaveDialog(QtWidgets.QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        # Defaults: the design's own folder when it has one, else the last used, else the
-        # project folder; a name that is free in that folder.
+        # Defaults: the design's own folder when it has one, else the project folder (This
+        # computer on Home: Luca, 2026-10-19, saves went to the last folder used and Home
+        # did not show them); a name that is free in that folder.
         older = version_of(doc)  # an older version opened read-only: its design's place
         design_file = older[0] if older else doc.FileName
         folder = os.path.dirname(design_file) if design_file else ""
-        folder = folder or _state["last_location"] or project_folder()
+        folder = folder or project_folder()
         self.location.setText(folder)
         base = core.clean_name(core.design_name(design_file) if design_file else doc.Label)
         base = base or "Design"
@@ -577,7 +577,6 @@ def _first_save(doc_name, path, after=None, save_as=False):
             commands.tell("The design could not be saved to %s." % path)
             return
         set_modified(doc, False)
-        _state["last_location"] = os.path.dirname(path)
         _recovered.pop(doc_name, None)
         log("%s %s" % ("saved as a copy:" if save_as else "saved:", path))
         if after is not None:

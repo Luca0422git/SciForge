@@ -344,7 +344,10 @@ class RibbonWidget(QtWidgets.QWidget):
         outer.setSpacing(0)
         outer.addWidget(self._doc_bar(available))
 
-        body = QtWidgets.QHBoxLayout()
+        # The commands under the top bar: hidden while the Home tab is in front (set_home)
+        self.command_area = QtWidgets.QWidget()
+        self.command_area.setObjectName("SciForgeRibbonCommands")
+        body = QtWidgets.QHBoxLayout(self.command_area)
         body.setContentsMargins(10, 4, 6, 4)
         body.setSpacing(10)
         body.addWidget(self._workspace_button(), 0, QtCore.Qt.AlignVCenter)
@@ -384,7 +387,7 @@ class RibbonWidget(QtWidgets.QWidget):
         self.pages.setMinimumWidth(0)
         right.addWidget(self.pages)
         body.addLayout(right, 1)
-        outer.addLayout(body)
+        outer.addWidget(self.command_area)
 
         self.tab_buttons["sketch"].setVisible(False)
         # The DRAWING tab shows only while a drawing's tab is active (drawing_ui).
@@ -405,6 +408,14 @@ class RibbonWidget(QtWidgets.QWidget):
                 )
         except Exception as exc:
             warn("document tabs: %s" % exc)
+
+    def set_home(self, on):
+        """Home in front: only the top bar (Home, File, Save, the document tabs) shows, like
+        Fusion's Home; a design in front: the commands too."""
+        try:
+            self.command_area.setVisible(not on)
+        except RuntimeError:
+            pass
 
     def _sync_tabs(self):
         try:

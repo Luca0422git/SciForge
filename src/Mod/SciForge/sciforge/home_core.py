@@ -104,12 +104,17 @@ def dump(state):
 # -- places ----------------------------------------------------------------------------
 def place_of(path, places):
     """(location id, path inside it with "/") of the place holding `path`, or ("", "").
-    places: {location id: root folder}."""
+    places: {location id: root folder}. The innermost place wins: on Windows, Documents (and
+    so This computer's folder) is often inside the OneDrive folder."""
+    best, best_root = "", ""
     for location_id, root in places.items():
         if root and versions.inside(root, path) and not versions.same_path(root, path):
-            rel = os.path.relpath(os.path.abspath(path), os.path.abspath(root))
-            return location_id, rel.replace(os.sep, "/")
-    return "", ""
+            if len(os.path.abspath(root)) > len(os.path.abspath(best_root or "")) or not best:
+                best, best_root = location_id, root
+    if not best:
+        return "", ""
+    rel = os.path.relpath(os.path.abspath(path), os.path.abspath(best_root))
+    return best, rel.replace(os.sep, "/")
 
 
 def resolve(entry, places):
@@ -247,6 +252,38 @@ def matches(entry, text):
     """The search box: every word in the name or the path inside its place."""
     hay = ("%s %s" % (entry.get("name", ""), entry.get("rel", ""))).lower()
     return all(word in hay for word in str(text or "").lower().split())
+
+
+def walk(root, list_folder, max_depth=6, limit=1000):
+    """Every design of a place, its folders too, for Home's row of that place:
+    [(folder, rel, designs)] folder by folder (rel: the folder inside the place with "/",
+    "" at the top), at most `limit` designs and `max_depth` folders deep (a whole NAS stays
+    quick). list_folder: versions.list_folder."""
+    found, count, todo = [], 0, [(root, "", 0)]
+    while todo and count < limit:
+        folder, rel, depth = todo.pop(0)
+        folders, designs = list_folder(folder)
+        designs = designs[: limit - count]
+        count += len(designs)
+        if designs:
+            found.append((folder, rel, designs))
+        if depth < max_depth:
+            for sub in folders:
+                todo.append((sub["path"], (rel + "/" if rel else "") + sub["name"], depth + 1))
+    return found
+
+
+def newest_first(designs):
+    """The designs of a place's row: the last saved first."""
+    return sorted(designs, key=lambda d: d.get("modified", ""), reverse=True)
+
+
+def elsewhere(state, places):
+    """The remembered designs that are in no place (saved in another folder of this
+    computer): Home shows them with This computer, so none is lost. Newest first."""
+    return [
+        e for e in ordered(state) if e.get("path") and not place_of(resolve(e, places), places)[0]
+    ]
 
 
 # -- the files -------------------------------------------------------------------------
