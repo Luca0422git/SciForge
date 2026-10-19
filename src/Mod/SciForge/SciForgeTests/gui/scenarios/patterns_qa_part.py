@@ -26,6 +26,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import widget_input as w
 
@@ -136,7 +137,7 @@ def p8_hole_taken():
 
 def p8_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def p8_values():
@@ -289,7 +290,7 @@ def p10_box():
 
 def p10_axis():
     h.fit()
-    h.click(V(0, -12, 0))
+    pl.click_on_plane(V(0, -12, 0))
 
 
 def p10_press_e():

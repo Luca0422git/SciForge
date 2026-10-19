@@ -474,11 +474,11 @@ def p10_e():
 
 def p10_first():
     h.fit()
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
 
 
 def p10_second():
-    h.click(V(25, 5, 0))
+    pl.click_on_plane(V(25, 5, 0))
 
 
 def p10_height():

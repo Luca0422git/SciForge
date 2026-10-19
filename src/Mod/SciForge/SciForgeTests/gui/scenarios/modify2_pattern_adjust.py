@@ -146,7 +146,7 @@ def hole_sketch():
 
 
 def click_bottom():
-    h.click(V(40, 3, 0))
+    pl.click_on_plane(V(40, 3, 0))
 
 
 def draw_hole():
@@ -211,7 +211,7 @@ def click_direction_box():
 
 def click_x_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def three():

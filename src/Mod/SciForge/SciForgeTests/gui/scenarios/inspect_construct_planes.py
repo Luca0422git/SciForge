@@ -24,6 +24,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 
 V = App.Vector
@@ -198,7 +199,7 @@ def mid_click_top():
 def mid_click_xy():
     p = s.construct_panel()
     h.check("first plane taken, second box blue", p is not None and p.boxes[1].button.isChecked())
-    h.click(V(6, -6, 0))
+    pl.click_on_plane(V(6, -6, 0))
 
 
 def mid_preview():

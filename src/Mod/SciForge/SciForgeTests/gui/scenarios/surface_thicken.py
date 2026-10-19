@@ -24,6 +24,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import surface_steps as st
 from SciForgeTests.gui import timeline_input as tl
 
@@ -94,7 +95,7 @@ def thicken_menu():
 def click_wall_a():
     p = st.panel()
     h.check("Thicken dialog open", p is not None and p.kind == "thicken")
-    h.click(V(15, 0, 5))
+    pl.click_on_plane(V(15, 0, 5))
 
 
 def click_wall_b():

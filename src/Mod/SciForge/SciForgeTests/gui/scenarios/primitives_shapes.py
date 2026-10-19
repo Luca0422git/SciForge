@@ -93,7 +93,7 @@ def cylinder_xy():
 def cylinder_centre():
     p = cyl_panel()
     h.check("XY picked, placing", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def cylinder_hover():
@@ -108,7 +108,7 @@ def cylinder_live():
         "the diameter follows the mouse", near(p.diameter.value(), 10.0, 1e-3), p.diameter.value()
     )
     h.shot("1-cylinder-circle")
-    h.click(V(10, 0, 0))
+    pl.click_on_plane(V(10, 0, 0))
 
 
 cylinder_live.wait_ms = 1200
@@ -203,7 +203,7 @@ def cylinder_edited():
 
 # -- a second Cylinder from the selected top face: a hole ---------------------------------------------
 def select_top():
-    h.click(V(0, -5, 15))
+    pl.click_on_plane(V(0, -5, 15))
 
 
 def cylinder2_start():
@@ -214,11 +214,11 @@ def cylinder2_start():
 def cylinder2_centre():
     p = cyl_panel()
     h.check("the face is taken at once", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 15))
+    pl.click_on_plane(V(0, 0, 15))
 
 
 def cylinder2_circle():
-    h.click(V(3, 0, 15))
+    pl.click_on_plane(V(3, 0, 15))
 
 
 cylinder2_circle.wait_ms = 1200
@@ -255,7 +255,7 @@ def cylinder2_kept():
 
 # -- Sphere from the selected top face -----------------------------------------------------------------
 def select_top_2():
-    h.click(V(6, 0, 15))
+    pl.click_on_plane(V(6, 0, 15))
 
 
 def sphere_start():
@@ -265,7 +265,7 @@ def sphere_start():
 def sphere_centre():
     p = sphere_panel()
     h.check("Sphere: the face is taken at once", p is not None and p.state == "place")
-    h.click(V(6, 0, 15))
+    pl.click_on_plane(V(6, 0, 15))
 
 
 sphere_centre.wait_ms = 1200
@@ -351,11 +351,11 @@ def torus_xy():
 def torus_centre():
     p = torus_panel()
     h.check("placing the torus", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def torus_circle():
-    h.click(V(20, 0, 0))
+    pl.click_on_plane(V(20, 0, 0))
 
 
 torus_circle.wait_ms = 1500
@@ -460,7 +460,7 @@ def sphere_cancel_plane():
 
 
 def sphere_cancel_centre():
-    h.click(V(0, -6, 15))
+    pl.click_on_plane(V(0, -6, 15))
 
 
 sphere_cancel_centre.wait_ms = 1200

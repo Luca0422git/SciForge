@@ -100,13 +100,13 @@ def p1_ok_refused():
     h.check("P1 OK with nothing picked keeps the dialog", p is not None)
     h.check("P1 it says what to pick", "plane" in msg(p).lower(), msg(p))
     h.check("P1 no pop-up", not h.popups(), h.popups())
-    h.click(V(15, -15, 0))  # the XY square
+    pl.click_on_plane(V(15, -15, 0))  # the XY square
 
 
 def p1_corner():
     p = pi.panel("BoxPanel")
     h.check("P1 placing", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def p1_rubber():
@@ -140,7 +140,7 @@ def p1_plane():
 
 
 def p1_corner_again():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def p1_type_length():
@@ -165,7 +165,7 @@ def p1_length_kept():
         p.length.value(),
     )
     h.check("P1 the width follows the mouse", near(p.width.value(), 15.0, 1e-3), p.width.value())
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
 
 
 p1_length_kept.wait_ms = 1500
@@ -377,11 +377,11 @@ def p3_plane():
 
 
 def p3_c1():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def p3_c2():
-    h.click(V(20, 10, 0))
+    pl.click_on_plane(V(20, 10, 0))
 
 
 p3_c2.wait_ms = 1500
@@ -467,7 +467,7 @@ def p4_plane():
 def p4_centre():
     p = pi.panel("SpherePanel")
     h.check("P4 placing the sphere", p is not None and p.state == "place", p and p.state)
-    h.click(V(-7.5, 25, 0))
+    pl.click_on_plane(V(-7.5, 25, 0))
 
 
 p4_centre.wait_ms = 1500

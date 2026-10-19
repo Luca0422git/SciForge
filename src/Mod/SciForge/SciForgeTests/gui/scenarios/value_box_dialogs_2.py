@@ -107,7 +107,7 @@ def revolve_click_z():
     p = ri.panel()
     h.check("Revolve: the sketch's profile is taken", p is not None and len(p.profiles) == 1)
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def revolve_angle_type():
@@ -159,12 +159,12 @@ def box_plane():
 
 def box_first_corner():
     pi.hover(V(5, 5, 0))
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def box_second_corner():
     pi.hover(V(30, 10, 0))
-    h.click(V(40, 20, 0))
+    pl.click_on_plane(V(40, 20, 0))
 
 
 box_second_corner.wait_ms = 1200
@@ -218,7 +218,7 @@ def pattern_click_direction_box():
 
 def pattern_click_x_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def pattern_box():

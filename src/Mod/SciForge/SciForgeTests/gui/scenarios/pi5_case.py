@@ -904,7 +904,7 @@ def pattern_direction_box():
 
 def pattern_y_axis():
     look("iso")
-    h.click(V(0, -12, 0))
+    pl.click_on_plane(V(0, -12, 0))
 
 
 def pattern_values():

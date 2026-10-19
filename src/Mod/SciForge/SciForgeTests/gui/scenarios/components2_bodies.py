@@ -295,7 +295,7 @@ def g_copy_open():
 
 
 def g_copy_pick():
-    h.click(V(110, 0, 10))
+    pl.click_on_plane(V(110, 0, 10))
 
 
 def g_copy_values():

@@ -19,6 +19,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import surface_steps as st
 
 V = App.Vector
@@ -91,7 +92,7 @@ def trim_waits():
 
 
 def click_xy_plane():
-    h.click(V(15, -15, 0))  # the XY square, nothing behind it there
+    pl.click_on_plane(V(15, -15, 0))  # the XY square, nothing behind it there
 
 
 def cells_shown():
@@ -111,7 +112,7 @@ def cells_shown():
 
 
 def click_lower_cell():
-    h.click(V(15, 0, -5))
+    pl.click_on_plane(V(15, 0, -5))
 
 
 def lower_gone():
@@ -205,7 +206,7 @@ def click_wall1_left():
     h.check("the cells can be clicked", p is not None and p.cells is not None)
     # high on wall 1's left piece: lower down, wall 2 stands in front of it (seen from the
     # front-right-top)
-    h.click(V(2, 0, 8))
+    pl.click_on_plane(V(2, 0, 8))
 
 
 def click_wall2_front():
@@ -288,7 +289,7 @@ def trim_nothing_cut():
 
 
 def click_yz_plane():
-    h.click(V(0, -15, 15))
+    pl.click_on_plane(V(0, -15, 15))
 
 
 def refused():

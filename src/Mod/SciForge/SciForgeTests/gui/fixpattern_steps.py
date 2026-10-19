@@ -204,11 +204,11 @@ def pattern_steps(kind):
     def reference():
         h.fit()
         if kind == "rectangular":
-            h.click(V(-12, 0, 0))  # the X axis, left of the part
+            pl.click_on_plane(V(-12, 0, 0))  # the X axis, left of the part
         elif kind == "circular":
-            h.click(V(0, 0, 22))  # the Z axis, above the part
+            pl.click_on_plane(V(0, 0, 22))  # the Z axis, above the part
         elif kind == "path":
-            h.click(V(160, -10, 0))  # the sketch line
+            pl.click_on_plane(V(160, -10, 0))  # the sketch line
         else:
             h.click(V(40, 15, 5))  # the box's right face
 

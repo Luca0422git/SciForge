@@ -114,11 +114,11 @@ def m1_plane():
 def m1_centre():
     p = coil_panel()
     h.check("M1 placing on XY", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def m1_circle():
-    h.click(V(10, 0, 0))
+    pl.click_on_plane(V(10, 0, 0))
 
 
 m1_circle.wait_ms = 2000
@@ -371,11 +371,11 @@ def m2_plane():
 def m2_corner1():
     p = pi.panel("BoxPanel")
     h.check("M2 placing the box", p is not None and p.state == "place", p and p.state)
-    h.click(V(30, -20, 0))
+    pl.click_on_plane(V(30, -20, 0))
 
 
 def m2_corner2():
-    h.click(V(70, 20, 0))
+    pl.click_on_plane(V(70, 20, 0))
 
 
 m2_corner2.wait_ms = 1500
@@ -420,11 +420,11 @@ def m2_torus():
 def m2_centre():
     p = torus_panel()
     h.check("M2 the face is taken at once", p is not None and p.state == "place", p and p.state)
-    h.click(V(50, 0, 10))
+    pl.click_on_plane(V(50, 0, 10))
 
 
 def m2_inner():
-    h.click(V(58, 0, 10))
+    pl.click_on_plane(V(58, 0, 10))
 
 
 m2_inner.wait_ms = 2000

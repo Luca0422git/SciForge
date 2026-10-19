@@ -33,6 +33,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import timeline_input as ti
 
@@ -198,7 +199,7 @@ def x_origin():
     h.fit()
     p = s.construct_panel()
     h.check("X the origin's dot is drawn to click", p is not None and "point" in p.overlays)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def x_corner():

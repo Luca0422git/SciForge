@@ -175,12 +175,12 @@ def p10_e():
 
 
 def p10_ring():
-    h.click(V(3, 3, 0))
+    pl.click_on_plane(V(3, 3, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p11_both():
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
 
 
 def p11_block_ok():
@@ -216,7 +216,7 @@ def p10_regions_offered():
     h.view().viewTop()
     h.view().fitAll()
     QtWidgets.QApplication.processEvents()
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 

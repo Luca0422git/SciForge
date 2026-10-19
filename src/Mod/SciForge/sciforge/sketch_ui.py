@@ -126,6 +126,7 @@ class PlanePicker:
             _show_round_origin(view, self.placement.Base, origin_look.EMPTY_SPAN)
         self.size = self._screen_side()
         self.facing = self._facing()
+        self.corners = self._places()
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -168,7 +169,7 @@ class PlanePicker:
         """(u, v) of the middle of the square of `role` in its plane (mm from the origin)."""
         from . import origin_look
 
-        u0, v0 = origin_look.square_corner(role, self.size, self.box, self.facing.get(role, 1.0))
+        u0, v0 = self.corners.get(role) or origin_look.square_corner(role, self.size, self.box)
         h = self.half_of(role)
         return u0 + h, v0 + h
 
@@ -248,17 +249,61 @@ class PlanePicker:
         except Exception:
             return {}
 
+    def _places(self, side=None):
+        """{role: (u, v)} of each square's corner nearest the origin: the first of
+        origin_look.square_corners that shows on the screen, not under a dialog (beside
+        the part the free side can be under the dialog on the right)."""
+        from . import origin_look
+
+        side = self.size if side is None else side
+        found = {}
+        for role in self.objects:
+            options = origin_look.square_corners(role, side, self.box, self.facing.get(role, 1.0))
+            found[role] = options[0]
+            if len(options) > 1:
+                for corner in options:
+                    if self._shows(role, corner, side):
+                        found[role] = corner
+                        break
+        return found
+
+    def _shows(self, role, corner, side):
+        """True if the middle of a square at `corner` is in the 3D view with room round it
+        and no widget (a dialog) lies over it."""
+        try:
+            from . import taskui
+
+            widget = taskui.view_widget()
+            if widget is None:
+                return True
+            base, _normal, u, v = self._frame(role)
+            middle = base + u * (corner[0] + side / 2.0) + v * (corner[1] + side / 2.0)
+            x, y = self.view.getPointOnViewport(middle)
+            ratio = widget.devicePixelRatioF() or 1.0
+            qx, qy = float(x) / ratio, widget.height() - float(y) / ratio
+            margin = 40
+            if not (margin < qx < widget.width() - margin and margin < qy < widget.height() - margin):
+                return False
+            spot = widget.mapToGlobal(QtCore.QPoint(int(qx), int(qy)))
+            return QtWidgets.QApplication.widgetAt(spot) is widget
+        except Exception:
+            return True
+
     def _follow_zoom(self):
-        """Keep the squares their size on the screen when the view zooms, and beside the
-        part on the side facing the viewer when it turns (a timer)."""
+        """Keep the squares their size on the screen when the view zooms, beside the part
+        on the side facing the viewer when it turns, and where they show (a timer)."""
         try:
             if not self.callbacks:
                 return
             side = self._screen_side()
             facing = self._facing() if self.box is not None else self.facing
-            if abs(side - self.size) > 0.08 * self.size or facing != self.facing:
+            resized = abs(side - self.size) > 0.08 * self.size
+            if resized or facing != self.facing:
                 self.facing = facing
-                self.resize(side)
+            corners = self._places(side if resized else self.size) if self.box is not None else self.corners
+            if resized or corners != self.corners:
+                self.corners = corners
+                self.resize(side if resized else self.size)
         except Exception as exc:
             warn("origin planes: %s" % exc)
 

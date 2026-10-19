@@ -20,6 +20,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -62,11 +63,11 @@ def new_design():
 
 
 def i_plane():
-    h.click(V(15, -15, 0))
+    pl.click_on_plane(V(15, -15, 0))
 
 
 def i_centre():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 i_centre.wait_ms = 2000
@@ -121,11 +122,11 @@ def r_plane():
         "the last gear's values come back (Fusion's sample remembers)",
         p is not None and p.type.currentText() == "Internal",
     )
-    h.click(V(40, -40, 0))  # a corner of the XY square the parts leave free
+    pl.click_on_plane(V(40, -40, 0))  # a corner of the XY square the parts leave free
 
 
 def r_centre():
-    h.click(V(0, 80, 0))
+    pl.click_on_plane(V(0, 80, 0))
 
 
 r_centre.wait_ms = 2000
@@ -205,7 +206,7 @@ def r_kept():
 
 # -- 3. English, symmetric, on XZ -----------------------------------------------------------------
 def e_plane():
-    h.click(V(10, 0, 30))  # the XZ square above the parts: nothing in front of it there
+    pl.click_on_plane(V(10, 0, 30))  # the XZ square above the parts: nothing in front of it there
 
 
 def e_centre():
@@ -215,7 +216,7 @@ def e_centre():
         p is not None and p.plane_field.button.text() == "XZ Plane",
         p and p.plane_field.button.text(),
     )
-    h.click(V(120, 0, 0))
+    pl.click_on_plane(V(120, 0, 0))
 
 
 e_centre.wait_ms = 2000

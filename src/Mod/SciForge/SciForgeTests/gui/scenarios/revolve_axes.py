@@ -365,7 +365,7 @@ def construction_drawn():
     )
     h.fit()
     h.shot("4-construction-line")
-    h.click(V(70, 0, 11))
+    pl.click_on_plane(V(70, 0, 11))
 
 
 def ring_axis():

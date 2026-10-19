@@ -333,7 +333,7 @@ def t3_waits():
 
 def t3_click_line():
     h.fit()
-    h.click(V(15, -25, 0))
+    pl.click_on_plane(V(15, -25, 0))
 
 
 def t3_both_lines():
@@ -341,13 +341,13 @@ def t3_both_lines():
     names = sorted(sub for obj, sub in p.profiles) if p is not None else []
     h.check("T3 one click takes the whole L (2 curves)", names == ["Edge1", "Edge2"], names)
     h.check("T3 said in words", "2 curves" in p.profile.text(), p.profile.text())
-    h.click(V(25, -20, 0))  # the other line: drops the L
+    pl.click_on_plane(V(25, -20, 0))  # the other line: drops the L
 
 
 def t3_dropped():
     p = xpanel()
     h.check("T3 a click on a picked line drops it", p is not None and not p.profiles, p.profiles)
-    h.click(V(10, -25, 0))
+    pl.click_on_plane(V(10, -25, 0))
 
 
 def t3_again():

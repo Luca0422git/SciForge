@@ -208,7 +208,7 @@ def p2_nothing_built():
     h.check("options alone build nothing", p.target is None and not extrudes())
     h.check("no message yet", "⚠" not in p.message.text(), p.message.text())
     h.fit()
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
 
 
 def p2_ring_symmetric():
@@ -258,13 +258,13 @@ def p2_after_esc():
 def p2_disc_first():
     p = xpanel()
     h.check("a new Extrude starts with the defaults", p.direction.currentText() == "One Side")
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
 
 
 def p2_then_ring():
     p = xpanel()
     h.check("disc picked", len(p.profiles) == 1, p.profiles)
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 

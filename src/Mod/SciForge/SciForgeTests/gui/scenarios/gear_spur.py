@@ -21,6 +21,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -85,7 +86,7 @@ def gear_waits():
 
 
 def gear_xy():
-    h.click(V(15, -15, 0))
+    pl.click_on_plane(V(15, -15, 0))
 
 
 def gear_hover():
@@ -102,7 +103,7 @@ def gear_outline():
     count = p.placer.coords.point.getNum()
     h.check("the gear's outline follows the mouse", count > 24 * 10, count)
     h.check("still no gear", p.target is None)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 gear_outline.wait_ms = 800
@@ -270,11 +271,11 @@ def cancel_start():
 
 
 def cancel_plane():
-    h.click(V(34, -34, 0))  # a corner of the XY square the parts leave free
+    pl.click_on_plane(V(34, -34, 0))  # a corner of the XY square the parts leave free
 
 
 def cancel_centre():
-    h.click(V(80, 0, 0))
+    pl.click_on_plane(V(80, 0, 0))
 
 
 cancel_centre.wait_ms = 2000

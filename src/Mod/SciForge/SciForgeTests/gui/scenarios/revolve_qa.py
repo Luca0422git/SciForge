@@ -204,7 +204,7 @@ def p1_background():
 def p1_enter_refused():
     h.check("P1 Enter without an axis keeps the dialog", dialog_open() and panel() is not None)
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def p1_axis():
@@ -292,7 +292,7 @@ def p2_open():
     h.check("P2 two areas: nothing is taken by itself", not p.profiles, p.profiles)
     h.check("P2 the Profile box waits", p.active == "profiles", p.active)
     h.fit()
-    h.click(V(0, 0, 32))  # the axis first, while the Profile box waits
+    pl.click_on_plane(V(0, 0, 32))  # the axis first, while the Profile box waits
 
 
 def _near_area(faces):  # the area touching the Z axis
@@ -457,7 +457,7 @@ def p4_axis():
     p = panel()
     h.check("P4 the new sketch's area is taken", p is not None and len(p.profiles) == 1)
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def added(angle):

@@ -145,7 +145,7 @@ def p18_sketch():
 
 
 def p18_face():
-    h.click(V(30, 0, 5))  # the front face
+    pl.click_on_plane(V(30, 0, 5))  # the front face
 
 
 def p18_rect():
@@ -312,7 +312,7 @@ def p20_revolve():
 
 def p20_face():
     h.fit()
-    h.click(V(30, 0, 4))  # the front face, away from the round
+    pl.click_on_plane(V(30, 0, 4))  # the front face, away from the round
 
 
 def p20_edge():

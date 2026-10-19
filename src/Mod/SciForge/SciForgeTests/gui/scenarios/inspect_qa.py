@@ -173,7 +173,7 @@ def l_not_stuck():
         s.close(p.values["distance"], st["l_value"]),
         (p.values["distance"], st["l_value"]),
     )
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def l_front_picked():

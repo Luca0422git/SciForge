@@ -136,7 +136,7 @@ def click_tube_alone():
         "the Tools box waits, planes drawn",
         p is not None and p.active == "tools" and p.planes is not None,
     )
-    h.click(V(0, -5, 5))
+    pl.click_on_plane(V(0, -5, 5))
 
 
 def nothing_closed():
@@ -221,11 +221,11 @@ def boundary_fill():
 
 
 def click_tube():
-    h.click(V(0, -5, 5))
+    pl.click_on_plane(V(0, -5, 5))
 
 
 def click_cone():
-    h.click(V(9, 0, -0.75))
+    pl.click_on_plane(V(9, 0, -0.75))
 
 
 def click_xy():
@@ -257,7 +257,7 @@ def tools_picked():
 
 def click_inner():
     h.shot("1-cells")
-    h.click(V(0, 0, 3))
+    pl.click_on_plane(V(0, 0, 3))
 
 
 def inner_filled():

@@ -473,7 +473,7 @@ def p7_left():
     h.check("P7 the back picked", p is not None and len(p.names()) == 3, p and p.names())
     h.view().viewLeft()
     h.view().fitAll()
-    h.click(V(0, 15, 5))
+    pl.click_on_plane(V(0, 15, 5))
 
 
 def p7_type():

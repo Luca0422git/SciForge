@@ -79,7 +79,7 @@ def f1_box():
 
 def f1_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def f1_quantity_gap():
@@ -137,7 +137,7 @@ def f2_xy():
 
 def f2_front():
     h.fit()
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def f2_gap():

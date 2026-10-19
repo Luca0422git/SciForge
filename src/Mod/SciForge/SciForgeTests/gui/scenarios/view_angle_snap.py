@@ -33,6 +33,7 @@ from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import revolve_input as ri
 
 V = App.Vector
@@ -121,7 +122,7 @@ def sketch():
 
 
 def pick_xz():
-    h.click(V(12, 0, 8))
+    pl.click_on_plane(V(12, 0, 8))
 
 
 def draw():
@@ -143,7 +144,7 @@ def revolve():
 
 def click_z():
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def type_60():
@@ -376,7 +377,7 @@ def g_sketch():
 
 
 def g_pick_xy():
-    h.click(V(5, -5, 0))  # inside the XY square (20 mm: the part is 20 mm)
+    pl.click_on_plane(V(5, -5, 0))  # inside the XY square (20 mm: the part is 20 mm)
 
 
 def g_draw():
@@ -397,7 +398,7 @@ def g_extrude():
 
 
 def g_profile():
-    h.click(V(35, -30, 0))
+    pl.click_on_plane(V(35, -30, 0))
 
 
 def g_distance():

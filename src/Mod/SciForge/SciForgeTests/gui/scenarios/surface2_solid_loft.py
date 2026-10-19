@@ -239,7 +239,7 @@ def m1_slot1():
         p is not None and p.merge.isEnabled() and not p.merge.isChecked(),
     )
     h.fit()
-    h.click(V(-5, 2, 0))
+    pl.click_on_plane(V(-5, 2, 0))
 
 
 def m1_slot2():

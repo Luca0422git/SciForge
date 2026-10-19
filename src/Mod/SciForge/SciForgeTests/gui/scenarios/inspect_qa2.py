@@ -34,6 +34,7 @@ from PySide import QtCore, QtWidgets
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import timeline_input as ti
 
@@ -464,7 +465,7 @@ def n_start():
 
 def n_front():
     h.fit()
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def n_on_front():

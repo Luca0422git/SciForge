@@ -21,6 +21,7 @@ import FreeCADGui as Gui
 from PySide import QtCore
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import surface_steps as st
 from SciForgeTests.gui import versions_input as vi
 
@@ -87,7 +88,7 @@ def offset():
 
 
 def offset_a():
-    h.click(V(15, 0, 5))
+    pl.click_on_plane(V(15, 0, 5))
 
 
 def offset_b():
@@ -117,7 +118,7 @@ def thicken():
 
 
 def thicken_a():
-    h.click(V(15, 0, 5))
+    pl.click_on_plane(V(15, 0, 5))
 
 
 def thicken_b():

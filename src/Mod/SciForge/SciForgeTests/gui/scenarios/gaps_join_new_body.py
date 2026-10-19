@@ -210,7 +210,7 @@ def j2_axis():
     p = rpanel()
     h.check("J2 Revolve open, the rectangle taken", p is not None and len(p.profiles) == 1)
     h.fit()
-    h.click(V(63, -20, 0))
+    pl.click_on_plane(V(63, -20, 0))
 
 
 def j2_auto():

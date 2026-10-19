@@ -172,7 +172,7 @@ def d_extrude():
 
 
 def d_click_region():
-    h.click(V(-10, -6, 0))
+    pl.click_on_plane(V(-10, -6, 0))
 
 
 def d_distance():

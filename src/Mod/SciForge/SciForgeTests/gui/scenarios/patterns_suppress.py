@@ -17,6 +17,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import widget_input as w
 
@@ -50,7 +51,7 @@ def box():
 
 def axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def quantity():
@@ -185,7 +186,7 @@ def circ_box():
 def circ_axis():
     h.fit()
     # The Z axis above the box's front-left corner area: the hole (8, 8) turns about it.
-    h.click(V(0, 0, 18))
+    pl.click_on_plane(V(0, 0, 18))
 
 
 def circ_tick():

@@ -309,7 +309,7 @@ def pocket_e_again():
 def pocket_pick_again():
     p = panel()
     if p is not None and not p.profiles:
-        h.click(V(2.5, 0, 20))  # click inside the square's area
+        pl.click_on_plane(V(2.5, 0, 20))  # click inside the square's area
 
 
 def pocket_to():

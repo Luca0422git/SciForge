@@ -22,6 +22,7 @@ from PySide6 import QtTest
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 
 V = App.Vector
@@ -59,7 +60,7 @@ def box():
 
 def axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def quantity_n():

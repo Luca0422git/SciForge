@@ -120,7 +120,7 @@ def click_z_axis():
     if p is None:
         return
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def cylinder():
@@ -326,7 +326,7 @@ def click_z_2():
     h.fit()
     p = panel()
     h.check("the new sketch's profile is taken", p is not None and len(p.profiles) == 1)
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def groove_preview():
@@ -365,7 +365,7 @@ def revolve_3():
 
 def click_z_3():
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def ok_groove():

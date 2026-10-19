@@ -89,25 +89,38 @@ def square_size(extent, empty=False):
     return max(MIN_SIZE, SIZE_FACTOR * float(extent))
 
 
-def square_corner(key, side, box=None, viewer_u=1.0):
-    """(u, v) of the corner of the `key` square ("XY", "XZ", "YZ") nearest the origin: in
-    the + quarter of the plane, GAP x side away from both axes, as Fusion draws them. When
-    the part's outline in that plane (box: xmin, xmax, ymin, ymax, zmin, zmax in the body's
-    axes, or None) covers that spot, the square moves along u to beside the part, where
-    nothing is in front of it or behind it, or it could not be clicked (a face of the part
-    takes a click over it). Along u, not up: a square above the part has the part's top
-    face behind it from the usual views; to the side of the part that faces the viewer
-    (`viewer_u`: the u part of the direction to the camera), not behind the part."""
+def square_corners(key, side, box=None, viewer_u=1.0):
+    """The places (u, v) of the corner of the `key` square ("XY", "XZ", "YZ") nearest the
+    origin, best first. Without a part in the way: the + quarter of the plane, GAP x side
+    away from both axes, as Fusion draws them. When the part's outline in that plane (box:
+    xmin, xmax, ymin, ymax, zmin, zmax in the body's axes, or None) covers that spot, the
+    square moves out beside the part, where nothing is in front of it or behind it, or it
+    could not be clicked (a face of the part takes a click over it): along u first, on the
+    side that faces the viewer (`viewer_u`: the u part of the direction to the camera),
+    then the other side; for XY also along v (the picker takes the first that shows on
+    the screen, not under a dialog). Not up along v for XZ / YZ: a square above the part
+    has the part's top face behind it from the usual views."""
     gap = GAP * side
     u0 = v0 = gap
     axes = PLANE_AXES.get(plane_key(key))
-    if box is not None and axes is not None:
-        iu, iv = axes
-        ulo, uhi = float(box[2 * iu]), float(box[2 * iu + 1])
-        vlo, vhi = float(box[2 * iv]), float(box[2 * iv + 1])
-        if ulo < u0 + side and uhi > u0 and vlo < v0 + side and vhi > v0:
-            u0 = uhi + CLEAR * side if viewer_u >= 0.0 else ulo - CLEAR * side - side
-    return u0, v0
+    if box is None or axes is None:
+        return [(u0, v0)]
+    iu, iv = axes
+    ulo, uhi = float(box[2 * iu]), float(box[2 * iu + 1])
+    vlo, vhi = float(box[2 * iv]), float(box[2 * iv + 1])
+    if not (ulo < u0 + side and uhi > u0 and vlo < v0 + side and vhi > v0):
+        return [(u0, v0)]
+    clear = CLEAR * side
+    beyond, before = (uhi + clear, v0), (ulo - clear - side, v0)
+    found = [beyond, before] if viewer_u >= 0.0 else [before, beyond]
+    if plane_key(key) == "XY":
+        found += [(u0, vhi + clear), (u0, vlo - clear - side)]
+    return found
+
+
+def square_corner(key, side, box=None, viewer_u=1.0):
+    """The best of square_corners."""
+    return square_corners(key, side, box, viewer_u)[0]
 
 
 def part_size(box=None):

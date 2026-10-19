@@ -33,6 +33,7 @@ from PySide import QtCore
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import direct_steps as d
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as t
 
@@ -196,14 +197,14 @@ def d_squares():
         spots,
     )
     h.shot("D-squares-with-part")
-    h.click(V(-12, 0, 5))
+    pl.click_on_plane(V(-12, 0, 5))
 
 
 def d_outside():
     sk = h.in_sketch()
     h.check("a click beside the smaller square picks nothing", sk is None, sk)
     h.check("Create Sketch still waits", picker() is not None)
-    h.click(V(8, 0, -8))
+    pl.click_on_plane(V(8, 0, -8))
 
 
 def d_on_xz():
@@ -330,7 +331,7 @@ def i_squares():
     p = check_squares("in a component", 20.0)
     if p is not None:
         h.check("squares at the component's origin", same(p.placement.Base, (40, 0, 0)))
-        h.click(V(45, -5, 0))
+        pl.click_on_plane(V(45, -5, 0))
 
 
 def i_on_xy():

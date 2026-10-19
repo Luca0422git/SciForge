@@ -437,7 +437,7 @@ def p9_e():
 
 
 def p9_ring():
-    h.click(V(3, 3, 0))
+    pl.click_on_plane(V(3, 3, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 

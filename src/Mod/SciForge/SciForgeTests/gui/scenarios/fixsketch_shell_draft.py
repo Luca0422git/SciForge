@@ -46,7 +46,7 @@ def shell():
 
 
 def shell_pick():
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def shell_ok():
@@ -75,7 +75,7 @@ def draft_plane():
 
 def draft_face():
     h.fit()
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def draft_angle():

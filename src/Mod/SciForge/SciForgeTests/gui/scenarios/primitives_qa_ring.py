@@ -37,6 +37,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 from SciForgeTests.gui import timeline_input as ti
 
@@ -97,7 +98,7 @@ def new_design():
 
 
 def r1_xy():
-    h.click(V(15, -15, 0))
+    pl.click_on_plane(V(15, -15, 0))
 
 
 def r1_draw():

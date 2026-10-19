@@ -204,7 +204,7 @@ def p6_sketch():
 
 
 def p6_face():
-    h.click(V(30, 0, 7))  # the front face
+    pl.click_on_plane(V(30, 0, 7))  # the front face
 
 
 def p6_rect():
@@ -424,7 +424,7 @@ def p7_revolve3():
 
 def p7_face3():
     h.fit()
-    h.click(V(25, 0, 7))  # the front face
+    pl.click_on_plane(V(25, 0, 7))  # the front face
 
 
 def p7_edge3():
@@ -451,7 +451,7 @@ def p7_cancelled():
 
 def p7_face4():
     h.fit()
-    h.click(V(25, 0, 7))
+    pl.click_on_plane(V(25, 0, 7))
 
 
 def p7_edge4():
