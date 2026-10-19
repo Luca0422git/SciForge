@@ -52,45 +52,14 @@ class Size(unittest.TestCase):
 
 class SquareCorner(unittest.TestCase):
     """Fusion's layout: each square in the + quarter of its plane, a little off the axes,
-    moved beside a part that would hide it."""
+    and it stays there (Luca 2026-10-19: squares that moved round the part confused)."""
 
-    def test_empty_design_plus_quarter_with_a_gap(self):
+    def test_plus_quarter_with_a_gap(self):
         for key in ("XY", "XZ_Plane", "YZ"):
             self.assertEqual(look.square_corner(key, 20.0), (2.0, 2.0))
 
-    def test_part_away_from_the_square_leaves_it(self):
-        # all at negative x and y: nothing of it in any + quarter
-        box = (-50, -10, -40, -5, -30, -1)
-        for key in ("XY", "XZ", "YZ"):
-            self.assertEqual(look.square_corner(key, 20.0, box), (2.0, 2.0))
-
-    def test_part_centred_on_the_origin_moves_it_beside(self):
-        # a 40 x 30 x 10 box centred in x and y, on XY: each square goes past the part
-        # along u by a quarter of its side
-        box = (-20, 20, -15, 15, 0, 10)
-        self.assertEqual(look.square_corner("XY", 20.0, box), (25.0, 2.0))  # past x = 20
-        self.assertEqual(look.square_corner("XZ", 20.0, box), (25.0, 2.0))  # past x = 20
-        self.assertEqual(look.square_corner("YZ", 20.0, box), (20.0, 2.0))  # past y = 15
-
-    def test_moved_to_the_side_facing_the_viewer(self):
-        # seen from -y (the usual front view), YZ goes in front of the part, not behind it
-        box = (-30, 30, -20, 20, 0, 20)
-        self.assertEqual(look.square_corner("YZ", 20.0, box, viewer_u=-1.0), (-45.0, 2.0))
-        self.assertEqual(look.square_corner("YZ", 20.0, box, viewer_u=1.0), (25.0, 2.0))
-
-    def test_part_above_the_plane_keeps_the_square_first(self):
-        # a wall z 20..30 over the XY quarter does not meet XY: the usual place comes
-        # first (the picker checks the screen), the places round it after
-        box = (-50, 50, -1, 1, 20, 30)
-        self.assertEqual(look.square_corner("XY", 20.0, box), (2.0, 2.0))
-        self.assertGreater(len(look.square_corners("XY", 20.0, box)), 1)
-
-    def test_part_below_the_plane_keeps_the_vertical_squares(self):
-        # all under z = 0: XZ and YZ (their + quarters are above z = 0) stay put
-        box = (-20, 20, -15, 15, -10, -1)
-        self.assertEqual(look.square_corner("XZ", 20.0, box), (2.0, 2.0))
-        # nor does it meet XY (all under z = 0): the usual place first, the screen decides
-        self.assertEqual(look.square_corner("XY", 20.0, box), (2.0, 2.0))
+    def test_the_gap_follows_the_side(self):
+        self.assertEqual(look.square_corner("XY", 50.0), (5.0, 5.0))
 
     def test_part_size_for_the_pick_tolerances(self):
         self.assertAlmostEqual(look.part_size((0, 100, 0, 60, 0, 20)), 60.0)

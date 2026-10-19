@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Aim at an origin square the way a person does: at a spot of it that shows and that no
-part covers (the squares are small, in the + quarter of their plane and moved beside a part
-that would hide them, so a fixed point can miss them). Kept outside scenarios/ because every file there is run as a scenario."""
+part covers (the squares are small and stay in the + quarter of their plane, like Fusion's,
+so a fixed point can miss them; a hidden one is picked in the browser). Kept outside scenarios/ because every file there is run as a scenario."""
 
 import FreeCAD as App
 from PySide import QtWidgets
@@ -73,13 +73,32 @@ def square_point(role="XY_Plane", picker_=None):
 
 
 def click_square(role="XY_Plane"):
-    """Click the `role` square where it shows (a check fails when it shows nowhere)."""
+    """Click the `role` square where it shows; when the part hides it (the squares stay at
+    the origin, like Fusion's), pick the plane in the browser instead, as a person does:
+    open the Origin folder and click the plane's row ("XY")."""
     point = square_point(role)
-    if not h.check("the %s square shows somewhere to click" % role, point is not None):
-        h.shot("no-%s-square" % role)
-        return None
+    if point is None:
+        return pick_in_browser(role)
     h.click(point)
     return point
+
+
+def pick_in_browser(role="XY_Plane"):
+    """Open the browser's Origin folder and click the `role` plane's row."""
+    from SciForgeTests.gui import bodies_steps, shell_draft_steps
+
+    label = role.split("_")[0]  # "XY_Plane" -> "XY" (browser_core.ORIGIN_LABELS)
+    tree = bodies_steps.browser()
+    if tree is not None and tree.row(label) is None:
+        shell_draft_steps.expand_browser_row("Origin")
+    found = tree is not None and tree.row(label) is not None
+    if not h.check("the %s plane in the browser" % role, found, tree and tree.labels()):
+        h.shot("no-%s-square" % role)
+        return None
+    tree.scrollToItem(tree.row(label))  # the folder has just opened: bring the row in view
+    QtWidgets.QApplication.processEvents()
+    bodies_steps.click_browser_row(label)
+    return label
 
 
 def click_on_plane(point):

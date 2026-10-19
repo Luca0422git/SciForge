@@ -12,8 +12,9 @@ green blue of all the rest of the axis and make it smaller. and label them." So:
 - a small screen label ("XY", "X") so you can tell which is which;
 - small squares like Fusion's (Luca, 2026-10-18, with a picture of Fusion's): each in the
   + quarter of its plane, a little away from the origin, about SCREEN_SIDE pixels on the
-  screen whatever the zoom; a square a part would hide is moved out beside the part
-  (square_corner). They were 1.3 x, then 0.6 x the part, centred on the origin.
+  screen whatever the zoom, and they stay there like Fusion's (square_corner). They were
+  1.3 x, then 0.6 x the part, centred on the origin; for a day they moved out beside a
+  part that hid them, which Luca found confusing (2026-10-19).
 
 Colours and sizes are plain data (unit-tested); the coin nodes are built only on demand.
 """
@@ -33,10 +34,6 @@ MIN_SIZE = 20.0  # mm: a tiny part still gets squares you can click
 EMPTY_SIZE = 100.0  # mm: an empty design is framed on the room 100 mm squares took
 SCREEN_SIDE = 120.0  # px: side of an origin square on the screen (Guess, from Luca's picture)
 GAP = 0.1  # the gap between the origin and a square (fraction of its side)
-CLEAR = 0.25  # the gap between a part and a square moved beside it (fraction of its side)
-# the box axes (0 x, 1 y, 2 z) along a square's u and v (sketch_ui.PLANES)
-PLANE_AXES = {"XY": (0, 1), "XZ": (0, 2), "YZ": (1, 2)}
-NORMAL_AXIS = {"XY": 2, "XZ": 1, "YZ": 0}  # the box axis a plane faces
 LABEL_POINTS = 16.0
 LABEL_INSET = 0.86  # the label sits this far out towards a corner (fraction of the half size)
 
@@ -89,44 +86,13 @@ def square_size(extent, empty=False):
     return max(MIN_SIZE, SIZE_FACTOR * float(extent))
 
 
-def square_corners(key, side, box=None, viewer_u=1.0):
-    """The places (u, v) of the corner of the `key` square ("XY", "XZ", "YZ") nearest the
-    origin, best first. Without a part in the way: the + quarter of the plane, GAP x side
-    away from both axes, as Fusion draws them. When the part's outline in that plane (box:
-    xmin, xmax, ymin, ymax, zmin, zmax in the body's axes, or None) covers that spot, the
-    square moves out beside the part, where nothing is in front of it or behind it, or it
-    could not be clicked (a face of the part takes a click over it): along u first, on the
-    side that faces the viewer (`viewer_u`: the u part of the direction to the camera),
-    then the other side, then along v; then the same further out. The picker takes the
-    first that shows on the screen: no dialog over it, nothing of the part in front of it
-    or behind it (above a part its top face is often behind a square, so that one is
-    usually skipped there)."""
+def square_corner(key, side):
+    """(u, v) of the corner of the `key` square ("XY", "XZ", "YZ") nearest the origin: in the
+    + quarter of its plane, GAP x side away from both axes, as Fusion draws them. The
+    squares stay there whatever the part and the view (Luca 2026-10-19: "Fixed, like
+    Fusion"); a square a part hides is picked in the browser, or the view is turned."""
     gap = GAP * side
-    u0 = v0 = gap
-    axes = PLANE_AXES.get(plane_key(key))
-    if box is None or axes is None:
-        return [(u0, v0)]
-    iu, iv = axes
-    ulo, uhi = float(box[2 * iu]), float(box[2 * iu + 1])
-    vlo, vhi = float(box[2 * iv]), float(box[2 * iv + 1])
-    found = []
-    for ring in range(4):  # beside the part, then further out (a big surface hides more)
-        clear = CLEAR * side + ring * side
-        beyond, before = (uhi + clear, v0), (ulo - clear - side, v0)
-        found += [beyond, before] if viewer_u >= 0.0 else [before, beyond]
-        found += [(u0, vhi + clear), (u0, vlo - clear - side)]
-    n = NORMAL_AXIS[plane_key(key)]
-    reaches = float(box[2 * n]) <= 1e-6 and float(box[2 * n + 1]) >= -1e-6  # the part meets the plane
-    if reaches and ulo < u0 + side and uhi > u0 and vlo < v0 + side and vhi > v0:
-        return found  # the part covers the + quarter in the plane
-    # free in the plane, but the part can still be in front of it or behind it on the
-    # screen: the picker falls back on the places round the part then
-    return [(u0, v0)] + found
-
-
-def square_corner(key, side, box=None, viewer_u=1.0):
-    """The best of square_corners."""
-    return square_corners(key, side, box, viewer_u)[0]
+    return (gap, gap)
 
 
 def part_size(box=None):

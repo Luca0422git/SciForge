@@ -37,6 +37,12 @@ def origin_planes(body):
     return found
 
 
+def _same_place(a, b, tol=1e-6):
+    """True if two origin features lie at the same place in the design."""
+    pa, pb = a.getGlobalPlacement(), b.getGlobalPlacement()
+    return (pa.Base - pb.Base).Length <= tol and pa.Rotation.isSame(pb.Rotation, tol)
+
+
 def local_box(body, shapes=None):
     """(xmin, xmax, ymin, ymax, zmin, zmax) of `shapes` (default: the body's) in the body's
     own axes (its shape is placed in its parent's frame)."""
@@ -93,9 +99,10 @@ class PlanePicker:
     """The three origin squares; on_pick(plane object) when one is clicked. Each has the
     colour of the axis it faces (XY blue, XZ green, YZ red), a label, and lights up under
     the mouse (origin_look). Small like Fusion's: in the + quarter of its plane, about
-    origin_look.SCREEN_SIDE pixels whatever the zoom (redrawn when the zoom changes), moved
-    beside a part that would hide it (origin_look.square_corner). LIVE lists the pickers
-    on show (tests aim at their squares)."""
+    origin_look.SCREEN_SIDE pixels whatever the zoom (redrawn when the zoom changes), and
+    they stay there like Fusion's, whatever the part (origin_look.square_corner): a square
+    a part hides is picked in the browser. LIVE lists the pickers on show (tests aim at
+    their squares)."""
 
     LIVE = []
 
@@ -105,12 +112,14 @@ class PlanePicker:
         from . import origin_look
 
         self.view = view
+        self.doc_name = body.Document.Name
+        self.gl = taskui.view_widget()  # its window: gone when the view or design closes
         self.on_pick = on_pick
         self.on_face = on_face  # (feature, "FaceN"): a flat face behind a clicked edge
         self.placement = body.getGlobalPlacement()
         self.objects = origin_planes(body)
         self.center = None  # the part's centre: the labels go to the corners away from it
-        self.box = design_box(body)  # the design's box in the body's axes: squares go beside
+        self.box = design_box(body)  # the design's box in the body's axes (pick tolerances)
         # no solid in the whole design (design_box falls back on the body's own box then)
         empty = (body.Shape.isNull() or not body.Shape.Solids) and self.box == local_box(body)
         if empty:
@@ -126,8 +135,6 @@ class PlanePicker:
             view.viewIsometric()
             _show_round_origin(view, self.placement, origin_look.EMPTY_SIZE)
         self.size = self._screen_side()
-        self.facing = self._facing()
-        self.corners = self._places()
         self.root = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style = coin.SoPickStyle.UNPICKABLE
@@ -146,6 +153,21 @@ class PlanePicker:
             ("SoLocation2Event", view.addEventCallback("SoLocation2Event", self._moved)),
         ]
         PlanePicker.LIVE.append(self)
+        # Fusion: an origin plane can also be picked in the browser (a part may hide its
+        # square, the squares do not move)
+        picker = self
+
+        class _BrowserPick:
+            def addSelection(self, doc, obj, sub, pnt):
+                if not sub:
+                    QtCore.QTimer.singleShot(0, lambda: picker._browser_pick(doc, obj))
+
+        self.browser_pick = _BrowserPick()
+        try:
+            Gui.Selection.addObserver(self.browser_pick)
+        except Exception as exc:
+            self.browser_pick = None
+            warn("origin planes: %s" % exc)
         self._zoom = None
         try:
             from .compat import QtCore
@@ -170,7 +192,7 @@ class PlanePicker:
         """(u, v) of the middle of the square of `role` in its plane (mm from the origin)."""
         from . import origin_look
 
-        u0, v0 = self.corners.get(role) or origin_look.square_corner(role, self.size, self.box)
+        u0, v0 = origin_look.square_corner(role, self.size)
         h = self.half_of(role)
         return u0 + h, v0 + h
 
@@ -237,99 +259,6 @@ class PlanePicker:
             pass
         return origin_look.square_size(0.0, True)
 
-    def _facing(self):
-        """{role: +1 or -1}: which way along each square's u the camera is (a square moved
-        beside the part goes to the side that faces the viewer)."""
-        try:
-            look = self.view.getViewDirection()
-            toward = self.placement.Rotation.inverted().multVec(
-                App.Vector(-look[0], -look[1], -look[2])
-            )
-            return {role: (1.0 if toward.dot(PLANES[role][1]) >= 0.0 else -1.0)
-                    for role in self.objects}
-        except Exception:
-            return {}
-
-    def _places(self, side=None):
-        """{role: (u, v)} of each square's corner nearest the origin: the first of
-        origin_look.square_corners that shows on the screen, not under a dialog (beside
-        the part the free side can be under the dialog on the right)."""
-        from . import origin_look
-
-        side = self.size if side is None else side
-        found = {}
-        for role in self.objects:
-            options = origin_look.square_corners(role, side, self.box, self.facing.get(role, 1.0))
-            found[role] = options[0]
-            if len(options) > 1 or self.box is not None:
-                for corner in options:
-                    if self._shows(role, corner, side):
-                        found[role] = corner
-                        break
-                else:
-                    found[role] = self._seen_corner(role, side) or options[0]
-        return found
-
-    def _seen_corner(self, role, side):
-        """(u, v) of a square of `role` that shows when the view looks away from the origin
-        (zoomed on a part far from it): on the part of its plane in view, nearest the
-        origin; None when the plane shows nowhere to click."""
-        from . import profile_pick
-
-        try:
-            base, normal, u, v = self._frame(role)
-            width, height = (int(n) for n in self.view.getSize())
-            _point, look = profile_pick.mouse_ray(self.view, (width // 2, height // 2))
-            if abs(App.Vector(*look).dot(normal)) < 0.2:
-                return None  # seen almost edge on: too thin to click
-            spots = []
-            for i in range(1, 10):
-                for j in range(1, 10):
-                    pixel = (int(width * i / 10.0), int(height * j / 10.0))
-                    hit = profile_pick.ray_plane(self.view, pixel, base, normal)
-                    if hit is None:
-                        continue
-                    local = hit[0] - base
-                    corner = (local.dot(u) - side / 2.0, local.dot(v) - side / 2.0)
-                    spots.append((local.Length, corner))
-            for _far, corner in sorted(spots):
-                if self._shows(role, corner, side):
-                    return corner
-        except Exception as exc:
-            warn("origin planes: %s" % exc)
-        return None
-
-    def _shows(self, role, corner, side):
-        """True if a square at `corner` can be clicked: its middle and four points round
-        it lie in the 3D view with room round them, no widget (a dialog) lies over them and
-        nothing of the part is there in front of it or behind it (a face of the part takes
-        the click over a see-through square)."""
-        try:
-            from . import taskui
-
-            widget = taskui.view_widget()
-            if widget is None:
-                return True
-            base, _normal, u, v = self._frame(role)
-            ratio = widget.devicePixelRatioF() or 1.0
-            margin = 30
-            for a, b in ((0.5, 0.5), (0.2, 0.2), (0.8, 0.2), (0.8, 0.8), (0.2, 0.8)):
-                spot = base + u * (corner[0] + a * side) + v * (corner[1] + b * side)
-                x, y = self.view.getPointOnViewport(spot)
-                qx, qy = float(x) / ratio, widget.height() - float(y) / ratio
-                if not (margin < qx < widget.width() - margin
-                        and margin < qy < widget.height() - margin):
-                    return False
-                where = widget.mapToGlobal(QtCore.QPoint(int(qx), int(qy)))
-                if QtWidgets.QApplication.widgetAt(where) is not widget:
-                    return False
-                info = self.view.getObjectInfo((int(round(float(x))), int(round(float(y)))))
-                if info and info.get("Object"):
-                    return False
-            return True
-        except Exception:
-            return True
-
     def _camera_key(self):
         """Where the camera is and how it looks (changes with every zoom, pan or turn)."""
         try:
@@ -345,24 +274,17 @@ class PlanePicker:
             return None
 
     def _follow_zoom(self):
-        """Keep the squares their size on the screen when the view zooms, beside the part
-        on the side facing the viewer when it turns, and where they show (a timer)."""
+        """Keep the squares their size on the screen when the view zooms (a timer)."""
         try:
-            if not self.callbacks:
+            if not self.callbacks or not self._alive():
                 return
             camera = self._camera_key()
             if camera is not None and camera == getattr(self, "_camera", None):
                 return  # the view has not moved
             self._camera = camera
             side = self._screen_side()
-            facing = self._facing() if self.box is not None else self.facing
-            resized = abs(side - self.size) > 0.08 * self.size
-            if resized or facing != self.facing:
-                self.facing = facing
-            corners = self._places(side if resized else self.size) if self.box is not None else self.corners
-            if resized or corners != self.corners:
-                self.corners = corners
-                self.resize(side if resized else self.size)
+            if abs(side - self.size) > 0.08 * self.size:
+                self.resize(side)
         except Exception as exc:
             warn("origin planes: %s" % exc)
 
@@ -564,9 +486,70 @@ class PlanePicker:
         except Exception as exc:
             warn("plane pick: %s" % exc)
 
-    def remove(self):
+    def _alive(self):
+        """False once the design or its 3D view has closed (the view must not be touched
+        then: FreeCAD crashes); the squares are dropped then."""
+        try:
+            import shiboken6
+
+            alive = self.doc_name in App.listDocuments() and (
+                self.gl is None or shiboken6.isValid(self.gl)
+            )
+        except Exception:
+            alive = False
+        if not alive:
+            self._drop()
+        return alive
+
+    def _drop(self):
+        """Forget the squares without touching the (closed) view."""
         if self in PlanePicker.LIVE:
             PlanePicker.LIVE.remove(self)
+        if getattr(self, "_zoom", None) is not None:
+            try:
+                self._zoom.stop()
+            except Exception:
+                pass
+            self._zoom = None
+        if getattr(self, "browser_pick", None) is not None:
+            try:
+                Gui.Selection.removeObserver(self.browser_pick)
+            except Exception:
+                pass
+            self.browser_pick = None
+        self.callbacks = []
+
+    def _browser_pick(self, doc_name, obj_name):
+        """An origin plane selected in the browser: as if its square were clicked. The
+        browser shows the component's origin; the squares are the body's, at the same
+        place (a plane there counts as the square's)."""
+        try:
+            if not self.callbacks or not self._alive():
+                return  # gone meanwhile (the command took the selection itself)
+            obj = App.getDocument(doc_name).getObject(obj_name)
+            role = getattr(obj, "Role", "") or ""
+            for key, plane in self.objects.items():
+                if plane is obj:
+                    self.on_pick(plane)
+                    return
+            for key, plane in self.objects.items():
+                if role.startswith(key) and _same_place(obj, plane):
+                    self.on_pick(plane)
+                    return
+        except Exception as exc:
+            warn("plane pick: %s" % exc)
+
+    def remove(self):
+        if not self._alive():
+            return  # the view has closed: _alive dropped the squares without touching it
+        if self in PlanePicker.LIVE:
+            PlanePicker.LIVE.remove(self)
+        if getattr(self, "browser_pick", None) is not None:
+            try:
+                Gui.Selection.removeObserver(self.browser_pick)
+            except Exception:
+                pass
+            self.browser_pick = None
         if getattr(self, "_zoom", None) is not None:
             try:
                 self._zoom.stop()

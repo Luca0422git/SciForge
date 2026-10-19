@@ -7,8 +7,9 @@ A  A new design, Create Sketch: the view shows the origin with room round it (no
    lies in the + quarter of its plane, a little off the axes; colours XY blue, XZ green, YZ
    red as before.
 B  Zoom in: the squares keep their size on the screen.
-C  Esc. A box 60 x 40 x 20 centred on the origin; Create Sketch: every square still shows
-   somewhere to click (moved beside the part); a click on the XZ square makes a sketch on XZ.
+C  Esc. A box 60 x 40 x 20 centred on the origin; Create Sketch: the squares stay at the
+   origin like Fusion's (Luca 2026-10-19: squares that moved round the part confused), also
+   after the view turns; XZ picked in the browser (Origin > XZ) makes a sketch on XZ.
 """
 
 import FreeCAD as App
@@ -97,11 +98,29 @@ def c_part():
     h.ribbon("Create Sketch")
 
 
-def c_beside():
+def at_origin(when):
+    """The squares sit where Fusion draws them: the + quarter, GAP x side off the axes."""
+    from sciforge import origin_look
+
+    p = pl.picker()
+    if not h.check("%s: the squares are on show" % when, p is not None):
+        return
     for role in ROLES:
-        h.check("%s still shows somewhere to click" % role, pl.square_point(role) is not None)
-    h.shot("C-beside-the-part")
-    pl.click_square("XZ_Plane")
+        mu, mv = p.middle_of(role)
+        want = (origin_look.GAP + 0.5) * p.size
+        h.check("%s: %s at the origin" % (when, role),
+                abs(mu - want) < 1e-6 and abs(mv - want) < 1e-6, (mu, mv, want))
+
+
+def c_fixed():
+    at_origin("over the part")
+    h.shot("C-squares-stay")
+    Gui.ActiveDocument.ActiveView.viewRear()
+
+
+def c_turned():
+    at_origin("view turned")
+    pl.pick_in_browser("XZ_Plane")
 
 
 def c_on_xz():
@@ -113,4 +132,7 @@ def c_on_xz():
         h.ribbon("Finish Sketch")
 
 
-h.run("origin_squares_small", [a_start, a_small, b_zoomed, c_part, c_beside, c_on_xz])
+c_fixed.wait_ms = 800  # the squares follow the view on a 250 ms timer
+
+
+h.run("origin_squares_small", [a_start, a_small, b_zoomed, c_part, c_fixed, c_turned, c_on_xz])
