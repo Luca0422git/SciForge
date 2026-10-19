@@ -1402,7 +1402,8 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 #### Tests
 - Unit 1526 OK; scenarios ai_chat (20), ai_bridge (43), home_screen (66), every timeline
-  scenario pass. Full sweep: see FULL_SWEEP_RESULT below.
+  scenario pass. Full sweep: all 380 scenarios PASS, base all passed (details in
+  the M2+M3 log below).
 
 ### Session log: Home, cloud and AI, M2 places + M3 AI connector (`sf/home-cloud-ai`, 2026-10-19)
 
@@ -1448,7 +1449,10 @@ by the time I wake up". M2 and M3 built; the brief says: after M3, ask Luca to m
 
 #### Tests
 - Unit 1463 OK; scenarios cloud_place, ai_bridge, home_screen, versions_*, polish2_*,
-  exchange2_link pass. Full sweep of all scenarios: FULL_SWEEP_RESULT
+  exchange2_link pass. Full sweep of all scenarios:
+  **all 380 scenarios PASS** on the final code (M0-M4, 2026-10-19 night, six lists two at a
+  time): misc_preferences failed once (its page list lacked M3's AI page: test updated, then
+  PASS 84). Base: unit 1526 OK, golden 432 pass + 2 known xfail, smoke, journey, restart.
 
 ### Session log: Home, cloud and AI, M1 the Home tab (branch `sf/home-cloud-ai`, 2026-10-19)
 
