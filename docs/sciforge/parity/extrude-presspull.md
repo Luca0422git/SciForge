@@ -6,6 +6,37 @@ negative taper narrows) and everyday Fusion behaviour. Implemented in
 `profile_pick.py` picking, `presspull_core.py` geometry, `presspull_ui.py` dialog, `preview.py`
 dialog helpers). Status: **built and tested with real clicks, not yet signed off by Luca**.
 
+## The drag arrow and the taper disc: one look, one screen size (branch `sf/arrows`, 2026-10-18)
+
+Luca: "can we streamline the drag arrows? ... SciForge has some janky looking arrows and
+sometimes they are oversized and sometimes they are tiny. It should be a consistant size. same
+thing for the angle dragger", with a picture of Fusion's Extrude on a cylinder's top face.
+Why they varied: Extrude sized its arrows from the profile (15 % of its diagonal, 4 to 30 mm),
+the other dialogs from the zoom at the moment the arrow was made (then not again when you
+zoomed), Move's manipulator from the bodies (0.45 x their size), and every tool had its own
+proportions (Coin's double-headed dragger, a ball with a cone, a curved band). Now one rule
+for all (`handle_look_core.py`, unit `test_handle_look_core`; Coin nodes in `handle_look.py`),
+drawn in pixels under FreeCAD's SoShapeScale so the size is right on every frame:
+
+| Fusion (Luca's picture) | SciForge | Source |
+|---|---|---|
+| A small solid blue arrow, short shaft and wide head, thin light outline, slightly shaded, about 30-35 px | 32 px from foot to tip (head 13 px long, 15 px wide; shaft 4.5 px wide), blue (0.16, 0.50, 0.93) shaded, a 1.5 px light outline | Luca's picture; exact pixels and colours **Guess** |
+| It stays the same size on the screen whatever the part or the zoom | Same: scenario `handle_size` (a 4 mm and a 400 mm block, Fit / zoomed out / in: the arrow's projected length, the blue pixels of the drawn arrow and the scale Coin drew it with all agree within 2-3 px / 2 %) | Luca's picture, everyday Fusion |
+| The arrow sits on the face / at the end of the extrusion and points the way it extrudes | It stands at the distance's point and points the way the distance goes (back down for a cut) | Luca's picture; the flip for a minus distance is a **Guess** |
+| A thin light line from the profile along the extrude direction | Same, from where the arrow starts (the profile, or the start offset) to its foot | Luca's picture |
+| The taper (angle) handle: a small white disc with a dark dot, on a thin light arc | A 19 px white disc facing the viewer, a 6 px dark dot, a thin grey rim, on a light arc 30 px each side of it | Luca's picture; sizes **Guess** |
+| Lighter under the mouse and while dragged | The arrow turns light blue, the disc light blue | **Guess** (usual Fusion feel) |
+| The value box beside the handle | Unchanged (`taskui.ValueBoxes`), now beside the small arrow / disc | as before |
+| Easy to grab | A press up to 4 px off the drawn arrow or disc still takes it: round the head, round the slim shaft, and just past the tip, never behind the foot (the foot stands on the profile, a pattern copy's dot or a face, which must stay clickable). What Coin picks is kept at the view's scale by the handle's poll from the moment it is made, so a press right after a new arrow or a zoom finds the arrow where it is drawn | **Guess** |
+
+The same look and size for every distance arrow and angle handle: Press Pull, Hole, Thread, Rib
+/ Web, Emboss, Fillet / Chamfer, the Patterns, Insert / Decal, the surface tools, Offset Plane
+and Plane at Angle, Section and the mesh plane cut, Shell / Scale (pickpanel), the primitives
+and Pipe, Revolve's angle (a disc on its arc), Draft's angle, Move / Copy's manipulator (its
+arrows 96 px from the centre, the turn handles' discs on their arcs, in the axis colours) and
+the 3D sketch's point arrows. What each handle drags, its snapping, value box and protractor
+are unchanged.
+
 ## Value boxes on the remaining handles (branch `sf/polish-2`, 2026-10-16)
 
 Fusion shows the value beside every manipulator while a command is open, and a number typed

@@ -137,17 +137,21 @@ class SelectionField:
 
 
 class AngleDragger(BoxCarrier):
-    """Fusion's taper handle: a short curved blue arrow at the end of the extrusion that
-    turns about the profile's edge (`pivot`, axis `axis`). At angle 0 it sits `radius`
-    along `zero` (the extrusion direction); positive angles turn it to axis x zero, the
-    outward side. Watched with a Qt timer like taskui.ArrowDragger (Coin's dragger
+    """Fusion's taper handle: a small white disc with a dark dot (handle_look) at the end of
+    the extrusion, riding a thin light arc, that turns about the profile's edge (`pivot`,
+    axis `axis`). At angle 0 it sits `radius` along `zero` (the extrusion direction);
+    positive angles turn it to axis x zero, the outward side. The disc keeps its size on
+    the screen whatever the part or the zoom; `width` is no longer used (it was the old
+    band's width in mm). Watched with a Qt timer like taskui.ArrowDragger (Coin's dragger
     callbacks run Python without its lock and crashed FreeCAD). It can carry a value box
-    (taskui.BoxCarrier): the box sits beside the curved band, clear of its heads."""
+    (taskui.BoxCarrier): the box sits beside the disc."""
 
     POLL_MS = 30
 
     def __init__(self, pivot, axis, zero, angle, radius, width, on_drag=None, on_release=None):
         from pivy import coin
+
+        from . import handle_look
 
         self.view = Gui.ActiveDocument.ActiveView
         self.pivot = App.Vector(pivot)
@@ -162,18 +166,51 @@ class AngleDragger(BoxCarrier):
         y = z.cross(x)
         matrix = App.Matrix(x.x, y.x, z.x, 0, x.y, y.y, z.y, 0, x.z, y.z, z.z, 0, 0, 0, 0, 1)
         place.rotation.setValue(*App.Placement(matrix).Rotation.Q)
-        self.root = taskui.on_top_root(coin, place)  # over the part and grabbable through it
+        # over the part and grabbable through it (in the 3D-annotation pass)
+        self.root = handle_look.top_root(coin, place, pickable=True)
         self.dragger = coin.SoRotateDiscDragger()
-        self.dragger.setPart("rotator", self._arc(coin, radius, width, (0.30, 0.62, 0.95)))
-        self.dragger.setPart("rotatorActive", self._arc(coin, radius, width, (0.55, 0.80, 1.0)))
+        # the thin arc the disc rides on (it turns with the disc), never picked
+        self.arc = handle_look.Line(coin)
+        self._arc_span = None
+        self.paints = []
+        self.scales = []  # the drawn discs' (SoShapeScale: right on every frame)
+        self.grabs = []  # what Coin picks: kept right by the poll (handle_look.PixelScale)
+        for part, hot in (("rotator", False), ("rotatorActive", True)):
+            sep = coin.SoSeparator()
+            arc = coin.SoSeparator()
+            unpickable = coin.SoPickStyle()
+            unpickable.style = coin.SoPickStyle.UNPICKABLE
+            arc.addChild(unpickable)
+            arc.addChild(self.arc.node)
+            sep.addChild(arc)
+            move = coin.SoTranslation()
+            move.translation.setValue(float(radius), 0.0, 0.0)
+            sep.addChild(move)
+            disc, paint = handle_look.disc_shape(coin)
+            paint.set(hot)
+            here = self.point_at(angle)
+            scale = handle_look.PixelScale(
+                coin, handle_look.unpickable(coin, disc), self.view, here
+            )
+            grab = handle_look.PixelScale(
+                coin, handle_look.disc_grab(coin), self.view, here, plain=True
+            )
+            sep.addChild(scale.node)
+            sep.addChild(grab.node)
+            self.dragger.setPart(part, sep)
+            self.paints.append(paint)
+            self.scales.append(scale)
+            self.grabs.append(grab)
         self.dragger.setPart("feedback", coin.SoSeparator())
         self.dragger.setPart("feedbackActive", coin.SoSeparator())
         self.root.addChild(self.dragger)
         self.set_angle(angle)
+        self._shape_arc()
         self.on_drag = on_drag
         self.on_release = on_release
         self._last = self.angle()
         self._was_active = False
+        self._hover = False
         self._wheel = protractor.Wheel()  # shown while the disc is held
         self.view.getSceneGraph().addChild(self.root)
         self._timer = QtCore.QTimer()
@@ -181,59 +218,35 @@ class AngleDragger(BoxCarrier):
         self._timer.timeout.connect(self._poll)
         self._timer.start()
 
-    @staticmethod
-    def _arc(coin, radius, width, color):
-        """A flat curved band with an arrow head at each end, around local +X."""
-        sep = coin.SoSeparator()
-        material = coin.SoMaterial()
-        material.diffuseColor.setValue(*color)
-        material.emissiveColor.setValue(color[0] * 0.5, color[1] * 0.5, color[2] * 0.5)
-        sep.addChild(material)
-        hints = coin.SoShapeHints()
-        hints.vertexOrdering = coin.SoShapeHints.COUNTERCLOCKWISE
-        hints.shapeType = coin.SoShapeHints.UNKNOWN_SHAPE_TYPE  # lit from both sides
-        sep.addChild(hints)
-        span = min(0.3, 1.6 * width / max(radius, 1e-6))  # half the arc, radians
-        steps = 12
-        points, index = [], []
-        r_in, r_out = radius - width * 0.25, radius + width * 0.25
+    def _shape_arc(self):
+        """The arc runs handle_look_core.ARC_REACH_PX on each side of the disc (redrawn
+        when the zoom changes it by more than a little)."""
+        from . import handle_look
+
+        span = handle_look.core.arc_span(
+            self.radius, handle_look.mm_per_px(self.view, self.point_at(self.angle()))
+        )
+        if self._arc_span is not None and abs(span - self._arc_span) < 0.02 * self._arc_span:
+            return
+        self._arc_span = span
+        steps = 24
+        r = float(self.radius)
+        points = []
         for i in range(steps + 1):
-            a = -span + 2.0 * span * i / steps
-            points.append((r_in * math.cos(a), r_in * math.sin(a), 0.0))
-            points.append((r_out * math.cos(a), r_out * math.sin(a), 0.0))
-        for i in range(steps):
-            a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2
-            index += [a, b, c, -1, a, c, d, -1]
-        for sign in (-1.0, 1.0):  # arrow heads, pointing along the arc
-            tip_angle = sign * (span + 1.2 * width / max(radius, 1e-6))
-            base_angle = sign * span
-            first = len(points)
-            points.append(
-                (
-                    (radius - width * 0.6) * math.cos(base_angle),
-                    (radius - width * 0.6) * math.sin(base_angle),
-                    0.0,
-                )
-            )
-            points.append(
-                (
-                    (radius + width * 0.6) * math.cos(base_angle),
-                    (radius + width * 0.6) * math.sin(base_angle),
-                    0.0,
-                )
-            )
-            points.append((radius * math.cos(tip_angle), radius * math.sin(tip_angle), 0.0))
-            index += [first, first + 1, first + 2, -1]
-        coords = coin.SoCoordinate3()
-        coords.point.setValues(0, len(points), points)
-        faces = coin.SoIndexedFaceSet()
-        faces.coordIndex.setValues(0, len(index), index)
-        sep.addChild(coords)
-        sep.addChild(faces)
-        return sep
+            a = math.radians(-span + 2.0 * span * i / steps)
+            points.append((r * math.cos(a), r * math.sin(a), 0.0))
+        self.arc.set_points(points)
+
+    def disc_mm(self):
+        """The disc's drawn radius (its rim included) in mm at its place now."""
+        from . import handle_look
+
+        return handle_look.mm(
+            self.view, self.point_at(self.angle()), handle_look.core.half_width_px("disc")
+        )
 
     def point_at(self, degrees):
-        """Where the band's middle is at `degrees` (3D)."""
+        """Where the disc's centre is at `degrees` (3D)."""
         out = self.zero.cross(self.axis) * -1.0  # local +Y: the outward side
         a = math.radians(degrees)
         return self.pivot + (self.zero * math.cos(a) + out * math.sin(a)) * self.radius
@@ -243,15 +256,15 @@ class AngleDragger(BoxCarrier):
         return self.point_at(self.angle()), self.point_at(degrees)
 
     def box_geometry(self):
-        """The curved band as the box sees it: its middle, the tips of its two heads (the
-        band is short, so the chord between them is where it lies) and the heads'
-        half-width. The box goes beside the band, along the extrusion."""
-        radius = max(self.radius, 1e-6)
-        span = min(0.3, 1.6 * self.width / radius) + 1.2 * self.width / radius  # radians
+        """The disc as the box sees it: its centre and its width across the arc (the box
+        goes beside it, along the extrusion)."""
         now = self.angle()
-        reach = math.degrees(span)
         anchor = self.point_at(now)
-        return anchor, self.point_at(now - reach), self.point_at(now + reach), 0.75 * self.width
+        out = self.zero.cross(self.axis) * -1.0
+        a = math.radians(now)
+        tangent = self.zero * -math.sin(a) + out * math.cos(a)
+        r = self.disc_mm()
+        return anchor, anchor - tangent * r, anchor + tangent * r, r
 
     def box_active(self):
         try:
@@ -317,9 +330,24 @@ class AngleDragger(BoxCarrier):
             if self._was_active and not active and self.on_release:
                 self.on_release(value)
             self._was_active = active
+            self._look(active)
             self.follow_box()
         except Exception as exc:
             warn("taper drag: %s" % exc)
+
+    def _look(self, active):
+        """Lighter under the mouse (the held disc is the dragger's own lit part); the arc
+        and, without SoShapeScale, the disc follow the zoom."""
+        from . import handle_look
+
+        point = self.point_at(self.angle())
+        hover = not active and handle_look.hovered(self.view, point, point, "disc")
+        if hover != self._hover:
+            self._hover = hover
+            self.paints[0].set(hover)
+        for scale in self.scales + self.grabs:
+            scale.update(self.view, point)
+        self._shape_arc()
 
     def remove(self):
         try:

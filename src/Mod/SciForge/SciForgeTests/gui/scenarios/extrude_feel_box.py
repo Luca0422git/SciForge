@@ -30,6 +30,7 @@ from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import blend_steps as bs
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from sciforge.handle_look_core import ARROW_PX
 from SciForgeTests.gui import viewcube_input as vc
 
 V = App.Vector
@@ -85,10 +86,10 @@ def close_if_open(what):
 
 # -- the arrow points sideways on the screen: its heads stay grabbable ----------------------------
 def head_pixels(dragger):
-    """{reach: (pixel, widget on top there)} along the + head (the cone runs from 1 to 1.5
-    arrow sizes from the middle; 1.25 is where a person aims)."""
+    """{share: (pixel, widget on top there)} along the head (the cone runs over the last
+    0.4 of the arrow from its foot; 0.75 is where a person aims)."""
     found = {}
-    for reach in (1.05, 1.25, 1.45):
+    for reach in (0.65, 0.75, 0.95):
         pos = h.screen_point(a.arrow_point(dragger, reach))
         found[reach] = ((pos.x(), pos.y()), a.top_name(pos))
     return found
@@ -103,7 +104,7 @@ def clear_of_dialog(what, panel):
 
     def under_dialog():
         found = []
-        for reach in (-1.5, -1.0, 0.0, 1.0, 1.25, 1.5, 1.7):
+        for reach in (0.0, 0.25, 0.5, 0.75, 0.9, 1.0, 1.15):
             pos = h.screen_point(a.arrow_point(dragger, reach))
             name = a.top_name(pos)
             if name not in ("3D view", a.BOX_NAME):
@@ -122,11 +123,12 @@ def check_heads(what, panel):
     dragger = panel.dragger
     if not h.check("%s: an arrow" % what, dragger is not None):
         return
-    tail = h.screen_point(a.arrow_point(dragger, -1.5))
-    tip = h.screen_point(a.arrow_point(dragger, 1.5))
+    tail = h.screen_point(a.arrow_point(dragger, 0.0))
+    tip = h.screen_point(a.arrow_point(dragger, 1.0))
+    # (the arrow is handle_look_core.ARROW_PX long on the screen: its whole length sideways)
     h.check(
         "%s: in the Front view the arrow points sideways" % what,
-        abs(tip.x() - tail.x()) > 40 and abs(tip.y() - tail.y()) < 6,
+        abs(tip.x() - tail.x()) > 0.85 * ARROW_PX and abs(tip.y() - tail.y()) < 6,
         ((tail.x(), tail.y()), (tip.x(), tip.y())),
     )
     boxes = a.value_boxes(arrows_only=True)
@@ -156,8 +158,8 @@ def grab_head(panel, key):
     and drag 60 px further along the arrow, the button held."""
     dragger = panel.dragger
     s[key + "_before"] = dragger.distance()
-    start = h.screen_point(a.arrow_point(dragger, 1.25))
-    tip = h.screen_point(a.arrow_point(dragger, 1.5))
+    start = h.screen_point(a.head_point(dragger))
+    tip = h.screen_point(a.arrow_point(dragger, 1.0))
     step = 1 if tip.x() >= start.x() else -1
     end = QtCore.QPoint(start.x() + 60 * step, start.y())
     s[key] = drag = a.HeldDrag(start, end, moves=20, every_ms=20, hold_ms=200)

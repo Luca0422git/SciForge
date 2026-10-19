@@ -4,8 +4,9 @@ an arrow to drag"). Only real input.
 
 Box 40 x 30 x 10, Chamfer, click the top-back edge in the iso view: the arrow lies on the
 face toward the viewer (the top), not on the back face behind the part. A 400 x 300 x 100
-part: after Fit the arrow spans at least 50 px between its tips (it was 16 px: the size was
-capped at 8 mm). A 4 x 3 x 1 part: the arrow's tips stay inside the view and within 2 part
+part: after Fit the arrow has the same screen size as on the box (handle_look_core.ARROW_PX,
+shorter only where the view foreshortens it; it was 16 px once: the size was capped at 8 mm).
+A 4 x 3 x 1 part: the arrow's tips stay inside the view and within 2 part
 heights of where the chamfer's size puts the arrow (the 1.5 mm minimum put it off the part).
 """
 import FreeCAD as App
@@ -14,6 +15,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from sciforge.handle_look_core import ARROW_PX
 
 V = App.Vector
 s = {}
@@ -42,7 +44,7 @@ def arrow_face_normal(spot):
 
 
 def tips(dragger):
-    return a.arrow_point(dragger, -1.5), a.arrow_point(dragger, 1.5)
+    return a.arrow_ends(dragger)
 
 
 def span_px(dragger):
@@ -84,8 +86,10 @@ def arrow_toward_viewer():
         (tuple(round(c, 3) for c in normal), tuple(round(c, 3) for c in toward())),
     )
     h.check("the arrow is in view", all(inside_view(q) for q in tips(dragger)))
-    h.check("the arrow is big enough to grab (over 50 px)", span_px(dragger) >= 50.0,
-            span_px(dragger))
+    # Luca 2026-10-18: the arrows are Fusion's small ones, one size on the screen
+    # (handle_look_core.ARROW_PX); lying on a face seen in the iso view it shows shorter
+    h.check("the arrow has its screen size (ARROW_PX, foreshortened at most to 3/4)",
+            0.75 * ARROW_PX <= span_px(dragger) <= ARROW_PX + 2.0, span_px(dragger))
     h.shot("1-top-back-edge")
     h.task_button("Cancel")
 
@@ -111,8 +115,8 @@ def big_arrow_visible():
         h.check("an arrow on the 400 mm part", False)
         return
     dragger = arrow[0]
-    h.check("on a 400 mm part the arrow spans at least 50 px (was 16 px)",
-            span_px(dragger) >= 50.0, span_px(dragger))
+    h.check("on a 400 mm part the arrow has the same screen size (was 16 px once)",
+            0.75 * ARROW_PX <= span_px(dragger) <= ARROW_PX + 2.0, span_px(dragger))
     h.check("and not more than a quarter of the view", span_px(dragger) <= h.gl_widget().width() / 4,
             span_px(dragger))
     h.shot("2-big-part")
@@ -149,7 +153,8 @@ def tiny_arrow_on_the_part():
             far <= limit, (far, limit))
     h.check("the arrow's tips are inside the view", all(inside_view(q) for q in tips(dragger)),
             [(h.screen_point(q).x(), h.screen_point(q).y()) for q in tips(dragger)])
-    h.check("still big enough to grab (over 30 px)", span_px(dragger) >= 30.0, span_px(dragger))
+    h.check("and the same screen size on the 4 mm part",
+            0.75 * ARROW_PX <= span_px(dragger) <= ARROW_PX + 2.0, span_px(dragger))
     h.shot("3-tiny-part")
     h.task_button("Cancel")
 

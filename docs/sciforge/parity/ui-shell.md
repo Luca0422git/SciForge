@@ -134,6 +134,22 @@ Luca's reports after the CI #131 quick update:
 Not built: the sketch's own Rotate (FreeCAD's `Sketcher_Rotate`, which snaps with Ctrl) keeps
 FreeCAD's behaviour; the 45-degree snap of sketch lines is the sketch area's (sf/sketch-3).
 
+## Drag handles: one look and one screen size (2026-10-18, branch `sf/arrows`)
+
+Every drag handle in SciForge is drawn by `handle_look.py` with the sizes and colours of
+`handle_look_core.py` (unit `test_handle_look_core`), in pixels under FreeCAD's SoShapeScale,
+in FreeCAD's 3D-annotation pass (over the part, with its own depth so a cone never shows its
+far side through its near side). Details and the Fusion picture they follow: parity
+`extrude-presspull.md`, "The drag arrow and the taper disc".
+
+| Handle | Fusion | SciForge | Source |
+|---|---|---|---|
+| Distance arrow (Extrude, Press Pull, Hole, Fillet, Offset Plane, Section, Shell, primitives ...) | Small blue arrow, light outline, one screen size | 32 px, blue, 1.5 px light outline, lighter when hot | Luca's picture; sizes **Guess** |
+| Angle handle (taper, Revolve, Draft, Plane at Angle, Section, Emboss, patterns, Insert / Decal turn) | Small white disc with a dark dot on a thin light arc | 19 px disc facing the viewer, dark dot, grey rim; light arc | Luca's picture; sizes **Guess** |
+| A point slid along a path (Plane Along Path, Sweep / Pipe distance) | (a ball) | 14 px blue ball, light outline | **Guess** |
+| Move / Copy manipulator | Axis-coloured arrows and turn handles, one screen size | Arrows 96 px from the centre in X red / Y green / Z blue, turn arcs at 0.6 of that with an axis-coloured disc; yellow when hot | **Guess** (Fusion's triad, sizes guessed) |
+| Size on the screen | The same whatever the part or the zoom | Same (scenario `handle_size`) | Luca |
+
 ## Value fields: a formula of the wrong kind (2026-10-14, gaps work)
 
 Fusion's formulas carry units and a field takes only its own kind: a length parameter typed

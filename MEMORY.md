@@ -1372,6 +1372,26 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Session log
 
+### 2026-10-18/19: Drag arrows and angle handles (branch `sf/arrows`, merged into develop 2026-10-19)
+- Luca: "streamline the drag arrows ... consistent size ... same thing for the angle dragger"
+  (Fusion picture). Every distance arrow and angle handle has one Fusion-like look and one
+  size on the screen whatever the zoom (`handle_look.py`, `handle_look_core.py`; extrude,
+  move, revolve, primitives, handles3d, pattern, pipe, sketch3d, hole). Scenario
+  `handle_size`, unit `test_handle_look_core`. Parity: `extrude-presspull.md`, `ui-shell.md`.
+- FreeCAD fact: `SoShapeScale` sets its scale only when it draws, so a handle made just before
+  a click (or after a Fit) is picked at 1 px = 1 mm, a huge invisible grab that swallows the
+  next click. The drawn arrow / disc is unpickable; an invisible grab shape scaled from the
+  camera by the handle itself (`PixelScale(plain=True)`, `unpickable()`, `disc_grab()`) takes
+  the click. The grab follows the drawn arrow (`handle_look_core.grab_parts`: wide at the
+  head, slim along the shaft, nothing behind the foot).
+- Hole's centre dot is a real handle now (`BoxCarrier`); it used to work only because the old
+  long depth arrow reached it.
+- `arrow_box_core.REACH / HEAD` describe Coin's old double-headed arrow; kept only for
+  `ArrowValueBox.place()` and `handle_size()`.
+- Tests: held drags take 2.5-2.9 s on a busy machine; the harness now waits for any
+  `arrow_input.HeldDrag` still running (`harness.BUSY`, at most 20 s, then 1 s to settle).
+- Open: Luca to confirm the arrow choices (flip for minus, hover colour).
+
 ### 2026-10-18: Hardware library (branch `sf/hardware`, merged into develop 2026-10-19)
 - INSERT > Hardware...: ISO screws (socket, button, countersunk), nuts, washers, heat-set
   inserts and round magnets as their own components, with the matching hole (clearance +
