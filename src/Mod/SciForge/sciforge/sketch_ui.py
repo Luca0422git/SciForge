@@ -135,11 +135,12 @@ class PlanePicker:
             view.viewIsometric()
             _show_round_origin(view, self.placement, origin_look.EMPTY_SIZE)
         self.size = self._screen_side()
-        self.root = coin.SoSeparator()
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        self.root.addChild(pick)
-        self.root.addChild(coin.SoPolygonOffset())
+        # drawn over the part, in the layer the drag arrows use (Luca 2026-10-19: the squares
+        # z-fought with faces lying in their planes): never pickable, clicks go by where
+        # the squares are on the screen (plane_at)
+        from . import handle_look
+
+        self.root = handle_look.top_root(coin)
         self.squares = coin.SoSeparator()
         self.root.addChild(self.squares)
         self.materials = {}
@@ -462,16 +463,18 @@ class PlanePicker:
 
     def _moved(self, info):
         try:
-            role = None
-            if not self._geometry_at(info["Position"]):
-                role = self.plane_at(info["Position"])
-            self.light(role)
+            self.light(self.plane_at(info["Position"]))  # drawn on top: a square wins
         except Exception as exc:
             warn("plane hover: %s" % exc)
 
     def _button(self, info):
         try:
             if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
+                return
+            role = self.plane_at(info["Position"])
+            if role is not None:  # the squares are drawn over the part: what you see wins
+                plane = self.objects[role]
+                QtCore.QTimer.singleShot(0, lambda: self._take_square(plane))
                 return
             if self._geometry_at(info["Position"]):
                 under = self.view.getObjectInfo(tuple(info["Position"])) or {}
@@ -480,9 +483,17 @@ class PlanePicker:
                     if face is not None and self.on_face is not None:
                         self.on_face(face)
                 return  # a face of the part: the selection observer takes it
-            role = self.plane_at(info["Position"])
-            if role is not None:
-                self.on_pick(self.objects[role])
+        except Exception as exc:
+            warn("plane pick: %s" % exc)
+
+    def _take_square(self, plane):
+        """A square was clicked: its plane, not the face behind it that FreeCAD selected
+        with the same click."""
+        try:
+            if not self.callbacks or not self._alive():
+                return
+            Gui.Selection.clearSelection()
+            self.on_pick(plane)
         except Exception as exc:
             warn("plane pick: %s" % exc)
 
