@@ -687,8 +687,19 @@ class TimelineWidget(QtWidgets.QWidget):
         return None
 
     def marker(self):
+        # The marker of the latest rebuild: the old row's widgets wait for deleteLater,
+        # which Qt runs only back in the event loop that asked for it, so during a busy
+        # moment they are still children here and the first marker found could be the
+        # old one (the view then "followed" to where the marker had been).
+        current = getattr(self, "_current_marker", None)
+        if current is not None:
+            try:
+                if self._row.indexOf(current) >= 0:
+                    return current
+            except RuntimeError:
+                pass  # deleted
         for w in self._inner.findChildren(QtWidgets.QFrame):
-            if w.property("role") == "marker":
+            if w.property("role") == "marker" and not w.isHidden():
                 return w
         return None
 
@@ -790,6 +801,11 @@ class TimelineWidget(QtWidgets.QWidget):
         try:
             marker = self.marker()
             if marker is not None:
+                # The row's new positions first: Qt lays it out later, by a queued event;
+                # when that came after this timer (a busy moment, a long design), the view
+                # scrolled to where the marker had been and stayed there.
+                QtWidgets.QApplication.sendPostedEvents(self._inner, QtCore.QEvent.LayoutRequest)
+                self._row.activate()
                 self._scroll.ensureWidgetVisible(marker, 60, 0)
         except RuntimeError:
             pass  # rebuilt meanwhile
@@ -824,6 +840,7 @@ class TimelineWidget(QtWidgets.QWidget):
     def _make_marker(self):
         marker = _Marker(self)
         marker.setFixedSize(8, ICON + 8)
+        self._current_marker = marker
         return marker
 
     # -- selection -----------------------------------------------------------------

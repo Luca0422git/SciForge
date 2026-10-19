@@ -69,3 +69,43 @@ against a fake bridge), `test_ai_installers.py`, `test_ai_ops_layout.py`.
 3. Gemini CLI: Set up, `/mcp` lists sciforge.
 4. The screenshot tool's picture shows the part (in the sandbox, without a graphics card,
    the off-screen picture left an empty frame on the 3D view: look whether it does on a PC).
+
+## M4: the chat panel inside SciForge
+
+The same 16 tools, but the person chats inside SciForge with their own API key: no other app
+needed. Fusion's own assistant is Autodesk's; here the person picks the AI.
+
+Implemented in `src/Mod/SciForge/sciforge/`:
+- `ai/providers/`: one adapter per API (Anthropic Messages, OpenAI Responses, Google Gemini,
+  any OpenAI-compatible server such as Ollama or LM Studio), each with its one default model
+  and its models list from the provider's models endpoint.
+- `ai/chat_core.py`: the conversation loop (the model asks for tools, SciForge answers,
+  repeat until the model answers in words; at most 25 requests per message; Stop).
+- `secrets_store.py`: keys kept for this user (Windows: DPAPI, encrypted for the Windows
+  account; macOS Keychain; Linux Secret Service or a file only the owner can read).
+- `ai/chat_ui.py`: the panel (right dock). File > **AI Chat**, Home's **Open chat panel**.
+
+| What | SciForge |
+|---|---|
+| Pick the AI | Claude (Anthropic), ChatGPT (OpenAI), Gemini (Google), Local or other (an address such as `http://localhost:11434/v1`; **List** asks the server for its models). |
+| Key | Pasted once, **Save key** keeps it (encrypted on Windows); never written to the log or the Report view. A key the provider refuses is said in words ("the key was not accepted"). |
+| Cost and privacy | The panel says plainly: API use is billed by the provider per use, separately from a chat subscription; the design's data and screenshots go to that provider; the local option is free and private. |
+| Building | Every step the AI makes is one Undo step, as with AI apps. No "Allow this AI app?" question: the person typing is the one asking. The rest of the bridge's rules hold (busy while a dialog is open, overwriting a file asks). |
+| Stop | Stops after the current step; the steps made stay in the timeline. |
+| Answers | Shown whole when they arrive (not streamed word by word yet). |
+
+Tests: scenario `ai_chat.py` (a fake OpenAI-compatible server inside the test: List shows
+its model, "make a 40 x 30 x 10 box" builds the box in two Undo steps, a model that never
+stops is stopped with Stop, a Claude key saved, read back, never logged, removed); unit tests
+`test_ai_providers.py` (each adapter against recorded answers), `test_ai_chat_core.py`
+(the loop with a scripted model), `test_secrets_store.py`.
+
+Not verified: the OpenAI default model name (`providers/openai.py`) and Gemini's exact
+error words; the real services were not called from the sandbox.
+
+### To check on a real PC (M4)
+
+1. File > AI Chat > Claude, paste an Anthropic API key, Save key, ask for the 40 x 30 x 10
+   box with 3 mm rounded edges: the steps appear, Undo removes them one by one.
+2. The same with ChatGPT and Gemini keys, and with Ollama (`ollama pull qwen3:8b`, then
+   Local or other, `http://localhost:11434/v1`, List).
