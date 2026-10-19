@@ -42,7 +42,8 @@ Unavailable items are greyed out. Separators group related commands.
   solids with a light-blue acted-on face, thin light sketch strokes with blue points, red
   constraint glyphs, green "create" badge), drawn from scratch. No Autodesk artwork (outline 2.5).
 - Omitted on purpose: Create Form (sculpt, out of scope), Create PCB (electronics, out of scope),
-  McMaster-Carr / manufacturer / TraceParts inserts (cloud catalogues), CONFIGURE group.
+  McMaster-Carr / manufacturer / TraceParts inserts (cloud catalogues; INSERT > Hardware... is
+  SciForge's offline library of standard hardware instead, parity/hardware.md), CONFIGURE group.
 - Tabs not shown: SHEET METAL, PLASTIC, MANAGE. Out of scope; Luca confirmed he does not need
   them for now (2026-10-09).
 - Commands SciForge does not have yet appear greyed out with "Not available in SciForge yet",

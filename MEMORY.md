@@ -1372,6 +1372,14 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Session log
 
+### 2026-10-18: Hardware library (branch `sf/hardware`, merged into develop 2026-10-19)
+- INSERT > Hardware...: ISO screws (socket, button, countersunk), nuts, washers, heat-set
+  inserts and round magnets as their own components, with the matching hole (clearance +
+  counterbore / countersink, insert hole, magnet pocket) as one undo step; editable from the
+  timeline. Full notes: `docs/sciforge/sessions/hardware.md`; spec, sources and guesses:
+  `docs/sciforge/parity/hardware.md`.
+- Open: Luca to confirm the heat-set insert sizes (a Guess set M2-M5) and magnet sizes.
+
 ### 2026-10-18: Send to Slicer (branch `sf/slicer`, merged into develop 2026-10-19)
 - Research (Autodesk help "3D print a design" and support / forum pages through search
   excerpts; the help site does not resolve from the sandbox): Fusion's 3D Print has
