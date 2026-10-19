@@ -305,7 +305,11 @@ def f_offset_plane():
 def f_squares():
     p = check_squares("Construct")
     if p is not None:
-        h.move(h.screen_point(V(5, -5, 0)))
+        # where the XY square shows (it stays in the + quarter, like Fusion's; V(5, -5, 0)
+        # was on it while the squares were big and centred on the origin)
+        point = pl.square_point("XY_Plane", p)
+        if h.check("Construct: the XY square shows", point is not None):
+            h.move(h.screen_point(point))
 
 
 def f_lit():
