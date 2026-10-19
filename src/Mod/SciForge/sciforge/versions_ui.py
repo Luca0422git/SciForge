@@ -26,6 +26,7 @@ The logic that needs no Qt or FreeCAD (stores, recovery files, summaries) is ver
 """
 
 import os
+import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -559,6 +560,34 @@ def _mtime(path):
         return 0.0
 
 
+def _finish_interrupted(doc, path, started, tries=40):
+    """FreeCAD wrote the save to "<design>.FCStd.<uuid>" but could not rename it to the
+    design (another program held the new file: Google Drive backing the folder up, an
+    antivirus). Finish the rename, trying for a few seconds while that program lets go;
+    then tell SciForge's listeners the save is done (FreeCAD did not). True when done."""
+    for attempt in range(tries):
+        done = core.finish_save(path, since=started)
+        if done:
+            log("save finished by SciForge (FreeCAD's last rename was refused): %s" % path)
+            _saved_by_sciforge(doc, path)
+            return True
+        if done is None:
+            return False
+        time.sleep(0.25)
+    return False
+
+
+def _saved_by_sciforge(doc, path):
+    """What FreeCAD's "save finished" tells its observers, for a save SciForge finished."""
+    from . import home_ui, locations_ui
+
+    for watch in (_Watch(), home_ui._Watch(), locations_ui._Watch()):
+        try:
+            watch.slotFinishSaveDocument(doc, path)
+        except Exception as exc:
+            warn("after saving: %s" % exc)
+
+
 def _first_save(doc_name, path, after=None, save_as=False):
     doc = _document(doc_name)
     if doc is None or not path:
@@ -571,11 +600,20 @@ def _first_save(doc_name, path, after=None, save_as=False):
             if was_version
             else ""
         )
-        doc.saveAs(path)  # returns None in FreeCAD 1.1.4, raises when it fails
-        if not os.path.isfile(path):
-            _pending.pop(doc_name, None)
-            commands.tell("The design could not be saved to %s." % path)
-            return
+        started = time.time()
+        try:
+            doc.saveAs(path)  # returns None in FreeCAD 1.1.4, raises when it fails
+            failed = None
+        except Exception as exc:
+            failed = exc
+        if failed is not None or not os.path.isfile(path):
+            if not _finish_interrupted(doc, path, started):
+                _pending.pop(doc_name, None)
+                commands.tell(
+                    "The design could not be saved to %s%s."
+                    % (path, ": %s" % failed if failed else "")
+                )
+                return
         set_modified(doc, False)
         _recovered.pop(doc_name, None)
         log("%s %s" % ("saved as a copy:" if save_as else "saved:", path))
@@ -596,13 +634,22 @@ def _save_version(doc_name, description, after=None, milestone=False):
         _pending[doc_name] = description or ""
         _pending_milestone[doc_name] = bool(milestone)
         before = _mtime(doc.FileName)
+        started = time.time()
         # FreeCAD's save() returns None (1.1.4) and raises when it fails: the file tells.
-        doc.save()
-        if not os.path.isfile(doc.FileName) or _mtime(doc.FileName) < before:
-            _pending.pop(doc_name, None)
-            _pending_milestone.pop(doc_name, None)
-            commands.tell("The design could not be saved to %s." % doc.FileName)
-            return
+        try:
+            doc.save()
+            failed = None
+        except Exception as exc:
+            failed = exc
+        if failed is not None or not os.path.isfile(doc.FileName) or _mtime(doc.FileName) < before:
+            if not _finish_interrupted(doc, doc.FileName, started):
+                _pending.pop(doc_name, None)
+                _pending_milestone.pop(doc_name, None)
+                commands.tell(
+                    "The design could not be saved to %s%s."
+                    % (doc.FileName, ": %s" % failed if failed else "")
+                )
+                return
         # FreeCAD's own Save command clears its "changed" mark after saving; a save from
         # Python does not, so the title kept its star. Done here.
         set_modified(doc, False)
@@ -627,10 +674,18 @@ def save_version_now(doc, description=""):
     _pending[name] = description or ""
     try:
         before = _mtime(path)
-        doc.save()
-        if not os.path.isfile(path) or _mtime(path) < before:
-            commands.tell("The design could not be saved to %s." % path)
-            return False
+        started = time.time()
+        try:
+            doc.save()
+            failed = None
+        except Exception as exc:
+            failed = exc
+        if failed is not None or not os.path.isfile(path) or _mtime(path) < before:
+            # (finished here; the version is recorded below: the listeners skip it while it
+            # is in _record_now)
+            if not _finish_interrupted(doc, path, started):
+                commands.tell("The design could not be saved to %s." % path)
+                return False
         set_modified(doc, False)
     except Exception as exc:
         warn("save failed: %s" % exc)

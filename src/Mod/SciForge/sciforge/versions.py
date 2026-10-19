@@ -70,6 +70,90 @@ def is_design(path):
     return path.lower().endswith(DESIGN_SUFFIX.lower())
 
 
+# -- saves FreeCAD could not finish ----------------------------------------------------------------
+# FreeCAD writes a save to "<design>.FCStd.<uuid>" and renames it to the design last. On
+# Windows the rename is refused while another program holds the new file: Google Drive for
+# desktop backing the folder up (Luca's Documents, 2026-10-19: every save there stayed a
+# "test.FCStd.78026b5d-..." and no design appeared), an antivirus. The save is complete in
+# that file; finish_save() makes it the design.
+TEMP_SAVE = re.compile(
+    r"^(?P<design>.+\.fcstd)\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+UNFINISHED_FOLDER = os.path.join(".sciforge", "unfinished-saves")
+
+
+def unfinished_saves(folder):
+    """{design path: [its temporary save files, newest first]} in `folder`."""
+    found = {}
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return found
+    for name in names:
+        match = TEMP_SAVE.match(name)
+        if match:
+            full = os.path.join(folder, name)
+            found.setdefault(os.path.join(folder, match.group("design")), []).append(full)
+    for temps in found.values():
+        temps.sort(key=lambda p: _mtime_or_zero(p), reverse=True)
+    return found
+
+
+def _mtime_or_zero(path):
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+def complete_save(path):
+    """A design file FreeCAD finished writing (a zip with its Document.xml)."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return "Document.xml" in archive.namelist()
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def finish_save(design, since=None, settle=0.0, now=None):
+    """Make the newest temporary save of `design` the design file (the rename FreeCAD could
+    not do), when it is complete, newer than the design and at least `settle` seconds old
+    (one being written now is left alone); `since`: only a save started then or later.
+    The older temporary files of the design go to .sciforge/unfinished-saves beside it
+    (kept, never deleted). True: done; False: there is one but it could not be renamed
+    yet (try again); None: nothing to finish."""
+    folder = os.path.dirname(design)
+    temps = unfinished_saves(folder).get(design) or []
+    now = time.time() if now is None else now
+    newest = None
+    for temp in temps:
+        stamp = _mtime_or_zero(temp)
+        if since is not None and stamp < since - 2.0:
+            continue
+        if now - stamp < settle or not complete_save(temp):
+            continue
+        newest = temp
+        break
+    if newest is None:
+        return None
+    if os.path.exists(design) and _mtime_or_zero(design) >= _mtime_or_zero(newest):
+        return None  # the design is newer: that temporary file is an older, finished save
+    try:
+        os.replace(newest, design)
+    except OSError:
+        return False
+    for temp in temps:
+        if temp != newest and os.path.exists(temp):
+            try:
+                keep = os.path.join(folder, UNFINISHED_FOLDER)
+                os.makedirs(keep, exist_ok=True)
+                os.replace(temp, os.path.join(keep, os.path.basename(temp)))
+            except OSError:
+                pass
+    return True
+
+
 # STEP / IGES files in a project folder (uploaded): the Data Panel lists them; opening one
 # makes a new design of it with its components (exchange_ui.open_file).
 CAD_SUFFIXES = (".step", ".stp", ".iges", ".igs")

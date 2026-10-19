@@ -645,3 +645,57 @@ class MoveCopyTests(Scratch):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnfinishedSaveTests(Scratch):
+    """FreeCAD's save left as "<design>.FCStd.<uuid>" when its last rename was refused
+    (Google Drive backing up Luca's Documents folder)."""
+
+    UUIDS = (
+        "78026b5d-cb38-45d0-a35f-496a00000001",
+        "de505953-325f-48bb-888d-ba0000000002",
+        "e6be27c2-5cd8-4564-9deb-abf000000003",
+    )
+
+    def temp(self, design, uuid, mtime):
+        path = make_design(os.path.join(self.root, "%s.FCStd.%s" % (design, uuid)))
+        os.utime(path, (mtime, mtime))
+        return path
+
+    def test_found_by_design_newest_first(self):
+        old = self.temp("test", self.UUIDS[0], 1000)
+        new = self.temp("test", self.UUIDS[1], 2000)
+        other = self.temp("the THING", self.UUIDS[2], 1500)
+        with open(os.path.join(self.root, "notes.FCStd.txt"), "w") as handle:
+            handle.write("not a save")
+        found = v.unfinished_saves(self.root)
+        self.assertEqual(found[os.path.join(self.root, "test.FCStd")], [new, old])
+        self.assertEqual(found[os.path.join(self.root, "the THING.FCStd")], [other])
+        self.assertEqual(len(found), 2)
+
+    def test_the_newest_complete_save_becomes_the_design(self):
+        old = self.temp("test", self.UUIDS[0], 1000)
+        new = self.temp("test", self.UUIDS[1], 2000)
+        design = os.path.join(self.root, "test.FCStd")
+        self.assertTrue(v.finish_save(design, now=5000))
+        self.assertTrue(v.complete_save(design))
+        self.assertFalse(os.path.exists(new))
+        self.assertFalse(os.path.exists(old))  # kept aside, never deleted:
+        kept = os.path.join(self.root, v.UNFINISHED_FOLDER, os.path.basename(old))
+        self.assertTrue(os.path.isfile(kept))
+        self.assertEqual(v.list_folder(self.root)[1][0]["name"], "test")
+        self.assertIsNone(v.finish_save(design, now=5000))  # nothing left
+
+    def test_left_alone(self):
+        design = os.path.join(self.root, "test.FCStd")
+        broken = os.path.join(self.root, "test.FCStd.%s" % self.UUIDS[0])
+        with open(broken, "wb") as handle:
+            handle.write(b"PK half written")
+        self.assertIsNone(v.finish_save(design))  # not a complete save
+        os.remove(broken)
+        self.temp("test", self.UUIDS[1], 2000)
+        self.assertIsNone(v.finish_save(design, settle=10.0, now=2005))  # being written
+        make_design(design)
+        os.utime(design, (3000, 3000))
+        self.assertIsNone(v.finish_save(design, now=5000))  # the design is newer
+        self.assertIsNone(v.finish_save(design, since=4000, now=5000))  # not this save

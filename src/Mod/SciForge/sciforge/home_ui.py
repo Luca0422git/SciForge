@@ -702,6 +702,7 @@ class HomeView(QtWidgets.QWidget):
                     "the NAS on? Its designs come back when it is." % (place["name"], root)
                 )
             else:
+                _finish_unfinished_saves(root)
                 tiles = self._place_tiles(root, locations_core, locations_ui)
                 if local:
                     tiles += self._elsewhere_tiles(state, known)
@@ -1175,6 +1176,25 @@ def _connect():
     from . import locations_ui
 
     locations_ui.connect_place()
+
+
+def _finish_unfinished_saves(root, max_depth=6):
+    """Saves FreeCAD could not finish (its last step, renaming "<design>.FCStd.<uuid>" to
+    the design, refused while Google Drive backed the folder up: Luca's Documents, where
+    every save stayed such a file and Home showed none) become their designs. Only a
+    complete one at least 10 s old (never a save being written now)."""
+    todo = [(root, 0)]
+    while todo:
+        folder, depth = todo.pop()
+        try:
+            for design in versions.unfinished_saves(folder):
+                if versions.finish_save(design, settle=10.0):
+                    log("home: finished a save FreeCAD left unfinished: %s" % design)
+            if depth < max_depth:
+                subfolders, _designs = versions.list_folder(folder)
+                todo.extend((sub["path"], depth + 1) for sub in subfolders)
+        except Exception as exc:
+            warn("home: unfinished saves in %s: %s" % (folder, exc))
 
 
 def _make_default_folder(root):
