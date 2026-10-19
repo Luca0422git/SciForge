@@ -4,7 +4,7 @@ part covers (the squares are small and stay in the + quarter of their plane, lik
 so a fixed point can miss them; a hidden one is picked in the browser). Kept outside scenarios/ because every file there is run as a scenario."""
 
 import FreeCAD as App
-from PySide import QtWidgets
+from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import harness as h
 
@@ -83,12 +83,49 @@ def click_square(role="XY_Plane"):
     return point
 
 
+def _plane_row(tree, role):
+    """The browser row of the squares' own `role` plane (the active component's Origin, at
+    the squares' place), not the first "XY" of the browser (the design's own, at 0 0 0)."""
+    from sciforge import browser_ui, sketch_ui
+
+    p = picker()
+    plane = p.objects.get(role) if p is not None else None
+    if plane is None or tree is None:
+        return None
+    doc = plane.Document
+    for item in tree._items():
+        node = item.data(1, browser_ui.ROLE_NODE) or {}
+        obj = doc.getObject(node.get("object") or "")
+        if obj is None or not (getattr(obj, "Role", "") or "").startswith(role.split("_")[0]):
+            continue
+        if obj is plane or sketch_ui._same_place(obj, plane):
+            return item
+    return None
+
+
 def pick_in_browser(role="XY_Plane"):
-    """Open the browser's Origin folder and click the `role` plane's row."""
+    """Open the browser's Origin folder and click the `role` plane's row (the one of the
+    squares' own origin: the active component's)."""
     from SciForgeTests.gui import bodies_steps, shell_draft_steps
+    from SciForgeTests.gui import widget_input as w
 
     label = role.split("_")[0]  # "XY_Plane" -> "XY" (browser_core.ORIGIN_LABELS)
     tree = bodies_steps.browser()
+    item = _plane_row(tree, role)
+    if item is not None:
+        folder = item.parent()
+        if folder is not None and not folder.isExpanded():
+            tree.scrollToItem(folder)
+            rect = tree.visualItemRect(folder)
+            w.double_click(tree.viewport(), QtCore.QPoint(rect.left() + 40, rect.center().y()))
+            if not folder.isExpanded():
+                folder.setExpanded(True)
+            QtWidgets.QApplication.processEvents()
+        h.check("the %s plane in the browser" % role, True)
+        tree.scrollToItem(item)
+        QtWidgets.QApplication.processEvents()
+        w.click(tree.viewport(), tree.label_point(item))
+        return label
     if tree is not None and tree.row(label) is None:
         shell_draft_steps.expand_browser_row("Origin")
     found = tree is not None and tree.row(label) is not None

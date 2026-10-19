@@ -1506,8 +1506,25 @@ def enable():
     App.addDocumentObserver(_state["watch"])
     area = _area()
     if area is not None and not _state.get("following"):
-        area.subWindowActivated.connect(lambda *_a: QtCore.QTimer.singleShot(0, _follow_active))
+        area.subWindowActivated.connect(_activated)
         _state["following"] = True
+
+
+def _activated(*_args):
+    """Another tab in front: the ribbon's commands at once (a design made and its command
+    run in one go, as a script or an AI app does, found them still hidden), the rest when
+    the activation is over."""
+    try:
+        from . import shell
+
+        ribbon = shell.ribbon()
+        if ribbon is not None:
+            ribbon.set_home(is_active())
+    except RuntimeError:
+        pass
+    except Exception as exc:
+        warn("home: %s" % exc)
+    QtCore.QTimer.singleShot(0, _follow_active)
 
 
 def disable():
