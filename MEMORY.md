@@ -1435,6 +1435,14 @@ with his OK ("good. its fixed. now merge").
   3D Print), `golden/builder.py`: develop's `golden/hardware_ops.py` moved to
   `sciforge/ai/ops/hardware_ops.py` (imports `.core`), registered at the end of `core.py`.
 - Sandbox lesson: never edit module files while a sweep runs (a false failure followed).
+- After the merge (develop = b41940db, fast-forwarded): base all passed; this branch's
+  scenarios, develop's new ones and 15 component scenarios pass. Fixed on the way:
+  the ribbon's commands show as soon as a design comes in front (`home_ui._activated`:
+  origin_squares_small ran a command right after newDocument); two tests red on develop
+  itself since its "squares stay at the origin": `plane_input.pick_in_browser` clicked
+  the design's own XY row, not the active component's (sketch2_palette D), and
+  view_origin_planes hovered V(5, -5, 0), off the + quarter square. Quick update
+  b41940db sent to Luca. The full sweep runs on GitHub (CI on develop).
 
 #### Open
 - FreeCAD's OverlayRight frame outline shows while a right-side SciForge dock is there
