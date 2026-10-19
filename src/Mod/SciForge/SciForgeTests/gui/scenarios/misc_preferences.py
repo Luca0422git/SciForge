@@ -205,6 +205,7 @@ def p1_window():
             "Default Units > Design",
             "Network",
             "Keyboard Shortcuts",  # SciForge's own: every command's key in one list
+            "AI",  # SciForge's own: Allow AI apps to control SciForge (parity ai.md)
         ],
         titles,
     )
