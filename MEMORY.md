@@ -1372,6 +1372,47 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Session log
 
+### 2026-10-18/19: small origin squares, four merges, overnight CI (branch `develop`)
+- Luca: "make it small like that, but keep the color" (Fusion's Create Sketch squares).
+  `origin_look.square_corners` + `sketch_ui.PlanePicker`: ~120 px squares (SCREEN_SIDE) in
+  the + quarter, 10 % off the axes, kept that size on a 250 ms follow-the-view timer; moved
+  beside a part that meets their plane (rings round the part, the side facing the viewer
+  first); a spot counts only if it shows (`_shows`: in view, not under a dialog, nothing of
+  the part in front/behind). When no spot round the origin shows (zoomed on a part far
+  away, surface2_loft), `_seen_corner` puts the square on the part of its plane in view,
+  nearest the origin (beyond Fusion). Empty designs keep the old framing (an invisible
+  100 mm cube for fitAll). Scenario `origin_squares_small`; ~130 scenarios aim through
+  `plane_input.click_square / click_on_plane`.
+- Merged into develop: Send to Slicer (sf/slicer), hardware library (sf/hardware), drag
+  arrows (sf/arrows), each with its own session entry above. Home screen / BYOCloud / AI
+  connectors: brief `docs/sciforge/dev/briefs/home-cloud-ai.md`, worked on by another
+  session on branch `sf/home-cloud-ai`.
+- CI #161, #172, #174 (everything else green; all test timing, plus one real glitch):
+  - revolve_axes: the squares' 250 ms timer moved them between aiming and clicking after
+    a fit. `plane_input.settle()` runs the picker's `_follow_zoom` before aiming.
+  - extrudeface_drag / extrude_feel: a 30-move held drag outlasted the step's wait_ms on a
+    busy runner. `harness.BUSY`: an `arrow_input.HeldDrag` marks itself busy, the harness
+    waits for it (max 20 s) and then 1 s more for the dialog's own timers.
+  - hole_qa P4: the press at the slim new arrow's foot missed by a pixel on CI.
+    `hole_steps.drag_arrow(..., arrow=)` presses on the head (`arrow_input.head_point`).
+  - value_box_dialogs_2 (real): two value boxes swapped sides at every pan (the first one
+    re-placed saw the other still at its pre-pan spot). `arrow_box_core.spot_and_way`
+    `keep=` the way it went last time; taskui.ArrowValueBox keeps `_way`.
+- Reproducing a GitHub-only failure: GitHub's font = `XDG_CONFIG_HOME=<dir>` whose
+  `fontconfig/fonts.conf` rejects Inter and prefers DejaVu Sans (view 1538x770, wider
+  boxes); its slowness = `taskset -c 0` with a busy loop on core 0. value_box_dialogs_2
+  failed 1/1 with the font, 0/5 without.
+- Sandbox rules learned: at most 2 FreeCAD processes (the container restarted twice from
+  memory); wrap runs in `flock` (one lock per process slot); `--only gui` runs EVERY
+  scenario (~8 h): use `--only scenarios --scenario a,b`; never `pgrep -f`/`pkill -f`
+  (matches your own shell); detached runs end with a done-file; any push to develop
+  cancels the CI run in progress (concurrency group), so batch pushes.
+- Quick update sent to Luca: build afe1f789 (CI #175 green), WHATS_NEW items 36-43.
+- Zip: `scratchpad/mkzip.sh <commit>` layout = quick-update/{SciForge, install_update.*,
+  README.md (docs/sciforge/quick-update.md), WHATS_NEW.txt}, build_info stamped.
+- Open for Luca: which slicer he uses (did it open with the part); heat-set insert sizes
+  and brand, magnet sizes; arrow look (flip for minus, hover colour).
+
 ### 2026-10-18/19: Drag arrows and angle handles (branch `sf/arrows`, merged into develop 2026-10-19)
 - Luca: "streamline the drag arrows ... consistent size ... same thing for the angle dragger"
   (Fusion picture). Every distance arrow and angle handle has one Fusion-like look and one
