@@ -487,4 +487,29 @@ class ActivityCommand:
             warn("AI Activity: %s" % exc)
 
 
-COMMANDS = {"SciForge_AddAI": AddAICommand, "SciForge_AIActivity": ActivityCommand}
+class ChatCommand:
+    def GetResources(self):
+        return {
+            "MenuText": "AI Chat",
+            "ToolTip": "Chat with an AI (Claude, ChatGPT, Gemini or a local model) that builds "
+            "in SciForge, with your own key",
+            "Pixmap": ui_icon_path("ai"),
+        }
+
+    def IsActive(self):
+        return True
+
+    def Activated(self):
+        try:
+            from .ai import chat_ui
+
+            chat_ui.show()
+        except Exception as exc:
+            warn("AI Chat: %s" % exc)
+
+
+COMMANDS = {
+    "SciForge_AddAI": AddAICommand,
+    "SciForge_AIActivity": ActivityCommand,
+    "SciForge_AIChat": ChatCommand,
+}

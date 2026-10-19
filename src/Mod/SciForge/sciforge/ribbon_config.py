@@ -1134,6 +1134,7 @@ FILE_MENU = [
     SEP,
     item("Add an AI App", "SciForge_AddAI", "ai", note="Claude Desktop, Gemini CLI, others"),
     item("AI Activity", "SciForge_AIActivity", "ai"),
+    item("AI Chat", "SciForge_AIChat", "ai", note="Chat with an AI that builds here"),
 ]
 
 # Quick-access buttons at the top left, like Fusion's application bar.

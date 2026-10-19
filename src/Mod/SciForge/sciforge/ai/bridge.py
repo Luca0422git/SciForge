@@ -273,12 +273,13 @@ def _busy():
     return ""
 
 
-def call(tool, args):
-    """One tool call: a result dict (bridge_core.result)."""
+def call(tool, args, from_chat=False):
+    """One tool call: a result dict (bridge_core.result). from_chat: from SciForge's own chat
+    panel, where the person is the one asking (no "Allow this AI app?" question)."""
     problems = tools_core.validate(tool, args)
     if problems:
         return bridge_core.error_result("Not done: " + "; ".join(problems) + ".")
-    if _state["consent"] is None:
+    if not from_chat and _state["consent"] is None:
         _state["consent"] = ask(
             "AI control",
             "An AI app wants to control SciForge (build, change and save designs). Every step "
@@ -286,7 +287,7 @@ def call(tool, args):
             "this session?",
         )
         log("AI bridge: the person %s AI control" % ("allowed" if _state["consent"] else "denied"))
-    if not _state["consent"]:
+    if not from_chat and not _state["consent"]:
         return _record(
             tool,
             bridge_core.error_result(

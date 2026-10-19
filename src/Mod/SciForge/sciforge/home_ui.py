@@ -413,6 +413,11 @@ class HomeView(QtWidgets.QWidget):
             lambda *_: QtCore.QTimer.singleShot(0, _ai_activity)
         )
         column.addWidget(self.ai_activity_button)
+        self.chat_button = QtWidgets.QPushButton("Open chat panel")
+        self.chat_button.setObjectName("SciForgeHomeAIChat")
+        self.chat_button.setToolTip("Chat with an AI that builds here, with your own key")
+        self.chat_button.clicked.connect(lambda *_: QtCore.QTimer.singleShot(0, _ai_chat))
+        column.addWidget(self.chat_button)
         column.addStretch(1)
         self.update_ai()
         return side
@@ -969,6 +974,12 @@ def _add_ai():
     from . import ai_ui
 
     ai_ui.add_ai()
+
+
+def _ai_chat():
+    from .ai import chat_ui
+
+    chat_ui.show()
 
 
 def _ai_activity():

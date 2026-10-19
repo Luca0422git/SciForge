@@ -26,6 +26,7 @@ NOT_REPEATABLE = {
     "SciForge_ConnectPlace",
     "SciForge_AddAI",
     "SciForge_AIActivity",
+    "SciForge_AIChat",
 }
 
 
