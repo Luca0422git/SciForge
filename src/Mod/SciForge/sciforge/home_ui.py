@@ -259,6 +259,20 @@ QSS = """
 """
 
 
+def _no_tab_focus(widget):
+    """Home's buttons and tiles take the keyboard focus only when clicked, never through
+    the Tab order: a timeline button hidden while it had the focus gave it to the next
+    widget in that order, a button of Home's newer rows, and the focus in Home's tab
+    brought Home to the front over the design being edited."""
+    for child in [widget] + widget.findChildren(QtWidgets.QWidget):
+        policy = child.focusPolicy()
+        if policy & QtCore.Qt.TabFocus:
+            strong = (policy & QtCore.Qt.ClickFocus) and not isinstance(
+                child, QtWidgets.QAbstractButton
+            )
+            child.setFocusPolicy(QtCore.Qt.ClickFocus if strong else QtCore.Qt.NoFocus)
+
+
 class _Tiles(QtWidgets.QListWidget):
     """A row's tiles: left to right, on as many lines as they need so every design shows
     (no scroll bar of its own: the Home page scrolls)."""
@@ -399,6 +413,7 @@ class HomeView(QtWidgets.QWidget):
         self.banner_timer.timeout.connect(self.update_banner)
         self.refresh()
         self.update_banner()
+        _no_tab_focus(self)
 
     # -- pieces
     def _ai(self):
@@ -649,6 +664,7 @@ class HomeView(QtWidgets.QWidget):
             self._clear_rows()
             for row_id, title, icon, path, tiles, empty in self.listing:
                 row = _Row(self, row_id, title, icon, path)
+                _no_tab_focus(row)
                 self.rows[row_id] = row
                 self.rows_layout.insertWidget(self.rows_layout.count() - 1, row)
                 shown = [t for t in tiles if core.matches({"name": t["search"]}, text)]

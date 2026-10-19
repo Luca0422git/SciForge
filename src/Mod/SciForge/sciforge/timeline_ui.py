@@ -710,6 +710,10 @@ class TimelineWidget(QtWidgets.QWidget):
             entry = self._row.takeAt(0)
             widget = entry.widget()
             if widget is not None:
+                if widget.hasFocus():
+                    # (hidden with the focus, Qt hands it to the next widget in the Tab
+                    # order, which may be in another tab: that tab came to the front)
+                    widget.clearFocus()
                 widget.hide()
                 widget.deleteLater()
 
