@@ -5,9 +5,10 @@ the browser and an empty view). Run twice with one profile by run_tests.sh:
     SCIFORGE_SMOKE_OUT=/dir SCIFORGE_RESTART_PHASE=1 FreeCAD restart_gui.py
     SCIFORGE_SMOKE_OUT=/dir SCIFORGE_RESTART_PHASE=2 FreeCAD restart_gui.py
 
-Each start checks that SciForge's ribbon, document tabs bar and timeline are shown, then
-closes the window as a person does (FreeCAD saves its window layout then), and writes
-restart-<phase>.json.
+Each start checks that SciForge's ribbon, document tabs bar and timeline are shown and that
+it opened on its Home tab, then closes the window as a person does (FreeCAD saves its window
+layout then), and writes restart-<phase>.json. The first start saves a design and closes
+it; the second start's Home lists it first in Recent.
 """
 
 import json
@@ -39,6 +40,26 @@ def run():
         timeline = main.findChild(QtWidgets.QDockWidget, "SciForgeTimelineDock")
         check("the timeline is shown", timeline is not None and timeline.isVisible())
         check("FreeCAD's menu bar is hidden", not main.menuBar().isVisible())
+        from sciforge import home_ui
+
+        check("it opens on the Home tab", home_ui.view() is not None and home_ui.is_active())
+        design = os.path.join(OUT_DIR, "RestartDesign.FCStd")
+        if PHASE == "1":
+            if os.path.exists(design):
+                os.remove(design)
+            doc = App.newDocument("RestartDesign")
+            doc.addObject("PartDesign::Body", "Body")
+            doc.recompute()
+            doc.saveAs(design)
+            App.closeDocument(doc.Name)
+        else:
+            page = home_ui.view()
+            names = [text.split("\n")[0] for _k, _key, _p, text, _s in page.items()] if page else []
+            check(
+                "Home lists the design saved at the first start first",
+                names[:1] == ["RestartDesign"],
+                names,
+            )
         try:
             main.grab().save(os.path.join(OUT_DIR, "restart-%s.png" % PHASE))
         except Exception:

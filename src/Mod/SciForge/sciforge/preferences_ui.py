@@ -207,6 +207,9 @@ def _apply(kind):
             panel = versions_ui._state.get("panel")
             if versions_ui._alive(panel):
                 panel.set_folder(versions_ui.project_folder())
+            from . import home_ui
+
+            home_ui.refresh_soon()  # (Home's "This computer" is the project folder)
         elif kind == "startup":  # Start in SciForge (counts from the next start)
             from . import start_in
 

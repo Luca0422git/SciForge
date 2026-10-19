@@ -1096,6 +1096,8 @@ TABS = [
 # above FreeCAD's own menus (ribbon_ui).
 # Fusion's File menu (the app bar's Menu button opens it, FreeCAD's own menus below).
 FILE_MENU = [
+    item("Home", "SciForge_Home", "qa_home", note="Recent designs, New design, Open"),
+    SEP,
     item("New Design", "SciForge_NewDesign", "qa_new", "Ctrl+N"),
     item(
         "New Drawing",
@@ -1127,6 +1129,12 @@ FILE_MENU = [
 
 # Quick-access buttons at the top left, like Fusion's application bar.
 QUICK_ACCESS = [
+    item(
+        "Home",
+        "SciForge_Home",
+        "qa_home",
+        note="Recent designs, New design, Open (Fusion's Home icon, at the far left)",
+    ),
     item(
         "Data Panel",
         "SciForge_DataPanel",

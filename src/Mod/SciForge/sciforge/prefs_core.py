@@ -144,6 +144,17 @@ OPTIONS = [
         apply="startup",
     ),
     _option(
+        "show_home",
+        "general",
+        "Show Home at start",
+        "bool",
+        True,
+        (SCIFORGE, "Bool", "ShowHomeAtStart"),
+        group="Startup",
+        tip="On: SciForge opens on its Home tab (your recent designs, New design, Open), and "
+        "closing the last design comes back to it. Off: an empty window, as before.",
+    ),
+    _option(
         "mouse_preset",
         "general",
         "Pan, Zoom, Orbit Shortcuts",

@@ -371,6 +371,7 @@ SciForgeTests/gui/scenarios/home_screen.py, cloud_place.py, ai_bridge.py, ai_cha
   with the golden models still green (434 pass, 2 known xfail).
   **Done 2026-10-19** (`sciforge/ai/ops/`; 434 models: 432 pass + 2 known xfail; MEMORY.md log).
 - **M1 Home screen** (local project folder + recent designs + New/Open + recovery banner).
+  **Built 2026-10-19** (`home_core.py`, `home_ui.py`, parity `home.md`; MEMORY.md log).
 - **M2 Places, phase A**: sync-folder and NAS places for all four providers, plain-store
   versions in cloud places, "changed on another computer", conflict copies, open-elsewhere
   notes, Home and Data Panel place switcher.
@@ -393,7 +394,8 @@ SciForgeTests/gui/scenarios/home_screen.py, cloud_place.py, ai_bridge.py, ai_cha
 - The chat panel does the same with a pasted API key.
 
 ## 8. Open points to settle with Luca as you go
-- Home at start: always, or only when no design was open at the last close?
+- Home at start: always, or only when no design was open at the last close? **Luca
+  (2026-10-19): always** ("Make the home screen default every time").
 - AI order after Claude: Gemini CLI or the chat panel first?
 - Whether git versions should stay available for NAS places.
 - Budget: API keys cost money per use; suggest the local OpenAI-compatible option for free use.

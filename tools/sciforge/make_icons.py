@@ -1532,6 +1532,20 @@ def _():
     return path("M6 14 H18 L22 18 H40 V38 H6 Z", STROKE, 2.4)
 
 
+@icon("qa_home")
+def _():
+    # A house: roof, walls and a door (the Home tab)
+    return path("M5 24 L24 7 L43 24", STROKE, 2.6) + path(
+        "M11 19 V41 H37 V19 M20 41 V29 H28 V41", STROKE, 2.4
+    )
+
+
+@icon("recent")
+def _():
+    # A clock (Home's Recent designs)
+    return circle(24, 24, 17, "none", STROKE, 2.6) + path("M24 13 V24 L32 29", STROKE, 2.6)
+
+
 @icon("qa_save")
 def _():
     return (

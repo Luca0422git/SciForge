@@ -104,6 +104,9 @@ def startup():
             # showed only the browser and an empty view, nothing to click)
             for delay in (0, 150, 600, 1500):
                 QtCore.QTimer.singleShot(delay, _show_own_bars)
+            # ... and SciForge's Home tab instead of an empty window (home_ui; Preferences >
+            # General > Show Home at start)
+            QtCore.QTimer.singleShot(0, lambda: _safely(_home_at_start))
         if name and name != SCIFORGE_WB and not _state["on"]:
             from . import shortcuts, sketch_mode, theme, versions_ui
 
@@ -179,6 +182,8 @@ def enable():
     _safely(lambda: __import__("sciforge.versions_ui").versions_ui.enable())
     # Preferences: the mouse preset, the zoom direction, new designs without history.
     _safely(lambda: __import__("sciforge.preferences_ui").preferences_ui.enable())
+    # Home: the designs opened and saved are remembered; the last design closed shows Home.
+    _safely(lambda: __import__("sciforge.home_ui").home_ui.enable())
     log("interface on")
 
 
@@ -195,6 +200,7 @@ def disable():
         timeline_ui.hide()
         return
     for step in (
+        lambda: __import__("sciforge.home_ui").home_ui.disable(),
         lambda: __import__("sciforge.preferences_ui").preferences_ui.disable(),
         lambda: __import__("sciforge.drawing_ui").drawing_ui.disable(),
         lambda: __import__("sciforge.versions_ui").versions_ui.disable(),
@@ -218,6 +224,12 @@ def disable():
         except Exception as exc:
             warn("turning interface off: %s" % exc)
     log("interface off")
+
+
+def _home_at_start():
+    from . import home_ui
+
+    home_ui.at_start()
 
 
 # -- ribbon ------------------------------------------------------------

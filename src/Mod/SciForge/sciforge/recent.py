@@ -22,6 +22,7 @@ NOT_REPEATABLE = {
     "SciForge_RecoverDocuments",
     "SciForge_DataPanel",
     "SciForge_FilesSettings",
+    "SciForge_Home",
 }
 
 
