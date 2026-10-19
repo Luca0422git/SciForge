@@ -378,7 +378,8 @@ SciForgeTests/gui/scenarios/home_screen.py, cloud_place.py, ai_bridge.py, ai_cha
 - **M3 AI bridge + MCP server** (**built 2026-10-19**, parity `ai.md`): the tool set, safety prompts, activity panel, Claude Desktop
   and Gemini CLI buttons, "Other app" command line.
   -> **Fundamentals done: ask Luca to merge `sf/home-cloud-ai` into `develop`.**
-- **M4 Chat panel**: Anthropic first, then OpenAI, Gemini, OpenAI-compatible (local).
+- **M4 Chat panel** (**built 2026-10-19**, parity `ai.md`): Anthropic first, then OpenAI, Gemini,
+  OpenAI-compatible (local). Answers are shown whole, not streamed yet.
 - **M5 Sign-in clouds (phase B)**: Dropbox, then Google Drive, OneDrive, WebDAV NAS (after Luca's
   app registrations).
 - **M6 ChatGPT connector (experimental)**: HTTP transport, tunnel, authentication, security

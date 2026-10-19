@@ -15,6 +15,7 @@ Path 4, Claude: a key typed and kept (Save key), read back, never in SciForge's 
 import http.server
 import json
 import threading
+import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -87,6 +88,7 @@ class _Fake(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         s["requests"].append(json.loads(self.rfile.read(length) or b"{}"))
         if s["loop"]:
+            time.sleep(0.3)  # a real model takes seconds per answer: time to press Stop
             self._json(_call("get_design", {}, len(s["requests"])))
         elif s["script"]:
             self._json(s["script"].pop(0))

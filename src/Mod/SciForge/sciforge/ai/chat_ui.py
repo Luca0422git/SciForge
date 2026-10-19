@@ -297,7 +297,9 @@ class ChatPanel(QtWidgets.QWidget):
                     kind, data = self.events.get_nowait()
                 except queue.Empty:
                     break
-                self._event(kind, data or {})
+                if not isinstance(data, dict):  # chat_core: "text", "progress", "error"
+                    data = {"text": "" if data is None else str(data)}
+                self._event(kind, data)
         except RuntimeError:
             pass  # (the panel was closed)
         except Exception as exc:
