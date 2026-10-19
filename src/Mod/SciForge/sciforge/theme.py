@@ -103,11 +103,16 @@ for _key, _dark in DARK.items():
     if _dark not in ("#ffffff", "#000000") and DARK[_key] != LIGHT[_key]:
         TO_LIGHT.setdefault(_dark, LIGHT[_key])
 # ... and back: a panel made while the light look was on keeps light colours in its style
-# (the light palette's colours are used nowhere else, so they can only come from it)
+# (a light colour the dark look uses too is left alone: the light marker is the dark
+# chrome #3b4453, and swapping it turned every dark panel light grey, the sketch palette
+# on Luca's screen, 2026-10-19)
 TO_DARK = {
     LIGHT[_key]: _dark
     for _key, _dark in DARK.items()
-    if LIGHT[_key] != _dark and LIGHT[_key] not in ("#ffffff", "#000000")
+    if LIGHT[_key] != _dark
+    and LIGHT[_key] not in ("#ffffff", "#000000")
+    and LIGHT[_key] not in DARK.values()
+    and LIGHT[_key] not in TO_LIGHT
 }
 _HEX = re.compile(r"#[0-9a-fA-F]{6}\b")
 

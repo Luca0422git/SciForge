@@ -41,7 +41,19 @@ def fully_defined():
 def open_preferences():
     from sciforge import home_ui, theme
 
+    from sciforge import sketch_palette
+
     h.check("SciForge starts dark", not theme.is_light())
+    # (Luca, 2026-10-19: the sketch palette came out light grey in the dark look: the swap
+    # back from light turned the dark chrome #3b4453, also the light marker, into #e8e8e8)
+    changed = [
+        c for c in list(theme.DARK.values()) + list(theme.TO_LIGHT) if theme.translate(c) != c
+    ]
+    h.check("the dark look leaves the dark colours as they are", changed == [], changed)
+    h.check(
+        "... the sketch palette's style unchanged",
+        theme.translate(sketch_palette.STYLE) == sketch_palette.STYLE,
+    )
     s["dark_background"] = background()
     s["dark_sketch"] = fully_defined()
     home_ui.show()

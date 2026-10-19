@@ -70,6 +70,17 @@ def pick_z():
     return (info or {}).get("z"), (info or {}).get("Object")
 
 
+DARK_PALETTE = "#3b4453"  # the palette's background in the dark look (sketch_palette.STYLE)
+
+
+def on_screen(palette):
+    """The colour the screen shows in the palette's body, right of its rows (what the user
+    sees: a grab of the palette alone skips what FreeCAD's overlay does to it)."""
+    image = QtWidgets.QApplication.primaryScreen().grabWindow(0).toImage()
+    point = palette.mapToGlobal(QtCore.QPoint(palette.width() - 30, palette.height() // 2))
+    return image.pixelColor(point.x(), point.y()).name()
+
+
 # -- A ----------------------------------------------------------------------------------------
 def a_empty():
     Gui.activateWorkbench("SciForgeWorkbench")
@@ -134,8 +145,6 @@ b_overlay.wait_ms = 500
 
 
 def b_overlay_undone():
-    from sciforge import theme
-
     palette = s["palette"]
     see_through = [
         w.metaObject().className()
@@ -144,29 +153,16 @@ def b_overlay_undone():
         or w.testAttribute(QtCore.Qt.WA_NoSystemBackground)
     ]
     h.check("the palette made itself opaque again", see_through == [], see_through)
-    image = palette.grab().toImage()
-    colour = image.pixelColor(image.width() - 4, image.height() - 4).name()
-    h.check(
-        "... in its own colour",
-        colour == theme.own_background(palette),
-        (colour, theme.own_background(palette)),
-    )
+    colour = on_screen(palette)
+    h.check("... dark on the screen", colour == DARK_PALETTE, colour)
 
 
 def b_before():
-    from sciforge import theme
-
     palette = Gui.getMainWindow().findChild(QtWidgets.QFrame, "SciForgeSketchPalette")
-    colour = None
-    if palette is not None:
-        image = palette.grab().toImage()
-        colour = image.pixelColor(image.width() - 4, image.height() - 4).name()
-    # (Luca, 2026-10-19: white, and see-through on hover, on Windows: it paints its own)
-    h.check(
-        "the palette paints its own background",
-        colour == theme.own_background(palette),
-        (colour, palette and theme.own_background(palette)),
-    )
+    # (Luca, 2026-10-19: light grey on his screen; the dark look's colour swap had turned
+    # its #3b4453 into the light look's marker colour)
+    colour = on_screen(palette) if palette is not None else None
+    h.check("the palette is dark on the screen", colour == DARK_PALETTE, colour)
     h.view().viewTop()
     h.fit(iso=False)
     z, obj = pick_z()
