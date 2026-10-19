@@ -1,0 +1,137 @@
+{
+ "_about": "Recorded-shape Responses API answers (openai-openapi openapi.yaml 2.3.0).",
+ "tool_use": {
+  "id": "resp_67ccd2bed1ec8190b14f964abc054267",
+  "object": "response",
+  "created_at": 1760850000,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "model": "gpt-6-astra",
+  "output": [
+   {
+    "type": "reasoning",
+    "id": "rs_67ccd2bf17f0",
+    "summary": [
+     {
+      "type": "summary_text",
+      "text": "Sketch the base first."
+     }
+    ],
+    "encrypted_content": "gAAAAABo1x2Lq0"
+   },
+   {
+    "type": "message",
+    "id": "msg_67ccd2bf17f0",
+    "status": "completed",
+    "role": "assistant",
+    "content": [
+     {
+      "type": "output_text",
+      "text": "I'll sketch the base rectangle first.",
+      "annotations": []
+     }
+    ]
+   },
+   {
+    "type": "function_call",
+    "id": "fc_67ccd3acc8d4",
+    "call_id": "call_12345xyz",
+    "name": "create_sketch",
+    "arguments": "{\"plane\": \"XY\", \"geometry\": [{\"center_rect\": [0, 0, 40, 30]}]}",
+    "status": "completed"
+   }
+  ],
+  "usage": {
+   "input_tokens": 5120,
+   "input_tokens_details": {
+    "cached_tokens": 0,
+    "cache_write_tokens": 0
+   },
+   "output_tokens": 210,
+   "output_tokens_details": {
+    "reasoning_tokens": 120
+   },
+   "total_tokens": 5330
+  }
+ },
+ "final": {
+  "id": "resp_2",
+  "object": "response",
+  "status": "completed",
+  "incomplete_details": null,
+  "model": "gpt-6-astra",
+  "output": [
+   {
+    "type": "message",
+    "id": "msg_2",
+    "status": "completed",
+    "role": "assistant",
+    "content": [
+     {
+      "type": "output_text",
+      "text": "Done: a 40 x 30 x 10 mm box.",
+      "annotations": []
+     }
+    ]
+   }
+  ],
+  "usage": {
+   "input_tokens": 300,
+   "output_tokens": 20,
+   "total_tokens": 320
+  }
+ },
+ "incomplete": {
+  "id": "resp_3",
+  "object": "response",
+  "status": "incomplete",
+  "incomplete_details": {
+   "reason": "max_output_tokens"
+  },
+  "model": "gpt-6-astra",
+  "output": [],
+  "usage": {
+   "input_tokens": 300,
+   "output_tokens": 16000,
+   "total_tokens": 16300
+  }
+ },
+ "error_401": {
+  "error": {
+   "message": "Incorrect API key provided: sk-proj-abc***************xyz. You can find your API key at https://platform.openai.com/account/api-keys.",
+   "type": "invalid_request_error",
+   "param": null,
+   "code": "invalid_api_key"
+  }
+ },
+ "models": {
+  "object": "list",
+  "data": [
+   {
+    "id": "gpt-6-astra",
+    "object": "model",
+    "created": 1760000000,
+    "owned_by": "openai"
+   },
+   {
+    "id": "gpt-5.5",
+    "object": "model",
+    "created": 1750000000,
+    "owned_by": "openai"
+   },
+   {
+    "id": "text-embedding-3-small",
+    "object": "model",
+    "created": 1705948997,
+    "owned_by": "system"
+   },
+   {
+    "id": "gpt-realtime",
+    "object": "model",
+    "created": 1756000000,
+    "owned_by": "system"
+   }
+  ]
+ }
+}

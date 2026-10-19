@@ -1,0 +1,144 @@
+{
+ "_about": "Recorded-shape generateContent answers (google-genai types.py field names, camelCase REST).",
+ "tool_use": {
+  "candidates": [
+   {
+    "content": {
+     "role": "model",
+     "parts": [
+      {
+       "text": "I'll sketch the base rectangle first."
+      },
+      {
+       "functionCall": {
+        "name": "create_sketch",
+        "args": {
+         "plane": "XY",
+         "geometry": [
+          {
+           "center_rect": [
+            0,
+            0,
+            40,
+            30
+           ]
+          }
+         ]
+        }
+       },
+       "thoughtSignature": "CiQBjz1rX7lYv2d8qQ=="
+      }
+     ]
+    },
+    "finishReason": "STOP",
+    "index": 0
+   }
+  ],
+  "usageMetadata": {
+   "promptTokenCount": 5120,
+   "candidatesTokenCount": 210,
+   "totalTokenCount": 5330
+  },
+  "modelVersion": "gemini-3.5-flash",
+  "responseId": "abcDEF123"
+ },
+ "tool_use_with_id": {
+  "candidates": [
+   {
+    "content": {
+     "role": "model",
+     "parts": [
+      {
+       "functionCall": {
+        "id": "fc-8f2a",
+        "name": "extrude",
+        "args": {
+         "profile": "sketch1",
+         "distance": 10
+        }
+       },
+       "thoughtSignature": "CiQBxyz=="
+      }
+     ]
+    },
+    "finishReason": "STOP",
+    "index": 0
+   }
+  ],
+  "usageMetadata": {
+   "promptTokenCount": 10,
+   "candidatesTokenCount": 5
+  },
+  "modelVersion": "gemini-3.5-flash"
+ },
+ "final": {
+  "candidates": [
+   {
+    "content": {
+     "role": "model",
+     "parts": [
+      {
+       "text": "Done: a 40 x 30 x 10 mm box."
+      }
+     ]
+    },
+    "finishReason": "STOP",
+    "index": 0
+   }
+  ],
+  "usageMetadata": {
+   "promptTokenCount": 300,
+   "candidatesTokenCount": 20,
+   "totalTokenCount": 320
+  },
+  "modelVersion": "gemini-3.5-flash"
+ },
+ "blocked": {
+  "promptFeedback": {
+   "blockReason": "SAFETY"
+  },
+  "usageMetadata": {
+   "promptTokenCount": 10
+  }
+ },
+ "error_key": {
+  "error": {
+   "code": 400,
+   "message": "API key not valid. Please pass a valid API key.",
+   "status": "INVALID_ARGUMENT",
+   "details": [
+    {
+     "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+     "reason": "API_KEY_INVALID",
+     "domain": "googleapis.com"
+    }
+   ]
+  }
+ },
+ "models": {
+  "models": [
+   {
+    "name": "models/gemini-flash-latest",
+    "displayName": "Gemini Flash Latest",
+    "supportedGenerationMethods": [
+     "generateContent",
+     "countTokens"
+    ]
+   },
+   {
+    "name": "models/gemini-3.1-pro-preview",
+    "supportedGenerationMethods": [
+     "generateContent",
+     "countTokens",
+     "createCachedContent"
+    ]
+   },
+   {
+    "name": "models/text-embedding-004",
+    "supportedGenerationMethods": [
+     "embedContent"
+    ]
+   }
+  ]
+ }
+}

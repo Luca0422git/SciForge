@@ -1,0 +1,97 @@
+{
+ "_about": "Recorded-shape Chat Completions answers as Ollama / LM Studio send them.",
+ "tool_use": {
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1760850000,
+  "model": "qwen3:8b",
+  "choices": [
+   {
+    "index": 0,
+    "message": {
+     "role": "assistant",
+     "content": "",
+     "tool_calls": [
+      {
+       "id": "call_7xk2p9",
+       "index": 0,
+       "type": "function",
+       "function": {
+        "name": "create_sketch",
+        "arguments": "{\"plane\": \"XY\", \"geometry\": [{\"center_rect\": [0, 0, 40, 30]}]}"
+       }
+      }
+     ]
+    },
+    "finish_reason": "tool_calls"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 2100,
+   "completion_tokens": 60,
+   "total_tokens": 2160
+  }
+ },
+ "bad_json": {
+  "id": "chatcmpl-124",
+  "object": "chat.completion",
+  "model": "qwen3:8b",
+  "choices": [
+   {
+    "index": 0,
+    "message": {
+     "role": "assistant",
+     "content": null,
+     "tool_calls": [
+      {
+       "id": "call_bad",
+       "type": "function",
+       "function": {
+        "name": "extrude",
+        "arguments": "{profile: sketch1, distance 10"
+       }
+      }
+     ]
+    },
+    "finish_reason": "stop"
+   }
+  ]
+ },
+ "final": {
+  "id": "chatcmpl-125",
+  "object": "chat.completion",
+  "model": "qwen3:8b",
+  "choices": [
+   {
+    "index": 0,
+    "message": {
+     "role": "assistant",
+     "content": "Done: a 40 x 30 x 10 mm box."
+    },
+    "finish_reason": "stop"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 300,
+   "completion_tokens": 20,
+   "total_tokens": 320
+  }
+ },
+ "models": {
+  "object": "list",
+  "data": [
+   {
+    "id": "qwen3:8b",
+    "object": "model",
+    "created": 1760000000,
+    "owned_by": "library"
+   },
+   {
+    "id": "nomic-embed-text:latest",
+    "object": "model",
+    "created": 1760000000,
+    "owned_by": "library"
+   }
+  ]
+ }
+}
