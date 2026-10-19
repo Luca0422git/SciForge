@@ -131,9 +131,9 @@ jobs:
           path: test-output/
           retention-days: 14
 
-  # Only when every part passed, on Linux and Windows.
+  # Packaged at once, without waiting for the tests (Luca 2026-10-19: "I need to be testing
+  # asap"); the tests run beside it and report on their own.
   quick-update:
-    needs: [tests, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
