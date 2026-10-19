@@ -24,6 +24,7 @@ from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import fixdecal_steps as f
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 st = {}
@@ -71,7 +72,7 @@ def press_pull(tag, point, distance):
 
     def click():
         h.check("%s: Press Pull open" % tag, pp_panel() is not None)
-        h.click(point)
+        pl.click_on_plane(point)
 
     def type_():
         p = pp_panel()

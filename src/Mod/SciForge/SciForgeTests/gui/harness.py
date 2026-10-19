@@ -377,6 +377,11 @@ def press(key, modifiers=QtCore.Qt.NoModifier):
     QtWidgets.QApplication.processEvents()
 
 
+# input still being played over several timer ticks (arrow_input.HeldDrag): the next step
+# waits for it to end
+BUSY = set()
+
+
 def fit(iso=True):
     if iso:
         view().viewIsometric()
@@ -590,6 +595,7 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
 
     def prepare():
         global _tap
+        BUSY.clear()
         # FreeCAD animates camera moves; a click computed mid-animation misses.
         App.ParamGet("User parameter:BaseApp/Preferences/View").SetBool(
             "UseNavigationAnimations", False
@@ -639,12 +645,21 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
         # A long recompute keeps the GUI alive by running Qt's event loop from inside it,
         # so this timer can fire in the middle of it; FreeCAD's progress handling then
         # throws away every click and key the step sends (a drop-down that would not open,
-        # a typed value lost). Wait until the document is done (at most 20 s).
-        if _recomputing() and state.get("waited", 0) < 200:
+        # a typed value lost). Wait until the document is done (at most 20 s), and until
+        # input still being played (a held drag, BUSY) has ended: on a slow machine it can
+        # outlast the step's wait_ms.
+        if (_recomputing() or BUSY) and state.get("waited", 0) < 200:
             state["waited"] = state.get("waited", 0) + 1
+            state["held"] = state.get("held") or bool(BUSY)
             QtCore.QTimer.singleShot(100, next_step)
             return
         state["waited"] = 0
+        BUSY.clear()  # ended, or given up on after 20 s
+        if state.pop("held", False):
+            # a drag that outlasted its step: what follows the release (the dialog's own
+            # timers) gets the second the step's wait_ms would have given it
+            QtCore.QTimer.singleShot(1000, next_step)
+            return
         step = queue.pop(0)
         # Progress on stdout and a partial result: a crash still shows where it happened.
         print("[SciForge] %s step: %s" % (state["name"], step.__name__), flush=True)

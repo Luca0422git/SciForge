@@ -93,11 +93,11 @@ def coil_xy():
 def coil_centre():
     p = panel()
     h.check("placing", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def coil_circle():
-    h.click(V(10, 0, 0))
+    pl.click_on_plane(V(10, 0, 0))
 
 
 coil_circle.wait_ms = 2500
@@ -311,11 +311,11 @@ def box_plane():
 def box_corner():
     p = pi.panel("BoxPanel")
     h.check("box placing", p is not None and p.state == "place", p and p.state)
-    h.click(V(40, -20, 0))
+    pl.click_on_plane(V(40, -20, 0))
 
 
 def box_corner2():
-    h.click(V(80, 20, 0))
+    pl.click_on_plane(V(80, 20, 0))
 
 
 box_corner2.wait_ms = 1200
@@ -350,11 +350,11 @@ def coil2_start():
 def coil2_centre():
     p = panel()
     h.check("the face is taken at once", p is not None and p.state == "place", p and p.state)
-    h.click(V(60, 0, 30))
+    pl.click_on_plane(V(60, 0, 30))
 
 
 def coil2_circle():
-    h.click(V(70, 0, 30))
+    pl.click_on_plane(V(70, 0, 30))
 
 
 coil2_circle.wait_ms = 2500
@@ -407,11 +407,11 @@ def cancel_plane():
 
 
 def cancel_centre():
-    h.click(V(60, 0, 30))
+    pl.click_on_plane(V(60, 0, 30))
 
 
 def cancel_circle():
-    h.click(V(65, 0, 30))
+    pl.click_on_plane(V(65, 0, 30))
 
 
 cancel_circle.wait_ms = 2500

@@ -185,7 +185,7 @@ def drag_length():
         h.check("length arrow to drag", False)
         return
     s["before"] = p.length.value()
-    hs.drag_arrow(p.length_origin, p.length_direction, arrow.distance(), -2.0)
+    hs.drag_arrow(p.length_origin, p.length_direction, arrow.distance(), -2.0, arrow=arrow)
 
 
 drag_length.wait_ms = 2500

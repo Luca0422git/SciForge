@@ -24,8 +24,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, drag_guard, handles3d, log, preview, primitives, profile_pick, ui_icon_path
-from . import warn
+from . import commands, drag_guard, handle_look, handles3d, log, preview, primitives
+from . import profile_pick, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_core import nearest_snap, nice_floor, round_to
@@ -181,8 +181,10 @@ _GRAB = {"time": 0.0}  # when a handle last took a press (one press moves one ha
 
 # -- the drag handle ----------------------------------------------------------------------------
 class LinearHandle(BoxCarrier):
-    """Fusion's blue arrow you drag along a line: a ball with an arrow head, at
-    origin + direction * value * scale. Drawn on top of the part, so it can be grabbed
+    """Fusion's blue arrow you drag along a line, standing at origin + direction * value *
+    scale and pointing the way the value goes (handle_look: the same size on the screen
+    whatever the part or the zoom; `size`, its old size in mm, and `color` are no longer
+    drawn). Drawn on top of the part, so it can be grabbed
     where the part is in front of it (a Coin dragger cannot); FreeCAD's mouse callbacks
     (view.addEventCallback, safe) only record the mouse, a Qt timer applies it (pivy
     dragger callbacks run Python without its lock and crash FreeCAD). It carries the
@@ -210,7 +212,7 @@ class LinearHandle(BoxCarrier):
         self.direction = App.Vector(direction)
         self.direction.normalize()
         self.scale = float(scale)
-        self.size = float(size)
+        self.size_hint = float(size)
         self.color = color
         self.name = name
         self.on_drag = on_drag
@@ -225,18 +227,15 @@ class LinearHandle(BoxCarrier):
         self._last_event = 0.0
         self._hover = False
         self._painted = None
-        self.root = coin.SoAnnotation()
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        self.root.addChild(pick)
-        self.material = coin.SoMaterial()
-        self.root.addChild(self.material)
+        self.root = handle_look.top_root(coin)  # over the part, never picked by Coin
         self.place = coin.SoTransform()
         self.root.addChild(self.place)
         self.flip = coin.SoRotationXYZ()
         self.flip.axis.setValue(coin.SoRotationXYZ.Z)
         self.root.addChild(self.flip)
-        self.root.addChild(self._arrow(coin))
+        shape, self.paint = self._shape(coin)
+        self.pixels = handle_look.PixelScale(coin, shape, self.view, self.position())
+        self.root.addChild(self.pixels.node)
         self._paint()
         self._draw()
         self.view.getSceneGraph().addChild(self.root)
@@ -249,28 +248,22 @@ class LinearHandle(BoxCarrier):
         self._timer.timeout.connect(self._poll)
         self._timer.start()
 
-    def _arrow(self, coin):
-        """A ball to grab and an arrow head pointing along local +Y."""
-        s = self.size
-        sep = coin.SoSeparator()
-        ball = coin.SoSphere()
-        ball.radius.setValue(0.3 * s)
-        sep.addChild(ball)
-        move = coin.SoTranslation()
-        move.translation.setValue(0.0, 0.55 * s, 0.0)
-        sep.addChild(move)
-        shaft = coin.SoCylinder()
-        shaft.radius.setValue(0.09 * s)
-        shaft.height.setValue(0.7 * s)
-        sep.addChild(shaft)
-        tip_move = coin.SoTranslation()
-        tip_move.translation.setValue(0.0, 0.55 * s, 0.0)
-        sep.addChild(tip_move)
-        tip = coin.SoCone()
-        tip.bottomRadius.setValue(0.25 * s)
-        tip.height.setValue(0.45 * s)
-        sep.addChild(tip)
-        return sep
+    SHAPE = "arrow"  # or "ball" (a point slid along a path: pipe_ui.PathHandle)
+
+    def _shape(self, coin):
+        """The arrow along local +Y (or the ball), in pixels; (node, paint)."""
+        if self.SHAPE == "ball":
+            return handle_look.ball_shape(coin)
+        return handle_look.arrow_shape(coin)
+
+    @property
+    def size(self):
+        """The arrow's length (mm) at its place in the view now."""
+        return handle_look.mm(self.view, self.position(), handle_look.core.ARROW_PX)
+
+    def _width(self):
+        half = handle_look.core.half_width_px(self.SHAPE)
+        return handle_look.mm(self.view, self.position(), half)
 
     # -- geometry ---------------------------------------------------------------------------------
     def point_at(self, value):
@@ -279,18 +272,20 @@ class LinearHandle(BoxCarrier):
     def position(self):
         return self.point_at(self._value)
 
-    def box_geometry(self):
-        """The ball (0.3 sizes) at the handle's position, the arrow to 1.325 sizes along it
-        (turned round when the value is negative)."""
+    def tip(self):
+        """The arrow's tip (the ball's centre for a ball)."""
         p = self.position()
+        if self.SHAPE == "ball":
+            return p
         sign = -1.0 if self._value * self.scale < 0 else 1.0
-        along = self.direction * sign
-        return (
-            p + along * (0.5 * self.size),
-            p - along * (0.3 * self.size),
-            p + along * (1.325 * self.size),
-            0.3 * self.size,
-        )
+        return p + self.direction * (sign * self.size)
+
+    def box_geometry(self):
+        """The arrow from its foot (the handle's position) to its tip, turned round when
+        the value is negative, as wide as its head (a ball: its centre and radius)."""
+        p = self.position()
+        tip = self.tip()
+        return (p + tip) * 0.5, p, tip, self._width()
 
     def box_active(self):
         return bool(self._drag or self._hover)
@@ -319,9 +314,7 @@ class LinearHandle(BoxCarrier):
         if self._painted == hot:
             return
         self._painted = hot
-        color = HANDLE_ACTIVE if hot else self.color
-        self.material.diffuseColor.setValue(*color)
-        self.material.emissiveColor.setValue(color[0] * 0.5, color[1] * 0.5, color[2] * 0.5)
+        self.paint.set(hot)
 
     # -- the mouse ----------------------------------------------------------------------------------
     def _screen(self, point):
@@ -329,35 +322,16 @@ class LinearHandle(BoxCarrier):
         return float(x), float(y)
 
     def hit(self, position):
-        """True if the mouse at `position` (viewport pixels) is on the handle."""
+        """True if the mouse at `position` (viewport pixels) is on the handle: its foot or
+        anywhere along the arrow, a few pixels of slack round it."""
         try:
-            p = self.position()
-            bx, by = self._screen(p)
-            sign = -1.0 if self._value * self.scale < 0 else 1.0
-            tip = p + self.direction * (sign * 1.1 * self.size)
-            tx, ty = self._screen(tip)
-            edge = p + self._side() * (0.3 * self.size)
-            ex, ey = self._screen(edge)
-            reach = max(self.GRAB_PIXELS, math.hypot(ex - bx, ey - by) + 4.0)
+            bx, by = self._screen(self.position())
+            tx, ty = self._screen(self.tip())
+            reach = handle_look.core.grab_px(self.SHAPE, at_least=self.GRAB_PIXELS)
             mx, my = float(position[0]), float(position[1])
-            if math.hypot(mx - bx, my - by) <= reach:
-                return True
-            # along the arrow's shaft
-            dx, dy = tx - bx, ty - by
-            length2 = dx * dx + dy * dy
-            if length2 < 1e-6:
-                return False
-            t = max(0.0, min(1.0, ((mx - bx) * dx + (my - by) * dy) / length2))
-            return math.hypot(mx - (bx + dx * t), my - (by + dy * t)) <= self.GRAB_PIXELS * 0.7
+            return handle_look.core.segment_distance((mx, my), (bx, by), (tx, ty)) <= reach
         except Exception:
             return False
-
-    def _side(self):
-        side = self.direction.cross(App.Vector(0, 0, 1))
-        if side.Length < 1e-6:
-            side = self.direction.cross(App.Vector(1, 0, 0))
-        side.normalize()
-        return side
 
     def _along(self, position):
         """The handle value under the mouse: the point of the handle's line nearest the
@@ -455,6 +429,7 @@ class LinearHandle(BoxCarrier):
                 return
             drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
+            self.pixels.update(self.view, self.position())
             pending = self._pending
             if pending is not None and abs(pending - self._value) > 1e-9:
                 self._value = pending
@@ -703,42 +678,10 @@ def base_face_holding(base, face_global):
         return None
 
 
-def design_box(body):
-    """(xmin, xmax, ymin, ymax, zmin, zmax) round the visible bodies of the design, along
-    `body`'s axes (None for an empty design)."""
-    inverse = body.getGlobalPlacement().inverse()
-    low, high = None, None
-    for obj in body.Document.Objects:
-        try:
-            if obj.TypeId != "PartDesign::Body" or not obj.ViewObject.Visibility:
-                continue
-            shape = obj.Shape
-            if shape.isNull() or not shape.Solids:
-                continue
-            b = shape.BoundBox
-            for x in (b.XMin, b.XMax):
-                for y in (b.YMin, b.YMax):
-                    for z in (b.ZMin, b.ZMax):
-                        p = inverse.multVec(App.Vector(x, y, z))
-                        if low is None:
-                            low, high = App.Vector(p), App.Vector(p)
-                        low = App.Vector(min(low.x, p.x), min(low.y, p.y), min(low.z, p.z))
-                        high = App.Vector(max(high.x, p.x), max(high.y, p.y), max(high.z, p.z))
-        except Exception:
-            continue
-    if low is None:
-        return None
-    return (low.x, high.x, low.y, high.y, low.z, high.z)
-
-
 def design_plane_picker(view, body, on_pick):
-    """The origin squares of Create Sketch (sketch_ui.PlanePicker), sized from the whole
-    design: the picker sizes them from the active body alone, so after a small second body
-    (a cylinder beside the part) they shrank to 20 mm round the origin and a click on the
-    plane beside the part hit nothing (found by the primitives QA). Same rule as the
-    picker's (origin_look.square_size_for: about 0.6 x the design, sticking out of a part
-    that covers the origin; Luca found 1.3 x too big)."""
-    from . import origin_look, sketch_ui
+    """The origin squares of Create Sketch (sketch_ui.PlanePicker) for the primitives: a
+    click on anything of the part is the part's."""
+    from . import sketch_ui
 
     class DesignPlanes(sketch_ui.PlanePicker):
         def _geometry_at(self, position):
@@ -749,17 +692,7 @@ def design_plane_picker(view, body, on_pick):
             info = self.view.getObjectInfo(tuple(position))
             return bool(info and info.get("Object"))
 
-    picker = DesignPlanes(view, body, on_pick)
-    try:
-        box = design_box(body)
-        if box is not None:
-            sizes = origin_look.square_sizes_for(box)
-            grown = {k: max(v, picker.sizes.get(k, 0.0)) for k, v in sizes.items()}
-            if grown != picker.sizes:
-                picker.resize(grown)
-    except Exception as exc:
-        warn("origin planes: %s" % exc)
-    return picker
+    return DesignPlanes(view, body, on_pick)
 
 
 def circle_points(cx, cy, r, steps=72):

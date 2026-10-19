@@ -1,0 +1,101 @@
+{
+  "id": "hardware_edit_length",
+  "title": "M3x10 socket head with the hole as deep as the screw, edited to M3x16: the hole follows",
+  "tags": [
+    "hardware",
+    "screw",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 30
+    },
+    {
+      "op": "sf_hardware",
+      "id": "hw1",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "at": [
+        12,
+        8,
+        30
+      ],
+      "standard": "iso4762",
+      "size": "3",
+      "length": 10,
+      "hole_depth": "length"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 35796.38552613922,
+        "source": "analytic",
+        "note": "before the edit: V1"
+      }
+    },
+    {
+      "op": "sf_hardware_edit",
+      "target": "hw1",
+      "set": {
+        "length": 16
+      },
+      "hardware_bbox": [
+        9.25,
+        5.25,
+        10.600000000000001,
+        14.75,
+        10.75,
+        29.6
+      ]
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "hw1": {
+          "volume": 177.3357624518024,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 35741.91030952597,
+    "faces": 10,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      30
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Counterbore 6.5 x 3.4, then the clearance hole as deep as the screw below the head: 3.4 + 10 = 13.4 (V1 = 36000 - pi 1.7^2 13.4 - pi (3.25^2 - 1.7^2) 3.4), after the edit 3.4 + 16 = 19.4 (V2 the same with 19.4)."
+  }
+}

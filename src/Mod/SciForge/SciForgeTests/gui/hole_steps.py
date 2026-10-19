@@ -120,11 +120,17 @@ def click_checkbox(box):
     w.click(box, QtCore.QPoint(8, box.height() // 2))
 
 
-def drag_arrow(origin, direction, distance, along):
-    """Drag a taskui.ArrowDragger whose middle is at origin + direction * distance by
-    `along` mm along its direction."""
-    centre = origin + direction * distance
-    h.drag(h.screen_point(centre), h.screen_point(centre + direction * along))
+def drag_arrow(origin, direction, distance, along, arrow=None):
+    """Drag a taskui.ArrowDragger whose foot is at origin + direction * distance by
+    `along` mm along its direction: grabbed at its head (where a person takes it) when
+    `arrow` is given, else at the foot (the edge of what the slim arrow takes since
+    the Fusion-like arrows)."""
+    start = origin + direction * distance
+    if arrow is not None and hasattr(arrow, "box_geometry"):
+        from SciForgeTests.gui import arrow_input
+
+        start = arrow_input.head_point(arrow)
+    h.drag(h.screen_point(start), h.screen_point(start + direction * along))
 
 
 def make_boss(name, radius=3.0, height=12.0, at=(20.0, 15.0)):

@@ -324,11 +324,11 @@ def box_plane():
 def box_corner():
     p = pi.panel("BoxPanel")
     h.check("box placing", p is not None and p.state == "place", p and p.state)
-    h.click(V(40, -40, 0))
+    pl.click_on_plane(V(40, -40, 0))
 
 
 def box_corner2():
-    h.click(V(80, -20, 0))
+    pl.click_on_plane(V(80, -20, 0))
 
 
 box_corner2.wait_ms = 1200

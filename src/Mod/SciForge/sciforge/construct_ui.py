@@ -184,18 +184,6 @@ def _depth_under_mouse(view, position):
     return (hit - point).dot(direction)
 
 
-def _part_under_mouse(view, position):
-    """True when a face, edge or corner of a solid is under the mouse."""
-    try:
-        info = view.getObjectInfo(tuple(position))
-    except Exception:
-        return False
-    if not info or not info.get("Object"):
-        return False
-    component = str(info.get("Component", "")).split(".")[-1]
-    return component.startswith(("Face", "Edge", "Vertex"))
-
-
 def _origin_planes_class():
     """sketch_ui.PlanePicker (the big origin squares, drawn bigger than the part) where the
     part under the mouse always takes the click, and otherwise the nearest of a square and
@@ -212,29 +200,13 @@ def _origin_planes_class():
                 if hit is None:
                     continue
                 point, t = hit
-                local = point - base
-                half = self.half_of(role)
-                if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
+                if self.on_square(role, point - base):
                     if best is None or t < best[1]:
                         best = (role, t)
             if best is None:
                 return None
-            # What is under the mouse but cannot go into the blue box (an axis for a box
-            # that waits for a plane, a round face...) does not take the click: Fusion picks
-            # through it, so the square behind does.
-            takes = getattr(self, "takes", None)
-            if takes is not None and not takes(position):
-                return best[0]
-            # The part under the mouse takes the click, also where a square is drawn in
-            # front of it or lies in one of its faces: the squares are big and drawn over
-            # the part (from the iso view the XZ square covers its back half), and Fusion
-            # picks the face that was clicked. Squares are picked beside the part.
-            if _part_under_mouse(self.view, position):
-                return None
-            depth = _depth_under_mouse(self.view, position)
-            tol = 1e-4 * max(1.0, abs(best[1]))
-            if depth is not None and depth <= best[1] + tol:
-                return None  # a construction plane in front takes it
+            # The squares are drawn over the part (the arrows' layer, Luca 2026-10-19): a
+            # square under the mouse takes the click, as what you see is the square.
             return best[0]
 
         def _moved(self, info):
@@ -278,9 +250,7 @@ def _square_depth(picker, position):
         if hit is None:
             continue
         point, t = hit
-        local = point - base
-        half = picker.half_of(role)
-        if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
+        if picker.on_square(role, point - base):
             if best is None or t < best:
                 best = t
     return best

@@ -23,6 +23,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 
 V = App.Vector
@@ -66,7 +67,7 @@ def make_box():
 
 def make_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def make_values():
@@ -88,7 +89,7 @@ def p11_q():
 
 
 def p11_front():
-    h.click(V(30, 0, 4))
+    pl.click_on_plane(V(30, 0, 4))
 
 
 def p11_distance():
@@ -182,7 +183,7 @@ def p12_both_taken():
 
 def p12_y_axis():
     h.fit()
-    h.click(V(0, -12, 0))
+    pl.click_on_plane(V(0, -12, 0))
 
 
 def p12_values():
@@ -242,7 +243,7 @@ def p13_box():
 
 def p13_axis():
     h.fit()
-    h.click(V(0, 0, 18))  # the Z axis above the box's corner
+    pl.click_on_plane(V(0, 0, 18))  # the Z axis above the box's corner
 
 
 def p13_angle_type():

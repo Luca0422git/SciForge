@@ -31,6 +31,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import joints_steps as j
 from SciForgeTests.gui import timeline_input as t
 
@@ -130,7 +131,7 @@ def m1_plane2():
     h.view().viewBottom()
     h.view().fitAll()
     QtWidgets.QApplication.processEvents()
-    h.click(V(15, 20, 0))  # the bottom face, seen from below
+    pl.click_on_plane(V(15, 20, 0))  # the bottom face, seen from below
 
 
 def m1_snap():

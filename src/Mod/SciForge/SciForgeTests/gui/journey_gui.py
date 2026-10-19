@@ -162,9 +162,24 @@ def step_pick_xy():
     state["planes"] = getattr(picker, "planes", None)
     check("Origin planes shown", state["planes"] is not None and len(state["planes"].objects) == 3)
     shot("journey-0-planes.png")
-    # From FreeCAD's isometric view (camera at +x -y +z) the XZ square hides the
-    # XY square for y > 0, so click the XY square where nothing is in front of it.
-    click(App.Vector(12, -8, 0))
+    # The XY square where it shows (the squares are small since 2026-10-18 and lie in
+    # their + quarter; from FreeCAD's isometric view the XZ square hides part of it).
+    click(xy_spot(state["planes"]))
+
+
+def xy_spot(planes):
+    """A point of the XY origin square that a click there gives to that square."""
+    if planes is None:
+        return App.Vector(12, 8, 0)
+    view = Gui.ActiveDocument.ActiveView
+    steps = [i / 10.0 for i in range(-8, 9)]
+    for a, b in sorted(((a, b) for a in steps for b in steps), key=lambda ab: abs(ab[0]) + abs(ab[1])):
+        point = planes.spot("XY_Plane", a, b)
+        x, y = view.getPointOnViewport(point)
+        pixel = (int(round(float(x))), int(round(float(y))))
+        if planes.plane_at(pixel) == "XY_Plane" and not planes._geometry_at(pixel):
+            return point
+    return planes.spot("XY_Plane", 0.0, 0.0)
 
 
 def step_in_sketch1():

@@ -193,20 +193,20 @@ def waits():
     h.check("two profiles: nothing taken by itself", p is not None and not p.profiles)
     h.check("Profile box waits", p is not None and p.active == "profiles")
     h.fit()
-    h.click(V(33, 0, 3))  # inside the ring, away from the circle
+    pl.click_on_plane(V(33, 0, 3))  # inside the ring, away from the circle
 
 
 def ring_picked():
     p = ri.panel()
     h.check("the ring is picked", len(p.profiles) == 1, p.profiles)
     h.check("then the Axis box waits", p.active == "axis")
-    h.click(V(40, 0, 10))  # the disc
+    pl.click_on_plane(V(40, 0, 10))  # the disc
 
 
 def disc_picked():
     p = ri.panel()
     h.check("the disc is added", len(p.profiles) == 2, p.profiles)
-    h.click(V(0, 0, 32))  # the Z axis, above the part
+    pl.click_on_plane(V(0, 0, 32))  # the Z axis, above the part
 
 
 def square_about_z():
@@ -225,7 +225,7 @@ def square_new_body():
     )
     h.fit()
     h.shot("2-two-profiles")
-    h.click(V(40, 0, 10))  # the disc again: drop it
+    pl.click_on_plane(V(40, 0, 10))  # the disc again: drop it
 
 
 def disc_dropped():
@@ -248,7 +248,7 @@ def axis_cleared():
     h.check("Axis box waits", p.active == "axis")
     h.check("the first body is shown", ri.shown(first_body()))
     h.fit()
-    h.click(V(62, 0, 0))  # the X axis, past the sketch
+    pl.click_on_plane(V(62, 0, 0))  # the X axis, past the sketch
 
 
 def ring_about_x():

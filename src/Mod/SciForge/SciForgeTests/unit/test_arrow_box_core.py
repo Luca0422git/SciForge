@@ -170,6 +170,39 @@ class Spot(unittest.TestCase):
         corner = core.spot((1447, 400), tail, tip, radius, BOX, VIEW, avoid_rects=others)
         self.assertGreaterEqual(core.clearance(tail, tip, rect(corner)) - radius, 1.0, corner)
 
+    def test_box_keeps_its_side_when_the_view_pans(self):
+        # CI #172/#174 (value_box_dialogs_2, Pattern): two arrows on one spot, box A on the
+        # first side, box B pushed to the other. After an 80 px pan B was placed first while
+        # A still stood where it was before the move: B took A's side, then A had to take
+        # B's, and the boxes swapped at every pan. With the way it went kept, B stays.
+        tail, tip = (700, 460), (700, 340)
+        a_left, a_top, a_way = core.spot_and_way((700, 400), tail, tip, 10, BOX, VIEW)
+        b_left, b_top, b_way = core.spot_and_way(
+            (700, 400), tail, tip, 10, BOX, VIEW, avoid_rects=[(a_left, a_top) + BOX]
+        )
+        self.assertIsNotNone(b_way)
+        self.assertNotEqual((a_left, a_top), (b_left, b_top))
+        pan = -80
+        moved = [(x + pan, y) for x, y in ((700, 400), tail, tip)]
+        stale_a = [(a_left, a_top) + BOX]  # A not placed yet after the pan
+        left, top, _way = core.spot_and_way(
+            moved[0], moved[1], moved[2], 10, BOX, VIEW, avoid_rects=stale_a, keep=b_way
+        )
+        self.assertEqual((left, top), (b_left + pan, b_top))
+        # without keep, the first choice wins: B would jump to A's side
+        left, top = core.spot(moved[0], moved[1], moved[2], 10, BOX, VIEW, avoid_rects=stale_a)
+        self.assertEqual((left, top), (a_left + pan, a_top))
+
+    def test_keep_gives_way_when_its_spot_is_taken(self):
+        tail, tip = (700, 460), (700, 340)
+        a_left, a_top, a_way = core.spot_and_way((700, 400), tail, tip, 10, BOX, VIEW)
+        other = [(a_left, a_top) + BOX]
+        left, top, way = core.spot_and_way(
+            (700, 400), tail, tip, 10, BOX, VIEW, avoid_rects=other, keep=a_way
+        )
+        self.assertNotEqual((left, top), (a_left, a_top))
+        self.assertIsNotNone(way)
+
     def test_clearance(self):
         self.assertEqual(core.clearance((0, 0), (100, 0), (40, -5, 10, 10)), 0.0)  # crosses
         self.assertEqual(core.clearance((0, 0), (100, 100), (40, 40, 10, 10)), 0.0)  # inside

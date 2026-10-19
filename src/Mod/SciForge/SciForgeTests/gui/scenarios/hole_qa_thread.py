@@ -194,7 +194,7 @@ def t2_drag_far2():
     if arrow is None:
         h.check("T2 length arrow shown again", False)
         return
-    hs.drag_arrow(p.length_origin, p.length_direction, arrow.distance(), 30.0)
+    hs.drag_arrow(p.length_origin, p.length_direction, arrow.distance(), 30.0, arrow=arrow)
 
 
 def t2_dragged_far():
@@ -210,7 +210,7 @@ def t2_dragged_far():
         arrow and arrow.distance(),
     )
     if arrow is not None:
-        hs.drag_arrow(p.length_origin, p.length_direction, arrow.distance(), -40.0)
+        hs.drag_arrow(p.length_origin, p.length_direction, arrow.distance(), -40.0, arrow=arrow)
 
 
 def t2_dragged_back():

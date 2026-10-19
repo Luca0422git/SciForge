@@ -26,7 +26,7 @@ from . import hole_common as common
 from . import hole_tables
 from . import thread_tables as tables
 from .compat import QtCore, QtWidgets
-from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes, on_top_root
+from .taskui import ArrowDragger, BoxCarrier, DistanceField, Panel, ValueBoxes, on_top_root
 
 PLACEMENT_LABELS = [("Single Hole", "single"), ("From Sketch (Multiple Holes)", "sketch")]
 EXTENT_LABELS = [("Distance", "distance"), ("To", "to"), ("All", "all")]
@@ -51,10 +51,15 @@ TO_WAITING = "Click the face or plane the hole goes to (in the 3D view or the br
 MISSES = "The hole misses the part. Drag it (or type X / Y) back onto a face of the part."
 
 
-class PointDragger:
+class PointDragger(BoxCarrier):
     """Fusion's centre point: a blue dot you drag over the face. It moves in the plane of
     `placement` (global; the hole's sketch) and reports (x, y) in that plane. Watched with a
-    Qt timer like taskui.ArrowDragger (Coin's dragger callbacks crashed FreeCAD)."""
+    Qt timer like taskui.ArrowDragger (Coin's dragger callbacks crashed FreeCAD).
+
+    A BoxCarrier without a box: its poll keeps it among the live handles, so a press on the
+    dot starts its drag and never a selection box (selection_ui._handle_under). It used to
+    get that only by luck, from the depth arrow drawn next to it (the old arrow reached down
+    to the dot); with the small arrows a drag on the dot drew a box and picked edges."""
 
     POLL_MS = 30
 
@@ -134,6 +139,14 @@ class PointDragger:
     def dragging(self):
         return common.is_dragging(self)
 
+    def box_geometry(self):
+        """The dot (taskui.BoxCarrier): where a press takes it."""
+        point = self.point()
+        return point, point, point, self.radius
+
+    def box_active(self):
+        return self.dragging()
+
     def _poll(self):
         try:
             active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
@@ -145,6 +158,7 @@ class PointDragger:
             if self._was_active and not active and self.on_release:
                 self.on_release(value)
             self._was_active = active
+            self.follow_box()  # a live handle (no value box)
         except Exception as exc:
             warn("hole centre drag: %s" % exc)
 
@@ -158,6 +172,7 @@ class PointDragger:
             self.view.getSceneGraph().removeChild(self.root)
         except Exception:
             pass
+        self.drop_box()
 
 
 def _face_centre(face):

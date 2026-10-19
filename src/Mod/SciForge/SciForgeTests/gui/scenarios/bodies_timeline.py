@@ -85,11 +85,11 @@ def combine_open():
 
 
 def combine_target():
-    h.click(V(-10, 0, 10))
+    pl.click_on_plane(V(-10, 0, 10))
 
 
 def combine_tool():
-    h.click(V(40, 0, 10))
+    pl.click_on_plane(V(40, 0, 10))
 
 
 def combine_ok():
@@ -190,7 +190,7 @@ def t4_open():
 
 
 def t4_body():
-    h.click(V(30, 0, 10))
+    pl.click_on_plane(V(30, 0, 10))
 
 
 def t4_plane():
@@ -245,7 +245,7 @@ def t5_open():
 
 
 def t5_body():
-    h.click(V(30, 0, 10))
+    pl.click_on_plane(V(30, 0, 10))
 
 
 def t5_copy():
@@ -300,7 +300,7 @@ def t6_open():
 
 
 def t6_body():
-    h.click(V(30, 0, 10))
+    pl.click_on_plane(V(30, 0, 10))
 
 
 def t6_type():

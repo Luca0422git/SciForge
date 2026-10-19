@@ -278,6 +278,13 @@ INSERT = group(
             "insert_step",
             note="A STEP or IGES file as a component: its parts, copies, names, colours.",
         ),
+        SEP,
+        item(
+            "Hardware...",
+            "SciForge_Hardware",
+            "hardware",
+            note="A real-size screw, nut, washer, heat-set insert or magnet, and its hole.",
+        ),
     ],
 )
 
@@ -644,8 +651,8 @@ UTIL_MAKE = group(
         item(
             "3D Print",
             "SciForge_3DPrint",
-            "insert_mesh",
-            note="Bodies as 3MF, STL or OBJ for your slicer, with the mesh refinement.",
+            "print_3d",
+            note="Send the bodies straight to your slicer (or save a 3MF / STL file).",
         ),
         item(
             "Export",
@@ -1143,7 +1150,7 @@ FILE_MENU = [
     item("Version History", "SciForge_VersionHistory", "document"),
     SEP,
     item("Export", ("SciForge_Export", "Std_Export"), "export"),
-    item("3D Print", "SciForge_3DPrint", "insert_mesh"),
+    item("3D Print", "SciForge_3DPrint", "print_3d"),
     item("Export Everything", "SciForge_ExportEverything", "export_all"),
     item("Capture Image", ("SciForge_CaptureImage", "Std_ViewScreenShot"), "canvas"),
     SEP,

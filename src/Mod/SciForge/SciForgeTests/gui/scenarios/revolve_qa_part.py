@@ -40,6 +40,7 @@ from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import revolve_input as ri
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
@@ -124,7 +125,7 @@ def new_design():
 
 
 def box_plane():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def box_rect():
@@ -203,7 +204,7 @@ def p6_sketch():
 
 
 def p6_face():
-    h.click(V(30, 0, 7))  # the front face
+    pl.click_on_plane(V(30, 0, 7))  # the front face
 
 
 def p6_rect():
@@ -423,7 +424,7 @@ def p7_revolve3():
 
 def p7_face3():
     h.fit()
-    h.click(V(25, 0, 7))  # the front face
+    pl.click_on_plane(V(25, 0, 7))  # the front face
 
 
 def p7_edge3():
@@ -450,7 +451,7 @@ def p7_cancelled():
 
 def p7_face4():
     h.fit()
-    h.click(V(25, 0, 7))
+    pl.click_on_plane(V(25, 0, 7))
 
 
 def p7_edge4():

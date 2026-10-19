@@ -385,11 +385,11 @@ def p6_plane():
 def p6_c1():
     p = pi.panel("BoxPanel")
     h.check("P6 placing on XY", p is not None and p.state == "place", p and p.state)
-    h.click(V(45, -35, 0))
+    pl.click_on_plane(V(45, -35, 0))
 
 
 def p6_c2():
-    h.click(V(55, -25, 0))
+    pl.click_on_plane(V(55, -25, 0))
 
 
 p6_c2.wait_ms = 1500
@@ -486,11 +486,11 @@ def p6_all_plane():
 
 
 def p6_all_c1():
-    h.click(V(-10, -10, 0))
+    pl.click_on_plane(V(-10, -10, 0))
 
 
 def p6_all_c2():
-    h.click(V(50, 40, 0))
+    pl.click_on_plane(V(50, 40, 0))
 
 
 p6_all_c2.wait_ms = 1500
@@ -577,7 +577,7 @@ def sketch_steps(tag, point, draw):
 
     def pick():
         h.fit()
-        h.click(point)
+        pl.click_on_plane(point)
 
     def drawing():
         sk = h.in_sketch()

@@ -73,11 +73,11 @@ def a_plane():
 
 
 def a_corner():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def a_corner2():
-    h.click(V(10, 10, 0))
+    pl.click_on_plane(V(10, 10, 0))
 
 
 a_corner2.wait_ms = 1200
@@ -331,11 +331,11 @@ def d_coil_plane():
 def d_coil_centre():
     p = pi.panel("CoilPanel")
     h.check("XZ picked", p is not None and p.plane_field.button.text() == "XZ Plane", p and p.state)
-    h.click(V(-80, 0, 0))
+    pl.click_on_plane(V(-80, 0, 0))
 
 
 def d_coil_circle():
-    h.click(V(-70, 0, 0))
+    pl.click_on_plane(V(-70, 0, 0))
 
 
 d_coil_circle.wait_ms = 2500
@@ -498,11 +498,11 @@ def e_plane():
 
 
 def e_centre():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def e_circle():
-    h.click(V(10, 0, 0))
+    pl.click_on_plane(V(10, 0, 0))
 
 
 e_circle.wait_ms = 1500
@@ -580,11 +580,11 @@ def e_coil_plane():
 def e_coil_centre():
     p = pi.panel("CoilPanel")
     h.check("placing the coil", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 0))  # in the middle of the torus' hole
+    pl.click_on_plane(V(0, 0, 0))  # in the middle of the torus' hole
 
 
 def e_coil_circle():
-    h.click(V(10, 0, 0))
+    pl.click_on_plane(V(10, 0, 0))
 
 
 e_coil_circle.wait_ms = 2500

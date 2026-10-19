@@ -195,7 +195,7 @@ def revolve():
 def click_x_axis():
     p = rpanel()
     h.check("1 the rectangle picked by itself", p is not None and len(p.profiles) == 1)
-    h.click(V(-25, 0, 0))  # the X axis, left of the plates
+    pl.click_on_plane(V(-25, 0, 0))  # the X axis, left of the plates
 
 
 def revolve_options():
@@ -406,7 +406,7 @@ def pick_profile_and_path():
     if p is None:
         return
     if not p.profiles:
-        h.click(V(40, 0, 8))  # inside the bar's area on the end face
+        pl.click_on_plane(V(40, 0, 8))  # inside the bar's area on the end face
     h.check("4 the profile", bool(p.profiles), p.profiles)
 
 
@@ -500,7 +500,7 @@ def loft_profiles():
     h.check("5 the loft dialog", p is not None)
     if p is None:
         return
-    h.click(V(35, 0, 10))  # the top rectangle (one of its areas)
+    pl.click_on_plane(V(35, 0, 10))  # the top rectangle (one of its areas)
 
 
 def loft_second():
@@ -509,7 +509,7 @@ def loft_second():
         return
     Gui.ActiveDocument.ActiveView.viewBottom()  # turn the view: the rectangle is under
     Gui.ActiveDocument.ActiveView.fitAll()
-    h.click(V(45, 0, 0))  # the lower rectangle, seen from below
+    pl.click_on_plane(V(45, 0, 0))  # the lower rectangle, seen from below
 
 
 def loft_cut():

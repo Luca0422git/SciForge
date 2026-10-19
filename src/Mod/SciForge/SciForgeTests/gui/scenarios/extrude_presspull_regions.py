@@ -92,7 +92,7 @@ def waiting_for_profiles():
 
 
 def click_ring():
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
@@ -106,7 +106,7 @@ def ring_extruded():
 
 
 def click_disc():
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
 
 
 def both_extruded():
@@ -117,7 +117,7 @@ def both_extruded():
 
 
 def click_ring_again():
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
 
 
 def disc_only():
@@ -129,7 +129,7 @@ def disc_only():
 
 
 def click_ring_back():
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
 
 
 def type_distance():

@@ -95,7 +95,7 @@ def drag_depth():
         h.check("depth arrow to drag", False)
         return
     s["before"] = p.depth.value()
-    hs.drag_arrow(p.depth_origin, p.depth_direction, arrow.distance(), 2.0)
+    hs.drag_arrow(p.depth_origin, p.depth_direction, arrow.distance(), 2.0, arrow=arrow)
 
 
 def dragged():

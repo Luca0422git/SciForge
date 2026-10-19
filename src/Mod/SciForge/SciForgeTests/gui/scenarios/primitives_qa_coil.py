@@ -93,11 +93,11 @@ def c1_rod_plane():
 
 
 def c1_rod_centre():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def c1_rod_circle():
-    h.click(V(10, 0, 0))
+    pl.click_on_plane(V(10, 0, 0))
 
 
 c1_rod_circle.wait_ms = 1500
@@ -119,7 +119,7 @@ def c1_rod_ok():
 def c1_select_top():
     h.check("C1 the rod", near(vol(), ROD), vol())
     h.fit()
-    h.click(V(0, -5, 30))
+    pl.click_on_plane(V(0, -5, 30))
 
 
 def c1_coil():
@@ -134,7 +134,7 @@ def c1_centre():
 
 
 def c1_edge():
-    h.click(V(10, 0, 30))
+    pl.click_on_plane(V(10, 0, 30))
 
 
 c1_edge.wait_ms = 2500
@@ -354,7 +354,7 @@ def c3_plane():
 def c3_centre():
     p = panel()
     h.check("C3 placing on XY", p is not None and p.state == "place", p and p.state)
-    h.click(V(30, 0, 0))
+    pl.click_on_plane(V(30, 0, 0))
 
 
 def c3_ok_early():
@@ -387,7 +387,7 @@ def c3_plane2():
 
 
 def c3_centre2():
-    h.click(V(30, 0, 0))
+    pl.click_on_plane(V(30, 0, 0))
 
 
 def c3_typed():

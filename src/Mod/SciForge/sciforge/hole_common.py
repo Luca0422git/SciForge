@@ -89,10 +89,16 @@ class SelectionField:
 
 
 def on_top(root):
-    """Draw a handle over the part (Fusion's manipulators are never hidden by it)."""
+    """Draw a handle over the part (Fusion's manipulators are never hidden by it). A handle
+    made with handle_look.top_root already is (with a depth buffer of its own, which a
+    depth test switched off here would spoil): it is left as it is."""
     try:
         from pivy import coin
 
+        if root.isOfType(coin.SoAnnotation.getClassTypeId()):
+            return
+        if "3DAnnotation" in root.getTypeId().getName().getString():
+            return
         depth = coin.SoDepthBuffer()
         depth.test.setValue(False)
         root.insertChild(depth, 0)

@@ -44,6 +44,7 @@ KINDS = {
     "coil": ("Coil", "coil"),
     "pipe": ("Pipe", "pipe"),
     "gear": ("Gear", "gear"),
+    "hardware": ("Hardware", "hardware"),  # INSERT > Hardware... (hardware.py)
     "primitive": ("Primitive", "box"),
     "pattern_rect": ("Rectangular Pattern", "pattern_rect"),
     "pattern_circ": ("Circular Pattern", "pattern_circ"),

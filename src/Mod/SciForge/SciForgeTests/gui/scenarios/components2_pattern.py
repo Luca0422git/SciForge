@@ -33,6 +33,7 @@ from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import component2_steps as c
 from SciForgeTests.gui import component_steps as cs
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import timeline_input as t
 
@@ -107,7 +108,7 @@ def a_type():
 
 
 def a_click_hub():
-    h.click(V(0, 65, 10))
+    pl.click_on_plane(V(0, 65, 10))
 
 
 def a_refused():
@@ -118,7 +119,7 @@ def a_refused():
 
 
 def a_click_spoke():
-    h.click(V(30, 0, 10))
+    pl.click_on_plane(V(30, 0, 10))
 
 
 def a_axis_box():
@@ -131,7 +132,7 @@ def a_click_z():
     p = ps.panel()
     h.check("origin axes drawn", p is not None and p.axis_picker is not None)
     h.fit()
-    h.click(V(0, 0, 22))
+    pl.click_on_plane(V(0, 0, 22))
 
 
 def a_quantity():
@@ -297,7 +298,7 @@ def f_direction_box():
 
 def f_click_x():
     h.fit()
-    h.click(V(10, 0, 0))  # between the origin and Spoke (the copies cover x < 0)
+    pl.click_on_plane(V(10, 0, 0))  # between the origin and Spoke (the copies cover x < 0)
 
 
 def f_values():

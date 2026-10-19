@@ -23,6 +23,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -79,7 +80,7 @@ def waiting_for_plane():
 
 
 def pick_xy():
-    h.click(V(15, -15, 0))
+    pl.click_on_plane(V(15, -15, 0))
 
 
 def placing():
@@ -94,7 +95,7 @@ def placing():
 
 
 def first_corner():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def second_corner_hover():
@@ -116,7 +117,7 @@ def rubber_band():
 
 
 def second_corner():
-    h.click(V(40, 20, 0))
+    pl.click_on_plane(V(40, 20, 0))
 
 
 second_corner.wait_ms = 1200

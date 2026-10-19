@@ -10,7 +10,11 @@ green blue of all the rest of the axis and make it smaller. and label them." So:
 - a plane takes the colour of the axis it faces (its normal): XY blue, XZ green, YZ red;
 - see-through, brighter with a thicker outline under the mouse;
 - a small screen label ("XY", "X") so you can tell which is which;
-- the squares are about 0.6 x the part (they were 1.3 x and covered it).
+- small squares like Fusion's (Luca, 2026-10-18, with a picture of Fusion's): each in the
+  + quarter of its plane, a little away from the origin, about SCREEN_SIDE pixels on the
+  screen whatever the zoom, and they stay there like Fusion's (square_corner). They were
+  1.3 x, then 0.6 x the part, centred on the origin; for a day they moved out beside a
+  part that hid them, which Luca found confusing (2026-10-19).
 
 Colours and sizes are plain data (unit-tested); the coin nodes are built only on demand.
 """
@@ -25,9 +29,11 @@ IDLE_TRANSPARENCY = 0.80
 HOVER_TRANSPARENCY = 0.55
 IDLE_OUTLINE = 1.0
 HOVER_OUTLINE = 3.0
-SIZE_FACTOR = 0.6  # square side / largest side of the part
+SIZE_FACTOR = 0.6  # square side / largest side of the part (the Mesh plane cut's squares)
 MIN_SIZE = 20.0  # mm: a tiny part still gets squares you can click
-EMPTY_SIZE = 100.0  # mm: an empty design (the view is framed on them)
+EMPTY_SIZE = 100.0  # mm: an empty design is framed on the room 100 mm squares took
+SCREEN_SIDE = 120.0  # px: side of an origin square on the screen (Guess, from Luca's picture)
+GAP = 0.1  # the gap between the origin and a square (fraction of its side)
 LABEL_POINTS = 16.0
 LABEL_INSET = 0.86  # the label sits this far out towards a corner (fraction of the half size)
 
@@ -80,31 +86,22 @@ def square_size(extent, empty=False):
     return max(MIN_SIZE, SIZE_FACTOR * float(extent))
 
 
-def square_sizes_for(box):
-    """{"XY": side, "XZ": side, "YZ": side} of the origin squares for a part whose box (in
-    the body's own axes) is (xmin, xmax, ymin, ymax, zmin, zmax): 0.6 x its largest side,
-    but a square the part hides round the origin sticks out beside it by a margin (15 % of
-    the part, at least 5 mm), where nothing is behind it, or it could not be clicked (a face
-    of the part takes a click over it):
-    - XY under a part that covers the origin in X and Y (centred on it): out of its nearer
-      side;
-    - XZ / YZ through a part that lies on both sides of it: out of its nearer side along the
-      plane (not above it: there the part's top face is behind the square)."""
-    x0, x1, y0, y1, z0, z1 = (float(c) for c in box)
-    extent = max(x1 - x0, y1 - y0, z1 - z0)
-    base = max(MIN_SIZE, SIZE_FACTOR * extent)
-    margin = max(5.0, 0.15 * extent)
-    need = {
-        "XY": min(-x0, x1, -y0, y1),
-        "XZ": min(-x0, x1) if y0 < 0.0 < y1 else 0.0,
-        "YZ": min(-y0, y1) if x0 < 0.0 < x1 else 0.0,
-    }
-    return {k: max(base, 2.0 * (n + margin)) if n > 0.0 else base for k, n in need.items()}
+def square_corner(key, side):
+    """(u, v) of the corner of the `key` square ("XY", "XZ", "YZ") nearest the origin: in the
+    + quarter of its plane, GAP x side away from both axes, as Fusion draws them. The
+    squares stay there whatever the part and the view (Luca 2026-10-19: "Fixed, like
+    Fusion"); a square a part hides is picked in the browser, or the view is turned."""
+    gap = GAP * side
+    return (gap, gap)
 
 
-def square_size_for(box):
-    """The largest of square_sizes_for(box)."""
-    return max(square_sizes_for(box).values())
+def part_size(box=None):
+    """The part's square size of before (0.6 x its largest side, EMPTY_SIZE without a
+    part): what the picks' "on the plane" tolerances are measured against."""
+    if box is None:
+        return square_size(0.0, True)
+    return square_size(max(float(box[1]) - float(box[0]), float(box[3]) - float(box[2]),
+                           float(box[5]) - float(box[4])))
 
 
 def look(role, hovered):

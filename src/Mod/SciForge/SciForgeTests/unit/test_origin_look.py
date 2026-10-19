@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """How the origin planes and axes look (sciforge/origin_look.py): one colour per axis, a
-plane in the colour of the axis it faces, smaller squares, labels away from the part. Runs
+plane in the colour of the axis it faces, small squares, labels away from the part. Runs
 without FreeCAD."""
 
 import os
@@ -50,32 +50,20 @@ class Size(unittest.TestCase):
         self.assertEqual(look.square_size(0.0, empty=True), look.EMPTY_SIZE)
 
 
-class SizeForBox(unittest.TestCase):
-    def test_part_beside_the_origin(self):
-        # a part in the + octant leaves 3/4 of each square free: 0.6 x the part
-        self.assertEqual(
-            look.square_sizes_for((0, 100, 0, 60, 0, 20)), {"XY": 60.0, "XZ": 60.0, "YZ": 60.0}
-        )
-        self.assertEqual(look.square_size_for((0, 20, 0, 20, 0, 20)), look.MIN_SIZE)
+class SquareCorner(unittest.TestCase):
+    """Fusion's layout: each square in the + quarter of its plane, a little off the axes,
+    and it stays there (Luca 2026-10-19: squares that moved round the part confused)."""
 
-    def test_part_centred_on_the_origin(self):
-        # a 40 x 30 x 10 box centred in x and y: XY sticks out of the nearer sides (y = +-15)
-        # by 15 % of the part (6): half 21; XZ out of x = +-20 (half 26), YZ out of y = +-15
-        sizes = look.square_sizes_for((-20, 20, -15, 15, 0, 10))
-        self.assertAlmostEqual(sizes["XY"], 42.0)
-        self.assertAlmostEqual(sizes["XZ"], 52.0)
-        self.assertAlmostEqual(sizes["YZ"], 42.0)
+    def test_plus_quarter_with_a_gap(self):
+        for key in ("XY", "XZ_Plane", "YZ"):
+            self.assertEqual(look.square_corner(key, 20.0), (2.0, 2.0))
 
-    def test_thin_plate_centred(self):
-        # 30 x 20 x 5: sides at 10, margin 5 (at least 5 mm); XZ out of x = +-15
-        sizes = look.square_sizes_for((-15, 15, -10, 10, 0, 5))
-        self.assertAlmostEqual(sizes["XY"], 30.0)
-        self.assertAlmostEqual(sizes["XZ"], 40.0)
+    def test_the_gap_follows_the_side(self):
+        self.assertEqual(look.square_corner("XY", 50.0), (5.0, 5.0))
 
-    def test_part_on_one_side_of_a_plane(self):
-        # centred in x, all at y > 0: XZ is seen from the front, it stays 0.6 x
-        sizes = look.square_sizes_for((-20, 20, 0, 30, 0, 10))
-        self.assertAlmostEqual(sizes["XZ"], 24.0)
+    def test_part_size_for_the_pick_tolerances(self):
+        self.assertAlmostEqual(look.part_size((0, 100, 0, 60, 0, 20)), 60.0)
+        self.assertEqual(look.part_size(None), look.EMPTY_SIZE)
 
 
 class AxisLabel(unittest.TestCase):

@@ -25,7 +25,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import log, warn
+from . import handle_look, log, warn
 from . import sketch3d
 from . import sketch3d_core as core
 from . import sketch_draw as draw
@@ -253,26 +253,28 @@ class Triad:
         self.typing = None
         obj = layer_.curves()
         self.start = sketch3d.resolved_points(obj, self.session.sketch)[index]
-        self.root = coin.SoAnnotation()
+        # Drawn like every SciForge handle (handle_look: Fusion's arrows, over the part,
+        # TRIAD_PX long on the screen whatever the zoom), in the axis colours.
+        self.root = handle_look.top_root(coin)
         self.root.setName("SciForgeSketch3DTriad")
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        self.root.addChild(pick)
         self.transform = coin.SoTransform()
         self.root.addChild(self.transform)
-        self.lines = {}
+        self.at = coin.SoTranslation()  # the point, in sketch coordinates
+        self.root.addChild(self.at)
+        shapes = coin.SoSeparator()
         for axis in ("X", "Y", "Z"):
             sep = coin.SoSeparator()
-            col = coin.SoBaseColor()
-            col.rgb.setValue(*AXIS_COLOURS[axis])
-            style = coin.SoDrawStyle()
-            style.lineWidth = 3.0
-            coords = coin.SoCoordinate3()
-            line = coin.SoLineSet()
-            for node in (col, style, coords, line):
-                sep.addChild(node)
-            self.root.addChild(sep)
-            self.lines[axis] = (coords, line)
+            turn = coin.SoRotation()  # the arrow is built along +Y
+            rot = App.Rotation(App.Vector(0, 1, 0), App.Vector(*core.AXIS_DIRECTIONS[axis]))
+            turn.rotation.setValue(*rot.Q)
+            sep.addChild(turn)
+            arrow, _paint = handle_look.arrow_shape(
+                coin, AXIS_COLOURS[axis], handle_look.core.AXIS_HOT, length=TRIAD_PX
+            )
+            sep.addChild(arrow)
+            shapes.addChild(sep)
+        self.pixels = handle_look.PixelScale(coin, shapes)
+        self.root.addChild(self.pixels.node)
         self.session.view.getSceneGraph().addChild(self.root)
         self.box = QtWidgets.QLineEdit(self.session.gl)
         self.box.setObjectName("SciForgeSketch3DValue")
@@ -289,7 +291,8 @@ class Triad:
     def arrows(self, v):
         """{axis: (base, tip)} in sketch coordinates."""
         p = self.point()
-        size = TRIAD_PX * v.mm_per_px(p)
+        world = v.place.multVec(App.Vector(*p))
+        size = TRIAD_PX * handle_look.mm_per_px(v.view, world)  # as handle_look draws it
         return {
             axis: (p, core.add(p, core.mul(core.AXIS_DIRECTIONS[axis], size)))
             for axis in ("X", "Y", "Z")
@@ -300,17 +303,9 @@ class Triad:
         place = v.place
         self.transform.translation.setValue(*place.Base)
         self.transform.rotation.setValue(*place.Rotation.Q)
-        for axis, (a, b) in self.arrows(v).items():
-            coords, line = self.lines[axis]
-            d = core.sub(b, a)
-            head = core.add(b, core.mul(d, -0.18))
-            side = {"X": (0, 1, 0), "Y": (1, 0, 0), "Z": (1, 0, 0)}[axis]
-            w = core.length(d) * 0.07
-            pts = [a, b, core.add(head, core.mul(side, w)), b, core.add(head, core.mul(side, -w))]
-            coords.point.setNum(0)
-            coords.point.setValues(0, len(pts), pts)
-            line.numVertices.setNum(0)
-            line.numVertices.setValues(0, 2, [2, 3])
+        p = self.point()
+        self.at.translation.setValue(*p)
+        self.pixels.update(v.view, v.place.multVec(App.Vector(*p)))
         self._box(v)
 
     def _box(self, v):

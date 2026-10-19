@@ -30,6 +30,9 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | Places (clouds, NAS) | `sciforge/locations_core.py`, `locations_ui.py`; spec `docs/sciforge/parity/cloud.md` |
 | AI connector (MCP server, bridge, Add an AI) | `sciforge/ai/`, `sciforge/ai_ui.py`; spec `docs/sciforge/parity/ai.md` |
 | AI chat panel (own API key; providers, loop, keys) | `sciforge/ai/chat_ui.py`, `ai/chat_core.py`, `ai/providers/`, `sciforge/secrets_store.py` |
+| AI panel (right dock: switch, Your AIs, Chat, Activity) | `sciforge/ai_panel_ui.py`, `ai_ui.py` |
+| Light / dark look (colours, style-sheet swap, light icons) | `sciforge/theme.py`, `sciforge/__init__.py` (`ui_icon_path`) |
+| FreeCAD Tools (FreeCAD's own workbenches, Back to SciForge) | `sciforge/freecad_tools_ui.py` |
 | Every change to FreeCAD's own code (tagged `SCIFORGE:`) | `docs/sciforge/core-patches.md` |
 | CI workflows (SciForge's own) | `.github/workflows/sciforge-*.yml` |
 | Tooling scripts for CI / local runs | `tools/sciforge/` |
@@ -289,7 +292,9 @@ Quick updates come from green "SciForge tests" runs on `develop`.
       Export dialog (STEP / STL binary+ASCII / 3MF / OBJ, whole design or ticked bodies,
       Unit Type, One File Per Body, Refinement Low/Medium/High/Custom, triangle count), 3D
       Print (formats, refinement, save + open folder, or Send to 3D Print Utility = the
-      slicer, remembered), Export Everything (STEP+STL+3MF+OBJ+PNG+README beside the design,
+      slicer, remembered; since 2026-10-18 **Send to Slicer**: slicers found on the computer,
+      Other..., Save file only, Save a copy, Preferences > 3D Print, `slicer_core.py`),
+      Export Everything (STEP+STL+3MF+OBJ+PNG+README beside the design,
       folder opened). `make3d*.py` replaced by `export.py` / `export_ui.py`. Ribbon: INSERT
       group wired (+ Insert STEP), MESH tab, UTILITIES > MAKE, a File menu on the quick-access
       Menu button (`ribbon_config.FILE_MENU`). 9 scenarios (`insert_*.py`, `export_*.py`,
@@ -1380,6 +1385,63 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Session log
 
+### Session log: Home, cloud and AI, Luca's feedback and the merge (`sf/home-cloud-ai`, 2026-10-19 late)
+
+Luca tried M1-M4 on Windows and asked for changes; all built, then merged into `develop`
+with his OK ("good. its fixed. now merge").
+
+#### Built
+- Home: the ribbon's commands hidden while Home is in front (`ribbon.set_home`), the browser
+  closed on Home and back on a design (`home_ui._follow_browser`); places as horizontal rows
+  (Recent, This computer, each cloud) with every design shown, each row with its folder path
+  and a "..." menu (Show in Folder, Change Folder..., Disconnect); This computer's folder is
+  the default save folder (Save dialog, FreeCAD's FileOpenSavePath) and is made if missing;
+  designs saved elsewhere are listed "another folder"; a Preferences button.
+- AI panel (`ai_panel_ui.py`, right dock): UTILITIES > AI (icon `ai_panel`) and File > AI
+  Panel open/close it; title bar with a clear X (`panel_close`); "AI control" switch (=
+  Preferences > AI, Home's switch follows); Your AIs list with SciForge's own lettered
+  badges (never company logos), room for several; tabs Chat and Activity.
+- Light look: Preferences > General > Look (dark default, light like Fusion's default).
+  `theme.DARK/LIGHT`, `translate()` swaps SciForge's own style sheets (a hook on
+  setStyleSheet keeps the original in the property `sciforgeQss`), light icon copies
+  (`icons-light`), 3D view and sketch colours; switching is live (`theme.set_theme`).
+- FreeCAD Tools (`freecad_tools_ui.py`): UTILITIES > FreeCAD Tools and the app menu list
+  FreeCAD's workbenches; choosing one switches to FreeCAD's own interface with a "Back to
+  SciForge" bar on top; designs stay open.
+- Installer: `install_update.ps1` offers to stop SciForge's own python.exe (the AI
+  connector Claude Desktop starts) that blocked the update.
+
+#### Found on Luca's Windows (and fixed)
+- **Saves never appeared**: FreeCAD saves to `<design>.FCStd.<uuid>` and renames it last;
+  in his Documents folder (Google Drive backup) Windows refuses every rename, for good.
+  `versions_ui` probes each folder once (`_renames_refused`), saves directly there
+  (FreeCAD's `BackupPolicy` off for that save only) and finishes a left temp file by a copy
+  (`versions.finish_save`); Home finishes leftovers it finds (`.sciforge/unfinished-saves`
+  keeps older ones). Scenario `unfinished_save`.
+- **Dark panels light grey** (the sketch palette, also marking menu, measure, text): my light
+  look's swap back to dark (`TO_DARK`) mapped the light marker colour, #3b4453, which is also
+  the dark chrome, to #e8e8e8. Colours the dark look uses are never swapped back now.
+  **Lesson:** two fixes went out on a wrong cause (FreeCAD's overlay making panels
+  translucent: real, `theme.keep_opaque` kept, but not the cause) because the test compared
+  the palette's colour with its own, already wrong, style sheet. Check the colour on the
+  screen (`grabWindow`) against the intended literal, and LOOK at the test's screenshots:
+  they showed the grey palette all along.
+- Focus: hiding a focused widget (timeline `_clear`) moved focus into a Home row, which
+  activated Home after a reopen; Home's buttons take no Tab focus, the timeline clears
+  focus first.
+
+#### Merge with develop
+- Conflicts: brief and MEMORY (both kept), `prefs_core` / `misc_preferences` (pages AI and
+  3D Print), `golden/builder.py`: develop's `golden/hardware_ops.py` moved to
+  `sciforge/ai/ops/hardware_ops.py` (imports `.core`), registered at the end of `core.py`.
+- Sandbox lesson: never edit module files while a sweep runs (a false failure followed).
+
+#### Open
+- FreeCAD's OverlayRight frame outline shows while a right-side SciForge dock is there
+  (FreeCAD's overlay style sheet).
+- M5 (sign-in clouds) and M6 (ChatGPT connector) not started; answers in the chat are not
+  streamed.
+
 ### Session log: Home, cloud and AI, M4 chat panel (`sf/home-cloud-ai`, 2026-10-19 night)
 
 #### Built
@@ -1550,6 +1612,102 @@ builder's step code into product code, golden models still green.
 - Black 26 locally reformats 4 moved files (`inspect_ops`, `primitive_ops`, `shell_draft_ops`,
   `runner.py`) differently from the repo's pinned black 25.11: they were like that before;
   left untouched.
+
+### 2026-10-18/19: small origin squares, four merges, overnight CI (branch `develop`)
+- Luca: "make it small like that, but keep the color" (Fusion's Create Sketch squares).
+  `origin_look.square_corners` + `sketch_ui.PlanePicker`: ~120 px squares (SCREEN_SIDE) in
+  the + quarter, 10 % off the axes, kept that size on a 250 ms follow-the-view timer; moved
+  beside a part that meets their plane (rings round the part, the side facing the viewer
+  first); a spot counts only if it shows (`_shows`: in view, not under a dialog, nothing of
+  the part in front/behind). When no spot round the origin shows (zoomed on a part far
+  away, surface2_loft), `_seen_corner` puts the square on the part of its plane in view,
+  nearest the origin (beyond Fusion). Empty designs keep the old framing (an invisible
+  100 mm cube for fitAll). Scenario `origin_squares_small`; ~130 scenarios aim through
+  `plane_input.click_square / click_on_plane`.
+- Merged into develop: Send to Slicer (sf/slicer), hardware library (sf/hardware), drag
+  arrows (sf/arrows), each with its own session entry above. Home screen / BYOCloud / AI
+  connectors: brief `docs/sciforge/dev/briefs/home-cloud-ai.md`, worked on by another
+  session on branch `sf/home-cloud-ai`.
+- CI #161, #172, #174 (everything else green; all test timing, plus one real glitch):
+  - revolve_axes: the squares' 250 ms timer moved them between aiming and clicking after
+    a fit. `plane_input.settle()` runs the picker's `_follow_zoom` before aiming.
+  - extrudeface_drag / extrude_feel: a 30-move held drag outlasted the step's wait_ms on a
+    busy runner. `harness.BUSY`: an `arrow_input.HeldDrag` marks itself busy, the harness
+    waits for it (max 20 s) and then 1 s more for the dialog's own timers.
+  - hole_qa P4: the press at the slim new arrow's foot missed by a pixel on CI.
+    `hole_steps.drag_arrow(..., arrow=)` presses on the head (`arrow_input.head_point`).
+  - value_box_dialogs_2 (real): two value boxes swapped sides at every pan (the first one
+    re-placed saw the other still at its pre-pan spot). `arrow_box_core.spot_and_way`
+    `keep=` the way it went last time; taskui.ArrowValueBox keeps `_way`.
+- Reproducing a GitHub-only failure: GitHub's font = `XDG_CONFIG_HOME=<dir>` whose
+  `fontconfig/fonts.conf` rejects Inter and prefers DejaVu Sans (view 1538x770, wider
+  boxes); its slowness = `taskset -c 0` with a busy loop on core 0. value_box_dialogs_2
+  failed 1/1 with the font, 0/5 without.
+- Sandbox rules learned: at most 2 FreeCAD processes (the container restarted twice from
+  memory); wrap runs in `flock` (one lock per process slot); `--only gui` runs EVERY
+  scenario (~8 h): use `--only scenarios --scenario a,b`; never `pgrep -f`/`pkill -f`
+  (matches your own shell); detached runs end with a done-file; any push to develop
+  cancels the CI run in progress (concurrency group), so batch pushes.
+- Quick update sent to Luca: build afe1f789 (CI #175 green), WHATS_NEW items 36-43.
+- Zip: `scratchpad/mkzip.sh <commit>` layout = quick-update/{SciForge, install_update.*,
+  README.md (docs/sciforge/quick-update.md), WHATS_NEW.txt}, build_info stamped.
+- Open for Luca: which slicer he uses (did it open with the part); heat-set insert sizes
+  and brand, magnet sizes; arrow look (flip for minus, hover colour).
+
+### 2026-10-18/19: Drag arrows and angle handles (branch `sf/arrows`, merged into develop 2026-10-19)
+- Luca: "streamline the drag arrows ... consistent size ... same thing for the angle dragger"
+  (Fusion picture). Every distance arrow and angle handle has one Fusion-like look and one
+  size on the screen whatever the zoom (`handle_look.py`, `handle_look_core.py`; extrude,
+  move, revolve, primitives, handles3d, pattern, pipe, sketch3d, hole). Scenario
+  `handle_size`, unit `test_handle_look_core`. Parity: `extrude-presspull.md`, `ui-shell.md`.
+- FreeCAD fact: `SoShapeScale` sets its scale only when it draws, so a handle made just before
+  a click (or after a Fit) is picked at 1 px = 1 mm, a huge invisible grab that swallows the
+  next click. The drawn arrow / disc is unpickable; an invisible grab shape scaled from the
+  camera by the handle itself (`PixelScale(plain=True)`, `unpickable()`, `disc_grab()`) takes
+  the click. The grab follows the drawn arrow (`handle_look_core.grab_parts`: wide at the
+  head, slim along the shaft, nothing behind the foot).
+- Hole's centre dot is a real handle now (`BoxCarrier`); it used to work only because the old
+  long depth arrow reached it.
+- `arrow_box_core.REACH / HEAD` describe Coin's old double-headed arrow; kept only for
+  `ArrowValueBox.place()` and `handle_size()`.
+- Tests: held drags take 2.5-2.9 s on a busy machine; the harness now waits for any
+  `arrow_input.HeldDrag` still running (`harness.BUSY`, at most 20 s, then 1 s to settle).
+- Open: Luca to confirm the arrow choices (flip for minus, hover colour).
+
+### 2026-10-18: Hardware library (branch `sf/hardware`, merged into develop 2026-10-19)
+- INSERT > Hardware...: ISO screws (socket, button, countersunk), nuts, washers, heat-set
+  inserts and round magnets as their own components, with the matching hole (clearance +
+  counterbore / countersink, insert hole, magnet pocket) as one undo step; editable from the
+  timeline. Full notes: `docs/sciforge/sessions/hardware.md`; spec, sources and guesses:
+  `docs/sciforge/parity/hardware.md`.
+- Open: Luca to confirm the heat-set insert sizes (a Guess set M2-M5) and magnet sizes.
+
+### 2026-10-18: Send to Slicer (branch `sf/slicer`, merged into develop 2026-10-19)
+- Research (Autodesk help "3D print a design" and support / forum pages through search
+  excerpts; the help site does not resolve from the sandbox): Fusion's 3D Print has
+  Preparation Type Manufacturing / Export / Print Utility; Print Utility = an Application
+  drop-down of the utilities Fusion found, or Custom (point at the program). Forums: a slicer
+  already open sometimes got nothing (FUS-171507); Custom with the .exe or a shortcut works.
+  Sources and the Fusion / SciForge table: `docs/sciforge/parity/insert-export.md` (3D Print).
+- Built: `slicer_core.py` (no Qt / FreeCAD: finds PrusaSlicer, Bambu Studio, OrcaSlicer,
+  UltiMaker Cura in Program Files / %LOCALAPPDATA%\Programs, on the PATH, Flatpak,
+  AppImages, /Applications; the Send to list; the command line incl. .lnk / .app; units;
+  file names; never overwrites a copy); `export_ui.PrintDialog` rebuilt around a **Send to**
+  drop-down (found slicers, "Other... (pick the program)", "Save file only"), a plain "no
+  slicer found" note, "Also save a copy next to the design", slicers always get mm;
+  Preferences > **3D Print** page (Send to, Program, Format, Save a copy, the slicers found);
+  original `print_3d` icon. Test seams: `export_ui.SLICER_ENV`, `PROGRAM_DIALOG`.
+- Tests: unit `test_slicer_core.py` (29); scenario `send_to_slicer.py` (106 checks, fake
+  slicers = shell scripts logging their arguments); export_print / mesh_print / smoke /
+  misc_preferences updated for the new drop-down and page.
+- Local runs: send_to_slicer 106, export_print 45, export_formats 55, export_everything 29,
+  exchange2_export 89, mesh_print 34, misc_preferences 84, ribbon_sweep 216 (all pass); unit
+  1380 OK; golden 432 + 2 xfail; smoke pass. export_print's own XY click aimed at the old big
+  origin square (cf6d1d74 made them small): it now aims through `plane_input` like box_steps.
+- At the merge, export_print's XY click went through `plane_input.click_on_plane` like the
+  rest of develop (the journey and insert scenarios were already rerouted there).
+- Open: try with the real slicers on Windows (Luca); more slicers (Creality Print, Elegoo...)
+  are one entry each in `slicer_core.SLICERS`.
 
 ### Session log: Luca's improvement list (branch `develop`, 2026-10-16/17)
 

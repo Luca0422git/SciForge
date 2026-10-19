@@ -90,7 +90,7 @@ a_dialog.wait_ms = 1500
 def a_low():
     d = print_dialog()
     h.check("Low: still 12", count(d) == 12, count(d))
-    i.set_check(d.send, False)
+    b.choose(d.send_to, "Save file only")
     i.dialog_button(d, "OK")
 
 

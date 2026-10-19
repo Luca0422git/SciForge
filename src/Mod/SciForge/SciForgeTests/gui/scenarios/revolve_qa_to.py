@@ -230,7 +230,7 @@ def p23_axis():
     p = panel()
     h.check("P23 the area is taken", p is not None and len(p.profiles) == 1)
     h.fit()
-    h.click(V(0, 0, 40))  # the drawn Z axis, above the part
+    pl.click_on_plane(V(0, 0, 40))  # the drawn Z axis, above the part
 
 
 def p23_type_to():
@@ -266,7 +266,7 @@ def p23_ok_refused():
     h.check("P23 it says why", "object to revolve to" in msg(), msg())
     h.check("P23 no pop-up", not h.popups(), h.popups())
     h.fit()
-    h.click(V(0, -15, 25))  # the YZ square, in front of the part's left
+    pl.click_on_plane(V(0, -15, 25))  # the YZ square, in front of the part's left
 
 
 def p23_plane_picked():
@@ -416,7 +416,7 @@ def p25_revolve():
 
 def p25_axis():
     h.fit()
-    h.click(V(0, 0, 40))
+    pl.click_on_plane(V(0, 0, 40))
 
 
 def p25_type_to():
@@ -542,7 +542,7 @@ def p26_top_refused():
     h.check("P26 the top face is refused", "contains the axis" in msg(), msg())
     h.check("P26 still waits", p.active == "to", p.active)
     h.check("P26 unchanged", near(vol(), s["v26"]), vol())
-    h.click(V(38, 0, 3))  # the front face, where the profile is
+    pl.click_on_plane(V(38, 0, 3))  # the front face, where the profile is
 
 
 def p26_front_refused():
@@ -553,7 +553,7 @@ def p26_front_refused():
     h.check("P26 the front face is refused", "already" in msg(), msg())
     h.check("P26 unchanged", near(vol(), s["v26"]), vol())
     h.shot("p26-refused")
-    h.click(V(0, -15, 25))  # the YZ square
+    pl.click_on_plane(V(0, -15, 25))  # the YZ square
 
 
 def p26_plane():

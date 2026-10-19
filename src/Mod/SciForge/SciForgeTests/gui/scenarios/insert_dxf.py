@@ -21,6 +21,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as i
 
 V = App.Vector
@@ -62,7 +63,7 @@ def a_waits():
 
 
 def a_click_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 a_click_xy.wait_ms = 1200
@@ -169,7 +170,7 @@ def e_extrude():
 
 
 def e_click_region():
-    h.click(V(10, 10, 0))
+    pl.click_on_plane(V(10, 10, 0))
 
 
 def e_distance():

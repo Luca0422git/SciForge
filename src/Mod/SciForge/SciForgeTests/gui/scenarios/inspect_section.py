@@ -25,6 +25,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import hole_steps as hs
 from SciForgeTests.gui import inspect_steps as s
 
@@ -89,7 +90,7 @@ def waits():
 
 def click_xz():
     h.fit()
-    h.click(V(8, 0, -8))
+    pl.click_on_plane(V(8, 0, -8))
 
 
 def cut_at_xz():
@@ -282,7 +283,7 @@ def angle_start():
 
 def angle_pick():
     h.fit()
-    h.click(V(8, 0, -8))
+    pl.click_on_plane(V(8, 0, -8))
 
 
 def angle_90():
@@ -328,7 +329,7 @@ def esc_start():
 
 def esc_pick():
     h.fit()
-    h.click(V(8, 0, -8))
+    pl.click_on_plane(V(8, 0, -8))
 
 
 def esc_press():

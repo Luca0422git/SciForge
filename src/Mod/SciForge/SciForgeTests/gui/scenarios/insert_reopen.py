@@ -20,6 +20,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as i
 from SciForgeTests.gui import sketch_input as si
 
@@ -89,7 +90,7 @@ def a_canvas():
 
 
 def a_click_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 a_click_xy.wait_ms = 1200

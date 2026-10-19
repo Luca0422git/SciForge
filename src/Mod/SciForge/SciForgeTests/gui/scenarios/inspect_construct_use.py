@@ -25,6 +25,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 
 V = App.Vector
@@ -194,7 +195,7 @@ def axis_click_xy():
         p is not None and "Plane1" in s.box_value(p, 0),
         p and s.box_value(p, 0),
     )
-    h.click(V(6, -6, 0))
+    pl.click_on_plane(V(6, -6, 0))
 
 
 def axis_preview():
@@ -219,7 +220,7 @@ def ring_sketch():
 
 
 def ring_pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def ring_draw():
@@ -253,7 +254,7 @@ def revolve_axis_click():
     if p is None:
         return
     h.check("the rectangle is taken by itself", len(p.profiles) == 1, p.profiles)
-    h.click(V(50, 25, 0))
+    pl.click_on_plane(V(50, 25, 0))
 
 
 def ring_made_preview():

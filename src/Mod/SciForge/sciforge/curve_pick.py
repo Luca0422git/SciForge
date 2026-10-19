@@ -20,7 +20,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import drag_guard, handles3d, profile_pick, warn
+from . import drag_guard, handle_look, handles3d, profile_pick, warn
 from .compat import QtCore, QtGui, QtWidgets
 from .taskui import BoxCarrier
 
@@ -254,7 +254,9 @@ _GRAB = {"time": 0.0}
 
 class PathHandle(BoxCarrier):
     """A blue ball on the path, at `value` (0..1) of `samples` = [(0..1, global point)],
-    with an arrow along the path. Dragging it slides it along the path (the nearest sample
+    the same size on the screen whatever the part or the zoom (handle_look; `size`, its
+    old size in mm, and `color` are no longer drawn). Dragging it slides it along the path
+    (the nearest sample
     to the mouse on screen); on_drag(value) while dragging, on_release(value) at the end.
     Drawn over the part and grabbed by distance on screen (like revolve_ui.AngleHandle),
     so it is not a Coin dragger. It carries the dialog's value box when given one
@@ -269,7 +271,7 @@ class PathHandle(BoxCarrier):
         self.coin = coin
         self.view = Gui.ActiveDocument.ActiveView
         self.samples = [(float(f), App.Vector(p)) for f, p in samples]
-        self.size = float(size)
+        self.size_hint = float(size)
         self.color = color
         self.on_drag = on_drag
         self.on_release = on_release
@@ -281,15 +283,12 @@ class PathHandle(BoxCarrier):
         self._hover = False
         self._painted = None
         self._last_event = 0.0
-        self.root = coin.SoAnnotation()
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        self.root.addChild(pick)
-        self.material = coin.SoMaterial()
-        self.root.addChild(self.material)
+        self.root = handle_look.top_root(coin)  # over the part, never picked by Coin
         self.place = coin.SoTransform()
         self.root.addChild(self.place)
-        self.root.addChild(self._shape(coin))
+        ball, self.paint = handle_look.ball_shape(coin)
+        self.pixels = handle_look.PixelScale(coin, ball, self.view, self.point_at(self._value))
+        self.root.addChild(self.pixels.node)
         self._paint()
         self._draw()
         self.view.getSceneGraph().addChild(self.root)
@@ -301,21 +300,6 @@ class PathHandle(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
-
-    def _shape(self, coin):
-        s = self.size
-        sep = coin.SoSeparator()
-        ball = coin.SoSphere()
-        ball.radius.setValue(0.3 * s)
-        sep.addChild(ball)
-        move = coin.SoTranslation()
-        move.translation.setValue(0.0, 0.55 * s, 0.0)
-        sep.addChild(move)
-        cone = coin.SoCone()
-        cone.bottomRadius.setValue(0.22 * s)
-        cone.height.setValue(0.45 * s)
-        sep.addChild(cone)
-        return sep
 
     def point_at(self, value):
         """Global point of the path at `value` (between samples, linear)."""
@@ -346,10 +330,10 @@ class PathHandle(BoxCarrier):
         self._draw()
 
     def box_geometry(self):
-        """The ball and its arrow along the path, as the value box sees them."""
+        """The ball, as the value box sees it."""
         point = self.point_at(self._value)
-        tip = point + self._direction(self._value) * (0.78 * self.size)
-        return point, point, tip, 0.3 * self.size
+        radius = handle_look.mm(self.view, point, handle_look.core.half_width_px("ball"))
+        return point, point, point, radius
 
     def box_active(self):
         return bool(self._drag or self._hover)
@@ -368,9 +352,7 @@ class PathHandle(BoxCarrier):
         if self._painted == state:
             return
         self._painted = state
-        color = HANDLE_ACTIVE if state else self.color
-        self.material.diffuseColor.setValue(*color)
-        self.material.emissiveColor.setValue(color[0] * 0.5, color[1] * 0.5, color[2] * 0.5)
+        self.paint.set(state)
 
     def _screen(self, point):
         x, y = self.view.getPointOnViewport(point)
@@ -379,7 +361,8 @@ class PathHandle(BoxCarrier):
     def hit(self, position):
         try:
             bx, by = self._screen(self.point_at(self._value))
-            return math.hypot(float(position[0]) - bx, float(position[1]) - by) <= self.GRAB_PIXELS
+            reach = handle_look.core.grab_px("ball", at_least=self.GRAB_PIXELS)
+            return math.hypot(float(position[0]) - bx, float(position[1]) - by) <= reach
         except Exception:
             return False
 
@@ -443,6 +426,7 @@ class PathHandle(BoxCarrier):
                 return
             drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
+            self.pixels.update(self.view, self.point_at(self._value))
             pending = self._pending
             if pending is not None and abs(pending - self._value) > 1e-6:
                 self._value = pending

@@ -21,6 +21,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import surface_steps as st
 from SciForgeTests.gui import timeline_input as tl
 
@@ -317,7 +318,7 @@ def cells():
 
 
 def click_disc():
-    h.click(V(65, 15, 0))
+    pl.click_on_plane(V(65, 15, 0))
 
 
 def holed():
@@ -340,7 +341,7 @@ def untrim():
 def click_face():
     p = st.panel()
     h.check("Untrim dialog open", p is not None and p.kind == "untrim")
-    h.click(V(55, 5, 0))
+    pl.click_on_plane(V(55, 5, 0))
 
 
 def internal():

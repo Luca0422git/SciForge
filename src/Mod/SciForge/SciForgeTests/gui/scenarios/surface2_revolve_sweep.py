@@ -29,6 +29,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import surface_steps as st
 
 V = App.Vector
@@ -165,7 +166,7 @@ def r1_waits():
     h.check("the origin planes show", p is not None and p.planes is not None)
     h.check("Angle is hidden", p is not None and not p.rows["angle"][0].isVisible())
     h.check("nothing built until the object is picked", p is not None and p.step is None)
-    h.click(V(0, -12, 8))
+    pl.click_on_plane(V(0, -12, 8))
 
 
 def r1_quarter():
@@ -213,7 +214,7 @@ def r2_click_xz():
     p = st.panel()
     h.check("the Object box takes the clicks", p is not None and p.active == "to_object")
     h.fit()
-    h.click(V(16, 0, 4))
+    pl.click_on_plane(V(16, 0, 4))
 
 
 def r2_half():
@@ -262,7 +263,7 @@ def r3_to():
 
 def r3_click_xy():
     h.fit()
-    h.click(V(6, -10, 0))
+    pl.click_on_plane(V(6, -10, 0))
 
 
 def r3_refused():

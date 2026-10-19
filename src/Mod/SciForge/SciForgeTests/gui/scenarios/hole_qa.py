@@ -347,7 +347,7 @@ def p4_drag_down():
     if arrow is None:
         h.check("P4 depth arrow to drag", False)
         return
-    hs.drag_arrow(p.depth_origin, p.depth_direction, arrow.distance(), 25.0)
+    hs.drag_arrow(p.depth_origin, p.depth_direction, arrow.distance(), 25.0, arrow=arrow)
 
 
 def p4_dragged_down():
@@ -367,7 +367,7 @@ def p4_drag_up():
     if arrow is None:
         h.check("P4 depth arrow to drag again", False)
         return
-    hs.drag_arrow(p.depth_origin, p.depth_direction, arrow.distance(), -60.0)
+    hs.drag_arrow(p.depth_origin, p.depth_direction, arrow.distance(), -60.0, arrow=arrow)
 
 
 def p4_dragged_up():
@@ -387,7 +387,7 @@ def p4_drag_diameter_in():
         h.check("P4 diameter arrow to drag", False)
         return
     s["d_before"] = p.diameter.value()
-    hs.drag_arrow(p.diameter_origin, p.diameter_direction, arrow.distance(), -8.0)
+    hs.drag_arrow(p.diameter_origin, p.diameter_direction, arrow.distance(), -8.0, arrow=arrow)
 
 
 def p4_dragged_in():

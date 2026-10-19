@@ -26,7 +26,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies_row_ui, commands, drag_guard, extrude, handles3d, log, preview
+from . import bodies_row_ui, commands, drag_guard, extrude, handle_look, handles3d, log, preview
 from . import origin_look, profile_pick, protractor, revolve, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
@@ -142,11 +142,12 @@ class SelectionField:
 
 # -- the angle handle ----------------------------------------------------------------------------
 class AngleHandle(BoxCarrier):
-    """Fusion's revolve manipulator: a blue ball with an arrow next to the part that
-    travels round the axis, and a thin arc showing the angle swept. It sits `radius` from
-    the axis at `center`, at angle 0 along `zero`; positive angles turn right-handed about
-    `axis`, like the revolve itself. The arrow points the way the angle grows (`pointing`
-    -1 for side two).
+    """Fusion's angle manipulator: a small white disc with a dark dot (handle_look) that
+    travels round the axis, and a thin light arc showing the angle swept. It sits `radius`
+    from the axis at `center`, at angle 0 along `zero`; positive angles turn right-handed
+    about `axis`, like the revolve itself. The disc keeps its size on the screen whatever
+    the part or the zoom: `size` (its old size in mm), `color` and `pointing` (the way its
+    old arrow pointed, -1 for side two) are kept for the dialogs but no longer drawn.
 
     Like Fusion's manipulators it is drawn on top of the part and can be grabbed even
     where the part is in front of it, so it is not a Coin dragger (Coin only lets the
@@ -197,24 +198,17 @@ class AngleHandle(BoxCarrier):
         self._mark = None  # the snap angle the drag sits on (protractor)
         self._raw = None  # the angle the hand asks for, before the snap
         self._wheel = protractor.Wheel()
-        self.root = coin.SoAnnotation()  # drawn over the part, like Fusion's handles
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        self.root.addChild(pick)
-        self.material = coin.SoMaterial()
-        self.root.addChild(self.material)
-        self.arc_coords = coin.SoCoordinate3()
-        self.arc_lines = coin.SoLineSet()
-        arc = coin.SoSeparator()
-        arc_style = coin.SoDrawStyle()
-        arc_style.lineWidth.setValue(1.5)
-        arc.addChild(arc_style)
-        arc.addChild(self.arc_coords)
-        arc.addChild(self.arc_lines)
-        self.root.addChild(arc)
+        # Drawn over the part, like Fusion's handles (handle_look: the 3D-annotation pass):
+        # the thin light arc of the angle swept and the white disc with its dark dot, the
+        # same size on the screen whatever the part or the zoom.
+        self.root = handle_look.top_root(coin)
+        self.arc = handle_look.Line(coin)
+        self.root.addChild(self.arc.node)
         self.place = coin.SoTransform()
         self.root.addChild(self.place)
-        self.root.addChild(self._arrow(coin))
+        disc, self.paint = handle_look.disc_shape(coin)
+        self.scale = handle_look.PixelScale(coin, disc, self.view, self.point_at(self._value))
+        self.root.addChild(self.scale.node)
         self._paint()
         self._draw()
         self.holder = _skip_fit(coin, self.root)
@@ -228,36 +222,9 @@ class AngleHandle(BoxCarrier):
         self._timer.timeout.connect(self._poll)
         self._timer.start()
 
-    def _arrow(self, coin):
-        """The ball to grab and an arrow along the circle (local +Y), at the origin."""
-        s = self.size
-        sep = coin.SoSeparator()
-        ball = coin.SoSphere()
-        ball.radius.setValue(0.3 * s)
-        sep.addChild(ball)
-        turn = coin.SoRotationXYZ()  # the cylinder and cone point along +Y
-        turn.axis.setValue(coin.SoRotationXYZ.Z)
-        turn.angle.setValue(0.0 if self.pointing > 0 else math.pi)
-        sep.addChild(turn)
-        shaft_move = coin.SoTranslation()
-        shaft_move.translation.setValue(0.0, 0.55 * s, 0.0)
-        sep.addChild(shaft_move)
-        shaft = coin.SoCylinder()
-        shaft.radius.setValue(0.09 * s)
-        shaft.height.setValue(0.7 * s)
-        sep.addChild(shaft)
-        tip_move = coin.SoTranslation()
-        tip_move.translation.setValue(0.0, 0.35 * s + 0.2 * s, 0.0)
-        sep.addChild(tip_move)
-        tip = coin.SoCone()
-        tip.bottomRadius.setValue(0.25 * s)
-        tip.height.setValue(0.45 * s)
-        sep.addChild(tip)
-        return sep
-
     # -- geometry ------------------------------------------------------------------------------
     def point_at(self, degrees):
-        """Where the handle's ball is at `degrees` (3D, global)."""
+        """Where the handle's disc is at `degrees` (3D, global)."""
         a = math.radians(degrees)
         return self.center + (self.zero * math.cos(a) + self.side * math.sin(a)) * self.radius
 
@@ -268,17 +235,19 @@ class AngleHandle(BoxCarrier):
     def angle(self):
         return self._value
 
-    def box_geometry(self):
-        """The ball (0.3 sizes) and the arrow along the circle (to 1.325 sizes the way the
-        angle grows): the box sits beside them, along the circle."""
-        p = self.point_at(self._value)
-        along = self._tangent(self._value) * self.pointing
-        return (
-            p + along * (0.5 * self.size),
-            p - along * (0.3 * self.size),
-            p + along * (1.325 * self.size),
-            0.3 * self.size,
+    def disc_mm(self):
+        """The disc's drawn radius (its rim included) in mm at its place now."""
+        return handle_look.mm(
+            self.view, self.point_at(self._value), handle_look.core.half_width_px("disc")
         )
+
+    def box_geometry(self):
+        """The disc as the box sees it: its centre and its width along the circle (the box
+        sits beside it)."""
+        p = self.point_at(self._value)
+        along = self._tangent(self._value)
+        r = self.disc_mm()
+        return p, p - along * r, p + along * r, r
 
     def box_active(self):
         return bool(self._drag or self._hover)
@@ -295,24 +264,15 @@ class AngleHandle(BoxCarrier):
         self._shown = self._value
         p = self.point_at(self._value)
         self.place.translation.setValue(p.x, p.y, p.z)
-        x = self._tangent(self._value).cross(self.axis)  # outward
-        y = self._tangent(self._value)
-        z = self.axis
-        matrix = App.Matrix(x.x, y.x, z.x, 0, x.y, y.y, z.y, 0, x.z, y.z, z.z, 0, 0, 0, 0, 1)
-        self.place.rotation.setValue(*App.Placement(matrix).Rotation.Q)
         steps = max(2, int(abs(self._value) / 5.0) + 1)
         points = [self.point_at(self._value * i / float(steps)) for i in range(steps + 1)]
-        self.arc_coords.point.setValues(0, len(points), [(q.x, q.y, q.z) for q in points])
-        self.arc_coords.point.setNum(len(points))
-        self.arc_lines.numVertices.setValue(len(points))
+        self.arc.set_points([(q.x, q.y, q.z) for q in points])
 
     def _paint(self):
         if self._painted_hover == (self._hover or self._drag):
             return
         self._painted_hover = self._hover or self._drag
-        color = HANDLE_ACTIVE if self._painted_hover else self.color
-        self.material.diffuseColor.setValue(*color)
-        self.material.emissiveColor.setValue(color[0] * 0.5, color[1] * 0.5, color[2] * 0.5)
+        self.paint.set(self._painted_hover)
 
     # -- the mouse -------------------------------------------------------------------------------
     def _screen(self, point):
@@ -320,12 +280,11 @@ class AngleHandle(BoxCarrier):
         return float(x), float(y)
 
     def hit(self, position):
-        """True if the mouse at `position` (viewport pixels) is on the ball."""
+        """True if the mouse at `position` (viewport pixels) is on the disc (a few pixels
+        of slack round it)."""
         try:
             bx, by = self._screen(self.point_at(self._value))
-            edge = self.point_at(self._value) + self.axis * (0.3 * self.size)
-            ex, ey = self._screen(edge)
-            reach = max(self.GRAB_PIXELS, math.hypot(ex - bx, ey - by) + 4.0)
+            reach = handle_look.core.grab_px("disc", at_least=self.GRAB_PIXELS)
             return math.hypot(float(position[0]) - bx, float(position[1]) - by) <= reach
         except Exception:
             return False
@@ -422,6 +381,7 @@ class AngleHandle(BoxCarrier):
                 return
             drag_guard.end_lost_drag(self, idle=False)  # its release never came (drag_guard)
             self._paint()
+            self.scale.update(self.view, self.point_at(self._value))
             if self._drag and not self._wheel.shown():
                 # the protractor wheel shows where the angle snaps while it is held (made
                 # here, not in the mouse callback: no nodes added while Coin traverses)

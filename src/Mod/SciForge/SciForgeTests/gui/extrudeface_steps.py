@@ -14,6 +14,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 
@@ -112,7 +113,7 @@ def xy_block(name, rect, height, expect_total, click=V(12, -8, 0)):
         h.ribbon("Create Sketch")
 
     def plane():
-        h.click(click)
+        pl.click_on_plane(click)
 
     def draw():
         sk = h.in_sketch()

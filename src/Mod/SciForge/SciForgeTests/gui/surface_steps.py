@@ -17,6 +17,7 @@ from PySide6 import QtTest
 from SciForgeTests.gui import arrow_input as ai
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as ins
 from SciForgeTests.gui import sketch_input as si
 
@@ -144,7 +145,7 @@ def sketch_on(point):
 
 def open_sketch_clicked(point):
     h.check("no pop-up", not h.popups(), h.popups())
-    h.click(point)
+    pl.click_on_plane(point)
 
 
 def add_lines(sketch, points, closed=False):

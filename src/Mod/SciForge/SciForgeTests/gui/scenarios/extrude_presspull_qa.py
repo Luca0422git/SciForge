@@ -26,6 +26,7 @@ from PySide import QtCore
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -104,7 +105,7 @@ def sketch_rect_on(tag, point, x0, y0, x1, y1, circle=None):
     def pick():
         h.check("no pop-up on Create Sketch (%s)" % tag, not h.popups(), h.popups())
         h.fit()
-        h.click(point)
+        pl.click_on_plane(point)
 
     def draw():
         sk = h.in_sketch()
@@ -207,7 +208,7 @@ def p2_nothing_built():
     h.check("options alone build nothing", p.target is None and not extrudes())
     h.check("no message yet", "⚠" not in p.message.text(), p.message.text())
     h.fit()
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
 
 
 def p2_ring_symmetric():
@@ -257,13 +258,13 @@ def p2_after_esc():
 def p2_disc_first():
     p = xpanel()
     h.check("a new Extrude starts with the defaults", p.direction.currentText() == "One Side")
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
 
 
 def p2_then_ring():
     p = xpanel()
     h.check("disc picked", len(p.profiles) == 1, p.profiles)
-    h.click(V(5, 5, 0))
+    pl.click_on_plane(V(5, 5, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
@@ -365,11 +366,9 @@ def p3_auto_cut():
 
 
 def _arrow_drag(p, pixels):
-    origin = p.dragger.root.getChild(0).translation.getValue().getValue()
-    place = p.dragger.root.getChild(0)
-    axis = place.rotation.getValue().multVec(p.dragger.coin.SbVec3f(1, 0, 0)).getValue()
-    head = V(*origin) + V(*axis) * (p.dragger.distance() + p.dragger.size * 0.9)
-    a = h.screen_point(head)
+    # On the arrow's head as it is drawn now: it points the way the distance goes (down,
+    # into the part, for the -5 pocket). The old arrow had a head on both sides.
+    a = h.screen_point(arrows.head_point(p.dragger))
     h.drag(a, QtCore.QPoint(a.x(), a.y() - pixels), steps=20)
 
 

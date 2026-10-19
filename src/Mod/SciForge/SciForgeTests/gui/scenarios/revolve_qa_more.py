@@ -157,7 +157,7 @@ def shaft_revolve():
 
 def shaft_axis():
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def shaft_ok():
@@ -318,7 +318,7 @@ def p12_not_taken():
 def p12_axis():
     h.check("P12 back in the first design", doc().Name == s["doc"], doc().Name)
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def p12_ok():
@@ -398,7 +398,7 @@ def p13_revolve():
 
 def p13_axis():
     h.fit()
-    h.click(V(0, 0, 32))
+    pl.click_on_plane(V(0, 0, 32))
 
 
 def p13_cut():
@@ -510,7 +510,7 @@ def p14_revolve():
 
 def p14_axis():
     h.fit()
-    h.click(V(0, 0, 38))
+    pl.click_on_plane(V(0, 0, 38))
 
 
 def p14_ok():

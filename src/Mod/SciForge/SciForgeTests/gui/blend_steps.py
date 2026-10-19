@@ -19,6 +19,7 @@ from PySide import QtCore, QtWidgets
 from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 BOX = 40.0 * 30.0 * 10.0
@@ -50,7 +51,7 @@ def box_steps(name, height=10, profile=None):
         h.ribbon("Create Sketch")
 
     def pick_xy():
-        h.click(V(12, -8, 0))
+        pl.click_on_plane(V(12, -8, 0))
 
     def draw():
         sk = h.in_sketch()

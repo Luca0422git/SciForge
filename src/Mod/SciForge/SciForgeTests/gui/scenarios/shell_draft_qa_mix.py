@@ -31,6 +31,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import shell_draft_steps as sd
 from SciForgeTests.gui import timeline_input as tl
 from SciForgeTests.gui import versions_input as vi
@@ -127,7 +128,7 @@ def p1_bottom():
     h.check("P1 no message", msg(p) == "", msg(p))
     h.view().viewBottom()  # the person turns the part over to reach its bottom
     h.view().fitAll()
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
     h.fit()
 
 

@@ -20,6 +20,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import primitive_input as pi
 
 V = App.Vector
@@ -66,11 +67,11 @@ def new_design():
 
 
 def plane():
-    h.click(V(15, -15, 0))
+    pl.click_on_plane(V(15, -15, 0))
 
 
 def centre():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 centre.wait_ms = 2000
@@ -211,15 +212,15 @@ def box_start():
 
 
 def box_plane():
-    h.click(V(30, -30, 0))  # a corner of the XY square the parts leave free
+    pl.click_on_plane(V(30, -30, 0))  # a corner of the XY square the parts leave free
 
 
 def box_corner():
-    h.click(V(60, -30, 0))
+    pl.click_on_plane(V(60, -30, 0))
 
 
 def box_corner2():
-    h.click(V(120, 30, 0))
+    pl.click_on_plane(V(120, 30, 0))
 
 
 box_corner2.wait_ms = 1200
@@ -256,7 +257,7 @@ def cut_start():
 def cut_centre():
     p = panel()
     h.check("the face is taken at once", p is not None and p.state == "place", p and p.state)
-    h.click(V(90, 0, 10))
+    pl.click_on_plane(V(90, 0, 10))
 
 
 cut_centre.wait_ms = 2000
@@ -337,11 +338,11 @@ ctrl_y.wait_ms = 1500
 
 # -- 3. New Component -----------------------------------------------------------------------------
 def comp_plane():
-    h.click(V(-40, -40, 0))  # a corner of the XY square the parts leave free
+    pl.click_on_plane(V(-40, -40, 0))  # a corner of the XY square the parts leave free
 
 
 def comp_centre():
-    h.click(V(0, -80, 0))
+    pl.click_on_plane(V(0, -80, 0))
 
 
 comp_centre.wait_ms = 2000

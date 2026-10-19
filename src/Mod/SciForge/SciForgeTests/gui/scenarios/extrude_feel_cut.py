@@ -209,7 +209,7 @@ def regrab_in_pocket():
     p = xpanel()
     s["regrab_before"] = p.distance.value()
     d = p.dragger
-    head = d.origin + d.direction * (d.distance() + 0.9 * d.size)
+    head = a.head_point(d)  # the arrow of a cut points down, into the part
     h.check("the arrow head is under the sketch plane", head.z < 10.0, head)
     start = h.screen_point(head)
     h.drag(start, QtCore.QPoint(start.x(), start.y() - 50))

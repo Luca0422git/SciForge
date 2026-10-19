@@ -120,7 +120,11 @@ def pick_xz():
 
 def draw_square():
     sk = h.in_sketch()
-    h.check("sketch on XZ", sk is not None and sk.AttachmentSupport[0][0].Role == "XZ_Plane")
+    h.check(
+        "sketch on XZ",
+        sk is not None and sk.AttachmentSupport[0][0].Role == "XZ_Plane",
+        sk is not None and sk.AttachmentSupport,
+    )
     if sk:
         h.draw_rectangle(sk, 0, 0, 20, 20)
         s["square"] = sk
@@ -365,7 +369,7 @@ def construction_drawn():
     )
     h.fit()
     h.shot("4-construction-line")
-    h.click(V(70, 0, 11))
+    pl.click_on_plane(V(70, 0, 11))
 
 
 def ring_axis():

@@ -20,6 +20,7 @@ from PySide import QtCore
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as t
 from SciForgeTests.gui import widget_input as w
 
@@ -78,7 +79,7 @@ def t2_create():
 
 
 def t2_pick():
-    h.click(V(12, -8, 0))  # the XY square (nothing else is shown)
+    pl.click_on_plane(V(12, -8, 0))  # the XY square (nothing else is shown)
 
 
 def t2_draw():

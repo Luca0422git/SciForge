@@ -105,7 +105,7 @@ def k1_plane():
 
 
 def k1_corner():
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 def k1_mouse():
@@ -196,7 +196,7 @@ def k2_plane():
 
 
 def k2_centre():
-    h.click(V(50, 10, 0))
+    pl.click_on_plane(V(50, 10, 0))
 
 
 def k2_mouse():
@@ -275,7 +275,7 @@ def k3_centre():
         p is not None and near(p.diameter.value(), 6.0),
         p and p.diameter.value(),
     )
-    h.click(V(50, -20, 0))
+    pl.click_on_plane(V(50, -20, 0))
 
 
 k3_centre.wait_ms = 1200
@@ -308,7 +308,7 @@ def k4_plane():
 
 
 def k4_centre():
-    h.click(V(-30, -30, 0))
+    pl.click_on_plane(V(-30, -30, 0))
 
 
 def k4_extrude_key():
@@ -349,11 +349,11 @@ def k4_box_plane():
 
 
 def k4_box_c1():
-    h.click(V(-30, 0, 0))
+    pl.click_on_plane(V(-30, 0, 0))
 
 
 def k4_box_c2():
-    h.click(V(-20, 10, 0))
+    pl.click_on_plane(V(-20, 10, 0))
 
 
 k4_box_c2.wait_ms = 1500
@@ -420,7 +420,7 @@ def k5_plane():
 
 
 def k5_centre():
-    h.click(V(-30, -30, 0))
+    pl.click_on_plane(V(-30, -30, 0))
 
 
 def k5_esc():

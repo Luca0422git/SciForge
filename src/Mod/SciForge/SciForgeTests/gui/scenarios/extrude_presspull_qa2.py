@@ -22,6 +22,7 @@ from PySide import QtCore
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -84,7 +85,7 @@ def sketch_on(tag, point, draw_fn):
 
     def pick():
         h.fit()
-        h.click(point)
+        pl.click_on_plane(point)
 
     def draw():
         sk = h.in_sketch()
@@ -436,7 +437,7 @@ def p9_e():
 
 
 def p9_ring():
-    h.click(V(3, 3, 0))
+    pl.click_on_plane(V(3, 3, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 

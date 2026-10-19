@@ -14,6 +14,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 
 V = App.Vector
@@ -105,7 +106,7 @@ def planes_top():
 
 
 def planes_front():
-    h.click(V(30, 0, 5))
+    pl.click_on_plane(V(30, 0, 5))
 
 
 def planes_check():
@@ -116,13 +117,13 @@ def planes_check():
 
 def origin_xy():
     h.fit()
-    h.click(V(6, -6, 0))
+    pl.click_on_plane(V(6, -6, 0))
 
 
 def origin_xz():
     p = s.construct_panel()
     h.check("XY square taken", p is not None and "XY" in s.box_value(p, 0), p and s.box_value(p, 0))
-    h.click(V(8, 0, -8))
+    pl.click_on_plane(V(8, 0, -8))
 
 
 def origin_check():
@@ -161,7 +162,7 @@ def z_axis_click():
     p = s.construct_panel()
     h.check("origin axes drawn", p is not None and "axes" in p.overlays)
     h.fit()
-    h.click(V(0, 0, -15))
+    pl.click_on_plane(V(0, 0, -15))
 
 
 def z_axis_check():
@@ -232,7 +233,7 @@ def three_1():
 
 
 def three_2():
-    h.click(V(30, 0, 5))
+    pl.click_on_plane(V(30, 0, 5))
 
 
 def three_3():
@@ -267,7 +268,7 @@ def edge_plane_edge():
 
 
 def edge_plane_xy():
-    h.click(V(6, -6, 0))
+    pl.click_on_plane(V(6, -6, 0))
 
 
 def edge_plane_check():

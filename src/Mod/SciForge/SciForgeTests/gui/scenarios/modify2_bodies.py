@@ -171,7 +171,7 @@ def direction_box():
 
 def click_y_axis():
     h.fit()
-    h.click(V(0, -12, 0))
+    pl.click_on_plane(V(0, -12, 0))
 
 
 def three():

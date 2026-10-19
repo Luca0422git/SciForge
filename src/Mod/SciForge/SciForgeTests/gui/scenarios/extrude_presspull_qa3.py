@@ -27,6 +27,7 @@ from PySide import QtCore, QtWidgets
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
@@ -114,7 +115,7 @@ def sketch_on(tag, point, draw_fn):
 
     def pick():
         h.fit()
-        h.click(point)
+        pl.click_on_plane(point)
 
     def draw():
         sk = h.in_sketch()
@@ -174,12 +175,12 @@ def p10_e():
 
 
 def p10_ring():
-    h.click(V(3, 3, 0))
+    pl.click_on_plane(V(3, 3, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 
 def p11_both():
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
 
 
 def p11_block_ok():
@@ -215,7 +216,7 @@ def p10_regions_offered():
     h.view().viewTop()
     h.view().fitAll()
     QtWidgets.QApplication.processEvents()
-    h.click(V(20, 15, 0))
+    pl.click_on_plane(V(20, 15, 0))
     arrows.type_distance("10")  # Extrude starts at 0 (Fusion): type the distance
 
 

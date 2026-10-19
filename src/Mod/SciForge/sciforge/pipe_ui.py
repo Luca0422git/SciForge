@@ -16,7 +16,8 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, log, pipe, preview, primitives, profile_pick, ui_icon_path, warn
+from . import commands, handle_look_core, log, pipe, preview, primitives, profile_pick
+from . import ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_ui import (
@@ -38,6 +39,8 @@ PATH_COLOR = (0.12, 0.53, 0.90)
 
 class PathHandle(LinearHandle):
     """The Distance handle: a blue ball that slides along the path (0 = start, 1 = end)."""
+
+    SHAPE = "ball"
 
     def __init__(self, points, fraction, size, on_drag=None, on_release=None):
         self.points = [App.Vector(p) for p in points]
@@ -93,9 +96,8 @@ class PathHandle(LinearHandle):
     def hit(self, position):
         try:
             bx, by = self._screen(self.position())
-            return math.hypot(float(position[0]) - bx, float(position[1]) - by) <= max(
-                self.GRAB_PIXELS, 0.0
-            )
+            reach = handle_look_core.grab_px("ball", at_least=self.GRAB_PIXELS)
+            return math.hypot(float(position[0]) - bx, float(position[1]) - by) <= reach
         except Exception:
             return False
 

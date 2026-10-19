@@ -24,6 +24,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 
 V = App.Vector
@@ -82,7 +83,7 @@ def axes_shown():
 
 
 def click_x_axis():
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def direction_picked():
@@ -290,7 +291,7 @@ def cancel_direction_box():
 
 def cancel_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def cancel_now():

@@ -124,7 +124,7 @@ def o1_symmetric():
     if not h.check("O1 Extrude open", p is not None):
         return
     if not p.profiles:
-        h.click(V(30, 0, 10))  # the square under the rod, if it was not taken by itself
+        pl.click_on_plane(V(30, 0, 10))  # the square under the rod, if it was not taken by itself
     h.check("O1 Symmetric", ui.choose(p.direction, "Symmetric"))
 
 
@@ -289,7 +289,7 @@ def o2_new_body():
         return
     if not p.profiles:
         h.fit()
-        h.click(V(50, 0, 10))
+        pl.click_on_plane(V(50, 0, 10))
     h.check("O2 New Body", ui.choose(p.operation, "New Body"))
 
 
@@ -300,7 +300,7 @@ def o2_click_block():
     )
     s["bodies"] = len(x.bodies())
     h.fit()
-    h.click(V(70, 0, 27))
+    pl.click_on_plane(V(70, 0, 27))
 
 
 def o2_reached():

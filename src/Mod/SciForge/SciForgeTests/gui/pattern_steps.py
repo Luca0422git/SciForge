@@ -17,6 +17,7 @@ from PySide6 import QtTest
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import widget_input as w
 
 V = App.Vector
@@ -242,7 +243,7 @@ def make_boss(name, at, r, height, click, top=10.0):
         h.ribbon("Create Sketch")
 
     def click_top():
-        h.click(click)
+        pl.click_on_plane(click)
 
     def draw_circle():
         sk = h.in_sketch()

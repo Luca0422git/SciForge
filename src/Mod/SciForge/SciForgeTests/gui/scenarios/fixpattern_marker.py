@@ -29,6 +29,7 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import fixpattern_steps as f
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import timeline_input as tl
 
@@ -72,7 +73,7 @@ def a_box():
 
 def a_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def a_values():

@@ -28,7 +28,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, drag_guard, handles3d, increments, move, move_face, profile_pick
+from . import bodies, drag_guard, handle_look, handles3d, increments, move, move_face
+from . import profile_pick
 from . import protractor, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
@@ -76,7 +77,10 @@ class Triad(BoxCarrier):
         self.coin = coin
         self.view = view
         self.center = App.Vector(center)
-        self.size = float(size)
+        # The triad keeps its size on the screen (handle_look_core.TRIAD_PX from the centre
+        # to an arrow's tip) whatever the part or the zoom: `size` (its old size in mm) is
+        # no longer used; self.size is that length in mm now.
+        self.size_hint = float(size)
         self.turns = turns
         self.on_drag = on_drag
         self.on_release = on_release
@@ -93,13 +97,14 @@ class Triad(BoxCarrier):
         self._last_event = 0.0
         self._mark = None  # the snap angle a turn sits on (protractor)
         self._wheel = protractor.Wheel()  # shown while a turn handle is held
-        self.root = coin.SoAnnotation()  # on top of the part, like Fusion's manipulators
-        pick = coin.SoPickStyle()
-        pick.style = coin.SoPickStyle.UNPICKABLE
-        self.root.addChild(pick)
+        # on top of the part, like Fusion's manipulators (handle_look), drawn in pixels
+        self.root = handle_look.top_root(coin)
         self.place = coin.SoTranslation()
         self.root.addChild(self.place)
-        self.materials = {}
+        self.shapes = coin.SoSeparator()  # in pixels from the centre
+        self.pixels = handle_look.PixelScale(coin, self.shapes, view, self.center)
+        self.root.addChild(self.pixels.node)
+        self.materials = {}  # (kind, index): its paint (set(hot))
         for i in range(3):
             self.materials[("move", i)] = self._arrow(coin, i)
             if turns:
@@ -117,37 +122,29 @@ class Triad(BoxCarrier):
         self._timer.start()
 
     # -- drawing -------------------------------------------------------------------------------
-    def _material(self, coin, color):
-        material = coin.SoMaterial()
-        material.diffuseColor.setValue(*color)
-        material.emissiveColor.setValue(*[c * 0.55 for c in color])
-        return material
+    @property
+    def size(self):
+        """Centre to an arrow's tip (mm) at the triad's place in the view now."""
+        return handle_look.mm(self.view, self.center, handle_look.core.TRIAD_PX)
 
     def _arrow(self, coin, index):
-        s = self.size
+        """Axis `index`'s arrow (pixels, from the centre), in its axis colour."""
+        core = handle_look.core
         sep = coin.SoSeparator()
-        material = self._material(coin, COLORS[index])
-        sep.addChild(material)
-        turn = coin.SoRotation()  # cylinders and cones point along +Y
+        turn = coin.SoRotation()  # the arrow is built along +Y
         rot = App.Rotation(App.Vector(0, 1, 0), AXES[index])
         turn.rotation.setValue(*rot.Q)
         sep.addChild(turn)
-        shaft_at = coin.SoTranslation()
-        shaft_at.translation.setValue(0, 0.5 * s, 0)
-        sep.addChild(shaft_at)
-        shaft = coin.SoCylinder()
-        shaft.radius.setValue(0.025 * s)
-        shaft.height.setValue(0.8 * s)
-        sep.addChild(shaft)
-        tip_at = coin.SoTranslation()
-        tip_at.translation.setValue(0, 0.5 * s, 0)
-        sep.addChild(tip_at)
-        tip = coin.SoCone()
-        tip.bottomRadius.setValue(0.08 * s)
-        tip.height.setValue(0.22 * s)
-        sep.addChild(tip)
-        self.root.addChild(sep)
-        return material
+        arrow, paint = handle_look.arrow_shape(
+            coin,
+            COLORS[index],
+            HOVER,
+            length=core.TRIAD_PX,
+            start=core.TRIAD_GAP * core.TRIAD_PX,
+        )
+        sep.addChild(arrow)
+        self.shapes.addChild(sep)
+        return paint
 
     def _frame(self, index):
         """Two directions spanning the plane a turn handle lies in (perpendicular to its axis)."""
@@ -155,42 +152,36 @@ class Triad(BoxCarrier):
         v = AXES[(index + 2) % 3]
         return u, v
 
-    def arc_points(self, index, steps=16):
+    def arc_points(self, index, steps=16, radius=None):
+        """A turn handle's arc relative to the centre (mm; `radius` in other units)."""
         u, v = self._frame(index)
-        r = 0.6 * self.size
+        r = handle_look.core.TRIAD_RING * self.size if radius is None else radius
         return [
             u * (r * math.cos(a)) + v * (r * math.sin(a))
             for a in [math.radians(15 + 60.0 * i / steps) for i in range(steps + 1)]
         ]
 
     def _turn_handle(self, coin, index):
+        """Turn handle `index`: an arc in its axis colour and a disc on it (pixels)."""
+        core = handle_look.core
         sep = coin.SoSeparator()
-        material = self._material(coin, COLORS[index])
-        sep.addChild(material)
-        style = coin.SoDrawStyle()
-        style.lineWidth.setValue(4.0)
-        sep.addChild(style)
-        points = self.arc_points(index)
-        coords = coin.SoCoordinate3()
-        coords.point.setValues(0, len(points), [(p.x, p.y, p.z) for p in points])
-        sep.addChild(coords)
-        line = coin.SoLineSet()
-        line.numVertices.setValue(len(points))
-        sep.addChild(line)
+        arc = handle_look.Line(coin, COLORS[index], width=core.TRIAD_RING_WIDTH_PX)
+        ring = core.TRIAD_RING * core.TRIAD_PX
+        arc.set_points([(p.x, p.y, p.z) for p in self.arc_points(index, radius=ring)])
+        sep.addChild(arc.node)
         ball_at = coin.SoTranslation()
-        mid = self.ball(index)
+        mid = self.ball(index, radius=ring)
         ball_at.translation.setValue(mid.x, mid.y, mid.z)
         sep.addChild(ball_at)
-        ball = coin.SoSphere()
-        ball.radius.setValue(0.07 * self.size)
-        sep.addChild(ball)
-        self.root.addChild(sep)
-        return material
+        disc, disc_paint = handle_look.disc_shape(coin, COLORS[index], HOVER)
+        sep.addChild(disc)
+        self.shapes.addChild(sep)
+        return _TurnPaint(arc, disc_paint, COLORS[index])
 
-    def ball(self, index):
-        """Where a turn handle's ball is, relative to the centre."""
+    def ball(self, index, radius=None):
+        """Where a turn handle's disc is, relative to the centre (mm)."""
         u, v = self._frame(index)
-        r = 0.6 * self.size
+        r = handle_look.core.TRIAD_RING * self.size if radius is None else radius
         a = math.radians(45.0)
         return u * (r * math.cos(a)) + v * (r * math.sin(a))
 
@@ -215,16 +206,18 @@ class Triad(BoxCarrier):
     def _part(self, handle):
         """(anchor, tail, tip, radius) of one of the triad's handles (see box_geometry)."""
         kind, index = handle
+        core = handle_look.core
         if kind == "move":
-            tail = self.center + AXES[index] * (0.15 * self.size)
+            tail = self.center + AXES[index] * (core.TRIAD_GAP * self.size)
             tip = self.tip(index)
-            return (tail + tip) * 0.5, tail, tip, 0.08 * self.size
+            width = handle_look.mm(self.view, self.center, core.half_width_px("arrow"))
+            return (tail + tip) * 0.5, tail, tip, width
         points = self.arc_points(index, 8)
         return (
             self.ball_point(index),
             self.center + points[0],
             self.center + points[-1],
-            0.07 * self.size,
+            handle_look.mm(self.view, self.center, core.half_width_px("disc")),
         )
 
     def box_avoid(self):
@@ -238,7 +231,10 @@ class Triad(BoxCarrier):
                 parts.append(self._part((kind, index)))
                 if kind == "turn":
                     ball = self.ball_point(index)
-                    parts.append((ball, ball, ball, 0.1 * self.size))
+                    radius = handle_look.mm(
+                        self.view, ball, handle_look.core.half_width_px("disc")
+                    )
+                    parts.append((ball, ball, ball, radius))
         return parts
 
     def use(self, handle):
@@ -275,10 +271,8 @@ class Triad(BoxCarrier):
         if active == self._painted:
             return
         self._painted = active
-        for key, material in self.materials.items():
-            color = HOVER if key == active else COLORS[key[1]]
-            material.diffuseColor.setValue(*color)
-            material.emissiveColor.setValue(*[c * 0.55 for c in color])
+        for key, paint in self.materials.items():
+            paint.set(key == active)
 
     # -- the mouse ---------------------------------------------------------------------------------
     def _screen(self, point):
@@ -289,11 +283,15 @@ class Triad(BoxCarrier):
         """("move"|"turn", axis index) of the handle under the mouse, or None."""
         px, py = float(position[0]), float(position[1])
         best = None
+        core = handle_look.core
+        size = self.size
+        arrow_reach = core.grab_px("arrow", at_least=self.GRAB_PIXELS)
+        disc_reach = core.grab_px("disc", at_least=self.GRAB_PIXELS + 3)
         for i in range(3):
-            a = self._screen(self.center + AXES[i] * (0.15 * self.size))
-            b = self._screen(self.tip(i))
+            a = self._screen(self.center + AXES[i] * (core.TRIAD_GAP * size))
+            b = self._screen(self.center + AXES[i] * size)
             d = _segment_distance((px, py), a, b)
-            if d <= self.GRAB_PIXELS and (best is None or d < best[0]):
+            if d <= arrow_reach and (best is None or d < best[0]):
                 best = (d, ("move", i))
             if not self.turns:
                 continue
@@ -304,7 +302,7 @@ class Triad(BoxCarrier):
                     best = (d, ("turn", i))
             bx, by = self._screen(self.ball_point(i))
             d = math.hypot(px - bx, py - by)
-            if d <= self.GRAB_PIXELS + 3 and (best is None or d < best[0]):
+            if d <= disc_reach and (best is None or d < best[0]):
                 best = (d, ("turn", i))
         return best[1] if best else None
 
@@ -382,7 +380,7 @@ class Triad(BoxCarrier):
         u, v = self._frame(index)
         a = math.radians(self._start or 0.0)
         zero = u * math.cos(a) + v * math.sin(a)
-        return self._origin(), AXES[index], zero, 0.6 * self.size
+        return self._origin(), AXES[index], zero, handle_look.core.TRIAD_RING * self.size
 
     def _moved(self, info):
         try:
@@ -427,6 +425,7 @@ class Triad(BoxCarrier):
                 return
             drag_guard.end_lost_drag(self, idle=None)  # its release never came (drag_guard)
             self._paint()
+            self.pixels.update(self.view, self.center)
             self.use(self._drag or self._hover)
             if self._drag and self._drag[0] == "turn" and not self._wheel.shown():
                 # the protractor wheel while a turn handle is held (made here, not in the
@@ -471,6 +470,23 @@ class Triad(BoxCarrier):
         except Exception:
             pass
         self.drop_box()
+
+
+class _TurnPaint:
+    """A turn handle's colours: its arc and its disc, lit together under the mouse."""
+
+    def __init__(self, arc, disc, colour):
+        self.arc = arc
+        self.disc = disc
+        self.colour = colour
+        self._state = None
+
+    def set(self, hot):
+        if self._state == bool(hot):
+            return
+        self._state = bool(hot)
+        self.arc.base.rgb.setValue(*(HOVER if hot else self.colour))
+        self.disc.set(hot)
 
 
 def _segment_distance(p, a, b):

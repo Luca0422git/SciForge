@@ -26,6 +26,7 @@ from PySide import QtCore
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import fixdecal_steps as f
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 st = {}
@@ -84,7 +85,7 @@ def open_move(point):
     def click():
         p = s.panel()
         h.check("Move/Copy open", p is not None and p.title == "Move/Copy", p)
-        h.click(point)
+        pl.click_on_plane(point)
 
     press.wait_ms = 1200
     click.wait_ms = 1200

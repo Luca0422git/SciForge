@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Aim at an origin square the way a person does: at a spot of it that shows and that no
-part covers (the squares are 0.6 x the part since view-3, so a fixed point beside the part
-can miss them). Kept outside scenarios/ because every file there is run as a scenario."""
+part covers (the squares are small and stay in the + quarter of their plane, like Fusion's,
+so a fixed point can miss them; a hidden one is picked in the browser). Kept outside scenarios/ because every file there is run as a scenario."""
 
 import FreeCAD as App
 from PySide import QtWidgets
@@ -20,6 +20,14 @@ def picker():
     return live[-1] if live else None
 
 
+def settle(p):
+    """The squares follow the view on a 250 ms timer: bring them up to date for this view
+    (a fit just before), else they can move between aiming and clicking."""
+    follow = getattr(p, "_follow_zoom", None)
+    if follow is not None:
+        follow()
+
+
 def _takes(p, pixel, role):
     if hasattr(p, "front_plane_at"):
         return p.front_plane_at(pixel) == role
@@ -32,8 +40,7 @@ def square_point(role="XY_Plane", picker_=None):
     p = picker_ or picker()
     if p is None:
         return None
-    base, _normal, u, v = p._frame(role)
-    half = p.half_of(role)
+    settle(p)
     pa, pb = PREFER.get(role, (0.5, 0.5))
     steps = [i / 10.0 for i in range(-9, 10)]
     spots = sorted(
@@ -43,7 +50,7 @@ def square_point(role="XY_Plane", picker_=None):
     widget = h.gl_widget()
     margin = 20
     for a, b in spots:
-        point = base + u * (a * half) + v * (b * half)
+        point = p.spot(role, a, b)
         pixel = view.getPointOnViewport(point)
         qt = h.screen_point(point)
         inside = margin < qt.x() < widget.width() - margin
@@ -66,9 +73,59 @@ def square_point(role="XY_Plane", picker_=None):
 
 
 def click_square(role="XY_Plane"):
-    """Click the `role` square where it shows (a check fails when it shows nowhere)."""
+    """Click the `role` square where it shows; when the part hides it (the squares stay at
+    the origin, like Fusion's), pick the plane in the browser instead, as a person does:
+    open the Origin folder and click the plane's row ("XY")."""
     point = square_point(role)
-    if not h.check("the %s square shows somewhere to click" % role, point is not None):
-        return None
+    if point is None:
+        return pick_in_browser(role)
     h.click(point)
     return point
+
+
+def pick_in_browser(role="XY_Plane"):
+    """Open the browser's Origin folder and click the `role` plane's row."""
+    from SciForgeTests.gui import bodies_steps, shell_draft_steps
+
+    label = role.split("_")[0]  # "XY_Plane" -> "XY" (browser_core.ORIGIN_LABELS)
+    tree = bodies_steps.browser()
+    if tree is not None and tree.row(label) is None:
+        shell_draft_steps.expand_browser_row("Origin")
+    found = tree is not None and tree.row(label) is not None
+    if not h.check("the %s plane in the browser" % role, found, tree and tree.labels()):
+        h.shot("no-%s-square" % role)
+        return None
+    tree.scrollToItem(tree.row(label))  # the folder has just opened: bring the row in view
+    QtWidgets.QApplication.processEvents()
+    bodies_steps.click_browser_row(label)
+    return label
+
+
+def click_on_plane(point):
+    """Click `point`, a spot on an origin plane a scenario aims at (V(12, -8, 0): on XY):
+    where it shows the square or the part, there; when the square no longer covers it
+    (the squares are small since 2026-10-18 and lie in their + quarter), on that plane's
+    square where it shows, as a person does."""
+    p = picker()
+    role = _plane_of(point)
+    if p is None or role is None:
+        h.click(point)
+        return point
+    settle(p)
+    pixel = h.view().getPointOnViewport(point)
+    pixel = (int(round(float(pixel[0]))), int(round(float(pixel[1]))))
+    if p._geometry_at(pixel) or _takes(p, pixel, role):
+        h.click(point)
+        return point
+    return click_square(role)
+
+
+def _plane_of(point, tol=1e-9):
+    """The origin plane `point` lies in ("XY_Plane" for z = 0 ...), or None."""
+    if abs(point.z) <= tol:
+        return "XY_Plane"
+    if abs(point.y) <= tol:
+        return "XZ_Plane"
+    if abs(point.x) <= tol:
+        return "YZ_Plane"
+    return None

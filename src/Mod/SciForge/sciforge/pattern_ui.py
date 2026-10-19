@@ -355,9 +355,7 @@ def front_planes():
                 if hit is None:
                     continue
                 point, t = hit
-                local = point - base
-                half = self.half_of(role)
-                if abs(local.dot(u)) <= half and abs(local.dot(v)) <= half:
+                if self.on_square(role, point - base):
                     if best is None or t < best[1]:
                         best = (role, t)
             if best is None:
@@ -464,37 +462,11 @@ class InstanceDots:
 
 def _TurnDragger(*args, **kwargs):
     """extrude_ui.AngleDragger (the taper handle, -180..180 deg) that keeps counting past half
-    a turn, so Total Angle can be dragged up to a full 360 deg as in Fusion."""
+    a turn, so Total Angle can be dragged up to a full 360 deg as in Fusion. (Its disc
+    faces the viewer, so it can be grabbed also where its circle is seen edge-on.)"""
     from .extrude_ui import AngleDragger
 
     class TurnDragger(AngleDragger):
-        @staticmethod
-        def _arc(coin, radius, width, color):
-            """The taper handle's flat curved band, plus the same band standing up across it.
-            The flat band lies in the plane the handle turns in: where that plane is seen
-            nearly edge-on (the handle at the bottom of its circle on screen) it was a sliver a
-            couple of pixels high, and presses on its middle missed it and hit the part."""
-            sep = AngleDragger._arc(coin, radius, width, color)
-            span = min(0.3, 1.6 * width / max(radius, 1e-6))
-            steps = 12
-            half = width * 0.3
-            points, index = [], []
-            for i in range(steps + 1):
-                a = -span + 2.0 * span * i / steps
-                x, y = radius * math.cos(a), radius * math.sin(a)
-                points.append((x, y, -half))
-                points.append((x, y, half))
-            for i in range(steps):
-                a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2
-                index += [a, b, c, -1, a, c, d, -1]
-            coords = coin.SoCoordinate3()
-            coords.point.setValues(0, len(points), points)
-            faces = coin.SoIndexedFaceSet()
-            faces.coordIndex.setValues(0, len(index), index)
-            sep.addChild(coords)
-            sep.addChild(faces)
-            return sep
-
         def angle(self):
             raw = AngleDragger.angle(self)
             last = getattr(self, "_last", None)

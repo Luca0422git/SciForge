@@ -25,6 +25,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import modify2_steps as m
 from SciForgeTests.gui import shell_draft_steps as sd
 
@@ -204,7 +205,7 @@ def modify_side():
 
 
 def click_front():
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def refused():

@@ -24,6 +24,7 @@ from PySide import QtCore
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 
 V = App.Vector
 s = {}
@@ -94,7 +95,7 @@ def sketch_rect_on(tag, point, x0, y0, x1, y1):
 
     def pick():
         h.fit()
-        h.click(point)
+        pl.click_on_plane(point)
 
     def draw():
         sk = h.in_sketch()

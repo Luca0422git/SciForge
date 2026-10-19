@@ -69,7 +69,7 @@ def sphere_plane():
 def sphere_centre():
     p = pi.panel("SpherePanel")
     h.check("placing", p is not None and p.state == "place", p and p.state)
-    h.click(V(0, 0, 0))
+    pl.click_on_plane(V(0, 0, 0))
 
 
 sphere_centre.wait_ms = 1200

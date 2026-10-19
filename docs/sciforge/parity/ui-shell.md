@@ -42,7 +42,8 @@ Unavailable items are greyed out. Separators group related commands.
   solids with a light-blue acted-on face, thin light sketch strokes with blue points, red
   constraint glyphs, green "create" badge), drawn from scratch. No Autodesk artwork (outline 2.5).
 - Omitted on purpose: Create Form (sculpt, out of scope), Create PCB (electronics, out of scope),
-  McMaster-Carr / manufacturer / TraceParts inserts (cloud catalogues), CONFIGURE group.
+  McMaster-Carr / manufacturer / TraceParts inserts (cloud catalogues; INSERT > Hardware... is
+  SciForge's offline library of standard hardware instead, parity/hardware.md), CONFIGURE group.
 - Tabs not shown: SHEET METAL, PLASTIC, MANAGE. Out of scope; Luca confirmed he does not need
   them for now (2026-10-09).
 - Commands SciForge does not have yet appear greyed out with "Not available in SciForge yet",
@@ -125,13 +126,29 @@ Luca's reports after the CI #131 quick update:
 | Behaviour | Source | SciForge |
 |---|---|---|
 | Origin planes in the axis colours: a plane in the colour of the axis it faces (XY blue, XZ green, YZ red), see-through, brighter with a thicker outline under the mouse, a label "XY" / "XZ" / "YZ" at the corner away from the part | Luca (Fusion draws its origin planes in one colour and unlabelled: beyond Fusion) | `origin_look.py` (colours, sizes, labels; unit `test_origin_look`), used by Create Sketch's `PlanePicker` and every tool that reuses it (Construct, Section, Draft, Insert, the patterns' Mirror Plane, Align / Split / Silhouette / Replace Face, the primitives, the surfaces) and by the Mesh plane cut's squares. Scenario `view_origin_planes` |
-| Smaller squares | Luca | 0.6 x the largest side of the design's visible bodies (was 1.3 x the active body), at least 20 mm; 100 mm in an empty design (the view is framed on them). A square the parts hide round the origin still sticks out beside them by 15 % of their size (at least 5 mm), where nothing is behind it: XY under parts that cover the origin, XZ / YZ out of the nearer side of parts lying on both sides of them (`origin_look.square_sizes_for`, one size per square). A click on a square is matched to the drawn square only; a face of the part under the mouse keeps the click even where a see-through square is drawn in front of it (fix-vw: on a wide flat part the XZ square stands well above it, and taking the click there stole sketches meant for the top face) |
+| Small squares like Fusion's (Luca 2026-10-18, with a picture of Fusion's Create Sketch: "make it small like that, but keep the color") | Luca's picture; pixel size and "same size whatever the zoom" **Guess** | Each square lies in the + quarter of its plane, 10 % of its side off the axes, about 120 px on the screen (`origin_look.SCREEN_SIDE`), redrawn when the zoom changes, and stays there like Fusion's (Luca 2026-10-19 chose "Fixed, like Fusion" after a day of squares that moved beside the part). A plane picked in the browser (Origin > XY) counts as its square, in every command that shows the squares. Scenario `origin_squares_small` |
 | Origin axes labelled X / Y / Z in red / green / blue | Luca | Revolve's and Construct's axis lines (`revolve_ui.AxisPicker`) and the patterns' (`pattern_ui.AxisPicker`) carry a label on their + half; the patterns use the shared colours |
 | Turn handles snap to 0 / 45 / 90 / 135 / 180 ... | Luca (Fusion: rotation increments depend on the zoom, no fixed 45 / 90 snap: Forum, [Smallest rotation unit too large](https://forums.autodesk.com/t5/fusion-support-forum/smallest-rotation-unit-too-large/td-p/11811166)): beyond Fusion | `angle_snap_core.py` (unit `test_angle_snap_core`): the angle is pulled onto the nearest multiple of 45 degrees when the hand is within 6 px of it along the ring as drawn (between 1 and 4 degrees); **Ctrl held: free**; Incremental Move (navigation bar) on: its steps instead. Every turn handle: Move's triad turns and Rotate handle, Revolve, the taper and Draft discs, Plane at Angle, Section, Emboss, the Mesh plane cut, the patterns' angle handle, Insert's and Decal's turn handles. A disc (Coin dragger) keeps the snap at the release too |
 | A protractor wheel while a turn handle is held | Luca: beyond Fusion | `protractor.ProtractorRing`: a ring in the plane the handle turns in, a tick every 15 degrees (longer at every 45, longest at every 90), the tick the angle sits on lit yellow, a dashed needle at the current angle and the angle as text ("90.0 deg"); gone when the handle is let go. Scenario `view_angle_snap` |
 
 Not built: the sketch's own Rotate (FreeCAD's `Sketcher_Rotate`, which snaps with Ctrl) keeps
 FreeCAD's behaviour; the 45-degree snap of sketch lines is the sketch area's (sf/sketch-3).
+
+## Drag handles: one look and one screen size (2026-10-18, branch `sf/arrows`)
+
+Every drag handle in SciForge is drawn by `handle_look.py` with the sizes and colours of
+`handle_look_core.py` (unit `test_handle_look_core`), in pixels under FreeCAD's SoShapeScale,
+in FreeCAD's 3D-annotation pass (over the part, with its own depth so a cone never shows its
+far side through its near side). Details and the Fusion picture they follow: parity
+`extrude-presspull.md`, "The drag arrow and the taper disc".
+
+| Handle | Fusion | SciForge | Source |
+|---|---|---|---|
+| Distance arrow (Extrude, Press Pull, Hole, Fillet, Offset Plane, Section, Shell, primitives ...) | Small blue arrow, light outline, one screen size | 32 px, blue, 1.5 px light outline, lighter when hot | Luca's picture; sizes **Guess** |
+| Angle handle (taper, Revolve, Draft, Plane at Angle, Section, Emboss, patterns, Insert / Decal turn) | Small white disc with a dark dot on a thin light arc | 19 px disc facing the viewer, dark dot, grey rim; light arc | Luca's picture; sizes **Guess** |
+| A point slid along a path (Plane Along Path, Sweep / Pipe distance) | (a ball) | 14 px blue ball, light outline | **Guess** |
+| Move / Copy manipulator | Axis-coloured arrows and turn handles, one screen size | Arrows 96 px from the centre in X red / Y green / Z blue, turn arcs at 0.6 of that with an axis-coloured disc; yellow when hot | **Guess** (Fusion's triad, sizes guessed) |
+| Size on the screen | The same whatever the part or the zoom | Same (scenario `handle_size`) | Luca |
 
 ## Value fields: a formula of the wrong kind (2026-10-14, gaps work)
 

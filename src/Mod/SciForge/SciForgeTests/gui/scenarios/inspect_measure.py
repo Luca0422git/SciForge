@@ -21,6 +21,7 @@ import FreeCADGui as Gui
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import widget_input as w
 
@@ -237,7 +238,7 @@ def click_middle():
     p = panel()
     names = [n for n, _p in p.snaps] if p else []
     h.check("dots on the edge", "Middle" in names, names)
-    h.click(V(20, 0, 10))
+    pl.click_on_plane(V(20, 0, 10))
 
 
 def centre_to_middle():

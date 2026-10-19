@@ -89,7 +89,7 @@ def new_design():
 
 
 def pick_xy():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def draw_slot1():
@@ -112,7 +112,7 @@ def offset_plane():
 
 
 def pick_xy_plane():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def plane_distance():
@@ -239,7 +239,7 @@ def m1_slot1():
         p is not None and p.merge.isEnabled() and not p.merge.isChecked(),
     )
     h.fit()
-    h.click(V(-5, 2, 0))
+    pl.click_on_plane(V(-5, 2, 0))
 
 
 def m1_slot2():

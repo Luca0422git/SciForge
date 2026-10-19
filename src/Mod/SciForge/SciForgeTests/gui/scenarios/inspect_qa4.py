@@ -35,6 +35,7 @@ from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as bs
 from SciForgeTests.gui import dialog_input as di
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import sketch_input as si
 from SciForgeTests.gui import timeline_input as ti
@@ -495,7 +496,7 @@ def x_offset():
 
 
 def x_front():
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def x_sum_enter():
@@ -568,7 +569,7 @@ def u_start():
 
 
 def u_front():
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def u_15():

@@ -318,7 +318,7 @@ def loft_dome():
 def click_point():
     p = panel()
     h.check("the top face is taken", p is not None and len(p.profiles) == 1, p and p.profiles)
-    h.click(V(0, 0, 45))
+    pl.click_on_plane(V(0, 0, 45))
 
 
 def point_offers():

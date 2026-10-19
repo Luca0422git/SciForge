@@ -70,7 +70,7 @@ def a_waits():
 
 
 def a_click_xy():
-    h.click(i.XY_CLICK)
+    pl.click_on_plane(i.XY_CLICK)
 
 
 a_click_xy.wait_ms = 1200
@@ -172,7 +172,7 @@ def d_extrude():
 
 
 def d_click_region():
-    h.click(V(-10, -6, 0))
+    pl.click_on_plane(V(-10, -6, 0))
 
 
 def d_distance():

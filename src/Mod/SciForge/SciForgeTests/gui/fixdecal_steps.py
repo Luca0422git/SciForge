@@ -9,6 +9,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import insert_steps as i
 from SciForgeTests.gui import sketch_input as si
 
@@ -99,7 +100,7 @@ def decal_steps(tag, point, check=None):
 
     def click():
         h.check("%s: the Decal dialog waits for a face" % tag, panel() is not None)
-        h.click(point)
+        pl.click_on_plane(point)
 
     def ok():
         p = panel()

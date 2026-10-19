@@ -35,6 +35,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 from SciForgeTests.gui import timeline_input as ti
 from SciForgeTests.gui import widget_input as w
@@ -449,7 +450,7 @@ def h_axis():
     h.fit()
     p = s.construct_panel()
     h.check("H the origin axes are drawn to click", p is not None and "axes" in p.overlays)
-    h.click(V(0, 0, 30))  # the Z axis line above the part's corner, nothing behind it
+    pl.click_on_plane(V(0, 0, 30))  # the Z axis line above the part's corner, nothing behind it
 
 
 def h_preview():

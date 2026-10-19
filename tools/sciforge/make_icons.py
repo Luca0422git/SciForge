@@ -396,6 +396,33 @@ def _():
     return poly(points, BLUE[1]) + circle(24, 24, 9.5, BLUE[0]) + circle(24, 24, 4.5, DARK)
 
 
+@icon("hardware")
+def _():
+    # A socket head screw standing up (hexagon socket on top, a plain shank with a few
+    # thread marks) and a hexagon nut beside it, seen from the front.
+    socket = [
+        (15 + 3.2 * math.cos(math.radians(60 * k)), 9 + 1.5 * math.sin(math.radians(60 * k)))
+        for k in range(6)
+    ]
+    screw = (
+        rect(11, 21, 8, 21, GREY[2], 1)
+        + rect(13, 21, 2.5, 21, GREY[1], 0.8)
+        + rect(6, 9, 18, 12, GREY[1], 2)
+        + rect(6, 9, 6, 12, GREY[0], 2)
+        + ellipse(15, 9, 9, 3, GREY[0])
+        + poly(socket, DARK)
+    )
+    for y in range(26, 42, 4):
+        screw += line(11.5, y + 1.5, 18.5, y, BLUE[2], 1.6)
+    nut = (
+        poly([(28, 30), (34, 27), (40, 30), (40, 40), (34, 43), (28, 40)], BLUE[1])
+        + poly([(28, 30), (34, 33), (34, 43), (28, 40)], BLUE[0])
+        + poly([(34, 33), (40, 30), (40, 40), (34, 43)], BLUE[2])
+        + ellipse(34, 30, 2.6, 1.3, DARK)
+    )
+    return screw + nut
+
+
 @icon("pipe")
 def _():
     return (
@@ -1945,6 +1972,21 @@ def _():
         + rect(20, 19, 10, 12, "#cfe6ff", 1.5)
         + rect(26, 16, 10, 12, GOLD[1], 1.5)
         + arrow(30, 10, 42, 6, WHITE, 2.2, 5)
+    )
+
+
+@icon("print_3d")
+def _():
+    # 3D Print / Send to Slicer: a printer frame, its head with a nozzle, and a blue part
+    # growing on the bed under it
+    return (
+        line(8, 8, 8, 40, STROKE, 2.4)
+        + line(40, 8, 40, 40, STROKE, 2.4)
+        + line(8, 9, 40, 9, STROKE, 2.4)
+        + rect(17, 12, 14, 7, DBLUE[1], 1.5)
+        + poly([(21, 19), (27, 19), (24, 23.5)], WHITE)
+        + block(0, 0, 0, 8, 8, 7, BLUE, 24, 31, 0.9)
+        + rect(6, 38, 36, 4, GREY[2], 1.2)
     )
 
 

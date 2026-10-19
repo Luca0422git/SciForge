@@ -24,6 +24,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import surface_steps as st
 from SciForgeTests.gui import timeline_input as tl
 
@@ -149,7 +150,7 @@ def click_top_surface():
 
 
 def click_front_surface():
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def two_stitched():
@@ -182,7 +183,7 @@ def two_stitched():
 
 
 def click_front_again():
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def front_dropped():
@@ -201,7 +202,7 @@ def front_dropped():
 
 
 def click_front_once_more():
-    h.click(V(20, 0, 5))
+    pl.click_on_plane(V(20, 0, 5))
 
 
 def click_right_surface():

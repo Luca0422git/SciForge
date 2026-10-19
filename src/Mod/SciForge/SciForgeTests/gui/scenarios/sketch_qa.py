@@ -45,6 +45,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
@@ -93,7 +94,7 @@ def a_create():
 
 
 def a_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def a_line():
@@ -371,7 +372,7 @@ def b_new():
 
 
 def b_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def b_circle():
@@ -571,7 +572,7 @@ def d_new():
 
 
 def d_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def d_line():
@@ -785,7 +786,7 @@ def f_new():
 
 
 def f_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def f_x():
@@ -829,7 +830,7 @@ def f_next():
 
 
 def f_next_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def f_next_open():
@@ -864,7 +865,7 @@ def g_new():
 
 
 def g_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def g_rect():
@@ -963,7 +964,7 @@ def k_new():
 
 
 def k_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def k_polygon():
@@ -1054,7 +1055,7 @@ def l_new():
 
 
 def l_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 def l_line():

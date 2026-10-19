@@ -29,6 +29,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import arrow_input as arrows
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import sketch_input as si
 
 V = App.Vector
@@ -84,7 +85,7 @@ def r_cancelled():
 
 
 def r_pick():
-    h.click(V(12, -8, 0))
+    pl.click_on_plane(V(12, -8, 0))
 
 
 # == R2: typed lengths, Enter in FreeCAD's field ===================================

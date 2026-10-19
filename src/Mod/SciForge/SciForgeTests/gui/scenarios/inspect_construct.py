@@ -17,6 +17,7 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import inspect_steps as s
 
 V = App.Vector
@@ -254,7 +255,7 @@ def click_xz_square():
     of (8, 0, -8) (the line of sight meets z = 0 at x = 16, beyond the XY square's 12; the
     YZ square is behind). The squares are 0.6 x the part (24 mm)."""
     h.fit()
-    h.click(V(8, 0, -8))
+    pl.click_on_plane(V(8, 0, -8))
 
 
 def offset_from_xz():

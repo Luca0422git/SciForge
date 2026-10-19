@@ -81,7 +81,7 @@ def preview_check():
 
 
 def edge_click():
-    h.click(V(12, 0, 0))
+    pl.click_on_plane(V(12, 0, 0))
 
 
 def hexagon_check():
@@ -196,7 +196,7 @@ def again_centre():
 
 
 def again_edge():
-    h.click(V(40, 8, 0))
+    pl.click_on_plane(V(40, 8, 0))
 
 
 def again_check():

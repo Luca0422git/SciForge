@@ -35,6 +35,7 @@ import FreeCAD as App
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import bodies_steps as s
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import joints_steps as j
 from SciForgeTests.gui import timeline_input as t
 
@@ -231,7 +232,7 @@ def c_pick_block():
     h.check(
         "As-Built Joint dialog open", p is not None and p.title == "As-Built Joint", p and p.title
     )
-    h.click(V(60, 0, 10))  # the block's front face
+    pl.click_on_plane(V(60, 0, 10))  # the block's front face
 
 
 def c_pick_plate():
@@ -368,7 +369,7 @@ def d_command():
 def d_pick_block():
     p = j.panel()
     h.check("Rigid Group dialog open", p is not None and p.title == "Rigid Group", p and p.title)
-    h.click(V(60, 0, 10))
+    pl.click_on_plane(V(60, 0, 10))
 
 
 def d_pick_pin():

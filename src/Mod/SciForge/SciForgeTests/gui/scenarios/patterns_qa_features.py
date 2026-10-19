@@ -25,6 +25,7 @@ from PySide import QtCore
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import pattern_steps as ps
 from SciForgeTests.gui import widget_input as w
 
@@ -120,7 +121,7 @@ def p14_both():
 
 def p14_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def p14_values():
@@ -173,7 +174,7 @@ def p15_axis():
     p = ps.panel()
     h.check("Pattern Type Faces", p and p.pattern_type.currentText() == "Faces")
     h.fit()
-    h.click(V(0, -12, 0))
+    pl.click_on_plane(V(0, -12, 0))
 
 
 def p15_distance():
@@ -260,7 +261,7 @@ def p16_box():
 
 def p16_axis():
     h.fit()
-    h.click(V(0, -12, 0))
+    pl.click_on_plane(V(0, -12, 0))
 
 
 def p16_said():
@@ -303,7 +304,7 @@ def p17_box():
 
 def p17_axis():
     h.fit()
-    h.click(V(-12, 0, 0))
+    pl.click_on_plane(V(-12, 0, 0))
 
 
 def p17_spacing():

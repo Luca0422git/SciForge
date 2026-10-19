@@ -743,3 +743,4 @@ from . import fillet2_ops  # noqa: E402,F401  (radius sets, rule, full round: fi
 from . import component_ops  # noqa: E402,F401  (whole components: move, paste, patterns)
 from . import modify2_ops  # noqa: E402,F401  (Modify part 2: compute option, draft, ...)
 from . import gear_ops  # noqa: E402,F401  (registers op_sf_gear, op_sf_gear_edit)
+from . import hardware_ops  # noqa: E402,F401  (registers op_sf_hardware, op_sf_hardware_edit)
