@@ -20,6 +20,14 @@ def picker():
     return live[-1] if live else None
 
 
+def settle(p):
+    """The squares follow the view on a 250 ms timer: bring them up to date for this view
+    (a fit just before), else they can move between aiming and clicking."""
+    follow = getattr(p, "_follow_zoom", None)
+    if follow is not None:
+        follow()
+
+
 def _takes(p, pixel, role):
     if hasattr(p, "front_plane_at"):
         return p.front_plane_at(pixel) == role
@@ -32,6 +40,7 @@ def square_point(role="XY_Plane", picker_=None):
     p = picker_ or picker()
     if p is None:
         return None
+    settle(p)
     pa, pb = PREFER.get(role, (0.5, 0.5))
     steps = [i / 10.0 for i in range(-9, 10)]
     spots = sorted(
@@ -83,6 +92,7 @@ def click_on_plane(point):
     if p is None or role is None:
         h.click(point)
         return point
+    settle(p)
     pixel = h.view().getPointOnViewport(point)
     pixel = (int(round(float(pixel[0]))), int(round(float(pixel[1]))))
     if p._geometry_at(pixel) or _takes(p, pixel, role):

@@ -107,6 +107,7 @@ class HeldDrag:
         return self.moves * self.every_ms + self.hold_ms + 200
 
     def run(self):
+        h.BUSY.add(self)
         h.move(self.start)
         # The press goes to the widget on top there, and that widget keeps the mouse until
         # the release (Qt's implicit grab), as with a real mouse.
@@ -168,6 +169,7 @@ class HeldDrag:
         except Exception as exc:
             self.error = self.error or str(exc)
         self.done = True
+        h.BUSY.discard(self)
 
 
 def type_in_box(box, text, enter=True):

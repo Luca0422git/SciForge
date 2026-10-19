@@ -120,7 +120,11 @@ def pick_xz():
 
 def draw_square():
     sk = h.in_sketch()
-    h.check("sketch on XZ", sk is not None and sk.AttachmentSupport[0][0].Role == "XZ_Plane")
+    h.check(
+        "sketch on XZ",
+        sk is not None and sk.AttachmentSupport[0][0].Role == "XZ_Plane",
+        sk is not None and sk.AttachmentSupport,
+    )
     if sk:
         h.draw_rectangle(sk, 0, 0, 20, 20)
         s["square"] = sk
