@@ -40,6 +40,11 @@ because FreeCAD loads every folder inside `Mod`). To go back: delete `Mod\SciFor
 backup folder there under the name `SciForge`. Old backups can be deleted any time; the
 uninstaller removes them with the program.
 
+**"SciForge's AI connector is running (python)"**: an AI app you set up (Claude Desktop, Gemini
+CLI, Claude Code) started SciForge's AI connector, which runs while that app runs, even with
+SciForge closed. Press **Enter** and the installer stops it (harmless: the AI app starts it again
+next time), or quit the AI app first (Claude Desktop: right-click its icon by the clock > Quit).
+
 **"Access to the path is denied"**: Windows would not let the files be changed. Close SciForge
 (also look in Task Manager for `SciForge` or `FreeCAD`), close every File Explorer window showing
 the SciForge folder, and run `install_update.cmd` again (right-click > **Run as administrator**

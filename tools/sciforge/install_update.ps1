@@ -200,8 +200,34 @@ try {
     $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
         try { $_.Path -and $_.Path.StartsWith($Target, [System.StringComparison]::OrdinalIgnoreCase) } catch { $false }
     })
+    # SciForge's own python.exe running alone is the AI connector (sciforge_mcp.py): Claude
+    # Desktop, Gemini CLI or Claude Code start it and keep it while they run, SciForge closed
+    # or not. Stopping it is harmless: the AI app starts it again when it is opened again.
+    $helpers = @($running | Where-Object { $_.ProcessName -like "python*" })
+    if ($running.Count -gt 0 -and $helpers.Count -eq $running.Count) {
+        Write-Host ("[SciForge] SciForge's AI connector is running ($($helpers.Count) python): an AI " +
+            "app you set up (Claude Desktop, Gemini CLI, Claude Code) started it.")
+        $answer = "y"
+        if (-not $NoPause) {
+            $answer = Read-Host "Stop it now? The AI app starts it again next time. (Enter = yes, n = no)"
+        }
+        if ($answer.Trim().ToLower() -ne "n") {
+            foreach ($p in $helpers) {
+                try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch { }
+            }
+            Start-Sleep -Seconds 1
+            $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+                try { $_.Path -and $_.Path.StartsWith($Target, [System.StringComparison]::OrdinalIgnoreCase) } catch { $false }
+            })
+        }
+    }
     if ($running.Count -gt 0) {
-        Finish $false ("SciForge is still running ($($running[0].ProcessName)). Close it, then run this again.")
+        $what = $running[0].ProcessName
+        if ($what -like "python*") {
+            Finish $false ("SciForge's AI connector is still running (python): quit Claude Desktop " +
+                "(right-click its icon by the clock > Quit), Gemini CLI or Claude Code, then run this again.")
+        }
+        Finish $false ("SciForge is still running ($what). Close it, then run this again.")
     }
 
     # Folders such as C:\Program Files need administrator rights: ask Windows for them once.
