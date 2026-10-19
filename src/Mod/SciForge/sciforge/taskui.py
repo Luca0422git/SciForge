@@ -354,6 +354,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         self.anchor = None  # widget pixel of the arrow point it sits next to
         self.handle_pixels = None  # (tail, tip, radius) of the handle on the screen, pixels
         self._placed = None  # what the last placement was worked out from (nothing new: skip)
+        self._way = None  # the side it went to last time (arrow_box_core.spot_and_way keep)
         self.textEdited.connect(self._typed)
         self.returnPressed.connect(self._enter)
         self.hide()
@@ -450,7 +451,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
         if key == self._placed and self.isVisible():
             return
         self._placed = key
-        left, top = arrow_box_core.spot(
+        left, top, self._way = arrow_box_core.spot_and_way(
             (ax, ay),
             tail,
             tip,
@@ -461,6 +462,7 @@ class ArrowValueBox(QtWidgets.QLineEdit):
             past_tip=self.past_tip,
             avoid=avoid,
             avoid_rects=avoid_rects,
+            keep=self._way,
         )
         if self.pos() != QtCore.QPoint(left, top):
             self.move(left, top)

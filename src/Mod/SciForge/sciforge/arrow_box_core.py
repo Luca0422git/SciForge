@@ -98,7 +98,14 @@ def clearance(tail, tip, rect):
     )
 
 
-def spot(
+def spot(*args, **kwargs):
+    """Top-left corner (x, y) of a box beside an arrow on the screen: spot_and_way without
+    the way it took."""
+    left, top, _way = spot_and_way(*args, **kwargs)
+    return left, top
+
+
+def spot_and_way(
     anchor,
     tail,
     tip,
@@ -110,8 +117,11 @@ def spot(
     past_tip=False,
     avoid=(),
     avoid_rects=(),
+    keep=None,
 ):
-    """Top-left corner (x, y) of a box of size `box` (w, h) beside an arrow on the screen.
+    """(left, top, way): the top-left corner (x, y) of a box of size `box` (w, h) beside an
+    arrow on the screen, and the way it went ((nx, ny, k): the direction from the arrow and
+    how many steps further out; None when nothing fitted).
 
     anchor     the arrow's middle (where the extrusion ends), in view pixels
     tail, tip  the arrow's two ends (the tips of its heads)
@@ -124,6 +134,10 @@ def spot(
     avoid      the dialog's other handles, [(tail, tip, radius)] in pixels: the box covers
                none of them either (a pattern's two arrows meet at a corner)
     avoid_rects the dialog's other boxes, [(left, top, width, height)]: never covered
+    keep       the way the box went last time: tried first while it is still free, so a
+               box keeps its side when the view moves (else two boxes placed one after the
+               other can swap sides at every pan: the first one sees the second where it
+               was before the move)
     The box keeps `gap` pixels plus `radius` away from the arrow's line, never covers a
     head (its own or another handle's) or another box, and stays inside the view. When
     every spot beside the arrow is taken (two arrows on one spot with a third handle next
@@ -155,20 +169,28 @@ def spot(
     if past_tip:
         ways = ways[2:] + ways[:2]
     step = 0.6 * max(width, height)  # further out when the spots beside the arrow are taken
+    tries = [(k, way) for k in range(4) for way in ways]
+    if keep is not None:
+        # the way it went last time first (the nearest direction, the same distance out)
+        kx, ky, kk = keep
+        near = [t for t in tries if t[0] == kk and t[1][0][0] * kx + t[1][0][1] * ky > 0.7]
+        if near:
+            best = max(near, key=lambda t: t[1][0][0] * kx + t[1][0][1] * ky)
+            tries.remove(best)
+            tries.insert(0, best)
     spots = []
-    for k in range(4):
-        for (nx, ny), (ox, oy), reach in ways:
-            cx, cy = ox + nx * (reach + k * step), oy + ny * (reach + k * step)
-            left = max(EDGE, min(cx - width / 2.0, view_w - width - EDGE))
-            top = max(EDGE, min(cy - height / 2.0, view_h - height - EDGE))
-            rect = (left, top, width, height)
-            handles = clearance(tail, tip, rect) - radius
-            for other_tail, other_tip, other_radius in avoid:
-                handles = min(handles, clearance(other_tail, other_tip, rect) - float(other_radius))
-            boxes = min((rect_gap(rect, other) for other in avoid_rects), default=1e9)
-            if min(handles, boxes) >= 1.0:
-                return int(round(left)), int(round(top))
-            spots.append((handles, boxes, k, left, top))
+    for k, ((nx, ny), (ox, oy), reach) in tries:
+        cx, cy = ox + nx * (reach + k * step), oy + ny * (reach + k * step)
+        left = max(EDGE, min(cx - width / 2.0, view_w - width - EDGE))
+        top = max(EDGE, min(cy - height / 2.0, view_h - height - EDGE))
+        rect = (left, top, width, height)
+        handles = clearance(tail, tip, rect) - radius
+        for other_tail, other_tip, other_radius in avoid:
+            handles = min(handles, clearance(other_tail, other_tip, rect) - float(other_radius))
+        boxes = min((rect_gap(rect, other) for other in avoid_rects), default=1e9)
+        if min(handles, boxes) >= 1.0:
+            return int(round(left)), int(round(top)), (nx, ny, k)
+        spots.append((handles, boxes, k, left, top))
     # Nothing fits at all: a box over another box costs less than a box over a handle (the
     # handle can no longer be grabbed there: CI #145-#149, Insert Canvas's crowded handles
     # with wider fonts). The nearest spot clear of every handle, else the least covering.
@@ -177,4 +199,4 @@ def spot(
         best = max(free, key=lambda s: (s[1], -s[2]))
     else:
         best = max(spots, key=lambda s: (s[0], -s[2]))
-    return int(round(best[3])), int(round(best[4]))
+    return int(round(best[3])), int(round(best[4])), None
