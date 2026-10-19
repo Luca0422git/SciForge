@@ -67,6 +67,7 @@ def click_square(role="XY_Plane"):
     """Click the `role` square where it shows (a check fails when it shows nowhere)."""
     point = square_point(role)
     if not h.check("the %s square shows somewhere to click" % role, point is not None):
+        h.shot("no-%s-square" % role)
         return None
     h.click(point)
     return point

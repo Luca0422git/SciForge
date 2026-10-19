@@ -260,7 +260,7 @@ class PlanePicker:
         for role in self.objects:
             options = origin_look.square_corners(role, side, self.box, self.facing.get(role, 1.0))
             found[role] = options[0]
-            if len(options) > 1:
+            if len(options) > 1 or self.box is not None:
                 for corner in options:
                     if self._shows(role, corner, side):
                         found[role] = corner
@@ -268,8 +268,10 @@ class PlanePicker:
         return found
 
     def _shows(self, role, corner, side):
-        """True if the middle of a square at `corner` is in the 3D view with room round it
-        and no widget (a dialog) lies over it."""
+        """True if a square at `corner` can be clicked: its middle and four points round
+        it lie in the 3D view with room round them, no widget (a dialog) lies over them and
+        nothing of the part is there in front of it or behind it (a face of the part takes
+        the click over a see-through square)."""
         try:
             from . import taskui
 
@@ -277,17 +279,38 @@ class PlanePicker:
             if widget is None:
                 return True
             base, _normal, u, v = self._frame(role)
-            middle = base + u * (corner[0] + side / 2.0) + v * (corner[1] + side / 2.0)
-            x, y = self.view.getPointOnViewport(middle)
             ratio = widget.devicePixelRatioF() or 1.0
-            qx, qy = float(x) / ratio, widget.height() - float(y) / ratio
-            margin = 40
-            if not (margin < qx < widget.width() - margin and margin < qy < widget.height() - margin):
-                return False
-            spot = widget.mapToGlobal(QtCore.QPoint(int(qx), int(qy)))
-            return QtWidgets.QApplication.widgetAt(spot) is widget
+            margin = 30
+            for a, b in ((0.5, 0.5), (0.2, 0.2), (0.8, 0.2), (0.8, 0.8), (0.2, 0.8)):
+                spot = base + u * (corner[0] + a * side) + v * (corner[1] + b * side)
+                x, y = self.view.getPointOnViewport(spot)
+                qx, qy = float(x) / ratio, widget.height() - float(y) / ratio
+                if not (margin < qx < widget.width() - margin
+                        and margin < qy < widget.height() - margin):
+                    return False
+                where = widget.mapToGlobal(QtCore.QPoint(int(qx), int(qy)))
+                if QtWidgets.QApplication.widgetAt(where) is not widget:
+                    return False
+                info = self.view.getObjectInfo((int(round(float(x))), int(round(float(y)))))
+                if info and info.get("Object"):
+                    return False
+            return True
         except Exception:
             return True
+
+    def _camera_key(self):
+        """Where the camera is and how it looks (changes with every zoom, pan or turn)."""
+        try:
+            cam = self.view.getCameraNode()
+            parts = [cam.position.getValue().getValue(), cam.orientation.getValue().getValue()]
+            for name in ("height", "heightAngle"):
+                field = getattr(cam, name, None)
+                if field is not None:
+                    parts.append(round(float(field.getValue()), 9))
+            parts.append(tuple(self.view.getSize()))
+            return repr(parts)
+        except Exception:
+            return None
 
     def _follow_zoom(self):
         """Keep the squares their size on the screen when the view zooms, beside the part
@@ -295,6 +318,10 @@ class PlanePicker:
         try:
             if not self.callbacks:
                 return
+            camera = self._camera_key()
+            if camera is not None and camera == getattr(self, "_camera", None):
+                return  # the view has not moved
+            self._camera = camera
             side = self._screen_side()
             facing = self._facing() if self.box is not None else self.facing
             resized = abs(side - self.size) > 0.08 * self.size

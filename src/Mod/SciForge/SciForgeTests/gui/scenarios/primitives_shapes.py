@@ -87,6 +87,10 @@ def cylinder_waits():
 
 
 def cylinder_xy():
+    # A new design shows about 300 mm round the origin (like Fusion): zoom in before a
+    # 10 mm cylinder, as a person does, or the 5 mm hover lands on the origin's snap.
+    Gui.activeView().zoomIn()
+    Gui.activeView().zoomIn()
     pl.click_square("XY_Plane")  # where the square shows (was 15, -15, 0)
 
 
