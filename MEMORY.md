@@ -26,6 +26,7 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | SciForge's own module (workbench, timeline, search, ...) | `src/Mod/SciForge/` |
 | Golden-model benchmark suite (step lists + runner) | `src/Mod/SciForge/SciForgeTests/golden/` |
 | Design steps the golden models and the AI tools both run (builder, `*_ops.py`, selectors) | `src/Mod/SciForge/sciforge/ai/ops/` |
+| The Home tab (recent designs, places) | `src/Mod/SciForge/sciforge/home_core.py`, `home_ui.py`; spec `docs/sciforge/parity/home.md` |
 | Every change to FreeCAD's own code (tagged `SCIFORGE:`) | `docs/sciforge/core-patches.md` |
 | CI workflows (SciForge's own) | `.github/workflows/sciforge-*.yml` |
 | Tooling scripts for CI / local runs | `tools/sciforge/` |
@@ -1370,6 +1371,51 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Home, cloud and AI, M1 the Home tab (branch `sf/home-cloud-ai`, 2026-10-19)
+
+Luca: "lets start with M1. Make the home screen default every time" (brief section 8's first
+open point: answered, always).
+
+#### Built
+- `sciforge/home_core.py` (pure, `test_home_core.py` 16 tests): recent list in
+  `<user data>/SciForge/home/recent.json` (cap 50, pinned first and never dropped, FreeCAD's
+  MRU merged once, `location_id` + `rel` per place for M2's clouds), online-only Windows
+  attributes (never read for a picture), thumbnail cache `home/thumbs/<key>-<stamp>.png`
+  (one per save, old ones removed), `VersionCounter` (one `git log` per listing, kept 5 s;
+  without it `versions.version_count` counts only plain-store copies: no badge for git
+  designs), `age_text`, `subtitle`.
+- `sciforge/home_ui.py`: the Home tab is a plain `QWidget` in a `QMdiSubWindow` (FreeCAD
+  supports non-MDIView sub-windows, MainWindow.cpp "the plot widget": activating it leaves
+  FreeCAD's active 3D view as it was), so it is a document tab like FreeCAD's Start page.
+  Places (Recent, This computer), New design (`App.newDocument("Untitled")` +
+  `commands.ensure_body`), Open... (`SciForge_Open`), search, recovery banner
+  (`versions_ui.recovery().leftovers()`, re-read every 3 s while shown), tiles read on a
+  daemon worker thread (file work only; answers polled by a 50 ms QTimer). Right-click menu
+  per the parity doc. `_Watch` document observer: opened (a moment after
+  `slotCreatedDocument`: the file name comes after), saved (`slotFinishSaveDocument`), last
+  design closed -> Home (skipped while the window closes). Navigation bar hidden while Home
+  is the active tab (`subWindowActivated`).
+- Wiring: `shell.startup` -> `home_ui.at_start` (FreeCAD started with a file: Home behind
+  it), `shell.enable/disable` -> `home_ui.enable/disable` (off: Home tab closed);
+  `ribbon_config.QUICK_ACCESS` Home first (Fusion: far left, before the Data Panel),
+  `FILE_MENU` Home on top; `prefs_core` option `show_home` (General > Startup,
+  `Mod/SciForge/ShowHomeAtStart`, default on); icons `qa_home`, `recent`.
+- Research: Fusion's Home (April / May / July 2026 updates) via search summaries only (the
+  sandbox cannot open autodesk.com): sources and guesses in `docs/sciforge/parity/home.md`.
+  Re-check them in a browser when possible.
+
+#### Tests
+- Scenario `home_screen.py`: 66 checks, pass. `restart_gui.py`: both starts on Home, the
+  second lists the first's design: pass. Unit 1369, golden 432 + 2 xfail, smoke, journey:
+  pass.
+- Full scenario sweep (all 377, two shards locally, ~4 h on this sandbox): still running at this
+  commit; result in the next MEMORY update
+
+#### Next
+- M2 places (clouds, NAS): `home_core` already keeps `location_id` / `rel`; `home_ui.places()`
+  and `PLACE_NAMES` are where new places plug in; sidecar pictures `.sciforge/thumbs/`.
+- Not built in M1: sort / list view / details panel, the AI column (M3).
 
 ### Session log: Home, cloud and AI, M0 groundwork (branch `sf/home-cloud-ai`, 2026-10-19)
 
