@@ -334,7 +334,7 @@ def p2_drag_out():
         return
     mid, grow, across, size = p._frame()
     origin = mid - grow * (0.4 * size)
-    hole_steps.drag_arrow(origin, across, arrow.distance(), 25.0)
+    hole_steps.drag_arrow(origin, across, arrow.distance(), 25.0, arrow=arrow)
 
 
 p2_drag_out.wait_ms = 1500
@@ -354,7 +354,9 @@ def p2_dragged_out():
     if arrow is not None:
         mid, grow, across, size = p._frame()
         origin = mid - grow * (0.4 * size)
-        hole_steps.drag_arrow(origin, across, arrow.distance(), -(arrow.distance() + 6.0))
+        hole_steps.drag_arrow(
+            origin, across, arrow.distance(), -(arrow.distance() + 6.0), arrow=arrow
+        )
 
 
 p2_dragged_out.wait_ms = 1500

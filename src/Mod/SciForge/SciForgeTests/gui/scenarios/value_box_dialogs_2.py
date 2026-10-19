@@ -14,6 +14,7 @@ import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
+from PySide6 import QtTest
 
 from SciForgeTests.gui import arrow_input as a
 from SciForgeTests.gui import blend_steps as b
@@ -62,6 +63,12 @@ def check_box(what, key, field, handle):
 
 
 def pan_view():
+    # the box may still be on its way to its place next to a handle that has just
+    # appeared (a slow machine): let it settle, then measure from where it is
+    QtTest.QTest.qWait(400)
+    box = s.get("box")
+    if box is not None:
+        s["box_x"] = box.pos().x()
     h.pan(PAN, 0)
 
 

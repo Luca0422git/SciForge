@@ -226,7 +226,7 @@ def drag_depth():
     mid, grow, across, size = p._frame()
     origin = mid + across * (1.0 + 0.4 * size)
     s["depth_before"] = p.depth.value()
-    hole_steps.drag_arrow(origin, grow, arrow.distance(), 3.0)
+    hole_steps.drag_arrow(origin, grow, arrow.distance(), 3.0, arrow=arrow)
 
 
 drag_depth.wait_ms = 1500
