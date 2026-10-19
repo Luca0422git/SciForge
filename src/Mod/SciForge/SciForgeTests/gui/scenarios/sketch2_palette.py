@@ -115,6 +115,19 @@ b_setup.wait_ms = 2000
 
 
 def b_before():
+    from sciforge import theme
+
+    palette = Gui.getMainWindow().findChild(QtWidgets.QFrame, "SciForgeSketchPalette")
+    colour = None
+    if palette is not None:
+        image = palette.grab().toImage()
+        colour = image.pixelColor(image.width() - 4, image.height() - 4).name()
+    # (Luca, 2026-10-19: white, and see-through on hover, on Windows: it paints its own)
+    h.check(
+        "the palette paints its own background",
+        colour == theme.own_background(palette),
+        (colour, palette and theme.own_background(palette)),
+    )
     h.view().viewTop()
     h.fit(iso=False)
     z, obj = pick_z()

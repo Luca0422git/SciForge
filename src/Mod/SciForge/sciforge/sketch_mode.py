@@ -34,7 +34,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import log, warn
+from . import log, theme, warn
 from .compat import QtCore, QtGui, QtWidgets
 
 SKETCHER = "User parameter:BaseApp/Preferences/Mod/Sketcher"
@@ -1961,7 +1961,7 @@ def remove_stray_editors(gl, keep=None):
     return removed
 
 
-class DimensionEditor(QtWidgets.QFrame):
+class DimensionEditor(theme.OwnBackground, QtWidgets.QFrame):
     """Fusion's in-place dimension box: shows the measured value selected; type a
     value or an expression (=width*2), Enter keeps it, Esc keeps the measured one."""
 

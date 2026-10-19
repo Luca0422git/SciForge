@@ -12,7 +12,7 @@ Geometries, 3D Sketch. Options are remembered between sessions (sketch_mode.opti
 
 import FreeCADGui as Gui
 
-from . import sketch_mode, ui_icon, ui_icon_path, warn
+from . import sketch_mode, theme, ui_icon, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 
 ROWS = [
@@ -57,7 +57,7 @@ STYLE = STYLE.replace("CHECK", ui_icon_path("palette_check").replace("\\", "/"))
 HIDDEN_SECTIONS = ("SketcherGui::TaskSketcherConstraints", "SketcherGui::TaskSketcherElements")
 
 
-class Palette(QtWidgets.QFrame):
+class Palette(theme.OwnBackground, QtWidgets.QFrame):
     def __init__(self, session, parent=None):
         super().__init__(parent)
         self.session = session

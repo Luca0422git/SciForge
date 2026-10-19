@@ -13,7 +13,7 @@ panel with the quantity and spacing in both directions and a live preview.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, log, sketch_mode, ui_icon_path, warn
+from . import commands, log, sketch_mode, theme, ui_icon_path, warn
 from .compat import QtCore, QtWidgets
 
 _state = {"waiter": None, "box": None}
@@ -190,7 +190,7 @@ def _size(sketch, ids):
     return max(box.XLength, 1.0), max(box.YLength, 1.0)
 
 
-class RectangularPatternBox(QtWidgets.QFrame):
+class RectangularPatternBox(theme.OwnBackground, QtWidgets.QFrame):
     """Fusion's sketch Rectangular Pattern panel, shown at the top of the sketch panel:
     Quantity and Distance (spacing) for both directions, live preview, OK / Cancel."""
 

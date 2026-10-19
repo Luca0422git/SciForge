@@ -139,6 +139,39 @@ def translate(text, light=None):
 _state = {"name": "dark", "hook": None}
 
 
+def own_background(widget):
+    """The background a panel's own style sheet gives it ("#Name { background: #..." for
+    its object name), in the look in use; None if it gives none."""
+    try:
+        match = re.search(
+            r"#%s\s*(?:,[^{]*)?\{[^}]*?background(?:-color)?\s*:\s*(#[0-9a-fA-F]{6})"
+            % re.escape(widget.objectName()),
+            widget.styleSheet() or "",
+        )
+        return match.group(1) if match else None
+    except RuntimeError:
+        return None
+
+
+class OwnBackground:
+    """Mix-in for a panel (a QFrame) whose style sheet gives it a background: it paints
+    that background itself. On Luca's Windows such panels came out white (and see-through
+    on hover) inside FreeCAD's Tasks overlay: the sketch palette, Home's AI column; their
+    style sheet's background was not drawn there (it was on Linux)."""
+
+    def paintEvent(self, event):
+        colour = own_background(self)
+        if colour:
+            from PySide import QtGui
+
+            painter = QtGui.QPainter(self)
+            try:
+                painter.fillRect(self.rect(), QtGui.QColor(colour))
+            finally:
+                painter.end()
+        super().paintEvent(event)
+
+
 def _use(name):
     """The module's colours (CHROME, TEXT...: read by the panels) for the look `name`."""
     global CHROME, MENU, VIEW, TEXT, TEXT_DIM, TEXT_DISABLED, HOVER, ACTIVE, LINE, ACCENT, FIELD

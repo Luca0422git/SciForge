@@ -12,10 +12,9 @@ curves are shown selected (FreeCAD's selection colour).
 
 import FreeCADGui as Gui
 
-from . import log, warn
+from . import log, sketch_project, theme, warn
 from . import sketch_draw as draw
 from . import sketch_infer_core as icore
-from . import sketch_project
 from .compat import QtCore, QtWidgets
 
 
@@ -231,7 +230,7 @@ def _grouped(items):
     return out
 
 
-class ProjectBox(QtWidgets.QFrame):
+class ProjectBox(theme.OwnBackground, QtWidgets.QFrame):
     """The Project to Surface panel at the top of the sketch panel."""
 
     def __init__(self, tool):

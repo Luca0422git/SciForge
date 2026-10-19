@@ -21,7 +21,8 @@ made is baked right after its undo step (DocWatch) as an undo step of its own.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, direct, direct_core as core, log, ui_icon, ui_icon_path, warn
+from . import commands, direct, log, theme, ui_icon, ui_icon_path, warn
+from . import direct_core as core
 from .compat import QtCore, QtWidgets
 
 _DEFERRED = {}  # document name -> the transaction (name, id) whose commit waits for a bake
@@ -429,7 +430,7 @@ def edit(step):
 
 
 # -- the Finish Base Feature bar over the 3D view ----------------------------------------------
-class FinishBar(QtWidgets.QFrame):
+class FinishBar(theme.OwnBackground, QtWidgets.QFrame):
     """Shown while a base feature is open: what is going on, and Finish Base Feature."""
 
     def __init__(self, parent):
