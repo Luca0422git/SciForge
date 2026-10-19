@@ -37,7 +37,6 @@ FREECAD_RECENT = "User parameter:BaseApp/Preferences/RecentFiles"
 TITLE = "Home"
 THUMB = 132  # tile picture (px)
 TILE_W, TILE_H = THUMB + 76, THUMB + 54  # (two lines of text under it)
-PLACE_NAMES = {core.LOCAL: "This computer"}
 LOCATE_PICKER = None  # tests: a function returning the path Locate... picks
 
 _state = {"sub": None, "watch": None, "on": False, "loader": None, "refresh": None}
@@ -66,14 +65,40 @@ def thumbs_dir():
 
 
 def places():
-    """{location id: its folder on this computer}."""
-    from . import versions_ui
+    """{location id: its folder on this computer}: This computer, the clouds and NAS."""
+    from . import locations_ui
 
-    return {core.LOCAL: versions_ui.project_folder()}
+    return locations_ui.roots()
 
 
 def place_name(location_id):
-    return PLACE_NAMES.get(location_id or "", "")
+    from . import locations_ui
+
+    return locations_ui.names().get(location_id or "", "")
+
+
+def _sidecar(path):
+    """The small picture beside a design in a cloud place, or None (locations_core)."""
+    from . import locations_core, locations_ui
+
+    place = locations_core.place_of(path, locations_ui.all_places())
+    if place is None or place["kind"] not in locations_core.CLOUD_KINDS:
+        return None
+    return locations_core.sidecar_file(place["root"], path)
+
+
+def write_sidecar(path):
+    """After a save in a cloud place: its picture beside it for the other computers."""
+    try:
+        target = _sidecar(path)
+        data = versions.thumbnail_bytes(path) if target else None
+        if data:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target + ".tmp", "wb") as handle:
+                handle.write(data)
+            os.replace(target + ".tmp", target)
+    except Exception as exc:
+        warn("home: picture beside %s: %s" % (path, exc))
 
 
 def _skip_folders():
@@ -147,7 +172,9 @@ class _Loader:
         while True:
             job = self.jobs.get()
             try:
-                status, mtime, png = core.load_thumbnail(job["path"], job["key"], job["cache"])
+                status, mtime, png = core.load_thumbnail(
+                    job["path"], job["key"], job["cache"], sidecar=job.get("sidecar")
+                )
                 count = 0
                 if status == core.OK and job.get("count"):
                     try:
@@ -277,15 +304,86 @@ class HomeView(QtWidgets.QWidget):
         header.setFlags(QtCore.Qt.NoItemFlags)
         header.setForeground(QtGui.QColor(theme.TEXT_DISABLED))
         self.places.addItem(header)
-        for location_id, folder in places().items():
-            item = QtWidgets.QListWidgetItem(ui_icon("folder"), place_name(location_id))
-            item.setData(_KIND, location_id)
-            item.setToolTip(folder)
-            self.places.addItem(item)
+        self.places.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.places.customContextMenuRequested.connect(self._place_menu)
+        self.fill_places()
         self.places.setCurrentRow(0)
         self.places.currentItemChanged.connect(self._place_clicked)
         column.addWidget(self.places, 1)
         return side
+
+    def fill_places(self):
+        """The place rows (after Recent and the PLACES header): name and status, then
+        + Connect a cloud or NAS."""
+        from . import locations_core, locations_ui
+
+        while self.places.count() > 2:
+            self.places.takeItem(2)
+        for place in locations_ui.all_places():
+            # (This computer's folder is made when first needed: never "offline")
+            offline = place["kind"] != "local" and (
+                locations_core.status(place) != locations_core.OK
+            )
+            item = QtWidgets.QListWidgetItem(
+                ui_icon("folder"), place["name"] + ("  \u00b7 Offline" if offline else "")
+            )
+            item.setData(_KIND, place["id"])
+            item.setToolTip(
+                place["root"]
+                + ("\nNot reachable now: is the cloud app running, the NAS on?" if offline else "")
+            )
+            if offline:
+                item.setForeground(QtGui.QColor(theme.TEXT_DISABLED))
+            self.places.addItem(item)
+        connect = QtWidgets.QListWidgetItem("+ Connect a cloud or NAS")
+        connect.setData(_KIND, "__connect__")
+        connect.setForeground(QtGui.QColor(theme.ACCENT))
+        connect.setToolTip("Keep designs in your Dropbox, OneDrive, Google Drive or NAS folder")
+        self.places.addItem(connect)
+
+    def _refill_places(self):
+        """The places again (a folder may have come back or gone), the current one kept."""
+        self.places.blockSignals(True)
+        try:
+            self.fill_places()
+            if self.mode != "recent" and self.mode not in places():
+                self.mode = "recent"
+            self.select_place(self.mode)
+        finally:
+            self.places.blockSignals(False)
+
+    def select_place(self, location_id):
+        for i in range(self.places.count()):
+            if self.places.item(i).data(_KIND) == location_id:
+                self.places.setCurrentRow(i)
+                return True
+        return False
+
+    def _place_menu(self, pos):
+        try:
+            item = self.places.itemAt(pos)
+            location_id = item.data(_KIND) if item is not None else None
+            if location_id in (None, "recent", "__connect__"):
+                return
+            self.place_menu(location_id).exec_(self.places.viewport().mapToGlobal(pos))
+        except Exception as exc:
+            warn("home: %s" % exc)
+
+    def place_menu(self, location_id):
+        """A place's right-click menu (tests read its actions)."""
+        from . import locations_ui
+
+        menu = QtWidgets.QMenu(self)
+        root = places().get(location_id, "")
+        menu.addAction("Show in Folder").triggered.connect(
+            lambda *_: QtCore.QTimer.singleShot(0, lambda: _open_folder(root))
+        )
+        if location_id != core.LOCAL:
+            menu.addSeparator()
+            menu.addAction("Disconnect").triggered.connect(
+                lambda *_: QtCore.QTimer.singleShot(0, lambda: locations_ui.disconnect(location_id))
+            )
+        return menu
 
     def _main(self):
         main = QtWidgets.QWidget()
@@ -387,6 +485,11 @@ class HomeView(QtWidgets.QWidget):
         try:
             if item is None or not item.data(_KIND):
                 return
+            if item.data(_KIND) == "__connect__":
+                back = self.mode
+                QtCore.QTimer.singleShot(0, lambda: self.select_place(back))
+                QtCore.QTimer.singleShot(0, _connect)
+                return
             self.mode = item.data(_KIND)
             self.folder = None
             self.refresh()
@@ -396,6 +499,7 @@ class HomeView(QtWidgets.QWidget):
     def refresh(self):
         """List the tiles again (their pictures come a moment later)."""
         try:
+            self._refill_places()
             self.generation += 1
             self.list.clear()
             self.tiles = {}
@@ -420,6 +524,7 @@ class HomeView(QtWidgets.QWidget):
                 "key": key,
                 "path": path,
                 "cache": thumbs_dir(),
+                "sidecar": _sidecar(path),
                 "count": count,
                 "project": versions_ui.project_folder(),
                 "git": versions_ui.use_git(),
@@ -467,8 +572,13 @@ class HomeView(QtWidgets.QWidget):
             self.title.setText(name)
             self.up.hide()
             self.empty.setText(
-                "The folder of %s (%s) is not there. Choose another one in File > Project and "
-                "Recovery Settings." % (name, root)
+                (
+                    "The folder of %s (%s) is not there. Choose another one in File > Project "
+                    "and Recovery Settings." % (name, root)
+                )
+                if self.mode == core.LOCAL
+                else "%s is offline: %s is not reachable now. Is the cloud app running, the NAS "
+                "on? Its designs come back when it is." % (name, root)
             )
             self.empty.show()
             self.list.hide()
@@ -479,6 +589,11 @@ class HomeView(QtWidgets.QWidget):
         self.title.setText(" / ".join([name] + crumbs))
         self.up.setVisible(not versions.same_path(root, self.folder))
         folders, designs = versions.list_folder(self.folder)
+        from . import locations_ui
+
+        self.conflicts = locations_ui.conflicts(
+            self.folder, [os.path.basename(d["path"]) for d in designs]
+        )
         text = self.search.text()
         for folder in folders:
             if not core.matches({"name": folder["name"]}, text):
@@ -499,6 +614,20 @@ class HomeView(QtWidgets.QWidget):
             item.setData(_KIND, ("design", key, design["path"]))
             item.setData(_STATUS, core.OK)
             item.setToolTip(design["path"])
+            original = self.conflicts.get(os.path.basename(design["path"]))
+            if original:
+                from . import locations_core
+
+                who = locations_core.conflict_who(os.path.basename(design["path"]), original)
+                item.setText(
+                    "%s\nConflict copy%s"
+                    % (versions.design_name(original), ", " + who if who else "")
+                )
+                item.setForeground(QtGui.QColor("#ffb74d"))
+                item.setToolTip(
+                    "%s\nYour cloud app made this copy: %s was changed on two computers. "
+                    "Right-click: Compare, Keep This One." % (design["path"], original)
+                )
             item.setSizeHint(QtCore.QSize(TILE_W, TILE_H))
             self.list.addItem(item)
             if not design.get("cad"):
@@ -531,9 +660,13 @@ class HomeView(QtWidgets.QWidget):
                 dim = status == core.MISSING
                 item.setIcon(QtGui.QIcon(_tile_pixmap(png, key in self.pinned, dim)))
                 item.setData(_STATUS, status)
-                name = item.text().split("\n")[0]
+                name, _sep, line = item.text().partition("\n")
                 where = place_name(core.place_of(path, places())[0]) if kind == "recent" else ""
-                item.setText("%s\n%s" % (name, core.subtitle(where, status, mtime, count)))
+                if not line.startswith("Conflict"):
+                    line = core.subtitle(where, status, mtime, count)
+                    if status == core.MISSING and _place_offline(path):
+                        line = "%s, offline" % where
+                item.setText("%s\n%s" % (name, line))
                 if dim:
                     item.setForeground(QtGui.QColor(theme.TEXT_DISABLED))
                     item.setToolTip(
@@ -670,6 +803,13 @@ class HomeView(QtWidgets.QWidget):
             add("Locate...", lambda: self.locate(key))
         else:
             add("Open", lambda: self._open(kind, key, path, core.OK))
+            original = getattr(self, "conflicts", {}).get(os.path.basename(path))
+            if kind == "design" and original:
+                twin = os.path.join(os.path.dirname(path), original)
+                add(
+                    "Compare with %s" % versions.design_name(original), lambda: _compare(path, twin)
+                )
+                add("Keep This One", lambda: self.keep_copy(path, twin))
         if kind == "recent":
             pinned = key in self.pinned
             add("Unpin" if pinned else "Pin", lambda: self.pin(key, not pinned))
@@ -680,6 +820,13 @@ class HomeView(QtWidgets.QWidget):
             menu.addSeparator()
             add("Remove from List", lambda: self.forget(key))
         return menu
+
+    def keep_copy(self, copy, original):
+        from . import versions_ui
+
+        kept = versions_ui.keep_conflict_copy(copy, original, places().get(self.mode))
+        self.refresh()
+        return kept
 
     def pin(self, key, on=True):
         try:
@@ -761,6 +908,40 @@ def _history(path):
     from . import versions_ui
 
     versions_ui.show_history(path)
+
+
+def _open_folder(folder):
+    try:
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(folder))
+    except Exception as exc:
+        warn("home: %s" % exc)
+
+
+def _compare(path, twin):
+    from . import versions_ui
+
+    versions_ui.compare_files(path, twin)
+
+
+def _connect():
+    from . import locations_ui
+
+    locations_ui.connect_place()
+
+
+def _place_offline(path):
+    from . import locations_core, locations_ui
+
+    place = locations_core.place_of(path, locations_ui.all_places())
+    return place is not None and locations_core.status(place) != locations_core.OK
+
+
+def places_changed():
+    """A place was connected or disconnected: the open Home lists them again."""
+    page = view()
+    if page is None:
+        return
+    page.refresh()  # (the places are listed again first)
 
 
 def _leftovers():
@@ -923,6 +1104,11 @@ def _after_close():
         warn("home: %s" % exc)
 
 
+def _saved(path):
+    record(path)
+    write_sidecar(path)
+
+
 class _Watch:
     """Remembers the designs opened and saved; notices the last design closing."""
 
@@ -937,7 +1123,7 @@ class _Watch:
     def slotFinishSaveDocument(self, doc, filename):
         try:
             path = str(filename or doc.FileName)
-            QtCore.QTimer.singleShot(0, lambda: record(path))
+            QtCore.QTimer.singleShot(0, lambda: _saved(path))
         except Exception as exc:
             warn("home: %s" % exc)
 

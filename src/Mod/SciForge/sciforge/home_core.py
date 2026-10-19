@@ -273,11 +273,18 @@ def thumb_file(cache_dir, key, mtime):
     return os.path.join(cache_dir, "%s-%s.png" % (key, stamp[:12]))
 
 
-def load_thumbnail(path, key, cache_dir, stat=os.stat):
+def load_thumbnail(path, key, cache_dir, stat=os.stat, sidecar=None):
     """(status, mtime, PNG bytes or None) for one tile. Runs on Home's worker thread: file
     work only. The cache gets the picture once per save; older pictures of the same design
-    are removed."""
+    are removed. A design kept online only shows its small sidecar picture (written beside
+    it in a cloud place) when there is one."""
     status, mtime = file_status(path, stat)
+    if status == ONLINE and sidecar and file_status(sidecar, stat)[0] == OK:
+        try:
+            with open(sidecar, "rb") as handle:
+                return status, mtime, handle.read()
+        except OSError:
+            pass
     if status != OK:
         return status, mtime, None
     target = thumb_file(cache_dir, key, mtime)

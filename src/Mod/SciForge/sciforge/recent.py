@@ -23,6 +23,7 @@ NOT_REPEATABLE = {
     "SciForge_DataPanel",
     "SciForge_FilesSettings",
     "SciForge_Home",
+    "SciForge_ConnectPlace",
 }
 
 

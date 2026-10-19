@@ -1125,6 +1125,12 @@ FILE_MENU = [
     item("Insert Design", "SciForge_InsertDesign", "insert_component"),
     SEP,
     item("Project and Recovery Settings", "SciForge_FilesSettings", "folder"),
+    item(
+        "Connect a Cloud or NAS",
+        "SciForge_ConnectPlace",
+        "folder",
+        note="Keep designs in your Dropbox, OneDrive, Google Drive or NAS folder",
+    ),
 ]
 
 # Quick-access buttons at the top left, like Fusion's application bar.

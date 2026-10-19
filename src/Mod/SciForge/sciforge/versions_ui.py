@@ -143,8 +143,16 @@ def recovery_folder():
 def store_of(path):
     """The version store of a design file, with what was decided logged."""
     notes = []
+    git = use_git()
+    if git:
+        from . import locations_ui
+
+        # SCIFORGE places (M2): a cloud app syncing a .git folder breaks the repository
+        git = locations_ui.git_allowed(path)
+        if not git:
+            notes.append("%s is in a folder a cloud app syncs: versions kept as copies" % path)
     store = core.store_for(
-        path, project_folder(), use_git(), os.path.join(user_dir(), "SciForge", "versions"), notes
+        path, project_folder(), git, os.path.join(user_dir(), "SciForge", "versions"), notes
     )
     for note in notes:
         log("versions: %s" % note)
@@ -264,6 +272,11 @@ class SaveDialog(QtWidgets.QDialog):
         self.name.setObjectName("SciForgeSaveName")
         self.name.setPlaceholderText("Name of the design")
         form.addRow("Name", self.name)
+        # SCIFORGE places (M2): This computer, the clouds and NAS connected; picking one puts
+        # its folder in Location
+        self.place = QtWidgets.QComboBox()
+        self.place.setObjectName("SciForgeSavePlace")
+        form.addRow("Place", self.place)
         row = QtWidgets.QHBoxLayout()
         self.location = QtWidgets.QLineEdit()
         self.location.setObjectName("SciForgeSaveLocation")
@@ -309,6 +322,38 @@ class SaveDialog(QtWidgets.QDialog):
         self.name.setText(base)
         self.name.selectAll()
         self.name.setFocus()
+        self._fill_places(folder)
+        self.place.activated.connect(self._place_chosen)
+        self.location.textChanged.connect(self._match_place)
+
+    def _fill_places(self, folder):
+        try:
+            from . import locations_core, locations_ui
+
+            for place in locations_ui.all_places():
+                status = locations_core.status(place)
+                offline = place["kind"] != "local" and status != locations_core.OK
+                label = place["name"] + (" (offline)" if offline else "")
+                self.place.addItem(label, place["root"])
+            self._match_place(folder)
+        except Exception as exc:
+            warn("save dialog: places: %s" % exc)
+
+    def _place_chosen(self, index):
+        root = self.place.itemData(index)
+        if root:
+            self.location.setText(root)
+
+    def _match_place(self, folder):
+        """The Place row shows the place the Location is in (the innermost)."""
+        best, size = -1, -1
+        for i in range(self.place.count()):
+            root = self.place.itemData(i)
+            if root and core.inside(root, folder) and len(root) > size:
+                best, size = i, len(root)
+        self.place.blockSignals(True)
+        self.place.setCurrentIndex(best)
+        self.place.blockSignals(False)
 
     def _pick_location(self):
         try:
@@ -468,6 +513,10 @@ def save_design(doc, after=None):
         dialog.accepted.connect(chosen)
         _show(dialog, "save:" + doc.Name)
         return
+    from . import locations_ui
+
+    if not locations_ui.before_save(doc, lambda: save_design(doc, after)):
+        return  # (changed on another computer: its question saves, or not)
     # The document's name is taken now: the design may be closed while the dialog is open
     # (the lambda then read `doc.Name` from a deleted object: ReferenceError), and
     # _first_save / _save_version look the document up by name and do nothing when gone.
@@ -1100,6 +1149,10 @@ class CompareDialog(QtWidgets.QDialog):
         self.fill(path, a, b)
 
     def fill(self, path, a, b):
+        self.rows = self._compute(path, a, b)
+        self._show_rows()
+
+    def _compute(self, path, a, b):
         try:
             store = store_of(path)
             folder = os.path.join(user_dir(), "SciForge", core.OPEN_FOLDER, "compare")
@@ -1118,15 +1171,18 @@ class CompareDialog(QtWidgets.QDialog):
                 volume = volume_of_file(file)
                 if volume is not None:
                     summary["volume"] = volume
-            self.rows = core.compare(summaries[0], summaries[1])
+            rows = core.compare(summaries[0], summaries[1])
             for file in files:
                 try:
                     os.remove(file)
                 except OSError:
                     pass
+            return rows
         except Exception as exc:
             warn("compare: %s" % exc)
-            self.rows = [("Could not compare", str(exc), "", False)]
+            return [("Could not compare", str(exc), "", False)]
+
+    def _show_rows(self):
         self.table.setRowCount(len(self.rows))
         changed = 0
         for row, (title, va, vb, differs) in enumerate(self.rows):
@@ -1145,6 +1201,34 @@ class CompareDialog(QtWidgets.QDialog):
             if self.rows
             else "Nothing to compare."
         )
+
+
+class _Label:
+    def __init__(self, label):
+        self.label = label
+
+
+class CompareFilesDialog(CompareDialog):
+    """Two design files side by side: a sync app's conflict copy and its original (places,
+    M2)."""
+
+    def __init__(self, path_a, path_b):
+        self._files = (path_a, path_b)
+        super().__init__(path_a, _Label(os.path.basename(path_a)), _Label(os.path.basename(path_b)))
+
+    def _compute(self, _path, _a, _b):
+        try:
+            summaries = []
+            for file in self._files:
+                summary = core.summary(file)
+                volume = volume_of_file(file)
+                if volume is not None:
+                    summary["volume"] = volume
+                summaries.append(summary)
+            return core.compare(summaries[0], summaries[1])
+        except Exception as exc:
+            warn("compare: %s" % exc)
+            return [("Could not compare", str(exc), "", False)]
 
 
 # -- recovery copies ----
@@ -1419,10 +1503,18 @@ class DataPanel(QtWidgets.QWidget):
         super().__init__()
         self.setObjectName("SciForgeDataPanel")
         self.folder = project_folder()
+        self.root = None  # the place shown (None: This computer, the project folder)
+        self.conflicts = {}  # file name -> its original's name (sync apps' copies here)
         self._thumbs = {}  # path -> (mtime, QIcon)
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(4, 4, 4, 4)
         outer.setSpacing(4)
+        # SCIFORGE places (M2): This computer, the clouds and NAS connected
+        self.places = QtWidgets.QComboBox()
+        self.places.setObjectName("SciForgeDataPanelPlace")
+        self.places.setToolTip("Which place to show: this computer, a cloud or a NAS")
+        self.places.activated.connect(self._place_chosen)
+        outer.addWidget(self.places)
         bar = QtWidgets.QHBoxLayout()
         bar.setSpacing(2)
         self.up = self._tool("Up", "Up one folder", self.go_up, "SciForgeDataPanelUp")
@@ -1501,22 +1593,58 @@ class DataPanel(QtWidgets.QWidget):
             self.list.setSpacing(6)
 
     # -- what is shown
+    def place_root(self):
+        return self.root or project_folder()
+
+    def _fill_places(self):
+        try:
+            from . import locations_core, locations_ui
+
+            self.places.blockSignals(True)
+            self.places.clear()
+            current = 0
+            for i, place in enumerate(locations_ui.all_places()):
+                offline = place["kind"] != "local" and (
+                    locations_core.status(place) != locations_core.OK
+                )
+                self.places.addItem(
+                    place["name"] + (" (offline)" if offline else ""), place["root"]
+                )
+                if self.root and core.same_path(place["root"], self.root):
+                    current = i
+            self.places.setCurrentIndex(current)
+            self.places.setVisible(self.places.count() > 1)
+        except Exception as exc:
+            warn("data panel: places: %s" % exc)
+        finally:
+            self.places.blockSignals(False)
+
+    def _place_chosen(self, index):
+        try:
+            root = self.places.itemData(index)
+            self.root = None if core.same_path(root, project_folder()) else root
+            self.folder = self.place_root()
+            self.refresh()
+        except Exception as exc:
+            warn("data panel: %s" % exc)
+
     def set_folder(self, folder):
-        project = project_folder()
+        project = self.place_root()
         if not core.inside(project, folder):
             folder = project
         self.folder = folder
         self.refresh()
 
     def go_up(self):
-        if core.same_path(self.folder, project_folder()):
+        if core.same_path(self.folder, self.place_root()):
             return
         self.set_folder(os.path.dirname(self.folder))
 
     def refresh(self):
         try:
-            project = project_folder()
-            if not os.path.isdir(project):
+            self._fill_places()
+            project = self.place_root()
+            if self.root is None and not os.path.isdir(project):
                 try:
                     os.makedirs(project, exist_ok=True)
                     log("made the project folder %s" % project)
@@ -1529,6 +1657,9 @@ class DataPanel(QtWidgets.QWidget):
                 self.crumbs.setText("")
                 self.status.setText(
                     "The project folder %s is not there. Choose one with the ... button." % project
+                    if self.root is None
+                    else "This place is offline: %s is not reachable now (is the cloud app "
+                    "running, the NAS on?)." % project
                 )
                 self.up.setEnabled(False)
                 return
@@ -1542,8 +1673,13 @@ class DataPanel(QtWidgets.QWidget):
             self.crumbs.setToolTip(self.folder)
             self.up.setEnabled(len(crumbs) > 1)
             folders, designs = core.list_folder(self.folder)
+            from . import locations_ui
+
+            self.conflicts = locations_ui.conflicts(
+                self.folder, [os.path.basename(d["path"]) for d in designs]
+            )
             counts = None
-            if use_git() and core.git_available():
+            if self.root is None and use_git() and core.git_available():
                 root = core.repo_root(project)
                 if root is not None:
                     counts = core.repo_counts(root)
@@ -1560,6 +1696,9 @@ class DataPanel(QtWidgets.QWidget):
             for design in designs:
                 n = core.version_count(design["path"], project, use_git(), counts)
                 badge = ("  v%d" % n) if n else ""
+                original = self.conflicts.get(os.path.basename(design["path"]))
+                if original:  # a sync app's copy (two computers changed the design)
+                    badge += "  (conflict)"
                 item = QtWidgets.QListWidgetItem(
                     self._thumbnail(design["path"]), design["name"] + badge
                 )
@@ -1738,6 +1877,15 @@ class DataPanel(QtWidgets.QWidget):
                     menu.addAction("Delete", lambda: self._trash(path))
                 else:
                     menu.addAction("Open", lambda: open_design(path))
+                    original = self.conflicts.get(os.path.basename(path))
+                    if original:
+                        twin = os.path.join(os.path.dirname(path), original)
+                        menu.addAction(
+                            "Compare with %s" % core.design_name(original),
+                            lambda: compare_files(path, twin),
+                        )
+                        menu.addAction("Keep This One", lambda: self.keep_copy(path, twin))
+                        menu.addSeparator()
                     menu.addAction("Version History", lambda: show_history(path))
                     menu.addAction("Milestones", lambda: show_history(path, True))
                     menu.addAction(
@@ -1753,6 +1901,11 @@ class DataPanel(QtWidgets.QWidget):
             menu.exec_(self.list.mapToGlobal(pos))
         except Exception as exc:
             warn("data panel menu: %s" % exc)
+
+    def keep_copy(self, copy, original):
+        kept = keep_conflict_copy(copy, original, self.place_root())
+        self.refresh()
+        return kept
 
     def _rename(self, path, is_folder):
         try:
@@ -2027,6 +2180,33 @@ def copy_design(path, folder):
         warn("copy: %s" % exc)
         commands.tell("Could not copy: %s" % exc)
         return None
+
+
+def keep_conflict_copy(copy, original, root=None):
+    """Keep This One: a sync app's conflict copy becomes the design; the other one goes to
+    the trash folder of its place (never deleted). The design's path, or None."""
+    try:
+        for path in (copy, original):
+            if doc_for_file(path) is not None:
+                raise core.StoreError("Close %s first." % core.design_name(path))
+        if os.path.exists(original):
+            core.trash_design(original, root or project_folder())
+        os.replace(copy, original)
+        log("kept %s as %s (the other one is in the trash folder)" % (copy, original))
+        commands.tell(
+            "%s is the design now; the other one is in the %s folder."
+            % (core.design_name(original), core.TRASH_FOLDER)
+        )
+        return original
+    except Exception as exc:
+        warn("keep this one: %s" % exc)
+        commands.tell("Could not keep this one: %s" % exc)
+        return None
+
+
+def compare_files(path_a, path_b):
+    """Compare a sync app's conflict copy with its original."""
+    return _show(CompareFilesDialog(path_a, path_b), "compare:" + path_a)
 
 
 def _show_in_folder(path):

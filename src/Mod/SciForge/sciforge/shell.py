@@ -184,6 +184,8 @@ def enable():
     _safely(lambda: __import__("sciforge.preferences_ui").preferences_ui.enable())
     # Home: the designs opened and saved are remembered; the last design closed shows Home.
     _safely(lambda: __import__("sciforge.home_ui").home_ui.enable())
+    # Places (clouds, NAS): changed on another computer, open-elsewhere notes.
+    _safely(lambda: __import__("sciforge.locations_ui").locations_ui.enable())
     log("interface on")
 
 
@@ -201,6 +203,7 @@ def disable():
         return
     for step in (
         lambda: __import__("sciforge.home_ui").home_ui.disable(),
+        lambda: __import__("sciforge.locations_ui").locations_ui.disable(),
         lambda: __import__("sciforge.preferences_ui").preferences_ui.disable(),
         lambda: __import__("sciforge.drawing_ui").drawing_ui.disable(),
         lambda: __import__("sciforge.versions_ui").versions_ui.disable(),
