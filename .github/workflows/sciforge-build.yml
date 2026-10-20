@@ -475,6 +475,8 @@ jobs:
             echo
             echo "Core id: \`${CORE_ID}\`"
             echo
+            echo "To try Update now with these files without publishing: tools/sciforge/fake_release_server.py (its first lines say how)."
+            echo
             echo "### Release notes"
             cat release-files/release-notes.md
             echo

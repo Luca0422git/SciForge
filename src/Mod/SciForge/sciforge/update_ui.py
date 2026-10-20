@@ -223,8 +223,37 @@ def _note_updated():
         _state["updated"] = __version__
         _set("String", "UpdateAvailable", "")
         log("update: updated to %s" % __version__)
+        _tidy_downloads(__version__)
     else:
         log("update: the update to %s did not finish (this is still %s)" % (pending, __version__))
+
+
+def _tidy_downloads(keep):
+    """The downloads of other versions (the installer or module zip of the update that is now
+    in) are not needed any more; the folder of this one stays (its install_update.log is what
+    to send when an update goes wrong). Backups of the old SciForge are never deleted here."""
+    folder = os.path.dirname(core.updates_dir(_user_data(), keep))
+    keep_name = os.path.basename(core.updates_dir(_user_data(), keep))
+
+    def tidy():  # (file work only: a worker thread, nothing of Qt or FreeCAD in here)
+        try:
+            import shutil
+
+            for name in os.listdir(folder):
+                if name != keep_name:
+                    shutil.rmtree(os.path.join(folder, name), ignore_errors=True)
+            mine = os.path.join(folder, keep_name)  # ... and the big files of this one
+            shutil.rmtree(os.path.join(mine, "module", "SciForge"), ignore_errors=True)
+            for name in os.listdir(mine):
+                if name.lower().endswith((".exe", ".zip", ".7z", ".part")):
+                    try:
+                        os.remove(os.path.join(mine, name))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+    threading.Thread(target=tidy, name="SciForgeUpdateTidy", daemon=True).start()
 
 
 def _load_remembered():

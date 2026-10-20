@@ -258,6 +258,12 @@ def p1_home_without_line():
     h.check("P1 ... hidden: nothing is known yet", found is not None and not found.isVisible())
     h.check("P1 the automatic check did not run by itself in a test", s["fake"].hits == [], s["fake"].hits)
     h.check("P1 Preferences' check at start is on by default", update_ui.check_on_start())
+    from sciforge import diagnostics
+
+    h.check(
+        "P1 Diagnostics names the core id ('unknown' for a source tree)",
+        "Update core: unknown" in diagnostics.report(),
+    )
 
 
 def p1_check_does_not_hold_the_window_up():
@@ -327,6 +333,35 @@ def p1_the_line_on_screen():
     )
     h.check("P1 the sentence is lit, readable on the blue", lightest > 180, lightest)
     h.shot("line")
+
+
+def p1b_the_light_look():
+    """The line in the light look (Preferences > General > Look): a pale blue with dark text,
+    read on the screen, not in the style sheet."""
+    from sciforge import theme
+
+    theme.set_theme("light")
+    QtTest.QTest.qWait(500)
+    found = line()
+    h.check("P1 light look: the line is still there", found is not None and found.isVisible())
+    if found is None:
+        return
+    inside = pixel(found, 5, found.height() // 2)
+    h.check("P1 light look: the line is pale blue on the screen", near(inside, (0xCD, 0xE2, 0xF7)), inside.name())
+    label = found.text
+    image = QtWidgets.QApplication.primaryScreen().grabWindow(0).toImage()
+    corner = label.mapToGlobal(QtCore.QPoint(0, 0))
+    darkest = min(
+        image.pixelColor(corner.x() + x, corner.y() + y).lightness()
+        for x in range(0, label.width(), 2)
+        for y in range(label.height())
+    )
+    h.check("P1 light look: the sentence is dark on it", darkest < 110, darkest)
+    h.shot("line_light")
+    theme.set_theme("dark")
+    QtTest.QTest.qWait(500)
+    again = pixel(found, 5, found.height() // 2)
+    h.check("P1 and the dark look again", near(again, (0x35, 0x4A, 0x63)), again.name())
 
 
 # -- P2 --------------------------------------------------------------------------------------
@@ -668,7 +703,16 @@ def p13_updated_to():
     h.check("P13 an update that did not happen says nothing on Home", line_text() == "", line_text())
     h.check("P13 ... it is logged", any("did not finish" in m for m in sciforge.RECENT[before:]))
     group().SetString("UpdateJustInstalled", VERSION)  # the start after a good update
+    older = updates_folder("0.1.0-beta.2")  # (the download of an earlier try is left over)
+    os.makedirs(older, exist_ok=True)
+    kept = updates_folder(VERSION)
+    os.makedirs(kept, exist_ok=True)
+    with open(os.path.join(kept, "install_update.log"), "w") as handle:
+        handle.write("the log of the update that just worked\n")
     update_ui._note_updated()
+    wait_for(lambda: not os.path.isdir(older), 5)
+    h.check("P13 the downloads of other versions are tidied away", not os.path.isdir(older), older)
+    h.check("P13 ... the folder of this one (its log) stays", os.path.isfile(os.path.join(kept, "install_update.log")))
     update_ui._changed()
     found = line()
     h.check("P13 Home says it once", line_text() == "Updated to %s." % VERSION, line_text())
@@ -805,6 +849,7 @@ h.run(
         p1_home_without_line,
         _wait(p1_check_does_not_hold_the_window_up, 300),
         p1_the_line_on_screen,
+        p1b_the_light_look,
         _wait(p2_once_a_day, 300),
         p3_later_hides_the_line,
         p3_menu_asks_and_answers,
