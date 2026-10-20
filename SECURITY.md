@@ -1,32 +1,25 @@
 # Security Policy
 
-The FreeCAD project is a FOSS (Free and Open-Source Software) project that has a community of thousands of users and
-hundreds of developers worldwide. We encourage responsible reporting of security vulnerabilities that may affect users
-of this software, and will endeavor to address these vulnerabilities when they are discovered.
+SciForge is a free, open-source project run by one person (see the [README](README.md)). If you find a
+security problem in SciForge itself, please do not post it publicly in an issue.
 
-## Bounties
+## How to report
 
-FreeCAD does not have a program to pay bounties for security bugs. If you discover a vulnerability that affects a part
-of the FreeCAD project (either directly in FreeCAD, in a library it depends on, or in any of the various other
-subprojects such as our website, forums, etc.) we ask you to join the large community of volunteer contributors and
-file a report about the issue.
+Use GitHub's private reporting: open the repository's **Security** tab and click **Report a vulnerability**
+(https://github.com/Luca0422git/SciForge/security/advisories/new). If that button is not there, open a normal
+issue that says only "I found a security problem, how can I tell you privately?" and leave out the details.
 
-Note that funds may be available from the [FreeCAD Project Association (FPA)](https://fpa.freecad.org) to pursue
-security research and/or the development of fixes to any vulnerabilities discovered. However, vulnerabilities held as
-hostage in demands for "bounties" will not be entertained. Contact the FPA at fpa@freecad.org for more information.
+There is no bounty program.
 
-## Supported Versions
+## Supported versions
 
-FreeCAD implements security fixes to the current release series, and to the current development on the main branch.
+Only the newest release (and the `develop` branch) gets fixes. SciForge is in beta.
 
-| Version | Supported          |
-|---------| ------------------ |
-| 1.1dev  | :white_check_mark: |
-| 1.0     | :white_check_mark: |
-| < 1.0   | :x:                |
+| Version       | Supported          |
+|---------------|--------------------|
+| 0.1.x (beta)  | :white_check_mark: |
 
-## Reporting a Vulnerability
+## FreeCAD's own code
 
-To report a vulnerability use GitHub's security reporting tool:
-https://github.com/FreeCAD/FreeCAD/security/advisories/new
-
+SciForge is based on FreeCAD. A problem that is in FreeCAD itself (not in SciForge's additions) is best
+reported to the FreeCAD project: https://github.com/FreeCAD/FreeCAD/security/advisories/new
