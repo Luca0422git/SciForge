@@ -15,6 +15,9 @@ on:
       run_id:
         description: "Id of the SciForge build run whose Linux AppImage to use"
         default: "39490600523"
+      shard:
+        description: "A shard like 1/4 (what a build's shard runs), or none to run the scenarios below"
+        default: "1/4"
       scenarios:
         description: "Scenario names, comma separated"
         default: "version_label"
@@ -49,10 +52,17 @@ jobs:
       - name: Run the scenarios and show their logs
         env:
           SCENARIOS: ${{ inputs.scenarios || 'version_label,home_screen' }}
+          SHARD: ${{ inputs.shard || '1/4' }}
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
-          tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --scenario "$SCENARIOS" || true
-          for log in test-output/scenario-*.log; do
+          if [ -n "$SHARD" ] && [ "$SHARD" != "none" ]; then
+            # exactly what a build's scenario shard runs
+            tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --only scenarios --shard "$SHARD" 2>&1 | head -12 || true
+          else
+            tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --scenario "$SCENARIOS" || true
+          fi
+          ls test-output | head -20
+          for log in $(ls test-output/scenario-*.log | head -3); do
             echo "::group::$log"
             head -c 6000 "$log"
             echo
