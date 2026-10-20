@@ -15,9 +15,21 @@
 # The update copies files over the old ones instead of renaming the SciForge folder:
 # Windows refuses to rename a folder while anything (an Explorer window, antivirus,
 # OneDrive) is looking inside it, but overwriting the files still works then.
-param([string]$Target = "", [switch]$NoPause, [switch]$Elevated)
+#
+# "Update now" inside SciForge (sciforge/update_ui.py) starts this script by itself, after
+# SciForge quit, with:  -Target <SciForge folder> -WaitPid <SciForge's process id> -Restart -Quiet
+#   -WaitPid N      wait (up to 15 minutes) until process N has ended before touching anything
+#   -Restart        start SciForge again when the update is in
+#   -Quiet          never ask anything (no folder picker, no Enter); a failure puts the old version
+#                   back and shows one message box with the log's path; implies -NoPause
+#   -RunInstaller X after -WaitPid, start the installer X (a full-installer update) and stop
+#   -NoDialog       with -Quiet: no message box (the Windows check job of sciforge-tests.yml)
+# Without these the script behaves exactly as before (the interactive quick update).
+param([string]$Target = "", [switch]$NoPause, [switch]$Elevated,
+    [int]$WaitPid = 0, [switch]$Restart, [switch]$Quiet, [string]$RunInstaller = "", [switch]$NoDialog)
 
 $ErrorActionPreference = "Stop"
+if ($Quiet) { $NoPause = $true }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $log = Join-Path $here "install_update.log"
 try { Start-Transcript -Path $log -Force -Append:$Elevated | Out-Null } catch { }
@@ -27,8 +39,36 @@ function Finish($ok, $msg) {
     if ($ok) { Write-Host "[SciForge] $msg" -ForegroundColor Green }
     else { Write-Host "[SciForge] $msg" -ForegroundColor Red; Write-Host "[SciForge] Details: $log" }
     try { Stop-Transcript | Out-Null } catch { }
+    # Quiet: nobody is looking at this window, so a failure is told in a message box (the
+    # elevated copy leaves that to the one that started it).
+    if ((-not $ok) -and $Quiet -and (-not $NoDialog) -and (-not $Elevated)) { Show-Failure $msg }
     if (-not $NoPause) { Read-Host "Press Enter to close" | Out-Null }
     if ($ok) { exit 0 } else { exit 1 }
+}
+
+function Show-Failure($msg) {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        [void][System.Windows.Forms.MessageBox]::Show(
+            "SciForge could not be updated. Your old version was put back.`n`n$msg`n`nDetails: $log",
+            "SciForge update", "OK", "Warning")
+    } catch { }
+}
+
+function Wait-ForProcess($id) {
+    # Until process $id has ended (SciForge quitting after "Update now"), at most 15 minutes.
+    $deadline = (Get-Date).AddSeconds(900)
+    while ((Get-Process -Id $id -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) {
+        Start-Sleep -Milliseconds 500
+    }
+    if (Get-Process -Id $id -ErrorAction SilentlyContinue) { return $false }
+    Start-Sleep -Seconds 1  # let Windows let go of the files
+    return $true
+}
+
+function Start-Program($folder, $name) {
+    $bin = Join-Path $folder "bin"
+    Start-Process -FilePath (Join-Path $bin $name) -WorkingDirectory $bin
 }
 
 function Pick-Folder {
@@ -93,8 +133,9 @@ function Can-Write($folder) {
     } catch { return $false }
 }
 
-function Copy-Tree($from, $to) {
-    # Copies every file from $from into $to, overwriting (also read-only files).
+function Copy-Tree($from, $to, [switch]$Tolerant) {
+    # Copies every file from $from into $to, overwriting (also read-only files). Tolerant (the
+    # put-back after a failed update): a file that cannot be written is told and skipped.
     $count = 0
     $fromFull = (Resolve-Path -LiteralPath $from).Path.TrimEnd('\', '/')
     foreach ($item in Get-ChildItem -LiteralPath $fromFull -Recurse -Force) {
@@ -113,6 +154,7 @@ function Copy-Tree($from, $to) {
         try {
             Copy-Item -LiteralPath $item.FullName -Destination $dest -Force
         } catch {
+            if ($Tolerant) { Write-Host "[SciForge] could not put back $dest ($($_.Exception.Message))"; continue }
             throw "Could not write $dest. $($_.Exception.Message)"
         }
         $count++
@@ -152,14 +194,31 @@ $accessHelp = ("Windows did not allow SciForge's files to be changed. Try this: 
     "An installed SciForge (C:\Program Files\SciForge) always needs the administrator step; " +
     "the portable build in a normal folder such as C:\SciForge does not.")
 
+$script:backup = ""  # the copy of the old version, once made (Quiet puts it back on a failure)
+$script:current = ""
 try {
     Write-Host "[SciForge] quick update, PowerShell $($PSVersionTable.PSVersion)"
+    if ($WaitPid -gt 0) {
+        Write-Host "[SciForge] waiting for SciForge (process $WaitPid) to close..."
+        if (-not (Wait-ForProcess $WaitPid)) {
+            Finish $false "SciForge did not close (process $WaitPid is still running), so nothing was changed."
+        }
+        Write-Host "[SciForge] SciForge has closed"
+    }
+    if ($RunInstaller -ne "") {
+        # A full-installer update: SciForge has quit, the person sees the normal installer.
+        if (-not (Test-Path -LiteralPath $RunInstaller)) { Finish $false "The installer is not there: $RunInstaller" }
+        Write-Host "[SciForge] starting the installer $RunInstaller"
+        Start-Process -FilePath $RunInstaller
+        Finish $true "The installer was started."
+    }
     $source = Join-Path $here "SciForge"
     if (-not (Test-Path (Join-Path $source "InitGui.py"))) {
         Finish $false ("The 'SciForge' folder is not next to this script. Unzip the whole download first " +
             "(right-click the .zip > Extract All), then run install_update.cmd from the unzipped folder.")
     }
 
+    if ($Target -eq "" -and $Quiet) { Finish $false "No -Target given; nothing changed." }
     if ($Target -eq "") {
         # An installed SciForge is found by itself; the picker is for the portable build.
         $installed = @(Find-Installed)
@@ -237,6 +296,23 @@ try {
             try { Stop-Transcript | Out-Null } catch { }
             $argList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$($MyInvocation.MyCommand.Path)`"",
                 "-Target", "`"$Target`"", "-Elevated")
+            if ($Quiet) {
+                # The elevated copy does the work and tells its result by its exit code; this one
+                # (not an administrator) starts SciForge again, so SciForge does not run elevated.
+                $argList += @("-Quiet", "-NoDialog")
+                try {
+                    $child = Start-Process -FilePath "powershell.exe" -ArgumentList $argList -Verb RunAs -Wait -PassThru -WindowStyle Hidden
+                } catch {
+                    try { Start-Transcript -Path $log -Append | Out-Null } catch { }
+                    Finish $false ("Administrator permission was not given. " + $accessHelp)
+                }
+                try { Start-Transcript -Path $log -Append | Out-Null } catch { }
+                if ($child.ExitCode -ne 0) {
+                    Finish $false "The update could not be installed (see the log); the old version was put back."
+                }
+                if ($Restart) { Start-Program $Target $program; Write-Host "[SciForge] SciForge started again" }
+                Finish $true "Update installed."
+            }
             try {
                 Start-Process -FilePath "powershell.exe" -ArgumentList $argList -Verb RunAs -Wait
                 Write-Host "[SciForge] the administrator window has finished; its result is in $log"
@@ -257,6 +333,17 @@ try {
         $backup = Join-Path $backups (Get-Date -Format "yyyyMMdd-HHmmss")
         Write-Host "[SciForge] keeping a copy of the old version in $backup ..."
         Copy-Item -LiteralPath $current -Destination $backup -Recurse -Force
+        if ($Quiet) {
+            # The put-back after a failure trusts this copy: it must be complete (a partly made
+            # one would make it delete files that were never saved).
+            $have = @(Get-ChildItem -LiteralPath $current -Recurse -Force -File).Count
+            $kept = @(Get-ChildItem -LiteralPath $backup -Recurse -Force -File).Count
+            if ($have -ne $kept) {
+                throw "The copy of the old version is not complete ($kept of $have files), so nothing was changed."
+            }
+        }
+        $script:backup = $backup
+        $script:current = $current
     } else {
         New-Item -ItemType Directory -Path $current -Force | Out-Null
     }
@@ -267,10 +354,26 @@ try {
 
     $info = Join-Path $current "sciforge\build_info.py"
     if (Test-Path $info) { Get-Content $info | Select-String "COMMIT|DATE" | ForEach-Object { Write-Host "[SciForge] $_" } }
+    if ($Restart -and -not $Elevated) {
+        try {
+            Start-Program $Target $program
+            Write-Host "[SciForge] SciForge started again"
+        } catch { Write-Host "[SciForge] could not start SciForge again: $($_.Exception.Message)" }
+        Finish $true "Update installed. SciForge is starting again."
+    }
     Finish $true "Update installed. Start SciForge again."
 } catch {
     $msg = $_.Exception.Message
     $line = $_.InvocationInfo.ScriptLineNumber
+    if ($Quiet -and $script:backup -ne "") {
+        # Nobody is watching: put the old version back before telling what went wrong.
+        try {
+            Write-Host "[SciForge] putting the old version back from $($script:backup) ..."
+            $back = Copy-Tree $script:backup $script:current -Tolerant
+            $gone = Remove-Leftovers $script:backup $script:current
+            Write-Host "[SciForge] old version back: $back files restored, $gone new files removed"
+        } catch { Write-Host "[SciForge] could not put the old version back: $($_.Exception.Message)" }
+    }
     if ($_.Exception -is [UnauthorizedAccessException] -or $msg -match "denied|being used by another process") {
         Finish $false ("Something went wrong: $msg (line $line). " + $accessHelp)
     }

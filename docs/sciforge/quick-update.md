@@ -53,6 +53,13 @@ if it still fails).
 Without the installer: close SciForge, delete `<your SciForge>\Mod\SciForge` and copy the
 `SciForge` folder from the download into `Mod`.
 
+**Update now** inside SciForge (Help > Check for Updates) uses this same script, started for you
+after SciForge quits: `install_update.ps1 -Target <SciForge folder> -WaitPid <SciForge's process>
+-Restart -Quiet`. It waits for SciForge to end, does the steps above without asking anything,
+puts the old version back and shows one message with the log's path if something fails, and
+starts SciForge again when it is done. The log is `install_update.log` next to the script, in
+`%APPDATA%\SciForge\SciForge\updates\<version>\module`.
+
 The .cmd already starts PowerShell with permission to run the script. The manual equivalent:
 
 ```

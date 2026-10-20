@@ -569,6 +569,12 @@ class HomeView(QtWidgets.QWidget):
         head_line.addWidget(self.version_label, 0, QtCore.Qt.AlignBottom)
         head_line.addStretch(1)
         column.addLayout(head_line)
+        try:  # "SciForge X is available" / "Updated to X" (home_update_ui.py, brief R3)
+            from . import home_update_ui
+
+            home_update_ui.attach(self, column)
+        except Exception as exc:
+            warn("home: update line: %s" % exc)
         top = QtWidgets.QHBoxLayout()
         self.new_button = QtWidgets.QPushButton("New design")
         self.new_button.setObjectName("SciForgeHomeNew")

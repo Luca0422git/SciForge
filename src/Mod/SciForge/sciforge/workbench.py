@@ -46,6 +46,10 @@ def build(wb):
         if found:
             wb.appendMenu(["SciForge", config.GROUPS[group_id]["title"]], found)
 
+    # Help > Check for Updates (update_ui.py; the app menu's Help shows it too)
+    if "SciForge_CheckForUpdates" in available:
+        wb.appendMenu("&Help", ["SciForge_CheckForUpdates"])
+
     log(
         "workbench built (%d missing commands, see SciForge > Diagnostics)"
         % len(set(registry.MISSING))

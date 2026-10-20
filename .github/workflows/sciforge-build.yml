@@ -16,6 +16,15 @@
 # every push because a build takes hours (free on this public repository, but slow).
 # Pushing a tag named sciforge-v* also starts it.
 #
+# Publishing (brief docs/sciforge/dev/briefs/beta-release.md, R3): the last job, "release",
+# makes sciforge-release.json, SHA256SUMS.txt and the release notes and, ONLY for a tag
+# (sciforge-v<version>, which must match src/Mod/SciForge/VERSION), creates the GitHub Release
+# with the installer, the portable build, the AppImage, the quick update and those files
+# (a pre-release when the version has -beta, -rc...). A run started by hand on a branch does
+# everything except that last step and prints what it would have published (the run summary,
+# and the artifact "release-files"): that is the dry run. It is the only job with write
+# permission (contents: write).
+#
 # Packaging reuses FreeCAD's own pipeline (package/rattler-build, package/WindowsInstaller),
 # rebranded by the branding pass (docs/sciforge/core-patches.md #8 to #13): the program is
 # SciForge.exe, settings live in %APPDATA%\SciForge, the installer uses its own registry
@@ -31,6 +40,12 @@ on:
         type: choice
         default: both
         options: [both, windows, linux]
+      publish:
+        description: >-
+          Publish the GitHub Release. Only a run on a TAG can publish (choose the tag in "Use
+          workflow from"); on a branch nothing is published whatever this says.
+        type: boolean
+        default: false
   push:
     tags: ["sciforge-v*"]
 
@@ -44,6 +59,31 @@ permissions:
   contents: read
 
 jobs:
+  # The core id: which compiled part this commit has (the last commit that changed anything
+  # outside SciForge's own module and the docs). Written into the build and into the release's
+  # sciforge-release.json: a module-only update is safe only when both ids are the same.
+  # Needs the whole history of those paths (a partial clone: commits and folders, no files).
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      core: ${{ steps.id.outputs.core }}
+    steps:
+      - name: Checkout (all history, no file contents)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: tools/sciforge
+          submodules: false
+
+      - name: Core id
+        id: id
+        run: |
+          core="$(tools/sciforge/core_id.sh)"
+          echo "core id: ${core}"
+          echo "core=${core}" >> "$GITHUB_OUTPUT"
+
   # A minute before hours of compiling: every SciForge file must be in the install rules
   # (run #2 compiled for 4 hours and then lacked 81 of 116 SciForge modules).
   check:
@@ -112,7 +152,7 @@ jobs:
           esac
 
   build:
-    needs: matrix
+    needs: [matrix, core]
     strategy:
       fail-fast: false
       matrix:
@@ -152,6 +192,14 @@ jobs:
             tag="$(date -u +%Y%m%d)-${GITHUB_SHA::8}"
           fi
           echo "BUILD_TAG=${tag}" >> "$GITHUB_ENV"
+
+      # Which build this is, for SciForge > Diagnostics (commit, date) and for the update check
+      # (core id: sciforge/core_info.py). The build installs sciforge/*.py from this folder.
+      - name: Write the build ids into the SciForge module
+        shell: bash
+        env:
+          CORE_ID: ${{ needs.core.outputs.core }}
+        run: bash tools/sciforge/write_build_info.sh --module src/Mod/SciForge --commit "$GITHUB_SHA" --date "$(date -u +%Y-%m-%d)" --core "$CORE_ID"
 
       - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
         with:
@@ -360,3 +408,103 @@ jobs:
           name: scenarios-linux-${{ env.PART }}
           path: test-output/
           retention-days: 14
+
+  # The GitHub Release. Needs both builds (their uploads are the files); everything but the last
+  # step also runs on a manual run on a branch, as a dry run that prints the notes and the
+  # json. The only job that may write to the repository.
+  release:
+    needs: [core, matrix, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    env:
+      CORE_ID: ${{ needs.core.outputs.core }}
+      PLATFORMS: ${{ github.event.inputs.platforms || 'both' }}
+      # only a tag publishes (a push of the tag, or a manual run on the tag with publish ticked)
+      PUBLISH: ${{ github.ref_type == 'tag' && (github.event_name == 'push' || github.event.inputs.publish == 'true') }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      # The tag names the release; the number inside the program is src/Mod/SciForge/VERSION.
+      # A release whose tag and VERSION differ would be offered to people forever (the program
+      # would never think it is up to date), so that stops here.
+      - name: Tag and version
+        run: |
+          version="$(tr -d '[:space:]' < src/Mod/SciForge/VERSION)"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+            if [ "${tag}" != "sciforge-v${version}" ]; then
+              echo "::error::The tag ${tag} does not match src/Mod/SciForge/VERSION (${version}): the tag must be sciforge-v${version}."
+              exit 1
+            fi
+          else
+            tag="sciforge-v${version}"
+          fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+          echo "Release ${tag}: publish=${PUBLISH}, platforms=${PLATFORMS}, core=${CORE_ID}"
+
+      - name: Get the built files
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-*' --dir assets
+
+      # The quick update of this very commit: the module only, with the core id, for builds
+      # that have the same compiled part (tools/sciforge/make_quick_update.sh).
+      - name: Quick update (SciForge module only)
+        run: |
+          mkdir -p assets/quick-update
+          tools/sciforge/make_quick_update.sh --out quick-update-folder \
+            --zip "assets/quick-update/SciForge-quick-update-${TAG#sciforge-}.zip" \
+            --commit "$GITHUB_SHA" --date "$(date -u +%Y-%m-%d)" --core "$CORE_ID"
+
+      - name: Notes, sciforge-release.json and SHA256SUMS.txt
+        run: |
+          require=""
+          if [ "${PLATFORMS}" = "both" ]; then require="--require-all"; fi
+          python3 tools/sciforge/make_release_files.py --tag "$TAG" --core "$CORE_ID" \
+            --assets assets --out release-files --list-file attach.txt ${require}
+          cp "assets/quick-update/SciForge-quick-update-${TAG#sciforge-}.zip" release-files/
+          {
+            echo "## Release ${TAG} ($( [ "${PUBLISH}" = "true" ] && echo "published" || echo "dry run: nothing published" ))"
+            echo
+            echo "Core id: \`${CORE_ID}\`"
+            echo
+            echo "To try Update now with these files without publishing: tools/sciforge/fake_release_server.py (its first lines say how)."
+            echo
+            echo "### Release notes"
+            cat release-files/release-notes.md
+            echo
+            echo "### sciforge-release.json"
+            echo '```json'
+            cat release-files/sciforge-release.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "---- files that would be attached:"
+          cat attach.txt
+
+      - name: Upload the release files (dry run result)
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: release-files-${{ env.TAG }}
+          path: release-files/
+          retention-days: 30
+          compression-level: 0
+
+      # The only step that publishes. A pre-release when the version has a pre-release part
+      # (-beta, -beta.2, -rc.1): the update check treats those as betas.
+      - name: Publish the GitHub Release
+        if: env.PUBLISH == 'true'
+        run: |
+          flags=()
+          case "${VERSION}" in *-*) flags+=(--prerelease) ;; esac
+          mapfile -t files < attach.txt
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "SciForge ${VERSION}" --notes-file release-files/release-notes.md \
+            "${flags[@]}" "${files[@]}"
+          echo "Published: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"

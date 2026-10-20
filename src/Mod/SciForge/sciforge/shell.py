@@ -217,6 +217,8 @@ def enable():
     _safely(lambda: __import__("sciforge.locations_ui").locations_ui.enable())
     # AI apps: the bridge on when Preferences > AI allows it (off by default).
     _safely(lambda: __import__("sciforge.ai_ui").ai_ui.enable())
+    # Updates: what an earlier check found, the daily check a few seconds after the start.
+    _safely(lambda: __import__("sciforge.update_ui").update_ui.enable())
     log("interface on")
 
 
@@ -236,6 +238,7 @@ def disable():
         lambda: __import__("sciforge.home_ui").home_ui.disable(),
         lambda: __import__("sciforge.locations_ui").locations_ui.disable(),
         lambda: __import__("sciforge.ai_ui").ai_ui.disable(),
+        lambda: __import__("sciforge.update_ui").update_ui.disable(),
         lambda: __import__("sciforge.preferences_ui").preferences_ui.disable(),
         lambda: __import__("sciforge.drawing_ui").drawing_ui.disable(),
         lambda: __import__("sciforge.versions_ui").versions_ui.disable(),

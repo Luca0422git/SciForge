@@ -35,6 +35,14 @@ def report(recent_lines=60):
         settings = App.getUserAppDataDir()
     except Exception:
         program = home = settings = "unknown"
+    # The compiled part this build has (the update check installs the small module update only
+    # over the same one; "unknown" for a source tree or a quick update from a test run).
+    try:
+        from . import update_core
+
+        core_id = update_core.installed_core() or "unknown"
+    except Exception:
+        core_id = "unknown"
     lines = [
         "SciForge %s (build %s)" % (__version__, build.strip()),
         "FreeCAD %s" % fc_version,
@@ -42,6 +50,7 @@ def report(recent_lines=60):
         "Qt %s" % qt,
         "Program: %s in %s" % (program, home),
         "Settings folder: %s" % settings,
+        "Update core: %s" % core_id,
         "",
     ]
     if registry.MISSING:

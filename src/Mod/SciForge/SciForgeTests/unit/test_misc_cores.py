@@ -358,7 +358,16 @@ class PrefsCore(unittest.TestCase):
         self.assertNotIn("default_appearance", plan)
         groups = [g for g, _opts in prefs_core.groups("general")]
         self.assertEqual(
-            groups, ["Language", "Startup", "Appearance", "Navigation", "Saving and Recovery"]
+            groups,
+            ["Language", "Startup", "Appearance", "Navigation", "Saving and Recovery", "Updates"],
+        )
+        # the update check (brief beta-release.md R3): on, and the channel follows the version
+        self.assertIs(plan["check_updates"], True)
+        self.assertEqual(
+            plan["update_channel"], "beta" if "-" in __import__("sciforge").__version__ else "stable"
+        )
+        self.assertEqual(
+            [c[0] for c in prefs_core.option("update_channel")["choices"]], ["stable", "beta"]
         )
         self.assertEqual(prefs_core.changed({"a": 1, "b": 2}, {"a": 1, "b": 3}), ["b"])
 
