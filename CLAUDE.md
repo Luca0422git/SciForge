@@ -12,6 +12,9 @@ Rules that are easy to forget:
 
 - Work on and push to the `develop` branch (Luca's choice), whatever branch name the session
   was given. Do not open pull requests unless Luca asks.
+- `Release` holds released builds only: it is fast-forwarded to a tested `develop` commit, and
+  tagged `sciforge-v<version>`, only when Luca gives the green light for that release. Never
+  commit to it directly or force-push it (`docs/sciforge/dev/briefs/beta-release.md`).
 
 - New code goes in `src/Mod/SciForge/`. Any change to FreeCAD's own files gets a `SCIFORGE:`
   comment and an entry in `docs/sciforge/core-patches.md`.

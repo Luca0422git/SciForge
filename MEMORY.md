@@ -4,6 +4,8 @@ This file is the project's memory across work sessions. **Read it first, every s
 `docs/sciforge/feature-outline.md` (the spec). Update it at the end of every session: what was
 done, what was learned, what is next. Newest session goes at the top of the log.
 
+**Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
+
 **Start here (2026-10-17):** read the newest session log ("Luca's improvement list").
 Every item of Luca's list (IMPROVEMENTS_AND_STUFF_TO_FIX.txt, 18 fixes + 3 additions) is
 built and merged; what is left is in that log's "Open" list. Luca wants ONE complete update
@@ -69,6 +71,8 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | 2026-10-09 | No SHEET METAL, PLASTIC or MANAGE tabs (Luca: "not for now") | Not used; out of scope |
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
 | 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
+| 2026-10-20 | First public release is **0.1.0-beta**; no code signing (Luca: no money for it), so the GitHub page and release notes explain Windows SmartScreen; update check with an easy install; a minimal welcome ("dont overdo it") | Brief `docs/sciforge/dev/briefs/beta-release.md` (milestones R0-R5) |
+| 2026-10-20 | Branch `Release` (from develop `a6a5f7bd`): only tested `develop` commits, fast-forwarded and tagged `sciforge-v<version>` on Luca's green light; all work stays on `develop` | Luca: "everything goes on develop until i give the green light" |
 - **2026-10-13: full (compiled) builds only for releases or a real C++ change.** Luca asked why
   compile at all when SciForge is an add-on: all 7 core patches are housekeeping or FreeCAD bug
   fixes (#4, #6, #7) that already have Python workarounds, so the quick update on the official
