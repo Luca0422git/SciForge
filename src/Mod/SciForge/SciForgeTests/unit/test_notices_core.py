@@ -158,6 +158,8 @@ class ShippedFiles(unittest.TestCase):
                 self.assertEqual(a.read(), b.read(), "the copy differs: run  %s" % command)
 
     def test_the_install_rules_carry_both_folders(self):
+        if not os.path.isfile(os.path.join(ROOT, "CMakeLists.txt")):
+            self.skipTest("an installed copy has no CMakeLists.txt")
         with open(os.path.join(ROOT, "CMakeLists.txt"), encoding="utf-8") as handle:
             rules = handle.read()
         self.assertIn("INSTALL(DIRECTORY docs examples DESTINATION Mod/SciForge", rules)

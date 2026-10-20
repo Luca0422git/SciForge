@@ -400,7 +400,17 @@ class Timing(unittest.TestCase):
         self.assertIn("Start-Process -FilePath 'C:\\Users\\O''Neil\\u\\SciForge-installer.exe'", command)
 
     def test_the_core_id_defaults_to_unknown(self):
-        self.assertEqual(uc.installed_core(), "")
+        # (a full build writes its real core id into core_info.py: only a source tree or a test
+        # run's quick update says "unknown", so the module is looked at, not assumed)
+        from sciforge import core_info
+
+        self.assertEqual(uc.installed_core(), str(core_info.CORE or "").strip())
+        saved = core_info.CORE
+        try:
+            core_info.CORE = ""
+            self.assertEqual(uc.installed_core(), "")
+        finally:
+            core_info.CORE = saved
 
 
 class Network(unittest.TestCase):
