@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SciForge: runs GUI scenarios on the Linux AppImage of an EARLIER "SciForge build" run, without
+# compiling anything, and prints the scenario logs. For finding out why a build's scenario
+# shards fail (the shards only upload their logs): Actions > "SciForge scenario debug" >
+# Run workflow, with the run number's id and the scenario names.
+name: SciForge scenario debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Id of the SciForge build run whose Linux AppImage to use"
+        required: true
+      scenarios:
+        description: "Scenario names, comma separated"
+        default: "version_label"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Get the AppImage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-Linux-*' --dir built
+          image=$(find built -name '*.AppImage' | head -1)
+          chmod +x "$image"
+          mkdir -p .sciforge-cache/sciforge
+          (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)
+          ls .sciforge-cache/sciforge/squashfs-root/usr/bin | head -30
+
+      - name: Run the scenarios and show their logs
+        env:
+          SCENARIOS: ${{ inputs.scenarios }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
+          tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --scenario "$SCENARIOS" || true
+          for log in test-output/scenario-*.log; do
+            echo "::group::$log"
+            head -c 6000 "$log"
+            echo
+            echo "..."
+            tail -c 3000 "$log"
+            echo "::endgroup::"
+          done
+
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: scenario-debug
+          path: test-output/
+          retention-days: 7
