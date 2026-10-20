@@ -197,6 +197,26 @@ def make(
     }
 
 
+SYSTEM_OPTIONS = ("Windows 11", "Windows 10", "Linux", "Something else (tell us below)")
+
+
+def system_option(text):
+    """The issue form's "Operating system" is a dropdown: GitHub only fills it from the exact
+    text of one of its options (.github/ISSUE_TEMPLATE/bug_report.yml), so the long system
+    text becomes one of those four."""
+    text = text or ""
+    build = re.search(r"Windows[^\n]*?10\.0\.(\d+)", text)
+    if build:  # Windows 11 still calls itself 10; its builds start at 22000
+        return SYSTEM_OPTIONS[0] if int(build.group(1)) >= 22000 else SYSTEM_OPTIONS[1]
+    if "Windows 11" in text:
+        return SYSTEM_OPTIONS[0]
+    if "Windows 10" in text:
+        return SYSTEM_OPTIONS[1]
+    if "Linux" in text:
+        return SYSTEM_OPTIONS[2]
+    return SYSTEM_OPTIONS[3]
+
+
 def _url(params):
     return (
         NEW_ISSUE
@@ -222,7 +242,7 @@ def issue_url(report, limit=URL_LIMIT):
             (FIELD_ID["what"], fields["what"]),
             (FIELD_ID["expected"], fields["expected"]),
             (FIELD_ID["version"], fields["version"]),
-            (FIELD_ID["system"], fields["system"]),
+            (FIELD_ID["system"], system_option(fields["system"])),
             (FIELD_ID["diagnostics"], fields["diagnostics"]),
         ]
 
@@ -230,7 +250,7 @@ def issue_url(report, limit=URL_LIMIT):
         return _url(params()), cut
     fields["diagnostics"] = PASTE_NOTE
     cut.append("diagnostics")
-    for name in ("system", "expected", "what"):
+    for name in ("expected", "what"):
         if len(_url(params())) <= limit:
             break
         full = fields[name]

@@ -16,6 +16,9 @@ WIN_HOME = "C:\\Users\\Luca"
 LINUX_HOME = "/home/luca"
 
 
+REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", ".."))
+
+
 class Redaction(unittest.TestCase):
     def red(self, text, home=WIN_HOME, user="Luca", **kw):
         return rc.redact(text, home, user, **kw)
@@ -250,8 +253,22 @@ class TheAddress(unittest.TestCase):
         self.assertEqual(got["what_happened"], "It closed.")
         self.assertEqual(got["expected"], "It stays.")
         self.assertEqual(got["version"], "0.1.0-beta (abc 2026-10-20)")
-        self.assertEqual(got["system"], "OS: Windows 11\nQt: 6.8.1")
+        self.assertEqual(got["system"], "Windows 11")
         self.assertEqual(got["diagnostics"], "line one\nline two & more = 100% #1")
+
+    def test_the_operating_system_dropdown_gets_one_of_its_exact_options(self):
+        self.assertEqual(rc.system_option("OS: Windows 10 (10.0.22631) AMD64"), "Windows 11")
+        self.assertEqual(rc.system_option("OS: Windows 10 (10.0.19045) AMD64"), "Windows 10")
+        self.assertEqual(rc.system_option("OS: Windows 11"), "Windows 11")
+        self.assertEqual(rc.system_option("OS: Linux-6.1 x86_64"), "Linux")
+        self.assertEqual(rc.system_option("OS: Darwin"), "Something else (tell us below)")
+        self.assertEqual(rc.system_option(""), "Something else (tell us below)")
+        form = os.path.join(REPO, ".github", "ISSUE_TEMPLATE", "bug_report.yml")
+        if os.path.isfile(form):
+            with open(form, encoding="utf-8") as handle:
+                text = handle.read()
+            for option in rc.SYSTEM_OPTIONS:
+                self.assertIn("- " + option, text)
 
     def test_the_field_ids_are_the_ones_the_issue_form_agreed_on(self):
         self.assertEqual(
