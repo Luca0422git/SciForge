@@ -420,6 +420,31 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Known issues / findings
 
+- **Speed of live previews (2026-10-20/21, branch `experimental`, Luca: "efficiency. make
+  things run fast and smooth")**. Measure first (GUI probes under xvfb with cProfile around
+  the panel's `_recompute()`), then fix:
+  - FreeCAD recomputes every step that depends on a changed one, **wherever the history
+    marker stands**: rolling the marker (Body.Tip) does not stop later steps from being
+    rebuilt. `doc.recompute([objects])` rebuilds only those and what they depend on; the
+    others stay touched and one plain `doc.recompute()` later brings them up to date (tested:
+    1 object in 3 ms instead of 5 in 64 ms, the catch-up right). The Body depends on every
+    step (Group): it must wait too, so `body.Shape` is stale while a dialog holds steps.
+  - Fusion: editing a step rolls the timeline to it; later features are greyed out and not
+    computed; everything is computed when the edit ends (Autodesk University 2018 "Under the
+    Hood of Fusion 360"). SciForge now does the same: `edit_rollback.py` (via
+    `taskui.edit_object`) rolls the marker to the edited step and back; `preview.hold()`
+    (every `taskui.Panel` opening) makes the steps after the marker wait in
+    `preview.recompute`; `preview.catch_up()` rebuilds them when the dialog's undo step
+    closes (`end_transaction`, inside that step); timeline settle() waits meanwhile. The
+    dialog's own step is never held (`preview._waiting`). Dialogs that call
+    `doc.recompute()` themselves still rebuild everything (correct, just slower).
+  - FreeCAD's Freeze (Std_ToggleFreeze) is no way to hold steps: not in Python, and a frozen
+    object's properties turn read-only (SciForge repairs later steps' references).
+  - OpenCASCADE booleans in FreeCAD already run parallel (`SetRunParallel` in TopoShape.cpp).
+    A cut with a B-spline wall of degree ~11 costs ~0.1-0.15 s where a plane or cone costs
+    ~0.015 s; exactly coincident faces cost nothing extra.
+  - A shape's `hashCode()` is a cheap identity between rebuilds (`drafting.shape_key`);
+    counting its faces costs ~0.5 ms. Keep a reference to the shape while caching by it.
 - **Draft of curved faces (2026-10-20, branch `experimental`, `draft_walls.py`)**:
   - OpenCASCADE's `BRepOffsetAPI_DraftAngle` (FreeCAD's Draft) tilts planes and cylinders /
     cones about the pull direction only. Any other face (`SurfaceOfExtrusion` of a spline or

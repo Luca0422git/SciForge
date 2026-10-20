@@ -1158,8 +1158,6 @@ class TimelineWidget(QtWidgets.QWidget):
         obj = self._object(name)  # finishing the open command may have removed it
         if obj is None:
             return
-        doc = obj.Document
-        back = self._roll_for_edit(doc, name)
         try:
             body = ops.body_of(obj)
             if body is not None:
@@ -1168,51 +1166,10 @@ class TimelineWidget(QtWidgets.QWidget):
             pass
         from . import taskui
 
-        taskui.edit_object(obj)  # the feature's SciForge dialog (EDITORS), else FreeCAD's
-        if back is not None:
-            self._roll_back_after_edit(doc.Name, *back)
-
-    def _roll_for_edit(self, doc, name):
-        """Fusion: editing a step after the history marker rolls the design to that
-        step while its dialog is open (else the edit could not be seen). Returns what
-        to roll back to afterwards: (marker count before, marker count while editing)."""
+        # the feature's SciForge dialog (EDITORS), else FreeCAD's; the marker rolls to the
+        # step while it is edited (edit_rollback)
+        taskui.edit_object(obj)
         self.refresh(force=True)
-        item = self._timeline.find(name)
-        if item is None or item.state != "rolled_back":
-            return None
-        tips, note = core.marker_for_slot(self._timeline, item.index + 1)
-        saved = (core.active_count(self._timeline), self._timeline.before)
-        ops.set_marker_untracked(doc, tips, note)
-        self.refresh(force=True)
-        return saved, (core.active_count(self._timeline), self._timeline.before)
-
-    def _roll_back_after_edit(self, doc_name, before, during):
-        """Once the edit is over, put the marker back where it was (unless the user
-        moved it meanwhile)."""
-        timer = QtCore.QTimer(self)
-        timer.setInterval(150)
-
-        def check():
-            try:
-                if _command_open():
-                    return
-                timer.stop()
-                timer.deleteLater()
-                doc = _doc()
-                if doc is None or doc.Name != doc_name:
-                    return
-                tl = ops.timeline(doc, deps=False)
-                if (core.active_count(tl), tl.before) != during:
-                    return  # the user rolled the marker himself
-                count, note = before
-                ops.set_marker_untracked(doc, core.tips_for_count(tl, count), note)
-                self.refresh(force=True)
-            except Exception as exc:
-                timer.stop()
-                warn("timeline: %s" % exc)
-
-        timer.timeout.connect(check)
-        timer.start()
 
     def edit_profile(self, name):
         obj = self._object(name)

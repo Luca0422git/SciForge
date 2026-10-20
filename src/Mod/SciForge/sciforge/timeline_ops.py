@@ -264,6 +264,10 @@ class RecomputeGuard:
                 self._pending.add(name)
                 self.defer(lambda: self._settle(name), 100)
                 return
+            from . import preview
+
+            if preview.holding(doc):
+                return  # a dialog's preview: the steps after the marker wait (settled after)
             settle(doc)
         except Exception as exc:
             from . import _remember

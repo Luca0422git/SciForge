@@ -107,6 +107,9 @@ def edit_object(obj):
         editor = EDITORS.get(type_key(obj))
     except ReferenceError:
         return  # it was the unfinished step of the dialog that was just cancelled
+    from . import edit_rollback
+
+    back = edit_rollback.roll_to(obj)  # Fusion: the marker goes to the step being edited
     try:
         if editor is not None:
             editor(obj)
@@ -114,6 +117,8 @@ def edit_object(obj):
             Gui.ActiveDocument.setEdit(obj.Name)
     except Exception as exc:
         warn("could not edit %s: %s" % (obj.Label, exc))
+    if back is not None:
+        edit_rollback.back_later(obj.Document.Name, *back)
 
 
 _BARE_NUMBER = re.compile(r"^\s*[+-]?(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?\s*$")
@@ -1244,12 +1249,14 @@ def _end_transaction(doc, abort=False):
     pending, and the next change anywhere opened a step under that name and threw away the
     Redo list. The pending name is closed too (same as preview.end_transaction), and a
     design without history bakes the change first (preview._bakes)."""
-    if not abort:
-        from . import preview
+    from . import preview
 
+    if not abort:
+        preview.catch_up(doc)  # the steps after the marker waited: rebuilt in this undo step
         if preview._bakes(doc):
             return
     if abort:
+        preview.release(doc)
         doc.abortTransaction()
     else:
         doc.commitTransaction()
@@ -1289,6 +1296,12 @@ class Panel:
         doc.openTransaction(transaction)
         self._closed = False
         set_current(self)
+        try:  # the steps after the history marker wait while the dialog is open
+            from . import preview
+
+            preview.hold(doc)
+        except Exception as exc:
+            warn("previews rebuild every step: %s" % exc)
         # Digits typed with the mouse over the 3D view go into the dialog's value box
         # (TypeOverView); removed with cleanup() / _close().
         try:
@@ -1390,7 +1403,9 @@ class Panel:
         if self._closed:
             return  # a change that arrived as the dialog closed
         try:
-            self.doc.recompute()
+            from . import preview
+
+            preview.recompute(self.doc)  # the steps after the marker wait (preview.hold)
             self.show_status()
         except Exception as exc:
             try:
@@ -1419,8 +1434,10 @@ class Panel:
         return getattr(buttons, "value", buttons)  # PySide6 enums need .value
 
     def accept(self):
+        from . import preview
+
         self._timer.stop()
-        self.doc.recompute()
+        preview.recompute(self.doc)  # the steps after the marker catch up as the step closes
         obj = self.feature()
         if obj is not None and "Invalid" in list(obj.State):
             self.show_status()
@@ -1447,6 +1464,13 @@ class Panel:
     def _close(self):
         if _OPEN["dialog"] is self:
             _OPEN["dialog"] = None
+        try:  # nothing waits after the dialog (its undo step closed and rebuilt them)
+            from . import preview
+
+            if preview.holding(self.doc):
+                preview.catch_up(self.doc)
+        except Exception as exc:
+            warn("could not rebuild the later steps: %s" % exc)
         self._remove_typing()
         Gui.Control.closeDialog()
         # Fusion clears the selection when a command ends. A selection left behind
