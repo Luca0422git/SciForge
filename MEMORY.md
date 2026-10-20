@@ -1470,7 +1470,9 @@ CODE_OF_CONDUCT.md is still FreeCAD's).
   on failure send `%APPDATA%\SciForge\SciForge\updates\<version>\module\install_update.log`.
 
 #### Tested (orchestrator, merged tree)
-- see the next lines of this log for the final unit/scenario results.
+- unit 1708+ OK; link check and check_install green; scenarios home_screen, version_label, welcome_line, crash_notice, report_problem, update_check, misc_preferences PASS; `--only base` (golden, smoke, journey, restart) PASS on the merged tree. The full scenario sweep runs on GitHub (CI on develop).
+- Quick update sent to Luca: commit fe2cb7ad (zip `SciForge-0.1.0-beta-quick-update.zip`, with WHATS_NEW.txt).
+- R5 not started: needs Luca's test of the zip, a dry-run build, and his green light.
 
 ### Session log: 0.1.0-beta, R0 groundwork (`develop`, 2026-10-20)
 
