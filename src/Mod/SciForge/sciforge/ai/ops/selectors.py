@@ -9,9 +9,12 @@ geometry a user would click, e.g. "the 4 straight edges at the top":
 
 Filters (all optional, combined with AND, applied in this order):
     type         line | circle | ellipse | bspline            (edges)
-                 plane | cylinder | cone | sphere | torus | bspline (faces)
+                 plane | cylinder | cone | sphere | torus | bspline | extrusion (faces;
+                 extrusion: the side of a sketch curve extruded, e.g. a spline or ellipse)
     normal       [x, y, z]  planar faces whose outward normal points this way
     parallel     [x, y, z]  straight edges parallel to this direction (either sense)
+    along        [x, y, z]  faces that run along this direction (their normal square to it
+                            everywhere: the side walls of a part extruded that way)
     radius       number     circles / cylinders / spheres with this radius
     on_faces     selector   edges that bound the faces this selector picks
     not_on_faces selector   edges that do NOT bound those faces
@@ -43,6 +46,7 @@ _FACE_TYPES = {
     "Toroid": "torus",
     "BSplineSurface": "bspline",
     "BezierSurface": "bspline",
+    "SurfaceOfExtrusion": "extrusion",
 }
 _AXIS = {"x": 0, "y": 1, "z": 2}
 
@@ -142,6 +146,15 @@ def select(shape, spec, element="edges"):
             if abs(_dot(d, want)) > 1 - 1e-6:
                 kept.append((i, e))
         items = kept
+    if "along" in spec:
+        if element != "faces":
+            raise SelectionError("'along' only applies to faces")
+        import FreeCAD as App
+
+        from sciforge import draft_walls
+
+        want = App.Vector(*_unit(spec["along"]))
+        items = [(i, f) for i, f in items if draft_walls.is_wall(f, want)]
     if "radius" in spec:
         items = [
             (i, e)

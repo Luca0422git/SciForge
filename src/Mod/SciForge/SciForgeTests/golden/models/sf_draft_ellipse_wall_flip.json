@@ -1,0 +1,52 @@
+{
+  "id": "sf_draft_ellipse_wall_flip",
+  "title": "The ellipse wall drafted 5 degrees with the pull direction flipped: wider toward the top",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "free-form"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "ellipse": [
+            0,
+            0,
+            12.0,
+            6.0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10.0
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "type": "extrusion",
+        "count": 1
+      },
+      "angle": 5,
+      "flip": true
+    }
+  ],
+  "expect": {
+    "volume": 2524.25105539,
+    "faces": 3,
+    "solids": 1,
+    "source": "analytic",
+    "volume_by": "mesh",
+    "rel_tol": 0.0001,
+    "note": "Pulled along -Z the wall leans out going up: offset outward by z tan5, area A0 + P d + pi d^2, V = A0 H + P tan5 H^2/2 + pi tan5^2 H^3/3 (P = 58.130689323)."
+  }
+}

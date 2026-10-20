@@ -30,6 +30,7 @@ from . import schema
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(HERE, "models")
 DEFAULT_REL_TOL = 1e-6
+MESH_DEFLECTION = 0.002  # mm, for "volume_by": "mesh" (about 1e-5 of the volume)
 DEFAULT_ABS_TOL = 1e-4
 
 
@@ -48,13 +49,21 @@ def load_models(folder=MODELS_DIR, text_filter=""):
     return models
 
 
-def measure(shape):
+def measure(shape, expect=None):
+    """The numbers compared with a model's expectations. "volume_by": "mesh" measures the
+    volume on a fine triangle mesh instead of OpenCASCADE's own integration, which is up to
+    about 1 % off on B-spline faces (drafted free-form walls, lofts)."""
     try:
         box = shape.optimalBoundingBox(False, False)
     except Exception:
         box = shape.BoundBox
+    volume = shape.Volume
+    if (expect or {}).get("volume_by") == "mesh":
+        import Mesh
+
+        volume = Mesh.Mesh(shape.tessellate(MESH_DEFLECTION)).Volume
     return {
-        "volume": shape.Volume,
+        "volume": volume,
         "area": shape.Area,
         "bbox": [box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax],
         "faces": len(shape.Faces),
@@ -120,7 +129,7 @@ def run_model(model, sciforge_build=False):
         for index, step in enumerate(model["steps"]):
             t0 = time.time()
             if step["op"] == "check":
-                got = measure(builder.shape())
+                got = measure(builder.shape(), step["expect"])
                 problems = compare(step["expect"], got)
                 result["problems"].extend("after step %d: %s" % (index, p) for p in problems)
             else:
@@ -128,7 +137,7 @@ def run_model(model, sciforge_build=False):
             result["steps"].append(
                 {"op": step["op"], "id": step.get("id"), "seconds": round(time.time() - t0, 4)}
             )
-        got = measure(builder.shape())
+        got = measure(builder.shape(), model["expect"])
         result["measured"] = got
         result["problems"].extend(compare(model["expect"], got))
         result["status"] = "pass" if not result["problems"] else "fail"

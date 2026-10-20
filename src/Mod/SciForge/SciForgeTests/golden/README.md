@@ -61,7 +61,9 @@ itself.
 ```
 
 Tolerances: `rel_tol` (default 1e-6, relative, for volume/area) and `abs_tol` (default 1e-4 mm,
-bounding box). Face, edge and solid counts must match exactly. Every result must be a valid solid.
+bounding box). `"volume_by": "mesh"` measures the volume on a fine triangle mesh (0.002 mm
+deflection, about 1e-5 of the volume, so pair it with `rel_tol` 1e-4) instead of OpenCASCADE's
+own integration, which is up to about 1 % off on B-spline faces (drafted free-form walls). Face, edge and solid counts must match exactly. Every result must be a valid solid.
 
 ### Steps
 
@@ -131,7 +133,11 @@ Conventions:
 
 `rect [x0, y0, x1, y1]`, `center_rect [cx, cy, w, h]`, `circle [cx, cy, r]`,
 `polyline [[x, y], ...]` (closed), `polygon {center, radius, sides, rotation}`,
-`slot [x1, y1, x2, y2, width]`, `line [x0, y0, x1, y1]` (one open line).
+`slot [x1, y1, x2, y2, width]`, `line [x0, y0, x1, y1]` (one open line),
+`ellipse [cx, cy, major, minor]` (major along X), `spline_loop [[x, y], ...]` (a closed smooth
+B-spline through the points), `segments [...]` (a closed chain of `{"line": [x0, y0, x1, y1]}`,
+`{"arc": [cx, cy, r, a0, a1]}` in degrees, `{"spline": [[x, y], ...], "tangents": [[tx, ty],
+[tx, ty]]}`).
 
 Give geometry a `name` to get Fusion-style dimensions you can `edit` later:
 `<name>.width`, `<name>.height`, `<name>.x`, `<name>.y` for rectangles, and `<name>.diameter`,

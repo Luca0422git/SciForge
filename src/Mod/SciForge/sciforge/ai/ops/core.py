@@ -181,6 +181,16 @@ class Builder:
             elif "line" in item:  # one open line (a line across a face to find its middle)
                 x0, y0, x1, y1 = item["line"]
                 sketch.addGeometry(Part.LineSegment(_v(x0, y0), _v(x1, y1)))
+            elif "ellipse" in item:  # [cx, cy, major radius (along X), minor radius]
+                cx, cy, major, minor = item["ellipse"]
+                sketch.addGeometry(Part.Ellipse(_v(cx, cy), major, minor))
+            elif "spline_loop" in item:  # a closed smooth B-spline through the points
+                curve = Part.BSplineCurve()
+                curve.interpolate([_v(x, y) for x, y in item["spline_loop"]], PeriodicFlag=True)
+                sketch.addGeometry(curve)
+            elif "segments" in item:  # a closed chain of lines, arcs and open splines
+                for segment in item["segments"]:
+                    sketch.addGeometry(_segment(segment))
         self.objects[step["id"]] = sketch
         self.ops[step["id"]] = "sketch"
         self.doc.recompute()
@@ -696,6 +706,31 @@ def _circle(sketch, name, cx, cy, r):
     _named(sketch, Sketcher.Constraint("Diameter", g, 2.0 * r), name + ".diameter")
     _named(sketch, Sketcher.Constraint("DistanceX", -1, 1, g, 3, cx), name + ".x")
     _named(sketch, Sketcher.Constraint("DistanceY", -1, 1, g, 3, cy), name + ".y")
+
+
+def _segment(spec):
+    """One piece of a "segments" chain: {"line": [x0, y0, x1, y1]}, {"arc": [cx, cy, r, a0,
+    a1]} (degrees, counter-clockwise) or {"spline": [[x, y], ...], "tangents": [[tx, ty],
+    [tx, ty]]} (an open B-spline through the points, optionally with its end tangents)."""
+    if "line" in spec:
+        x0, y0, x1, y1 = spec["line"]
+        return Part.LineSegment(_v(x0, y0), _v(x1, y1))
+    if "arc" in spec:
+        cx, cy, r, a0, a1 = spec["arc"]
+        circle = Part.Circle(_v(cx, cy), App.Vector(0, 0, 1), r)
+        return Part.ArcOfCircle(circle, math.radians(a0), math.radians(a1))
+    if "spline" in spec:
+        points = [_v(x, y) for x, y in spec["spline"]]
+        curve = Part.BSplineCurve()
+        if "tangents" in spec:
+            (t0x, t0y), (t1x, t1y) = spec["tangents"]
+            tangents = [_v(t0x, t0y)] + [_v(0, 0)] * (len(points) - 2) + [_v(t1x, t1y)]
+            flags = [True] + [False] * (len(points) - 2) + [True]
+            curve.interpolate(points, Tangents=tangents, TangentFlags=flags)
+        else:
+            curve.interpolate(points)
+        return curve
+    raise BuildError("segment %r: expected 'line', 'arc' or 'spline'" % (spec,))
 
 
 def _polyline(sketch, pts):

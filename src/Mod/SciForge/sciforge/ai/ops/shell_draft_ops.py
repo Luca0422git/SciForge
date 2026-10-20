@@ -121,9 +121,12 @@ def op_sf_draft_edit(self, step):
     later = follow.snapshot(self.body, target)
     try:
         drafting.check(base.Shape, plane, names, options)
-        drafting.apply(target, base, plane, names, options, formula)
+        # update(): the step may have to become the other kind (a free-form wall needs
+        # SciForge's DraftFeature, FreeCAD's Draft cannot tilt it)
+        target = drafting.update(target, base, plane, names, options, formula)
     except drafting.DraftError as exc:
         raise BuildError("sf_draft_edit %r: %s" % (step["target"], exc))
+    self.objects[step["target"]] = target
     follow.recompute(self.doc, later)
     _check_broken(self, "editing %r" % step["target"])
     return target

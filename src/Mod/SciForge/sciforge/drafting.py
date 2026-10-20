@@ -5,8 +5,9 @@ GUI code: the Draft dialog (draft_ui.py) and the golden-model builder both use t
 What the user picks:
   plane  the fixed plane: an origin plane, a construction plane of the body, or a flat
          face of the part. The drafted faces turn about the line where they meet it.
-  faces  the faces to tilt (flat side faces, or round ones whose axis is the pull
-         direction). Tangent Chain picks the faces that continue a picked one smoothly.
+  faces  the faces to tilt: faces that run along the pull direction (flat, round or
+         free-form side walls; flat and conical faces may lean already). Tangent Chain picks
+         the faces that continue a picked one smoothly.
 Options: {"angle": degrees, "flip": bool, "tangent": bool, "draft_type": "fixed" or
 "parting", "sides": "one", "two" or "symmetric", "angle2": degrees, "parting": [refs]}.
 
@@ -22,6 +23,10 @@ out of a picked face (its outward side) or along an origin/construction plane's 
 and "flip" turns it round. A positive angle makes the part narrower toward the pull
 direction, as Fusion does. FreeCAD's Draft always pulls along the plane's own normal
 and has a Reversed switch; apply() works out which to use.
+
+OpenCASCADE's draft (FreeCAD's Draft) only tilts planes and round faces about the pull
+direction; every other wall (the side of an extruded spline or ellipse...) is drafted by
+SciForge's draft_walls.py, in _scratch(), and its step is always a DraftFeature.
 
 FreeCAD's Draft is silent about some failures (a face it cannot tilt is just skipped,
 with a message in the Report view only), so check() refuses such faces first and
@@ -126,6 +131,8 @@ def why_not(shape, name, pull, plane_ref=None):
         face = shape.getElement(name)
     except Exception:
         return "%s no longer exists." % name
+    from . import draft_walls
+
     kind = face.Surface.__class__.__name__
     if kind == "Plane":
         u, v = face.Surface.parameter(face.CenterOfMass)
@@ -133,11 +140,37 @@ def why_not(shape, name, pull, plane_ref=None):
         if abs(normal.dot(pull)) >= PARALLEL:
             return "A face parallel to the fixed plane cannot be drafted."
         return ""
-    if kind in ("Cylinder", "Cone"):
-        if abs(_unit(face.Surface.Axis).dot(pull)) >= PARALLEL:
-            return ""
-        return "A round face can only be drafted when its axis is the pull direction."
-    return "This kind of face (%s) cannot be drafted." % kind.lower()
+    if draft_walls.native_ok(face, pull) or draft_walls.is_wall(face, pull):
+        return ""  # FreeCAD's Draft, or a side wall along the pull (draft_walls)
+    return (
+        "Only faces that run along the pull direction (side walls, flat, round or free-form) "
+        "can be drafted; this %s face does not." % _KIND_WORDS.get(kind, "curved")
+    )
+
+
+_KIND_WORDS = {
+    "Cylinder": "round",
+    "Cone": "conical",
+    "Sphere": "spherical",
+    "Toroid": "torus",
+    "BSplineSurface": "free-form",
+    "BezierSurface": "free-form",
+    "SurfaceOfExtrusion": "free-form",
+    "SurfaceOfRevolution": "revolved",
+}
+
+
+def needs_engine(shape, plane_ref, names, options):
+    """True when some face needs SciForge's draft_walls (FreeCAD's Draft cannot tilt it)."""
+    from . import draft_walls
+
+    if shape is None or plane_ref is None or not names:
+        return False
+    try:
+        pull = pull_direction(plane_ref, bool(options.get("flip")))
+        return bool(draft_walls.engine_names(shape, list(names), pull))
+    except Exception:
+        return False
 
 
 def tangent_faces(shape, names):
@@ -274,10 +307,13 @@ def solid_base(body):
     return shelling.solid_base(body)
 
 
-def needs_own_feature(options):
-    """True when FreeCAD's Draft cannot make it: a Parting Line draft, or Two Side /
-    Symmetric (both split the faces at a line first)."""
-    return options.get("draft_type", "fixed") == "parting" or options.get("sides", "one") != "one"
+def needs_own_feature(options, shape=None, plane_ref=None, names=None):
+    """True when FreeCAD's Draft cannot make it: a Parting Line draft, Two Side / Symmetric
+    (both split the faces at a line first), or a face only draft_walls can tilt (a free-form
+    side wall; give the base shape, plane and faces to check that)."""
+    if options.get("draft_type", "fixed") == "parting" or options.get("sides", "one") != "one":
+        return True
+    return needs_engine(shape, plane_ref, names, options)
 
 
 def is_own(obj):
@@ -294,7 +330,7 @@ def apply(feature, base, plane_ref, names, options, formula="", formula2=""):
     if is_own(feature):
         _apply_own(feature, base, plane_ref, names, options, formula, formula2)
         return
-    if needs_own_feature(options):
+    if needs_own_feature(options, base.Shape if base else None, plane_ref, names):
         raise DraftError("FreeCAD's draft cannot do this; use update() to switch.")
     old = feature.Base
     if not (old and old[0] is base and [s for s in old[1] if s] == names):
@@ -335,7 +371,7 @@ def make(body, base, plane_ref, names, options, name="Draft", formula="", formul
     rest. Not recomputed."""
     if base is None or base.Shape.isNull() or not base.Shape.Solids:
         raise DraftError("Make a solid first (Create Sketch, then Extrude).")
-    if needs_own_feature(options):
+    if needs_own_feature(options, base.Shape, plane_ref, names):
         if before is not None:
             feature = body.Document.addObject(OWN_TYPE, name)
             body.insertObject(feature, before, False)
@@ -358,7 +394,8 @@ def update(feature, base, plane_ref, names, options, formula="", formula2=""):
     """Change a draft. Returns the feature: a new object when the change needs the other
     kind (FreeCAD's Draft <-> SciForge's DraftFeature); it takes the old one's place and
     label, later steps and the draft's followers in other bodies move over to it."""
-    if needs_own_feature(options) == is_own(feature):
+    own = needs_own_feature(options, base.Shape if base else None, plane_ref, names)
+    if own == is_own(feature):
         apply(feature, base, plane_ref, names, options, formula, formula2)
         return feature
     from . import modify_bodies, shelling
@@ -810,11 +847,27 @@ def _faces_at(shape, points):
 
 
 def _scratch(shape, points, hinge, pull, angle):
-    """FreeCAD's own Draft run on `shape` in a hidden throw-away document: the faces at
-    `points` tilted by `angle` toward `pull` about the hinge plane (point, normal)."""
-    import FreeCAD as App
+    """The faces at `points` of `shape` tilted by `angle` toward `pull` about the hinge plane
+    (point, normal): FreeCAD's own Draft for the faces OpenCASCADE can tilt (planes, round
+    faces about the pull direction), SciForge's draft_walls for the other walls (free-form
+    sides, and the walls joined to them, so a tangent chain stays tangent)."""
+    from . import draft_walls
 
     names = _faces_at(shape, points)
+    own = draft_walls.engine_names(shape, names, _unit(pull))
+    if not own:
+        return _occ_draft(shape, names, hinge, pull, angle)
+    own_points = [p for p in points if _faces_at(shape, [p])[0] in own]
+    native_points = [p for p in points if _faces_at(shape, [p])[0] not in own]
+    if native_points:
+        shape = _occ_draft(shape, _faces_at(shape, native_points), hinge, pull, angle)
+    return draft_walls.draft(shape, _faces_at(shape, own_points), hinge, pull, angle)
+
+
+def _occ_draft(shape, names, hinge, pull, angle):
+    """FreeCAD's own Draft run on `shape` in a hidden throw-away document."""
+    import FreeCAD as App
+
     doc = _scratch_document()
     try:
         holder = doc.addObject("Part::Feature", "Solid")

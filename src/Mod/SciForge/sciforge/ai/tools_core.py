@@ -28,11 +28,12 @@ import re
 UNITS = "All lengths are in millimetres (mm) and all angles in degrees."
 
 EDGE_TYPES = ("line", "circle", "ellipse", "bspline")
-FACE_TYPES = ("plane", "cylinder", "cone", "sphere", "torus", "bspline")
+FACE_TYPES = ("plane", "cylinder", "cone", "sphere", "torus", "bspline", "extrusion")
 SELECTOR_KEYS = (
     "type",
     "normal",
     "parallel",
+    "along",
     "radius",
     "on_faces",
     "not_on_faces",
@@ -49,9 +50,11 @@ SELECTOR_HELP = "\n".join(
         ' (never by names like "Edge7"). It is an object; every filter is optional, they '
         "combine with AND and apply in this order:",
         "  type: for edges line, circle, ellipse or bspline; for faces plane, cylinder, cone,"
-        " sphere, torus or bspline.",
+        " sphere, torus, bspline or extrusion (the side of an extruded spline or ellipse).",
         "  normal: [x, y, z] (faces only) flat faces whose outward normal points this way.",
         "  parallel: [x, y, z] straight edges parallel to this direction (either sense).",
+        "  along: [x, y, z] (faces only) faces running along this direction: the side walls of"
+        " a part extruded that way (flat, round or free-form).",
         "  radius: a number (mm): circles, cylinders and spheres with this radius.",
         "  on_faces: a face selector (edges only): the edges that bound the faces it picks.",
         "  not_on_faces: a face selector (edges only): the edges that do NOT bound those faces.",
@@ -117,6 +120,11 @@ def _selector(description):
             "type": {"type": "string", "enum": sorted(set(EDGE_TYPES + FACE_TYPES))},
             "normal": dict(_VECTOR3, description="[x, y, z] outward normal of flat faces"),
             "parallel": dict(_VECTOR3, description="[x, y, z] direction of straight edges"),
+            "along": dict(
+                _VECTOR3,
+                description="[x, y, z]: faces running along it (the side walls of a part "
+                "extruded that way)",
+            ),
             "radius": dict(_POSITIVE, description="radius in mm"),
             "on_faces": {"type": "object", "description": "a face selector"},
             "not_on_faces": {"type": "object", "description": "a face selector"},
@@ -645,9 +653,10 @@ def _check_selector(spec, path, element, problems):
             problems.append(
                 "%s.type must be one of %s for %s" % (path, ", ".join(allowed), element)
             )
-    if "normal" in spec and element != "faces":
-        problems.append("%s.normal only applies to faces" % path)
-    for key in ("normal", "parallel"):
+    for key in ("normal", "along"):
+        if key in spec and element != "faces":
+            problems.append("%s.%s only applies to faces" % (path, key))
+    for key in ("normal", "parallel", "along"):
         if key in spec:
             vec = spec[key]
             if not (

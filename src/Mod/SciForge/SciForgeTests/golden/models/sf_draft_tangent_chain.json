@@ -1,0 +1,138 @@
+{
+  "id": "sf_draft_tangent_chain",
+  "title": "Rounded rectangle with a spline side, extruded 10; one Draft of its 8 side walls (lines, arcs, the spline: one tangent chain) 3 degrees about XY",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "free-form",
+    "tangent-chain"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "segments": [
+            {
+              "spline": [
+                [
+                  3,
+                  0
+                ],
+                [
+                  15,
+                  -3
+                ],
+                [
+                  27,
+                  0
+                ]
+              ],
+              "tangents": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            {
+              "arc": [
+                27,
+                3,
+                3,
+                -90,
+                0
+              ]
+            },
+            {
+              "line": [
+                30,
+                3,
+                30,
+                17
+              ]
+            },
+            {
+              "arc": [
+                27,
+                17,
+                3,
+                0,
+                90
+              ]
+            },
+            {
+              "line": [
+                27,
+                20,
+                3,
+                20
+              ]
+            },
+            {
+              "arc": [
+                3,
+                17,
+                3,
+                90,
+                180
+              ]
+            },
+            {
+              "line": [
+                0,
+                17,
+                0,
+                3
+              ]
+            },
+            {
+              "arc": [
+                3,
+                3,
+                3,
+                180,
+                270
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10.0
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "along": [
+          0,
+          0,
+          1
+        ],
+        "count": 8
+      },
+      "angle": 3
+    }
+  ],
+  "expect": {
+    "volume": 5980.652376686,
+    "faces": 10,
+    "solids": 1,
+    "source": "analytic",
+    "volume_by": "mesh",
+    "rel_tol": 0.0001,
+    "note": "The outline is smooth all round (the spline is tangent to the corner arcs), so each height is it offset inward by z tan3 with area Ac - Pc d + pi d^2: V = Ac H - Pc tan3 H^2/2 + pi tan3^2 H^3/3, Ac = 622.874333853 (shoelace area of 400000 points), Pc = 95.774777043. The chain stays tangent: still 10 faces."
+  }
+}

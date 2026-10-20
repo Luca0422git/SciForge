@@ -4,6 +4,11 @@ This file is the project's memory across work sessions. **Read it first, every s
 `docs/sciforge/feature-outline.md` (the spec). Update it at the end of every session: what was
 done, what was learned, what is next. Newest session goes at the top of the log.
 
+**Branch `experimental` (Luca, 2026-10-20): Fusion workflows that do not work yet get fixed
+there, one at a time ("New branch time. Call it experimental"). First item done: Draft of
+curved / free-form faces (session log "Draft of curved faces"). Luca tests it; nothing from
+`experimental` goes to `develop` or `Release` until he says so.**
+
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
 R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
 
@@ -73,6 +78,7 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
 | 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
 | 2026-10-20 | First public release is **0.1.0-beta**; no code signing (Luca: no money for it), so the GitHub page and release notes explain Windows SmartScreen; update check with an easy install; a minimal welcome ("dont overdo it") | Brief `docs/sciforge/dev/briefs/beta-release.md` (milestones R0-R5) |
+| 2026-10-20 | Branch `experimental` (from develop `ae1d3768`) for fixing Fusion workflows that do not work in SciForge yet; the first is Draft of curved faces. This work is pushed to `experimental`, not `develop` | Luca: "some of the workflows that id regularly do on fusion dont exactly work ... New branch time. Call it experimental. thats where youll do your work" |
 | 2026-10-20 | Branch `Release` (from develop `a6a5f7bd`): only tested `develop` commits, fast-forwarded and tagged `sciforge-v<version>` on Luca's green light; all work stays on `develop` | Luca: "everything goes on develop until i give the green light" |
 - **2026-10-13: full (compiled) builds only for releases or a real C++ change.** Luca asked why
   compile at all when SciForge is an add-on: all 7 core patches are housekeeping or FreeCAD bug
@@ -270,6 +276,15 @@ Quick updates come from green "SciForge tests" runs on `develop`.
       longer "too thick", arrows can always be grabbed, Draft's Pull Direction box and
       clickable pull arrow, Change Parameters lists Shell / Scale values. 4 QA scenarios
       (`shell_draft_qa_shell/_draft/_scale/_mix.py`, 25 paths), 4 golden models.
+- [x] Draft of curved and free-form faces (branch `experimental`, 2026-10-20, Luca's report "I
+      cant seem to select curved faces"): every face that runs along the pull direction is
+      taken (the side of an extruded spline or ellipse, round walls, tangent chains of flat,
+      round and spline walls), FreeCAD's Draft kept for the faces it can tilt, SciForge's new
+      `draft_walls.py` for the rest. Fixed Plane / Parting Line, One / Two Side / Symmetric,
+      flip, edits, followers in other bodies. Scenario `draft_curved` (50 checks), 6 golden
+      models (`sf_draft_ellipse_*`, `sf_draft_spline_*`, `sf_draft_tangent_chain`), unit
+      `test_draft_curved_schema.py`. **Not yet checked by Luca.** Gaps in
+      `parity/shell-draft-scale.md` (leaning free-form walls, sloped caps)
 - [x] Body tools, Fusion-style (branch `sf/bodies`): Combine (Target / Tool Bodies, Join /
       Cut / Intersect, New Body, Keep Tools; used-up tools hidden while the step is part of
       the design), Split Body (origin/construction plane, face with Extend Splitting Tool,
@@ -405,6 +420,44 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Known issues / findings
 
+- **Draft of curved faces (2026-10-20, branch `experimental`, `draft_walls.py`)**:
+  - OpenCASCADE's `BRepOffsetAPI_DraftAngle` (FreeCAD's Draft) tilts planes and cylinders /
+    cones about the pull direction only. Any other face (`SurfaceOfExtrusion` of a spline or
+    ellipse, B-splines, spheres, a cylinder lying across the pull) is skipped with "Failed to
+    add some face for drafting, skip" (TopoShapeExpansion.cpp) and the step stays unchanged.
+    SciForge used to filter those faces out of the selection, so they never lit up.
+  - A wall = a face whose normal is square to the pull direction everywhere (sampled 5 x 5):
+    then it is the side of a shape extruded along the pull, and its drafted form is the ruled
+    surface through its cross-section on the fixed plane with rulings leaning by the angle.
+    Its exact profile curve is `SurfaceOfExtrusion.BasisCurve`; a section of the surface is
+    an approximation with C0 knots, which `Part.OffsetCurve` refuses ("Offset on C0 curve").
+  - **OpenCASCADE booleans and offset-curve geometry**: a solid with a face built on an
+    `OffsetCurve` edge is split wrongly or not at all by `generalFuse`; convert offsets to
+    B-splines (`OffsetCurve.toBSpline(u0, u1)`; same parameters, so a ruled surface between
+    two offsets stays exact along its rulings). Lines and circles: build the exact offset.
+  - **`face.extrude()` against the face's own normal makes an inside-out prism** (valid,
+    positive volume): splits and booleans with it then silently go wrong. `draft_walls._prism`
+    reverses the face first.
+  - **`generalFuse([compound])` does not join the faces inside the compound to each other**: a
+    drafted wall plus its tangent strip passed as one compound leaked (the zone was not split
+    at all). Pass the faces as separate arguments (`list(tool.Faces)`).
+  - **A splitting tool exactly as tall as the solid it splits** (coincident top / bottom
+    edges) does not split it: make the solid shorter than the tool.
+  - **Fusing many thin overlapping wedges first (`multiFuse`) and then cutting** left a 270 mm^3
+    chunk of a part loose; `shape.cut([pieces])` (all pieces as tools of one boolean) is right.
+  - **`removeSplitter()` raises `OCCError(' ')` when several faces of one B-spline surface
+    should merge** (seen after slicing a drafted wall into three by a zone cut). Avoid cutting
+    the drafted wall into pieces: cut only the region that must go.
+  - **OpenCASCADE's volume (and face area) of B-spline geometry is off**: a drafted ellipse
+    prism 2122.30 by `Volume` against 2112.50 exact (+0.46 %); a spline-bounded flat face's
+    `Area` 7e-5 off. A mesh at 0.002 mm deflection is right to ~1e-5; golden models with
+    free-form faces use `"volume_by": "mesh"`. `BoundBox` of B-spline solids is loose (poles).
+  - Corner rule where a drafted wall ends (each region belongs to one wall): outside corner,
+    material to add stops at the next face as drafted (filled up to where the two drafted
+    surfaces meet, like a mitre), material to take away needs no trim (the part bounds it);
+    inside corner, material to take away stops at the next face as drafted, material to add
+    at the next face as it was. Only near the end (a full cone or an extended plane crosses
+    the wall again further on). A smooth join with a wall drafted with it needs nothing.
 - **Components (2026-10-13, branch `sf/components`)**: a component is an `App::Part`; the
   root is the document itself; the active component is the active body's container, else
   FreeCAD's `"part"` active-object slot (`components.active_component`); `find_body()` /
@@ -1389,6 +1442,38 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Draft of curved faces (branch `experimental`, 2026-10-20)
+
+Luca: "some of the workflows that id regularly do on fusion dont exactly work on SciForge. one of
+them is the draft tool. I cant seem to select curved faces ... New branch time. Call it
+experimental ... our first order of bisness is getting the draft tool to fusions standards".
+Then, asked by the session: Fusion's Draft "accepts freeform stuff. just confirmed it myself".
+(Autodesk's help site does not resolve from the sandbox; Luca's check is the source.)
+
+- Cause: `drafting.why_not` (the dialog's selection gate) refused every face but planes and
+  round faces about the pull direction, because FreeCAD's Draft cannot tilt the others.
+- Built `sciforge/draft_walls.py`: SciForge's own draft of walls (see the findings). Wired in
+  `drafting._scratch` (FreeCAD's Draft for the faces it can do, draft_walls for the rest and
+  the walls touching them); `why_not` takes any wall; `needs_own_feature` /
+  `needs_engine` make such a step SciForge's `DraftFeature` (edits switch kinds both ways).
+- Golden format: sketch curves `ellipse`, `spline_loop`, `segments`; `"volume_by": "mesh"`;
+  selector type `extrusion` and filter `along` (also in the AI tools' schema and help);
+  `sf_draft_edit` uses `drafting.update` (a step may have to change kind).
+- Tests, all passing: scenario `draft_curved` (50 checks: ribbon Draft, XY square, the spline
+  wall clicked takes its 8-wall tangent chain, live preview, 3 deg, Tangent Chain off / on,
+  OK, Ctrl+Z / Ctrl+Y, timeline edit, 40 deg refused with the reason, 5 deg, a leaning
+  free-form wall refused, Cancel); 6 new golden models (analytic: Steiner's offset area for
+  smooth outlines, slice integration for sharp corners); unit `test_draft_curved_schema.py`;
+  a 24-case geometry suite run by hand (ellipse in / out / hinge mid, spline wall alone,
+  sharp and tangent corners in and out, spline pocket, ledge, L-shape, window, sloped top,
+  hinge below the part, too tight a curve refused). Regression: `--only base` (unit 1795,
+  golden 446 + 2 known xfail, smoke, journey), scenarios `shell_draft_draft`,
+  `shell_draft_qa`, `shell_draft_qa_draft`, `shell_draft_qa_mix`, `modify2_draft`,
+  `modify2_bodies`.
+- Speed: 0.5 s (ellipse) to 0.9 s (8-wall tangent chain) per preview.
+- Open: leaning free-form walls (a tapered extrude's B-spline sides, a loft) are refused;
+  sloped caps leave a sliver; Fusion behaviour on both unconfirmed (parity doc's gaps).
 
 ### Session log: 0.1.0-beta, R1-R4 built by three parallel agents, merged (`develop`, 2026-10-20)
 

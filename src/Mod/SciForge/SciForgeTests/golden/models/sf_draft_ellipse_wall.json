@@ -1,0 +1,51 @@
+{
+  "id": "sf_draft_ellipse_wall",
+  "title": "Ellipse 12 x 6 extruded 10, Draft of its free-form wall 5 degrees about XY (FreeCAD's own Draft cannot tilt such a face)",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "free-form"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "ellipse": [
+            0,
+            0,
+            12.0,
+            6.0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10.0
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "type": "extrusion",
+        "count": 1
+      },
+      "angle": 5
+    }
+  ],
+  "expect": {
+    "volume": 2015.673423516,
+    "faces": 3,
+    "solids": 1,
+    "source": "analytic",
+    "volume_by": "mesh",
+    "rel_tol": 0.0001,
+    "note": "Each height z is the ellipse offset inward by z tan5 (the drafted wall); a smooth closed curve offset by d has area A0 - P d + pi d^2 (Steiner), so V = A0 H - P tan5 H^2/2 + pi tan5^2 H^3/3, A0 = pi 12 6, P = the ellipse's perimeter 58.130689323 (its arc-length integral). OpenCASCADE's volume of the drafted B-spline wall is ~0.5 % off: measured on a mesh."
+  }
+}

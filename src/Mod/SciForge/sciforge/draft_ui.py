@@ -12,7 +12,8 @@ or the flip button next to the box turns it round.
                  curves. Fix Parting Line keeps that line where it is (Move Parting Line is
                  not built: greyed with the reason).
 The Faces box then takes the clicks: click the faces to tilt (click one again to drop it),
-also faces of other bodies (one Draft step changes them all); Tangent Chain picks the faces
+flat, round or free-form walls (the side of an extruded spline), also faces of other bodies
+(one Draft step changes them all); Tangent Chain picks the faces
 that continue a picked one smoothly. Draft Sides: One Side tilts the faces one way (Parting
 Line: only the pull side of the line), Two Side splits them at the plane or line and tilts
 each side away from it (Angle 1 toward the pull direction, Angle 2 the other way),

@@ -88,14 +88,25 @@ later steps move over to the new one.
 |---|---|
 | Draft with nothing selected waits for the Pull Direction: click an origin plane or a flat face | Same: the box is called Pull Direction; the big origin squares appear (like Create Sketch) while it is blue; origin planes from the browser work too. A flat face clicked first becomes the pull direction (its x clears it) |
 | The pull direction is shown as an arrow; clicking it, or the flip button, flips it | Same (blue arrow beside the part, so it never covers a face to click; the ⇅ button). Out of a picked face, along an origin plane's normal |
-| Then the Faces box takes the clicks; click a picked face again to drop it; Tangent Chain | Same. Faces that cannot be tilted (parallel to the plane, round faces with another axis) do not light up |
+| Then the Faces box takes the clicks; click a picked face again to drop it; Tangent Chain | Same. Faces that cannot be tilted (parallel to the plane, faces that do not run along the pull direction such as a sphere or a round face lying across it) do not light up |
+| Curved and free-form walls are drafted too: the side of an extruded spline or ellipse, round walls, and tangent chains mixing flat, round and spline walls (Luca confirmed in Fusion, 2026-10-20) | Same (2026-10-20, branch `experimental`): every face that runs along the pull direction lights up and is drafted. A tangent chain stays tangent (a rounded rectangle keeps its 10 faces); a free-form wall's corner with a face that is not drafted is finished like a flat one (that face is extended or trimmed to meet it) |
 | Angle field and an angle handle; positive angles make the part narrower toward the pull direction | Same; the curved blue handle sits on the drafted face's continuation beyond the plane, outside the part, so it can always be grabbed |
 | An impossible draft is explained in the dialog | Same ("cannot be tilted this far"); FreeCAD's Draft often fails without any text, or skips a face silently (both caught) |
 | Works on any body | Same: the first click on another body moves the dialog there |
 | Edit from the timeline, Cancel, Esc, Ctrl+Z | Same |
 
 Built on FreeCAD's `PartDesign::Draft` (NeutralPlane = the picked plane, PullDirection empty,
-Reversed worked out from the pull direction). Parting Line, Two Side and Symmetric are
+Reversed worked out from the pull direction) for planes and round faces about the pull
+direction. OpenCASCADE's draft (`BRepOffsetAPI_DraftAngle`) cannot tilt any other face ("Failed
+to add some face for drafting, skip"), so curved walls go to SciForge's `draft_walls.py`: the
+wall's cross-section on the fixed plane stays where it is and the drafted wall is the ruled
+surface through it whose rulings lean by the angle (a plane for a straight wall, a cone for a
+round one, a ruled B-spline otherwise); the thin slab next to the wall is split by that surface,
+the material between the old and the new wall is taken away or added (one cut, one fuse), and
+the corners where a wall ends are finished against the next face (outside corner: filled up to
+the next face as drafted; inside corner: trimmed at it). Walls touching such a wall are drafted
+with it, so a tangent chain stays tangent. A draft with such a wall is SciForge's `DraftFeature`
+(Fixed Plane / One Side included). Parting Line, Two Side and Symmetric are
 SciForge's `DraftFeature` (`PartDesign::FeaturePython`, `drafting.py`): the picked faces are
 split at the parting line (`generalFuse` with the plane or the parting curves swept along the
 pull direction), and every group of pieces that turns about the same line is drafted by
@@ -125,6 +136,10 @@ corner used as the point follows edits of earlier steps.
 | Draft Move Parting Line (Angle Above / Below / Both, Fixed Edges) | Greyed with the reason: the parting line moving needs a new step face along it, which OpenCASCADE's draft (BRepOffsetAPI_DraftAngle) does not make |
 | Draft Parting Line that bends inside one face (a 3D curve, or a stepped line crossing one face) | Each piece of a face turns about one line (its longest edge on the parting line); a parting line that is not flat where it meets a face is refused with the reason |
 | Draft, Shell, Scale handles for the new options | Angle 2 has no handle of its own (typed in its field); the Angle handle drives Angle 1 |
+| Draft of a free-form wall that already leans (drafted before, a tapered extrude's B-spline side, a loft) | Refused with the reason ("only faces that run along the pull direction"): `draft_walls` needs the wall's rulings along the pull direction. Flat and conical leaning faces still work (OpenCASCADE). Fusion's behaviour on these is not documented; a guess would be re-leaning the rulings from the fixed plane |
+| Draft of faces that do not run along the pull direction at all (a sphere, a fillet along a top edge, a round face lying across the pull) | Refused with the reason (OpenCASCADE cannot, and they are not walls) |
+| A drafted curved wall meeting a sloped or curved top / bottom face | The new material ends square to the wall's own top / bottom edge, not on the sloped face extended: a sliver up to about (draft offset) x (slope) is left (0.2 mm on a 10 mm wall at 5 deg under a 15 deg slope). Flat tops and bottoms (the usual case) are exact |
+| A free-form wall's corner with a face not drafted with it | The drafted surface goes on along its tangent past the wall's end (a small flat piece at the corner); Fusion extends the B-spline surface itself (the difference is second order, invisible at draft angles) |
 | Scale of components | Belongs to the components area (components-2) |
 | Rolling the history marker back before a sketch's Scale step | The sketch stays scaled (the step changed the sketch itself; Undo or deleting the step puts it back) |
 | A sketch's Scale default point | The sketch's own origin (Fusion gives "a default point", not documented which) |

@@ -1,0 +1,90 @@
+{
+  "id": "sf_draft_spline_pocket",
+  "title": "Box 40 x 30 x 10 with a closed-spline pocket cut through it, the pocket wall drafted 4 degrees about XY (the pocket opens up toward the top)",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "free-form",
+    "pocket"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10.0
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "spline_loop": [
+            [
+              10,
+              10
+            ],
+            [
+              20,
+              7
+            ],
+            [
+              30,
+              12
+            ],
+            [
+              25,
+              22
+            ],
+            [
+              12,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10.0,
+      "operation": "cut"
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "type": "extrusion",
+        "count": 1
+      },
+      "angle": 4
+    }
+  ],
+  "expect": {
+    "volume": 9041.527628252,
+    "faces": 7,
+    "solids": 1,
+    "source": "analytic",
+    "volume_by": "mesh",
+    "rel_tol": 0.0001,
+    "note": "The part gets narrower toward +Z, so the hole grows: at height z it is the spline offset outward by z tan4, area Ap + Pp d + pi d^2 (Steiner, a smooth closed curve). V = 12000 - (Ap H + Pp tan4 H^2/2 + pi tan4^2 H^3/3), Ap = 274.445921881 (shoelace area of 200000 points on it) and Pp = 59.746069771 of the spline through (10,10) (20,7) (30,12) (25,22) (12,20)."
+  }
+}
