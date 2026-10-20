@@ -179,8 +179,9 @@ workarounds is in **[Known issues](docs/sciforge/known-issues.md)**.
 
 SciForge looks for a new version when it starts (at most once a day; you can switch this off in
 Preferences > General > "Check for updates when SciForge starts", and **Help > Check for
-Updates** checks any time). If there is one, a line appears at the top of the Home tab with
-**What's new**, **Update now** and **Later**. Nothing is installed until you click **Update now**,
+Updates** checks any time). If there is one, an update icon appears in the top right of the window, next to the search
+button (click it for **Update now** or **What's new**), and a line appears at the top of the Home
+tab with **What's new**, **Update now** and **Later**. Nothing is installed until you click **Update now**,
 and SciForge asks about unsaved designs first.
 
 Updating yourself works too: download the newest installer from the

@@ -473,6 +473,17 @@ class RibbonWidget(QtWidgets.QWidget):
         self._out_of_date_ticks = 0
         row.addWidget(self.out_of_date)
         row.addStretch(1)
+        # The update icon (top right, before the search): shown while a newer SciForge is known
+        # (update_ui.pending); its menu has Update now and What's new.
+        self.update_icon = QtWidgets.QToolButton()
+        self.update_icon.setObjectName("SciForgeUpdateIcon")
+        self.update_icon.setIcon(ui_icon("update_available"))
+        self.update_icon.setProperty("sciforgeIcon", "update_available")
+        self.update_icon.setIconSize(QtCore.QSize(SMALL, SMALL))
+        self.update_icon.setAutoRaise(True)
+        self.update_icon.clicked.connect(self._update_menu)
+        self.update_icon.hide()
+        row.addWidget(self.update_icon)
         search = QtWidgets.QToolButton()
         search.setIcon(ui_icon("nav_zoom"))
         search.setProperty("sciforgeIcon", "nav_zoom")
@@ -481,7 +492,42 @@ class RibbonWidget(QtWidgets.QWidget):
         search.setToolTip("Search commands  (S)")
         search.clicked.connect(lambda: run(("SciForge_CommandSearch", None), "Search"))
         row.addWidget(search)
+        self.refresh_update()
         return bar
+
+    def refresh_update(self):
+        """Show the update icon while a newer SciForge is known."""
+        try:
+            from . import update_ui
+
+            version = update_ui.pending()
+            self.update_icon.setToolTip(
+                "SciForge %s is available. Click to update." % version if version else ""
+            )
+            self.update_icon.setVisible(bool(version))
+        except Exception as exc:
+            warn("update icon: %s" % exc)
+
+    def _update_menu(self):
+        try:
+            from . import update_ui
+
+            version = update_ui.pending()
+            if not version:
+                self.refresh_update()
+                return
+            menu = QtWidgets.QMenu(self.update_icon)
+            menu.setObjectName("SciForgeUpdateMenu")
+            title = menu.addAction("SciForge %s is available" % version)
+            title.setEnabled(False)
+            menu.addSeparator()
+            menu.addAction("Update now", lambda: QtCore.QTimer.singleShot(0, update_ui.install_now))
+            menu.addAction(
+                "What's new", lambda: QtCore.QTimer.singleShot(0, lambda: update_ui.whats_new(version))
+            )
+            menu.exec_(self.update_icon.mapToGlobal(QtCore.QPoint(0, self.update_icon.height())))
+        except Exception as exc:
+            warn("update icon: %s" % exc)
 
     def _workspace_button(self):
         button = QtWidgets.QToolButton()

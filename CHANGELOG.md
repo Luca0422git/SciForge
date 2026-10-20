@@ -59,8 +59,9 @@ edges (read the known issues).
 - **A crash log**: if SciForge closes unexpectedly, the next start shows a one-line note on Home
   with a button to report it.
 - **Help > Check for Updates**, and a quiet check when SciForge starts (at most once a day, off in
-  Preferences > General). A new version shows as one line on Home with **Update now**, **What's
-  new** and **Later**. Nothing is installed without your click.
+  Preferences > General). A new version shows as an **update icon in the top right** of the window
+  (next to the search button; it stays until you update) and as one line on Home with **Update
+  now**, **What's new** and **Later**. Nothing is installed without your click.
 - **A one-line welcome** on Home the first time you start it. It can be closed for good.
 - **Version 0.1.0-beta** shown quietly on Home, in SciForge > Diagnostics, on the splash and in
   Help > About.

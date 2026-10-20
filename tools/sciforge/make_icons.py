@@ -1730,6 +1730,16 @@ def _():
     )
 
 
+@icon("update_available")
+def _():
+    # an arrow down into a tray: "a new version can be installed" (the top bar's update icon)
+    return (
+        path("M8 30 V40 H40 V30", STROKE, 2.6)
+        + line(24, 8, 24, 28, BLUE[1], 4)
+        + path("M15 20 L24 30 L33 20", BLUE[1], 4)
+    )
+
+
 @icon("nav_fit")
 def _():
     return path("M6 16 V6 H16 M32 6 H42 V16 M42 32 V42 H32 M16 42 H6 V32", STROKE, 2.4) + circle(

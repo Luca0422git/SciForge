@@ -130,6 +130,18 @@ def available():
     return version
 
 
+def pending():
+    """The version the top bar's update icon is for: a newer release is known and the channel
+    takes it. Unlike available() it ignores Later (that only hides Home's line): the icon stays
+    until SciForge is updated, like Fusion's."""
+    version = _state["version"]
+    if not version or not version_core.newer(version, installed()["version"]):
+        return ""
+    if channel() != core.BETA and version_core.is_prerelease(version):
+        return ""
+    return version
+
+
 def updated():
     """The version just installed ("" when this start is not the first one after an update)."""
     return _state["updated"]
@@ -165,6 +177,14 @@ def _changed():
         home_update_ui.changed()
     except Exception as exc:
         warn("update: Home line: %s" % exc)
+    try:
+        from . import shell
+
+        ribbon = shell.ribbon()
+        if ribbon is not None:
+            ribbon.refresh_update()
+    except Exception as exc:
+        warn("update: top bar icon: %s" % exc)
 
 
 def _open_url(url):

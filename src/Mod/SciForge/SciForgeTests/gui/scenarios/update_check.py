@@ -31,6 +31,10 @@ P12 Cancel at "save your changes?" (the quit says no): the helper is stopped, th
 P13 After the update: "Updated to 0.1.0-beta." once, What's new opens the notes, Dismiss hides it.
 P14 Linux (the AppImage cannot replace itself): the release page and one line of what to do.
 P15 Preferences > General > Updates: the two options, their defaults, and they work.
+P16 The update icon in the top bar (top right, left of the search button, like Fusion's): hidden
+    while nothing newer is known, shown (lit, on the real screen) when the check finds a newer
+    SciForge, still shown after Later (that only hides Home's line), gone when up to date; its
+    menu offers Update now and What's new.
 """
 
 import hashlib
@@ -197,6 +201,28 @@ def press_update_now():
     w.click(found.update_button)
 
 
+def icon_button():
+    from sciforge import shell
+
+    ribbon = shell.ribbon()
+    return getattr(ribbon, "update_icon", None) if ribbon is not None else None
+
+
+def icon_lit():
+    """How many pixels of the icon's light blue the real screen shows on the button."""
+    button = icon_button()
+    if button is None or not button.isVisible():
+        return 0
+    top = button.mapToGlobal(QtCore.QPoint(0, 0))
+    image = QtWidgets.QApplication.primaryScreen().grabWindow(0).toImage()
+    return sum(
+        1
+        for x in range(button.width())
+        for y in range(button.height())
+        if near(image.pixelColor(top.x() + x, top.y() + y), (0x8F, 0xD0, 0xFF), 40)
+    )
+
+
 def pixel(widget, dx, dy):
     top = widget.mapToGlobal(QtCore.QPoint(dx, dy))
     image = QtWidgets.QApplication.primaryScreen().grabWindow(0).toImage()
@@ -258,6 +284,9 @@ def p1_home_without_line():
     h.check("P1 ... hidden: nothing is known yet", found is not None and not found.isVisible())
     h.check("P1 the automatic check did not run by itself in a test", s["fake"].hits == [], s["fake"].hits)
     h.check("P1 Preferences' check at start is on by default", update_ui.check_on_start())
+    button = icon_button()
+    h.check("P1 the top bar has an update icon button", button is not None)
+    h.check("P1 ... hidden: nothing is known yet", button is not None and not button.isVisible())
     from sciforge import diagnostics
 
     h.check(
@@ -335,6 +364,24 @@ def p1_the_line_on_screen():
     h.shot("line")
 
 
+def p16_the_icon_on_screen():
+    button = icon_button()
+    h.check("P16 the update icon is shown", button is not None and button.isVisible())
+    if button is None or not button.isVisible():
+        return
+    h.check(
+        "P16 ... its tooltip says what is available",
+        button.toolTip() == "SciForge 0.1.0-beta.2 is available. Click to update.",
+        button.toolTip(),
+    )
+    search = [b for b in button.parent().findChildren(QtWidgets.QToolButton) if b.toolTip().startswith("Search commands")]
+    h.check("P16 ... top right, just left of the search button", bool(search) and button.x() < search[0].x() and search[0].x() - button.x() < 80)
+    h.check("P16 ... in the right half of the window", button.mapToGlobal(QtCore.QPoint(0, 0)).x() > Gui.getMainWindow().width() // 2)
+    lit = icon_lit()
+    h.check("P16 ... drawn on the screen (its blue arrow is there)", lit >= 10, lit)
+    h.shot("update_icon")
+
+
 def p1b_the_light_look():
     """The line in the light look (Preferences > General > Look): a pale blue with dark text,
     read on the screen, not in the style sheet."""
@@ -393,6 +440,8 @@ def p3_later_hides_the_line():
     QtTest.QTest.qWait(100)
     h.check("P3 Later hides the line", line_text() == "", line_text())
     h.check("P3 ... for that version", group().GetString("UpdateLater", "") == "0.1.0-beta.2")
+    button = icon_button()
+    h.check("P16 the top bar icon stays after Later", button is not None and button.isVisible())
 
 
 def p3_menu_asks_and_answers():
@@ -443,6 +492,45 @@ def p3_a_newer_version_shows_the_line_again():
     h.check("P3 (the found version is still known)", update_ui._state["version"] == "0.1.0-beta.3")
 
 
+def p16_the_icon_menu():
+    button = icon_button()
+    seen = []
+
+    def choose(text):
+        seen.append(text)
+        return text == "What's new"
+
+    s["opened"].clear()
+    ok = False
+    if button is not None and button.isVisible():
+        ok = w.click_menu(button, "What's new")
+    h.check("P16 clicking the icon opens a menu with What's new", ok)
+    h.check(
+        "P16 ... What's new opens the release page of the version the icon is for",
+        bool(s["opened"]) and s["opened"][-1].endswith("/releases/tag/sciforge-v0.1.0-beta.3"),
+        s["opened"],
+    )
+    # the menu also has Update now (it is the one that starts the download)
+    texts = []
+    from sciforge import update_ui
+
+    if button is not None:
+        QtCore.QTimer.singleShot(
+            80,
+            lambda: (
+                texts.extend(a.text() for a in QtWidgets.QApplication.activePopupWidget().actions()),
+                QtWidgets.QApplication.activePopupWidget().close(),
+            ),
+        )
+        w.click(button)
+    h.check(
+        "P16 the menu lists the version, Update now and What's new",
+        [t for t in texts if t] == ["SciForge 0.1.0-beta.3 is available", "Update now", "What's new"],
+        texts,
+    )
+    h.check("P16 (update_ui.pending knows the version)", update_ui.pending() == "0.1.0-beta.3")
+
+
 # -- P4 --------------------------------------------------------------------------------------
 def p4_up_to_date():
     reset_state()
@@ -454,6 +542,8 @@ def p4_up_to_date():
         h.check("P4 it says up to date", box.text() == "SciForge %s is up to date." % VERSION, box.text())
         h.shot("answer_up_to_date")
     h.check("P4 no line on Home", line_text() == "")
+    button = icon_button()
+    h.check("P16 the top bar icon is gone when up to date", button is not None and not button.isVisible())
     close_answer()
 
 
@@ -849,12 +939,14 @@ h.run(
         p1_home_without_line,
         _wait(p1_check_does_not_hold_the_window_up, 300),
         p1_the_line_on_screen,
+        _wait(p16_the_icon_on_screen, 300),
         p1b_the_light_look,
         _wait(p2_once_a_day, 300),
         p3_later_hides_the_line,
         p3_menu_asks_and_answers,
         p3_whats_new,
         p3_a_newer_version_shows_the_line_again,
+        p16_the_icon_menu,
         p4_up_to_date,
         p5_channels,
         p6_offline,

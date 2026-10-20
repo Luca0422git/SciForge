@@ -1469,6 +1469,15 @@ CODE_OF_CONDUCT.md is still FreeCAD's).
   `SciForge.exe`; Help > Check for Updates > Update now. Backups: `...\SciForge\SciForge-backups\<date>`;
   on failure send `%APPDATA%\SciForge\SciForge\updates\<version>\module\install_update.log`.
 
+#### Update icon in the top bar (Luca's request, same day)
+- Luca: "check for updates on start and show an update icon ... in the top right like fusion".
+  The check at start already existed (default on). New: `ribbon_ui` `update_icon` (object name
+  `SciForgeUpdateIcon`, icon `update_available`, left of the search button), shown while
+  `update_ui.pending()` (a newer release is known and the channel takes it; unlike `available()` it
+  ignores Home's Later, so it stays until SciForge is updated); click = menu "SciForge X is
+  available" / Update now / What's new; `update_ui._changed()` refreshes it. Scenario
+  `update_check` P16 (150 checks; looked at the screenshot: the blue arrow sits top right).
+
 #### Tested (orchestrator, merged tree)
 - unit 1708+ OK; link check and check_install green; scenarios home_screen, version_label, welcome_line, crash_notice, report_problem, update_check, misc_preferences PASS; `--only base` (golden, smoke, journey, restart) PASS on the merged tree. The full scenario sweep runs on GitHub (CI on develop).
 - Quick update sent to Luca: commit fe2cb7ad (zip `SciForge-0.1.0-beta-quick-update.zip`, with WHATS_NEW.txt).
