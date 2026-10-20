@@ -33,7 +33,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, home_core as core, log, theme, ui_icon, versions, warn
+from . import __version__, commands, home_core as core, log, theme, ui_icon, versions, warn
 from .compat import QtCore, QtGui, QtWidgets
 
 OPTION = ("User parameter:BaseApp/Preferences/Mod/SciForge", "ShowHomeAtStart")
@@ -242,6 +242,7 @@ QSS = """
 #SciForgeHomeAI {{ background: {chrome}; }}
 #SciForgeHomeAIStatus {{ color: {text_dim}; padding: 4px 0px 8px 0px; }}
 #SciForgeHomeHeading {{ color: {text}; font-size: 22px; }}
+#SciForgeHomeVersion {{ color: {text_dim}; font-size: 12px; }}
 #SciForgeHomeTitle {{ color: {text}; font-size: 16px; }}
 #SciForgeHomePath {{ color: {text_dim}; font-size: 12px; }}
 #SciForgeHomeLine {{ background: #3b4250; border: none; }}
@@ -558,7 +559,16 @@ class HomeView(QtWidgets.QWidget):
         column.setSpacing(10)
         heading = QtWidgets.QLabel(TITLE)
         heading.setObjectName("SciForgeHomeHeading")
-        column.addWidget(heading)
+        # The version, small and grey after the heading (the beta label, quietly; R0 of
+        # docs/sciforge/dev/briefs/beta-release.md). No banner, no title-bar text.
+        self.version_label = QtWidgets.QLabel("SciForge %s" % __version__)
+        self.version_label.setObjectName("SciForgeHomeVersion")
+        head_line = QtWidgets.QHBoxLayout()
+        head_line.setSpacing(10)
+        head_line.addWidget(heading)
+        head_line.addWidget(self.version_label, 0, QtCore.Qt.AlignBottom)
+        head_line.addStretch(1)
+        column.addLayout(head_line)
         top = QtWidgets.QHBoxLayout()
         self.new_button = QtWidgets.QPushButton("New design")
         self.new_button.setObjectName("SciForgeHomeNew")

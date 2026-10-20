@@ -15,7 +15,7 @@ IDI_ICON1               ICON    DISCARDABLE     "${SCIFORGE_WIN_ICON}"
 // File info for the FreeCAD.exe
 //
 1 VERSIONINFO
-FILEVERSION ${PACKAGE_VERSION_MAJOR},${PACKAGE_VERSION_MINOR},${PACKAGE_VERSION_PATCH},${PACKAGE_BUILD_VERSION}
+FILEVERSION ${SCIFORGE_VERSION_MAJOR},${SCIFORGE_VERSION_MINOR},${SCIFORGE_VERSION_PATCH},${PACKAGE_BUILD_VERSION}
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
@@ -27,7 +27,7 @@ BEGIN
             VALUE "LegalCopyright", "(C) SciForge contributors; based on FreeCAD, (C) FreeCAD contributors (LGPL-2.1-or-later)"
             VALUE "OriginalFilename", "${SCIFORGE_APP_NAME}.exe"
             VALUE "ProductName", "${SCIFORGE_APP_NAME}"
-            VALUE "ProductVersion", "${PACKAGE_VERSION}${PACKAGE_VERSION_SUFFIX}"
+            VALUE "ProductVersion", "${SCIFORGE_VERSION}"
         END
     END
     BLOCK "VarFileInfo"

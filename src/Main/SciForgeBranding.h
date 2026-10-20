@@ -20,6 +20,12 @@
 #ifndef SCIFORGE_BRANDING_H
 #define SCIFORGE_BRANDING_H
 
+// SciForge's own version, from src/Mod/SciForge/VERSION through CMake (src/Main/CMakeLists.txt).
+// FreeCAD's version numbers stay FreeCAD's: the "based on FreeCAD 1.1.4" in Help > About.
+#ifndef SCIFORGE_VERSION
+#error "SCIFORGE_VERSION is set by src/Main/CMakeLists.txt from src/Mod/SciForge/VERSION"
+#endif
+
 #define SCIFORGE_EXE_NAME "SciForge"
 #define SCIFORGE_VENDOR "SciForge"
 #define SCIFORGE_URL "https://github.com/Luca0422git/SciForge"

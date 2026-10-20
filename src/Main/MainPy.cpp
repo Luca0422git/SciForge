@@ -85,6 +85,7 @@ PyMOD_INIT_FUNC(FreeCAD)
     // (SciForgeBranding.h, patch #8). The Python module keeps its name, FreeCAD.
     App::Application::Config()["ExeName"] = SCIFORGE_EXE_NAME;
     App::Application::Config()["ExeVendor"] = SCIFORGE_VENDOR;
+    App::Application::Config()["SciForgeVersion"] = SCIFORGE_VERSION;
     App::Application::Config()["AppDataSkipVendor"] = "true";
 
     QByteArray path;

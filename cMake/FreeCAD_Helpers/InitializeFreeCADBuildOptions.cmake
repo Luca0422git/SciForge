@@ -108,6 +108,19 @@ macro(InitializeFreeCADBuildOptions)
     set(SCIFORGE_APP_NAME "SciForge")
     set(SCIFORGE_DESKTOP_ID "org.sciforge.SciForge")
     set(SCIFORGE_URL "https://github.com/Luca0422git/SciForge")
+    # SCIFORGE: the one place SciForge's own version is written, e.g. "0.1.0-beta"
+    # (src/Mod/SciForge/VERSION). The Python side reads the same file; CMake hands it to the
+    # programs (src/Main) and the Windows version resource (core-patches.md #15).
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/src/Mod/SciForge/VERSION")
+    file(STRINGS "${CMAKE_SOURCE_DIR}/src/Mod/SciForge/VERSION" SCIFORGE_VERSION LIMIT_COUNT 1)
+    string(STRIP "${SCIFORGE_VERSION}" SCIFORGE_VERSION)
+    if(NOT SCIFORGE_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.]+)?$")
+        message(FATAL_ERROR "src/Mod/SciForge/VERSION must look like 0.1.0 or 0.1.0-beta.2, not '${SCIFORGE_VERSION}'")
+    endif()
+    set(SCIFORGE_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(SCIFORGE_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(SCIFORGE_VERSION_PATCH "${CMAKE_MATCH_3}")
     option(BUILD_SANDBOX "Build the FreeCAD Sandbox module which is only for testing purposes" OFF)
     option(BUILD_TEMPLATE "Build the FreeCAD template module which is only for testing purposes" OFF)
     option(BUILD_ADDONMGR "Build the FreeCAD addon manager module" ON)

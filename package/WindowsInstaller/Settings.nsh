@@ -44,7 +44,8 @@ These typically need to be modified for each FreeCAD release
 !define APP_EMERGENCY_DOT "" # use "." for an emergency release of FreeCAD otherwise ""
 !define APP_VERSION_BUILD 1 # Start with 1 for the installer releases of each version
 
-!define APP_VERSION "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}${APP_EMERGENCY_DOT}${APP_VERSION_EMERGENCY}" # Version to display
+# SCIFORGE: SciForge's own version, e.g. "0.1.0-beta" (written by write_version_nsh.py)
+!define APP_VERSION "${APP_VERSION_DISPLAY}" # Version to display
 
 #--------------------------------
 # Installer file name

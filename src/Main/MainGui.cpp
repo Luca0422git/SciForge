@@ -190,6 +190,7 @@ int main(int argc, char** argv)
     // settings folder, so SciForge and FreeCAD live side by side (patch #8).
     App::Application::Config()["ExeName"] = SCIFORGE_EXE_NAME;
     App::Application::Config()["ExeVendor"] = SCIFORGE_VENDOR;
+    App::Application::Config()["SciForgeVersion"] = SCIFORGE_VERSION;
     App::Application::Config()["AppDataSkipVendor"] = "true";
     App::Application::Config()["MaintainerUrl"] = SCIFORGE_URL;
 
@@ -207,6 +208,7 @@ int main(int argc, char** argv)
     App::Application::Config()["SplashInfoPosition"] = SCIFORGE_SPLASH_INFO_POSITION;
     // The wordmark is part of the splash picture; only the version number is painted on it.
     App::Application::Config()["SplashInfoExeName"] = "";
+    App::Application::Config()["SplashInfoVersion"] = SCIFORGE_VERSION;
     App::Application::Config()["DesktopFileName"] = SCIFORGE_DESKTOP_ID;
 
     try {

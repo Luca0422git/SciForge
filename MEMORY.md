@@ -5,6 +5,7 @@ This file is the project's memory across work sessions. **Read it first, every s
 done, what was learned, what is next. Newest session goes at the top of the log.
 
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
+R0 (groundwork) is built and on `develop`; next is R1 (the GitHub page and user-facing docs).
 
 **Start here (2026-10-17):** read the newest session log ("Luca's improvement list").
 Every item of Luca's list (IMPROVEMENTS_AND_STUFF_TO_FIX.txt, 18 fixes + 3 additions) is
@@ -1388,6 +1389,45 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: 0.1.0-beta, R0 groundwork (`develop`, 2026-10-20)
+
+Brief `docs/sciforge/dev/briefs/beta-release.md`, milestone R0.
+
+#### Built
+- **One version file**: `src/Mod/SciForge/VERSION` (`0.1.0-beta`). `sciforge.__version__` reads it
+  (literal fallback `_FALLBACK_VERSION`; a unit test checks both agree). The module's CMake
+  installs it (`check_install.sh` passes, 1571 files). The old internal "0.2.0" is gone (only a
+  test fixture used it).
+- **`sciforge/version_core.py`** (pure): `parse` (semver order: `0.1.0-beta < beta.2 < beta.10 <
+  rc.1 < 0.1.0 < 0.1.1-beta`; accepts `v` and `sciforge-v`), `newer(candidate, current)`,
+  `is_prerelease`, `canonical`, `tag_for`; junk gives None/False, never raises.
+  `SciForgeTests/unit/test_version_core.py`.
+- **C++ / installer** (core patch #15; only takes effect in a full build, NOT compiled in the
+  sandbox: the CMake lines and the .rc template were run on their own, the C++ edits are
+  one-liners): CMake reads `VERSION` -> `SCIFORGE_VERSION` (+ `_MAJOR/_MINOR/_PATCH`) ->
+  `add_compile_definitions` in `src/Main` -> `Config()["SciForgeVersion"]` in all three
+  programs, `SplashInfoVersion` (the splash paints "0.1.0-beta"), About shows "0.1.0-beta
+  (based on FreeCAD 1.1.4)", the Windows version resource, and the installer (`APP_VERSION`,
+  uninstall `DisplayVersion`, via `write_version_nsh.py` which asks `SciForgeCmd` for
+  `SciForgeVersion`). `FreeCAD.Version()` stays 1.1.4.
+  **Installer registry key changes**: it follows SciForge's numbers now (`SciForge010`, was
+  `SciForge114`), so Luca's test install of the earlier build is a separate entry (uninstall
+  it first). 0.1.0-beta.2 will use the same key (same major.minor.patch), so it installs over
+  0.1.0-beta; the installer's "already installed" question appears then (R3 must test it).
+- **Quiet beta label**: Home's heading line has a small dim "SciForge 0.1.0-beta" next to
+  "Home" (`#SciForgeHomeVersion`, the theme's dim text colour like the folder paths); Diagnostics'
+  first line; no banner, title bar untouched. Scenario `version_label` (checks the colour on the
+  real screen grab; `QWidget.grab()` paints without style sheets, do not use it for colours).
+- `.github` clean-up (patch #16): FUNDING.yml, BACKPORT_REQUEST.yml, labels.yml deleted, PR
+  template replaced, `ISSUE_TEMPLATE/config.yml` no longer points at FreeCAD's forum
+  (`PROBLEM_REPORT.yml` stays until R1 replaces it with the SciForge forms).
+
+#### Tested
+- unit: 1619 tests OK; `version_label` scenario passes on real FreeCAD 1.1.4.
+
+#### Next
+- R1: the README and docs (see the brief). Discussions must be switched on by Luca.
 
 ### Session log: Home, cloud and AI, Luca's feedback and the merge (`sf/home-cloud-ai`, 2026-10-19 late)
 

@@ -69,6 +69,7 @@ int main(int argc, char** argv)
     // settings folder, shared with the SciForge GUI program and separate from FreeCAD's.
     App::Application::Config()["ExeName"] = SCIFORGE_EXE_NAME;
     App::Application::Config()["ExeVendor"] = SCIFORGE_VENDOR;
+    App::Application::Config()["SciForgeVersion"] = SCIFORGE_VERSION;
     App::Application::Config()["AppDataSkipVendor"] = "true";
 
     // set the banner (for logging and console)

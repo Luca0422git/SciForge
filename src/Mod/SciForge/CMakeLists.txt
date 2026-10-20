@@ -2,9 +2,12 @@
 # SciForge module: the Fusion-style interface layer and the golden-model suite.
 # Pure Python for now, so this only copies files into the build and install trees.
 
+# VERSION: SciForge's own version ("0.1.0-beta"), the one file the programs (src/Main), the
+# installer, the release scripts and sciforge.__version__ all read.
 SET(SciForge_Init
     Init.py
     InitGui.py
+    VERSION
 )
 
 # Every module, icon and test file in the folder (never a list kept by hand: in October

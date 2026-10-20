@@ -111,6 +111,38 @@ class BrandingFilesTest(unittest.TestCase):
             self.assertIn('Config()["%s"] = %s;' % (key, macro), gui, key)
         self.assertEqual(_define(self.header, "SCIFORGE_START_WORKBENCH"), "SciForgeWorkbench")
 
+    def test_one_version_file_feeds_cmake_the_programs_and_the_installer(self):
+        version = _read("src", "Mod", "SciForge", "VERSION").strip()
+        self.assertRegex(version, r"^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$")
+        # CMake reads the file (not a copy of the number) and hands it to src/Main
+        self.assertIn("src/Mod/SciForge/VERSION", self.cmake)
+        main = _read("src", "Main", "CMakeLists.txt")
+        self.assertIn('SCIFORGE_VERSION="${SCIFORGE_VERSION}"', main)
+        self.assertIn("#error", self.header)  # no silent fallback number
+        for name in ("MainGui.cpp", "MainCmd.cpp", "MainPy.cpp"):
+            self.assertIn(
+                'Config()["SciForgeVersion"] = SCIFORGE_VERSION;', _read("src", "Main", name), name
+            )
+        # the splash paints it, About names it next to FreeCAD's, the exe's resource carries it
+        self.assertIn(
+            'Config()["SplashInfoVersion"] = SCIFORGE_VERSION;', _read("src", "Main", "MainGui.cpp")
+        )
+        self.assertIn("based on FreeCAD", _read("src", "Gui", "Dialogs", "DlgAbout.cpp"))
+        for name in ("freecad.rc.cmake", "freecadCmd.rc.cmake"):
+            rc = _read("src", "Main", name)
+            self.assertIn('"ProductVersion", "${SCIFORGE_VERSION}"', rc, name)
+            self.assertIn("FILEVERSION ${SCIFORGE_VERSION_MAJOR}", rc, name)
+        # the installer shows SciForge's version, not FreeCAD's
+        nsh = _read("package", "WindowsInstaller", "write_version_nsh.py")
+        self.assertIn('ConfigGet("SciForgeVersion")', nsh)
+        self.assertIn("APP_VERSION_DISPLAY", nsh)
+        self.assertIn(
+            '!define APP_VERSION "${APP_VERSION_DISPLAY}"',
+            _read("package", "WindowsInstaller", "Settings.nsh"),
+        )
+        # and the module's CMake installs the file next to the package
+        self.assertRegex(_read("src", "Mod", "SciForge", "CMakeLists.txt"), r"Init\.py\s+InitGui\.py\s+VERSION")
+
     def test_pictures_exist_and_are_qt_resources(self):
         qrc = _read("src", "Gui", "Icons", "resource.qrc")
         icons = os.path.join(REPO, "src", "Gui", "Icons")

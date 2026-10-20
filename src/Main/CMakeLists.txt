@@ -7,6 +7,9 @@ set(SCIFORGE_WIN_ICON "sciforge.ico")
 configure_file(freecad.rc.cmake ${CMAKE_CURRENT_BINARY_DIR}/freecad.rc)
 configure_file(freecadCmd.rc.cmake ${CMAKE_CURRENT_BINARY_DIR}/freecadCmd.rc)
 file(COPY ${SCIFORGE_WIN_ICON} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# SCIFORGE: SciForge's own version ("0.1.0-beta", from src/Mod/SciForge/VERSION) for the
+# programs' About box, splash and the installer (SciForgeBranding.h, core-patches.md #15).
+add_compile_definitions(SCIFORGE_VERSION="${SCIFORGE_VERSION}")
 
 ######################## FreeCADMain ########################
 if(BUILD_GUI)

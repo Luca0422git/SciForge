@@ -420,7 +420,7 @@ does not show it; the links call their seams.
 
 ## 6. Done means
 
-- [ ] R0: `0.1.0-beta` everywhere (Home, Diagnostics, About, splash, installer); FreeCAD's
+- [x] R0 (2026-10-20): `0.1.0-beta` everywhere (Home, Diagnostics, About, splash, installer); FreeCAD's
       funding/backport templates gone.
 - [ ] R1: new README with screenshots, download section, SmartScreen explanation, privacy,
       licence, trademark note; `known-issues.md`, `privacy.md`, `CHANGELOG.md`; SciForge issue

@@ -166,7 +166,7 @@ class JsonConfig(unittest.TestCase):
 
 class Extension(unittest.TestCase):
     def test_manifest(self):
-        data = installers.manifest("0.2.0", PY, bridge_file="/b.json")
+        data = installers.manifest("0.1.0-beta", PY, bridge_file="/b.json")
         for key in ("manifest_version", "name", "version", "description", "author", "server"):
             self.assertIn(key, data)
         self.assertEqual(data["manifest_version"], "0.3")
@@ -194,7 +194,7 @@ class Extension(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, "out", "SciForge.mcpb")
             files = installers.mcpb_files(ROOT)
-            data = installers.manifest("0.2.0", sys.executable)
+            data = installers.manifest("0.1.0-beta", sys.executable)
             self.assertEqual(installers.build_mcpb(out, files, data), out)
             with zipfile.ZipFile(out) as archive:
                 names = archive.namelist()

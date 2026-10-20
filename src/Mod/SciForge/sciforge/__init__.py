@@ -7,8 +7,24 @@ module level except inside the logging helpers.
 
 import os
 
-__version__ = "0.2.0"
 ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# SciForge's version lives in one file, VERSION next to this package (the C++ build, the
+# installer and the release scripts read the same file). The literal is the fallback if the
+# file is missing; SciForgeTests/unit/test_version_core.py checks both say the same.
+_FALLBACK_VERSION = "0.1.0-beta"
+
+
+def _read_version():
+    try:
+        with open(os.path.join(os.path.dirname(ROOT), "VERSION"), "r", encoding="utf-8") as handle:
+            text = handle.readline().strip()
+        return text or _FALLBACK_VERSION
+    except Exception:
+        return _FALLBACK_VERSION
+
+
+__version__ = _read_version()
 
 
 def icon_path(name):
