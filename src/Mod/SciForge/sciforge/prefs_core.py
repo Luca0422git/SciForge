@@ -9,6 +9,8 @@ ribbon entries): Fusion's window shows them, and a person looking for one learns
 nothing here. Sources: docs/sciforge/parity/misc.md.
 """
 
+from . import __version__ as _version, update_core as _update_core
+
 PREFS = "User parameter:BaseApp/Preferences/Mod/SciForge/Preferences"
 SCIFORGE = "User parameter:BaseApp/Preferences/Mod/SciForge"
 FILES = "User parameter:BaseApp/Preferences/Mod/SciForge/Files"
@@ -287,6 +289,34 @@ OPTIONS = [
         True,
         (FILES, "Bool", "UseGit"),
         group="Saving and Recovery",
+    ),
+    # -- General > Updates (update_ui.py; brief beta-release.md R3) --------------------------
+    _option(
+        "check_updates",
+        "general",
+        "Check for updates when SciForge starts",
+        "bool",
+        True,
+        (SCIFORGE, "Bool", "CheckForUpdates"),
+        group="Updates",
+        tip="On: once a day SciForge asks GitHub whether a newer version exists (one request, "
+        "nothing about you is sent) and says so on the Home tab. Off: only Help > Check for "
+        "Updates asks. Nothing is ever installed without your click on Update now.",
+    ),
+    _option(
+        "update_channel",
+        "general",
+        "Updates",
+        "choice",
+        _update_core.default_channel(_version),
+        (SCIFORGE, "String", "UpdateChannel"),
+        group="Updates",
+        choices=[
+            (_update_core.STABLE, "Stable only", True, ""),
+            (_update_core.BETA, "Betas too", True, ""),
+        ],
+        tip="Stable only: finished versions. Betas too: also the test versions that come before "
+        "them. A beta starts with Betas too.",
     ),
     # -- General > Design -------------------------------------------------------------------
     _option(

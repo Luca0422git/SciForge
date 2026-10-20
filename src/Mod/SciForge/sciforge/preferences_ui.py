@@ -624,8 +624,10 @@ class PreferencesDialog(QtWidgets.QDialog):
             layout.addWidget(self.print_note)
         if pid == "network":
             note = QtWidgets.QLabel(
-                "SciForge never sends anything anywhere: there is no account and no data "
-                "collection. Only the Add-on Manager goes online, with these settings."
+                "SciForge sends nothing by itself except the update check: one request to "
+                "GitHub that asks for the newest release (General > Updates switches it off). "
+                "There is no account and no data collection. Besides that, only the Add-on "
+                "Manager goes online, with these settings."
             )
             note.setWordWrap(True)
             note.setStyleSheet("color: #c3cad4;")

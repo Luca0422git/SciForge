@@ -81,6 +81,9 @@ if [ "${ADDON:-0}" = 1 ]; then
 fi
 export FREECAD_USER_HOME="${PROFILE}"
 export LANG=C.UTF-8
+# No test goes online: the update check (sciforge/update_core.py) refuses every address but
+# this computer's own (the tests' fake GitHub), and does not even start by itself.
+export SCIFORGE_NO_INTERNET=1
 
 run_unit() {
     echo "== [SciForge] unit tests"

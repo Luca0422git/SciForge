@@ -131,6 +131,25 @@ jobs:
           path: test-output/
           retention-days: 14
 
+  # install_update.ps1 -Quiet, what "Update now" starts after SciForge quits, on Windows
+  # PowerShell 5.1 against a fake SciForge folder (a dummy SciForge.exe, a Mod\SciForge): it
+  # waits, replaces the module, keeps a backup, restarts; a failure puts the old version back.
+  # (The same steps also run in the unit tests with pwsh on Linux.)
+  update-script:
+    name: tests (update script, Windows)
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: install_update.ps1 -Quiet against a fake SciForge folder
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\sciforge\test_update_script.ps1
+
   # Packaged at once, without waiting for the tests (Luca 2026-10-19: "I need to be testing
   # asap"); the tests run beside it and report on their own.
   quick-update:
@@ -143,15 +162,10 @@ jobs:
           fetch-depth: 1
           submodules: false
 
+      # The same script packages a release's quick update (sciforge-build.yml). No core id here:
+      # a test run does not know which compiled part the person's SciForge has.
       - name: Package the quick update (SciForge module only, no rebuild needed)
-        run: |
-          mkdir -p quick-update
-          cp -r src/Mod/SciForge quick-update/SciForge
-          find quick-update -name __pycache__ -prune -exec rm -rf {} +
-          printf 'COMMIT = "%s"\nDATE = "%s"\n' "${GITHUB_SHA::8}" "$(date -u +%Y-%m-%d)" \
-            > quick-update/SciForge/sciforge/build_info.py
-          cp tools/sciforge/install_update.ps1 tools/sciforge/install_update.cmd quick-update/
-          cp docs/sciforge/quick-update.md quick-update/README.md
+        run: tools/sciforge/make_quick_update.sh --out quick-update
 
       - name: Upload the quick update
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
