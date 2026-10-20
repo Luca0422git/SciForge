@@ -826,24 +826,62 @@ def _plane_key(hinge):
 
 
 def _faces_at(shape, points):
-    import Part
-
     names = []
     for point in points:
+        found = _face_at(shape, point)
+        if found not in names:
+            names.append(found)
+    return names
+
+
+def _face_at(shape, point):
+    """The name of the face of `shape` that `point` lies on. A live preview asks this for
+    every picked face on every rebuild: the faces whose box holds the point are tried by
+    projecting it onto their surface (fast), the slow distance search only if that fails."""
+    import Part
+
+    key = (shape_key(shape), round(point.x, 9), round(point.y, 9), round(point.z, 9))
+    if key in _FACE_AT:
+        return _FACE_AT[key][0]
+    found = None
+    faces = shape.Faces
+    for i, face in enumerate(faces, start=1):
+        box = face.BoundBox
+        box.enlarge(1e-5)
+        if not box.isInside(point):
+            continue
+        try:
+            u, v = face.Surface.parameter(point)
+            if (face.Surface.value(u, v) - point).Length < 1e-6 and face.isPartOfDomain(u, v):
+                found = "Face%d" % i
+                break
+        except Exception:
+            continue
+    if found is None:
         probe = Part.Vertex(point)
-        found = None
-        for i, face in enumerate(shape.Faces, start=1):
+        for i, face in enumerate(faces, start=1):
             try:
                 if face.distToShape(probe)[0] < 1e-6:
                     found = "Face%d" % i
                     break
             except Exception:
                 continue
-        if found is None:
-            raise DraftError("A face to draft was lost while drafting the faces next to it.")
-        if found not in names:
-            names.append(found)
-    return names
+    if found is None:
+        raise DraftError("A face to draft was lost while drafting the faces next to it.")
+    if len(_FACE_AT) > 256:
+        _FACE_AT.clear()
+    _FACE_AT[key] = (found, shape)  # the shape is kept: its key cannot be reused meanwhile
+    return found
+
+
+_FACE_AT = {}
+
+
+def shape_key(shape):
+    """Tells shapes apart between rebuilds of a live preview: the same shape (the step before
+    a draft, unchanged while only the angle is dragged) gives the same key. Whoever caches
+    by it keeps a face of the shape, so the shape (and its key) cannot be reused meanwhile."""
+    return (shape.hashCode(), shape.ShapeType)  # (counting its faces costs ~0.5 ms a call)
 
 
 def _scratch(shape, points, hinge, pull, angle):
@@ -853,12 +891,16 @@ def _scratch(shape, points, hinge, pull, angle):
     sides, and the walls joined to them, so a tangent chain stays tangent)."""
     from . import draft_walls
 
-    names = _faces_at(shape, points)
+    at = [_face_at(shape, p) for p in points]
+    names = []
+    for name in at:
+        if name not in names:
+            names.append(name)
     own = draft_walls.engine_names(shape, names, _unit(pull))
     if not own:
         return _occ_draft(shape, names, hinge, pull, angle)
-    own_points = [p for p in points if _faces_at(shape, [p])[0] in own]
-    native_points = [p for p in points if _faces_at(shape, [p])[0] not in own]
+    own_points = [p for p, name in zip(points, at) if name in own]
+    native_points = [p for p, name in zip(points, at) if name not in own]
     if native_points:
         shape = _occ_draft(shape, _faces_at(shape, native_points), hinge, pull, angle)
     return draft_walls.draft(shape, _faces_at(shape, own_points), hinge, pull, angle)
@@ -1063,7 +1105,8 @@ class DraftFeature:
             if plane_ref is None:
                 raise DraftError("Pick the pull direction (a plane or a flat face).")
             spec = build_spec(plane_ref, options, obj)
-            result = draft_shape(base.Shape.copy(), names, spec)
+            # not a copy: the same shape between rebuilds lets draft_walls reuse its work
+            result = draft_shape(base.Shape, names, spec)
             if obj.Refine:
                 try:
                     result = result.removeSplitter()

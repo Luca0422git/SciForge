@@ -92,10 +92,36 @@ def _adjacent(face_a, face_b):
     return False
 
 
+# A live preview rebuilds the draft many times on the same shape (only the angle changes):
+# what does not depend on the angle (which faces are walls, their cross-sections, ends and
+# neighbours) is worked out once and kept here, keyed by drafting.shape_key.
+_CACHE = {}
+_CACHE_SIZE = 256
+
+
+def _cached(key, make):
+    if key not in _CACHE:
+        if len(_CACHE) >= _CACHE_SIZE:
+            _CACHE.clear()
+        _CACHE[key] = make()
+    return _CACHE[key]
+
+
+def _vec_key(v):
+    return (round(v.x, 9), round(v.y, 9), round(v.z, 9))
+
+
 def engine_names(shape, names, pull):
     """The faces of `names` this module drafts: the walls OpenCASCADE cannot tilt, and the
     walls joined to them through other picked walls (a tangent chain of flat, round and
     spline walls is drafted as one, so it stays tangent)."""
+    from .drafting import shape_key
+
+    key = ("engine", shape_key(shape), tuple(names), _vec_key(pull))
+    return list(_cached(key, lambda: (_engine_names(shape, names, pull), shape))[0])
+
+
+def _engine_names(shape, names, pull):
     faces = {}
     for name in names:
         try:
@@ -417,16 +443,30 @@ class _Wall:
         bottom edge: a near miss there makes OpenCASCADE's split do nothing)."""
         import Part
 
-        on_edge = min(abs(self.hmin), abs(self.hmax)) < 1e-6
-        heights = [lo, 0.0, hi] if on_edge and lo < -1e-9 and hi > 1e-9 else [lo, hi]
-        rows = [self._offset_edge(self.shift(h), h) for h in heights]
-        faces = []
-        for bottom, top in zip(rows, rows[1:]):
-            face = Part.makeRuledSurface(bottom, top)
-            if face.isNull() or face.Area < TOL:
-                raise _err("The drafted surface of %s could not be made." % self.name)
-            faces.append(face)
+        faces = [face for _a, _b, face in self._ruled_bands(lo, hi)]
         return faces[0] if len(faces) == 1 else Part.makeCompound(faces)
+
+    def _ruled_bands(self, lo, hi):
+        """[(bottom height, top height, ruled face)] of the drafted surface from lo to hi,
+        made once per wall and height range: the wedges cut their drafted face out of these
+        same surfaces, so FreeCAD's Refine merges it with the pieces the corners leave (it
+        merges B-spline faces only when their definitions are identical)."""
+        import Part
+
+        cache = self.__dict__.setdefault("_bands", {})
+        key = (round(lo, 9), round(hi, 9), round(self.tan_a, 12))
+        if key not in cache:
+            on_edge = min(abs(self.hmin), abs(self.hmax)) < 1e-6
+            heights = [lo, 0.0, hi] if on_edge and lo < -1e-9 and hi > 1e-9 else [lo, hi]
+            rows = [self._offset_edge(self.shift(h), h) for h in heights]
+            bands = []
+            for (ha, bottom), (hb, top) in zip(zip(heights, rows), zip(heights[1:], rows[1:])):
+                face = Part.makeRuledSurface(bottom, top)
+                if face.isNull() or face.Area < TOL:
+                    raise _err("The drafted surface of %s could not be made." % self.name)
+                bands.append((ha, hb, face))
+            cache[key] = bands
+        return cache[key]
 
     def _strip(self, end, lo, hi, length, start=0.0):
         import Part
@@ -514,6 +554,128 @@ class _Wall:
             thick = self.face.makeOffsetShape(-offset, TOL, fill=True).Solids[0]
         return thick
 
+    # -- the wedges, built directly (the fast way) ----------------------------------------------
+    # The material a draft takes away (or adds) next to a plain band of a wall is a wedge:
+    # between the old wall and the drafted one, from the band's bottom to its top. Built from
+    # its faces it costs a few milliseconds; splitting a slab with the drafted surface (slab()
+    # and _pieces(), still used for other walls and at corners) cost ~60 ms a wall, most of a
+    # live preview's time.
+    def wedges(self, outward):
+        """The wedge(s) of material to add (outward) or take away, as solids, or None when
+        the wall is no plain band (then slab() and _pieces() do it)."""
+        if not self.rectangular() or abs(self.tan_a) < 1e-12:
+            return None
+        lo, hi = self.hmin, self.hmax
+        # where the drafted wall lies out of the old one (shift > 0) or in it (shift < 0)
+        spans = [(max(lo, 0.0), hi), (lo, min(hi, 0.0))]
+        found = []
+        for ha, hb in spans:
+            if hb - ha < 1e-9:
+                continue
+            mid = 0.5 * (ha + hb)
+            if (self.shift(mid) > 0) != outward:
+                continue
+            solid = self._wedge(ha, hb)
+            if solid is None:
+                return None
+            found.append(solid)
+        return found
+
+    def _wedge(self, ha, hb):
+        import Part
+
+        try:
+            da, db = self.shift(ha), self.shift(hb)
+            base_a = self._offset_edge(0.0, ha)
+            base_b = self._offset_edge(0.0, hb)
+            rows = {
+                ha: (base_a, self._offset_edge(da, ha), da),
+                hb: (base_b, self._offset_edge(db, hb), db),
+            }
+            faces = [base_a.extrude(self.pull * (hb - ha)), self._drafted_band(ha, hb, rows)]
+            for h in (ha, hb):
+                old, new, d = rows[h]
+                if abs(d) < 1e-9:
+                    continue  # on the fixed plane: the wedge ends in an edge there
+                faces.append(self._cap(old, new))
+            if not self.closed:
+                for end in self.end_info:
+                    n = self.normal(end["u"])
+                    p = end["point"]
+                    ring = [p + self.pull * ha, p + self.pull * hb]
+                    if abs(db) > 1e-9:
+                        ring.append(p + n * db + self.pull * hb)
+                    if abs(da) > 1e-9:
+                        ring.append(p + n * da + self.pull * ha)
+                    faces.append(Part.Face(Part.makePolygon(ring + [ring[0]])))
+            shape = Part.makeCompound(faces)
+            shape.sewShape()
+            if len(shape.Shells) != 1:
+                return None
+            solid = Part.Solid(shape.Shells[0])
+            if solid.Volume < 0:
+                solid.reverse()
+            if not solid.isValid() or solid.Volume < 1e-12:
+                return None
+            return solid
+        except Exception:
+            return None
+
+    def _drafted_band(self, ha, hb, rows):
+        """The drafted wall between heights ha and hb: a plane, a cone (exact) or a ruled
+        B-spline between the offset rows."""
+        import Part
+
+        a, b = rows[ha][1], rows[hb][1]
+        if self.kind == "line":
+            pts = [a.Vertexes[0].Point, a.Vertexes[-1].Point]
+            pts += [b.Vertexes[-1].Point, b.Vertexes[0].Point]
+            if (pts[0] - pts[3]).Length > (pts[0] - pts[2]).Length:
+                pts[2], pts[3] = pts[3], pts[2]
+            return Part.Face(Part.makePolygon(pts + [pts[0]]))
+        if self.kind == "circle":
+            # the line from row to row at the arc's start, turned round the axis: a cone
+            circle = self.curve.Curve
+            center = circle.Center - self.pull * (circle.Center - self.origin).dot(self.pull)
+            p, n = self.curve.valueAt(self.u0), self.normal(self.u0)
+            p = p - self.pull * (p - self.origin).dot(self.pull)
+            da, db = rows[ha][2], rows[hb][2]
+            line = Part.LineSegment(p + n * da + self.pull * ha, p + n * db + self.pull * hb)
+            angle = math.degrees(self.u1 - self.u0)
+            return line.toShape().revolve(center, circle.Axis, angle).Faces[0]
+        reach = getattr(self, "reach", None)
+        if reach is not None:
+            # trimmed from the drafted surface itself (see _ruled_bands)
+            for h0, h1, face in self._ruled_bands(self.hmin - reach, self.hmax + reach):
+                if h0 - 1e-9 <= ha and hb <= h1 + 1e-9:
+                    surface = face.Surface
+                    u0, u1, v0, v1 = face.ParameterRange
+                    um = 0.5 * (u0 + u1)
+                    z0 = (surface.value(um, v0) - self.origin).dot(self.pull)
+                    z1 = (surface.value(um, v1) - self.origin).dot(self.pull)
+                    if abs(z1 - z0) < 1e-12:
+                        break
+
+                    def v_at(h):
+                        return v0 + (v1 - v0) * (h - z0) / (z1 - z0)
+
+                    va, vb = sorted((v_at(ha), v_at(hb)))
+                    return surface.toShape(u0, u1, va, vb)
+        return Part.makeRuledSurface(a, b)
+
+    def _cap(self, old, new):
+        """The flat face between the old and the drafted wall at one height."""
+        import Part
+
+        if self.closed:
+            return Part.makeFace([Part.Wire([old]), Part.Wire([new])], "Part::FaceMakerBullseye")
+        a0, a1 = old.Vertexes[0].Point, old.Vertexes[-1].Point
+        b0, b1 = new.Vertexes[0].Point, new.Vertexes[-1].Point
+        if (a0 - b0).Length + (a1 - b1).Length > (a0 - b1).Length + (a1 - b0).Length:
+            b0, b1 = b1, b0
+        edges = [old, new, Part.LineSegment(a0, b0).toShape(), Part.LineSegment(a1, b1).toShape()]
+        return Part.Face(Part.Wire(Part.__sortEdges__(edges)))
+
     def end_box(self, end, outward, depth):
         """Past an end of the wall: the slab going on along the tangent for a while (the
         corner with the next face is finished there), or None."""
@@ -560,6 +722,19 @@ END_LENGTH = 6.0  # how far past a wall's end its corner is finished, in slab de
 
 
 # -- the draft --------------------------------------------------------------------------------
+def _wall(shape, name, origin, pull, tan_a, size):
+    """A _Wall, its angle-free part made once per shape (see _CACHE)."""
+    from .drafting import shape_key
+
+    key = ("wall", shape_key(shape), name, _vec_key(origin), _vec_key(pull), round(size, 6))
+    wall = _cached(key, lambda: _Wall(shape, name, origin, pull, tan_a, size))
+    if wall.tan_a != tan_a:
+        wall.tan_a = tan_a
+        wall.__dict__.pop("_bands", None)  # the drafted surfaces of the old angle
+    wall.__dict__.pop("reach", None)
+    return wall
+
+
 def _prism(face, pull, height):
     """`face` (square to `pull`) extruded by `height` along `pull`. Extruded against its own
     normal, OpenCASCADE's prism comes out inside-out (splits and booleans then go wrong)."""
@@ -734,7 +909,7 @@ def draft(shape, names, hinge, pull, angle):
         face = shape.getElement(name)
         if not is_wall(face, pull):
             raise _err("%s does not run along the pull direction." % name)
-        walls[name] = _Wall(shape, name, origin, pull, tan_a, size)
+        walls[name] = _wall(shape, name, origin, pull, tan_a, size)
     reach, go = {}, {}
     for name, wall in walls.items():
         shifts = [wall.shift(wall.hmin), wall.shift(wall.hmax)]
@@ -745,7 +920,7 @@ def draft(shape, names, hinge, pull, angle):
                 "fold over. Try a smaller angle." % name
             )
         go[name] = (go_in, go_out)
-        reach[name] = _reach(wall, go_in, go_out)
+        reach[name] = wall.reach = _reach(wall, go_in, go_out)
 
     tools, olds, regions = {}, {}, {}
 
@@ -763,23 +938,27 @@ def draft(shape, names, hinge, pull, angle):
 
     def region_of(name):
         if name not in regions:
-            regions[name] = _inner_region(shape, name, size)
+            from .drafting import shape_key
+
+            key = ("region", shape_key(shape), name, round(size, 6))
+            regions[name] = _cached(key, lambda: (_inner_region(shape, name, size), shape))[0]
         return regions[name]
 
     cuts, adds = [], []
     for name, wall in walls.items():
         go_in, go_out = go[name]
-        tool = tool_of(name)
         length = END_LENGTH * max(_depth(go_in, wall.r_in), _depth(go_out, wall.r_out)) + 0.5
         for outward, gone, radius in ((False, go_in, wall.r_in), (True, go_out, wall.r_out)):
             if gone <= 0:
                 continue
             depth = _depth(gone, radius)
-            pieces = [
-                p
-                for p in _pieces(wall.slab(outward, depth), tool)
-                if wall.inside_drafted(_piece_point(p)) == outward
-            ]
+            pieces = wall.wedges(outward)
+            if pieces is None:  # no plain band: split the slab with the drafted surface
+                pieces = [
+                    p
+                    for p in _pieces(wall.slab(outward, depth), tool_of(name))
+                    if wall.inside_drafted(_piece_point(p)) == outward
+                ]
             for end in wall.end_info:
                 others = end["faces"]
                 if any(o in walls and _tangent(shape, wall, end, o) for o in others):
