@@ -1031,6 +1031,7 @@ class SurfacePanel(BodyPanel):
                 body,
                 lambda plane: QtCore.QTimer.singleShot(0, lambda: self._plane_clicked(plane)),
             )
+            self.planes.own_selection()  # a plane picked in the browser comes as a pick
         except Exception as exc:
             warn("%s planes unavailable: %s" % (self.title, exc))
         if camera is not None and self._has_shape():

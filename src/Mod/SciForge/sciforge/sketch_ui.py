@@ -137,7 +137,7 @@ class PlanePicker:
         self.size = self._screen_side()
         # drawn over the part, in the layer the drag arrows use (Luca 2026-10-19: the squares
         # z-fought with faces lying in their planes): never pickable, clicks go by where
-        # the squares are on the screen (plane_at)
+        # the squares are on the screen (plane_at), the part under the mouse first
         from . import handle_look
 
         self.root = handle_look.top_root(coin)
@@ -463,18 +463,18 @@ class PlanePicker:
 
     def _moved(self, info):
         try:
-            self.light(self.plane_at(info["Position"]))  # drawn on top: a square wins
+            # the part under the mouse wins, also where a square is drawn over it (Luca
+            # 2026-10-20: a face clicked through a square must be the face, like Fusion)
+            role = None
+            if not self._geometry_at(info["Position"]):
+                role = self.plane_at(info["Position"])
+            self.light(role)
         except Exception as exc:
             warn("plane hover: %s" % exc)
 
     def _button(self, info):
         try:
             if info.get("Button") != "BUTTON1" or info.get("State") != "DOWN":
-                return
-            role = self.plane_at(info["Position"])
-            if role is not None:  # the squares are drawn over the part: what you see wins
-                plane = self.objects[role]
-                QtCore.QTimer.singleShot(0, lambda: self._take_square(plane))
                 return
             if self._geometry_at(info["Position"]):
                 under = self.view.getObjectInfo(tuple(info["Position"])) or {}
@@ -483,6 +483,11 @@ class PlanePicker:
                     if face is not None and self.on_face is not None:
                         self.on_face(face)
                 return  # a face of the part: the selection observer takes it
+            # beside the part a square takes the click (drawn on top, never picked itself)
+            role = self.plane_at(info["Position"])
+            if role is not None:
+                plane = self.objects[role]
+                QtCore.QTimer.singleShot(0, lambda: self._take_square(plane))
         except Exception as exc:
             warn("plane pick: %s" % exc)
 
@@ -549,6 +554,17 @@ class PlanePicker:
                     return
         except Exception as exc:
             warn("plane pick: %s" % exc)
+
+    def own_selection(self):
+        """The command takes what is selected itself (a plane picked in the browser too):
+        the squares leave the browser to it, or the plane was taken twice, which drops it
+        again (Boundary Fill's Tools, Luca 2026-10-20)."""
+        if getattr(self, "browser_pick", None) is not None:
+            try:
+                Gui.Selection.removeObserver(self.browser_pick)
+            except Exception:
+                pass
+            self.browser_pick = None
 
     def remove(self):
         if not self._alive():

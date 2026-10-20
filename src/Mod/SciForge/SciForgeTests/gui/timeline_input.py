@@ -172,6 +172,9 @@ def row_point(label, eye=False):
     h.check("browser row %r" % label, found is not None, t.labels())
     if found is None:
         return t, None
+    # a person scrolls to the row first (an open Origin folder can push it out of view)
+    t.scrollToItem(found)
+    QtWidgets.QApplication.processEvents()
     return t, (t.eye_point(found) if eye else t.label_point(found))
 
 

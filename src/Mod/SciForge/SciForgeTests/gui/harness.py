@@ -315,10 +315,27 @@ def ensure_also_selected(point):
             return
 
 
+def _empty_spot(widget):
+    """A spot of the 3D view with nothing under it: the top left corner first (a big
+    construction plane can reach into it when the view is framed tightly)."""
+    w, hgt = widget.width(), widget.height()
+    ratio = widget.devicePixelRatioF()
+    for x, y in ((15, 15), (15, hgt // 2), (w // 3, 15), (15, hgt - 80), (w // 2, 15)):
+        pos = QtCore.QPoint(x, y)
+        try:
+            if covered(pos):
+                continue
+            if not view().getObjectInfo((x * ratio, (hgt - y) * ratio)):
+                return pos
+        except Exception:
+            break
+    return QtCore.QPoint(15, 15)
+
+
 def click_empty():
     """Click on empty background (clears the selection, like in Fusion)."""
     widget = gl_widget()
-    pos = QtCore.QPoint(15, 15)
+    pos = _empty_spot(widget)
     QtTest.QTest.mouseClick(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pos)
     QtWidgets.QApplication.processEvents()
 

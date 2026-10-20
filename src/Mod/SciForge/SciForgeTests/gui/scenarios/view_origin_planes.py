@@ -296,6 +296,9 @@ def e_closed():
 
 
 # -- F ------------------------------------------------------------------------------------------
+LIT = {}  # the square hovered in f_squares
+
+
 def f_offset_plane():
     h.click_empty()
     h.fit()
@@ -305,19 +308,32 @@ def f_offset_plane():
 def f_squares():
     p = check_squares("Construct")
     if p is not None:
-        # where the XY square shows (it stays in the + quarter, like Fusion's; V(5, -5, 0)
-        # was on it while the squares were big and centred on the origin)
-        point = pl.square_point("XY_Plane", p)
-        if h.check("Construct: the XY square shows", point is not None):
-            h.move(h.screen_point(point))
+        # a square where it shows (they stay in the + quarter, like Fusion's, and the part
+        # in front takes the mouse: Luca 2026-10-20); V(5, -5, 0) was on the XY square
+        # while the squares were big and centred on the origin
+        found = []
+        for _zoom in range(12):
+            found = [(r, pl.square_point(r, p)) for r in ("XY_Plane", "XZ_Plane", "YZ_Plane")]
+            found = [(r, pt) for r, pt in found if pt is not None]
+            if found:
+                break
+            # the box covers all three: zoom out, as a person does (the squares keep their
+            # size on the screen, the box gets smaller)
+            Gui.activeView().zoomOut()
+            Gui.updateGui()
+        if h.check("Construct: a square shows", found != []):
+            LIT["role"] = found[0][0]
+            h.move(h.screen_point(found[0][1]))
 
 
 def f_lit():
     p = picker()
     if p is None:
         return
-    xy = p.looks["XY_Plane"]
-    h.check("Construct: the XY square lights up", width(xy) > look().IDLE_OUTLINE, width(xy))
+    role = LIT.get("role", "XY_Plane")
+    square = p.looks[role]
+    h.check("Construct: the %s square lights up" % role, width(square) > look().IDLE_OUTLINE,
+            width(square))
     h.press(QtCore.Qt.Key_Escape)
 
 
