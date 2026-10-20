@@ -6,11 +6,15 @@
 name: SciForge scenario debug
 
 on:
+  # (a manual run needs this file on the default branch; a push of this file to develop runs it
+  # with the defaults below instead)
+  push:
+    paths: [".github/workflows/sciforge-scenario-debug.yml"]
   workflow_dispatch:
     inputs:
       run_id:
         description: "Id of the SciForge build run whose Linux AppImage to use"
-        required: true
+        default: "39490600523"
       scenarios:
         description: "Scenario names, comma separated"
         default: "version_label"
@@ -33,7 +37,7 @@ jobs:
       - name: Get the AppImage
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.run_id }}
+          RUN_ID: ${{ inputs.run_id || '39490600523' }}
         run: |
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-Linux-*' --dir built
           image=$(find built -name '*.AppImage' | head -1)
@@ -44,7 +48,7 @@ jobs:
 
       - name: Run the scenarios and show their logs
         env:
-          SCENARIOS: ${{ inputs.scenarios }}
+          SCENARIOS: ${{ inputs.scenarios || 'version_label,home_screen' }}
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
           tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --scenario "$SCENARIOS" || true
