@@ -624,6 +624,13 @@ class HomeView(QtWidgets.QWidget):
         line.addWidget(self.recover_button)
         self.banner.hide()
         column.addWidget(self.banner)
+        try:  # the slim lines under it: closed unexpectedly, welcome (home_notices_ui)
+            from . import home_notices_ui
+
+            self.notices = home_notices_ui.Notices()
+            column.addWidget(self.notices)
+        except Exception as exc:
+            warn("home: notices: %s" % exc)
 
         self.scroll = QtWidgets.QScrollArea()
         self.scroll.setObjectName("SciForgeHomeScroll")

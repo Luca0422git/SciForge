@@ -2,6 +2,15 @@
 import FreeCAD
 import FreeCADGui
 
+# The crash log goes first, before anything else of SciForge can go wrong (sciforge/crashlog.py;
+# it never raises and never stops the start).
+try:
+    from sciforge import crashlog as _crashlog
+
+    _crashlog.start()
+except Exception as _exc:
+    FreeCAD.Console.PrintWarning("[SciForge] crash log not started: %s\n" % _exc)
+
 
 class SciForgeWorkbench(FreeCADGui.Workbench):
     def __init__(self):
