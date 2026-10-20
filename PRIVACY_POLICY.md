@@ -7,6 +7,5 @@ accounts. The only thing SciForge sends on its own is the optional update check 
 The full, plain-language details (AI features, cloud places, crash logs, Report a Problem) are in
 [docs/sciforge/privacy.md](docs/sciforge/privacy.md).
 
-SciForge is based on FreeCAD, whose own privacy policy is kept in
-[README.FreeCAD.md](README.FreeCAD.md)'s project; FreeCAD's remote-file and add-on caveats apply to the FreeCAD
-parts that SciForge still contains.
+SciForge is based on [FreeCAD](README.FreeCAD.md). FreeCAD's own caveats (loading remote files, installing
+add-ons, files that can contain your folder names) apply to the FreeCAD parts that SciForge still contains.
