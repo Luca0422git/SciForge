@@ -345,7 +345,7 @@ def github_opened():
     import sciforge
 
     h.check("... version has the SciForge version", sciforge.__version__ in got.get("version", ""))
-    h.check("... system has the OS", "OS: " in got.get("system", ""))
+    h.check("... system is one of the form's dropdown options", got.get("system") in ("Windows 11", "Windows 10", "Linux", "Something else (tell us below)"), got.get("system"))
     h.check("... diagnostics has the log", "Recent SciForge messages" in got.get("diagnostics", ""))
     h.check(
         "... nothing of the person is in the address",
