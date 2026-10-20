@@ -1443,6 +1443,16 @@ with his OK ("good. its fixed. now merge").
   the design's own XY row, not the active component's (sketch2_palette D), and
   view_origin_planes hovered V(5, -5, 0), off the + quarter square. Quick update
   b41940db sent to Luca. The full sweep runs on GitHub (CI on develop).
+- CI #195 on merged develop: 7 scenarios red, all already red on develop since its origin
+  squares commits (bisected: afe1f789 green, 1f28247b red). Luca chose (2026-10-20,
+  option 1): **the part under the mouse takes the hover and the click, a square only
+  beside it** (squares stay drawn on top). Also: Boundary Fill took a browser-picked plane
+  twice (`PlanePicker.own_selection`); tests: `click_empty` picks a spot with nothing under
+  it, `timeline_input.row_point` scrolls to the row (without processing events: the
+  browser rebuilt and the row was gone, CI #197), view_origin_planes zooms out until a
+  square shows. CI #198 green after one rerun of two shards (inspect_section and
+  sketch_qa failed once on a slow runner, which also hit the 90-min limit; both passed on
+  #197, on the rerun and locally).
 
 #### Open
 - FreeCAD's OverlayRight frame outline shows while a right-side SciForge dock is there
