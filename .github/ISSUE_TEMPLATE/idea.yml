@@ -1,0 +1,26 @@
+# SCIFORGE: a short form for ideas (docs/sciforge/dev/briefs/beta-release.md, R1).
+name: Idea or request
+description: Something SciForge should do, or do differently.
+title: "[Idea] "
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        SciForge aims to work the way Fusion users expect. If your idea is "Fusion does X like
+        this", say what you do in Fusion, step by step. Questions about how something works
+        belong in [Discussions](https://github.com/Luca0422git/SciForge/discussions).
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: What do you want to be able to do, and what do you do today instead?
+    validations:
+      required: true
+  - type: textarea
+    id: fusion
+    attributes:
+      label: How does it work in Fusion (if you know it)?
+      description: The commands, the options, what you see. Please use your own words, with no screenshots or text copied from Autodesk's help.
+    validations:
+      required: false

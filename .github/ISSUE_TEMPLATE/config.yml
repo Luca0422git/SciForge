@@ -1,7 +1,8 @@
-# SCIFORGE: replaces FreeCAD's (it sent people to FreeCAD's forum). R1 of
-# docs/sciforge/dev/briefs/beta-release.md adds the real bug_report / idea templates.
+# SCIFORGE: replaces FreeCAD's (it sent people to FreeCAD's forum). Blank issues stay off so
+# every report comes in through a form. Questions go to Discussions (the repository's
+# Settings > General > Features > Discussions must be switched on for that link to work).
 blank_issues_enabled: false
 contact_links:
-  - name: Questions and ideas
+  - name: Questions and help
     url: https://github.com/Luca0422git/SciForge/discussions
-    about: Ask how something works or suggest an idea (needs GitHub Discussions switched on).
+    about: Ask how something works, or talk about SciForge.

@@ -1,8 +1,22 @@
 # SciForge: start here
 
 SciForge is a fork (a copy we are allowed to change) of FreeCAD 1.1.4, being reshaped until it
-works like Autodesk Fusion. The plan is in [feature-outline.md](feature-outline.md); progress
+works the way Fusion users expect (Fusion is Autodesk's trademark; SciForge is not affiliated with
+Autodesk). The plan is in [feature-outline.md](feature-outline.md); progress
 is tracked in [MEMORY.md](../../MEMORY.md).
+
+## Releases
+
+Releases (0.1.0-beta and later) follow the brief [dev/briefs/beta-release.md](dev/briefs/beta-release.md):
+all work goes to `develop`; the `Release` branch only ever receives a tested `develop` commit, on
+Luca's green light, and the tag `sciforge-v<version>` on that commit starts the build that
+publishes the GitHub release (section 1 of the brief has the exact steps). The user-facing side
+is the repository's [README.md](../../README.md), the [CHANGELOG.md](../../CHANGELOG.md) (the
+release notes are made from its newest section), [known-issues.md](known-issues.md),
+[privacy.md](privacy.md) and [smartscreen.md](smartscreen.md) (the fixed "Windows protected your
+PC" text, also in the README and in every release's notes). Screenshots for the README are made
+by `tools/sciforge/screenshots.sh`. `tools/sciforge/check_links.py` checks the links in those
+documents (it also runs as a unit test).
 
 ## Getting a SciForge build to test (Windows)
 
