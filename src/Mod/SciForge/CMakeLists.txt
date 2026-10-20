@@ -33,8 +33,15 @@ FILE(GLOB_RECURSE SciForge_Tests RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_
 FILE(GLOB SciForge_Fixtures RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
     SciForgeTests/fixtures/*)
 
+# What the Home tab's welcome line opens offline: the cheat sheet (a copy of
+# docs/sciforge/cheat-sheet.md; a unit test keeps the two the same) and the Raspberry Pi 5
+# case design (a copy of docs/sciforge/examples/pi5-case/pi5_case.FCStd).
+FILE(GLOB SciForge_Docs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS docs/*.md)
+FILE(GLOB_RECURSE SciForge_Examples RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
+    examples/*.FCStd)
+
 SET(SciForge_ALL ${SciForge_Init} ${SciForge_Package} ${SciForge_Icons} ${SciForge_UiIcons}
-    ${SciForge_Tests} ${SciForge_Fixtures})
+    ${SciForge_Docs} ${SciForge_Examples} ${SciForge_Tests} ${SciForge_Fixtures})
 
 ADD_CUSTOM_TARGET(SciForge ALL SOURCES ${SciForge_ALL})
 
@@ -51,3 +58,5 @@ INSTALL(DIRECTORY SciForgeTests DESTINATION Mod/SciForge
     FILES_MATCHING PATTERN "*.py" PATTERN "*.json" PATTERN "*.md" PATTERN "*.txt"
     PATTERN "__pycache__" EXCLUDE)
 INSTALL(FILES ${SciForge_Fixtures} DESTINATION Mod/SciForge/SciForgeTests/fixtures)
+INSTALL(DIRECTORY docs examples DESTINATION Mod/SciForge
+    FILES_MATCHING PATTERN "*.md" PATTERN "*.FCStd")

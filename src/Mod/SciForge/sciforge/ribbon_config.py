@@ -732,6 +732,12 @@ UTIL_UTILITY = group(
         item("Save As", "SciForge_SaveAs", "qa_save"),
         SEP,
         item("SciForge Diagnostics", "SciForge_Diagnostics", "compute"),
+        item(
+            "Report a Problem",
+            "SciForge_ReportProblem",
+            "document",
+            note="Tell us what went wrong; you see the whole report before anything is sent",
+        ),
         item("Command Search", "SciForge_CommandSearch", "nav_zoom", "S"),
     ],
 )

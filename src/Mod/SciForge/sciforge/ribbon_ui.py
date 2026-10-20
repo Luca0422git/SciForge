@@ -526,6 +526,11 @@ class RibbonWidget(QtWidgets.QWidget):
             warn("file menu: %s" % exc)
         for action in Gui.getMainWindow().menuBar().actions():
             if action.menu() is not None and action.text():
+                if action.text().replace("&", "").strip() == "Help":
+                    try:  # Help > Report a Problem... (report_ui)
+                        __import__("sciforge.report_ui").report_ui.add_help_entry(action.menu())
+                    except Exception as exc:
+                        warn("help menu: %s" % exc)
                 menu.addMenu(action.menu())
         menu.exec_(button.mapToGlobal(QtCore.QPoint(0, button.height())))
 

@@ -652,6 +652,12 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
             command_options.reset_for_tests()
         except Exception as exc:
             print("[SciForge] shortcuts / pins reset failed: %s" % exc, flush=True)
+        try:  # the first-start welcome line on Home shows once per profile: not in the others
+            from sciforge import home_notices_ui
+
+            home_notices_ui.reset_for_tests(True)
+        except Exception as exc:
+            print("[SciForge] welcome line reset failed: %s" % exc, flush=True)
         _tap = _ConsoleTap()
         new_errors()  # start-up messages are not the scenario's
 

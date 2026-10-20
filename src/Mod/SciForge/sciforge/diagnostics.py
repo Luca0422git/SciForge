@@ -7,7 +7,9 @@ import FreeCAD as App
 from . import RECENT, __version__, registry
 
 
-def report():
+def report(recent_lines=60):
+    """The text of SciForge > Diagnostics. recent_lines: how many of the last SciForge
+    messages follow (0: none, and no heading: Report a Problem adds its own 200)."""
     try:
         fc_version = ".".join(str(p) for p in App.Version()[:3])
     except Exception:
@@ -47,10 +49,11 @@ def report():
         lines.extend("  - %s" % m for m in sorted(set(registry.MISSING)))
     else:
         lines.append("All configured commands were found.")
-    lines += ["", "Recent SciForge messages (newest last):"]
-    lines.extend("  " + m for m in RECENT[-60:])
-    if not RECENT:
-        lines.append("  (none)")
+    if recent_lines:
+        lines += ["", "Recent SciForge messages (newest last):"]
+        lines.extend("  " + m for m in RECENT[-recent_lines:])
+        if not RECENT:
+            lines.append("  (none)")
     return "\n".join(lines)
 
 
