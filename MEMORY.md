@@ -5,7 +5,7 @@ This file is the project's memory across work sessions. **Read it first, every s
 done, what was learned, what is next. Newest session goes at the top of the log.
 
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
-R0 (groundwork) is built and on `develop`; next is R1 (the GitHub page and user-facing docs).
+R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
 
 **Start here (2026-10-17):** read the newest session log ("Luca's improvement list").
 Every item of Luca's list (IMPROVEMENTS_AND_STUFF_TO_FIX.txt, 18 fixes + 3 additions) is
@@ -1389,6 +1389,88 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: 0.1.0-beta, R1-R4 built by three parallel agents, merged (`develop`, 2026-10-20)
+
+Luca: "get some agents working and work through all of the things that need to be finished",
+then "give me the zip ... a finished product for me to test". R5 (publishing) stays his call.
+Agents worked in worktrees and did not push; the orchestrator merged the branches (no
+conflicts) and pushed. After merging, the orchestrator fixed: the issue form's Operating system
+is a dropdown, so `report_core.system_option()` sends one of the four exact option texts; the
+brief's R5 step 4 (a throwaway must be `0.1.0-alpha.1`, not `beta.0`: semver order); replaced
+FreeCAD's root SECURITY.md, PRIVACY_POLICY.md, CONTRIBUTING.md (core patch #17;
+CODE_OF_CONDUCT.md is still FreeCAD's).
+
+#### R1: GitHub page and docs
+- README.md is SciForge's (FreeCAD's moved to README.FreeCAD.md), five screenshots from the
+  real window (`tools/sciforge/screenshots.sh`, scenario `readme_shots`; the 3D view renders
+  under xvfb; FreeCAD's OverlayRight frame is hidden for two shots), `docs/sciforge/smartscreen.md`
+  (README carries the same text between `smartscreen:begin/end` markers; a test keeps them equal;
+  the release-notes generator uses the file), `known-issues.md`, `privacy.md` (checked against the
+  code), `CHANGELOG.md` (headings exactly `## <version>`), issue forms `bug_report.yml` (ids
+  what_happened, expected, steps, diagnostics, version, system, extra) and `idea.yml`,
+  `tools/sciforge/check_links.py` + `test_docs_links.py`.
+- Open: OpenGL: FreeCAD's source says "2.0 or above" (the brief said 3.3, wiki unreachable), the
+  README says 2.0; disk "about 3 GB" is the stock AppImage's size, not measured for SciForge;
+  README names the Linux key-storage fallback. Labels `idea` and `beta` do not exist on GitHub yet.
+
+#### R2: crash log + Report a Problem; R4: welcome line
+- `crashlog.py` / `crashlog_core.py` (started from InitGui.py): faulthandler + excepthooks into
+  `<user data>/SciForge/crash/session-*.log`, marker `running-<id>.json` removed on a clean exit
+  (`aboutToQuit`, `atexit`); a marker whose pid is gone = the last session did not end cleanly
+  (decided by the marker alone). Home lines in `home_notices_ui.py` / `notices_core.py` (7-line
+  hook in home_ui): "SciForge closed unexpectedly last time. [Report it] [Dismiss]" and the
+  welcome line (pref `WelcomeShown`; [Cheat sheet] opens the module's copy in a window,
+  [Open an example] copies the Pi 5 case to `<user data>/SciForge/examples/`, [Report a problem]).
+  The module now ships `docs/cheat-sheet.md` and `examples/pi5-case/pi5_case.FCStd` (copies of
+  `docs/sciforge/...`; `test_notices_core` fails if they drift: copy the file over).
+- `report_core.py` (redaction of home folders, user name, API keys; report layout; GitHub
+  address under 7000 characters, field ids = `report_core.FIELD_ID`, must match bug_report.yml)
+  + `report_ui.py` (dialog with preview; Open on GitHub, Save report..., Copy; the whole report
+  is always also copied). Entries: app menu > Help > Report a Problem..., UTILITIES, command
+  `SciForge_ReportProblem`. Seams: `report_ui.OPEN_URL`, `SAVE_PICKER`, `IDENTITY`.
+- Lessons: a wrong style-sheet selector made the Home lines grey while widget checks were green:
+  check pixels on `QScreen.grabWindow` (again); a scenario step named `..._error` fails itself
+  (the harness greps step names for "error"); `harness.prepare` marks the welcome as shown.
+- Not verified: Windows (faulthandler first-chance exceptions, `pid_alive` via ctypes), a real
+  browser, a real click on the window's close X.
+
+#### R3: update check, Update now, release job
+- `update_core.py` (pure: releases JSON, channels, `plan()` = module / installer / browser,
+  sha256, download, safe unzip), `update_ui.py` (worker thread + 50 ms timer, daily limit,
+  Help > Check for Updates, download dialog with Cancel, unsaved-designs question through the
+  normal close, refuses while a command dialog is open; seams `HAND_OVER`, `QUIT`, `OPEN_URL`,
+  `LAYOUT`, `INSTALLED`, `API_BASE` / env `SCIFORGE_UPDATE_API`), `home_update_ui.py` ("X is
+  available" / "Updated to X"), Preferences > General > Updates (check at start; Stable only /
+  Betas too), Diagnostics "Update core" line. `run_tests.sh` exports `SCIFORGE_NO_INTERNET=1`
+  (update_core refuses non-local addresses). FreeCAD leaves SIGPIPE at default on Linux: a write
+  to a closed socket killed it; update_ui ignores SIGPIPE.
+- `install_update.ps1`: `-WaitPid -Restart -Quiet -RunInstaller -NoDialog` (interactive mode
+  unchanged; on failure the backup is put back and one message box names the log).
+- CI: `tools/sciforge/make_quick_update.sh` (reproducible zip; `--core` writes the core id),
+  `write_build_info.sh`, `core_id.sh` (core id = last commit touching src minus the module,
+  cMake, CMakeLists, CMakePresets, package, pixi files; fails on a shallow clone),
+  `make_release_files.py` (notes + `sciforge-release.json` + `SHA256SUMS.txt`),
+  `sciforge-build.yml` (`core` job, `release` job: `contents: write` on that job only; only a
+  tag publishes; the tag must equal `src/Mod/SciForge/VERSION`; a manual run on a branch is a
+  dry run that prints the notes and uploads `release-files-<tag>`), `sciforge-tests.yml`
+  (Windows "update script" job, uses `test_update_script.ps1`). A quick update from a test run
+  has core "" = unknown, so Update now falls back to the full installer there.
+- Limit: a module update does not change the compiled version (splash/About) until the next full
+  build.
+- Not verified: Windows PowerShell 5.1 (the CI job has never run), the UAC path, the NSIS
+  installer over an existing install (settings in `%APPDATA%\SciForge` must survive), a real
+  quit, the new CI steps (the first dry run shows them), the real GitHub API.
+- **Trying Update now without publishing** (Luca): run "SciForge build" on a branch (publish off)
+  for build 1 and install it; run again with `VERSION` = `0.1.0-beta.2` for build 2, download its
+  `release-files-sciforge-v0.1.0-beta.2` artifact into e.g. `C:\fake` (plus the installer for the
+  installer path); start `"C:\Program Files\SciForge\bin\python.exe" fake_release_server.py
+  C:\fake`; in another PowerShell `$env:SCIFORGE_UPDATE_API="http://127.0.0.1:8765"` then start
+  `SciForge.exe`; Help > Check for Updates > Update now. Backups: `...\SciForge\SciForge-backups\<date>`;
+  on failure send `%APPDATA%\SciForge\SciForge\updates\<version>\module\install_update.log`.
+
+#### Tested (orchestrator, merged tree)
+- see the next lines of this log for the final unit/scenario results.
 
 ### Session log: 0.1.0-beta, R0 groundwork (`develop`, 2026-10-20)
 

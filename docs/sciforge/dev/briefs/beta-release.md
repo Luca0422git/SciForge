@@ -378,11 +378,17 @@ does not show it; the links call their seams.
    Help > Check for Updates (says up to date or could not reach GitHub: no release exists
    yet).
 4. **Update test before going public** (the one thing that cannot be fixed after people
-   have it): publish a throwaway prerelease from a test tag only if Luca agrees, e.g.
-   `sciforge-v0.1.0-beta.0` on a `develop` commit, install it, then publish
-   `0.1.0-beta` and check that the installed `.0` offers the update and the module update
-   works end to end. Delete the throwaway release afterwards (Luca's OK). If he prefers not
-   to, write down that the first real update (`beta.2`) is the test and warn him.
+   have it): publish a throwaway prerelease from a test tag only if Luca agrees. **It must
+   sort BEFORE the real beta in semver order** (`0.1.0-beta.0` sorts AFTER `0.1.0-beta`, so
+   an installed `.0` would never be offered the beta): use `sciforge-v0.1.0-alpha.1`. The
+   release job refuses a tag that differs from `src/Mod/SciForge/VERSION`, so the throwaway
+   needs a `develop` commit that sets `VERSION` to `0.1.0-alpha.1` (and a commit setting it
+   back to `0.1.0-beta` afterwards). Install the alpha, publish `0.1.0-beta`, check that the
+   installed alpha offers the update and the module update works end to end. Delete the
+   throwaway release afterwards (Luca's OK). If he prefers not to, write down that the first
+   real update (`beta.2`) is the test and warn him. The R3 session also built a way to try
+   "Update now" with nothing published: `tools/sciforge/fake_release_server.py` (steps in the
+   MEMORY session log "R3").
 5. Luca's green light ("release it" or similar, in the conversation): fast-forward `Release`
    to the approved `develop` commit, tag `sciforge-v0.1.0-beta`, push the tag, watch the
    build (~3-4 h for the full build; MEMORY), check the published release page (assets,
@@ -422,16 +428,16 @@ does not show it; the links call their seams.
 
 - [x] R0 (2026-10-20): `0.1.0-beta` everywhere (Home, Diagnostics, About, splash, installer); FreeCAD's
       funding/backport templates gone.
-- [ ] R1: new README with screenshots, download section, SmartScreen explanation, privacy,
+- [x] R1 (2026-10-20): new README with screenshots, download section, SmartScreen explanation, privacy,
       licence, trademark note; `known-issues.md`, `privacy.md`, `CHANGELOG.md`; SciForge issue
       templates; link check passes; Luca told how to switch on Discussions.
-- [ ] R2: crash log + crashed-last-time line + Report a Problem (save/copy/open on GitHub,
+- [x] R2 (2026-10-20): crash log + crashed-last-time line + Report a Problem (save/copy/open on GitHub,
       redacted); unit + 2 scenarios green.
-- [ ] R3: release job + `sciforge-release.json` + checksums + generated notes; update check
+- [x] R3 (2026-10-20): release job + `sciforge-release.json` + checksums + generated notes; update check
       (background, daily, channel, opt-out) + Update now (module and installer paths, hash
       check, hand-over, restart, "Updated to" line); unit + scenario green; update path
       tried by Luca or the Windows CI check.
-- [ ] R4: the one-line welcome, shown once.
+- [x] R4 (2026-10-20): the one-line welcome, shown once.
 - [ ] R5: dry-run build installed by Luca; with his green light: `Release` fast-forwarded,
       tag pushed, release published as prerelease, link sent.
 - [ ] MEMORY.md session log written (what was built, what was learned, what is next), and
