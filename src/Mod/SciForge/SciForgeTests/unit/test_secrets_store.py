@@ -285,7 +285,31 @@ class FakeKeyring:
         del self.data[(service, name)]
 
 
+class BrokenKeyring(FakeKeyring):
+    """A keyring module with no keyring service behind it (a bare desktop, a container)."""
+
+    def set_password(self, service, name, value):
+        raise RuntimeError("no keyring service is running")
+
+
 class Keyring(TempFolder):
+    def test_a_keyring_without_a_service_falls_back_to_the_private_file(self):
+        # Found by the first release build: a runner had the keyring module but no service, and the
+        # key was simply not saved. It goes to the private file, and the warning says so.
+        s = secrets_store.Store(
+            self.folder,
+            self.log,
+            backend=secrets_store.KeyringBackend(BrokenKeyring(), self.log),
+        )
+        self.assertEqual(s.warning(), "")  # (until a key has had to go to the file)
+        self.assertTrue(s.store("ai.anthropic", VALUE))
+        self.assertEqual(s.read("ai.anthropic"), VALUE)
+        self.assertEqual(
+            secrets_store.FileBackend(self.folder, self.log).read("ai.anthropic"), VALUE
+        )
+        self.assertEqual(s.warning(), secrets_store.FILE_WARNING)
+        self.assert_never_logged()
+
     def test_keyring_and_old_plain_copy(self):
         # A key stored in the file while the keyring was unavailable is still found, and
         # storing it again moves it into the keyring.

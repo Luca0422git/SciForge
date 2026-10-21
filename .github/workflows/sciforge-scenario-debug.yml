@@ -2,7 +2,7 @@
 # SciForge: runs GUI scenarios on the Linux AppImage of an EARLIER "SciForge build" run, without
 # compiling anything, and prints the scenario logs. For finding out why a build's scenario
 # shards fail (the shards only upload their logs): Actions > "SciForge scenario debug" >
-# Run workflow, with the run number's id and the scenario names.
+# Run workflow, with the run number's id and the scenario names. (Its `unit` job also runs on a push of this file.)
 name: SciForge scenario debug
 
 on:

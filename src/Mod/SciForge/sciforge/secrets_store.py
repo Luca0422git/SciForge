@@ -381,6 +381,7 @@ class Store:
         self.log = log or _default_log
         self.fallback = FileBackend(folder, self.log)
         self.primary = self._choose(backend)
+        self.fell_back = False  # a key went to the file because the system store refused it
 
     def _choose(self, backend):
         if not isinstance(backend, str):
@@ -409,6 +410,8 @@ class Store:
 
     def warning(self):
         """The sentence to show when keys are not encrypted, else ""."""
+        if self.fell_back:
+            return FILE_WARNING
         return "" if getattr(self.primary, "encrypted", False) else FILE_WARNING
 
     def store(self, name, value):
@@ -423,6 +426,18 @@ class Store:
                 return True
         except Exception as exc:
             self.log("[SciForge] secrets: could not store %s (%s)" % (name, type(exc).__name__))
+        # Linux only: a keyring module is installed but no keyring service is running (a bare
+        # desktop, a container), so the system store cannot take the key. Linux has always kept
+        # keys in the private file when there is no keyring, so it goes there and the warning
+        # says it is not encrypted. Windows and macOS never quietly downgrade to a plain file.
+        if getattr(self.primary, "name", "") in ("keyring", "secretstorage"):
+            try:
+                if self.fallback.store(name, value):
+                    self.fell_back = True
+                    self.log("[SciForge] secrets: stored %s (file: the system store was unavailable)" % name)
+                    return True
+            except Exception as exc:
+                self.log("[SciForge] secrets: could not store %s (%s)" % (name, type(exc).__name__))
         return False
 
     def read(self, name):
