@@ -2,14 +2,10 @@
 # SciForge: runs GUI scenarios on the Linux AppImage of an EARLIER "SciForge build" run, without
 # compiling anything, and prints the scenario logs. For finding out why a build's scenario
 # shards fail (the shards only upload their logs): Actions > "SciForge scenario debug" >
-# Run workflow, with the run number's id and the scenario names. (Its `unit` job also runs on a push of this file.)
+# Run workflow, with the run number's id and the scenario names.
 name: SciForge scenario debug
 
 on:
-  # (a manual run needs this file on the default branch; a push of this file to develop runs it
-  # with the defaults below instead)
-  push:
-    paths: [".github/workflows/sciforge-scenario-debug.yml"]
   workflow_dispatch:
     inputs:
       run_id:
