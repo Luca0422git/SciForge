@@ -1469,6 +1469,11 @@ CODE_OF_CONDUCT.md is still FreeCAD's).
   `SciForge.exe`; Help > Check for Updates > Update now. Backups: `...\SciForge\SciForge-backups\<date>`;
   on failure send `%APPDATA%\SciForge\SciForge\updates\<version>\module\install_update.log`.
 
+#### Release dry runs (2026-10-20/21): what they found
+- Build run #7 (both platforms, develop ae1d376): Windows installer (501 MB) + portable build were made and passed the Windows golden test; the Linux build compiled in ~2h, packaged, passed smoke/journey/restart, but FAILED its unit tests (two tests assumed a source tree: `test_the_core_id_defaults_to_unknown` with a real core id, `test_the_install_rules_carry_both_folders` needs CMakeLists.txt): fixed (bb8fb08). The release job needs ALL build jobs green (no `if: always()`), so it was skipped.
+- All 4 scenario shards of that run failed in seconds: the Linux artifact held `appimagetool-x86_64.AppImage` next to the SciForge AppImage and the shards' `find built -name '*.AppImage' | head -1` picked the tool ("Error: no such file or directory: freecad"). Also `make_release_files.find_assets` would have stopped with "two files for the appimage". Fixed (fe29cd6): upload only `SciForge_*.AppImage`, `find ... 'SciForge_*.AppImage'`, `classify` requires the name to start with SciForge. Found with `sciforge-scenario-debug.yml` (runs scenarios on an earlier build's AppImage: `run_id` input; a manual run of a NEW workflow file needs it on the default branch, so it also runs on a push of its own file; remove that push trigger when no longer needed).
+- Sandbox cannot download Actions artifacts (blob.core.windows.net is blocked by the proxy) but `gh run download` finds them; use workflow logs (mcp github get_job_logs) instead.
+
 #### Update icon in the top bar (Luca's request, same day)
 - Luca: "check for updates on start and show an update icon ... in the top right like fusion".
   The check at start already existed (default on). New: `ribbon_ui` `update_icon` (object name
