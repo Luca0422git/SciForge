@@ -1468,6 +1468,38 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Session log
 
+### Session log: speed all round (branch `experimental`, 2026-10-21)
+
+Luca: "draft is only one example of things being slow. Im thinking of optimizing everything all
+around." (after "make things run fast and smooth").
+
+- Edits roll back like Fusion (`edit_rollback.py`, `preview.hold`): while an earlier step is
+  edited, the later steps are rolled back (hidden, not rebuilt) and come back at OK. 19 GUI
+  scenarios had measured previews with the later steps in; updated to Fusion semantics (the
+  result after OK is still checked). The loft QA now drags its centerline sketch before the
+  loft first (Fusion cannot pick what comes later).
+- Bugs the rollback uncovered: a hardware part's own Hole step was rolled back with it (now
+  the marker goes past the part's hole too, `edit_rollback._companions`); the timeline click
+  left the step selected whole, and FreeCAD turns a click on a whole-selected object into its
+  parent (the body), so the first face click in the edit picked the body
+  (`taskui._unselect_whole`).
+- Benchmark `SciForgeTests/gui/scenarios/perf_benchmark.py` (run alone:
+  `run_tests.sh --scenario perf_benchmark`): writes perf-report.md/json with open / change /
+  finish times and cProfile tops. Per change, before -> after: Press Pull 267 -> ~160 ms,
+  Fillet 218 -> ~160, Chamfer 216 -> ~160. Fixes: Press Pull read `face.Surface` thousands of
+  times per preview (descriptors read once, unmoved faces cached per drag); Fillet/Chamfer
+  built the round twice (trial + feature): after a good preview the feature is changed
+  directly and checked, the trial runs first only after a failure; `isValid()` asked up to 3x
+  per preview (`shape_checks.is_valid` remembers it); blend recomputes honour held steps,
+  Fillet's OK rebuilds them and repairs later blends.
+- Found, not changed: entering a sketch costs ~200 ms switching to the Sketcher workbench and
+  back (ViewProviderSketch's EditingWorkbench); SciForge's sketch mode hangs on that switch
+  (`shell.on_workbench`), so changing it is a bigger job. Timeline marker: SciForge's own work
+  ~40 ms, the rest is drawing under xvfb. Edits opened by double-click in the 3D view do not
+  roll back (they nearly always open the last step).
+- Fixed: warnings "profile shading" / "sketch text" when a design closed with a sketch drawn.
+- Tests: the 19 rollback scenarios, 33 Fillet / Chamfer / Press Pull scenarios, all passing.
+
 ### Session log: Draft of curved faces (branch `experimental`, 2026-10-20)
 
 Luca: "some of the workflows that id regularly do on fusion dont exactly work on SciForge. one of
