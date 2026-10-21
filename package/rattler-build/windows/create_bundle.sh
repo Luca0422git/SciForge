@@ -141,14 +141,8 @@ fi
 sha256sum ${version_name}.7z > ${version_name}.7z-SHA256.txt
 
 if [ "${MAKE_INSTALLER}" == "true" ]; then
-    FILES_FREECAD="$(cygpath -w $(pwd))\\${version_name}"
-    nsis_cmd="${CONDA_PREFIX}/NSIS/makensis.exe"
-    "${nsis_cmd}" -V4 \
-        -D"ExeFile=${version_name}-installer.exe" \
-        -D"FILES_FREECAD=${FILES_FREECAD}" \
-        -X'SetCompressor /FINAL lzma' \
-        ../../WindowsInstaller/FreeCAD-installer.nsi
-    mv ../../WindowsInstaller/${version_name}-installer.exe .
+    # SCIFORGE: the installer is made by make_installer.sh (short drive letter, see there)
+    bash make_installer.sh "${version_name}"
     echo "Created installer ${version_name}-installer.exe"
     # See if we can sign the installer exe as well:
     if [[ "${WINDOWS_SIGN_RELEASE:-0}" == "1" ]] && \

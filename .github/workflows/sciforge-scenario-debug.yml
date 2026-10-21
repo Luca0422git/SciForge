@@ -157,3 +157,57 @@ jobs:
           name: scenario-debug
           path: test-output/
           retention-days: 7
+
+  # The Windows installer step (package/rattler-build/windows/make_installer.sh) on the portable
+  # files of an earlier build run, in the same long checkout path a build has: about 20 minutes
+  # instead of a 4-hour build. First makensis straight on the long path (expected to fail while
+  # a path is past 260 characters), then make_installer.sh (short drive letter), which must pass.
+  installer:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SRC_RUN: "39490600523"
+      NAME: SciForge_v0.1.0-beta-Windows-x86_64-py311
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          pixi-version: v0.59.0
+          cache: false
+          run-install: false
+
+      - name: Get the portable build of the earlier run, under the release's folder name
+        run: |
+          gh run download "$SRC_RUN" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-Windows-portable-*' --dir portable
+          archive=$(find portable -name '*.7z' | head -1)
+          echo "archive: $archive"
+          cd package/rattler-build/windows
+          7z x -y "$GITHUB_WORKSPACE/$archive" >/dev/null
+          old=$(ls -d SciForge_*-Windows-x86_64-py311 | head -1)
+          [ "$old" = "$NAME" ] || mv "$old" "$NAME"
+          longest=$(find "$NAME" -type f | awk '{ print length($0) }' | sort -n | tail -1)
+          echo "[SciForge] workspace: $(cygpath -w "$GITHUB_WORKSPACE")"
+          echo "[SciForge] longest path inside the bundle folder: $longest characters (+ $(cygpath -w "$(pwd)" | wc -c) for the folder it is in)"
+
+      - name: makensis on the long path (expected to fail)
+        continue-on-error: true
+        working-directory: package/rattler-build/windows
+        run: |
+          cd ..
+          pixi run -e package bash -c 'cd windows && "${CONDA_PREFIX}/NSIS/makensis.exe" -V2 -D"ExeFile=long-path-installer.exe" -D"FILES_FREECAD=$(cygpath -w "$(pwd)")\\${NAME}" -X"SetCompressor /FINAL lzma" ../../WindowsInstaller/FreeCAD-installer.nsi'
+
+      - name: make_installer.sh (must pass)
+        working-directory: package/rattler-build
+        run: |
+          pixi run -e package bash -c 'cd windows && bash make_installer.sh "${NAME}"'
+          ls -la windows/*-installer.exe
