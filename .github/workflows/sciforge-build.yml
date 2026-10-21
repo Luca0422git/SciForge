@@ -206,6 +206,10 @@ jobs:
           pixi-version: v0.59.0
           cache: false
           run-install: false
+          # The runner is thrown away after the job; the clean-up that deletes pixi.exe failed
+          # with EPERM (file in use) on the sciforge-v0.1.0-beta build and turned a green
+          # Windows build red, so the release was skipped.
+          post-cleanup: false
 
       # ---- Windows: compile cache kept between builds -----------------------
       # FreeCAD already compiles through ccache (ccache is in the recipe and FreeCAD's

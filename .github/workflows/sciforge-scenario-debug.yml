@@ -185,6 +185,10 @@ jobs:
           pixi-version: v0.59.0
           cache: false
           run-install: false
+          # The runner is thrown away after the job; the clean-up that deletes pixi.exe failed
+          # with EPERM (file in use) on the sciforge-v0.1.0-beta build and turned a green
+          # Windows build red, so the release was skipped.
+          post-cleanup: false
 
       - name: Get the portable build of the earlier run, under the release's folder name
         run: |
