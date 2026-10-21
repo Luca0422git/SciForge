@@ -23,7 +23,8 @@ import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore, QtGui, QtTest, QtWidgets
+from PySide import QtCore, QtGui, QtWidgets
+from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import plane_input as pl
