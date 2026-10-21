@@ -56,6 +56,59 @@ jobs:
           grep -aE "^(FAIL|ERROR):" test-output/unit.log || echo "(no FAIL/ERROR lines)"
           grep -a -B2 -A25 -E "^(FAIL|ERROR):" test-output/unit.log | head -150
 
+  # The release job's steps (notes, sciforge-release.json, SHA256SUMS, the list of files to
+  # attach) on the files of an earlier build run, without publishing: a dry run of "release"
+  # without compiling again.
+  release-dry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CORE_ID: e32ed0e90b
+      PLATFORMS: both
+      PUBLISH: "false"
+      GH_TOKEN: ${{ github.token }}
+      SRC_RUN: "39490600523"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Tag and version
+        run: |
+          version="$(tr -d '[:space:]' < src/Mod/SciForge/VERSION)"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          echo "TAG=sciforge-v${version}" >> "$GITHUB_ENV"
+
+      - name: Get the built files of the earlier run
+        run: gh run download "$SRC_RUN" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-*' --dir assets
+
+      - name: Quick update (SciForge module only)
+        run: |
+          mkdir -p assets/quick-update
+          tools/sciforge/make_quick_update.sh --out quick-update-folder \
+            --zip "assets/quick-update/SciForge-quick-update-${TAG#sciforge-}.zip" \
+            --commit "$GITHUB_SHA" --date "$(date -u +%Y-%m-%d)" --core "$CORE_ID"
+
+      - name: Notes, sciforge-release.json and SHA256SUMS.txt
+        run: |
+          find assets -type f | sed 's/^/asset: /'
+          python3 tools/sciforge/make_release_files.py --tag "$TAG" --core "$CORE_ID" \
+            --assets assets --out release-files --list-file attach.txt --require-all
+          cp "assets/quick-update/SciForge-quick-update-${TAG#sciforge-}.zip" release-files/
+          echo "---- files that would be attached:"
+          cat attach.txt
+          echo "---- sciforge-release.json"
+          cat release-files/sciforge-release.json
+          echo "---- SHA256SUMS.txt"
+          cat release-files/SHA256SUMS.txt
+          echo "---- release-notes.md"
+          cat release-files/release-notes.md
+
   debug:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
