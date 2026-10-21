@@ -1560,13 +1560,16 @@ class BlendPanel(Panel):
                 self._discard_target()
             self.show_status()
             return
-        try:
-            self._trial()
-        except blend.BlendError as exc:
-            self.error = str(exc)
-            self.show_status()
-            self._hint.start()
-            return
+        # Speed: once a preview worked, FreeCAD's own Fillet/Chamfer is changed straight away
+        # and checked afterwards (the round was built twice: a trial, then the feature); the
+        # trial only runs first after a failure, and to explain one.
+        optimistic = self._optimistic()
+        if not optimistic:
+            try:
+                self._trial()
+            except blend.BlendError as exc:
+                self._failed(str(exc))
+                return
         self.error = None
         with quiet_errors():
             if self._uses_step():
@@ -1607,9 +1610,80 @@ class BlendPanel(Panel):
                     blend.apply(self.target, options)
             # later steps (marker rolled back, or an earlier fillet edited) stay on their edges
             blend.recompute_keeping(self.doc, self.keep)
+            if optimistic and not self._target_ok():
+                self._back_to_good()
+                try:
+                    self._trial()
+                    reason = None
+                except blend.BlendError as exc:
+                    reason = str(exc)
+                if reason is not None:
+                    self._failed(reason)
+                    return
+            self._remember_good()
         self._show_preview(True)
         self._refresh_rows()
         self.show_status()
+
+    def _failed(self, reason):
+        self._good_last = False
+        self.error = reason
+        self.show_status()
+        self._hint.start()
+
+    def _optimistic(self):
+        """The last preview worked and FreeCAD's own step holds it: change it directly."""
+        good = getattr(self, "_good", None)
+        return (
+            bool(getattr(self, "_good_last", False))
+            and good is not None
+            and good[0] is self.target
+            and _alive(self.target)
+            and not self._uses_step()
+        )
+
+    def _remember_good(self):
+        target = self.target
+        if target is None or self._uses_step() or not self._target_ok():
+            self._good, self._good_last = None, False
+            return
+        props = {}
+        for name in ("Radius", "ChamferType", "Size", "Size2", "Angle", "FlipDirection"):
+            if hasattr(target, name):
+                props[name] = getattr(target, name)
+        self._good = (target, (target.Base[0], list(target.Base[1])) if target.Base else None, props)
+        self._good_last = True
+
+    def _target_ok(self):
+        """FreeCAD's Fillet/Chamfer built a sound result (it keeps an invalid one)."""
+        target = self.target
+        try:
+            state = list(target.State)
+            if "Invalid" in state or "Error" in state or "Touched" in state:
+                return False
+            shape = target.Shape
+            if shape.isNull() or not shape.Solids:
+                return False
+            if len(shape.Solids) > max(1, len(self.info.shape.Solids)):
+                return False
+            return shape.isValid()
+        except Exception:
+            return False
+
+    def _back_to_good(self):
+        """The direct change failed: the step goes back to the last preview that worked."""
+        good = getattr(self, "_good", None)
+        if good is None or good[0] is not self.target:
+            return
+        target, base, props = good
+        try:
+            if base is not None:
+                target.Base = base
+            for name, value in props.items():
+                setattr(target, name, value)
+            blend.recompute_keeping(self.doc, self.keep)
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
 
     def _swap(self, flat):
         """FreeCAD's Fillet / Chamfer becomes SciForge's step (a second set, another type):
@@ -1746,6 +1820,13 @@ class BlendPanel(Panel):
             # Panel.accept() without its plain recompute: a later step this edit broke (and
             # the dialog named) would print its failure to the Report view once more.
             self.cleanup()
+            # the steps after the marker waited (preview.hold): rebuilt now, and later blends
+            # put back on their edges, in this undo step
+            from . import edit_rollback, preview
+
+            edit_rollback.restore(self.doc)
+            if preview.catch_up(self.doc):
+                blend.recompute_keeping(self.doc, self.keep)
             _end_transaction(self.doc)
             self._close()
             log("%s done" % self.title)

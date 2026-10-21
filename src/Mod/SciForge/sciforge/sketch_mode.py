@@ -2355,6 +2355,13 @@ class ProfileShading:
     def _attach(self, on):
         try:
             graph = self.session.view.getSceneGraph()
+        except Exception:
+            graph = None  # the design was closed: its view (and the drawing in it) is gone
+        if graph is None:
+            if not on:
+                self.attached = False
+            return
+        try:
             if on and not self.attached:
                 graph.addChild(self.root)
                 self.attached = True

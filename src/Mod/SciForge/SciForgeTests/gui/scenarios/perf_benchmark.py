@@ -125,6 +125,22 @@ def _profile_top(pr, n=14):
     return keep[: n + 1]
 
 
+def busy(fn, wait=0.3):
+    """(seconds of work, profile) for fn() and what it leaves to timers within `wait`: the
+    profiler's total minus the idle sleeps between event rounds."""
+    pr = cProfile.Profile()
+    pr.enable()
+    fn()
+    end = time.perf_counter() + wait
+    while time.perf_counter() < end:
+        QtWidgets.QApplication.processEvents()
+        time.sleep(0.01)
+    pr.disable()
+    stats = pstats.Stats(pr)
+    idle = sum(row[2] for key, row in stats.stats.items() if "time.sleep" in key[2])
+    return max(0.0, stats.total_tt - idle), _profile_top(pr)
+
+
 def record(label, **values):
     entry = {"label": label}
     entry.update(values)
@@ -136,18 +152,23 @@ def measure_dialog(label, open_fn, panel_fn, change_fn, values, finish="Cancel")
     """Open a dialog, time each value change's preview and the finish."""
     try:
         t0 = time.perf_counter()
+        pr_open = cProfile.Profile()
+        pr_open.enable()
         open_fn()
         pump()
+        pr_open.disable()
         p = panel_fn()
         if p is None or getattr(p, "_closed", True):
             record(label, error="the dialog did not open")
             return
+        pr_open.enable()
         try:
             p._timer.stop()
             p._recompute()  # the first preview, if the dialog left it to its timer
         except Exception:
             pass
         pump()
+        pr_open.disable()
         t_open = time.perf_counter() - t0
         times = []
         pr = cProfile.Profile()
@@ -161,8 +182,11 @@ def measure_dialog(label, open_fn, panel_fn, change_fn, values, finish="Cancel")
             pr.disable()
             times.append(time.perf_counter() - t1)
         t2 = time.perf_counter()
+        pr_finish = cProfile.Profile()
+        pr_finish.enable()
         h.task_button(finish)
         pump()
+        pr_finish.disable()
         t_finish = time.perf_counter() - t2
         record(
             label,
@@ -172,6 +196,8 @@ def measure_dialog(label, open_fn, panel_fn, change_fn, values, finish="Cancel")
             finish=t_finish,
             finish_kind=finish,
             profile=_profile_top(pr),
+            profile_open=_profile_top(pr_open),
+            profile_finish=_profile_top(pr_finish),
         )
     except Exception as exc:
         record(label, error="%s: %s" % (type(exc).__name__, exc))
@@ -347,15 +373,16 @@ def m_timeline():
     try:
         doc = App.ActiveDocument
         names = ti.titles()
-        t0 = time.perf_counter()
-        ti.drag_marker(before_title=names[1])
-        pump(0.3)
-        t_back = time.perf_counter() - t0
-        t0 = time.perf_counter()
-        ti.drag_marker(to_end=True)
-        pump(0.3)
-        t_end = time.perf_counter() - t0
-        record("Timeline marker: to the 2nd step / back to the end", open=t_back, finish=t_end, change=t_end)
+        t_back, prof_back = busy(lambda: ti.drag_marker(before_title=names[1]))
+        t_end, prof_end = busy(lambda: ti.drag_marker(to_end=True))
+        record(
+            "Timeline marker: to the 2nd step / back to the end",
+            open=t_back,
+            finish=t_end,
+            change=t_end,
+            profile_open=prof_back,
+            profile=prof_end,
+        )
         t0 = time.perf_counter()
         doc.undo()
         doc.recompute()
@@ -415,12 +442,9 @@ def m_sketch():
             App.closeDocument(d)
         App.newDocument("PerfSketch")
         h.fit()
-        t0 = time.perf_counter()
-        h.ribbon("Create Sketch")
-        pump()
-        pl.click_on_plane(V(12, -8, 0))
-        pump()
-        t_enter = time.perf_counter() - t0
+        t_ribbon, _prof = busy(lambda: h.ribbon("Create Sketch"), wait=1.0)
+        t_click, prof_enter = busy(lambda: pl.click_on_plane(V(12, -8, 0)), wait=1.0)
+        t_enter = t_ribbon + t_click
         sk = h.in_sketch()
         if sk is None:
             record("Sketch", error="no sketch open")
@@ -461,11 +485,10 @@ def m_sketch():
             "Sketch: drag a corner (12 rectangles, 12 circles)",
             open=t_enter, change=statistics.median(times), change_max=max(times), finish=t_release,
             profile=_profile_top(pr),
+            profile_open=prof_enter,
         )
-        t1 = time.perf_counter()
-        h.ribbon("Finish Sketch")
-        pump()
-        record("Finish Sketch", change=time.perf_counter() - t1)
+        t_fin, prof_fin = busy(lambda: h.ribbon("Finish Sketch"), wait=0.5)
+        record("Finish Sketch", change=t_fin, profile=prof_fin)
     except Exception as exc:
         record("Sketch", error="%s: %s" % (type(exc).__name__, exc))
 
@@ -523,8 +546,9 @@ def report():
         )
     lines.append("")
     for r in rows:
-        if r.get("profile"):
-            lines += ["## %s" % r["label"], "", "```"] + r["profile"] + ["```", ""]
+        for key, what in (("profile", "change"), ("profile_open", "open"), ("profile_finish", "finish")):
+            if r.get(key):
+                lines += ["## %s (%s)" % (r["label"], what), "", "```"] + r[key] + ["```", ""]
     with open(os.path.join(out_dir(), "perf-report.md"), "w") as f:
         f.write("\n".join(lines))
     print("[SciForge] perf report: %s" % os.path.join(out_dir(), "perf-report.md"), flush=True)

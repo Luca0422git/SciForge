@@ -734,8 +734,11 @@ def recompute_keeping(doc, keep, rounds=4):
     """Recompute; later blends that lost their edges are put back on them (a repaired step
     can uncover the next one, hence the rounds). Quiet: what still fails afterwards is
     reported by the caller (the dialog says which later steps no longer work)."""
+    from . import preview
+
+    # preview.recompute: while a dialog is open the steps after the marker wait
     with quiet():
-        doc.recompute()
+        preview.recompute(doc)
         if keep is None:
             return []
         changed = []
@@ -744,7 +747,7 @@ def recompute_keeping(doc, keep, rounds=4):
             if not fixed:
                 break
             changed.extend(fixed)
-            doc.recompute()
+            preview.recompute(doc)
     return changed
 
 

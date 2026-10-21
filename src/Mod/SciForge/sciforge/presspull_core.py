@@ -183,24 +183,41 @@ def press_pull(base, faces, distance, refine=True, report=None, pieces=None):
 
 def _same_surface(a, b, tol=1e-6):
     """True if two faces lie on the same plane or the same cylinder."""
-    sa, sb = a.Surface, b.Surface
+    return _same_info(_surface_info(a), _surface_info(b), tol)
+
+
+def _surface_info(face):
+    """What _same_info compares, read once (face.Surface makes a new object every time:
+    comparing every face of a filleted part with every other one cost 60 ms a preview)."""
+    sa = face.Surface
     kind = type(sa).__name__
-    if kind != type(sb).__name__:
+    if kind == "Plane":
+        return (kind, sa.Axis, sa.Position, 0.0)
+    if kind == "Cylinder":
+        return (kind, sa.Axis, sa.Center, sa.Radius)
+    if kind == "Sphere":
+        return (kind, None, sa.Center, sa.Radius)
+    return (kind, None, None, 0.0)
+
+
+def _same_info(ia, ib, tol=1e-6):
+    kind = ia[0]
+    if kind != ib[0]:
         return False
     if kind == "Plane":
-        na, nb = sa.Axis, sb.Axis
+        na, nb = ia[1], ib[1]
         if abs(abs(na.dot(nb)) - 1.0) > tol:
             return False
-        return abs((sb.Position - sa.Position).dot(na)) < 1e-5
+        return abs((ib[2] - ia[2]).dot(na)) < 1e-5
     if kind == "Cylinder":
-        if abs(sa.Radius - sb.Radius) > 1e-5:
+        if abs(ia[3] - ib[3]) > 1e-5:
             return False
-        if abs(abs(sa.Axis.dot(sb.Axis)) - 1.0) > tol:
+        if abs(abs(ia[1].dot(ib[1])) - 1.0) > tol:
             return False
-        offset = sb.Center - sa.Center
-        return (offset - sa.Axis * offset.dot(sa.Axis)).Length < 1e-5
+        offset = ib[2] - ia[2]
+        return (offset - ia[1] * offset.dot(ia[1])).Length < 1e-5
     if kind == "Sphere":
-        return abs(sa.Radius - sb.Radius) < 1e-5 and (sb.Center - sa.Center).Length < 1e-5
+        return abs(ia[3] - ib[3]) < 1e-5 and (ib[2] - ia[2]).Length < 1e-5
     return False
 
 
@@ -239,13 +256,16 @@ def step_faces(base, moved, slabs, result):
             if _parallel_surface(side, face):
                 continue  # the slab's bottom (the face itself) or its top (the moved face)
             sides.append(side)
+    unmoved_info = [_surface_info(u) for u in unmoved]
+    side_info = [_surface_info(side) for side in sides]
     steps = []
     for candidate in result.Faces:
-        if any(_same_surface(candidate, u) for u in unmoved):
+        info = _surface_info(candidate)
+        if any(_same_info(info, u) for u in unmoved_info):
             continue
         point = _inner_point(candidate)
-        for side in sides:
-            if _same_surface(candidate, side) and _on_face(side, point):
+        for side, si in zip(sides, side_info):
+            if _same_info(info, si) and _on_face(side, point):
                 steps.append(candidate)
                 break
     return steps
