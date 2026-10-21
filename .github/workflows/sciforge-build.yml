@@ -308,6 +308,8 @@ jobs:
             package/rattler-build/linux/*-SHA256.txt
           retention-days: 30
           compression-level: 0
+          # a re-run of a failed job uploads again under the same name
+          overwrite: true
 
       - name: Test the Linux build (unit, golden models, GUI smoke and journey)
         if: runner.os == 'Linux'
@@ -330,6 +332,8 @@ jobs:
             package/rattler-build/windows/*-installer.exe-SHA256.txt
           retention-days: 30
           compression-level: 0
+          # a re-run of a failed job uploads again under the same name
+          overwrite: true
 
       - name: Upload Windows portable build
         if: runner.os == 'Windows'
@@ -341,6 +345,8 @@ jobs:
             package/rattler-build/windows/*.7z-SHA256.txt
           retention-days: 30
           compression-level: 0
+          # a re-run of a failed job uploads again under the same name
+          overwrite: true
 
       - name: Test the Windows build (golden models)
         if: runner.os == 'Windows'
