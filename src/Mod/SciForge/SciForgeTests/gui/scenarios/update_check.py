@@ -289,9 +289,14 @@ def p1_home_without_line():
     h.check("P1 ... hidden: nothing is known yet", button is not None and not button.isVisible())
     from sciforge import diagnostics
 
+    from sciforge import update_core
+
+    # ('unknown' for a source tree or a test run's quick update; a build carries its real id,
+    # written into core_info.py at build time, and Diagnostics must say that one)
+    core_id = update_core.installed_core() or "unknown"
     h.check(
-        "P1 Diagnostics names the core id ('unknown' for a source tree)",
-        "Update core: unknown" in diagnostics.report(),
+        "P1 Diagnostics names the core id (%s)" % core_id,
+        "Update core: %s" % core_id in diagnostics.report(),
     )
 
 
