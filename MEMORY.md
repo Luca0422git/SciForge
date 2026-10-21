@@ -7,6 +7,13 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
 R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
 
+**Sandbox limit found at release time (2026-10-21): a Claude Code cloud session can only push to
+`develop`.** A tag push (`git push origin sciforge-v...`) and a push to `Release` get HTTP 403 from
+the session's git proxy, and having a workflow create the tag instead was refused as a bypass. So
+the release step (tag + moving `Release`) is Luca's: `git tag sciforge-v<version> <tested develop
+sha> && git push origin sciforge-v<version>`, later `git push origin <sha>:refs/heads/Release`.
+A future release session must say so at the START, not after the build work.
+
 **Start here (2026-10-17):** read the newest session log ("Luca's improvement list").
 Every item of Luca's list (IMPROVEMENTS_AND_STUFF_TO_FIX.txt, 18 fixes + 3 additions) is
 built and merged; what is left is in that log's "Open" list. Luca wants ONE complete update
