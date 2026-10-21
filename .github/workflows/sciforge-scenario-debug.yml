@@ -27,6 +27,7 @@ jobs:
   # clean-up of the runner, a checkout with submodules, the build ids written into the module):
   # prints the names of the tests that fail.
   unit:
+    if: inputs.scenarios != 'rerun-test'
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
@@ -56,6 +57,7 @@ jobs:
   # attach) on the files of an earlier build run, without publishing: a dry run of "release"
   # without compiling again.
   release-dry:
+    if: inputs.scenarios != 'rerun-test'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -106,7 +108,7 @@ jobs:
           cat release-files/release-notes.md
 
   debug:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.scenarios != 'rerun-test'
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
@@ -163,7 +165,7 @@ jobs:
   # instead of a 4-hour build. First makensis straight on the long path (expected to fail while
   # a path is past 260 characters), then make_installer.sh (short drive letter), which must pass.
   installer:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.scenarios != 'rerun-test'
     runs-on: windows-2022
     timeout-minutes: 60
     defaults:
@@ -215,3 +217,33 @@ jobs:
         run: |
           pixi run -e package bash -c 'cd windows && bash make_installer.sh "${NAME}"'
           ls -la windows/*-installer.exe
+
+  # Does a re-run of a failed job upload an artifact under a name its first attempt already
+  # used, and what does "gh run download" then get? (Scenarios input "rerun-test" runs only
+  # this job: attempt 1 uploads and fails, then "Re-run failed jobs".)
+  rerun-test:
+    if: inputs.scenarios == 'rerun-test'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: mkdir -p out && echo "attempt ${{ github.run_attempt }}" > out/attempt.txt
+      - name: Upload under a fixed name (same action and settings as the build's uploads)
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: SciForge-rerun-test
+          path: out/
+          retention-days: 1
+          compression-level: 0
+      - name: What the run holds now
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --jq '.artifacts[] | "\(.name) id=\(.id) created=\(.created_at)"'
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-*' --dir dl
+          find dl -type f -exec sh -c 'echo "$1: $(cat "$1")"' _ {} \;
+      - name: Fail the first attempt
+        if: github.run_attempt == 1
+        run: exit 1
