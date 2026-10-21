@@ -578,7 +578,9 @@ def p7_edit():
 
 def p7_edit_preview():
     v = h.solid_volume()
-    h.check("P7 the preview carries the boss along", sd.close(v, sd.open_top(3) + boss()), v)
+    # the shell is edited with the timeline rolled to it (Fusion): the boss after it waits
+    # until OK (edit_rollback / preview.hold), then follows the floor (p7_followed)
+    h.check("P7 the preview: the shell alone, the boss waits", sd.close(v, sd.open_top(3)), v)
     p = sd.shell_panel()
     h.check("P7 no message", msg(p) == "", msg(p))
     h.task_button("OK")
@@ -652,8 +654,8 @@ def p8_edit():
 
 def p8_both():
     v = h.solid_volume()
-    expect = both_open(3, 1) + boss() + 42 * 11 * 2
-    h.check("P8 Both previews under the boss and the Press Pull", sd.close(v, expect), (v, expect))
+    expect = both_open(3, 1)  # the boss and the Press Pull wait until OK (rolled back)
+    h.check("P8 Both previews, the later steps wait", sd.close(v, expect), (v, expect))
     p = sd.shell_panel()
     h.check("P8 no message", msg(p) == "", msg(p))
     h.task_button("OK")

@@ -511,7 +511,7 @@ def t6_typed():
     )
     h.check("T6 the formula is shown", p is not None and "tlen" in p.formulas.text())
     v = h.solid_volume()
-    expect = s["v"] - removed(6)
+    expect = BOSS - removed(6)  # T4's hole and thread wait while Thread 1 is edited (Fusion)
     h.check("T6 the thread is 6 long", hs.close(v, expect, 1e-5), (v, expect))
     if p:
         ui.type_into(p.length.widget, "tlenn")

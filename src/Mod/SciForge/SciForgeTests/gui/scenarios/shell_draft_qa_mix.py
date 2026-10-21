@@ -179,7 +179,8 @@ def p2_type():
 
 def p2_ok():
     v = h.solid_volume()
-    h.check("P2 the preview has the boss", sd.close(v, open_bottom(1) + BOSS), v)
+    # edited with the timeline rolled to the shell (Fusion): the boss after it waits until OK
+    h.check("P2 the preview: the shell alone, the boss waits", sd.close(v, open_bottom(1)), v)
     h.task_button("OK")
 
 

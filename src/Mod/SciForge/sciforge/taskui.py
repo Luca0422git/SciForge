@@ -109,7 +109,14 @@ def edit_object(obj):
         return  # it was the unfinished step of the dialog that was just cancelled
     from . import edit_rollback
 
-    back = edit_rollback.roll_to(obj)  # Fusion: the marker goes to the step being edited
+    doc = obj.Document
+    # Fusion: the marker goes to the step being edited. A step after the marker: rolled
+    # forward to before its editor opens, and back once nothing is edited (as before). A
+    # step before it: a SciForge dialog rolls back to it inside its undo step
+    # (edit_rollback.take), so Ctrl+Z after the edit leaves the marker where it was.
+    back = edit_rollback.roll_forward(obj)
+    edit_rollback.request(obj)
+    _unselect_whole(obj)
     try:
         if editor is not None:
             editor(obj)
@@ -117,8 +124,23 @@ def edit_object(obj):
             Gui.ActiveDocument.setEdit(obj.Name)
     except Exception as exc:
         warn("could not edit %s: %s" % (obj.Label, exc))
+    edit_rollback.unclaimed(doc)
     if back is not None:
-        edit_rollback.back_later(obj.Document.Name, *back)
+        edit_rollback.back_later(doc.Name, *back)
+
+
+def _unselect_whole(obj):
+    """The timeline click selected the step itself. Rolled to it, the step is shown; a click
+    on an object FreeCAD has selected whole selects its parent (the body), so the first click
+    on the step's faces in its dialog picked the whole body."""
+    try:
+        for sel in Gui.Selection.getSelectionEx("", 0):
+            for sub in list(sel.SubElementNames) or [""]:
+                found = sel.Object.getSubObject(sub, retType=1) if sub else sel.Object
+                if found is obj and not sub.split(".")[-1]:
+                    Gui.Selection.removeSelection(sel.Object.Document.Name, sel.Object.Name, sub)
+    except Exception as exc:
+        warn("could not clear the selection: %s" % exc)
 
 
 _BARE_NUMBER = re.compile(r"^\s*[+-]?(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?\s*$")
@@ -1249,13 +1271,15 @@ def _end_transaction(doc, abort=False):
     pending, and the next change anywhere opened a step under that name and threw away the
     Redo list. The pending name is closed too (same as preview.end_transaction), and a
     design without history bakes the change first (preview._bakes)."""
-    from . import preview
+    from . import edit_rollback, preview
 
     if not abort:
+        edit_rollback.restore(doc)  # the marker back after an edit, in this undo step
         preview.catch_up(doc)  # the steps after the marker waited: rebuilt in this undo step
         if preview._bakes(doc):
             return
     if abort:
+        edit_rollback.drop(doc)
         preview.release(doc)
         doc.abortTransaction()
     else:
@@ -1296,9 +1320,11 @@ class Panel:
         doc.openTransaction(transaction)
         self._closed = False
         set_current(self)
-        try:  # the steps after the history marker wait while the dialog is open
-            from . import preview
+        try:  # an edit rolls the marker to its step (in this undo step); the steps after
+            # the marker wait while the dialog is open
+            from . import edit_rollback, preview
 
+            edit_rollback.take(doc)
             preview.hold(doc)
         except Exception as exc:
             warn("previews rebuild every step: %s" % exc)
@@ -1464,9 +1490,11 @@ class Panel:
     def _close(self):
         if _OPEN["dialog"] is self:
             _OPEN["dialog"] = None
-        try:  # nothing waits after the dialog (its undo step closed and rebuilt them)
-            from . import preview
+        try:  # nothing waits after the dialog (its undo step closed and rebuilt them); a
+            # dialog that closed its step itself still gets the marker back after an edit
+            from . import edit_rollback, preview
 
+            edit_rollback.restore(self.doc)
             if preview.holding(self.doc):
                 preview.catch_up(self.doc)
         except Exception as exc:

@@ -423,14 +423,17 @@ def p21_ok():
     p = panel()
     h.check("P21 'turn / 4' is 90", p is not None and near(p.angle.value(), 90.0), p.angle.value())
     h.check("P21 the formula is listed", p is not None and "turn / 4" in p.formulas.text())
-    s["v21"] = first_vol()
     rev = ti.obj(s["t21"])
     s["r21"] = rev.Shape.Volume if rev is not None else None
     h.task_button("OK")
 
 
 def p21_undo():
-    h.check("P21 kept", not dialog_open() and near(first_vol(), s["v21"]), first_vol())
+    # the steps after the revolve waited while it was edited (Fusion): measured after OK
+    rev = ti.obj(s["t21"])
+    have = rev.Shape.Volume if rev is not None else None
+    h.check("P21 kept", not dialog_open() and have is not None and near(have, s["r21"]), have)
+    s["v21"] = first_vol()
     ti.ctrl("z")
 
 

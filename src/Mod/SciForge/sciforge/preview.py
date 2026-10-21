@@ -52,11 +52,15 @@ def end_transaction(doc, abort=False):
 
     In a design without history (or for an open base feature's bodies) the steps the
     command made are first baked into the bodies, in this same undo step (direct.py)."""
+    from . import edit_rollback
+
     if not abort:
+        edit_rollback.restore(doc)  # the marker back after an edit, in this undo step
         catch_up(doc)  # the steps after the marker, in this undo step
         if _bakes(doc):
             return
     if abort:
+        edit_rollback.drop(doc)
         release(doc)
         doc.abortTransaction()
     else:
@@ -87,8 +91,26 @@ def recompute(doc):
         names = _waiting(doc)
         if names:
             doc.recompute([o for o in doc.Objects if o.Name not in names])
+            _refresh_bodies(doc, names)
         else:
             doc.recompute()
+
+
+def _refresh_bodies(doc, names):
+    """A body waits with the steps after the marker (it depends on all its steps), but its
+    shape is only its Tip's: rebuilt alone (not its steps), so body.Shape is the design as
+    it is at the marker, as Fusion shows it while a step is edited."""
+    for name in names:
+        body = doc.getObject(name)
+        if body is None or body.TypeId != "PartDesign::Body":
+            continue
+        tip = body.Tip
+        if tip is not None and tip.Name in names:
+            continue
+        try:
+            body.recompute()  # this object only
+        except Exception:
+            pass
 
 
 # -- the steps after the history marker wait while a dialog is open ---------------------------
@@ -174,7 +196,11 @@ def _waiting(doc):
     try:
         from . import taskui
 
-        panel = taskui.current()
+        # the dialog being built or open (taskui.current() would forget a dialog that is
+        # not shown yet: its first preview runs before Gui.Control.showDialog)
+        panel = taskui._OPEN.get("dialog")
+        if panel is not None and getattr(panel, "_closed", False):
+            panel = None
         own = [panel.feature()] if panel is not None else []
         own += [getattr(m, "target", None) for m in getattr(panel, "members", [])]
         keep = set()

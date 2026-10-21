@@ -278,8 +278,9 @@ def edit_size():
             abs(p.diameter.value() - t.minor) < 0.006,
             (p.diameter.value(), t.minor),
         )
-    expect = s["v2"] + frustum(12, tables().taper_thread("npt", "1/8").minor) - frustum(12, t.minor)
-    s["v3"] = expect
+    change = frustum(12, tables().taper_thread("npt", "1/8").minor) - frustum(12, t.minor)
+    s["v3"] = s["v2"] + change
+    expect = s["v1"] + change  # Hole 2 waits while Hole 1 is edited (Fusion)
     h.check("3 1/4 NPT volume", hs.close(h.solid_volume(), expect), (h.solid_volume(), expect))
     h.task_button("OK")
 

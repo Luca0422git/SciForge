@@ -356,7 +356,8 @@ rack_teeth.wait_ms = 1500
 
 def rack_ok():
     rack = area(type="rack", teeth=12) * 10.0
-    expected = s["internal"] + rack + s["english"]
+    # Fusion: the steps after the edited one (the third gear) wait until OK
+    expected = s["internal"] + rack
     h.check("12-tooth rack", near(vol(), expected), (vol(), expected))
     h.task_button("OK")
 

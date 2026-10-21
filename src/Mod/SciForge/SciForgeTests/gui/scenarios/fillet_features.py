@@ -143,7 +143,8 @@ def rolled_back():
     h.check("editing Fillet 1", p is not None and p.target is not None and not p.created)
     h.check(
         "the part shows Fillet 1 (later chamfer rolled back while editing)",
-        b.close(h.body().Shape.Volume, s["v"])
+        # the body is the design at Fillet 1 now (the chamfer, 40 x 0.5, waits: Fusion)
+        b.close(h.body().Shape.Volume, s["v"] + 40 * 0.5)
         and p is not None
         and p.target.ViewObject.isVisible()
         and not b.blends()[1].ViewObject.isVisible(),

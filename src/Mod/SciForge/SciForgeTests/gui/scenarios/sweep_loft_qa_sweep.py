@@ -298,9 +298,11 @@ def p2_edit_open():
 def p2_taper():
     s["v2b"] = tube_frustum(L1, 3.0) + boss()
     h.check("P2 Taper 3 in an edit: no complaint", msg() == "", msg())
-    h.check("P2 frustum + the boss on top", near(vol(), s["v2b"], 1e-5), (vol(), s["v2b"]))
+    # edited with the timeline rolled to the sweep (Fusion): the boss after it waits until OK
+    alone = tube_frustum(L1, 3.0)
+    h.check("P2 the frustum, the boss waits", near(vol(), alone, 1e-5), (vol(), alone))
     zmax = st.bbox(h.body().Shape)[5]
-    h.check("P2 the boss still stands on the top face", near(zmax, L1 + BOSS), zmax)
+    h.check("P2 the part ends at the frustum's top", near(zmax, L1), zmax)
     h.shot("p2-taper")
     h.task_button("OK")
 
@@ -322,9 +324,10 @@ def p2_edit2():
 def p2_half():
     s["v2c"] = tube_frustum(L1 / 2, 3.0) + boss()
     h.check("P2 Distance 0.5: no complaint", msg() == "", msg())
-    h.check("P2 half the frustum + the boss", near(vol(), s["v2c"], 1e-5), (vol(), s["v2c"]))
+    alone = tube_frustum(L1 / 2, 3.0)  # the boss waits (rolled back) until OK
+    h.check("P2 half the frustum, the boss waits", near(vol(), alone, 1e-5), (vol(), alone))
     zmax = st.bbox(h.body().Shape)[5]
-    h.check("P2 the boss followed the top face down", near(zmax, L1 / 2 + BOSS), zmax)
+    h.check("P2 the part ends half way", near(zmax, L1 / 2), zmax)
     h.task_button("OK")
 
 
@@ -358,7 +361,8 @@ def p3_open():
 
 def p3_zero():
     h.check("P3 Distance 0 is said", "0" in msg() and "distance" in msg().lower(), msg())
-    h.check("P3 the last good preview stays", near(vol(), s["v2b"], 1e-5), vol())
+    # the boss waits while the sweep is edited: the previews are the sweep alone
+    h.check("P3 the last good preview stays", near(vol(), tube_frustum(L1, 3.0), 1e-5), vol())
     h.task_button("OK")
 
 
@@ -368,7 +372,7 @@ def p3_zero_ok():
 
 
 def p3_quarter():
-    s["v3"] = tube_frustum(L1 / 4, 3.0) + boss()
+    s["v3"] = tube_frustum(L1 / 4, 3.0)  # the boss waits while the sweep is edited
     h.check("P3 a comma works: a quarter", near(vol(), s["v3"], 1e-5), (vol(), s["v3"]))
     h.check("P3 no message", msg() == "", msg())
     ui.type_into(panel().taper.widget, "89")
@@ -412,7 +416,8 @@ def p3_dragged_far():
     p = panel()
     d = p.distance.value() if p is not None else None
     h.check("P3 dragged far past the end: Distance stops at 1", d is not None and d > 0.99, d)
-    h.check("P3 the whole tapered tube", near(vol(), s["v2b"], 1e-4), (vol(), s["v2b"]))
+    alone = tube_frustum(L1, 3.0)  # the boss waits
+    h.check("P3 the whole tapered tube", near(vol(), alone, 1e-4), (vol(), alone))
     handle = p.handles.get("distance") if p is not None else None
     if handle is not None:
         st.drag_ball_to(handle, V(0, 0, -30))

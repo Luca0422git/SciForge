@@ -77,6 +77,18 @@ def moulded(a, t):
     return outer - inner
 
 
+def moulded_cavity(a, t):
+    """What the shell of moulded(a, t) takes away."""
+    k = tan(a)
+    c = math.cos(math.radians(a))
+
+    def area(z, d):
+        return (40 - 2 * z * k - 2 * d) * (30 - 2 * z * k - 2 * d)
+
+    hh = 10 - t
+    return hh / 6.0 * (area(t, t / c) + 4 * area(t + hh / 2, t / c) + area(10, t / c))
+
+
 def doc():
     return App.ActiveDocument
 
@@ -308,7 +320,7 @@ def p4_negative():
     a = p.angle.value() if p else 0
     h.check("P4 dragged the other way: a negative angle", -30 < a < 0, a)
     v = h.solid_volume()
-    expect = front_right(a, 2)
+    expect = front(a)  # Draft 2 (the right face) waits while Draft 1 is edited (Fusion)
     h.check("P4 the face leans out (wider at the top)", sd.close(v, expect), (v, expect, a))
     h.check("P4 no message", msg(p) == "", msg(p))
     h.shot("p4-negative")
@@ -522,8 +534,10 @@ def p7_edit():
 
 
 def p7_edit_ok():
+    # the shell after the draft waits while the draft is edited (Fusion): the solid drafted 5
     v = h.solid_volume()
-    h.check("P7 the preview shells the new draft", sd.close(v, moulded(5, 1)), (v, moulded(5, 1)))
+    expect = moulded(5, 1) + moulded_cavity(5, 1)
+    h.check("P7 the preview drafts 5 degrees", sd.close(v, expect), (v, expect))
     h.task_button("OK")
 
 

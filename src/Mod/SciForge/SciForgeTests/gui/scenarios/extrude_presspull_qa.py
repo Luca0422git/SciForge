@@ -10,7 +10,8 @@ Path 3, values while the preview runs: two distances typed back to back, the arr
         zero distance and an impossible taper (message in the dialog, OK refused).
 Path 4, another command's key while a dialog is open: Q in Extrude, E in Press
         Pull, Ctrl+Z in a dialog with a preview.
-Path 5, editing from the timeline twice, then undo / redo of both edits.
+Path 5, editing from the timeline twice, then undo / redo of both edits (while a step is
+        edited the timeline is rolled to it, as in Fusion: the Press Pull after it waits).
 Path 6, save, close, reopen, edit the extrude and the Press Pull again.
 
 Numbers by hand: 40 x 30 x 10 block (a ring around an r5 disc), a 10 x 10 column.
@@ -583,7 +584,13 @@ def p5_editing():
 def p5_ok():
     from PySide6 import QtTest
 
-    h.check("preview +300", near(h.solid_volume(), s["volume"] + 300.0), h.solid_volume())
+    # While Extrude 2 is edited the timeline is rolled to it (Fusion): the Press Pull after
+    # it (+2200) waits until OK (edit_rollback / preview.hold).
+    h.check(
+        "preview +300, the Press Pull waits",
+        near(h.solid_volume(), s["volume"] - 2200.0 + 300.0),
+        h.solid_volume(),
+    )
     field = xpanel().distance.widget
     field.setFocus()
     QtTest.QTest.keyClick(field, QtCore.Qt.Key_Return)  # Enter in the field: OK
@@ -612,7 +619,11 @@ def p5_two_sides():
 
 def p5_two_ok():
     # Side two goes down into the block: it joins nothing new.
-    h.check("side two inside the block", near(h.solid_volume(), s["volume"] + 300.0))
+    h.check(
+        "side two inside the block (the Press Pull waits)",
+        near(h.solid_volume(), s["volume"] - 2200.0 + 300.0),
+        h.solid_volume(),
+    )
     h.task_button("OK")
 
 
@@ -687,7 +698,11 @@ def p6_editing():
 
 
 def p6_ok():
-    h.check("preview 4", near(h.solid_volume(), s["volume"] - 400.0), h.solid_volume())
+    h.check(
+        "preview 4 (the Press Pull waits)",
+        near(h.solid_volume(), s["volume"] - 2200.0 - 400.0),
+        h.solid_volume(),
+    )
     h.task_button("OK")
 
 

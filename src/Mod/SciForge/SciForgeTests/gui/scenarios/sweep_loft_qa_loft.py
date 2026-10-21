@@ -13,10 +13,12 @@ Path 2, Esc and another command's key in the middle of picking: Ctrl+Z, Loft, cl
         the bottom circle, press Q: the half-made loft is dropped and Press Pull starts; Esc.
         Ctrl+Y still brings the loft back (the Redo list survives both).
 Path 3, with Create Sketch and Extrude, and a guide added later: a circle (about r 2) on
-        the loft's top face, E 5: a boss. A line on XZ at x 12 from z 0, 30 long. Double-click
-        Loft 1 in the timeline, Guide Type Centerline, click the line: the loft follows it
-        (the same frustum, now SciForge's loft) and the boss stays on the top face. OK. Edit
-        it again: back to Rails with no rail (FreeCAD's loft again), OK. Ctrl+Z, Ctrl+Y.
+        the loft's top face, E 5: a boss. A line on XZ at x 12 from z 0, 30 long; its sketch
+        dragged before Loft 1 in the timeline (Fusion: editing a step rolls the design back
+        to it, what comes later cannot be picked). Double-click Loft 1 in the timeline (the
+        boss waits), Guide Type Centerline, click the line: the loft follows it (the same
+        frustum, now SciForge's loft); OK: the boss stays on the top face. Edit it again:
+        back to Rails with no rail (FreeCAD's loft again), OK. Ctrl+Z, Ctrl+Y.
 Path 4, save, close, reopen, edit: the loft and the boss come back; the line's sketch
         shown with its eye in the browser; double-click Loft 1: its two profiles are listed
         in their order; Centerline + the line again, OK.
@@ -409,7 +411,26 @@ def p3_line_done():
     h.ribbon("Finish Sketch")
 
 
+def p3_line_first():
+    from SciForgeTests.gui import bodies_steps as bs
+
+    title = bs.timeline_title_of(s["sd"])
+    h.check("P3 the line's sketch dragged before Loft 1", ti.drag_step(title, "Loft 1"), title)
+
+
+p3_line_first.wait_ms = 1500
+
+
 def p3_edit():
+    titles = st.timeline_titles()
+    from SciForgeTests.gui import bodies_steps as bs
+
+    title = bs.timeline_title_of(s["sd"])
+    h.check(
+        "P3 the line's sketch is before Loft 1",
+        title in titles and titles.index(title) < titles.index("Loft 1"),
+        titles,
+    )
     lines = si.lines(s["sd"])
     h.check("P3 one line", len(lines) == 1, s["sd"].Geometry)
     g = s["sd"].getGlobalPlacement()
@@ -449,11 +470,8 @@ def p3_centerline():
         p is not None and p.target is not None and getattr(p.target, "SciForgeType", "") == "Loft",
         p and p.target and p.target.TypeId,
     )
-    h.check(
-        "P3 the same frustum, the boss still on top", near(vol(), s["v3a"], 1e-5), (vol(), s["v3a"])
-    )
-    zmax = st.bbox(h.body().Shape)[5]
-    h.check("P3 the boss stands on the top face", near(zmax, H + BOSS), zmax)
+    # the boss waits while the loft is edited (Fusion)
+    h.check("P3 the same frustum", near(vol(), frustum(), 1e-5), (vol(), frustum()))
     h.shot("p3-centerline")
     h.task_button("OK")
 
@@ -461,6 +479,8 @@ def p3_centerline():
 def p3_kept():
     h.check("P3 OK closes the edit", not st.dialog_open())
     h.check("P3 kept", near(vol(), s["v3a"], 1e-5), vol())
+    zmax = st.bbox(h.body().Shape)[5]
+    h.check("P3 the boss stands on the top face", near(zmax, H + BOSS), zmax)
     st.edit_in_timeline("Loft 1")
 
 
@@ -480,7 +500,7 @@ def p3_rails():
         p is not None and p.target is not None and p.target.TypeId == "PartDesign::AdditiveLoft",
         p and p.target and p.target.TypeId,
     )
-    h.check("P3 the same part", near(vol(), s["v3a"], 1e-5), (vol(), s["v3a"]))
+    h.check("P3 the same frustum", near(vol(), frustum(), 1e-5), (vol(), frustum()))
     h.task_button("OK")
 
 
@@ -567,7 +587,7 @@ def p4_centerline():
     p = panel()
     h.check("P4 the centerline", p is not None and len(p.centerline) == 1, p and p.centerline)
     h.check("P4 no message", msg() == "", msg())
-    h.check("P4 the same part", near(vol(), s["v3a"], 1e-5), (vol(), s["v3a"]))
+    h.check("P4 the same frustum", near(vol(), frustum(), 1e-5), (vol(), frustum()))
     h.task_button("OK")
 
 
@@ -668,7 +688,8 @@ h.run(
             p3_line_start,
             p3_line_typed,
             p3_line_done,
-            p3_edit,
+            p3_line_first,
+        p3_edit,
             p3_editing,
             p3_centerline_box,
             p3_centerline,
