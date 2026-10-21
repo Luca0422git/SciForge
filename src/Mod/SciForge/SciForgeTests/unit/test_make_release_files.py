@@ -99,6 +99,8 @@ class Files(Fixture):
         self.assertEqual(c("SciForge_x-installer.exe"), "installer")
         self.assertEqual(c("SciForge_x.7z"), "portable")
         self.assertEqual(c("SciForge_x.AppImage"), "appimage")
+        # the packaging tool sits next to the AppImage in the build folder: never a release file
+        self.assertEqual(c("appimagetool-x86_64.AppImage"), "")
         self.assertEqual(c("SciForge-quick-update-x.zip"), "module")
         for other in ("SciForge_x-installer.exe-SHA256.txt", "SciForge_x.7z-SHA256.txt", "other.zip", "README.md"):
             self.assertEqual(c(other), "", other)

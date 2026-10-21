@@ -300,7 +300,7 @@ jobs:
         with:
           name: SciForge-Linux-${{ env.BUILD_TAG }}
           path: |
-            package/rattler-build/linux/*.AppImage
+            package/rattler-build/linux/SciForge_*.AppImage
             package/rattler-build/linux/*-SHA256.txt
           retention-days: 30
           compression-level: 0
@@ -309,7 +309,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
-          image=$(ls package/rattler-build/linux/*.AppImage | head -1)
+          image=$(ls package/rattler-build/linux/SciForge_*.AppImage | head -1)
           mkdir -p .sciforge-cache/sciforge
           (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)
           tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --only base
@@ -383,7 +383,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SciForge-Linux-*' --dir built || true
-          image=$(find built -name '*.AppImage' 2>/dev/null | head -1)
+          image=$(find built -name 'SciForge_*.AppImage' 2>/dev/null | head -1)
           if [ -z "$image" ]; then
             echo "::error::No Linux AppImage in this run: the Linux build did not finish (see its own log), so the scenarios cannot run."
             exit 1

@@ -53,7 +53,7 @@ def classify(name):
         return "installer"
     if name.endswith(".7z"):
         return "portable"
-    if name.endswith(".AppImage"):
+    if name.startswith("SciForge") and name.endswith(".AppImage"):  # (not appimagetool)
         return "appimage"
     if name.startswith("SciForge-quick-update-") and name.endswith(".zip"):
         return "module"
