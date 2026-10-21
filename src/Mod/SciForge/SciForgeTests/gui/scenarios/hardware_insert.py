@@ -334,7 +334,8 @@ def e_longer():
     have = screw.Shape.Volume if screw is not None else 0.0
     h.check("the screw grows to 16", close(have, want), (have, want))
     h.check("renamed M3x16 ISO 4762", "M3x16 ISO 4762" in component_labels(), component_labels())
-    want_box = BOX - SCREW_HOLE - INSERT_HOLE - MAGNET_HOLE
+    # the insert's and the magnet's holes (made later) wait while the screw is edited (Fusion)
+    want_box = BOX - SCREW_HOLE
     h.check("the hole stays (through all)", close(block_volume(), want_box), block_volume())
     if screw is not None:
         box = global_box(screw)
@@ -349,6 +350,8 @@ e_longer.wait_ms = 2000
 def e_kept():
     h.check("edit kept", panel() is None and "M3x16 ISO 4762" in component_labels())
     h.check("still three parts and three holes", len(parts()) == 3 and len(holes()) == 3)
+    want_box = BOX - SCREW_HOLE - INSERT_HOLE - MAGNET_HOLE
+    h.check("all three holes after OK", close(block_volume(), want_box), block_volume())
     state["count"] = len(App.ActiveDocument.Objects)
     state["volume"] = block_volume()
     open_hardware()
