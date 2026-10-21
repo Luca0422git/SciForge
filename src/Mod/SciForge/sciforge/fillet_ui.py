@@ -31,7 +31,8 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import blend, commands, fillet_core as core, fillet_sets, log, ui_icon, ui_icon_path, warn
+from . import blend, commands, fillet_core as core, fillet_sets, log, shape_checks, ui_icon
+from . import ui_icon_path, warn
 from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction, handle_size_at
@@ -1644,17 +1645,19 @@ class BlendPanel(Panel):
 
     def _remember_good(self):
         target = self.target
-        if target is None or self._uses_step() or not self._target_ok():
+        # the shape was checked already (by the trial, or by _target_ok): state only here
+        if target is None or self._uses_step() or not self._target_ok(validate=False):
             self._good, self._good_last = None, False
             return
         props = {}
         for name in ("Radius", "ChamferType", "Size", "Size2", "Angle", "FlipDirection"):
             if hasattr(target, name):
                 props[name] = getattr(target, name)
-        self._good = (target, (target.Base[0], list(target.Base[1])) if target.Base else None, props)
+        base = (target.Base[0], list(target.Base[1])) if target.Base else None
+        self._good = (target, base, props)
         self._good_last = True
 
-    def _target_ok(self):
+    def _target_ok(self, validate=True):
         """FreeCAD's Fillet/Chamfer built a sound result (it keeps an invalid one)."""
         target = self.target
         try:
@@ -1666,7 +1669,7 @@ class BlendPanel(Panel):
                 return False
             if len(shape.Solids) > max(1, len(self.info.shape.Solids)):
                 return False
-            return shape.isValid()
+            return shape_checks.is_valid(shape) if validate else True
         except Exception:
             return False
 
@@ -1771,7 +1774,7 @@ class BlendPanel(Panel):
         if "Invalid" in state or "Error" in state:
             self._say("⚠ " + blend.friendly(obj.getStatusString()))
             return
-        if obj.Shape.isNull() or not obj.Shape.isValid():
+        if obj.Shape.isNull() or not shape_checks.is_valid(obj.Shape):
             self._say("⚠ The result is not a valid solid. Try a smaller size.")
             return
         broken = [
@@ -1813,7 +1816,7 @@ class BlendPanel(Panel):
                 self.show_status()
                 return False
             state = list(obj.State)
-            if "Invalid" in state or "Error" in state or not obj.Shape.isValid():
+            if "Invalid" in state or "Error" in state or not shape_checks.is_valid(obj.Shape):
                 self.show_status()
                 return False
             self._accepted = True

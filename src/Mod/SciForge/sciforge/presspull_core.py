@@ -249,14 +249,13 @@ def _on_face(face, point, tol=1e-5):
 def step_faces(base, moved, slabs, result):
     """Faces of `result` left by the side of a slab that does not continue a face which
     stays where it is: they have to go (the neighbours are extended instead)."""
-    unmoved = [f for f in base.Faces if not any(f.isSame(m) or same_face(f, m) for m in moved)]
+    unmoved, unmoved_info = _unmoved(base, moved)
     sides = []
     for face, solid in zip(moved, slabs):
         for side in solid.Faces:
             if _parallel_surface(side, face):
                 continue  # the slab's bottom (the face itself) or its top (the moved face)
             sides.append(side)
-    unmoved_info = [_surface_info(u) for u in unmoved]
     side_info = [_surface_info(side) for side in sides]
     steps = []
     for candidate in result.Faces:
@@ -269,6 +268,26 @@ def step_faces(base, moved, slabs, result):
                 steps.append(candidate)
                 break
     return steps
+
+
+_UNMOVED = {}  # the last base and moved faces -> (base, unmoved faces, their surfaces)
+
+
+def _unmoved(base, moved):
+    """The faces of `base` that stay, with their surfaces. Every preview of a drag asks
+    this for the same base and faces: kept for the last one."""
+    try:
+        key = (base.hashCode(), tuple(m.hashCode() for m in moved))
+    except Exception:
+        key = None
+    kept = _UNMOVED.get("last")
+    if key is not None and kept is not None and kept[0] == key and kept[1].isSame(base):
+        return kept[2], kept[3]
+    unmoved = [f for f in base.Faces if not any(f.isSame(m) or same_face(f, m) for m in moved)]
+    info = [_surface_info(u) for u in unmoved]
+    if key is not None:
+        _UNMOVED["last"] = (key, base, unmoved, info)
+    return unmoved, info
 
 
 def _inner_point(face):
