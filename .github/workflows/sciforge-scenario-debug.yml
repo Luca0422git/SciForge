@@ -27,7 +27,37 @@ permissions:
   actions: read
 
 jobs:
+  # The unit tests the way a build's "Test the Linux build" step runs them (same image, the same
+  # clean-up of the runner, a checkout with submodules, the build ids written into the module):
+  # prints the names of the tests that fail.
+  unit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@90e01b21170618765a73370fcc3abbd1684a7793 # v5
+        with:
+          remove-android: 'true'
+          remove-cached-tools: 'true'
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 2
+          submodules: recursive
+
+      - name: Write the build ids into the SciForge module
+        run: bash tools/sciforge/write_build_info.sh --module src/Mod/SciForge --commit "$GITHUB_SHA" --date "$(date -u +%Y-%m-%d)" --core e32ed0e90b
+
+      - name: Unit tests
+        run: |
+          python3 --version
+          tools/sciforge/run_tests.sh --only unit --out test-output || true
+          grep -aE "^(FAIL|ERROR):" test-output/unit.log || echo "(no FAIL/ERROR lines)"
+          grep -a -B2 -A25 -E "^(FAIL|ERROR):" test-output/unit.log | head -150
+
   debug:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
