@@ -79,6 +79,42 @@ class Step(unittest.TestCase):
         self.assertNotIn("looks", keys(items))
         self.assertIn("see_through", keys(items))
 
+    def test_flat_step_loses_components(self):
+        """A STEP written body by body (Selected bodies, Export Everything) has no
+        component structure (review F3)."""
+        self.assertIn("components", keys(core.items("STEP", dict(DESIGN, components=1, flat=True))))
+
+    def test_iges_does_not_claim_the_file_has_no_names(self):
+        """FreeCAD's IGES writer keeps the names (406 name property, entity labels); only
+        SciForge's reader loses them (review F5)."""
+        text = [i for i in core.items("IGES", DESIGN) if i["key"] == "names"][0]["text"]
+        self.assertNotIn("unnamed", text)
+        self.assertIn("when SciForge opens the file", text)
+        brep = [i for i in core.items("BREP", DESIGN) if i["key"] == "names"][0]["text"]
+        self.assertIn("unnamed", brep)
+
+    def test_singular_wording(self):
+        """One of a thing reads right (review F8)."""
+        texts = " | ".join(
+            i["text"]
+            for i in core.items(
+                "STEP",
+                {"parameters": 1, "hidden_components": 1, "meshes": 1, "colours_written": True},
+            )
+        )
+        self.assertIn("1 parameter (its value is built in)", texts)
+        self.assertIn("1 component hidden, with its bodies", texts)
+        self.assertIn("export it as STL", texts)
+        texts = " | ".join(i["text"] for i in core.items("STL", {"solids": 1, "curved": 1}))
+        self.assertIn("1 curved face becomes small flat triangles", texts)
+        texts = " | ".join(i["text"] for i in core.items("STL", {"parameters": 2}))
+        self.assertIn("2 parameters (their values are built in)", texts)
+        loose = core.cad_items({"loose_faces": 1})[0]["text"]
+        self.assertTrue(loose.startswith("1 loose face that is not part of a solid"), loose)
+        self.assertIn("5 loose faces that are not", core.cad_items({"loose_faces": 5})[0]["text"])
+        dims = core.items("drawing_dxf", {"drawing_dimensions": 1})[0]["text"]
+        self.assertIn("it no longer measures the view", dims)
+
     def test_step_keeps_components_and_reports_names(self):
         items = core.items("STEP", dict(DESIGN, components=3))
         self.assertNotIn("components", keys(items))
@@ -100,7 +136,7 @@ class Step(unittest.TestCase):
         self.assertIn("the timeline (6 steps)", texts)
         self.assertIn("2 sketches", texts)
         self.assertIn("1 construction feature", texts)
-        self.assertIn("1 parameter (their values are built in)", texts)
+        self.assertIn("1 parameter (its value is built in)", texts)
         self.assertIn("the physical material of 1 body", texts)
         self.assertNotIn("curves", texts)  # STEP keeps exact curves
 
@@ -252,8 +288,33 @@ class Combine(unittest.TestCase):
         by_key = {i["key"]: i for i in merged}
         self.assertEqual(by_key["timeline"]["formats"], ["STEP", "STL", "OBJ"])
         self.assertNotIn("(", by_key["sketches"]["text"])  # every file loses them
-        self.assertTrue(by_key["looks"]["text"].endswith("(STL, OBJ)"), by_key["looks"]["text"])
-        self.assertTrue(by_key["merged"]["text"].endswith("(STL)"))
+        # the files first: never two sets of brackets at the end of a line
+        self.assertTrue(by_key["looks"]["text"].startswith("STL, OBJ: the colours"))
+        self.assertFalse(by_key["looks"]["text"].endswith(") (STL, OBJ)"))
+        self.assertTrue(by_key["merged"]["text"].startswith("STL: "), by_key["merged"]["text"])
+
+    def test_everything_mesh_body(self):
+        """Export Everything with a mesh body: the STEP leaves it out, but the STL, 3MF and
+        OBJ written with it hold it, so no advice to export it as STL, 3MF or OBJ (review
+        F8)."""
+        facts = {"solids": 2, "mesh_bodies": 1, "timeline": 2}
+        step = core.items("STEP", dict(facts, meshes=1, solids=2, mesh_bodies=0))
+        reports = [("STEP", step)] + [(f, core.items(f, facts)) for f in ("STL", "3MF", "OBJ")]
+        merged = core.combine(reports)
+        text = [i["text"] for i in merged if i["key"] == "meshes"][0]
+        self.assertEqual(
+            text, "1 mesh body not in the STEP (exact solids only): it is in the STL, 3MF, OBJ"
+        )
+        self.assertNotIn("export", text)
+
+    def test_everything_flat_step_loses_components(self):
+        """Export Everything writes its STEP body by body (export.export_step): flat, so the
+        components are not kept in any of the four files, and the line names no format
+        (review F3: it said "(STL, 3MF, OBJ)", as if the STEP had kept them)."""
+        facts = {"solids": 3, "components": 1, "flat": True}
+        reports = [(f, core.items(f, facts)) for f in ("STEP", "STL", "3MF", "OBJ")]
+        text = [i["text"] for i in core.combine(reports) if i["key"] == "components"][0]
+        self.assertEqual(text, "the components (1): every body is written on its own, flat")
 
     def test_summary(self):
         items = core.items("STL", {"timeline": 1, "sketches": 1})
@@ -290,6 +351,21 @@ class Imports(unittest.TestCase):
         self.assertIn("inches", items[1]["text"])
         self.assertEqual(core.mesh_items({"file_unit": "Inch", "unit": "Inch"}), [])
 
+    def test_3mf_in_microns(self):
+        """A 3MF in microns comes in 1000 times too big (Mesh.Mesh ignores the unit), and
+        Unit Type has no micrometres: the card says so and how to scale it (review F11)."""
+        facts = core.three_mf_facts(
+            '<model unit="micron" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/'
+            '2015/02"><resources><object id="1"><mesh/></object></resources></model>'
+        )
+        self.assertEqual(facts["file_unit"], "Micrometer")
+        items = core.mesh_items(dict(facts, unit="Millimeter"))
+        self.assertEqual(keys(items), ["unit"])
+        self.assertIn("micrometres", items[0]["text"])
+        self.assertIn("scale it by 0.001", items[0]["text"])
+        cm = core.mesh_items({"file_unit": "Micrometer", "unit": "Centimeter"})[0]["text"]
+        self.assertIn("scale it by 0.0001", cm)
+
     def test_cad(self):
         items = core.cad_items({"loose_faces": 5, "loose_curves": 1, "sewn": 0, "invalid": 1})
         self.assertEqual(keys(items), ["loose_faces", "loose_curves", "invalid"])
@@ -308,7 +384,7 @@ class Imports(unittest.TestCase):
         self.assertEqual(facts, {"unsupported": {"HATCH": 1}, "texts": 1, "points": 1})
         items = core.curve_items(dict(facts, skipped=0, flattened=2))
         self.assertEqual(keys(items), ["unsupported", "texts", "points", "flattened"])
-        self.assertEqual(items[0]["text"], "1 hatch (FreeCAD cannot read them)")
+        self.assertEqual(items[0]["text"], "1 hatch (FreeCAD cannot read it)")
         self.assertIn("1 text or dimension", items[1]["text"])
 
     def test_dxf_no_stats(self):

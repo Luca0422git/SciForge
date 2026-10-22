@@ -15,14 +15,18 @@ docs/sciforge/sessions/2026-10-21-export-report.md):
                  FreeCAD's headless writer has no colours); see-through looks come out
                  opaque; bodies come back named Body1, Body2 ... inside a component (a single
                  body at the design's root keeps its name);
-  IGES           solids only: no components, no colours, no names;
+  IGES           solids only: no components, no colours; the names are in the file (other
+                 programs read them) but SciForge's own reader brings bodies back as Body1,
+                 Body2 ...;
   STL            one mesh: no names, no colours, no unit (the numbers are in the unit chosen
                  but the file cannot say which); curved faces become flat triangles;
   3MF            one object per body with its name and the unit; no colours, no components;
   OBJ            named groups; no colours (no material file), no unit, no components;
   DXF of a sketch  curves only (lines, arcs, circles, ellipses, splines): no dimensions or
-                 constraints, no construction geometry, no points, no projected curves, and
-                 flat in the sketch's own X and Y;
+                 constraints, no construction geometry, no points, no projected curves that
+                 are only references (projected curves that are "defining", as Project and
+                 Auto project make them, are curves of the sketch and are written), and flat
+                 in the sketch's own X and Y;
   drawing DXF    SciForge's own writer: dimensions and symbols as plain lines and text,
                  curves that are not circles or arcs as short straight lines, hatching as
                  separate lines, text without a named font;
@@ -30,6 +34,10 @@ docs/sciforge/sessions/2026-10-21-export-report.md):
 
 An item is {"key", "count", "text"}; `formats` is added when reports of several files are
 combined (Export Everything).
+
+A STEP written body by body (Export > Selected bodies, Export Everything, the AI's STEP export
+with the window open: export.export_step) is flat: each body is a part of its own, so its
+components are not kept (facts "flat").
 """
 
 import re
@@ -65,6 +73,8 @@ _ALIASES = {
 
 # 3D Print only says what matters for the print (the file goes to a slicer, not to another
 # CAD program): what is left out of the print, colours, bodies merged into one, the unit.
+# (3D Print exports the bodies ticked in its dialog, so "hidden" only comes up when a caller
+# asks for a whole-design report with purpose "print".)
 PRINT_KEYS = (
     "hidden",
     "hidden_components",
@@ -147,6 +157,10 @@ def _bodies(count):
     return plural(count, "body", "bodies")
 
 
+def _them(count):
+    return "it" if count == 1 else "them"
+
+
 def _item(key, count, text):
     return {"key": key, "count": int(count), "text": text}
 
@@ -157,12 +171,24 @@ def _mm(value):
 
 
 UNIT_WORDS = {
+    "Micrometer": "micrometres",
     "Millimeter": "millimetres",
     "Centimeter": "centimetres",
     "Meter": "metres",
     "Inch": "inches",
     "Foot": "feet",
 }
+MM_PER_UNIT = {
+    "Micrometer": 0.001,
+    "Millimeter": 1.0,
+    "Centimeter": 10.0,
+    "Meter": 1000.0,
+    "Inch": 25.4,
+    "Foot": 304.8,
+}
+# the units Insert Mesh's Unit Type offers (insert.UNITS): a file in another unit cannot be
+# put right there, only scaled
+MESH_UNIT_TYPES = ("Centimeter", "Millimeter", "Meter", "Inch", "Foot")
 
 
 # -- export ----------------------------------------------------------------------------------
@@ -185,7 +211,7 @@ def _left_out(facts, fmt, out):
             _item(
                 "hidden_components",
                 n,
-                "%s hidden, with their bodies" % plural(n, "component"),
+                "%s hidden, with %s bodies" % (plural(n, "component"), "its" if n == 1 else "their"),
             )
         )
     if _n(facts, "surfaces"):
@@ -203,8 +229,8 @@ def _left_out(facts, fmt, out):
             _item(
                 "meshes",
                 n,
-                "%s (%s holds exact solids only: export them as STL, 3MF or OBJ)"
-                % (plural(n, "mesh body", "mesh bodies"), FORMAT_NAMES[fmt]),
+                "%s (%s holds exact solids only: export %s as STL, 3MF or OBJ)"
+                % (plural(n, "mesh body", "mesh bodies"), FORMAT_NAMES[fmt], _them(n)),
             )
         )
 
@@ -235,7 +261,12 @@ def _history(facts, out, design_wide=True):
     n = _n(facts, "parameters")
     if n:
         out.append(
-            _item("parameters", n, "%s (their values are built in)" % plural(n, "parameter"))
+            _item(
+                "parameters",
+                n,
+                "%s (%s built in)"
+                % (plural(n, "parameter"), "its value is" if n == 1 else "their values are"),
+            )
         )
     n = _n(facts, "joints")
     if n and design_wide:
@@ -279,7 +310,7 @@ def items(fmt, facts, purpose="file"):
         _left_out(facts, fmt, out)
         _history(facts, out, design_wide=facts.get("scope", "design") != "bodies")
         comps = _n(facts, "components")
-        if comps and fmt != "step":
+        if comps and (fmt != "step" or facts.get("flat")):
             out.append(
                 _item(
                     "components",
@@ -314,7 +345,12 @@ def items(fmt, facts, purpose="file"):
                 _item(
                     "names",
                     n,
-                    "the names of %s (%s holds unnamed shapes)" % (_bodies(n), FORMAT_NAMES[fmt]),
+                    "the names of %s (%s holds unnamed shapes)" % (_bodies(n), FORMAT_NAMES[fmt])
+                    if fmt == "brep"
+                    # the IGES file has them (other programs read them): SciForge's reader
+                    # does not bring them back
+                    else "the names of %s when SciForge opens the file (they come back as "
+                    "Body1, Body2 ...; other programs read the names IGES keeps)" % _bodies(n),
                 )
             )
         looks = _n(facts, "looks")
@@ -355,8 +391,12 @@ def items(fmt, facts, purpose="file"):
                     _item(
                         "curved",
                         n,
-                        "exact curves: %s become small flat triangles%s"
-                        % (plural(n, "curved face"), within),
+                        "exact curves: %s small flat triangles%s"
+                        % (
+                            plural(n, "curved face")
+                            + (" becomes" if n == 1 else " become"),
+                            within,
+                        ),
                     )
                 )
             unit = facts.get("unit") or "Millimeter"
@@ -419,8 +459,13 @@ def items(fmt, facts, purpose="file"):
                     _item(
                         "drawing_dimensions",
                         n,
-                        "%s as plain lines and text: they no longer measure the views"
-                        % plural(n, "dimension"),
+                        "%s as plain lines and text: %s"
+                        % (
+                            plural(n, "dimension"),
+                            "it no longer measures the view"
+                            if n == 1
+                            else "they no longer measure the views",
+                        ),
                     )
                 )
             n = _n(facts, "symbols")
@@ -476,7 +521,10 @@ def items(fmt, facts, purpose="file"):
 def combine(reports):
     """One list for several files written at once (Export Everything): `reports` is
     [(format name, items)]. An item every file loses is listed once; one only some lose
-    says which ("the colours of 2 bodies (STL, OBJ)")."""
+    says which ("STL, OBJ: the colours of 2 bodies (the file is written without colours)":
+    the files first, so the line never ends in two sets of brackets). Mesh bodies left out
+    of the STEP are in the mesh files written with it: the line says so, without the advice
+    to export them as STL, 3MF or OBJ."""
     names = [name for name, _ in reports]
     found = {}
     order = []
@@ -492,7 +540,16 @@ def combine(reports):
     for key in order:
         entry = found[key]
         if len(entry["formats"]) < len(set(names)):
-            entry["text"] = "%s (%s)" % (entry["text"], ", ".join(entry["formats"]))
+            if entry["key"] == "meshes":
+                others = [n for n in names if n not in entry["formats"]]
+                entry["text"] = "%s not in the %s (exact solids only): %s in the %s" % (
+                    plural(entry["count"], "mesh body", "mesh bodies"),
+                    ", ".join(entry["formats"]),
+                    "it is" if entry["count"] == 1 else "they are",
+                    ", ".join(others),
+                )
+            else:
+                entry["text"] = "%s: %s" % (", ".join(entry["formats"]), entry["text"])
         out.append(entry)
     rank = {key: n for n, key in enumerate(ORDER)}
     out.sort(key=lambda i: rank.get(i["key"], len(ORDER)))
@@ -552,7 +609,24 @@ def mesh_items(facts):
     if facts.get("colours"):
         out.append(_item("colours", 1, "the file's colours (Insert Mesh takes the shape only)"))
     file_unit, unit = facts.get("file_unit"), facts.get("unit")
-    if file_unit and unit and file_unit != unit:
+    if file_unit and unit and file_unit != unit and file_unit not in MESH_UNIT_TYPES:
+        # Unit Type has no such unit (a 3MF in microns): only a scale puts it right
+        factor = MM_PER_UNIT.get(file_unit, 1.0) / MM_PER_UNIT.get(unit, 1.0)
+        out.append(
+            _item(
+                "unit",
+                1,
+                "the file says its numbers are in %s; it came in as %s: scale it by %s "
+                "if the size is wrong (Unit Type has no %s)"
+                % (
+                    UNIT_WORDS.get(file_unit, file_unit),
+                    UNIT_WORDS.get(unit, unit),
+                    ("%.6f" % factor).rstrip("0").rstrip("."),
+                    UNIT_WORDS.get(file_unit, file_unit),
+                ),
+            )
+        )
+    elif file_unit and unit and file_unit != unit:
         out.append(
             _item(
                 "unit",
@@ -578,8 +652,8 @@ def cad_items(facts):
             _item(
                 "loose_faces",
                 n,
-                "%s that are not part of a solid (only the solids of those parts came in)"
-                % plural(n, "loose face"),
+                "%s that %s not part of a solid (only the solids of those parts came in)"
+                % (plural(n, "loose face"), "is" if n == 1 else "are"),
             )
         )
     n = _n(facts, "loose_curves")
@@ -682,7 +756,9 @@ def curve_items(facts, kind="dxf"):
         if not n:
             continue
         one, many = DXF_NAMES.get(name, ("%s entity" % name, "%s entities" % name))
-        out.append(_item("unsupported", n, "%s (FreeCAD cannot read them)" % plural(n, one, many)))
+        out.append(
+            _item("unsupported", n, "%s (FreeCAD cannot read %s)" % (plural(n, one, many), _them(n)))
+        )
     n = _n(facts, "texts")
     if n:
         what = "text or dimension" if kind == "dxf" else "text"
@@ -726,7 +802,7 @@ def open_edges(facets):
 
 
 _UNIT_3MF = {
-    "micron": None,
+    "micron": "Micrometer",
     "millimeter": "Millimeter",
     "centimeter": "Centimeter",
     "meter": "Meter",
