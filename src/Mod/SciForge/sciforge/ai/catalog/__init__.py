@@ -309,7 +309,9 @@ OVERVIEW = (
     + UNITS
     + " Faces and edges are picked with selectors that describe their geometry (get_help "
     "topic selectors), never by internal names. " + STEP_HELP + " Errors come back as plain "
-    "sentences: read them, fix the arguments and try again. Read-only tools (inspect_design, "
+    "sentences: read them, fix the arguments and try again; a size that does not fit (a "
+    "fillet radius, a shell thickness, a draft angle...) is refused with the largest value "
+    "that does, never built smaller in its place. Read-only tools (inspect_design, "
     "query_geometry, check_design, render, diff_design, get_design, get_timeline, get_step, "
     "measure, physical_properties...) never change anything."
 )

@@ -6,7 +6,7 @@ Fusion: INSERT > Insert Mesh / Insert DXF / Insert STEP, and Insert into Current
 
 ## What it does
 
-Bring a file into the active design: STEP / IGES (one component with the file's structure, its bodies and colours), STL / OBJ / 3MF (a mesh body; unit: the file's unit), DXF (its curves into a new sketch on sketch_plane XY | XZ | YZ, ready to extrude), FCStd (another design's bodies as a component). label names what is made.
+Bring a file into the active design: STEP / IGES (one component with the file's structure, its bodies and colours), STL / OBJ / 3MF (a mesh body; unit: the file's unit), DXF (its curves into a new sketch on sketch_plane XY | XZ | YZ, ready to extrude), FCStd (another design's bodies as a component). label names what is made. The answer also lists what the file had that did not come in or came in changed ("Not brought in, or changed:" and one line each, as INSERT's message says: an open mesh, a 3MF's unit or colours, DXF texts, hatches and points, loose faces of a STEP...); a mesh whose file says another unit can be inserted again with unit.
 
 ## Arguments
 

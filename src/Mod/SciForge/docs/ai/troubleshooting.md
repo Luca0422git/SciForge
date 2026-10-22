@@ -35,22 +35,37 @@ fails and lists what it picked. Fix the selector (add `type`, `at`, `radius`), o
 ## A size that does not fit
 
 A fillet or chamfer bigger than the faces next to it, a shell wall thicker than the part, a
-hole bigger than the face: reduce the size. Fillet radius < half the thinnest wall it
-touches is a good rule.
+draft angle steeper than the face takes, a press pull deeper than the part: the call fails
+and changes nothing. SciForge never builds a smaller value in place of yours (you asked for
+an exact value); instead the answer ends with the largest value that does fit, found by
+trying smaller values (the same search SciForge's dialogs use when a person drags a value
+past what fits; it takes a few seconds at most): `Largest radius that fits here: 19.99 mm`.
+For a value that goes the other way (a press pull into the part, a negative angle) it says
+`Furthest ... that fits here`. Use that value or less, or rethink the size. Changing a step
+later with `edit_step` answers the same way. A size given as a formula (`expressions`) is
+not searched.
 
 ```json sciforge-calls
 [
   {"tool": "fillet", "args": {"edges": {"type": "line", "parallel": [0, 0, 1], "count": 4},
     "radius": 30},
-   "expect": {"error": true, "contains": ["Radius 30 mm is too big here"]}},
+   "expect": {"error": true, "contains": ["Radius 30 mm is too big here",
+     "Largest radius that fits here: 19.99 mm", "give radius 19.99 or less"]}},
   {"tool": "shell", "args": {"faces": {"normal": [0, 0, 1], "count": 1}, "thickness": 25},
-   "expect": {"contains": ["Warning: no solid changed"]}},
-  {"tool": "undo", "args": {}, "expect": {"contains": ["Undo: AI: Shell 25 mm."]}}
+   "expect": {"error": true, "contains": ["the value does not fit here",
+     "Largest thickness that fits here: 9.99 mm"]}},
+  {"tool": "fillet", "args": {"edges": {"type": "line", "parallel": [0, 0, 1], "count": 4},
+    "radius": 5}, "expect": {"contains": ["Its id is 'Fillet1'"]}},
+  {"tool": "edit_step", "args": {"step": "Fillet1", "set": {"radius": 30}},
+   "expect": {"error": true, "contains": ["Largest radius that fits here: 19.99 mm",
+     "give set.radius 19.99 or less"]}},
+  {"tool": "undo", "args": {}, "expect": {"contains": ["Undo: AI: Fillet 5 mm."]}}
 ]
 ```
 
-Note the shell: OpenCASCADE quietly returned the unchanged plate, so the step "worked" but
-changed nothing. SciForge says so with the warning; undo it and use a thinner wall.
+Note the shell: OpenCASCADE quietly gives the plate back unchanged for a wall thicker than
+the part; SciForge sees that the volume did not change and refuses it like any other size
+that does not fit.
 
 ## It points the wrong way (nothing changed)
 
@@ -184,12 +199,21 @@ Headless SciForge never replaces a file unless it was started with `--allow-over
 (the window asks the person instead); paths must end in the format's extension; `save` on a
 design that was never saved needs `path` (or use `save_as`).
 
+An export answers what the file does not keep of this design, after the file written: `Not
+kept in this file:` and one line each (the timeline steps, sketches, hidden bodies,
+colours, names, bodies merged into one mesh...), the same list the person sees after File >
+Export; nothing is listed when nothing is lost. Inserting or opening a file answers what did
+not come in or came in changed (`Not brought in, or changed:`: an open mesh, a 3MF's unit,
+DXF texts and hatches, loose faces of a STEP...). These are facts about the file formats, not
+errors: decide whether they matter (a STEP for another CAD program never has the timeline).
+
 ```json sciforge-calls
 [
   {"tool": "primitive", "args": {"kind": "box", "plane": "XY", "length": 10, "width": 10,
     "height": 10}},
   {"tool": "export", "args": {"format": "step", "path": "{tmp}/box.step"},
-   "expect": {"contains": ["box.step"]}},
+   "expect": {"contains": ["box.step", "Not kept in this file:",
+     "- the timeline (1 step): the file holds the finished shapes only"]}},
   {"tool": "export", "args": {"format": "step", "path": "{tmp}/box.step"},
    "expect": {"error": true, "contains": ["already exists"]}},
   {"tool": "export", "args": {"format": "stl", "path": "{tmp}/box.step"},
@@ -213,7 +237,8 @@ design that was never saved needs `path` (or use `save_as`).
 
 A parameter that a formula uses (another parameter's, a sketch dimension's or a step's)
 cannot be deleted: change those first. A sketch constraint or dimension that conflicts with
-the sketch is refused with the constraints it fights with ([sketches.md](sciforge://docs/sketches.md)).
+the sketch, or that the sketch already says, is refused with the constraints it fights or
+repeats, named in words and by index ([sketches.md](sciforge://docs/sketches.md)).
 
 ## Over MCP: SciForge busy, closed, or the answer lost
 

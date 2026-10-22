@@ -86,7 +86,10 @@ lines that close a loop together do (a triangle of three lines is an area). Open
 
 Shapes made by `create_sketch` come with their constraints and dimensions (a rectangle is
 fully constrained: Fusion's padlock). `get_sketch` lists every curve and constraint by index,
-the degrees of freedom left, and conflicting or redundant constraints.
+the degrees of freedom left, and conflicting or redundant constraints; `inspect_design` and
+`check_design` give every sketch's `fully_constrained` and `degrees_of_freedom` (how many
+ways its curves can still move; 0 and fully constrained: the padlock the person sees in the
+browser and the timeline).
 
 - `sketch_constraint` adds coincident, horizontal, vertical, parallel, perpendicular,
   tangent, equal, collinear, concentric, midpoint, symmetric, fix, point_on, smooth; items
@@ -97,7 +100,12 @@ the degrees of freedom left, and conflicting or redundant constraints.
   (`expression`; an empty expression removes the formula). Everything built from the sketch
   updates.
 - A constraint or dimension that conflicts with the sketch is not added: the answer names the
-  constraints it fights with.
+  constraints it fights with, in the words the sketch tools use in the window ("Vertical:
+  not added, it conflicts with the 50 mm dimension 'len'") and by index (`constraint 1 of
+  Sketch1`, for sketch_delete or set_sketch_dimension). One that the sketch already says is
+  not added either ("..., the 50 mm dimension 'len' already makes it so"). A new value for a
+  dimension that the sketch cannot take says what it conflicts with ("That value does not
+  fit: it conflicts with ...").
 
 ```json sciforge-calls
 [
@@ -109,7 +117,15 @@ the degrees of freedom left, and conflicting or redundant constraints.
     "items": [{"curve": 0}], "value": 50, "name": "len"},
    "expect": {"contains": ["constraint 1 of Sketch1 = 50.00 mm"]}},
   {"tool": "sketch_constraint", "args": {"sketch": "Sketch1", "kind": "vertical",
-    "items": [{"curve": 0}]}, "expect": {"error": true, "contains": ["Not added"]}},
+    "items": [{"curve": 0}]}, "expect": {"error": true, "contains": [
+    "Vertical: not added, it conflicts with the 50 mm dimension 'len'",
+    "constraint 1 of Sketch1"]}},
+  {"tool": "sketch_dimension", "args": {"sketch": "Sketch1", "kind": "distance_x",
+    "items": [{"curve": 0, "point": "start"}, {"curve": 0, "point": "end"}], "value": 50},
+   "expect": {"error": true, "contains": ["the 50 mm dimension 'len' already makes it so"]}},
+  {"tool": "inspect_design", "args": {},
+   "expect": {"json": {"sketches.0.fully_constrained": false,
+     "sketches.0.degrees_of_freedom": 2}}},
   {"tool": "set_sketch_dimension", "args": {"sketch": "Sketch1", "constraint": "len",
     "value": 60}, "expect": {"contains": ["len = 60"]}},
   {"tool": "get_sketch", "args": {"sketch": "Sketch1"},

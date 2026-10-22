@@ -6,7 +6,7 @@ Fusion: File > Open. Category: Designs and files. Changes which design is open o
 
 ## What it does
 
-Open a design (.FCStd) or a STEP / IGES file as a new design (its components and bodies kept). A design that is already open comes to the front. It becomes the active design.
+Open a design (.FCStd) or a STEP / IGES file as a new design (its components and bodies kept). A design that is already open comes to the front. It becomes the active design. For a STEP / IGES file the answer also lists what the file had that did not come in or came in changed ("Not brought in, or changed:" and one line each: loose faces, curves and points, surface bodies, bodies with geometry errors).
 
 ## Arguments
 

@@ -6,7 +6,7 @@ Fusion: DRAWING > EXPORT > Output PDF / Output DXF. Category: Drawings. Writes f
 
 ## What it does
 
-Export a drawing: format pdf (every sheet in one PDF; needs the SciForge window) or dxf (the sheet: frame, views on their own layers, dimensions, text). Replacing an existing file must be confirmed by the person in SciForge.
+Export a drawing: format pdf (every sheet in one PDF; needs the SciForge window) or dxf (the sheet: frame, views on their own layers, dimensions, text). Replacing an existing file must be confirmed by the person in SciForge. The answer lists what the file does not keep ("Not kept in this file:": other sheets, dimensions written as plain lines and text, hatching as lines, the font...), as the drawing's Export message does.
 
 ## Arguments
 

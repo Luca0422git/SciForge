@@ -28,6 +28,7 @@ A plain sentence. The example below shows a real one.
 - Called without arguments, the arguments are refused before anything runs: `Not done: step is missing.`
 - Arguments of the wrong type, out of their limits or not in the table are refused the same way, each problem in a sentence ("radius must be a number above 0").
 - When it cannot be done the answer says why in a sentence (isError true) and nothing changes.
+- A size that does not fit (a radius, distance, thickness or angle in `set`) is refused, never built smaller in its place: the reason ends with the largest value that fits, found by trying smaller ones (`Largest radius that fits here: 19.99 mm (30 mm does not; ... give radius 19.99 or less).`; `Furthest ... that fits here` for a value below 0). A value given as a formula is not searched. See [troubleshooting](sciforge://docs/troubleshooting.md#a-size-that-does-not-fit).
 
 ## Example 1: make the plate 15 mm thick (the hole follows)
 

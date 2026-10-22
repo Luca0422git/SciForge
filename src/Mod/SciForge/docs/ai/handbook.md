@@ -38,7 +38,14 @@ You call tools; each answers in plain sentences, often followed by JSON:
   all it ends with `Warning: no solid changed ...` (a cut that pointed away from the part, a
   wall thicker than the part).
 - A tool that fails changes nothing and says why in one sentence: `Not done (AI: Fillet
-  30 mm): Radius 30 mm is too big here: ...`. Read it, fix the arguments, call again.
+  30 mm): Radius 30 mm is too big here: ...`. Read it, fix the arguments, call again. When
+  the reason is a size that does not fit (a fillet radius, chamfer distance, shell or wall
+  thickness, draft or taper angle, press pull distance...), the answer also gives the
+  largest value that fits (`Largest radius that fits here: 19.99 mm`); SciForge never
+  builds a smaller value in place of the one you asked for.
+- An export says what the file does not keep (`Not kept in this file:` ...), an insert or
+  open what did not come in (`Not brought in, or changed:` ...): facts about the format,
+  the same the person sees in the window.
 - Arguments that break a tool's rules are refused before anything runs: `Not done: give
   profile (a sketch id) or face (a flat face selector), one of them.`
 - Read-only tools (`get_design`, `inspect_design`, `query_geometry`, `check_design`, `measure`,
@@ -66,7 +73,8 @@ You call tools; each answers in plain sentences, often followed by JSON:
    "expect": {"contains": ["Its id is 'Extrude1'", "Bodies now: Body1: 24000 mm3, 60 x 40 x 10 mm."]}},
   {"tool": "fillet", "args": {"edges": {"type": "line", "parallel": [0, 0, 1], "count": 4},
     "radius": 30},
-   "expect": {"error": true, "contains": ["Radius 30 mm is too big here"]}}
+   "expect": {"error": true, "contains": ["Radius 30 mm is too big here",
+     "Largest radius that fits here: 19.99 mm"]}}
 ]
 ```
 

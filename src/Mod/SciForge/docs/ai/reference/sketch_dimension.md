@@ -29,6 +29,7 @@ A plain sentence. The example below shows a real one.
 - Called without arguments, the arguments are refused before anything runs: `Not done: sketch is missing; kind is missing; items is missing.`
 - Arguments of the wrong type, out of their limits or not in the table are refused the same way, each problem in a sentence ("radius must be a number above 0").
 - When it cannot be done the answer says why in a sentence (isError true) and nothing changes.
+- A constraint or dimension that conflicts with the sketch, or that the sketch already says, is not added (a new value it cannot take is not set): the answer names the constraints it fights or repeats, as the sketch tools do in the window (`Vertical: not added, it conflicts with the 50 mm dimension 'len' (constraint 1 of Sketch1: ...).`, `..., the 50 mm dimension 'len' already makes it so ...`, `That value does not fit: it conflicts with ...`). See [sketches](sciforge://docs/sketches.md#constraints-and-dimensions).
 
 ## Example 1: a 50 mm dimension on the first line, named len
 

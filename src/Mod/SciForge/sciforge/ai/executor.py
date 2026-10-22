@@ -421,13 +421,15 @@ class Context:
             return _clean(text), isinstance(exc, _NoChange)
 
     def _changed_nothing(self, doc, before, shapes_before):
-        """True when the steps just built left every solid as it was (no step broke and the
-        history marker is at the end, so the bodies show the result)."""
+        """True when the steps just built left every solid's volume and size as they were
+        (no step broke and the history marker is at the end, so the bodies show the
+        result). For a call with a size value: a shell as thick as the part gives back a
+        solid of the same volume with other faces, which is no shell either."""
         if shapes_before is None or not _marker_at_end(doc):
             return False
         if broke_text(doc, before):
             return False
-        return shape_signature(doc) == shapes_before
+        return _volumes(shape_signature(doc)) == _volumes(shapes_before)
 
     def _trial(self, doc, builder, step_id, args, before, shapes_before):
         """Build this call with other arguments in a transaction that is taken back: True
@@ -479,6 +481,13 @@ class Context:
 _BUILDERS = {}
 
 
+def _volumes(signature):
+    """{body: (volume, bounding box)} of a shape_signature (None stays None)."""
+    if signature is None:
+        return None
+    return {name: (sig[0], sig[3]) for name, sig in signature.items()}
+
+
 def _solids_valid(doc, shapes_before):
     """True when every body a trial changed is a valid shape (a trial is stricter than a
     real call, so the largest value it finds always builds)."""
@@ -506,8 +515,8 @@ class _NoChange(Exception):
     def __init__(self, title):
         Exception.__init__(
             self,
-            "%s changed no solid: the value does not fit here (OpenCASCADE gave the part back "
-            "unchanged)." % title.replace("AI: ", ""),
+            "%s left every solid's volume as it was: the value does not fit here "
+            "(OpenCASCADE gave the part back unchanged)." % title.replace("AI: ", ""),
         )
 
 

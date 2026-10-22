@@ -27,7 +27,7 @@ Pure Python: no FreeCAD, no Qt.
 import json
 import os
 
-from . import catalog, docs_core
+from . import catalog, docs_core, value_fit
 from .catalog import kit, registry
 
 FILE = "tools.md"  # under the docs root (docs_core.docs_root())
@@ -429,7 +429,41 @@ def _errors(entry):
             "- When it cannot be done the answer says why in a sentence (isError true) and "
             "nothing changes."
         )
+    limited = value_fit.LIMITED.get(entry["name"])
+    if limited or entry["name"] == "edit_step":
+        names = sorted({_dotted(path) for path, _words, _unit in limited or ()})
+        which = (
+            " (%s)" % ", ".join("`%s`" % n for n in names)
+            if names
+            else " (a radius, distance, thickness or angle in `set`)"
+        )
+        lines.append(
+            "- A size that does not fit%s is refused, never built smaller in its place: the "
+            "reason ends with the largest value that fits, found by trying smaller ones "
+            "(`Largest radius that fits here: 19.99 mm (30 mm does not; ... give radius "
+            "19.99 or less).`; `Furthest ... that fits here` for a value below 0). A "
+            "value given as a formula is not searched. See "
+            "[troubleshooting](sciforge://docs/troubleshooting.md#a-size-that-does-not-fit)."
+            % which
+        )
+    if entry["name"] in SKETCH_EXPLAINED:
+        lines.append(
+            "- A constraint or dimension that conflicts with the sketch, or that the sketch "
+            "already says, is not added (a new value it cannot take is not set): the answer "
+            "names the constraints it fights or repeats, as the sketch tools do in the window "
+            "(`Vertical: not added, it conflicts with the 50 mm dimension 'len' (constraint 1 "
+            "of Sketch1: ...).`, `..., the 50 mm dimension 'len' already makes it so ...`, "
+            "`That value does not fit: it conflicts with ...`). See "
+            "[sketches](sciforge://docs/sketches.md#constraints-and-dimensions)."
+        )
     return lines
+
+
+SKETCH_EXPLAINED = ("sketch_constraint", "sketch_dimension", "set_sketch_dimension")
+
+
+def _dotted(path):
+    return ".".join("[]" if key == "*" else key for key in path).replace(".[]", "[]")
 
 
 def reference_page(entry, results, recipes=(), golden=()):

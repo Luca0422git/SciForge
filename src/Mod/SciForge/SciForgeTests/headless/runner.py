@@ -536,7 +536,7 @@ SESSION = [
         "tool": "sketch_constraint",
         "expect": "error",
         "args": {"sketch": "$s_edit", "kind": "vertical", "items": [{"curve": 0}]},
-        "contains": ["Not added"],
+        "contains": ["Vertical: not added"],
     },
     {
         "tool": "sketch_dimension",

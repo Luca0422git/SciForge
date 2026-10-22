@@ -33,6 +33,7 @@ On success: `Done: <undo title>. Its id is '<id>'. Bodies now: <each solid body'
 - Called without arguments, the arguments are refused before anything runs: `Not done: path is missing.`
 - Arguments of the wrong type, out of their limits or not in the table are refused the same way, each problem in a sentence ("radius must be a number above 0").
 - When SciForge cannot build the step (a selector that picks another number of elements than `count`, a size that does not fit, an id that does not exist), the answer is `Not done (<undo title>): <reason>` and nothing changes; [troubleshooting](sciforge://docs/troubleshooting.md) lists the usual causes.
+- A size that does not fit (`section_size`, `thickness`) is refused, never built smaller in its place: the reason ends with the largest value that fits, found by trying smaller ones (`Largest radius that fits here: 19.99 mm (30 mm does not; ... give radius 19.99 or less).`; `Furthest ... that fits here` for a value below 0). A value given as a formula is not searched. See [troubleshooting](sciforge://docs/troubleshooting.md#a-size-that-does-not-fit).
 
 ## Example 1: a 4 mm pipe along a line
 
