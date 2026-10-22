@@ -168,6 +168,13 @@ def same_answer(recorded, now, rel=1e-4, absolute=1e-3):
     return None
 
 
+def _first_line(answer):
+    """An answer cut to its first line with the numbers masked: what stays the same for the
+    documentation tools while the documents they search change."""
+    text = (answer.get("text") or "").split("\n", 1)[0]
+    return dict(answer, text=_NUMBER.sub("#", text))
+
+
 class Session:
     def __init__(self, gui=False):
         self.folder = tempfile.mkdtemp(prefix="sciforge-docs-")
@@ -319,7 +326,7 @@ def run_examples(record=False, text_filter="", gui=False, path=RESULTS):
                     problems.append("failed: %s" % answer["text"][:600])
                 if record:
                     if not problems:
-                        recorded[key] = dict(spec, answer=answer)
+                        recorded[key] = dict(spec, note=ex.get("note", ""), answer=answer)
                         changed = True
                 else:
                     old = recorded.get(key)
@@ -328,7 +335,10 @@ def run_examples(record=False, text_filter="", gui=False, path=RESULTS):
                     elif {k: old.get(k) for k in spec} != json.loads(json.dumps(spec)):
                         problems.append("recorded for other arguments: record again")
                     else:
-                        difference = same_answer(old["answer"], answer)
+                        if ex.get("volatile"):  # (answers about the documentation itself)
+                            difference = same_answer(_first_line(old["answer"]), _first_line(answer))
+                        else:
+                            difference = same_answer(old["answer"], answer)
                         if difference:
                             problems.append(
                                 "the answer differs from its reference page (%s): record "

@@ -4,8 +4,10 @@
 resources and prompts (sciforge/ai/mcp_resources.py) honest:
 
   * the tool table of docs/ai/tools.md lists exactly what tools/list answers, in order;
-  * every tool of the catalogue has its section there, and the file is exactly what
-    tools/sciforge/make_ai_docs.py writes from the catalogue now;
+  * every tool of the catalogue has its reference page (reference/<tool>.md) with an example,
+    and every generated file (tools.md, reference/, examples/golden-models.md, the user/
+    copies of docs/sciforge) is exactly what tools/sciforge/make_ai_docs.py writes now, with
+    no stale page left over;
   * every resource resources/list names can be read, every document is listed, every
     sciforge:// link in the documents points to something that exists;
   * every prompt can be fetched and names only tools that exist;
@@ -24,11 +26,19 @@ import zipfile
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 sys.path.insert(0, ROOT)
 
-from sciforge.ai import catalog, installers, mcp_core, mcp_resources, tool_docs  # noqa: E402
+from sciforge.ai import (  # noqa: E402
+    catalog,
+    docs_core,
+    installers,
+    mcp_core,
+    mcp_resources,
+    tool_docs,
+)
 
 DOCS = os.path.join(ROOT, "docs", "ai")
 REPO = os.path.abspath(os.path.join(ROOT, "..", "..", ".."))
-LINK = re.compile(r"sciforge://[A-Za-z0-9_./{}<>-]+")
+LINK = re.compile(r"sciforge://[A-Za-z0-9_./{}<>#-]+")
+IN_SOURCE_TREE = os.path.isdir(os.path.join(REPO, "docs", "sciforge"))
 
 
 def rpc(method, params=None, call_tool=None, request_id=1):
@@ -64,11 +74,15 @@ class ToolReference(unittest.TestCase):
         listed = [t["name"] for t in rpc("tools/list")["result"]["tools"]]
         self.assertEqual(tool_docs.table_names(read_doc(tool_docs.FILE)), listed)
 
-    def test_every_tool_has_a_section(self):
-        text = read_doc(tool_docs.FILE)
+    def test_every_tool_has_a_reference_page_with_an_example(self):
         for name in catalog.TOOL_NAMES:
-            self.assertIn("### `%s`:" % name, text, name)
-            self.assertIn('<a id="%s"></a>' % name, text, name)
+            text = read_doc(tool_docs.page_path(name))
+            self.assertIn("# `%s`:" % name, text, name)
+            self.assertIn("## Arguments", text, name)
+            self.assertIn("## Errors", text, name)
+            self.assertIn("## Example 1:", text, name)
+            self.assertIn("The answer:", text, name)
+            self.assertIn("sciforge://docs/%s" % tool_docs.page_path(name), read_doc(tool_docs.FILE))
 
     def test_file_is_what_the_catalogue_writes(self):
         self.assertEqual(
@@ -76,6 +90,36 @@ class ToolReference(unittest.TestCase):
             tool_docs.render(),
             "docs/ai/tools.md is out of date: run tools/sciforge/make_ai_docs.py",
         )
+
+    def test_every_generated_file_is_current(self):
+        files = tool_docs.generated(REPO if IN_SOURCE_TREE else None)
+        for rel, text in files.items():
+            if rel.startswith(tool_docs.USER + "/") and not IN_SOURCE_TREE:
+                continue
+            path = os.path.join(DOCS, rel)
+            self.assertTrue(os.path.isfile(path), "%s is missing: run make_ai_docs.py" % rel)
+            with open(path, encoding="utf-8") as handle:
+                self.assertEqual(
+                    handle.read(), text, "docs/ai/%s is out of date: run "
+                    "tools/sciforge/make_ai_docs.py" % rel
+                )
+        for folder in tool_docs.generated_folders():
+            if folder == tool_docs.USER and not IN_SOURCE_TREE:
+                continue
+            for root, _dirs, names in os.walk(os.path.join(DOCS, folder)):
+                for name in names:
+                    rel = os.path.relpath(os.path.join(root, name), DOCS).replace(os.sep, "/")
+                    self.assertIn(rel, files, "%s is stale: run make_ai_docs.py" % rel)
+
+    def test_user_copies_cover_the_persons_documentation(self):
+        if not IN_SOURCE_TREE:
+            self.skipTest("not in the source tree")
+        files = tool_docs.generated(REPO)
+        for name in ("cheat-sheet.md", "known-issues.md", "feature-outline.md",
+                     "parity/fillet.md", "parity/ai.md", "dev/feature-guide.md"):
+            self.assertIn("user/" + name, files, name)
+        self.assertFalse([r for r in files if r.startswith("user/sessions/")])
+        self.assertFalse([r for r in files if r.startswith("user/dev/briefs/")])
 
     def test_generator_script_agrees(self):
         script = os.path.join(REPO, "tools", "sciforge", "make_ai_docs.py")
@@ -127,22 +171,60 @@ class Resources(unittest.TestCase):
 
     def test_links_in_the_documents_exist(self):
         listed = {r["uri"] for r in mcp_resources.resources()}
+        lib = docs_core.library(DOCS)
+        golden = {m["id"] for m in docs_core.golden_models()}
         for rel, full in mcp_resources.doc_files(DOCS):
+            if rel.startswith("user/") and not rel.endswith(".md"):
+                continue
             with open(full, encoding="utf-8") as handle:
                 text = handle.read()
+            if rel.startswith(tool_docs.REFERENCE + "/"):
+                # (the recorded answers in their code blocks quote whatever the documents
+                # said when they were recorded)
+                text = docs_core.split_code(text)[0]
             for link in LINK.findall(text):
                 link = link.rstrip(".")
                 if "{" in link or "<" in link:
                     continue  # a template written out (sciforge://docs/{path}, .../<path>)
                 if link.startswith("sciforge://step/"):
                     continue
+                where = "%s in %s" % (link, rel)
                 if link.startswith("sciforge://tools/"):
-                    name = link[len("sciforge://tools/") :]
-                    if name.startswith("<"):
-                        continue
-                    self.assertIn(name, catalog.TOOL_NAMES, "%s in %s" % (link, rel))
+                    self.assertIn(link[len("sciforge://tools/") :], catalog.TOOL_NAMES, where)
                     continue
-                self.assertIn(link, listed, "%s in %s" % (link, rel))
+                if link.startswith(docs_core.GOLDEN_URI):
+                    self.assertIn(link[len(docs_core.GOLDEN_URI) :], golden, where)
+                    continue
+                uri, _sep, anchor = link.partition("#")
+                self.assertIn(uri, listed, where)
+                if anchor:
+                    self.assertTrue(uri.startswith(docs_core.DOCS_URI), where)
+                    self.assertIn(anchor, lib.anchors(uri[len(docs_core.DOCS_URI) :]), where)
+
+    def test_section_resources(self):
+        reply = rpc("resources/read", {"uri": "sciforge://docs/handbook.md#units-and-coordinates"})
+        text = reply["result"]["contents"][0]["text"]
+        self.assertTrue(text.startswith("## Units and coordinates"), text[:80])
+        self.assertNotIn("## Fusion's ideas in SciForge", text)
+        reply = rpc("resources/read", {"uri": "sciforge://docs/handbook.md#no-such-section"})
+        self.assertEqual(reply["error"]["code"], mcp_resources.RESOURCE_NOT_FOUND)
+
+    def test_golden_and_handbook_resources(self):
+        reply = rpc("resources/read", {"uri": "sciforge://examples/golden/box_basic"})
+        data = json.loads(reply["result"]["contents"][0]["text"])
+        self.assertEqual(data["id"], "box_basic")
+        reply = rpc("resources/read", {"uri": "sciforge://examples/golden/nope"})
+        self.assertEqual(reply["error"]["code"], mcp_resources.RESOURCE_NOT_FOUND)
+        sizes = {}
+        for uri in ("sciforge://handbook/compact", "sciforge://handbook",
+                    "sciforge://handbook/full"):
+            text = rpc("resources/read", {"uri": uri})["result"]["contents"][0]["text"]
+            self.assertTrue(text.startswith("# " + docs_core.EXPORT_TITLE), uri)
+            self.assertIn("File: handbook.md", text, uri)
+            sizes[uri] = len(text)
+        self.assertLess(sizes["sciforge://handbook/compact"], sizes["sciforge://handbook"])
+        self.assertLess(sizes["sciforge://handbook"], sizes["sciforge://handbook/full"])
+        self.assertLess(sizes["sciforge://handbook/compact"], 400000)
 
     def test_design_resources_ask_sciforge(self):
         fake = FakeSciForge()
@@ -174,6 +256,7 @@ class Resources(unittest.TestCase):
                 "sciforge://tools/{name}",
                 "sciforge://help/{topic}",
                 "sciforge://docs/{path}",
+                "sciforge://examples/golden/{id}",
             },
         )
         tool = rpc("resources/read", {"uri": "sciforge://tools/render"})["result"]["contents"]
@@ -341,7 +424,10 @@ class ClaudeExtension(unittest.TestCase):
     def test_the_extension_carries_the_documents_and_serves_them(self):
         files = installers.mcpb_files(ROOT)
         self.assertIn("server/sciforge/ai/mcp_resources.py", files)
+        self.assertIn("server/sciforge/ai/docs_core.py", files)
         self.assertIn("server/docs/ai/%s" % tool_docs.FILE, files)
+        self.assertIn("server/docs/ai/reference/extrude.md", files)
+        self.assertIn("server/SciForgeTests/golden/models/box_basic.json", files)
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, "SciForge.mcpb")
             installers.build_mcpb(out, files, installers.manifest("1.0.0", sys.executable))
@@ -354,6 +440,14 @@ class ClaudeExtension(unittest.TestCase):
                     (
                         ("resources/read", {"uri": "sciforge://docs/tools.md"}),
                         ("prompts/list", {}),
+                        (
+                            "tools/call",
+                            {"name": "docs_search", "arguments": {"query": "bolt flange"}},
+                        ),
+                        (
+                            "tools/call",
+                            {"name": "examples_search", "arguments": {"op": "sf_revolve"}},
+                        ),
                     ),
                     start=1,
                 )
@@ -372,6 +466,11 @@ class ClaudeExtension(unittest.TestCase):
             replies = [json.loads(line) for line in done.stdout.decode("utf-8").splitlines()]
             self.assertEqual(replies[0]["result"]["contents"][0]["text"], tool_docs.render())
             self.assertTrue(replies[1]["result"]["prompts"])
+            # the documentation tools answer from the extension, with SciForge closed
+            self.assertFalse(replies[2]["result"]["isError"], replies[2])
+            self.assertIn("flange-bolt-pattern", replies[2]["result"]["content"][0]["text"])
+            self.assertFalse(replies[3]["result"]["isError"], replies[3])
+            self.assertIn("golden", replies[3]["result"]["content"][0]["text"])
 
 
 if __name__ == "__main__":

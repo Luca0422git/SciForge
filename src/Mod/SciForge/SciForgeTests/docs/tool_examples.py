@@ -10,7 +10,8 @@ records the answers again (then run tools/sciforge/make_ai_docs.py); without
 SCIFORGE_DOCS_RECORD the runner checks that every answer is still what the page shows.
 "{tmp}" in a path is a fresh temporary folder (shown as /home/me/sciforge on the pages).
 An example with "gui": True needs the SciForge window and is recorded by the GUI scenario
-ai_docs_gui. Plain Python data.
+ai_docs_gui; one with "volatile": True answers about the documentation itself, so only its
+first line (numbers masked) is compared. Plain Python data.
 """
 
 TOP = {"normal": [0, 0, 1], "at": {"axis": "z", "value": "max"}, "count": 1}
@@ -912,18 +913,21 @@ EXAMPLES = [
     {
         "tool": "docs_search",
         "setup": "none",
+        "volatile": True,
         "args": {"query": "shell open top wall thickness", "limit": 3},
         "note": "find how to hollow a part",
     },
     {
         "tool": "docs_read",
         "setup": "none",
+        "volatile": True,
         "args": {"path": "handbook.md", "section": "units-and-coordinates"},
         "note": "one section of the handbook",
     },
     {
         "tool": "examples_search",
         "setup": "none",
+        "volatile": True,
         "args": {"query": "bolt circle flange", "limit": 3},
         "note": "examples of a flange with holes around a circle",
     },

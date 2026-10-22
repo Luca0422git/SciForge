@@ -18,7 +18,8 @@ Resources (MCP 2025-06-18 / 2025-11-25 server/resources):
                                #anchor, only that section (docs_core.py finds sections)
   sciforge://examples/golden/{id}  one golden model (a design-step list with measurements)
   sciforge://handbook          every document in one file (sciforge://handbook/full adds
-                               SciForge's user documentation)
+                               SciForge's user documentation, /compact leaves out the tool
+                               reference pages)
 The design resources ask SciForge through call_tool, so they work the same through the
 bridge, headless and in the tests; the rest is read here (the server never imports
 FreeCAD).
@@ -269,6 +270,16 @@ def resources(root=None):
     )
     out.append(
         {
+            "uri": "sciforge://handbook/compact",
+            "name": "handbook-compact",
+            "title": "SciForge for AI models, compact (one file)",
+            "description": "The handbook, the guides, the recipes and the list of tools in one "
+            "Markdown file (without the reference page of every tool).",
+            "mimeType": "text/markdown",
+        }
+    )
+    out.append(
+        {
             "uri": "sciforge://handbook/full",
             "name": "handbook-full",
             "title": "SciForge for AI models, with the user documentation (one file)",
@@ -320,9 +331,11 @@ def read(uri, call_tool, root=None):
         return _from_tool(uri, "get_step", {"step": rest[len("step/") :]}, call_tool)
     if rest == "docs/index":
         return [{"uri": uri, "mimeType": "text/markdown", "text": docs_index(root)}]
-    if rest in ("handbook", "handbook/full"):
+    if rest in ("handbook", "handbook/full", "handbook/compact"):
         lib = docs_core.library(root or docs_root())
-        text = docs_core.export_text(full=rest.endswith("/full"), lib=lib)
+        text = docs_core.export_text(
+            full=rest.endswith("/full"), lib=lib, compact=rest.endswith("/compact")
+        )
         return [{"uri": uri, "mimeType": "text/markdown", "text": text}]
     if rest.startswith("examples/golden/"):
         ident = rest[len("examples/golden/") :]
@@ -376,6 +389,8 @@ PROMPTS = (
             },
         ],
         "tools": [
+            "examples_search",
+            "docs_search",
             "inspect_design",
             "new_design",
             "create_sketch",
@@ -392,7 +407,8 @@ PROMPTS = (
             "Model this part in SciForge: {description}\n\n"
             "Work like a careful CAD designer:\n"
             "1. Call inspect_design to see what is open; call new_design when you need an "
-            "empty design.\n"
+            "empty design. Look for a tested recipe of a similar part with examples_search, "
+            "and search the documentation with docs_search when unsure how a tool behaves.\n"
             "2. Plan the steps first (base sketch, extrude / revolve, then holes, fillets, "
             "patterns), in millimetres. Name the key sizes with set_parameter and use them in "
             "expressions so the part stays easy to change.\n"

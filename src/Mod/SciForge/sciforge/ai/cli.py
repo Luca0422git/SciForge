@@ -12,13 +12,18 @@ convert and script designs without the window, with the same AI tools the app of
                                             a picture of the design, drawn without the
                                             window
     sciforge-cli tools [--names]            the tool catalogue as JSON
+    sciforge-cli docs search WORDS | read PATH [--page N] | examples WORDS
+                    | export FILE [--full | --compact]
+                                            SciForge's documentation for AI models: search,
+                                            read, find examples, or write it all into one
+                                            Markdown file (for AI apps that load files)
     sciforge-cli mcp [--headless]           the MCP server (default: forwards to the
                                             running SciForge; --headless: runs the tools
                                             here)
 
 tools/sciforge/sciforge-cli finds FreeCAD's command-line program and runs this file with it
 (`freecadcmd cli.py`, the arguments in a file named by SCIFORGE_CLI_ARGFILE, because FreeCAD
-reads options itself); `tools` also runs with any Python. Output that is not ours
+reads options itself); `tools` and `docs` also run with any Python. Output that is not ours
 (FreeCAD's banner, console messages) goes to stderr, so stdout holds only the answer. Exit
 status: 0 done, 1 a tool or step failed, 2 bad command line.
 """
@@ -103,6 +108,15 @@ def _parser():
     p = sub.add_parser("tools", help="the tool catalogue as JSON")
     p.add_argument("--names", action="store_true", help="only the names")
     p.add_argument("--category", help="only this category")
+    p = sub.add_parser("docs", help="search, read or export the documentation for AI models")
+    p.add_argument("action", choices=("search", "read", "examples", "export"))
+    p.add_argument("text", nargs="+", help="the words, the document's path, or the file")
+    p.add_argument("--page", type=int, default=1, help="read: which page")
+    p.add_argument("--full", action="store_true", help="export: add SciForge's user docs")
+    p.add_argument(
+        "--compact", action="store_true", help="export: leave out the tool reference pages"
+    )
+    p.add_argument("--force", action="store_true", help="export: replace FILE if it exists")
     p = sub.add_parser("mcp", help="the MCP server over stdin / stdout")
     p.add_argument("--headless", action="store_true", help="run the tools in this process")
     p.add_argument(
@@ -150,6 +164,35 @@ def _tools(options, out):
         data["tools"] = [t for t in data["tools"] if t["category"] == options.category]
     out.write((json.dumps(data, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
     return 0
+
+
+def _docs(options, out):
+    """sciforge-cli docs ...: the documentation tools (docs_core.py), no FreeCAD needed."""
+    from sciforge.ai import docs_core
+
+    def say(text):
+        out.write((text.rstrip("\n") + "\n").encode("utf-8"))
+
+    words = " ".join(options.text)
+    if options.action == "export":
+        target = os.path.abspath(words)
+        if os.path.exists(target) and not options.force:
+            sys.stderr.write("[SciForge] %s already exists: add --force to replace it\n" % target)
+            return 1
+        text = docs_core.export_text(full=options.full, compact=options.compact)
+        with open(target, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        say("Wrote %s (%d characters, %d documents)." % (
+            target, len(text), text.count("\nFile: ")))
+        return 0
+    if options.action == "search":
+        text, failed = docs_core.tool_answer("docs_search", {"query": words})
+    elif options.action == "read":
+        text, failed = docs_core.tool_answer("docs_read", {"path": words, "page": options.page})
+    else:
+        text, failed = docs_core.tool_answer("examples_search", {"query": words})
+    say(text)
+    return 1 if failed else 0
 
 
 def parse_size(text):
@@ -204,6 +247,8 @@ def main(argv=None, out=None):
         return 2
     if options.command == "tools":
         return _tools(options, out or getattr(sys.stdout, "buffer", sys.stdout))
+    if options.command == "docs":
+        return _docs(options, out or getattr(sys.stdout, "buffer", sys.stdout))
     if options.command == "mcp":
         from sciforge.ai import sciforge_mcp
 

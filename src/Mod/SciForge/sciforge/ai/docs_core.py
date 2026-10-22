@@ -194,6 +194,28 @@ def call_blocks(text):
     return blocks
 
 
+CODE_WEIGHT = 0.25  # words in code blocks (calls, recorded answers) count a quarter
+LOW_WEIGHT = 0.3  # and the words of sections that only point elsewhere
+LOW_SECTIONS = ("see also", "contents")
+
+
+def split_code(text):
+    """(the prose of a Markdown text, the content of its fenced code blocks)."""
+    prose, code = [], []
+    fence = None
+    for line in text.split("\n"):
+        match = _FENCE.match(line)
+        if match:
+            mark = match.group(1)[0]
+            if fence is None:
+                fence = mark
+            elif fence == mark:
+                fence = None
+            continue
+        (code if fence is not None else prose).append(line)
+    return "\n".join(prose), "\n".join(code)
+
+
 # -- words ----------------------------------------------------------------------------------------
 _WORD = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*")
 STOP = frozenset(
@@ -476,7 +498,10 @@ class Library:
                     body = "\n".join(lines[sec["start"] : sec["body_end"]])
                     weighted = [(w, 3) for w in words(sec["title"])]
                     weighted += [(w, 1) for w in head]
-                    weighted += [(w, 1) for w in words(body)]
+                    prose, code = split_code(body)
+                    low = sec["title"].lower() in LOW_SECTIONS  # lists of links, mostly
+                    weighted += [(w, LOW_WEIGHT if low else 1) for w in words(prose)]
+                    weighted += [(w, CODE_WEIGHT) for w in words(code)]
                     units.append(
                         _Unit(doc.rel, sec["anchor"], sec["title"], sec["level"], body, weighted)
                     )
@@ -906,23 +931,37 @@ def prompt_index(lib=None, max_chars=3000):
 EXPORT_TITLE = "SciForge for AI models (all the documentation in one file)"
 
 
-def export_text(full=False, lib=None):
-    """Every document in one Markdown file, for AI apps that load files. full=False leaves
-    out the copy of the user documentation (user/); full adds it. A link
-    sciforge://docs/<path> points to the part of this file headed "File: <path>"."""
+def export_text(full=False, lib=None, compact=False):
+    """Every document in one Markdown file, for AI apps that load files. Leaves out the copy
+    of the user documentation (user/) unless full; compact also leaves out the reference
+    pages and the golden model index (the handbook, guides, recipes and tools.md stay). A
+    link sciforge://docs/<path> points to the part of this file headed "File: <path>"."""
     lib = lib or library()
-    chosen = [d for d in lib.docs if d.kind == "text/markdown" and (full or not d.rel.startswith("user/"))]
+
+    def wanted(doc):
+        if doc.kind != "text/markdown":
+            return False
+        if doc.rel.startswith("user/"):
+            return bool(full)
+        if compact and doc.rel.startswith(("reference/", "examples/")):
+            return False
+        return True
+
+    chosen = [d for d in lib.docs if wanted(d)]
+    what = "the handbook, the guides, the recipes and the list of tools"
+    if not compact:
+        what = "the handbook, the guides, the recipes, the reference page of every tool"
+    if full:
+        what += " and SciForge's documentation for people"
     out = [
         "# " + EXPORT_TITLE,
         "",
         "SciForge is a parametric CAD program built on FreeCAD that works like Autodesk "
-        "Fusion. This file holds SciForge's documentation for AI models: the handbook, the "
-        "recipes, the reference page of every tool%s. Each part starts with a line "
-        '"File: <path>"; a link sciforge://docs/<path> in the text means that part. When '
-        "SciForge's MCP server is connected, the same documents are resources and the tools "
-        "docs_search / docs_read / examples_search search them." % (
-            " and SciForge's user documentation" if full else ""
-        ),
+        "Fusion. This file holds SciForge's documentation for AI models: %s. Each part "
+        'starts with a line "File: <path>"; a link sciforge://docs/<path> in the text means '
+        "that part. When SciForge's MCP server is connected, the same documents are "
+        "resources and the tools docs_search / docs_read / examples_search search them."
+        % what,
         "",
         "## Contents",
         "",

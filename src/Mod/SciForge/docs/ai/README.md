@@ -1,16 +1,57 @@
 # SciForge for AI models
 
-These documents are written for the AI models that use SciForge's tools (through MCP, the
-chat panel inside SciForge or `tools/sciforge/sciforge-cli`). The MCP server offers every
-file in this folder as a resource: `sciforge://docs/<path>` (resources/list lists them,
-[sciforge://docs/index](sciforge://docs/index) has them with their titles).
+These documents are written for the AI models that use SciForge's tools: through MCP (Claude
+Desktop, Gemini CLI, Claude Code...), the chat panel inside SciForge, or
+`tools/sciforge/sciforge-cli`. Everything here is checked against the code: the tool pages
+are generated from the tool catalogue, and every tool call shown in a document is run by
+SciForge's tests in real FreeCAD.
 
-- [tools.md](sciforge://docs/tools.md): every tool, its Fusion command, its arguments and
-  examples. Generated from the tool catalogue (`tools/sciforge/make_ai_docs.py`); never edit
-  it by hand.
-- The rules the tools refer to are help topics: [selectors](sciforge://help/selectors),
-  [picks](sciforge://help/picks), [sketches](sciforge://help/sketches),
-  [workflow](sciforge://help/workflow), [checking](sciforge://help/checking).
+## Start here
+
+1. [The handbook](sciforge://docs/handbook.md): what SciForge is, how Fusion's ideas map to
+   it (timeline, history marker, bodies, components, joints, sketches, parameters), units
+   and coordinates, ids, how tool calls become undo steps, a good way to work.
+2. [Sketches and profiles](sciforge://docs/sketches.md) and
+   [selectors](sciforge://docs/selectors.md) (picking faces and edges, with a cookbook).
+3. [Checking your work](sciforge://docs/checking.md) and
+   [troubleshooting](sciforge://docs/troubleshooting.md) (failures and how to recover).
+4. [Recipes](sciforge://docs/recipes/index.md): common parts built step by step (bracket,
+   enclosure with lid, shaft with keyway, gear pair, flange with bolt pattern, threaded
+   fastener, snap-fit, sheet-like part, revolved knob, lofted handle, surface patch,
+   parametric plate).
+
+## Reference
+
+- [All tools](sciforge://docs/tools.md) with their Fusion commands, and the shared rules
+  (selectors, picks, sketch planes, curves, ids, expressions).
+- `reference/<tool>.md`, one page per tool: every argument with its type, unit, default and
+  limits, the answer, the errors, and a complete example with its real answer
+  ([extrude](sciforge://docs/reference/extrude.md), [fillet](sciforge://docs/reference/fillet.md),
+  [inspect_design](sciforge://docs/reference/inspect_design.md)...).
+- [The golden models by feature](sciforge://docs/examples/golden-models.md): about 450 small
+  designs with measured results; read one with `docs_read` `golden/<id>`.
+- `user/`: SciForge's documentation for people, copied here so you can read everything the
+  person can: [the cheat sheet](sciforge://docs/user/cheat-sheet.md),
+  [known issues](sciforge://docs/user/known-issues.md),
+  [the feature outline](sciforge://docs/user/feature-outline.md) and the Fusion parity spec of
+  every feature (`user/parity/<feature>.md`, for example
+  [fillet](sciforge://docs/user/parity/fillet.md)).
+
+## Finding things
+
+- `docs_search` ranks every section of every document by the words you give (BM25) and
+  answers snippets with addresses (`path#anchor`); `docs_read` reads a document or one
+  section, in pages; `examples_search` finds recipes and golden models by words, tool, op or
+  tag. The MCP server answers these three itself, so they work even while SciForge is closed.
+- Over MCP every document is a resource `sciforge://docs/<path>` (add `#anchor` for one
+  section); [sciforge://docs/index](sciforge://docs/index) lists them;
+  [sciforge://handbook](sciforge://handbook) is all of them in one file (and
+  [sciforge://handbook/full](sciforge://handbook/full) with the `user/` copies). The open
+  design is [sciforge://design](sciforge://design).
+- The same single file is written by `sciforge-cli docs export FILE`, by
+  `tools/sciforge/make_ai_docs.py --export FILE`, and by SciForge's **Add an AI app** dialog
+  (**Save AI handbook...**), for AI apps that load files (Claude Desktop projects and the
+  like).
 
 ## Checking your own work
 
@@ -21,12 +62,14 @@ since `last_change` or since a step), [query_geometry](sciforge://tools/query_ge
 faces and edges a selector picks, each with a `ref` selector that picks exactly that one),
 [check_design](sciforge://tools/check_design) (valid solids, failed steps, overlapping bodies)
 and [render](sciforge://tools/render) (a picture, with `highlight` to mark what a selector
-picks). The open design itself is the resource [sciforge://design](sciforge://design).
+picks).
 
-## Adding documents
+## For SciForge's developers
 
-Put a Markdown file in this folder (sub-folders are fine): it becomes
+Hand-written documents live in this folder (sub-folders are fine): each becomes
 `sciforge://docs/<path>` at once, in the source tree, an installed SciForge and the Claude
-extension. Link tools as `sciforge://tools/<name>` and other documents as
-`sciforge://docs/<path>`: a unit test (`test_ai_docs_contract.py`) checks that every such
-link exists.
+extension. `tools.md`, `reference/`, `examples/golden-models.md` and `user/` are generated by
+`tools/sciforge/make_ai_docs.py` (never edit them by hand). Tool calls in a
+` ```json sciforge-calls ` block are run by `SciForgeTests/headless/docs_runner.py`
+(`run_tests.sh --only headless`); a unit test (`test_ai_docs_contract.py`) checks that every
+`sciforge://` link, anchor included, exists and that the generated files are current.

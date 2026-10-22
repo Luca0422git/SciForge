@@ -10,6 +10,8 @@
 #   tools/sciforge/sciforge-cli check part.FCStd
 #   tools/sciforge/sciforge-cli render part.FCStd part.png --view top --size 800x600
 #   tools/sciforge/sciforge-cli tools
+#   tools/sciforge/sciforge-cli docs search "fillet radius too big"
+#   tools/sciforge/sciforge-cli docs export SciForge-for-AI.md
 #   tools/sciforge/sciforge-cli mcp --headless
 #
 # FreeCAD is looked for in $SCIFORGE_FREECAD (an unpacked AppImage folder or an install prefix),
@@ -22,8 +24,8 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODULE="${REPO}/src/Mod/SciForge"
 CLI="${MODULE}/sciforge/ai/cli.py"
 
-# "tools" needs no FreeCAD: any Python reads the catalogue.
-if [ "${1:-}" = "tools" ] && command -v python3 >/dev/null; then
+# "tools" and "docs" need no FreeCAD: any Python reads the catalogue and the documents.
+if { [ "${1:-}" = "tools" ] || [ "${1:-}" = "docs" ]; } && command -v python3 >/dev/null; then
     exec python3 "${CLI}" "$@"
 fi
 

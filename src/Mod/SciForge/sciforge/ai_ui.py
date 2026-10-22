@@ -132,6 +132,25 @@ def build_extension():
     return out
 
 
+HANDBOOK_NAME = "SciForge-for-AI.md"
+
+
+def save_handbook(folder=None):
+    """Write SciForge's documentation for AI models into one Markdown file (docs_core's
+    export: handbook, guides, recipes and every tool's reference page), for AI apps that
+    load files (a Claude Desktop project, a custom GPT...). Returns (path, characters)."""
+    from .ai import docs_core
+
+    folder = folder or os.path.join(App.getUserAppDataDir(), "SciForge", "ai")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, HANDBOOK_NAME)
+    text = docs_core.export_text()
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+    log("AI: handbook written to %s (%d characters)" % (path, len(text)))
+    return path, len(text)
+
+
 def _open_file(path):
     if OPEN_FILE is not None:
         return OPEN_FILE(path)
@@ -207,6 +226,14 @@ class AddAIDialog(QtWidgets.QDialog):
         self.extension_button.setObjectName("SciForgeAddAIExtension")
         self.extension_button.clicked.connect(self._extension)
         row.addWidget(self.extension_button)
+        self.handbook_button = QtWidgets.QPushButton("Save AI handbook...")
+        self.handbook_button.setObjectName("SciForgeAddAIHandbook")
+        self.handbook_button.setToolTip(
+            "Write SciForge's documentation for AI models into one file, for AI apps that "
+            "load files (for example a Claude Desktop project)."
+        )
+        self.handbook_button.clicked.connect(self._handbook)
+        row.addWidget(self.handbook_button)
         self.copy_button = QtWidgets.QPushButton("Copy")
         self.copy_button.setObjectName("SciForgeAddAICopy")
         self.copy_button.clicked.connect(self._copy)
@@ -294,6 +321,19 @@ class AddAIDialog(QtWidgets.QDialog):
         except Exception as exc:
             warn("AI: extension: %s" % exc)
             self.text.setPlainText("The extension could not be made: %s" % exc)
+
+    def _handbook(self):
+        try:
+            path, size = save_handbook()
+            self.text.setPlainText(
+                "The AI handbook is %s (%d characters). Add it to your AI app's project or "
+                "knowledge files; AI apps connected through MCP read the same documents by "
+                "themselves." % (path, size)
+            )
+            _open_file(os.path.dirname(path))
+        except Exception as exc:
+            warn("AI: handbook: %s" % exc)
+            self.text.setPlainText("The handbook could not be written: %s" % exc)
 
     def _copy(self):
         QtWidgets.QApplication.clipboard().setText(self.text.toPlainText())

@@ -46,8 +46,27 @@ SYSTEM_PROMPT = (
     "it, fix the arguments and try again. When the request is unclear or a choice matters "
     "(a size, which face, whether to replace a file), ask the person instead of guessing. "
     "Keep answers short and plain: the person may be new to CAD. How to pick faces and "
-    "edges: " + catalog.SELECTOR_HELP.replace("\n", " ")
+    "edges: " + catalog.SELECTOR_HELP.replace("\n", " ") + " Before guessing how a tool or "
+    "feature behaves, search SciForge's documentation with docs_search and read the part "
+    "you need with docs_read; examples_search finds tested recipes and examples. Long "
+    "documents are read with these tools, never all at once."
 )
+
+
+def _docs_index():
+    """The short list of the documentation for the system prompt ("" when it is not
+    installed); never raises."""
+    try:
+        from . import docs_core
+
+        return docs_core.prompt_index()
+    except Exception:
+        return ""
+
+
+DOCS_INDEX = _docs_index()
+if DOCS_INDEX:
+    SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + DOCS_INDEX
 
 COST_NOTE = (
     "Using an AI through its API is billed by that provider for each use, separately from "
