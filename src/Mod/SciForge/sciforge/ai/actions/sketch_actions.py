@@ -2,14 +2,15 @@
 """AI actions that read and edit an existing sketch: draw more in it, read it, add
 constraints and dimensions (Fusion's forms of Collinear, Concentric and Midpoint, as
 sketch_constrain_tools.py makes them), change and delete, and sketch Text (text.py). A
-constraint or dimension that fights the sketch is taken out again and the answer names the
-constraints it conflicts with (FreeCAD's solver reports them; idea 1 of
-docs/sciforge/dev/cadcraft-lessons.md)."""
+constraint or dimension that fights the sketch, or says what it says already, is taken out
+again and the answer names the constraints it conflicts with or repeats, in the words the
+sketch tools use (sketch_explain.py; idea 1 of docs/sciforge/dev/cadcraft-lessons.md)."""
 
 import math
 
 import FreeCAD as App
 
+from ... import warn
 from ..executor import UserError, json_result
 from . import action
 
@@ -148,11 +149,15 @@ def get_sketch(ctx, args):
     except Exception:
         pass
     try:
-        info["degrees_of_freedom"] = int(sketch.getDoF()) if hasattr(sketch, "getDoF") else None
+        info["degrees_of_freedom"] = int(
+            sketch.getDoF() if hasattr(sketch, "getDoF") else sketch.DoF
+        )
     except Exception:
         info["degrees_of_freedom"] = None
-    try:
-        info["fully_constrained"] = bool(sketch.FullyConstrained)
+    try:  # Fusion's padlock, as the browser and timeline show it (sketch_explain)
+        from ... import sketch_explain
+
+        info["fully_constrained"] = bool(sketch_explain.fully_constrained(sketch))
     except Exception:
         pass
     for key, prop in (
@@ -315,32 +320,66 @@ def _check_items(sketch, items):
             )
 
 
-def _add_checked(sketch, constraints):
-    """Add constraints; if the sketch then conflicts, take them out and say with what."""
+# Fusion's names of the constraint tools (the titles sketch_explain's messages start with)
+TITLES = {
+    "coincident": "Coincident",
+    "point_on": "Coincident",
+    "symmetric": "Symmetry",
+    "smooth": "Smooth",
+    "fix": "Fix",
+}
+
+
+def _title(kind):
+    return TITLES.get(kind, kind.replace("_", " ").capitalize())
+
+
+def _explained(ctx, sketch, text, culprits):
+    """sketch_explain's message for an AI answer: the culprits by index too (the AI deletes
+    or changes them by index); highlighted in the window, as the dialogs do."""
+    from ... import sketch_explain, sketch_explain_core
+
+    if ctx.host.gui and culprits:
+        try:
+            sketch_explain.highlight(sketch, culprits)
+        except Exception as exc:
+            warn("AI sketch: the culprits were not highlighted (%s)" % exc)
+    else:
+        text = text.replace(sketch_explain_core.SHOWN, "")
+    if culprits:
+        text = text.rstrip().rstrip(".") + (
+            " (constraint%s %s of %s: get_sketch lists them, sketch_delete removes one)."
+            % ("s" if len(culprits) > 1 else "", ", ".join(str(i) for i in culprits), sketch.Name)
+        )
+    return text
+
+
+def _add_checked(ctx, sketch, constraints, title):
+    """Add constraints; if one conflicts with the sketch or says what it says already, take
+    them out again and say which constraints it fights or repeats, in the words the
+    sketch's own tools use (sketch_explain)."""
+    from ... import sketch_explain
+
     first = len(sketch.Constraints)
     before = sketch.solve()
     sketch.addConstraint(constraints)
     added = list(range(first, len(sketch.Constraints)))
-    code = sketch.solve()
-    conflicting = [n - 1 for n in _list(getattr(sketch, "ConflictingConstraints", []))]
-    redundant = [n - 1 for n in _list(getattr(sketch, "RedundantConstraints", []))]
-    if (code != 0 and before == 0) or any(i in conflicting + redundant for i in added):
-        others = [i for i in conflicting + redundant if i not in added]
+    finding = sketch_explain.check_new(sketch, added, probe=True)
+    code = sketch.solve() if not finding else -1
+    if finding or (code != 0 and before == 0):
+        text = ""
+        if finding:
+            sketch_explain.log_finding("AI " + title, sketch, finding)
+            text = sketch_explain.refusal(sketch, title, finding)
+            text = _explained(ctx, sketch, text, finding.culprits)
         for index in sorted(added, reverse=True):
             sketch.delConstraint(index)
         sketch.solve()
-        if others:
-            names = []
-            for i in sorted(set(others)):
-                c = sketch.Constraints[i] if i < len(sketch.Constraints) else None
-                if c is not None:
-                    names.append("%d (%s%s)" % (i, c.Type, (" " + c.Name) if c.Name else ""))
-            raise UserError(
-                "Not added: it conflicts with constraint(s) %s of the sketch. Delete or change "
-                "one of those first." % ", ".join(names)
-            )
+        if text:
+            raise UserError(text)
         raise UserError(
-            "Not added: it does not fit the sketch's other constraints " "(over-constrained)."
+            "%s: not added, it does not fit the sketch's other constraints "
+            "(over-constrained)." % title
         )
     return added
 
@@ -352,7 +391,9 @@ def sketch_constraint(ctx, args):
     doc = sketch.Document
 
     def work():
-        added = _add_checked(sketch, _constraint(sketch, args["kind"], args["items"]))
+        added = _add_checked(
+            ctx, sketch, _constraint(sketch, args["kind"], args["items"]), _title(args["kind"])
+        )
         doc.recompute()
         return added
 
@@ -459,7 +500,7 @@ def sketch_dimension(ctx, args):
         raise UserError("A %s must be more than 0." % kind)
 
     def work():
-        added = _add_checked(sketch, [_dimension(kind, refs, value)])
+        added = _add_checked(ctx, sketch, [_dimension(kind, refs, value)], "Dimension")
         index = added[0]
         if args.get("name"):
             sketch.renameConstraint(index, args["name"])
@@ -506,20 +547,44 @@ def set_sketch_dimension(ctx, args):
         raise UserError("Constraint %d is a %s, not a dimension." % (index, c.Type))
     path = ".Constraints[%d]" % index
 
+    from ... import sketch_explain_core
+
+    if "value" in args and sketch_explain_core.bad_size(c.Type, float(args["value"])):
+        raise UserError("The value must be more than 0.")
+
+    def conflict():
+        """The value does not fit: name what it fights (FreeCAD's failed solve still knows),
+        in the words of the dimension box (sketch_explain)."""
+        from ... import sketch_explain
+
+        try:
+            culprits = sketch_explain.conflict_culprits(sketch, [index])
+        except Exception:
+            culprits = []
+        if not culprits:
+            return UserError(
+                "The sketch cannot take that value (it would break its other constraints)."
+            )
+        words, _count = sketch_explain.words(sketch, culprits)
+        text = sketch_explain_core.value_conflict(words)
+        return UserError(_explained(ctx, sketch, text, culprits))
+
     def work():
+        solved_before = sketch.solve() == 0
         if "value" in args:
             sketch.setExpression(path, None)
             unit = "deg" if c.Type == "Angle" else "mm"
-            sketch.setDatum(index, App.Units.Quantity("%r %s" % (float(args["value"]), unit)))
+            try:
+                sketch.setDatum(index, App.Units.Quantity("%r %s" % (float(args["value"]), unit)))
+            except Exception:
+                raise conflict()  # (FreeCAD: "Negative datum values are not valid")
         elif args["expression"].strip():
             parameters._set(sketch, path, args["expression"], parameters.user_names(doc))
         else:
             sketch.setExpression(path, None)
         doc.recompute()
-        if "Invalid" in list(sketch.State):
-            raise UserError(
-                "The sketch cannot take that value (it would break its other " "constraints)."
-            )
+        if "Invalid" in list(sketch.State) or (solved_before and sketch.solve() != 0):
+            raise conflict()
 
     before = _broken(doc)
     ctx.change(work)

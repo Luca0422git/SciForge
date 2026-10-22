@@ -194,6 +194,30 @@ def _parameters(doc):
     return rows
 
 
+def _freedom(sketch):
+    """{fully_constrained, degrees_of_freedom}: Fusion's padlock and how many ways the curves
+    can still move, as the browser, timeline and Sketch Palette show them (sketch_explain:
+    read from the solver's last result, no solve; only a sketch not solved since its file
+    was opened, whose count FreeCAD leaves at 0, is solved first)."""
+    from ... import sketch_explain
+
+    out = {}
+    try:
+        dof, locked, conflicting = sketch_explain.freedom(sketch)
+        if dof == 0 and not locked and not conflicting and len(sketch.Geometry):
+            sketch.solve()  # (0 before the first solve after opening a file)
+            dof, locked, conflicting = sketch_explain.freedom(sketch)
+        out["fully_constrained"] = bool(locked)
+        if dof is not None:
+            out["degrees_of_freedom"] = int(dof)
+    except Exception:
+        try:
+            out["fully_constrained"] = bool(sketch.FullyConstrained)
+        except Exception:
+            pass
+    return out
+
+
 def _sketches(doc):
     from ... import extrude
 
@@ -206,10 +230,7 @@ def _sketches(doc):
             row["closed_areas"] = len(extrude.regions(obj))
         except Exception:
             row["closed_areas"] = None
-        try:
-            row["fully_constrained"] = bool(obj.FullyConstrained)
-        except Exception:
-            pass
+        row.update(_freedom(obj))
         for key in ("Conflicting", "Redundant", "Malformed"):
             found = list(getattr(obj, key + "Constraints", []) or [])
             if found:
@@ -580,7 +601,11 @@ def check_design(ctx, args):
         ],
         "interference": overlap if args.get("interference", True) else None,
         "sketches": [
-            {k: v for k, v in s.items() if k in ("id", "fully_constrained", "closed_areas")}
+            {
+                k: v
+                for k, v in s.items()
+                if k in ("id", "fully_constrained", "degrees_of_freedom", "closed_areas")
+            }
             for s in sketches
         ],
     }
