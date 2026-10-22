@@ -944,6 +944,8 @@ class LimitedValues:
             sign = 1.0 if value > limit else -1.0
             if (now - limit) * sign <= 1e-12 or now * value <= 0:
                 return  # moved back below the limit (or to the other side of zero) meanwhile
+            if self._limit_edit is not None and self._limit_edit[0] == what:
+                source = self._limit_edit[1]  # typed meanwhile: the note says so
             self._limit_pending = False
             self.limits.limited(key, now, limit, source == "typed", self.limit_unit(what))
             self.limit_set(what, limit)

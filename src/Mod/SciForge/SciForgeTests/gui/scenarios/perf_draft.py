@@ -127,6 +127,18 @@ class Probe:
             self.taken.append((time.perf_counter(), float(p.options.get("angle", 0.0))))
 
         self.handle.on_drag, self.handle.on_release = drag, release
+        self.polls = []  # seconds each poll of the handle took (its own work and the dialog's)
+        old_poll = self.handle._poll
+
+        def poll():
+            t0 = time.perf_counter()
+            old_poll()
+            self.polls.append((t0, time.perf_counter() - t0))
+
+        self.handle._poll = poll
+        mover = getattr(self.handle, "_move_poll", None)
+        if mover is not None:
+            mover.poll = poll
         self._preview = p._preview
 
         def preview(*args, **kwargs):
@@ -160,6 +172,13 @@ class Probe:
             pass
         try:
             del self.p._preview
+        except Exception:
+            pass
+        try:
+            del self.handle._poll
+            mover = getattr(self.handle, "_move_poll", None)
+            if mover is not None:
+                mover.poll = self.handle._poll
         except Exception:
             pass
         try:
@@ -228,6 +247,7 @@ class Probe:
             "rebuilds_while_moving": during,
             "final": final,
             "work": list(self.work),
+            "polls": [d for t, d in self.polls if t_first - 0.05 <= t <= t_last + 0.05],
         }
 
 
@@ -282,6 +302,7 @@ def finish_drag(name):
     record("Draft drag, %s: value box follows a mouse move (worst)" % name, _ms(s["box"], "max"))
     record("Draft drag, %s: dialog's work per handle move (median)" % name, _ms(s["work"], "median"))
     record("Draft drag, %s: dialog's work per handle move (worst)" % name, _ms(s["work"], "max"))
+    record("Draft drag, %s: handle's poll, worst (its work and the dialog's)" % name, _ms(s["polls"], "max"))
     record("Draft drag, %s: frame drawn after a mouse move (median)" % name, _ms(s["frame"], "median"))
     record("Draft drag, %s: live preview follows a mouse move (median)" % name, _ms(s["live"], "median"))
     record("Draft drag, %s: live preview follows a mouse move (worst)" % name, _ms(s["live"], "max"))
