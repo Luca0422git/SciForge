@@ -243,9 +243,29 @@ the source's InternalAlignment constraints. Old way kept as a fallback.
   their helpers, and an update. On the code before this follow-up (87370a0) 17 checks fail
   (A, B, C, S and D each); all 53 pass now.
 
-### Results (final code)
+### Results (final code, real FreeCAD 1.1.4)
 
-(filled in below when the runs finish)
+- `--only base`: all passed: unit 2166 tests OK (9 skipped); golden 451 pass + 2 known
+  xfail; headless 284 calls, 0 failed; docs 141 items, 0 failed; agent end to end 81
+  checks, 0 failed; smoke, journey, restart.
+- The builder's 46 scenarios plus sketch_geometry_follow (47): all PASS (sketch_geometry_keep
+  162, sketch_explain*, sketch2_fillet, sketch2_text_frame, modeling2_sketch, the eight
+  sketch_tools_*, the six fixsketch_*, sketch_qa*, modify2_scale, shell_draft_scale,
+  shell_draft_qa_scale, sketch_text_*, text_on_face, emboss_*, parameters_trial,
+  limits_fillet/notes/review, misc_derive, polish2_derive, sketch_infer*, sketch_modify,
+  sketch_polygon).
+- 71 scenarios about what this follow-up touches (Delete, Delete Face / Move Face,
+  patterns, shell and draft, revolve, sweep and loft, projections: bodies_delete,
+  direct_*, fixpattern_*, patterns_*, modify2_pattern_*, components2_pattern,
+  sketch_pattern, shell_draft*, modify2_shell, modify2_draft, draft_curved,
+  limits_shell_draft, limits_revolve, revolve_*, sweep_loft_*, surface2_*, gaps_loft_ends,
+  gaps_sweep_guide_surface, ribbon_sweep, sketch_sweep, modeling2_sweep_formula,
+  sketch2_project, sketch_projected_profiles, meshinspect2_direct,
+  inspect_analysis_draft): 70 PASS; shell_draft_hollow crashed once inside Qt
+  (SIGSEGV in a timer slot setting a list item's icon, QRasterPaintEngine destructor;
+  no SciForge code on the stack) and passed twice when run again (72 checks).
+- Cost: Delete of the Fillet with the re-projection 33-37 ms against 26-65 ms before
+  (loaded machine; no measurable difference).
 
 ### Not done / for later
 
