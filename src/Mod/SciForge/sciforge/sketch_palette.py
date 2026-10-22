@@ -140,8 +140,18 @@ class Palette(theme.OwnBackground, QtWidgets.QFrame):
         self.finish.setProperty("role", "finish")
         self.finish.setObjectName("SciForgePaletteFinish")
         self.finish.clicked.connect(lambda: self._later("SciForge_FinishSketch"))
+        # how much is left to define (the solver's degrees of freedom), or "Fully
+        # constrained" (Fusion's padlock in the browser says the same)
+        self.freedom = QtWidgets.QLabel("")
+        self.freedom.setObjectName("SciForgePaletteFreedom")
+        self.freedom.setProperty("role", "freedom")
+        self.freedom.setToolTip(
+            "How many ways the sketch's curves can still move or change size (degrees of "
+            "freedom). Add dimensions and constraints until it says Fully constrained."
+        )
         row = QtWidgets.QHBoxLayout()
         row.setContentsMargins(8, 4, 8, 0)
+        row.addWidget(self.freedom)
         row.addStretch(1)
         row.addWidget(self.finish)
         outer.addLayout(row)
@@ -174,10 +184,27 @@ class Palette(theme.OwnBackground, QtWidgets.QFrame):
         self.construction.setChecked(self._mode)
         self._later("Sketcher_ToggleConstruction")
 
+    def _refresh_freedom(self):
+        """The "left to define" note, from what the solver last found (no solve)."""
+        from . import sketch_explain, sketch_explain_core
+
+        dof, locked, conflicting = sketch_explain.freedom(self.session.sketch)
+        text = sketch_explain_core.freedom_note(dof, locked, conflicting)
+        if text != self.freedom.text():
+            self.freedom.setText(text)
+            colour = "#ff8a80" if conflicting else ("#f5f5f5" if locked else "#9fd2ff")
+            self.freedom.setStyleSheet("color: %s;" % colour)
+
     def _refresh_mode(self):
         """Show whether new curves are drawn as construction (X with nothing selected
         switches that on: without this it was invisible until the next curve came out
         orange and made no profile)."""
+        if not getattr(self, "_freedom_off", False):
+            try:
+                self._refresh_freedom()
+            except Exception as exc:
+                self._freedom_off = True  # said once, not every 0.3 s
+                warn("sketch palette: left to define: %s" % exc)
         try:
             mode = sketch_mode.construction_mode()
             if self.construction.isChecked() != mode:

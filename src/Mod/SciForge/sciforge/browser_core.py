@@ -262,7 +262,10 @@ def _folders(objects, active_body, component):
         elif sciforge_type == "DrawingBreak":
             pass  # a drawing's break lines (drawing.py): part of the drawing, not the design
         elif type_id in SKETCH_TYPES:
-            sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
+            # Fusion: a padlock on the icon of a fully constrained sketch
+            sketches.append(
+                _item("sketch:", obj, "sk_rectangle", "sketch", locked=bool(obj.get("locked")))
+            )
         elif type_id in CONSTRUCTION_TYPES:
             icon = {"Plane": "offset_plane", "Line": "axis", "Point": "point"}.get(
                 type_id.split("::")[1].replace("Datum", ""), "ucs"
@@ -389,6 +392,7 @@ def signature(tree):
         tree["status"],
         tree["tip"],
         tree.get("icon"),
+        tree.get("locked", False),
         tuple(signature(c) for c in tree["children"]),
     )
 

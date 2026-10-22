@@ -53,6 +53,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import log, warn
+from . import sketch_explain as explain
 from . import sketch_infer_core as core
 from .compat import QtCore, QtGui, QtWidgets
 
@@ -849,18 +850,12 @@ class Inference:
                     pins = len(blocks)
             for (geo, pos), point in moves:
                 sketch.moveGeometry(geo, pos, App.Vector(point[0], point[1], 0), False)
-            ours_first = len(sketch.Constraints)
-            if constraints:
-                sketch.addConstraint(constraints)
+            # all at once; if some do not fit, one by one, strongest first (sketch_explain)
+            names = [c.Type for c in explain.add_checked(sketch, constraints)]
             sketch.solve()
-            bad = set(sketch.RedundantConstraints) | set(sketch.ConflictingConstraints)
-            ours = [i for i in range(ours_first, len(sketch.Constraints)) if i + 1 in bad]
-            for i in reversed(ours):
-                sketch.delConstraint(i)
-            names = [c.Type for c in sketch.Constraints[ours_first:]]
             for i in reversed(range(first, first + pins)):  # the pins go again
                 sketch.delConstraint(i)
-            if ours or pins:
+            if pins:
                 sketch.solve()
         except Exception:
             doc.abortTransaction()
@@ -1121,16 +1116,7 @@ class TangentArc:
                 c = infer._alignment((index, arc.free_pos), guide, [index])
                 if c is not None:
                     constraints.append(c)
-            first = len(sketch.Constraints)
-            sketch.addConstraint(constraints)
-            sketch.solve()
-            bad = set(sketch.RedundantConstraints) | set(sketch.ConflictingConstraints)
-            ours = [i for i in range(first, len(sketch.Constraints)) if i + 1 in bad]
-            for i in reversed(ours):
-                sketch.delConstraint(i)
-            if ours:
-                sketch.solve()
-            names = [c.Type for c in sketch.Constraints[first:]]
+            names = [c.Type for c in explain.add_checked(sketch, constraints)]
         except Exception:
             doc.abortTransaction()
             infer._applying = False
