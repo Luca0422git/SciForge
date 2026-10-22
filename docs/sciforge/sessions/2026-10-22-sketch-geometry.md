@@ -121,11 +121,29 @@ and passes now.
   centre is a construction point) scaled by the AI `scale` tool keeps every curve's flag and
   id (old: the centre became a normal point with a new id).
 
-Runs (`tools/sciforge/run_tests.sh`, see the results section below).
+## Results (final code, commit after e3c4666)
 
-## Results
+- `--only unit`: 2166 tests OK (9 skipped).
+- `--only base`: all passed (golden 451 pass + 2 known xfail; headless 284 calls, 0 failed,
+  with the new scale check; docs 141 items, 0 failed; agent end to end 81 checks; smoke,
+  journey, restart).
+- 46 related scenarios, all PASS on the final code: sketch_geometry_keep (162),
+  sketch_explain (159), sketch_explain_box, sketch_explain_paths, sketch2_fillet (165),
+  sketch2_text_frame, the eight sketch_tools_*, the six fixsketch_*, sketch_qa (460),
+  sketch_qa_keys, sketch_qa_part, modeling2_sketch (142), modify2_scale, shell_draft_scale,
+  shell_draft_qa_scale (368), sketch_text_basic/cut/edit/more/path, text_on_face,
+  emboss_flat, emboss_cylinder, parameters_trial, limits_fillet, limits_notes, limits_review,
+  misc_derive, polish2_derive, sketch_infer, sketch_infer_tools, sketch_infer_undo,
+  sketch_modify, sketch_polygon. (No limits_* scenario has "sketch" in its name; the three
+  that touch sketch limits were run.)
 
-(filled in at the end of the session)
+## For MEMORY.md (to merge)
+
+- Status: the loose end "sketch_explain.py, scale.py, text.py reset sketch geometry in the
+  unsafe way" is done (`sciforge/sketch_geometry.py`; also derive ids and the refused
+  Change Parameters putting curves back).
+- Known issue to drop: "A sketch point's construction flag is not kept in the file" (wrong:
+  it was this bug).
 
 ## Findings
 
