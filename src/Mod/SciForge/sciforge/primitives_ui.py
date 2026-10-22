@@ -1413,7 +1413,8 @@ class PlacedPanel(Panel, value_limits.LimitedValues):
 
     def limit_unit(self, what):
         field = self.fields.get(what)
-        return getattr(field, "unit", "mm") or "mm"
+        unit = getattr(field, "unit", "mm")
+        return "mm" if unit is None else unit  # "": a count (a coil's turns), no unit
 
     def limit_set(self, what, value):
         self.options[what] = value

@@ -897,7 +897,7 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
             return
         note = getattr(getattr(self.target, "Proxy", None), "note", "") if self.target else ""
         self.message.setText(note)
-        # a distance held at its limit: "Smallest that fits here: -9.99 mm"
+        # a distance held at its limit: "Furthest that fits here: -9.99 mm"
         value_limits.show_note(self.limit_label, self.limits.note)
 
     def accept(self):

@@ -54,6 +54,12 @@ class Notes(unittest.TestCase):
     def test_words(self):
         self.assertEqual(vl.note_reached(3.47, "hi"), "Largest that fits here: 3.47 mm")
         self.assertEqual(vl.note_reached(-3.2, "lo"), "Furthest that fits here: -3.20 mm")
+        # review finding L6: a lower limit on a positive value, and a count without a unit
+        self.assertEqual(vl.note_reached(2.5, "lo"), "Smallest that fits here: 2.50 mm")
+        self.assertEqual(
+            vl.note_typed(20.0, 9.99, ""), "20 does not fit: limited to 9.99"
+        )
+        self.assertEqual(vl.note_reached(9.99, "hi", ""), "Largest that fits here: 9.99")
         self.assertEqual(vl.note_reached(12.3, "hi", "deg"), "Largest that fits here: 12.3°")
         self.assertEqual(vl.note_typed(5, 3.47), "5 mm does not fit: limited to 3.47 mm")
         self.assertEqual(vl.note_typed(40, 12.3, "deg"), "40° does not fit: limited to 12.3°")
@@ -379,6 +385,22 @@ class LimitedValuesFlow(unittest.TestCase):
         self.assertEqual(p.edit(9.0, "dragged"), "held")
         self.assertEqual(p.value, 2.0)
         self.assertEqual(p.limits.searches, 2)
+
+    def test_the_note_goes_when_another_input_changes(self):
+        # review finding L5: Draft held at 71.5 ("80° does not fit"), then Flip clicked: the
+        # note was still shown although 80 now fits
+        p = FakePanel()
+        p.edit(1.0, "typed")
+        self.assertEqual(p.edit(5.0, "typed"), "held")
+        self.assertEqual(p.limits.note, "5 mm does not fit: limited to 3.47 mm")
+        p.picks = ("Face6", "flipped")  # an input in the limit's key
+        self.assertEqual(p.limits.note, "")
+        p.picks = ("Face6",)  # back: the note stays gone (it was about that edit)
+        self.assertEqual(p.limits.note, "")
+        # a note set by the dialog itself is kept as it is
+        p.limits.note = "something"
+        p.picks = ("Face1",)
+        self.assertEqual(p.limits.note, "something")
 
     def test_forget(self):
         p = FakePanel()

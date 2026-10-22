@@ -390,6 +390,7 @@ class BlendPanel(Panel):
         # found, the size edited last ((row, value name, "typed" / "dragged" / "formula")),
         # whether its preview is still to come, and the sizes whose preview worked.
         self.limits = value_limits.Limiter()
+        self.limits.key_now = self._limit_key_now  # a note goes when its inputs change
         self._edit = None
         self._edit_pending = False
         self._limiting = False
@@ -1359,6 +1360,15 @@ class BlendPanel(Panel):
         else:
             data[what] = value
 
+    def _limit_key_now(self):
+        """The inputs now for the size edited last (None: none edited)."""
+        if self._edit is None or self.info is None:
+            return None
+        row, what = self._edit[0], self._edit[1]
+        if row is not None and row >= len(self.spec["sets"]):
+            return None
+        return self._limit_key(row, what)
+
     def _limit_works(self, row, what):
         """works(value): the blend builds with `what` set to value (nothing in the document)."""
         spec = copy.deepcopy(self.spec)
@@ -1441,7 +1451,6 @@ class BlendPanel(Panel):
                 return False
             self._edit_pending = False
             self.limits.limited(key, value, limit, source == "typed", self._unit(what))
-            log("%s %g does not fit here, held at %g" % (self.title, value, limit))
             self._set_value(row, what, limit)
             field = self._field_for(what)
             if field is not None and field.raw is None:

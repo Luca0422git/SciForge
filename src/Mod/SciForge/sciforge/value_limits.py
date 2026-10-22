@@ -109,7 +109,8 @@ def tidy(value, step, toward):
 
 
 def fmt(value, unit="mm", step=None):
-    """A value as the dialog shows it in a note: '3.47 mm', '12.3°'."""
+    """A value as the dialog shows it in a note: '3.47 mm', '12.3°', '9.99' (unit "": a
+    count, the turns of a coil)."""
     step = step or step_for(unit)
     text = "%.*f" % (_digits(step), value)
     if text.startswith("-") and float(text) == 0.0:
@@ -124,7 +125,12 @@ def fmt_typed(value, unit="mm"):
 
 def note_reached(limit, side, unit="mm", step=None):
     """The note shown while a dragged value sits at its limit."""
-    word = "Largest" if side == "hi" else "Furthest"  # a push into the part, -30 deg...
+    if side == "hi":
+        word = "Largest"
+    elif limit > 0:
+        word = "Smallest"  # a value that must not get smaller (a pipe's section size)
+    else:
+        word = "Furthest"  # a push into the part, -30 deg...
     return "%s that fits here: %s" % (word, fmt(limit, unit, step))
 
 
@@ -363,12 +369,37 @@ class Limiter:
         self.unit = unit
         self.budget = budget
         self.cache = LimitCache()
-        self.note = ""  # what the dialog shows under its boxes (not an error)
+        self._note = ""  # what the dialog shows under its boxes (not an error): .note
+        self.note_key = None  # the inputs the note was made for (None: any)
+        self.key_now = None  # the dialog's inputs now, for the value edited (a function)
         self.searches = 0  # bisections run (tests: never on every drag step)
         self.search_clock = time.perf_counter  # tests give a fake clock
 
     def step(self, unit=None):
         return step_for(unit or self.unit)
+
+    @property
+    def note(self):
+        """The note, as long as the inputs it was made for have not changed: "80° does not
+        fit: limited to 71.5°" is not true any more once Flip is clicked (review finding L5)."""
+        if self._note and self.note_key is not None and self.key_now is not None:
+            try:
+                now = self.key_now()
+            except Exception:
+                now = None
+            if now is not None and now != self.note_key:
+                self._note = ""
+                self.note_key = None
+        return self._note
+
+    @note.setter
+    def note(self, text):
+        self._note = text or ""
+        self.note_key = None
+
+    def _say(self, text, key):
+        self._note = text or ""
+        self.note_key = key if text else None
 
     def clamp(self, key, value, typed=False, unit=None):
         """The value to use: held at the cached limit it went past (the note says so), else
@@ -379,12 +410,13 @@ class Limiter:
             self.note = ""
             on = self.cache.on_limit(key, value)  # sitting right on it (the arrow let go there)
             if on is not None:
-                self.note = note_reached(on[0], on[1], unit, self.step(unit))
+                self._say(note_reached(on[0], on[1], unit, self.step(unit)), key)
             return value
-        self.note = (
+        self._say(
             note_typed(value, limit, unit, self.step(unit))
             if typed
-            else note_reached(limit, side, unit, self.step(unit))
+            else note_reached(limit, side, unit, self.step(unit)),
+            key,
         )
         return held
 
@@ -441,10 +473,11 @@ class Limiter:
         """Set the note for `value` held at `limit` (found just now)."""
         unit = unit or self.unit
         side = side_of(value, limit) if value != limit else "hi"
-        self.note = (
+        self._say(
             note_typed(value, limit, unit, self.step(unit))
             if typed
-            else note_reached(limit, side, unit, self.step(unit))
+            else note_reached(limit, side, unit, self.step(unit)),
+            key,
         )
 
 
@@ -533,6 +566,7 @@ class LimitedValues:
 
     def limit_init(self):
         self.limits = Limiter()
+        self.limits.key_now = self._limit_key_now  # a note goes when its inputs change
         self.limit_shower = ShowWhenLeft()  # a typed number held: the box shows the limit
         self._limit_edit = None  # (value name, "typed" / "dragged" / "formula")
         self._limit_pending = False
@@ -541,6 +575,12 @@ class LimitedValues:
 
     def limit_unit(self, what):
         return "mm"
+
+    def _limit_key_now(self):
+        """The inputs now for the value edited last (None: nothing edited)."""
+        if self._limit_edit is None:
+            return None
+        return self.limit_key(self._limit_edit[0])
 
     def limit_forget(self):
         """A value that has no limit was edited (a count of teeth): nothing is held, and a
