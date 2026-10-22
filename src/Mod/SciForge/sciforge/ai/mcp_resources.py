@@ -377,7 +377,9 @@ PROMPTS = (
             "4. If a step fails, read the sentence, fix the arguments and try again; undo takes "
             "back a step that came out wrong.\n"
             "5. When the part is done, call check_design and render (iso and one more view), "
-            "and compare the volume and bounding box with the description.{material}{save}"
+            "and compare the volume and bounding box with the description.\n"
+            "6. {material}\n"
+            "7. {save}"
         ),
     },
     {
@@ -510,6 +512,17 @@ def prompts():
     ]
 
 
+def _material(prompt, material):
+    if prompt == "model_part":
+        if material:
+            return "Set the material to %s with physical_material and report the mass." % material
+        return (
+            "If the description names a material, set it with physical_material and report "
+            "the mass."
+        )
+    return " in %s" % material if material else ""
+
+
 def get_prompt(name, arguments=None):
     """prompts/get's result; ResourceError(INVALID_PARAMS) for an unknown prompt or a
     missing required argument."""
@@ -536,13 +549,11 @@ def get_prompt(name, arguments=None):
     values = {k: str(v).strip() for k, v in arguments.items() if v is not None}
     fill = {
         "description": values.get("description", ""),
-        "material": (
-            " Set the material to %s with physical_material." % values["material"]
-            if values.get("material") and name == "model_part"
-            else (" in %s" % values["material"] if values.get("material") else "")
-        ),
+        "material": _material(name, values.get("material")),
         "save": (
-            " Then save it with save_as to %s." % values["save_as"] if values.get("save_as") else ""
+            "Save it with save_as to %s." % values["save_as"]
+            if values.get("save_as")
+            else "Ask the person whether and where to save it (save_as)."
         ),
         "step": (" (%s)" % values["step"]) if values.get("step") else "",
         "format": values.get("format") or "3mf",
