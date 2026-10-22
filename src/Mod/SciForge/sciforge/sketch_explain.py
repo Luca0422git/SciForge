@@ -604,35 +604,93 @@ def inference_rank(sketch, c):
     return core.inference_rank(c.Type, c.FirstPos, c.SecondPos, lines, touching)
 
 
+FAILED = -1  # SketchObject.solve(): the solver found no solution
+
+
+def collapsed(g, tol=1e-6):
+    """A sketch curve with no size left: a line of length 0, a circle or arc of radius 0."""
+    if g.TypeId == "Part::GeomLineSegment":
+        return (g.EndPoint - g.StartPoint).Length <= tol
+    radius = getattr(g, "Radius", None)
+    return radius is not None and radius <= tol
+
+
+def _curves_of(constraints):
+    return {g for c in constraints for g in _geos(c)}
+
+
+def _collapsed_among(sketch, geos, geometry=None):
+    geometry = sketch.Geometry if geometry is None else geometry
+    return {g for g in geos if 0 <= g < len(geometry) and collapsed(geometry[g])}
+
+
 def add_checked(sketch, constraints):
     """Add inferred constraints and keep those that fit. Fast path: all at once; when one or
     more turn out redundant or conflicting, they are taken out and tried again one by one,
     strongest first (sketch_explain_core.inference_rank), each kept only if the sketch stays
     clean, so a weak guess (parallel) never pushes out a strong one (a snapped corner).
-    Returns the constraints kept (as they are now in the sketch)."""
+    "Clean" also means the solver still finds a real solution: guesses that only fit together
+    by collapsing a curve (upright and parallel to a level line) are no conflict to FreeCAD,
+    its solver squeezes the line to a point (or fails, -1). The curves are put back when a
+    try did that. Returns the constraints kept (as they are now in the sketch)."""
     constraints = [c for c in constraints if c is not None]
     if not constraints:
         return []
-    sketch.solve()
+    failed_before = sketch.solve() == FAILED
     conflicting, redundant = bad_sets(sketch)
     before = len(conflicting | redundant)
+    touched = _curves_of(constraints)
+    geometry = sketch.Geometry
+    flat_before = _collapsed_among(sketch, touched, geometry)
     first = len(sketch.Constraints)
+
+    def broke(new_indices):
+        """The constraints just added made the sketch worse."""
+        fails = sketch.solve() == FAILED and not failed_before
+        conflicting, redundant = bad_sets(sketch)
+        now = conflicting | redundant
+        return (
+            fails
+            or any(i in now for i in new_indices)
+            or len(now) > before
+            or bool(_collapsed_among(sketch, touched) - flat_before)
+        )
+
     sketch.addConstraint(constraints)
-    sketch.solve()
-    conflicting, redundant = bad_sets(sketch)
-    bad = conflicting | redundant
-    if not any(i in bad for i in range(first, len(sketch.Constraints))) and len(bad) <= before:
+    if not broke(range(first, len(sketch.Constraints))):
         return list(sketch.Constraints[first:])
+    for i in reversed(range(first, len(sketch.Constraints))):
+        sketch.delConstraint(i)
+    _restore_geometry(sketch, geometry)
+    sketch.solve()
+
+    def try_add(c):
+        saved = sketch.Geometry
+        index = sketch.addConstraint(c)
+        if broke([index]):
+            sketch.delConstraint(index)
+            _restore_geometry(sketch, saved)
+            sketch.solve()
+            return False
+        return True
+
+    kept = core.add_in_order(constraints, lambda c: inference_rank(sketch, c), try_add)
+    if len(kept) < len(constraints):
+        log(
+            "sketch: inferred constraints tried one by one: kept %s, left out %d"
+            % (", ".join(c.Type for c in kept) or "none", len(constraints) - len(kept))
+        )
+    return list(sketch.Constraints[first:])
     for i in reversed(range(first, len(sketch.Constraints))):
         sketch.delConstraint(i)
     sketch.solve()
 
     def try_add(c):
         index = sketch.addConstraint(c)
-        sketch.solve()
+        fails = sketch.solve() == FAILED and not failed_before
         conflicting, redundant = bad_sets(sketch)
         now = conflicting | redundant
-        if index in now or len(now) > before:
+        if fails or index in now or len(now) > before:
             sketch.delConstraint(index)
             sketch.solve()
             return False

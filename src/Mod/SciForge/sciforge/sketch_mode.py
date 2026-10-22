@@ -2245,8 +2245,17 @@ class DimensionEditor(theme.OwnBackground, QtWidgets.QFrame):
         doc.openTransaction("Edit Dimension")
         try:
             if expression is not None:
-                self.sketch.setExpression(".Constraints[%d]" % self.index, expression)
+                from . import parameters, parameters_core
+
+                # Fusion's parameter names (=width*2) in FreeCAD's spelling (Parameters.width)
+                formula = parameters_core.to_freecad(expression, parameters.user_names(doc))
+                was_broken = bool({"Invalid", "Error"} & set(self.sketch.State))
+                self.sketch.setExpression(".Constraints[%d]" % self.index, formula)
                 self.sketch.recompute()
+                state = list(self.sketch.State)
+                if not was_broken and ("Invalid" in state or "Error" in state):
+                    # a formula FreeCAD cannot compute (an unknown name): said, not kept
+                    raise ValueError("That formula cannot be computed: %s" % expression)
                 # a formula is checked like a typed value: no size of 0 or less
                 kind = self._constraint().Type
                 got = self.sketch.getDatum(self.index).getValueAs("mm").Value

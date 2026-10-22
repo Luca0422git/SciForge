@@ -314,7 +314,7 @@ def _broken(obj):
         if obj.MalformedConstraints:
             return "its constraints would break"
         for i, g in enumerate(obj.Geometry):
-            if _collapsed(g):
+            if sketch_explain.collapsed(g):
                 return "its %s would shrink to nothing" % curve_names.get(i, "curve")
     state = list(obj.State)
     if "Invalid" in state or "Error" in state:
@@ -339,13 +339,6 @@ NOT_SOLID_STEPS = (
     "PartDesign::SubShapeBinder",
 )
 
-
-def _collapsed(g, tol=1e-6):
-    """A sketch curve with no size left: a line of length 0, a circle or arc of radius 0."""
-    if g.TypeId == "Part::GeomLineSegment":
-        return (g.EndPoint - g.StartPoint).Length <= tol
-    radius = getattr(g, "Radius", None)
-    return radius is not None and radius <= tol
 
 
 def _step_names(doc):

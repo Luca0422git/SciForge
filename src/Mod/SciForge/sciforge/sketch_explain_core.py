@@ -379,6 +379,8 @@ def bad_size_reason(c, names):
     'r' of Circle 1 would be -2 mm, and a size must be more than 0"."""
     what = {"Radius": "radius", "Diameter": "diameter"}.get(c.get("type"), "dimension")
     label = (" '%s'" % c["name"]) if c.get("name") else ""
+    if not label and c.get("index") is not None:
+        label = " d%d" % (c["index"] + 1)  # what Change Parameters calls an unnamed one
     owner = curve_name(c.get("first"), names)
     where = (" of %s" % owner) if owner else ""
     return "its %s%s%s would be %s mm, and a size must be more than 0" % (

@@ -279,6 +279,10 @@ class ParameterTests(unittest.TestCase):
         text = core.parameter_refusal("r = -2 mm", [("Sketch 1", reason), ("Extrude 1", "x")])
         self.assertTrue(text.startswith("Not changed: with r = -2 mm, Sketch 1 would break: its"))
         self.assertTrue(text.endswith("Extrude 1 would break too."))
+        unnamed = core.bad_size_reason(
+            dict(con("DistanceX", 0, 1, 0, 2, value=0.0), index=9), NAMES
+        )
+        self.assertTrue(unnamed.startswith("its dimension d10 of Line 1 would be 0 mm"), unnamed)
         three = core.parameter_refusal("w = 0", [("A", "a"), ("B", "b"), ("C", "c")])
         self.assertTrue(three.endswith("2 more steps would break too."))
         self.assertEqual(core.parameter_refusal("w = 1", []), "")

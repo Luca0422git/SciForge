@@ -20,6 +20,10 @@ F  A value that does not fit: the left line carries a second, driving 20 mm (a s
    before SciForge refused repeats); double-click it, type 25: the box stays open, says it
    conflicts with the 20 mm dimension, which is highlighted; the value stays 20.
 G  Finish Sketch: the padlock stays on the timeline icon and the browser row.
+H  Least movement (a finding, no fix needed): changing a dimension moves neither curves that
+   do not touch it nor the far end of a free line hanging on it.
+I  Inferred constraints in priority order: of Coincident, Vertical and a weak Parallel that
+   cannot all hold, the Coincident and the Vertical stay.
 """
 
 import FreeCAD as App
@@ -485,6 +489,142 @@ def g_check():
 
 g_check.wait_ms = 900
 
+
+# == H: least movement (finding, cadcraft-lessons idea 1) =========================================
+def _ends(sk, i):
+    g = sk.Geometry[i]
+    if hasattr(g, "StartPoint"):
+        return [g.StartPoint, g.EndPoint]
+    return [g.Center]
+
+
+def h_least_movement():
+    """Changing a dimension moves only what it must: FreeCAD's solver splits a sketch into
+    groups that share no curve and solves only the group the dimension is in, and inside it
+    moves as little as it can. Checked with the dimension box's own call (setDatum):
+    - a circle and a rectangle that do not touch the dimensioned line stay exactly put;
+    - a free line hanging on the line's end moves its joined end only, its far end stays.
+    (Seen meanwhile, not a bug: a dimensioned line that is free at both ends grows from
+    both ends, the solver's least total movement; Fusion's choice there is unconfirmed.)"""
+    import Part
+    import Sketcher
+
+    d = App.newDocument("LeastMovement")
+    sk = d.addObject("Sketcher::SketchObject", "Sketch")
+    a = sk.addGeometry(Part.LineSegment(V(0, 0, 0), V(30, 0, 0)))
+    b = sk.addGeometry(Part.LineSegment(V(30, 0, 0), V(40, 25, 0)))
+    circle = sk.addGeometry(Part.Circle(V(-30, 30, 0), V(0, 0, 1), 6))
+    first = sk.GeometryCount
+    h.draw_rectangle(sk, 50, 40, 70, 55)
+    rect = list(range(first, first + 4))
+    sk.addConstraint(
+        [
+            Sketcher.Constraint("Coincident", a, 1, -1, 1),
+            Sketcher.Constraint("Horizontal", a),
+            Sketcher.Constraint("Coincident", a, 2, b, 1),
+        ]
+    )
+    dim = sk.addConstraint(Sketcher.Constraint("Distance", a, 30.0))
+    sk.solve()
+    before = {i: _ends(sk, i) for i in [a, b, circle] + rect}
+    sk.setDatum(dim, App.Units.Quantity("45 mm"))
+    sk.solve()
+    moved = {i: max((p - q).Length for p, q in zip(_ends(sk, i), before[i])) for i in before}
+    h.check("H: the line is 45 now", abs(sk.Geometry[a].length() - 45) < 1e-9)
+    h.check(
+        "H: unrelated curves did not move at all",
+        all(moved[i] == 0.0 for i in [circle] + rect),
+        moved,
+    )
+    far = (sk.Geometry[b].EndPoint - before[b][1]).Length
+    h.check("H: the hanging line's far end stayed", far < 1e-9, far)
+    App.closeDocument(d.Name)
+
+
+# == I: inferred constraints in priority order =====================================================
+def i_priority():
+    """A new line drawn from the end of a 30 mm line, 20 mm typed: the guesses are that it
+    starts on that end (Coincident) and, a weak one, that it is as long as the other line
+    (Equal). Equal cannot hold with the typed 20 and the 30 mm dimension: FreeCAD flags the
+    three as one conflict, and the old way dropped both new ones (the typed length too). One
+    by one, the typed length and the Coincident go first and stay; only the Equal goes."""
+    import Part
+    import Sketcher
+
+    from sciforge import sketch_explain
+
+    d = App.newDocument("InferPriority")
+    sk = d.addObject("Sketcher::SketchObject", "Sketch")
+    level = sk.addGeometry(Part.LineSegment(V(0, 0, 0), V(30, 0, 0)))
+    sk.addConstraint(Sketcher.Constraint("Distance", level, 30.0))
+    new = sk.addGeometry(Part.LineSegment(V(30, 0, 0), V(31, 20, 0)))
+    sk.solve()
+    kept = sketch_explain.add_checked(
+        sk,
+        [
+            Sketcher.Constraint("Equal", new, level),
+            Sketcher.Constraint("Coincident", new, 1, level, 2),
+            Sketcher.Constraint("Distance", new, 20.0),
+        ],
+    )
+    types = sorted(c.Type for c in kept)
+    h.check(
+        "I: the typed length and the Coincident are kept",
+        types == ["Coincident", "Distance"],
+        types,
+    )
+    h.check(
+        "I: the sketch is clean",
+        sk.solve() == 0 and not sk.ConflictingConstraints and not sk.RedundantConstraints,
+    )
+    h.check("I: the new line is 20 long", abs(sk.Geometry[new].length() - 20) < 1e-9)
+    App.closeDocument(d.Name)
+
+
+def i_collapse():
+    """Guesses that only fit by collapsing the line (upright, and parallel to a level line)
+    are no conflict to FreeCAD: its solver just fails. Those count as not fitting too: the
+    Coincident and the Vertical stay, the Parallel goes, and the line keeps its length.
+    (FreeCAD reports the failed try in its Report view and notification list: expected.)"""
+    import Part
+    import Sketcher
+
+    from PySide6 import QtTest
+    from sciforge import sketch_explain
+
+    d = App.newDocument("InferCollapse")
+    sk = d.addObject("Sketcher::SketchObject", "Sketch")
+    level = sk.addGeometry(Part.LineSegment(V(0, 0, 0), V(30, 0, 0)))
+    sk.addConstraint(Sketcher.Constraint("Horizontal", level))
+    new = sk.addGeometry(Part.LineSegment(V(30, 0, 0), V(30.2, 20, 0)))
+    sk.solve()
+    kept = sketch_explain.add_checked(
+        sk,
+        [
+            Sketcher.Constraint("Parallel", new, level),
+            Sketcher.Constraint("Coincident", new, 1, level, 2),
+            Sketcher.Constraint("Vertical", new),
+        ],
+    )
+    types = sorted(c.Type for c in kept)
+    h.check(
+        "I: the Coincident and the Vertical are kept", types == ["Coincident", "Vertical"], types
+    )
+    h.check("I: the sketch solves", sk.solve() == 0)
+    g = sk.Geometry[new]
+    h.check(
+        "I: the new line is upright and kept its length",
+        abs(g.StartPoint.x - g.EndPoint.x) < 1e-9 and g.length() > 19,
+        g,
+    )
+    App.closeDocument(d.Name)
+    QtTest.QTest.qWait(500)
+    h.check("I: FreeCAD reported the failed try (expected)", True, h.new_errors())
+
+
+i_collapse.notes_ok = ("Invalid solution", "Both points are equal")
+
+
 h.run(
     "sketch_explain",
     si.watched(
@@ -529,6 +669,9 @@ h.run(
             f_closed,
             g_finish,
             g_check,
+            h_least_movement,
+            i_priority,
+            i_collapse,
         ]
     ),
 )
