@@ -21,8 +21,11 @@ B  Rendered (pdftoppm): with every layer on, the page looks exactly like TechDra
    hidden edges, the base view's outline, the centre mark, the section's hatching, the
    notes, the title block), each where it belongs and nothing where the others are.
 C  A second sheet, A4 (by script: SciForge's Sheet Bar makes sheets of the first one's
-   size), with a base view; Export PDF of All Sheets: two pages, A3 then A4, one set of
-   layers, the second sheet's title block searchable ("2 / 2").
+   size), with a base view and a projection group (FreeCAD's TechDraw makes those; made by
+   script, TechDraw draws its two views at the sheet's bottom left corner, not inside the
+   group's item); markers go into the group and its views and all come out again; Export
+   PDF of All Sheets: two pages, A3 then A4, one set of layers, the second sheet's title
+   block searchable ("2 / 2").
 """
 
 import os
@@ -338,6 +341,17 @@ def c_sheet():
     sheet.Document.recompute()
     drawing.add_base_view(sheet, drawing.design_bodies(sheet.Document), 100.0, 120.0,
                           orientation="Top", scale=1.0)
+    # a projection group (FreeCAD's own TechDraw makes them; SciForge reads them): its
+    # views are items inside the group's item in TechDraw's scene
+    group = sheet.Document.addObject(drawing.GROUP, "ProjGroup")
+    sheet.addView(group)
+    group.Source = drawing.design_bodies(sheet.Document)
+    group.addProjection("Front")
+    group.addProjection("Right")
+    group.X, group.Y = 200.0, 120.0
+    group.ScaleType = "Custom"
+    group.Scale = 1.0
+    state["group"] = group
     drawing_sheets.refresh_titles(page)
     sheet.Document.recompute()
     state["sheet"] = sheet
@@ -350,8 +364,20 @@ c_sheet.wait_ms = 5000
 
 
 def c_command():
-    h.check("the second sheet is A4", state["sheet"].Template.Width.Value == 297.0,
-            state["sheet"].Template.Width)
+    from sciforge import drawing_pdf_export
+
+    sheet = state["sheet"]
+    h.check("the second sheet is A4", sheet.Template.Width.Value == 297.0, sheet.Template.Width)
+    group_views = [v.Name for v in state["group"].Views]
+    h.check("the group has its two views", len(group_views) == 2, group_views)
+    scene = drawing_pdf_export.scene_of(sheet)
+    markers, codes, _hidden = drawing_pdf_export.add_markers(sheet, scene)
+    marked = {key for key, _kind, _band in codes.values()}
+    drawing_pdf_export.remove_markers(markers)
+    h.check("markers for the group and the views inside it",
+            set(group_views) | {state["group"].Name} <= marked, (marked, group_views))
+    left = [i for i in scene.items() if i.type() == drawing_pdf_export._marker_class().TYPE]
+    h.check("... and none left", not left, len(left))
     h.ribbon("Export PDF")
 
 
