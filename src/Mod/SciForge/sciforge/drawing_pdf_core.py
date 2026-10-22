@@ -789,7 +789,9 @@ def enhance(data, sheets, meta, font=None):
                 added.append(item)
         if added:
             extra, extra_links, extra_used = overlay(added, font, size, media)
-            new = new + extra
+            # the page's own drawing leaves its transformation behind (Qt's first cm
+            # is outside any q/Q): the added text starts from the page's own
+            new = b"q\n" + new + b"Q\n" + extra
             links += extra_links
             used |= extra_used
             entry["texts"] = len(added)
