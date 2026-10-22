@@ -29,6 +29,8 @@ from . import drawing_pdf_core as core
 from . import drawing_pdf_font
 
 MARKER_SIZE = 0.1  # scene units (0.01 mm): invisible, and printed almost transparent
+# tests: a path where the PDF as TechDraw printed it (before the rewrite) is copied
+KEEP_PRINTED = {"path": None}
 
 
 def _qt():
@@ -120,7 +122,6 @@ def add_markers(page, scene):
     doc = page.Document
     rez = _rez(scene, page)
     width, height = drawing.sheet_size_of(page)
-    centre = QtCore.QPointF(width * rez / 2.0, -height * rez / 2.0)
     items, hidden, owners = [], {}, {}
     for item in scene.items():
         try:
@@ -142,14 +143,46 @@ def add_markers(page, scene):
             continue
     plan, codes = core.marker_plan(items)
     Marker = _marker_class()
+    page_rect = QtCore.QRectF(0.0, -height * rez, width * rez, height * rez)
     markers = []
+    by_item = {}
     for name, _band, z, _code, colour in plan:
+        by_item.setdefault(name, []).append((z, colour))
+    for name, wanted in by_item.items():
         parent = owners[name]
-        marker = Marker(colour, parent)
-        marker.setZValue(z)
-        marker.setPos(parent.mapFromScene(centre))
-        markers.append(marker)
+        before = parent.boundingRect()
+        spot = _marker_spot(parent, page_rect)
+        mine = []
+        for z, colour in wanted:
+            marker = Marker(colour, parent)
+            marker.setZValue(z)
+            marker.setPos(spot)
+            mine.append(marker)
+        markers += mine
+        if parent.boundingRect() != before:
+            # a marker outside what the view covers makes it bigger, and TechDraw puts
+            # the caption under a view's extent: try the middle of what it covered
+            middle = before.center() - QtCore.QPointF(MARKER_SIZE / 2.0, MARKER_SIZE / 2.0)
+            for marker in mine:
+                marker.setPos(middle)
+            if parent.boundingRect() != before:
+                log("PDF: a marker changes the extent of %s (its caption may move)" % name)
     return markers, codes, hidden
+
+
+def _marker_spot(item, page_rect):
+    """Where an item's markers go (item coordinates): inside what it already covers, so
+    it does not grow (TechDraw places a view's caption under its extent), and on the
+    sheet, or Qt does not print them. A view's middle is its own origin."""
+    QtCore, _QtGui, _QtWidgets = _qt()
+    half = QtCore.QPointF(MARKER_SIZE / 2.0, MARKER_SIZE / 2.0)
+    origin = QtCore.QPointF(0.0, 0.0)
+    if page_rect.contains(item.mapToScene(origin)) and item.boundingRect().contains(origin):
+        return origin - half
+    covered = item.mapRectToScene(item.boundingRect()).intersected(page_rect)
+    if covered.isEmpty():
+        covered = page_rect
+    return item.mapFromScene(covered.center()) - half
 
 
 def remove_markers(markers):
@@ -371,6 +404,9 @@ def improve(path, pages, infos):
     try:
         with open(path, "rb") as handle:
             data = handle.read()
+        if KEEP_PRINTED["path"]:
+            with open(KEEP_PRINTED["path"], "wb") as handle:
+                handle.write(data)
         font, why = drawing_pdf_font.load(font_path())
         if why:
             log("PDF text font: %s (Helvetica is used instead)" % why)
