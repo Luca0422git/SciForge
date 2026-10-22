@@ -68,4 +68,24 @@ the review of item 8 (`2026-10-21-limits.md`): seven findings, all reproduced, a
   to -26.5), `limits_review` (L5 Draft Flip, L6 Coil turns, L3 Shell on the busy plate, L4
   chamfer check; crashes FreeCAD on the integration head). `limits_fillet` now also checks
   that nothing goes to the Report view (L7; fails on the integration head).
-- Results: see the report of this job (run_tests `--only base` and the related scenarios).
+- `extrude_presspull_qa` (path 3) still expected the old behaviour for a taper typed too
+  steep (error, OK refused); it failed on the integration head too. Updated to Luca's
+  decision: -60 on the 10 x 10 x 5 column is held at the steepest taper that fits and said.
+
+## Results (real FreeCAD 1.1.4 under xvfb, 2026-10-22)
+
+- `run_tests.sh --only base`: unit (2095 tests), golden (451 pass, 2 known xfail), headless
+  AI tools, docs examples, agent end to end, smoke, journey, restart: all passed.
+- Scenarios, all PASS: `limits_extrude`, `limits_extrude_other`, `limits_fillet`,
+  `limits_notes`, `limits_presspull`, `limits_primitives`, `limits_review`, `limits_revolve`,
+  `limits_shell_draft`, `limits_thicken`, `fillet`, `fillet_qa`, `fillet_qa_chamfer`,
+  `fillet_qa_more`, `fillet_qa_part`, `fillet2_chamfer`, `fillet2_chord`, `fillet2_sets`,
+  `fillet2_variable`, `fillet2_chain`, `fillet_chain`, `fillet_chamfer`, `chamfer_arrow`,
+  `draft_curved`, `gear_refuse`, `sketch2_fillet`, `surface_thicken`, `shell_draft`,
+  `shell_draft_draft`, `shell_draft_hollow`, `shell_draft_qa`, `shell_draft_qa_draft`,
+  `shell_draft_qa_mix`, `shell_draft_qa_shell`, `shell_draft_qa_scale`, `shell_draft_scale`,
+  `modify2_draft`, `modify2_shell`, `modify2_presspull_type`, `primitives_qa_coil`,
+  `primitives_qa_more`, `primitives_qa_part`, `primitives_qa_pipe`, `primitives_shapes`,
+  `extrude_presspull_qa` (after the update), `extrude_presspull_qa2` to `qa7`,
+  `extrude_options`, `gaps_extrude_taper_to`, `extrude_feel`, `extrude_review_fixes`,
+  `sketch_tools_circles`, `sketch_qa`, `sketch_explain`, `undo_fast`, `mesh_edit_reopen`.
