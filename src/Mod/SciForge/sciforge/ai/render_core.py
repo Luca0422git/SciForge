@@ -124,7 +124,8 @@ def render(
     """Draw the scene; returns (png bytes, info).
 
     meshes: [{"points": [(x, y, z), ...], "triangles": [(i, j, k), ...], "color": (r, g, b)}]
-    (lists or numpy arrays; several meshes may share one points array)
+    (lists or numpy arrays; several meshes may share one points array; "in_front": true
+    draws it over a face it lies on)
     lines: [{"points": [(x, y, z), ...] (a polyline), "color": (r, g, b), "width": px,
     "on_top": draw also where hidden}]. info: {"width", "height", "view", "mm_per_pixel",
     "triangles"}."""
@@ -144,7 +145,7 @@ def render(
             continue
         if tris.min() < 0 or tris.max() >= len(pts):
             raise RenderError("A triangle refers to a point that is not there.")
-        prepared.append((pts, tris, mesh.get("color") or BODY_COLORS[0]))
+        prepared.append((pts, tris, mesh.get("color") or BODY_COLORS[0], bool(mesh.get("in_front"))))
         pts_all.append(pts)
     line_items = []
     for line in lines:
@@ -191,8 +192,10 @@ def render(
         (_unit(tuple(-forward[i] * 0.5 - up[i] * 0.3 + right[i] * 0.6 for i in range(3))), 0.18),
     ]
     count = 0
-    for pts, tris, color in prepared:
+    for pts, tris, color, in_front in prepared:
         scr = to_screen(pts)
+        if in_front:  # (wins over a face it lies on: the polygon offset of OpenGL)
+            scr[:, 2] -= depth_span * 2e-3
         a, b, c = pts[tris[:, 0]], pts[tris[:, 1]], pts[tris[:, 2]]
         normals = np.cross(b - a, c - a)
         lengths = np.linalg.norm(normals, axis=1)

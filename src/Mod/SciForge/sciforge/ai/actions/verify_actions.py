@@ -848,17 +848,19 @@ def scene(ctx, doc, marked, edges=True):
     ):  # an earlier step (not what the body shows now): its marked faces / edges drawn alone,
         # where that solid is in the design (its body's and component's placement applied)
         try:
-            shape = bodies.global_shape(source, copy=False)
+            shape = bodies.global_shape(source)
         except Exception:
             shape = marked["shape"]
         tol = _tolerance(shape)
-        for name in sorted(marked["faces"]):
-            points, tris = shape.getElement(name).tessellate(tol)
+        if marked["faces"]:
+            points, per_face = face_meshes(shape, tol)
+            parts = [per_face[int(name[4:]) - 1] for name in sorted(marked["faces"])]
             meshes.append(
                 {
-                    "points": [(p.x, p.y, p.z) for p in points],
-                    "triangles": tris,
+                    "points": points,
+                    "triangles": _joined(parts),
                     "color": render_core.HIGHLIGHT,
+                    "in_front": True,  # (over the body's face it may lie on)
                 }
             )
         for name in sorted(marked["edges"]):

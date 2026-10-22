@@ -1168,6 +1168,177 @@ SESSION = [
 ]
 
 
+# -- the checking tools on two bodies, one in a moved component (fix-aiverify F3, F4, F8, F9) -----
+BOX = 30.0 * 30.0 * 20.0  # the box body, 30 x 30 x 20 at x 100..130, moved 100 mm in X
+FILLETED_BOX = BOX - (4.0 - math.pi) * 20.0  # one vertical edge rounded r 2
+
+
+def _two_bodies(data, run):
+    rows = {b["id"]: b for b in data["bodies"]}
+    others = [name for name in rows if name != run.ids["v_box_body"]]
+    run.ids["v_plate_body"] = others[0] if others else None
+    plate, box = rows.get(run.ids["v_plate_body"]), rows.get(run.ids["v_box_body"])
+    if not plate or not box or len(rows) != 2:
+        return "two bodies expected: %s" % sorted(rows)
+    if box["bbox_mm"]["min"][0] != 200.0 or plate["bbox_mm"]["min"][0] != 0.0:
+        return "the box is not where the moved component shows it: %s" % box["bbox_mm"]
+    if box.get("component") != run.ids["v_comp"]:
+        return "the box's component: %s" % box.get("component")
+    run.ids["v_snapshot"] = data["snapshot"]
+    return None
+
+
+def _box_edge(data, run):
+    row = data["elements"][0] if data["count"] == 1 else None
+    ref = (row or {}).get("ref") or {}
+    if ref.get("body") != run.ids["v_box_body"]:
+        return "the ref does not name its body: %s" % row
+    if data.get("active_body") != run.ids["v_plate_body"] or "not the active body" not in data["note"]:
+        return "no word that another body is active: %s" % data.get("note")
+    run.ids["v_edge_ref"] = ref
+    return None
+
+
+def _volumes(plate, box):
+    def check(answer, run):
+        rows = {b["id"]: b for b in json_of(answer)["bodies"]}
+        got = (rows[run.ids["v_plate_body"]]["volume_mm3"], rows[run.ids["v_box_body"]]["volume_mm3"])
+        if abs(got[0] - plate) > 1e-6 or abs(got[1] - box) > 1e-6:
+            return "volumes (plate, box) %s, expected %s" % (got, (plate, box))
+        return None
+
+    return check
+
+
+def _diff_two(data, run):
+    changed = {b["id"]: b for b in data["bodies"]["changed"]}
+    added = [s["id"] for s in data["steps"]["added"]]
+    if run.ids["v_fillet"] not in added:
+        return "the fillet is not among the added steps: %s" % added
+    if run.ids["v_plate_body"] in changed or run.ids["v_box_body"] not in changed:
+        return "only the box changed: %s" % sorted(changed)
+    return None
+
+
+def _orange_right_of(fraction, minimum=200):
+    """A rendered picture whose orange pixels are many and all right of x = fraction * width
+    (the box at x 200..230 is right of the plate at 0..60 in a top view)."""
+
+    def check(answer, run):
+        import base64
+
+        from sciforge.ai import render_core
+
+        rows = render_core.png_pixels(base64.b64decode(answer["image_png_base64"]))
+        xs = [
+            x
+            for row in rows
+            for x, (r, g, b) in enumerate(row)
+            if r > 200 and 90 < g < 180 and b < 80
+        ]
+        width = len(rows[0])
+        if len(xs) < minimum or min(xs) < fraction * width:
+            return "%d orange pixels from x %s of %d" % (len(xs), min(xs) if xs else None, width)
+        return None
+
+    return check
+
+
+def _refs_round_trip(data, run):
+    """Every ref picks its own element when the real selector code runs it."""
+    from sciforge import bodies
+    from sciforge.ai.ops import selectors
+
+    obj = run.obj(data["shape_of"])
+    for row in data["elements"]:
+        if row["ref"] is None or selectors.select(obj.Shape, row["ref"], data["element"]) != [row["name"]]:
+            return "the ref of %s does not pick it: %s" % (row["name"], row["ref"])
+    return None if data["elements"] else "no elements"
+
+
+VERIFY_SESSION = [
+    {"tool": "new_design", "args": {"name": "VerifyTwoBodies"}},
+    {"tool": "create_sketch", "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 60, 40]}]}, "save": "v_sk1"},
+    {"tool": "extrude", "args": {"profile": "$v_sk1", "distance": 10}, "save": "v_plate"},
+    {
+        "tool": "query_geometry",
+        "args": {"element": "edges", "limit": 500},
+        "check": _json_check(_refs_round_trip),
+    },
+    {"tool": "new_body", "args": {"label": "Box"}, "save": "v_box_body"},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [100, 0, 130, 30]}]},
+        "save": "v_sk2",
+    },
+    {"tool": "extrude", "args": {"profile": "$v_sk2", "distance": 20}, "save": "v_box"},
+    {"tool": "components_from_bodies", "args": {"bodies": ["$v_box_body"], "label": "C1"}, "save": "v_comp"},
+    {"tool": "move_copy", "args": {"components": ["$v_comp"], "move_type": "translate", "dx": 100}},
+    {"tool": "activate", "args": {"target": "Body"}},
+    {"tool": "inspect_design", "args": {}, "check": _json_check(_two_bodies)},
+    {
+        "tool": "check_design",
+        "args": {},
+        "check": _json_check(lambda d, r: None if d["ok"] else "not ok: %s" % d["problems"]),
+    },
+    {
+        "tool": "query_geometry",
+        "args": {
+            "of": "$v_box_body",
+            "element": "edges",
+            "select": {
+                "type": "line",
+                "parallel": [0, 0, 1],
+                "at": [{"axis": "x", "value": "min"}, {"axis": "y", "value": "min"}],
+            },
+        },
+        "check": _json_check(_box_edge),
+    },
+    {  # the plate is active: the box's ref must not round the plate's matching edge
+        "tool": "fillet",
+        "args": {"edges": "$v_edge_ref", "radius": 2},
+        "expect": "error",
+        "contains": ["made for body", "activate"],
+    },
+    {"tool": "inspect_design", "args": {"snapshot": False}, "check": _volumes(24000.0, BOX)},
+    {"tool": "activate", "args": {"target": "$v_box_body"}},
+    {"tool": "fillet", "args": {"edges": "$v_edge_ref", "radius": 2}, "save": "v_fillet"},
+    {"tool": "inspect_design", "args": {"snapshot": False}, "check": _volumes(24000.0, FILLETED_BOX)},
+    {"tool": "diff_design", "args": {"since": "$v_snapshot"}, "check": _json_check(_diff_two)},
+    {
+        "tool": "render",
+        "args": {
+            "view": "top",
+            "width": 400,
+            "height": 200,
+            "highlight": {"of": "$v_box_body", "faces": {"normal": [0, 0, 1], "count": 1}},
+        },
+        "check": _orange_right_of(0.6),
+        "contains": ["in orange"],
+    },
+    {  # an earlier step of the moved box: drawn where the box is, not 100 mm away
+        "tool": "render",
+        "args": {
+            "view": "top",
+            "width": 400,
+            "height": 200,
+            "highlight": {"of": "$v_box", "faces": {"normal": [0, 0, 1], "count": 1}},
+        },
+        "check": _orange_right_of(0.6),
+        "contains": ["step"],
+    },
+    {"tool": "roll_timeline", "args": {"before": "$v_fillet"}},
+    {
+        "tool": "diff_design",
+        "args": {"since": "$v_fillet"},
+        "expect": "error",
+        "contains": ["rolled back"],
+    },
+    {"tool": "roll_timeline", "args": {"to": "end"}},
+    {"tool": "diff_design", "args": {"since": "$v_fillet"}, "contains": ["the solid is the same"]},
+]
+
+
 def _ids_from(answer):
     match = re.search(r"Its id is '([^']+)'", answer["text"])
     if match:
@@ -1313,6 +1484,7 @@ def main():
     try:
         run = Run(folder)
         run_session(run, SESSION, os.environ.get("SCIFORGE_HEADLESS_FILTER", ""))
+        run_session(run, VERIFY_SESSION, os.environ.get("SCIFORGE_HEADLESS_FILTER", ""))
         report["results"] = run.results
         report["missing"] = [] if os.environ.get("SCIFORGE_HEADLESS_FILTER") else missing_tools(run)
         report["tools_called"] = len(run.called)
