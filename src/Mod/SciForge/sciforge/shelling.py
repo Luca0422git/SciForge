@@ -176,11 +176,24 @@ def _offset(solid, offset, join, what):
         result = solid.makeOffsetShape(offset, TOL, False, False, 0, join, False)
     except Exception:
         raise ShellError(too_thick(what, abs(offset)))
-    if result is None or result.isNull() or not result.Solids or not result.isValid():
+    if result is None or result.isNull() or not result.Solids:
         raise ShellError(too_thick(what, abs(offset)))
-    if result.Volume <= TOL:
+    if offset < 0 and not _inside_box(_box(result), _box(solid), 0.0):
+        # before isValid(): see _check()
+        raise ShellError(too_thick(what, abs(offset)))
+    if not _closed(result) or not result.isValid() or result.Volume <= TOL:
         raise ShellError(too_thick(what, abs(offset)))
     return result.Solids[0]
+
+
+def _closed(shape):
+    """True when every shell of every solid of `shape` is closed (a valid solid's are). Asked
+    before isValid(), which crashed FreeCAD (segfault in BRepCheck_Solid) on the solids with
+    an open shell that some walls far too thick give (see _check)."""
+    try:
+        return all(shell.isClosed() for solid in shape.Solids for shell in solid.Shells)
+    except Exception:
+        return False
 
 
 def _box(shape):
@@ -321,12 +334,18 @@ def _check(solid, result, inside, outside, opened):
             "These walls would split the part into %d pieces. Try a thinner wall."
             % len(result.Solids)
         )
-    if not result.isValid():
+    # The cheap checks first: OpenCASCADE's validity check crashed FreeCAD (segfault in
+    # BRepCheck_Solid) on some walls far too thick, whose result has an open shell and often
+    # sticks out of the part (a plate with holes and bosses, 8 or 25 mm inside: review finding
+    # L3). The limit search tries such values nobody typed.
+    if not _closed(result):
         raise ShellError(too_thick(what, biggest))
     if not _inside_box(_box(result), _box(solid), outside):
         raise ShellError(too_thick(what, biggest))
     volume = result.Volume
     if volume <= TOL:
+        raise ShellError(too_thick(what, biggest))
+    if not result.isValid():
         raise ShellError(too_thick(what, biggest))
     if outside <= 0 and volume >= solid.Volume * (1.0 - 1e-9):
         # OpenCASCADE gave the solid part back: the walls filled the whole inside.

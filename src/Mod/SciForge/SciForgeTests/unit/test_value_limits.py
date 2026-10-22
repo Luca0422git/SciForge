@@ -231,9 +231,9 @@ class LimiterFlow(unittest.TestCase):
 
     def test_a_search_cut_short_is_not_a_wall(self):
         # review finding L2: on a slow part the time budget stops the bisection after
-        # MIN_TRIALS builds (50 -> 26, 14, 8 all refused): 2.0 (the value that worked) is used
-        # for the 50 typed, but values between 2.0 and 8.0 were never tried: they must be
-        # built, not held at 2.0 ("2.5 mm does not fit" while it does)
+        # MIN_TRIALS builds (50 -> 10, 4.47, 3.24 all refused): 2.0 (the value that worked) is
+        # used for the 50 typed, but values between 2.0 and 3.24 were never tried: they must
+        # be built, not held at 2.0 ("2.5 mm does not fit" while it does)
         now = [0.0]
 
         def clock():
@@ -250,22 +250,39 @@ class LimiterFlow(unittest.TestCase):
         key = vl.make_key("plate", "61 edges")
         limit = limiter.find(key, slow, 50.0, 2.0, good_known=True)
         self.assertEqual(limit, 2.0)
-        self.assertEqual(works.calls[:3], [26.0, 14.0, 8.0])
-        # 2.5 and 5.0 were never tried: used as they are (the preview tries them)
+        self.assertEqual(len(works.calls), vl.MIN_TRIALS)
+        refused = min(works.calls)
+        self.assertGreater(refused, 3.0)
+        # 2.5 and 3.0 were never tried: used as they are (the preview tries them)
         self.assertEqual(limiter.clamp(key, 2.5, typed=True), 2.5)
         self.assertEqual(limiter.note, "")
-        self.assertEqual(limiter.clamp(key, 5.0, typed=True), 5.0)
-        # past the nearest refused value (8.0): held without a build, and said
+        self.assertEqual(limiter.clamp(key, 3.0, typed=True), 3.0)
+        # past the nearest refused value: held without a build, and said
         self.assertEqual(limiter.clamp(key, 9.0, typed=True), 2.0)
         self.assertEqual(limiter.note, "9 mm does not fit: limited to 2.00 mm")
-        # 5.0 refused by its preview: the gap 2.0 .. 5.0 is searched, a better limit found
+        # 3.1 (under the nearest refused value) refused by its preview: the gap 2.0 .. 3.1 is
+        # searched, a better limit found
         calls = len(works.calls)
-        limit = limiter.find(key, slow, 5.0, 2.0, good_known=True)
+        limit = limiter.find(key, slow, 3.1, 2.0, good_known=True)
         self.assertGreater(len(works.calls), calls)
         self.assertGreater(limit, 2.0)
         self.assertLessEqual(limit, 3.0)
-        # the nearest refused value only comes closer
+        # and 9 is still held, at the better limit
         self.assertEqual(limiter.clamp(key, 9.0), limit)
+
+    def test_far_apart_the_search_stays_near_the_good_value(self):
+        # review finding L3: a shell wall of 0.01 works, 50 is refused, 2.9 is the limit and
+        # walls of 8 to 30 crashed OpenCASCADE's validity check: the first build is not 25
+        works = Counter(2.9)
+        self.assertEqual(vl.search(works, 0.01, 50.0, 0.01)[0], 2.9)
+        self.assertLess(works.calls[0], 1.0)
+        self.assertLess(max(works.calls), 8.0)
+        # the same on the negative side (a taper of -0.1 works, -50 does not)
+        self.assertAlmostEqual(vl._middle(-0.1, -50.0), -(5.0**0.5))
+        # close together, or across zero: the middle
+        self.assertEqual(vl._middle(2.0, 4.0), 3.0)
+        self.assertEqual(vl._middle(0.0, 40.0), 20.0)
+        self.assertEqual(vl._middle(-1.0, 7.0), 3.0)
 
     def test_an_exact_limit_is_a_wall(self):
         limiter = vl.Limiter()

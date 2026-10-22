@@ -853,6 +853,11 @@ def trial(kind, info, refs, options):
         raise BlendError(
             "This %s would cut the part into pieces. Use a smaller %s." % (kind, label)
         )
+    # An open shell first: a solid with one is never valid, and OpenCASCADE's validity check
+    # crashed FreeCAD on such results of a shell (shelling._closed); a search tries sizes
+    # nobody typed.
+    if not all(sh.isClosed() for so in result.Solids for sh in so.Shells):
+        raise BlendError(too_big(kind, label, size))
     if not result.isValid():
         raise BlendError(too_big(kind, label, size))
     return result

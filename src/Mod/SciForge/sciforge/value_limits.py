@@ -149,6 +149,19 @@ def _safe(works):
     return run
 
 
+def _middle(lo, hi):
+    """The next value to try between `lo` (works) and `hi` (does not). Far apart on the same
+    side of zero (0.01 and 50): their geometric mean (0.71), so the first builds stay near the
+    value that worked and home in on the scale of the limit: a slow part's few trials then
+    give a useful limit, and values far past it (a 25 mm shell wall where 3 fits, which
+    crashed OpenCASCADE) are rarely built. Close together: the middle."""
+    if lo * hi > 0:
+        a, b = abs(lo), abs(hi)
+        if max(a, b) > 4.0 * min(a, b):
+            return math.copysign(math.sqrt(a * b), lo)
+    return (lo + hi) / 2.0
+
+
 def search(
     works, good, bad, step, budget=BUDGET, good_known=False, clock=time.perf_counter, seen=None
 ):
@@ -177,7 +190,7 @@ def search(
             break
         if trials > 60:
             break
-        mid = (lo + hi) / 2.0
+        mid = _middle(lo, hi)
         trials += 1
         if works(mid):
             lo = mid
