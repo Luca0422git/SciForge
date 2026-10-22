@@ -283,7 +283,9 @@ class AngleDragger(BoxCarrier):
 
     def set_angle(self, degrees):
         self._turn_to(degrees)
-        self._last = degrees
+        # the angle as the disc reads it back (80 came back as 80.0000026): the poll must
+        # not take that rounding for a turn (it dropped a formula typed in the box)
+        self._last = self.angle()
 
     def _turn_to(self, degrees):
         from pivy import coin

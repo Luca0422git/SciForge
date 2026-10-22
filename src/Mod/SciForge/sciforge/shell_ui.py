@@ -559,17 +559,9 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         self.options["shell_type"] = self.shell_type.currentData()
         self.options["tangent"] = self.tangent.isChecked()
         if not self.formulas.get("inside"):
-            self.options["inside"] = self._held("inside", self.inside.value())
+            self.options["inside"] = self.limit_held("inside", self.inside.value())
         if not self.formulas.get("outside"):
-            self.options["outside"] = self._held("outside", self.outside.value())
-
-    def _held(self, what, value):
-        """A number typed in a box, held at the thickest wall known to fit (the box keeps
-        showing what is being typed until it is left)."""
-        try:
-            return self.limits.cache.clamp(self.limit_key(what), value)[0]
-        except Exception:
-            return value
+            self.options["outside"] = self.limit_held("outside", self.outside.value())
 
     # -- formulas (preview.FormulaInput calls these) -------------------------------------------
     def formula_typed(self, key, text, value):

@@ -53,7 +53,7 @@ class Tidy(unittest.TestCase):
 class Notes(unittest.TestCase):
     def test_words(self):
         self.assertEqual(vl.note_reached(3.47, "hi"), "Largest that fits here: 3.47 mm")
-        self.assertEqual(vl.note_reached(-3.2, "lo"), "Smallest that fits here: -3.20 mm")
+        self.assertEqual(vl.note_reached(-3.2, "lo"), "Furthest that fits here: -3.20 mm")
         self.assertEqual(vl.note_reached(12.3, "hi", "deg"), "Largest that fits here: 12.3°")
         self.assertEqual(vl.note_typed(5, 3.47), "5 mm does not fit: limited to 3.47 mm")
         self.assertEqual(vl.note_typed(40, 12.3, "deg"), "40° does not fit: limited to 12.3°")
@@ -178,6 +178,9 @@ class LimiterFlow(unittest.TestCase):
             self.assertEqual(limiter.note, "Largest that fits here: 3.47 mm")
         self.assertEqual(len(works.calls), builds)
         self.assertEqual(limiter.searches, 1)
+        # let go right on the limit: still said
+        self.assertEqual(limiter.clamp(key, 3.47), 3.47)
+        self.assertEqual(limiter.note, "Largest that fits here: 3.47 mm")
         # back below the limit: the value is used as it is, the note goes
         self.assertEqual(limiter.clamp(key, 2.0), 2.0)
         self.assertEqual(limiter.note, "")
@@ -215,7 +218,7 @@ class LimiterFlow(unittest.TestCase):
         limit = limiter.find(key, Counter(1e9, lower=-3.2345), -40.0, 0.0)
         self.assertEqual(limit, -3.23)
         self.assertEqual(limiter.clamp(key, -50.0), -3.23)
-        self.assertEqual(limiter.note, "Smallest that fits here: -3.23 mm")
+        self.assertEqual(limiter.note, "Furthest that fits here: -3.23 mm")
         self.assertEqual(limiter.clamp(key, 10.0), 10.0)  # the other side has no limit
 
 

@@ -55,6 +55,7 @@ LIMIT_WORDS = (
     "leaves no solid",
     "run into each other",
     "could not build",
+    "command not done",  # OpenCASCADE's own words when a fillet / chamfer does not fit
 )
 
 
@@ -114,7 +115,7 @@ def fmt_typed(value, unit="mm"):
 
 def note_reached(limit, side, unit="mm", step=None):
     """The note shown while a dragged value sits at its limit."""
-    word = "Largest" if side == "hi" else "Smallest"
+    word = "Largest" if side == "hi" else "Furthest"  # a push into the part, -30 deg...
     return "%s that fits here: %s" % (word, fmt(limit, unit, step))
 
 
@@ -307,6 +308,10 @@ class Limiter:
         held, limit, side = self.cache.clamp(key, value)
         if limit is None:
             self.note = ""
+            for edge in ("hi", "lo"):  # sitting right on the limit (the arrow let go there)
+                found = self.cache.get(key, edge)
+                if found and found[0] is not None and abs(value - found[0]) < 1e-9:
+                    self.note = note_reached(found[0], edge, unit, self.step(unit))
             return value
         self.note = (
             note_typed(value, limit, unit, self.step(unit))
@@ -424,6 +429,14 @@ class LimitedValues:
             return self.limits.clamp(
                 self.limit_key(what), value, source == "typed", self.limit_unit(what)
             )
+        except Exception:
+            return value
+
+    def limit_held(self, what, value):
+        """`value` held at the limit known for these inputs (no note, nothing built): what a
+        number being typed in a box stands for until the box is left."""
+        try:
+            return self.limits.cache.clamp(self.limit_key(what), value)[0]
         except Exception:
             return value
 

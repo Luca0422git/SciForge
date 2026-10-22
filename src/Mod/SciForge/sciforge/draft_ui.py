@@ -820,12 +820,6 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     def limit_keep(self):
         return self.base.Shape if self.base is not None else None
 
-    def _held(self, what, value):
-        try:
-            return self.limits.cache.clamp(self.limit_key(what), value)[0]
-        except Exception:
-            return value
-
     def _collect(self):
         self.options["flip"] = self.flip.isChecked()
         self.options["tangent"] = self.tangent.isChecked()
@@ -834,9 +828,9 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         self.options["parting_mode"] = self.mode.currentData() or "fix"
         self.options["parting"] = list(self.parting)
         if not self.formula:
-            self.options["angle"] = self._held("angle", self.angle.value())
+            self.options["angle"] = self.limit_held("angle", self.angle.value())
         if not self.formula2:
-            self.options["angle2"] = self._held("angle2", self.angle2.value())
+            self.options["angle2"] = self.limit_held("angle2", self.angle2.value())
 
     def formula_typed(self, key, text, value):
         self.formula_error = ""
