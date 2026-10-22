@@ -191,7 +191,7 @@ define(
     "Diff design",
     "inspect",
     "TIMELINE (compare before and after)",
-    "What changed in the design since: a snapshot id that inspect_design answered (\"S3\"), "
+    'What changed in the design since: a snapshot id that inspect_design answered ("S3"), '
     '"last_change" (just before the latest change an AI made: what that change did), or a '
     "step id (the solid as it was right after that step, compared with now: what the later "
     "steps did). Answers the bodies added, removed and changed (volume, area, size, faces, "

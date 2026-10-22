@@ -537,6 +537,14 @@ def jsonable(value, depth=0):
     return str(value)
 
 
-def json_result(data, text=None):
-    body = json.dumps(data, indent=1, ensure_ascii=False, default=str)
+def json_result(data, text=None, compact=False):
+    """A result whose text is the data as JSON (after a sentence when text is given).
+    compact: short lists and objects stay on one line (a bounding box, a selector), so a
+    long answer costs the AI far fewer tokens and stays easy to read."""
+    if compact:
+        body = bridge_core.compact_json(data)
+    else:
+        body = json.dumps(data, indent=1, ensure_ascii=False, default=str)
     return bridge_core.result(body if text is None else text + "\n" + body)
+
+

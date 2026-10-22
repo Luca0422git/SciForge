@@ -329,7 +329,7 @@ CHECKING_HELP = (
     "what changed (bodies, steps, parameters). query_geometry: the faces / edges / corners a "
     "selector picks with their facts (type, area / length, normal, axis, radius, centre) and "
     "a ref, a selector that picks exactly that element: give it to fillet / chamfer / shell "
-    "/ draft, or pick ({\"face\": ref}) to measure / create_sketch. check_design: invalid "
+    '/ draft, or pick ({"face": ref}) to measure / create_sketch. check_design: invalid '
     "or open solids, bodies in several pieces, failed steps, overlapping bodies. measure: the "
     "distance / angle between two picks, or the size of one. render: a PNG picture (iso, "
     "front, top... or a direction), highlight marks faces / edges in orange; it works "

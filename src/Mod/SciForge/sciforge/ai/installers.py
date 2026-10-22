@@ -41,7 +41,14 @@ import zipfile
 SERVER_NAME = "sciforge"
 ENTRY_POINT = "server/sciforge/ai/sciforge_mcp.py"
 MANIFEST_VERSION = "0.3"
-_SERVER_MODULES = ("tools_core.py", "mcp_core.py", "bridge_core.py", "sciforge_mcp.py")
+_SERVER_MODULES = (
+    "tools_core.py",
+    "mcp_core.py",
+    "mcp_resources.py",
+    "bridge_core.py",
+    "sciforge_mcp.py",
+)
+_DOCS = ("docs", "ai")  # the documents for AI models (resources sciforge://docs/...)
 _CATALOG = "catalog"  # a package: every .py file in it goes into the extension
 
 
@@ -265,6 +272,14 @@ def mcpb_files(mod_root):
     for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
         if name.endswith(".py"):
             files["server/sciforge/ai/%s/%s" % (_CATALOG, name)] = os.path.join(folder, name)
+    # the documents for AI models, where the server looks for them (server/docs/ai)
+    docs = os.path.join(mod_root, *_DOCS)
+    for here, dirs, names in os.walk(docs) if os.path.isdir(docs) else []:
+        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "_")))
+        for name in sorted(names):
+            if name.endswith((".md", ".txt", ".json")) and not name.startswith("."):
+                rel = os.path.relpath(os.path.join(here, name), mod_root).replace(os.sep, "/")
+                files["server/" + rel] = os.path.join(here, name)
     return files
 
 

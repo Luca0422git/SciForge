@@ -171,7 +171,9 @@ def measure(ctx, args):
             "%s %.6g %s" % (k.rsplit("_", 1)[0].replace("_", " "), v, k.rsplit("_", 1)[-1])
             for k, v in rows.items()
         )
-        return json_result(details, "Measured a (%s): %s." % (details["a"]["kind"], words))
+        return json_result(
+            details, "Measured a (%s): %s." % (details["a"]["kind"], words), compact=True
+        )
     b = inspect_ops._ref(builder, args["b"], "measure b")
     second = measuring.entity(*b)
     found = measuring.relation(first, second)
@@ -185,7 +187,7 @@ def measure(ctx, args):
         delta_mm=[_round(found["dx"]), _round(found["dy"]), _round(found["dz"])],
         nearest_points_mm=[[_round(c) for c in p] for p in found["points"]],
     )
-    return json_result(details, "Measured: " + ", ".join(words) + ".")
+    return json_result(details, "Measured: " + ", ".join(words) + ".", compact=True)
 
 
 _UNITS = {"length": "mm", "area": "mm2", "volume": "mm3", "angle": "deg", "coordinate": "mm"}

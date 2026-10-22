@@ -5,12 +5,14 @@ files, so it can be unit tested (docs/sciforge/dev/briefs/home-cloud-ai.md, sect
 An AI app (Claude Desktop, Gemini CLI, ...) starts sciforge_mcp.py and talks JSON-RPC 2.0
 to it over stdin / stdout. The stdio transport sends one JSON-RPC message per line: UTF-8
 JSON with no newline inside it; anything else the server wants to say goes to stderr.
-SciForge only offers tools, so the subset is small: initialize, ping, tools/list and
-tools/call (with text and PNG image results). The tools come from the catalogue
-(sciforge/ai/catalog). Arguments that break a tool's rules come back as a tool result with
-isError and plain sentences (MCP 2025-11-25: input validation errors are tool execution
-errors, so the model can correct itself); an unknown tool or params that are not an object
-are protocol errors (-32602).
+SciForge offers tools, resources and prompts: initialize, ping, tools/list and tools/call
+(with text and PNG image results), resources/list, resources/templates/list and
+resources/read (the open design, the tool catalogue, the help topics and the documents for
+AI models: mcp_resources.py), prompts/list and prompts/get (workflow templates). The tools
+come from the catalogue (sciforge/ai/catalog). Arguments that break a tool's rules come
+back as a tool result with isError and plain sentences (MCP 2025-11-25: input validation
+errors are tool execution errors, so the model can correct itself); an unknown tool or
+params that are not an object are protocol errors (-32602).
 
 Checked against the MCP specification's text on GitHub
 (modelcontextprotocol/modelcontextprotocol, docs/specification/2025-06-18/basic/transports
@@ -24,7 +26,7 @@ The tools part did not change between the versions below, so one answer fits the
 
 import json
 
-from . import catalog, tools_core
+from . import catalog, mcp_resources, tools_core
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 LATEST = PROTOCOL_VERSIONS[0]
@@ -149,7 +151,11 @@ def _handle(message, call_tool, version, log):
             request_id,
             {
                 "protocolVersion": negotiate(client_version),
-                "capabilities": {"tools": {"listChanged": False}},
+                "capabilities": {
+                    "tools": {"listChanged": False},
+                    "resources": {"subscribe": False, "listChanged": False},
+                    "prompts": {"listChanged": False},
+                },
                 "serverInfo": {"name": "sciforge", "title": "SciForge", "version": str(version)},
                 "instructions": INSTRUCTIONS,
             },
@@ -160,6 +166,10 @@ def _handle(message, call_tool, version, log):
         return _result(request_id, {"tools": tools_core.mcp_tools()})
     if method == "tools/call":
         return _call(request_id, params, call_tool, log)
+    if method in ("resources/list", "resources/templates/list", "resources/read"):
+        return _resources(request_id, method, params, call_tool)
+    if method in ("prompts/list", "prompts/get"):
+        return _prompts(request_id, method, params)
     return error_response(request_id, METHOD_NOT_FOUND, "Method not found: %s" % method)
 
 
@@ -196,3 +206,39 @@ def _call(request_id, params, call_tool, log):
             answer.get("text", ""), answer.get("image_png_base64"), answer.get("is_error", False)
         ),
     )
+
+
+def _resources(request_id, method, params, call_tool):
+    """resources/list (everything at once: no cursor), resources/templates/list and
+    resources/read; an unknown URI is error -32002 (MCP's "Resource not found")."""
+    if method == "resources/list":
+        return _result(request_id, {"resources": mcp_resources.resources()})
+    if method == "resources/templates/list":
+        return _result(request_id, {"resourceTemplates": mcp_resources.templates()})
+    uri = params.get("uri")
+    if not isinstance(uri, str) or not uri:
+        return error_response(
+            request_id, INVALID_PARAMS, "Invalid params: resources/read needs a uri"
+        )
+    try:
+        contents = mcp_resources.read(uri, call_tool)
+    except mcp_resources.ResourceError as exc:
+        answer = error_response(request_id, exc.code, str(exc))
+        if exc.data is not None:
+            answer["error"]["data"] = exc.data
+        return answer
+    return _result(request_id, {"contents": contents})
+
+
+def _prompts(request_id, method, params):
+    if method == "prompts/list":
+        return _result(request_id, {"prompts": mcp_resources.prompts()})
+    name = params.get("name")
+    if not isinstance(name, str):
+        return error_response(
+            request_id, INVALID_PARAMS, "Invalid params: prompts/get needs a name"
+        )
+    try:
+        return _result(request_id, mcp_resources.get_prompt(name, params.get("arguments")))
+    except mcp_resources.ResourceError as exc:
+        return error_response(request_id, exc.code, str(exc))

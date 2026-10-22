@@ -329,9 +329,13 @@ def inspect_design(ctx, args):
     doc = ctx.doc
     if doc is None:
         return json_result(
-            {"design": None, "note": "No design is open: new_design, open_design or "
-             "create_sketch starts one."},
+            {
+                "design": None,
+                "note": "No design is open: new_design, open_design or "
+                "create_sketch starts one.",
+            },
             "No design is open.",
+            compact=True,
         )
     detail = args.get("detail", "summary")
     active = ctx.host.find_body(doc)
@@ -377,7 +381,7 @@ def inspect_design(ctx, args):
         words += ", %d failed (%s)" % (len(failed), ", ".join(s["id"] for s in failed))
     if invalid:
         words += ", %d invalid bod%s" % (len(invalid), "y" if len(invalid) == 1 else "ies")
-    return json_result(info, words + ". Snapshot %s." % info["snapshot"])
+    return json_result(info, words + ". Snapshot %s." % info["snapshot"], compact=True)
 
 
 # -- query_geometry ---------------------------------------------------------------------------
@@ -475,7 +479,7 @@ def query_geometry(ctx, args):
         words,
         (" (showing %d)" % len(rows)) if len(names) > len(rows) else "",
     )
-    return json_result(out, text)
+    return json_result(out, text, compact=True)
 
 
 # -- check_design -----------------------------------------------------------------------------
@@ -523,9 +527,7 @@ def check_design(ctx, args):
         )
     for s in steps:
         if s.get("status") == "warning":
-            warnings.append(
-                "Step %s (%s) warns: %s" % (s["name"], s["id"], s.get("message") or "")
-            )
+            warnings.append("Step %s (%s) warns: %s" % (s["name"], s["id"], s.get("message") or ""))
     suppressed = [s["id"] for s in steps if s.get("suppressed")]
     if suppressed:
         warnings.append("Suppressed steps (left out of the result): %s." % ", ".join(suppressed))
@@ -549,9 +551,7 @@ def check_design(ctx, args):
         if len(solid) >= 2:
             try:
                 pairs = analysis.interference([(b.Label, bodies.global_shape(b)) for b in solid])
-                overlap = [
-                    {"body1": a, "body2": b, "volume_mm3": _r(v)} for a, b, v, _s in pairs
-                ]
+                overlap = [{"body1": a, "body2": b, "volume_mm3": _r(v)} for a, b, v, _s in pairs]
             except Exception as exc:
                 warnings.append("Interference could not be checked: %s" % exc)
             for pair in overlap:
@@ -590,7 +590,7 @@ def check_design(ctx, args):
         len(warnings),
         "" if len(warnings) == 1 else "s",
     )
-    return json_result(out, text)
+    return json_result(out, text, compact=True)
 
 
 # -- render -------------------------------------------------------------------------------------
@@ -643,9 +643,7 @@ def scene(ctx, doc, marked, edges=True):
             continue
         color = render_core.BODY_COLORS[n % len(render_core.BODY_COLORS)]
         tol = _tolerance(shape)
-        mark_here = source is not None and (
-            source is body or getattr(body, "Tip", None) is source
-        )
+        mark_here = source is not None and (source is body or getattr(body, "Tip", None) is source)
         for i, face in enumerate(shape.Faces, start=1):
             try:
                 points, tris = face.tessellate(tol)
@@ -726,9 +724,7 @@ def _sketch_shown(sketch):
         return bodies.is_shown(sketch)
     if not getattr(sketch, "Visibility", True):
         return False
-    return not any(
-        o.TypeId not in ("PartDesign::Body", "App::Part") for o in sketch.InList
-    )
+    return not any(o.TypeId not in ("PartDesign::Body", "App::Part") for o in sketch.InList)
 
 
 def _software(ctx, doc, args, marked):
@@ -780,8 +776,11 @@ def _window(ctx, doc, args, marked):
                 view.setCamera(camera)
             except Exception:
                 pass
-    return data, {"width": width, "height": height, "view": args.get("direction") or args.get(
-        "view", "iso")}
+    return data, {
+        "width": width,
+        "height": height,
+        "view": args.get("direction") or args.get("view", "iso"),
+    }
 
 
 @action("render")
@@ -906,7 +905,9 @@ def _words(diff):
     parts = []
     b, s, p = diff["bodies"], diff["steps"], diff["parameters"]
     if s["added"]:
-        parts.append("steps added: %s" % ", ".join("%s (%s)" % (x["name"], x["id"]) for x in s["added"]))
+        parts.append(
+            "steps added: %s" % ", ".join("%s (%s)" % (x["name"], x["id"]) for x in s["added"])
+        )
     if s["removed"]:
         parts.append("steps removed: %s" % ", ".join(x["id"] for x in s["removed"]))
     if s["changed"]:
@@ -922,8 +923,10 @@ def _words(diff):
                 "%s volume %.6g -> %.6g mm3" % (row["label"], v["before"] or 0, v["after"] or 0)
             )
         else:
-            parts.append("%s changed (%s)" % (row["label"], ", ".join(k for k in row if k not in (
-                "id", "label"))))
+            parts.append(
+                "%s changed (%s)"
+                % (row["label"], ", ".join(k for k in row if k not in ("id", "label")))
+            )
     if p["added"] or p["removed"] or p["changed"]:
         parts.append(
             "parameters: %d added, %d removed, %d changed"
@@ -966,8 +969,13 @@ def _since_step(ctx, doc, ident):
             for item in tl.items[start + 1 :]:
                 if item.body == body.Name:
                     later.append(
-                        {"id": item.name, "name": item.display, "kind": item.kind,
-                         "state": item.state, "status": item.status}
+                        {
+                            "id": item.name,
+                            "name": item.display,
+                            "kind": item.kind,
+                            "state": item.state,
+                            "status": item.status,
+                        }
                     )
     except Exception:
         pass
@@ -986,7 +994,7 @@ def _since_step(ctx, doc, ident):
         text += "; volume %.6g -> %.6g mm3" % (v["before"], v["after"])
     elif not changes:
         text += "; the solid is the same"
-    return json_result(out, text + ".")
+    return json_result(out, text + ".", compact=True)
 
 
 @action("diff_design")
@@ -1013,4 +1021,4 @@ def diff_design(ctx, args):
         return _since_step(ctx, doc, since)
     diff = compare(old, record(doc))
     diff["since"] = since
-    return json_result(diff, "Since %s: %s." % (label, _words(diff)))
+    return json_result(diff, "Since %s: %s." % (label, _words(diff)), compact=True)

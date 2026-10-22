@@ -157,6 +157,56 @@ def _all(*checks):
     return check
 
 
+def _inspected(data, run):
+    body = data["bodies"][0] if data.get("bodies") else {}
+    if not body.get("valid") or body.get("solids") != 1:
+        return "the plate is not one valid solid: %s" % body
+    if body["bbox_mm"]["size"] != [40.0, 30.0, 10.0]:
+        return "the plate is %s" % body["bbox_mm"]["size"]
+    if not any(s.get("definition") for s in data["timeline"]):
+        return "detail full gave no step definitions"
+    if data["summary"]["failed_steps"]:
+        return "failed steps %s" % data["summary"]["failed_steps"]
+    run.ids["snapshot"] = data["snapshot"]
+    return None
+
+
+def _hole_face(data, run):
+    if data["count"] != 1:
+        return "%d faces of radius 3" % data["count"]
+    row = data["elements"][0]
+    if row["type"] != "cylinder" or abs(row["radius_mm"] - 3) > 1e-9 or not row.get("ref"):
+        return "the hole's face: %s" % row
+    run.ids["hole_pick"] = row["pick"]
+    return None
+
+
+def _every_ref(data, run):
+    missing = [r["name"] for r in data["elements"] if not r.get("ref")]
+    return "no ref for %s" % missing if missing or not data["elements"] else None
+
+
+def _later_steps(data, run):
+    later = [s["id"] for s in data["later_steps"]]
+    if run.ids["hole"] not in later or "volume_mm3" not in data["changes"]:
+        return "later steps %s, changes %s" % (later, data["changes"])
+    return None
+
+
+def _picture(width, height):
+    def check(answer, run):
+        import base64
+
+        from sciforge.ai import render_core
+
+        if not answer.get("image_png_base64"):
+            return "no picture"
+        size = render_core.png_info(base64.b64decode(answer["image_png_base64"]))
+        return None if size == (width, height) else "the picture is %s" % (size,)
+
+    return check
+
+
 HOLE = 12000.0 - math.pi * 9.0 * 10.0  # 40 x 30 x 10 plate, a 6 mm hole through it
 
 SESSION = [
@@ -171,6 +221,7 @@ SESSION = [
     {"tool": "get_help", "args": {"topic": "selectors"}, "contains": ["selector"]},
     {"tool": "get_help", "args": {}, "contains": ["SciForge"]},
     {"tool": "get_design", "args": {}, "contains": ["No design is open"]},
+    {"tool": "inspect_design", "args": {}, "contains": ["No design is open"]},
     {"tool": "list_designs", "args": {}},
     {"tool": "list_materials", "args": {}, "contains": ["aluminium", "plastic_red"]},
     {
@@ -300,6 +351,73 @@ SESSION = [
                 else "the cut through the middle of the plate: %s" % d
             )
         ),
+    },
+    # -- the checking tools (sciforge/ai/actions/verify_actions.py) --------------------------------
+    {"tool": "inspect_design", "args": {"detail": "full"}, "check": _json_check(_inspected)},
+    {
+        "tool": "query_geometry",
+        "args": {"select": {"type": "cylinder", "radius": 3}},
+        "check": _json_check(_hole_face),
+    },
+    {
+        "tool": "measure",
+        "args": {"a": "$hole_pick"},
+        "contains": ["Measured a (face)", "radius 3 mm"],
+    },
+    {
+        "tool": "query_geometry",
+        "args": {"element": "edges", "select": {"at": {"axis": "z", "value": "max"}}},
+        "check": _json_check(_every_ref),
+    },
+    {
+        "tool": "query_geometry",
+        "args": {
+            "of": "$plate",
+            "element": "vertices",
+            "select": {"at": {"axis": "z", "value": "min"}},
+        },
+        "check": _json_check(
+            lambda d, r: None if d["count"] == 4 else "%d corners at the bottom" % d["count"]
+        ),
+    },
+    {
+        "tool": "query_geometry",
+        "args": {"select": {"type": "torus", "count": 1}},
+        "expect": "error",
+        "contains": ["does not fit"],
+    },
+    {
+        "tool": "check_design",
+        "args": {},
+        "check": _json_check(lambda d, r: None if d["ok"] else "not ok: %s" % d["problems"]),
+    },
+    {"tool": "diff_design", "args": {"since": "$snapshot"}, "contains": ["nothing changed"]},
+    {
+        "tool": "diff_design",
+        "args": {"since": "$plate"},
+        "check": _json_check(_later_steps),
+    },
+    {
+        "tool": "diff_design",
+        "args": {"since": "S999"},
+        "expect": "error",
+        "contains": ["no snapshot"],
+    },
+    {
+        "tool": "render",
+        "args": {
+            "width": 320,
+            "height": 240,
+            "highlight": {"faces": {"type": "cylinder", "radius": 3}},
+        },
+        "check": _picture(320, 240),
+        "contains": ["software renderer", "in orange"],
+    },
+    {
+        "tool": "render",
+        "args": {"view": "top", "renderer": "window"},
+        "expect": "error",
+        "contains": ["needs the SciForge window"],
     },
     {"tool": "undo", "args": {}, "contains": ["Undo"]},
     {"tool": "redo", "args": {}, "contains": ["Redo"]},
