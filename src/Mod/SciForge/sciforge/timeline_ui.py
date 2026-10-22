@@ -302,11 +302,19 @@ class _ItemButton(QtWidgets.QToolButton):
     def paintEvent(self, event):
         super().paintEvent(event)
         item = self.item
-        if not (item.suppressed or item.status != "ok"):
+        if not (item.suppressed or item.status != "ok" or item.locked):
             return
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         w, h = self.width(), self.height()
+        if item.locked:  # Fusion: a padlock on a fully constrained sketch's icon
+            try:
+                from . import sketch_explain
+
+                size = max(8, ICON // 2)
+                sketch_explain.paint_padlock(painter, QtCore.QRect(1, h - size - 1, size, size))
+            except Exception:
+                pass
         if item.suppressed:  # struck through, like a step that is switched off
             pen = QtGui.QPen(QtGui.QColor("#c3cad4"), 2)
             painter.setPen(pen)
@@ -834,6 +842,7 @@ class TimelineWidget(QtWidgets.QWidget):
         button.setProperty("state", item.state)
         button.setProperty("status", item.status)
         button.setProperty("suppressed", "true" if item.suppressed else "false")
+        button.setProperty("locked", "true" if item.locked else "false")  # the padlock
         button.setToolTip(core.tooltip(item))
         button.doubleClicked.connect(lambda n=item.name: self.edit(n))
         button.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)

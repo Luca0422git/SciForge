@@ -173,6 +173,10 @@ def _objects(doc):
                     row[note[0]] = note[1]
             if obj.TypeId in core.BODY_TYPES and _is_surface_body(obj):
                 row["surface"] = True  # the surface icon (surface.py)
+            if obj.TypeId == "Sketcher::SketchObject":
+                from . import sketch_explain
+
+                row["locked"] = sketch_explain.fully_constrained(obj)  # read, not solved
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
                     row["suppressed"] = True  # off, not broken: greyed, like Fusion
@@ -518,6 +522,8 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
             font.setStrikeOut(True)
             shifted.font = font
         super().paint(painter, shifted, index)
+        if node.get("locked"):
+            self._padlock(painter, shifted, index)
         if radio or node["key"] == self.tree._drop_key:
             painter.save()
             try:
@@ -542,6 +548,25 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
                     painter.drawRoundedRect(option.rect.adjusted(1, 1, -2, -2), 3, 3)
             finally:
                 painter.restore()
+
+    def _padlock(self, painter, option, index):
+        """Fusion's padlock over the bottom corner of a fully constrained sketch's icon."""
+        try:
+            opt = QtWidgets.QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            style = self.tree.style()
+            icon = style.subElementRect(QtWidgets.QStyle.SE_ItemViewItemDecoration, opt, self.tree)
+            if icon.width() <= 0:
+                return
+            size = max(8, icon.width() * 5 // 8)
+            from . import sketch_explain
+
+            sketch_explain.paint_padlock(
+                painter,
+                QtCore.QRect(icon.right() - size + 3, icon.bottom() - size + 3, size, size),
+            )
+        except Exception:
+            pass
 
     def sizeHint(self, option, index):
         size = super().sizeHint(option, index)
@@ -736,6 +761,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 item.setText(1, node["label"] + "  ●")
             # A component's mark is the filled ring at the end of its row (the delegate).
         tips = [node["tip"]] if node["tip"] else []
+        if node.get("locked"):
+            tips.append("Fully constrained: nothing in it can move")
         if node["visible"] is not None:
             tips.append("Click the eye to show or hide")
         if node["kind"] in ("component", "document") and not node["active"]:

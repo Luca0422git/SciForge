@@ -316,6 +316,7 @@ class Item:
     group_name: str = ""
     component: str = ""  # the component the step belongs to ("" = the root)
     component_name: str = ""
+    locked: bool = False  # a fully constrained sketch: Fusion's padlock on its icon
 
     @property
     def icon(self):
@@ -513,6 +514,7 @@ def build(features, tips, marker_before=None):
                 group_name=f.get("group_name") or "",
                 component=f.get("component") or "",
                 component_name=f.get("component_name") or "",
+                locked=bool(f.get("locked")),
             )
         )
     return Timeline(tuple(items), marker, dict(tips), before)
@@ -544,6 +546,8 @@ def tooltip(item):
         lines.append("Suppressed")
     elif item.state == "rolled_back":
         lines.append("After the history marker (not computed)")
+    if item.locked:
+        lines.append("Fully constrained")
     if item.status == "error":
         lines.append("Error: " + item.message)
     elif item.status == "warning":
@@ -558,7 +562,17 @@ def signature(timeline, extra=None):
         timeline.marker,
         timeline.before,
         tuple(
-            (i.name, i.display, i.kind, i.state, i.suppressed, i.status, i.message, i.group)
+            (
+                i.name,
+                i.display,
+                i.kind,
+                i.state,
+                i.suppressed,
+                i.status,
+                i.message,
+                i.group,
+                i.locked,
+            )
             for i in timeline.items
         ),
         tuple(sorted({(i.group, i.group_name) for i in timeline.items if i.group})),

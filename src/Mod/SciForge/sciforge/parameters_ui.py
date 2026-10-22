@@ -5,6 +5,9 @@ Top: user parameters (Name, Unit, Expression, Value, Comment), with + / -.
 Bottom: model parameters, every dimension in the design, editable in place.
 Expressions may use parameter names directly: `width / 2 + wall`.
 Everything is one undo step; Cancel puts the design back as it was.
+A value that would break a step (a feature that fails, a sketch whose constraints conflict, a
+sketch length of 0 or less) is tried and put back, and the message names the step and the
+dimension (parameters.change_checked).
 """
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -132,11 +135,19 @@ class ParametersDialog(QtWidgets.QDialog):
             self._loading = False
 
     # -- editing -------------------------------------------------------------------
-    def _apply(self, fn):
+    def _apply(self, fn, checked=None):
+        """Run a change. `checked`: (object, property path, "name = value") of a value change,
+        tried first: when it would break a step it is put back and the message says which
+        step and which dimension (parameters.change_checked)."""
         try:
-            fn()
-            self.doc.recompute()
-            self.message.setText("")
+            if checked is not None:
+                obj, path, what = checked
+                refused = parameters.change_checked(self.doc, obj, path, fn, what)
+            else:
+                fn()
+                self.doc.recompute()
+                refused = ""
+            self.message.setText(("⚠ " + refused) if refused else "")
         except Exception as exc:
             self.message.setText("⚠ %s" % exc)
         QtCore.QTimer.singleShot(0, self.reload)
@@ -146,7 +157,11 @@ class ParametersDialog(QtWidgets.QDialog):
             return
         name = self.user.item(item.row(), 0).text()
         if item.column() == 2:
-            self._apply(lambda: parameters.set_user(self.doc, name, item.text()))
+            text = item.text()
+            self._apply(
+                lambda: parameters.set_user(self.doc, name, text),
+                (parameters.container(self.doc), name, "%s = %s" % (name, text.strip())),
+            )
         else:
             obj = parameters.container(self.doc)
             self._apply(lambda: obj.setDocumentationOfProperty(name, item.text()))
@@ -157,7 +172,15 @@ class ParametersDialog(QtWidgets.QDialog):
         row = item.data(0, QtCore.Qt.UserRole)
         if row is None:
             return
-        self._apply(lambda: parameters.set_model(self.doc, row, item.text(2)))
+        text = item.text(2)
+        self._apply(
+            lambda: parameters.set_model(self.doc, row, text),
+            (
+                self.doc.getObject(row["object"]),
+                row["path"],
+                "%s = %s" % (row["label"], text.strip()),
+            ),
+        )
 
     def add_parameter(self, name=None, unit="mm", text="10", comment=""):
         if name is None:

@@ -263,3 +263,161 @@ def _set(obj, path, text, names):
         setattr(obj, path, number.Value)
     else:
         setattr(obj, path, number)
+
+
+# -- Change Parameters checked on a trial ------------------------------------------------------
+# Fusion's idea, CADCraft's habit (docs/sciforge/dev/cadcraft-lessons.md, idea 1): a parameter
+# change that would break the design is refused with the step and the dimension it would break,
+# and nothing changes. The change is made, the design recomputed, and when a step that was fine
+# is now broken (a feature fails, a sketch's constraints conflict, a sketch length or radius
+# becomes 0 or less), the change is put back and the design recomputed again. Change Parameters
+# keeps everything in one transaction until OK, so the change is undone by hand, not aborted.
+SKIP_TYPES = (
+    "PartDesign::Body",
+    "App::Part",
+    "App::Origin",
+    "App::VarSet",
+    "App::DocumentObjectGroup",
+)
+
+
+def broken_steps(doc):
+    """{object name: reason} of the steps that are broken now, in document order."""
+    out = {}
+    for obj in doc.Objects:
+        if obj.TypeId in SKIP_TYPES:
+            continue
+        try:
+            reason = _broken(obj)
+        except Exception:
+            reason = ""
+        if reason:
+            out[obj.Name] = reason
+    return out
+
+
+def _broken(obj):
+    from . import sketch_explain_core as explain_core
+
+    if obj.TypeId == "Sketcher::SketchObject":
+        from . import sketch_explain
+
+        curve_names, _kinds = sketch_explain.names(obj)
+        for i, c in enumerate(obj.Constraints):
+            if c.Driving and explain_core.bad_size(c.Type, c.Value):
+                info = sketch_explain.constraint_info(obj, i, c)
+                return explain_core.bad_size_reason(info, curve_names)
+        conflicting = [i - 1 for i in obj.ConflictingConstraints]
+        if conflicting:
+            text, _count = sketch_explain.words(obj, conflicting)
+            return "its constraints would conflict%s" % ((": " + text) if text else "")
+        if obj.MalformedConstraints:
+            return "its constraints would break"
+        for i, g in enumerate(obj.Geometry):
+            if sketch_explain.collapsed(g):
+                return "its %s would shrink to nothing" % curve_names.get(i, "curve")
+    state = list(obj.State)
+    if "Invalid" in state or "Error" in state:
+        from . import timeline_ops
+
+        _kind, reason = timeline_ops.problem(obj)
+        return reason or "it could not be computed"
+    if obj.TypeId.startswith("PartDesign::") and obj.TypeId not in NOT_SOLID_STEPS:
+        shape = getattr(obj, "Shape", None)
+        if shape is not None and (shape.isNull() or shape.Volume < 1e-6):
+            return "its solid would be empty"
+    return ""
+
+
+# PartDesign objects that are no solid step (a solid step whose solid is empty is broken)
+NOT_SOLID_STEPS = (
+    "PartDesign::Plane",
+    "PartDesign::Line",
+    "PartDesign::Point",
+    "PartDesign::CoordinateSystem",
+    "PartDesign::ShapeBinder",
+    "PartDesign::SubShapeBinder",
+)
+
+
+
+def _step_names(doc):
+    """{object name: what the timeline calls it} ("Sketch 1", "Extrude 2")."""
+    try:
+        from . import timeline_ops
+
+        return {item.name: item.display for item in timeline_ops.timeline(doc, deps=False).items}
+    except Exception:
+        return {}
+
+
+def _snapshot(obj, path):
+    """What `path` of `obj` holds now (its expressions and its value), to put it back."""
+    expressions = dict(obj.ExpressionEngine)
+    if path.startswith(".Constraints["):
+        value = obj.getDatum(int(path[len(".Constraints[") : -1]))
+    else:
+        value = getattr(obj, path)
+    return expressions, value
+
+
+def _put_back(obj, path, snapshot):
+    expressions, value = snapshot
+    now = dict(obj.ExpressionEngine)
+    for key in now:
+        if key not in expressions:
+            obj.setExpression(key, None)
+    for key, expr in expressions.items():
+        if now.get(key) != expr:
+            obj.setExpression(key, expr)
+    if path in expressions:
+        return  # its formula is back: the value follows it
+    if path.startswith(".Constraints["):
+        index = int(path[len(".Constraints[") : -1])
+        try:
+            obj.setDatum(index, value)
+        except Exception:
+            # the sketch cannot solve until the value is back: through a formula, which
+            # sets the value without asking the solver first, then the formula goes again
+            obj.setExpression(path, str(value))
+            obj.recompute()
+            obj.setExpression(path, None)
+    else:
+        setattr(obj, path, value)
+
+
+def change_checked(doc, obj, path, apply, what):
+    """Make a parameter change (`apply()`), recompute, and take it back when it breaks a step
+    that was fine before. `obj`/`path`: the property `apply` changes (a user parameter: the
+    Parameters container and its name; a model parameter: the object and its path); `what`
+    names the change in the message ("width = 5 mm"). Returns "" when the change stands, else
+    the message (and the design is as it was)."""
+    from . import log
+    from . import sketch_explain_core as explain_core
+
+    before = broken_steps(doc)
+    snapshot = _snapshot(obj, path)
+    try:
+        apply()
+    except Exception:
+        # refused half-way (a formula FreeCAD cannot read): what it did is put back too
+        try:
+            _put_back(obj, path, snapshot)
+        except Exception:
+            pass
+        raise
+    doc.recompute()
+    after = broken_steps(doc)
+    new = [(name, reason) for name, reason in after.items() if name not in before]
+    if not new:
+        return ""
+    labels = _step_names(doc)
+    problems = []
+    for name, reason in new:
+        found = doc.getObject(name)
+        problems.append((labels.get(name) or (found.Label if found else name), reason))
+    message = explain_core.parameter_refusal(what, problems)
+    log("parameters: refused %s: %s" % (what, "; ".join("%s: %s" % p for p in problems)))
+    _put_back(obj, path, snapshot)
+    doc.recompute()
+    return message
