@@ -6,6 +6,11 @@ convert and script designs without the window, with the same AI tools the app of
     sciforge-cli convert IN OUT [--force]   e.g. part.FCStd -> part.step / .stl / .3mf
     sciforge-cli run [FILE] --tool 'NAME {JSON}' ... [--save OUT.FCStd] [--force]
                                             run tools in order, then save
+    sciforge-cli check FILE                 is the design sound (check_design as JSON;
+                                            exit 1 when it has problems)
+    sciforge-cli render FILE OUT.png [--view top] [--size 800x600]
+                                            a picture of the design, drawn without the
+                                            window
     sciforge-cli tools [--names]            the tool catalogue as JSON
     sciforge-cli mcp [--headless]           the MCP server (default: forwards to the
                                             running SciForge; --headless: runs the tools
@@ -84,6 +89,17 @@ def _parser():
     p.add_argument("--force", action="store_true", help="files may be replaced")
     p.add_argument("--keep-going", action="store_true", help="go on after a failed tool")
     p.add_argument("--json", action="store_true", help="answers as JSON")
+    p = sub.add_parser("check", help="check a design: valid solids, failed steps, overlaps")
+    p.add_argument("file")
+    p.add_argument("--no-interference", action="store_true", help="skip the overlap check")
+    p = sub.add_parser("render", help="a PNG picture of a design (no window needed)")
+    p.add_argument("file")
+    p.add_argument("target", help="the .png to write")
+    p.add_argument(
+        "--view", default="iso", choices=("iso", "front", "back", "top", "bottom", "left", "right")
+    )
+    p.add_argument("--size", default="800x600", help="WIDTHxHEIGHT in pixels (default 800x600)")
+    p.add_argument("--force", action="store_true", help="replace OUT.png if it exists")
     p = sub.add_parser("tools", help="the tool catalogue as JSON")
     p.add_argument("--names", action="store_true", help="only the names")
     p.add_argument("--category", help="only this category")
@@ -136,6 +152,38 @@ def _tools(options, out):
     return 0
 
 
+def parse_size(text):
+    """'800x600' -> (800, 600); ValueError with a plain reason otherwise."""
+    parts = (text or "").lower().split("x")
+    if len(parts) != 2 or not all(p.strip().isdigit() for p in parts):
+        raise ValueError("--size must be WIDTHxHEIGHT, e.g. 800x600")
+    width, height = int(parts[0]), int(parts[1])
+    if not (64 <= width <= 2048 and 64 <= height <= 2048):
+        raise ValueError("--size must be 64 to 2048 pixels each way")
+    return width, height
+
+
+def _render(options, host, say):
+    import base64
+
+    from sciforge.ai import headless
+
+    width, height = parse_size(options.size)
+    target = os.path.abspath(options.target)
+    if os.path.exists(target) and not options.force:
+        raise ValueError("%s already exists: add --force to replace it" % target)
+    headless.open_file(options.file, host)
+    args = {"view": options.view, "width": width, "height": height, "renderer": "software"}
+    answer = headless.call("render", args, host)
+    if answer["is_error"] or not answer["image_png_base64"]:
+        say(answer["text"])
+        return 1
+    with open(target, "wb") as handle:
+        handle.write(base64.b64decode(answer["image_png_base64"]))
+    say("%s Wrote %s." % (answer["text"], target))
+    return 0
+
+
 def _need_freecad():
     try:
         import FreeCAD  # noqa: F401
@@ -183,6 +231,17 @@ def main(argv=None, out=None):
             say(json.dumps(headless.info(options.file), indent=1, ensure_ascii=False, default=str))
             return 0
         host = headless.HeadlessHost(allow_overwrite=getattr(options, "force", False))
+        if options.command == "check":
+            headless.open_file(options.file, host)
+            args = {"interference": not options.no_interference}
+            answer = headless.call("check_design", args, host)
+            say(answer["text"])
+            if answer["is_error"]:
+                return 1
+            data = json.loads(answer["text"][answer["text"].index("{") :])
+            return 0 if data.get("ok") else 1
+        if options.command == "render":
+            return _render(options, host, say)
         if options.command == "convert":
             answer = headless.convert(options.source, options.target, host)
             say(answer["text"])

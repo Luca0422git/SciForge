@@ -7,6 +7,8 @@
 #   tools/sciforge/sciforge-cli run --tool 'create_sketch {"plane": "XY", "geometry":
 #       [{"rect": [0, 0, 40, 20]}]}' --tool 'extrude {"profile": "Sketch1", "distance": 10}' \
 #       --save box.FCStd
+#   tools/sciforge/sciforge-cli check part.FCStd
+#   tools/sciforge/sciforge-cli render part.FCStd part.png --view top --size 800x600
 #   tools/sciforge/sciforge-cli tools
 #   tools/sciforge/sciforge-cli mcp --headless
 #

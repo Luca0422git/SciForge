@@ -331,6 +331,12 @@ def script(agent, out_dir=None):
             size == want,
             size,
         )
+    if out_dir:
+        path = os.path.join(out_dir, "agent-plate.FCStd")
+        if os.path.exists(path):
+            os.remove(path)
+        a.call("save_as", {"path": path})
+        a.ids["file"] = path
     if a.read is not None:
         result = a.read("sciforge://design")
         contents = (result or {}).get("contents") or [{}]
@@ -345,6 +351,35 @@ def script(agent, out_dir=None):
             contents[0].get("text", "")[:300],
         )
     return a.results
+
+
+def command_line(agent, path, out_dir):
+    """The saved part checked and drawn from the command line (sciforge-cli check / render)."""
+    cli = os.path.join(REPO, "tools", "sciforge", "sciforge-cli")
+    done = subprocess.run([cli, "check", path], capture_output=True, timeout=TIMEOUT)
+    out = done.stdout.decode("utf-8", "replace")
+    agent.check(
+        "sciforge-cli check: the saved part is OK",
+        done.returncode == 0 and "Design check: OK" in out,
+        out[:300] + done.stderr.decode()[-300:],
+    )
+    png = os.path.join(out_dir, "agent-cli-top.png")
+    if os.path.exists(png):
+        os.remove(png)
+    done = subprocess.run(
+        [cli, "render", path, png, "--view", "top", "--size", "300x200"],
+        capture_output=True,
+        timeout=TIMEOUT,
+    )
+    size = None
+    if os.path.isfile(png):
+        with open(png, "rb") as handle:
+            size = png_size(handle.read(32))
+    agent.check(
+        "sciforge-cli render writes a 300 x 200 PNG",
+        done.returncode == 0 and size == (300, 200),
+        (size, done.stderr.decode()[-300:]),
+    )
 
 
 # -- the headless run ----------------------------------------------------------------------------
@@ -410,6 +445,9 @@ def run_over_mcp(command, out_dir=None):
             str(docs)[:200],
         )
         script(agent, out_dir)
+        if agent.ids.get("file"):
+            client.close()
+            command_line(agent, agent.ids["file"], out_dir)
         results = agent.results
     except Exception as exc:
         results = (agent.results if agent else []) + [

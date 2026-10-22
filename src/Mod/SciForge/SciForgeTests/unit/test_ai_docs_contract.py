@@ -320,6 +320,23 @@ class CompactAnswers(unittest.TestCase):
         self.assertEqual(bridge_core.compact_json("é"), '"é"')
 
 
+class CommandLine(unittest.TestCase):
+    def test_render_size_and_new_commands(self):
+        from sciforge.ai import cli
+
+        self.assertEqual(cli.parse_size("800x600"), (800, 600))
+        self.assertEqual(cli.parse_size("64X2048"), (64, 2048))
+        for bad in ("", "800", "8x6", "800x600x2", "axb", "5000x100"):
+            with self.assertRaises(ValueError):
+                cli.parse_size(bad)
+        options = cli._parser().parse_args(["render", "a.FCStd", "a.png", "--view", "top"])
+        self.assertEqual(
+            (options.command, options.view, options.size), ("render", "top", "800x600")
+        )
+        options = cli._parser().parse_args(["check", "a.FCStd", "--no-interference"])
+        self.assertTrue(options.no_interference)
+
+
 class ClaudeExtension(unittest.TestCase):
     def test_the_extension_carries_the_documents_and_serves_them(self):
         files = installers.mcpb_files(ROOT)
