@@ -53,7 +53,7 @@ Evidence:
   a Press Pull change, close and reopen), `fillet_qa_part.py` (fillets and chamfers on a
   multi-step part, Press Pull on a round, history edits round fillets).
 - Golden models: `fillet_top_edges`, `fillet_all_edges`, `edit_fillet_radius`,
-  `revolve_washer`, the 21 `sf_revolve_*`, `sketch_nut_trap_polygon`, `param_driven_box`.
+  `revolve_washer`, the 19 `sf_revolve_*`, `sketch_nut_trap_polygon`, `param_driven_box`.
 
 Missing (none blocks the workflow): conflicting constraints are refused without naming the
 culprits (G-03), no fully-constrained padlock (G-06), no Centerline line type (G-09),
