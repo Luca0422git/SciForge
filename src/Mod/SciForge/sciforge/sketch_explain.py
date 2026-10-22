@@ -27,7 +27,7 @@ from . import sketch_explain_core as core
 
 HIGHLIGHT_MS = 2500
 PROBE_LIMIT = 150  # constraints switched off at most to find a redundancy's culprits
-PROBE_SECONDS = 0.8  # in all, to find a redundancy's culprits (each try is a solve)
+PROBE_SECONDS = 1.0  # in all, to find a redundancy's culprits (each try is a solve)
 
 
 # -- reading constraints ----------------------------------------------------------------------
@@ -121,12 +121,14 @@ def _neighbours(sketch, index):
 # -- finding the culprits ---------------------------------------------------------------------
 class Finding:
     """What is wrong with some new constraints: kind "conflict", "redundant" or "" (all
-    fine); `bad`: the new ones that do not fit; `culprits`: the existing ones they fight."""
+    fine); `bad`: the new ones that do not fit; `culprits`: the existing ones they fight;
+    `partial`: the culprits are only some of them (the search was cut short)."""
 
     def __init__(self, kind="", bad=(), culprits=()):
         self.kind = kind
         self.bad = list(bad)
         self.culprits = list(culprits)
+        self.partial = bool(getattr(culprits, "partial", False))
 
     def __bool__(self):
         return bool(self.kind)
@@ -181,6 +183,25 @@ def _nearness(sketch, index, candidates):
     return sorted(candidates, key=key)
 
 
+class Culprits(list):
+    """Culprits found by switching constraints off; `partial`: the search was cut short."""
+
+    partial = False
+
+
+def _solves_itself(sketch):
+    """FreeCAD solves the sketch on every change of its constraints itself (setActive too)
+    while it is open for editing and the Sketcher's "Auto-update" is off (its default; its
+    task panel sets the sketch's noRecomputes then, which Python cannot read)."""
+    if not _in_edit(sketch):
+        return False
+    try:
+        group = App.ParamGet("User parameter:BaseApp/Preferences/Mod/Sketcher")
+        return not group.GetBool("AutoRecompute", False)
+    except Exception:
+        return False
+
+
 def redundant_culprits(sketch, index, exclude=(), solved=False):
     """The existing constraints that already say what constraint `index` says. FreeCAD names
     only the one it would drop, so the constraints connected to it are switched off in turn,
@@ -191,29 +212,31 @@ def redundant_culprits(sketch, index, exclude=(), solved=False):
     just solved the sketch as it is. The constraints are put back as they were (and the
     curves, should the solver have nudged them)."""
     started = time.time()
+    found = Culprits()
     cons = sketch.Constraints
     exclude = set(exclude) | {index}
     candidates = [
         j for j in component(sketch, [index]) if j not in exclude and _nameable(cons[j])
     ]
     if not candidates:
-        return []
+        return found
     candidates = _nearness(sketch, index, candidates)[:PROBE_LIMIT]
     if not solved:
         sketch.solve()
     _conflicting, redundant = bad_sets(sketch)
     base = len(redundant)
     if index not in redundant or not base:
-        return []
+        return found
     geometry = sketch.Geometry
-    found = []
+    itself = _solves_itself(sketch)  # then setActive solves: no second solve of ours
     tries = 0
     slowest = 0.0
     complete = True
     try:
         for j in candidates:
-            # room left for this try and for the solve that puts the sketch back
-            if time.time() - started + 2 * slowest > PROBE_SECONDS:
+            # room left for this try (and for the solve that puts the sketch back, unless
+            # setActive does that)
+            if time.time() - started + (1 if itself else 2) * slowest > PROBE_SECONDS:
                 complete = False
                 log(
                     "explain: stopped looking for culprits after %d of %d tries (%.1f s)"
@@ -224,7 +247,8 @@ def redundant_culprits(sketch, index, exclude=(), solved=False):
             began = time.time()
             sketch.setActive(j, False)
             try:
-                sketch.solve()
+                if not itself:
+                    sketch.solve()
                 _c, now = bad_sets(sketch)
                 if index not in now and len(now) < base:
                     found.append(j)
@@ -232,12 +256,15 @@ def redundant_culprits(sketch, index, exclude=(), solved=False):
                 sketch.setActive(j, True)
             slowest = max(slowest, time.time() - began)
     finally:
-        sketch.solve()
+        if not itself:  # (else the last setActive solved the sketch as it is)
+            sketch.solve()
         _restore_geometry(sketch, geometry)
     if found or not complete:
+        found.partial = not complete
         return found
     # every one tried, none alone ends it (it is said twice over): the ones on its curves
-    return _neighbours(sketch, index)
+    found.extend(_neighbours(sketch, index))
+    return found
 
 
 def _restore_geometry(sketch, geometry):
@@ -336,7 +363,7 @@ def check_new(sketch, new, probe=True):
 def refusal(sketch, title, finding):
     """The constraint tool's message for `finding` (sketch_explain_core.refused_constraint)."""
     text, count = words(sketch, finding.culprits)
-    return core.refused_constraint(title, finding.kind, text, count)
+    return core.refused_constraint(title, finding.kind, text, count, finding.partial)
 
 
 def log_finding(where, sketch, finding):

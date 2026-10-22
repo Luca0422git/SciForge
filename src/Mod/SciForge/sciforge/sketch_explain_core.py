@@ -275,13 +275,20 @@ def culprit_list(items, names, kinds=None, limit=3):
 SHOWN = " (highlighted in the sketch)"
 
 
-def refused_constraint(title, kind, culprits_text, count=1):
+def refused_constraint(title, kind, culprits_text, count=1, partial=False):
     """A constraint tool's refusal. kind "conflict": it fights others; "redundant": the
-    sketch already says it (`count` culprits make it so)."""
+    sketch already says it (`count` culprits make it so; `partial`: the search for them was
+    cut short on a big sketch, so they are only some of the reason)."""
     if kind == "conflict":
         if culprits_text:
             return "%s: not added, it conflicts with %s%s." % (title, culprits_text, SHOWN)
         return "%s: not added, it does not fit the sketch's other constraints." % title
+    if culprits_text and partial:
+        return "%s: not added, it is so already (%s, among others%s)." % (
+            title,
+            culprits_text,
+            SHOWN.replace(" (", "; ").rstrip(")"),
+        )
     if culprits_text:
         return "%s: not added, %s already make%s it so%s." % (
             title,
@@ -292,8 +299,10 @@ def refused_constraint(title, kind, culprits_text, count=1):
     return "%s: not added, it is so already." % title
 
 
-def driven_dimension(culprits_text):
+def driven_dimension(culprits_text, partial=False):
     """A dimension on a size the sketch already sets: it is added as a driven dimension."""
+    if culprits_text and partial:
+        culprits_text += ", among others,"
     if culprits_text:
         return (
             "That size is already set by %s%s: added as a driven dimension (it shows the "

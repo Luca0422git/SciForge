@@ -165,6 +165,21 @@ class MessageTests(unittest.TestCase):
         self.assertIn("does not fit", core.refused_constraint("Equal", "conflict", "", 0))
         self.assertIn("is so already", core.refused_constraint("Equal", "redundant", "", 0))
 
+    def test_partial_culprits_are_not_the_whole_reason(self):
+        # a big sketch: the search stopped after the nearest ones
+        text = core.refused_constraint(
+            "Parallel", "redundant", "the Horizontal on Line 2", 1, partial=True
+        )
+        self.assertEqual(
+            text,
+            "Parallel: not added, it is so already (the Horizontal on Line 2, among others; "
+            "highlighted in the sketch).",
+        )
+        self.assertIn(
+            "the 30 mm dimension, among others,",
+            core.driven_dimension("the 30 mm dimension", partial=True),
+        )
+
     def test_driven_and_value(self):
         self.assertIn(
             "already set by the 30 mm dimension", core.driven_dimension("the 30 mm dimension")

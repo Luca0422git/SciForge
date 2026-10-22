@@ -1015,7 +1015,7 @@ class SketchSession:
         from . import commands
 
         text, _count = explain.words(sketch, finding.culprits)
-        commands.tell(explain_core.driven_dimension(text))
+        commands.tell(explain_core.driven_dimension(text, finding.partial))
         explain.highlight(sketch, finding.culprits)
         return True
 
