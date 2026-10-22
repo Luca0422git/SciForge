@@ -487,9 +487,17 @@ def query_geometry(ctx, args):
         raise UserError("The selector does not fit %s: %s." % (words, exc))
     limit = int(args.get("limit", 60))
     shown = names[:limit]
+    from ... import bodies
+
+    try:
+        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+    except Exception:
+        body = None
     refs = {}
     if args.get("refs", True) and element != "vertices":
         refs = gf.stable_refs(shape, element, wanted=set(shown))
+        if body is not None:  # (a tool working on another body refuses the ref: selectors)
+            gf.tie_to_body(refs, body.Name)
     rows = []
     for name in shown:
         sub = shape.getElement(name)
@@ -514,9 +522,17 @@ def query_geometry(ctx, args):
         % obj.Name,
     }
     try:
-        from ... import bodies
-
-        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+        active = ctx.host.find_body(ctx.doc)
+        if body is not None and rows and active is not None and active is not body:
+            out["active_body"] = active.Name
+            out["note"] += (
+                " %s is not the active body (%s is): activate %s before passing these refs to "
+                "a tool that changes the active body (fillet, chamfer...), which refuses them "
+                "otherwise." % (body.Name, active.Name, body.Name)
+            )
+    except Exception:
+        pass
+    try:
         place = body.getGlobalPlacement() if body is not None else None
         if place is not None and not place.isIdentity():
             out["body_placement"] = {

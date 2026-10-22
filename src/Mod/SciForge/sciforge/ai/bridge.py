@@ -383,6 +383,11 @@ class GuiHost(executor.Host):
                     wanted = {n for n in subs if n.startswith(prefix)}
                     if wanted:
                         refs = geometry_facts.stable_refs(shape, element, wanted)
+                        from .. import bodies
+
+                        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+                        if body is not None:
+                            geometry_facts.tie_to_body(refs, body.Name)
                         row.setdefault("refs", {}).update(refs)
             except Exception:
                 pass

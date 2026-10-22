@@ -33,6 +33,7 @@ SELECTOR_KEYS = (
     "all",
     "count",
     "any_of",
+    "body",
 )
 
 # Matches SciForgeTests/golden/README.md "Selectors" and sciforge/ai/ops/selectors.py.
@@ -59,6 +60,9 @@ SELECTOR_HELP = "\n".join(
         "instead of changing the wrong geometry. Always give it.",
         "  any_of: [selector, ...]: the union of several selectors (each may have its own "
         "count).",
+        "  body: the id of the body the selector was made for (query_geometry's refs carry "
+        "it): a tool that works on another body (the active one) refuses it instead of "
+        "changing that body; activate this body first.",
         'Examples: the 4 top edges of a box {"type": "line", "at": {"axis": "z", "value": '
         '"max"}, "count": 4}; the top face {"normal": [0, 0, 1], "count": 1}; one specific '
         'edge {"type": "line", "parallel": [0, 1, 0], "at": [{"axis": "x", "value": 5}, '
@@ -314,6 +318,7 @@ def _selector_properties():
         "all": {"type": "boolean"},
         "count": {"type": "integer", "minimum": 1},
         "any_of": {"type": "array", "items": {"type": "object"}, "minItems": 1},
+        "body": {"type": "string", "description": "the body the selector was made for"},
     }
 
 
@@ -466,7 +471,9 @@ def check_selector(spec, path, element, problems):
         return
     if spec.get("all") is not None and not isinstance(spec.get("all"), bool):
         problems.append("%s.all must be true or false" % path)
-    if spec.get("all") and set(spec) - {"all", "count"}:
+    if "body" in spec and not (isinstance(spec["body"], str) and spec["body"]):
+        problems.append("%s.body must be the id of a body" % path)
+    if spec.get("all") and set(spec) - {"all", "count", "body"}:
         problems.append("%s: all combines with nothing else (except count)" % path)
     if "type" in spec:
         allowed = EDGE_TYPES if element == "edges" else FACE_TYPES

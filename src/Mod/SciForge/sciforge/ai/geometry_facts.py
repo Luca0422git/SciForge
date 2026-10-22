@@ -277,6 +277,16 @@ def stable_refs(shape, element, wanted=None, verify=True):
     return out
 
 
+def tie_to_body(refs, body_name):
+    """Put the body the refs were made for in each of them ({"body": "Body001", ...}): a tool
+    that works on another body refuses such a ref (selectors._check_body) instead of
+    picking the matching element of that other body."""
+    for spec in refs.values():
+        if spec is not None:
+            spec["body"] = body_name
+    return refs
+
+
 def pick_of(name, element, ref, sub=None):
     """The pick other tools take for this element ({"face": ref}, {"edge": ref},
     {"vertex": [x, y, z]})."""
