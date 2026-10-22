@@ -7,7 +7,12 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 **Branch `experimental` (Luca, 2026-10-20): Fusion workflows that do not work yet get fixed
 there, one at a time ("New branch time. Call it experimental"). First item done: Draft of
 curved / free-form faces (session log "Draft of curved faces"). Luca tests it; nothing from
-`experimental` goes to `develop` or `Release` until he says so.**
+`experimental` goes to `develop` or `Release` until he says so.** Since then on `experimental`
+(2026-10-21/22): speed of edits, Fusion rollback while editing, and Luca's 8 approved ideas
+from CADCraft (session log "Eight features from the CADCraft study"): values stop at the
+limit, sketch messages naming culprits + padlock, export/import reports, 117 AI tools with
+verification tools and a full AI documentation library, headless CLI, parity script, speed
+with big designs, PDF layers/searchable text.
 
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
 R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
@@ -79,6 +84,8 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
 | 2026-10-20 | First public release is **0.1.0-beta**; no code signing (Luca: no money for it), so the GitHub page and release notes explain Windows SmartScreen; update check with an easy install; a minimal welcome ("dont overdo it") | Brief `docs/sciforge/dev/briefs/beta-release.md` (milestones R0-R5) |
 | 2026-10-20 | Branch `experimental` (from develop `ae1d3768`) for fixing Fusion workflows that do not work in SciForge yet; the first is Draft of curved faces. This work is pushed to `experimental`, not `develop` | Luca: "some of the workflows that id regularly do on fusion dont exactly work ... New branch time. Call it experimental. thats where youll do your work" |
+| 2026-10-21 | A value past what fits (fillet radius, chamfer, draft angle, shell wall, press pull ...) stops at the largest value that works, with a note, instead of an error; formulas are not rewritten (they keep the error). Deliberately differs from Fusion | Luca: "limit edits to stop at that limit ... add the functionality to any tool that can give that sort of error" |
+| 2026-10-21 | AI: expose everything SciForge can do as tools, with all documentation an AI model could use | Luca: "go crazy with 3. give all the tools possible, with absolutely all the documentation available" |
 | 2026-10-20 | Branch `Release` (from develop `a6a5f7bd`): only tested `develop` commits, fast-forwarded and tagged `sciforge-v<version>` on Luca's green light; all work stays on `develop` | Luca: "everything goes on develop until i give the green light" |
 - **2026-10-13: full (compiled) builds only for releases or a real C++ change.** Luca asked why
   compile at all when SciForge is an add-on: all 7 core patches are housekeeping or FreeCAD bug
@@ -1467,6 +1474,60 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Eight features from the CADCraft study (branch `experimental`, 2026-10-21/22)
+
+Luca asked to study github.com/storytold/cadcraft (an AutoCAD-like 2D app in Rust, MIT/Apache)
+and draft ideas (docs/sciforge/dev/cadcraft-lessons.md), then approved all of them plus one of
+his own ("limit edits to stop at that limit"), "in one go", with ultracode (multi-agent
+workflows). Built by 9 agents in separate git worktrees (branches wf/*), merged on a local
+`integration` branch, then 10 adversarial reviewers + 10 fixers (78 findings, all reproduced
+and fixed with regression tests; branches fix/*), then the full suite. Two machine restarts cut
+agents off; the workflow was made restart-proof (fixed worktrees, WIP commits). Each agent's
+detailed notes: docs/sciforge/sessions/2026-10-21-*.md (build) and 2026-10-22-*.md (fixes,
+integration). Summary:
+
+- **Values stop at the limit** (value_limits.py): Fillet (all kinds), Chamfer (Distance-and-
+  Angle now checked as the equivalent two-distance bevel: FreeCAD segfaulted), Draft, Shell,
+  Press Pull / Offset Face, Thicken, Extrude taper/thin, Revolve, Torus, Coil, Pipe, Gear,
+  sketch fillet/chamfer. Bisection once (time-budgeted), cached per inputs, rounded to the
+  box's precision and verified. Not held (errors as before): Hole/Thread, Sweep taper/twist,
+  Rib, Web, some surface tools, MESH shell (reasons in the parity docs). AI tools do NOT clamp:
+  they fail and state the largest value that fits (ai/value_fit.py).
+- **Sketch explains itself** (sketch_explain*.py): conflicts/repeats name the culprits in
+  Fusion terms with red rings; padlock for fully constrained sketches in browser + timeline,
+  "N left to define" in the Sketch Palette; inferred constraints added one by one in priority
+  order when the batch does not fit; Change Parameters and the dimension box refuse a value
+  that breaks a step (parameters.change_checked), naming it.
+- **Export/import reports** (export_report*.py): a card after every export lists what the
+  format does not keep (counted from the design, verified by round trips: e.g. STEP colours
+  only with the window open, IGES loses names, 3MF reader ignores the unit); imports say what
+  did not come in. Also in the AI export/import tools and the CLI.
+- **AI** (sciforge/ai/catalog, executor.py, actions/, headless.py, cli.py, docs_core.py,
+  render_core.py): one catalogue of 117 tools feeding MCP, bridge, chat and CLI (the original
+  16 unchanged); checking tools inspect_design / query_geometry / check_design / render (also
+  headless: own software renderer) / diff_design; MCP resources + prompts; honest retries;
+  `tools/sciforge/sciforge-cli` (info, convert, run, check, render, tools, docs, mcp
+  --headless). AI docs in src/Mod/SciForge/docs/ai (handbook, selectors cookbook, 12 tested
+  recipes, a generated page per tool with recorded examples, golden-model index, copy of the
+  user docs) via docs_search / docs_read / examples_search and MCP resources; regenerate with
+  `python3 tools/sciforge/make_ai_docs.py` (a unit test fails when stale). Tests: headless
+  runner calls every tool; docs_runner runs every documented call; agent end-to-end over MCP.
+- **Parity script**: tools/sciforge/parity.py + data/fusion-menus.txt (631 Fusion names from
+  memory, 125 marked "?", Luca can correct) -> docs/sciforge/parity-checklist.md: 457 / 631
+  (72%; 84% without the areas Luca left out). core-workflows.md (6 daily workflows with
+  evidence); remaining-gaps.md is the one ranked work list (G-xx).
+- **Speed with big designs**: doc_epoch.py (timeline/browser re-read only after changes: idle
+  cost 251 -> 38 ms/s), undo_fast.py (Undo/Redo without rebuild when FreeCAD restored the right
+  shapes: 15-19 s -> 0.7-1.7 s on a 1716-face part; drawings and other dependents without a
+  Shape are refreshed), refind cache (31 s -> <1 s), timeline button reuse, perf_big_model
+  scenario, perf_guard.py (warns at >2x baseline; SCIFORGE_PERF_STRICT=1 fails).
+- **Drawing PDFs** (drawing_pdf_*.py): same page pixel for pixel, plus 6 switchable layers,
+  searchable text for everything TechDraw draws as shapes (title block, parts list), links,
+  metadata; PDF/A gets no layers.
+- Findings: Fusion menu names are from memory; FreeCAD's Coin/OCC cannot build the picture off
+  the main thread (no background tessellation); the RenderCache/VBO settings showed no effect
+  under software GL (measure on a real GPU).
 
 ### Session log: speed all round (branch `experimental`, 2026-10-21)
 
