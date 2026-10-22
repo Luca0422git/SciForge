@@ -1001,6 +1001,15 @@ def prompt_index(lib=None, max_chars=3000):
 EXPORT_TITLE = "SciForge for AI models (all the documentation in one file)"
 
 
+def tokens_text(characters):
+    """About how many tokens (what AI apps count their context in) a text of this many
+    characters is, in words: about 4 characters a token for English Markdown."""
+    tokens = characters / 4.0
+    if tokens >= 1000:
+        return "{:,}".format(int(round(tokens, -3)))
+    return "{:,}".format(int(round(tokens, -2)) or 100)
+
+
 def export_text(full=False, lib=None, compact=False):
     """Every document in one Markdown file, for AI apps that load files. Leaves out the copy
     of the user documentation (user/) unless full; compact also leaves out the reference

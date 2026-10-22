@@ -40,7 +40,9 @@ takes `curves`, open curves and points; `add_to_sketch` adds either to an existi
 Give a shape a `name` to get named dimensions; an unnamed shape's dimensions are called
 `g<index>.width`, `g<index>.diameter`... after its place in the list (`g0`, `g1`...).
 `sketch_text` writes text (a font's outlines: areas for extrude or emboss);
-`sketch_polygon` draws a polygon by centre and a corner with a dimension; `sketch_trim`
+`sketch_polygon` draws a regular polygon by centre and a point that is the middle of an
+edge (the default, `circumscribed`; `diameter` is then across the flats) or a corner
+(`circumscribed: false`), with a dimension; `sketch_trim`
 trims curves at a point; `sketch_delete` removes curves or constraints by index.
 
 ```json sciforge-calls

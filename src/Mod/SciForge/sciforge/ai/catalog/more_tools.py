@@ -477,7 +477,7 @@ define(
     extra=_extra_drive,
     own_id=False,
     title_fn=lambda a: "AI: Drive joint %s" % a.get("joint", ""),
-    examples=[example({"joint": "Joint1", "angle": 45}, "turn the revolute joint to 45 degrees")],
+    examples=[example({"joint": "Joint", "angle": 45}, "turn the first joint (id Joint) to 45 degrees")],
 )
 define(
     "ground",

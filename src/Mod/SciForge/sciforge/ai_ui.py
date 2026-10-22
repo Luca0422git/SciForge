@@ -132,23 +132,29 @@ def build_extension():
     return out
 
 
-HANDBOOK_NAME = "SciForge-for-AI.md"
+HANDBOOK_NAME = "SciForge-for-AI.md"  # compact: what most AI apps should load
+HANDBOOK_BIG_NAME = "SciForge-for-AI-with-tool-pages.md"  # plus every tool's reference page
 
 
 def save_handbook(folder=None):
-    """Write SciForge's documentation for AI models into one Markdown file (docs_core's
-    export: handbook, guides, recipes and every tool's reference page), for AI apps that
-    load files (a Claude Desktop project, a custom GPT...). Returns (path, characters)."""
+    """Write SciForge's documentation for AI models as Markdown files for AI apps that load
+    files (a Claude Desktop project, a custom GPT...): HANDBOOK_NAME, the compact export
+    (handbook, guides, recipes, the list of tools: about 45 thousand tokens), and
+    HANDBOOK_BIG_NAME, the export with every tool's reference page (about 170 thousand
+    tokens: too big for most projects). Returns [(path, characters), ...], compact first."""
     from .ai import docs_core
 
     folder = folder or os.path.join(App.getUserAppDataDir(), "SciForge", "ai")
     os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, HANDBOOK_NAME)
-    text = docs_core.export_text()
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
-    log("AI: handbook written to %s (%d characters)" % (path, len(text)))
-    return path, len(text)
+    written = []
+    for name, compact in ((HANDBOOK_NAME, True), (HANDBOOK_BIG_NAME, False)):
+        path = os.path.join(folder, name)
+        text = docs_core.export_text(compact=compact)
+        with open(path, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        log("AI: handbook written to %s (%d characters)" % (path, len(text)))
+        written.append((path, len(text)))
+    return written
 
 
 def _open_file(path):
@@ -229,7 +235,7 @@ class AddAIDialog(QtWidgets.QDialog):
         self.handbook_button = QtWidgets.QPushButton("Save AI handbook...")
         self.handbook_button.setObjectName("SciForgeAddAIHandbook")
         self.handbook_button.setToolTip(
-            "Write SciForge's documentation for AI models into one file, for AI apps that "
+            "Write SciForge's documentation for AI models into a file, for AI apps that "
             "load files (for example a Claude Desktop project)."
         )
         self.handbook_button.clicked.connect(self._handbook)
@@ -324,11 +330,22 @@ class AddAIDialog(QtWidgets.QDialog):
 
     def _handbook(self):
         try:
-            path, size = save_handbook()
+            from .ai import docs_core
+
+            (path, size), (big, big_size) = save_handbook()
             self.text.setPlainText(
-                "The AI handbook is %s (%d characters). Add it to your AI app's project or "
-                "knowledge files; AI apps connected through MCP read the same documents by "
-                "themselves." % (path, size)
+                "The AI handbook is %s (about %s tokens, the measure AI apps count in). Add "
+                "it to your AI app's project or knowledge files.\n\n"
+                "Next to it, %s (about %s tokens) also has the page of every tool. Use it only "
+                "with an AI app that takes very large files: it would fill most of a 200,000 "
+                "token project, and small models cannot read it at all.\n\n"
+                "AI apps connected through MCP read the same documents by themselves."
+                % (
+                    path,
+                    docs_core.tokens_text(size),
+                    os.path.basename(big),
+                    docs_core.tokens_text(big_size),
+                )
             )
             _open_file(os.path.dirname(path))
         except Exception as exc:

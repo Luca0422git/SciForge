@@ -113,22 +113,40 @@ def handbook_saved():
     from sciforge import ai_ui
     from sciforge.ai import docs_core
 
-    path = os.path.join(App.getUserAppDataDir(), "SciForge", "ai", ai_ui.HANDBOOK_NAME)
-    text = ""
+    folder = os.path.join(App.getUserAppDataDir(), "SciForge", "ai")
+    path = os.path.join(folder, ai_ui.HANDBOOK_NAME)
+    big = os.path.join(folder, ai_ui.HANDBOOK_BIG_NAME)
+    text = big_text = ""
     if os.path.isfile(path):
         with open(path, encoding="utf-8") as handle:
             text = handle.read()
+    if os.path.isfile(big):
+        with open(big, encoding="utf-8") as handle:
+            big_text = handle.read()
+    # review 2026-10-22: the file a person loads is the compact one (about 45 thousand
+    # tokens); the one with every tool's page (about 170 thousand) is offered next to it
     h.check(
-        "the handbook file has every document",
+        "the handbook file is the compact one",
         text.startswith("# " + docs_core.EXPORT_TITLE)
         and "File: handbook.md" in text
-        and "File: reference/extrude.md" in text
-        and "File: recipes/bracket.md" in text,
+        and "File: recipes/bracket.md" in text
+        and "File: reference/extrude.md" not in text
+        and len(text) < 300000,
         (path, len(text)),
+    )
+    h.check(
+        "the big file next to it has every tool's page",
+        "File: reference/extrude.md" in big_text and "File: handbook.md" in big_text,
+        (big, len(big_text)),
     )
     d = vi.dialog("SciForgeAddAIDialog")
     shown = vi.child(d, "SciForgeAddAIText").toPlainText() if d is not None else ""
     h.check("the dialog says where it is", path in shown, shown[:300])
+    h.check(
+        "the dialog gives both sizes in tokens",
+        shown.count("tokens") >= 2 and ai_ui.HANDBOOK_BIG_NAME in shown,
+        shown[:400],
+    )
     h.check("its folder was opened", s.get("opened") == os.path.dirname(path), s.get("opened"))
     if d is not None:
         vi.cancel_dialog(d)

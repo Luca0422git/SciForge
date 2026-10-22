@@ -61,8 +61,10 @@ surface body (keep it to edit the patch later, or hide it with `show_hide`).
 
 ## 3. Check the shape
 
-The panel's corners stay at z = 0 and its middle rises a little above the arcs' height
-(the patch is a smooth surface through the boundary, not a part of a sphere).
+The panel's corners stay at z = 0. Its middle rises well above the arcs' tops (8.3 mm for
+the long arcs, 6.2 mm for the short ones), to about 14.8 mm: the patch is a smooth surface
+through the boundary, not a part of a sphere, and bulges more than the arcs alone suggest.
+For a flatter panel use flatter arcs (a bigger radius over a shorter angle).
 
 ```json sciforge-calls
 [

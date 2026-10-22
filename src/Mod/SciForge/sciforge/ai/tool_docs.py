@@ -135,6 +135,8 @@ def _unit(key, node):
         and node["items"].get("type") == "number"
     ):
         return ""
+    if "degree" in words and "mm" in words:
+        return "mm or deg"  # (a dimension's value: a length or an angle)
     if "degree" in words or key in ("angle", "angle2", "taper", "taper2", "twist", "rotation"):
         return "deg"
     if kind == "integer":
