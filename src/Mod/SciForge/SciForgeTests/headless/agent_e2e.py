@@ -287,7 +287,11 @@ def script(agent, out_dir=None):
     )
     # 7. a mistake: changes nothing and says why
     r = a.call("fillet", {"edges": TOP4, "radius": 50}, expect_error=True)
-    a.check("the mistake is told in a sentence", "Not done" in text_of(r), text_of(r))
+    a.check(
+        "the mistake is told in a sentence: those edges are smooth now",
+        "Not done" in text_of(r) and "smooth" in text_of(r),
+        text_of(r),
+    )
     a.volume_is("the failed fillet changed nothing", got, 1e-9)
     # 8. check everything, with numbers and a picture
     check = json_of(a.call("check_design"))

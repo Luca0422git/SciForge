@@ -301,6 +301,25 @@ class CheckingTools(unittest.TestCase):
             self.assertTrue(tools[name]["annotations"]["readOnlyHint"], name)
 
 
+class CompactAnswers(unittest.TestCase):
+    def test_short_parts_on_one_line_and_same_data(self):
+        from sciforge.ai import bridge_core
+
+        data = {
+            "bodies": [{"id": "Body", "bbox_mm": {"min": [0, 0, 0], "max": [60, 40, 10]}}],
+            "ref": {"type": "plane", "normal": [0, 0, 1], "count": 1},
+            "long": ["x" * 30] * 5,
+            "empty": [],
+        }
+        text = bridge_core.compact_json(data)
+        self.assertEqual(json.loads(text), data)
+        self.assertIn('"ref": {"type": "plane", "normal": [0, 0, 1], "count": 1}', text)
+        self.assertIn('"bbox_mm": {"min": [0, 0, 0], "max": [60, 40, 10]}', text)
+        self.assertTrue(all(len(line) <= 110 for line in text.splitlines()), text)
+        self.assertEqual(bridge_core.compact_json([]), "[]")
+        self.assertEqual(bridge_core.compact_json("é"), '"é"')
+
+
 class ClaudeExtension(unittest.TestCase):
     def test_the_extension_carries_the_documents_and_serves_them(self):
         files = installers.mcpb_files(ROOT)

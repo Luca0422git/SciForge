@@ -185,7 +185,7 @@ def close_design(ctx, args):
         except Exception:
             pass
     App.closeDocument(name)
-    executor.forget(name)
+    executor.forget(name, closed=True)
     executor.MODIFIED.discard(name)
     left = App.ActiveDocument
     return bridge_core.result(

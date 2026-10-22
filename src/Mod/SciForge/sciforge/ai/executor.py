@@ -391,8 +391,18 @@ class Context:
 _BUILDERS = {}
 
 
-def forget(doc_name):
+def forget(doc_name, closed=False):
+    """Drop the step builder kept for a design (its steps changed under it); closed: the
+    design was closed, so its snapshots for diff_design go too."""
     _BUILDERS.pop(doc_name, None)
+    if not closed:
+        return
+    try:
+        from .actions import verify_actions
+
+        verify_actions.forget(doc_name)
+    except Exception:
+        pass
 
 
 def _alive(obj):

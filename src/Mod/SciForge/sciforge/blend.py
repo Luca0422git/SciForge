@@ -805,6 +805,12 @@ def trial(kind, info, refs, options):
     result shape (None when it can only be checked by the feature), raises BlendError
     with a plain-language reason when it does not work."""
     names = blended_edges(info, refs)
+    if not names and refs:  # only smooth edges picked (an AI's selector, or a click)
+        raise BlendError(
+            "The picked edges are smooth: the faces on both sides already meet without a "
+            "corner (the edges of an earlier fillet, for example), so there is nothing to "
+            "%s. Pick sharp edges." % ("round" if kind == "fillet" else "chamfer")
+        )
     if not names:
         raise BlendError(
             "Select the edges or faces to %s (click them in the view)." % kind
