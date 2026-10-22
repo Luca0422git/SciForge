@@ -47,6 +47,7 @@ REMEMBERED = (
 
 class GearPanel(PlacedPanel):
     FORMULA_KEYS = gear_core.NUMBER_KEYS
+    NO_LIMIT_KEYS = ("teeth",)  # a whole number: refused with the reason instead
     TYPE_ORDER = ()
     READY_KEY = "thickness"
     title = "Gear"
@@ -68,6 +69,9 @@ class GearPanel(PlacedPanel):
 
     def _tool(self):
         return None
+
+    def limit_check(self, options):
+        gear.check(gear.with_defaults(options))
 
     def _auto(self, base):
         return "new_body"  # Fusion's sample always makes a new component; never a guess

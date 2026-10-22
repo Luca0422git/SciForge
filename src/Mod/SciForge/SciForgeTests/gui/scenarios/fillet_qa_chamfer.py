@@ -2,8 +2,9 @@
 """Chamfer the way Fusion users really use it, trying to break it (QA, only real input).
 
 Path 12, beginner and wrong values: Chamfer with nothing picked, OK (refused, says why),
-         Esc; a 0 distance and impossible angles (0, 90 degrees: said in the dialog, OK
-         refused, nothing in the Report view); Flip in Distance and Angle; Two Distances
+         Esc; a 0 distance and a 0 degree angle (said in the dialog, OK refused); 90 degrees
+         is held at the steepest angle whose bevel still fits and said (Luca's decision of
+         2026-10-21; nothing in the Report view); Flip in Distance and Angle; Two Distances
          with the second arrow dragged back through the edge (it stops at its smallest and
          comes back to the value shown).
 Path 13, edit twice from the timeline (type changed, an edge added), undo / redo, save,
@@ -14,6 +15,7 @@ Path 14, a chamfer round a hole (a curved edge) after Create Sketch + Extrude cu
 Numbers by hand: 40 x 30 x 10 box; a chamfer with legs a, b along a straight edge of length
 L removes L a b / 2; round a hole of radius R with legs d it removes d^2/2 * 2 pi (R + d/3).
 """
+
 import math
 import os
 import tempfile
@@ -128,10 +130,16 @@ def p12_angle_zero_said():
 
 
 def p12_angle_90():
-    text = message()
-    h.check(
-        "P12 90 degrees (the bevel never meets the face) is explained", "below 90" in text, text
-    )
+    """Luca, 2026-10-21: 90 degrees (the bevel never meets the face) is held at the steepest
+    angle whose bevel still fits the 10 mm front face (2 tan a <= 10: about 78.6 degrees)."""
+    p = b.blend_panel()
+    a = p.options.get("angle", 0) if p else 0
+    note = p.limit_label.text() if p and p.limit_label.isVisible() else ""
+    h.check("P12 90 degrees is held at the steepest angle that fits", 70.0 < a < 79.0, a)
+    h.check("P12 and said", note == "90° does not fit: limited to %.1f°" % a, note)
+    h.check("P12 no error", "⚠" not in message(), message())
+    v = legs(2, 2 * math.tan(math.radians(a)))
+    h.check("P12 the preview has that bevel", b.close(h.solid_volume(), v), (h.solid_volume(), v))
     h.check(
         "P12 nothing about it in the Report view",
         not b.report_has_kernel_errors(),
@@ -139,11 +147,12 @@ def p12_angle_90():
     )
     b.no_popups("an impossible chamfer angle")
     h.shot("p12-angle-90")
-    h.task_button("OK")
+
+
+p12_angle_90.wait_ms = 2000
 
 
 def p12_angle_refused():
-    h.check("P12 OK refused at 90 degrees", dialog_open())
     p = b.blend_panel()
     if p:
         ui.type_into(p.angle.widget, "60")

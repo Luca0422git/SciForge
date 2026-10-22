@@ -27,7 +27,7 @@ import time
 from collections import OrderedDict
 
 BUDGET = 1.5  # seconds the bisection may take (it runs once per set of inputs)
-MIN_TRIALS = 5  # ... but at least this many builds, even on a slow part
+MIN_TRIALS = 3  # ... but at least this many builds, even on a slow part
 VERIFY_TRIES = 6  # tidy candidates tried toward the safe side before giving up on tidiness
 NOTE_STYLE = "color: #8cc4ff;"  # the note is information, not an error (theme.py swaps it)
 
@@ -56,6 +56,15 @@ LIMIT_WORDS = (
     "run into each other",
     "could not build",
     "command not done",  # OpenCASCADE's own words when a fillet / chamfer does not fit
+    "fold over",
+    "too thin",  # the limits on the other side: a value that must not get smaller
+    "must be larger",
+    "at least",
+    "at most",
+    "touch each other",
+    "close up",
+    "shorter than",
+    "narrows",
 )
 
 
@@ -203,8 +212,8 @@ def frozen(value):
         return tuple(sorted((str(k), frozen(v)) for k, v in value.items()))
     if isinstance(value, (list, tuple, set, frozenset)):
         items = [frozen(v) for v in value]
-        return tuple(sorted(items, key=repr)) if isinstance(value, (set, frozenset)) else tuple(
-            items
+        return (
+            tuple(sorted(items, key=repr)) if isinstance(value, (set, frozenset)) else tuple(items)
         )
     if all(hasattr(value, a) for a in ("x", "y", "z")):
         try:
@@ -410,6 +419,13 @@ class LimitedValues:
     def limit_unit(self, what):
         return "mm"
 
+    def limit_forget(self):
+        """A value that has no limit was edited (a count of teeth): nothing is held, and a
+        refusal now is not about the value edited before."""
+        self._limit_edit = None
+        self._limit_pending = False
+        self.limits.note = ""
+
     def limit_keep(self):
         return None
 
@@ -452,11 +468,13 @@ class LimitedValues:
             pass
 
     def _limit_from(self, what, key, value):
+        """(good, known): the value whose preview worked last with these inputs when it is
+        on the same side of zero (a search across zero would stop at 0, which many tools
+        refuse), else limit_start()'s value (to be built first)."""
         found = self._limit_good.get(what)
         if found is not None and found[0] == key:
             good = found[1]
-            # on the same side of zero, and nearer to it than the refused value
-            if good * value > 0 and abs(good) < abs(value):
+            if good * value > 0 and abs(good - value) > 1e-12:
                 return good, True
         return self.limit_start(what, value), False
 
@@ -464,7 +482,7 @@ class LimitedValues:
         """The limit on the side of `value` for the inputs now (cached; searched once)."""
         key = self.limit_key(what)
         good, known = self._limit_from(what, key, value)
-        if good is None or abs(value) <= abs(good) or good * value <= 0:
+        if good is None or abs(good - value) <= 1e-12:
             return None
         return self.limits.find(
             key,

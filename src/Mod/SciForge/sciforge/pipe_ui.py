@@ -11,13 +11,14 @@ sets the section size. Operation Join / Cut / Intersect / New Body / New Compone
 that runs mostly inside the part becomes a Cut unless you picked the operation, one that
 touches nothing a New Body (also when Join was picked: Fusion never leaves a separate piece).
 """
+
 import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, handle_look_core, log, pipe, preview, primitives, profile_pick
-from . import ui_icon_path, warn
+from . import ui_icon_path, value_limits, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_ui import (
@@ -168,7 +169,11 @@ class PathLook:
             pass
 
 
-class PipePanel(Panel):
+class PipePanel(Panel, value_limits.LimitedValues):
+    """Pipe. A Section Thickness typed past what the section can hold (or a Section Size
+    dragged or typed under what the wall needs) stops at the value that still works and the
+    dialog says so (Luca, 2026-10-21; Fusion refuses it: value_limits.py)."""
+
     title = "Pipe"
     icon = "pipe"
     last = None
@@ -204,6 +209,8 @@ class PipePanel(Panel):
         self._shown = []
         self.size_set = feature is not None  # the section size was chosen (not a default)
         self.thickness_set = feature is not None  # the wall was typed (not a default)
+        self.limit_init()
+        self._limit_next = None  # (value name, "typed" / "dragged") the next _collect() holds
         if feature is not None:
             try:
                 self.path, read = pipe.read(feature)
@@ -262,6 +269,8 @@ class PipePanel(Panel):
         self.formulas.setStyleSheet("color: #b8c7d9;")
         form.addRow(self.formulas)
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: ..."
+        form.addRow(self.limit_label)
         self.formula_error = ""
         self.formula_fields = {"section_size": self.size, "thickness": self.thickness}
         self.formula_inputs = [
@@ -307,10 +316,75 @@ class PipePanel(Panel):
         o["hollow"] = self.hollow.isChecked()
         o["thickness"] = abs(self.thickness.value())
         o["operation"] = self.operation.currentData()
+        self._hold_collected()
+
+    # -- values past what fits (value_limits.LimitedValues) ---------------------------------------
+    def _hold_collected(self):
+        """The value just typed or dragged held at its limit (the note says so); the other
+        boxes' values held at the limits known for them. Never a formula's value."""
+        edited, self._limit_next = self._limit_next, None
+        expressions = self.options.get("expressions", {})
+        for key, field in self.formula_fields.items():
+            if expressions.get(key):
+                continue
+            value = float(self.options[key])
+            if edited is not None and edited[0] == key:
+                held = self.limit_edit(key, value, edited[1])
+            else:
+                held = self.limit_held(key, value)
+            if held != value:
+                self.options[key] = held
+                if field._typed is None:  # not while a number is being typed in it
+                    self._quiet = True
+                    try:
+                        field.set_value(held)
+                    finally:
+                        self._quiet = False
+                handle = self.handles.get(key)
+                if handle is not None:
+                    try:
+                        handle.set_value(held)
+                    except Exception:
+                        pass
+
+    def limit_key(self, what):
+        options = {k: v for k, v in self.options.items() if k not in (what, "distance")}
+        return value_limits.make_key("pipe", options, what)
+
+    def limit_works(self, what):
+        options = dict(self.options)
+
+        def works(value):
+            trial = dict(options)
+            trial[what] = value
+            pipe.check(pipe.with_defaults(trial))
+            return True
+
+        return works
+
+    def limit_value(self, what):
+        return float(self.options.get(what, 0.0))
+
+    def limit_set(self, what, value):
+        self.options[what] = value
+        field = self.formula_fields.get(what)
+        if field is not None and field._typed is None:
+            self._quiet = True
+            try:
+                field.set_value(value)
+            finally:
+                self._quiet = False
+        handle = self.handles.get(what)
+        if handle is not None:
+            try:
+                handle.set_value(value)
+            except Exception:
+                pass
 
     # -- formulas (preview.FormulaInput calls these) -----------------------------------------------
     def formula_typed(self, key, text, value):
         self.formula_error = ""
+        self._limit_next = (key, "formula")
         self.options.setdefault("expressions", {})[key] = text
         if key == "section_size":
             self.size_set = True
@@ -573,6 +647,7 @@ class PipePanel(Panel):
         if self._quiet:
             return
         self.thickness_set = True
+        self._limit_next = ("thickness", "typed")
         self._typed()
 
     @safe
@@ -580,6 +655,7 @@ class PipePanel(Panel):
         if self._quiet:
             return
         self.size_set = True
+        self._limit_next = ("section_size", "typed")
         self._changed(new_geometry=True)
 
     @safe
@@ -639,6 +715,19 @@ class PipePanel(Panel):
             self.message.setText("⚠ %s" % exc)
 
     def _apply(self):
+        """Build the pipe; a value just typed or dragged past what fits is held at the one
+        that still works and built again (value_limits)."""
+        self._apply_once()
+        if not self.path:
+            return
+        if self.error and self.limit_refused(self.error):
+            self._apply_once()
+        elif not self.error:
+            self.limit_good()
+        if self.error:
+            self.error = self.limit_hint(self.error)
+
+    def _apply_once(self):
         if not self.path:
             return
         try:
@@ -666,6 +755,7 @@ class PipePanel(Panel):
         return self.target
 
     def show_status(self):
+        value_limits.show_note(getattr(self, "limit_label", None), "")
         if self.formula_error:
             self.message.setText("⚠ " + self.formula_error)
             return
@@ -674,6 +764,7 @@ class PipePanel(Panel):
             return
         text = _plain(preview.failure(self.target))
         self.message.setText("⚠ " + text if text else "")
+        value_limits.show_note(self.limit_label, "" if text else self.limits.note)
 
     # -- handles --------------------------------------------------------------------------------------------
     def _remove_handles(self):
@@ -788,6 +879,7 @@ class PipePanel(Panel):
             self.size.set_value(value)
         finally:
             self._quiet = False
+        self._limit_next = ("section_size", "dragged")
         self._changed()
 
     @safe

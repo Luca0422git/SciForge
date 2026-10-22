@@ -18,6 +18,7 @@ parameters and formulas ("wall", "wall * 2").
 Built on FreeCAD's PartDesign::Thickness, or SciForge's ShellFeature for what that cannot
 do (hollow body, Both): see shelling.py. Double-click the step in the timeline to edit.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 

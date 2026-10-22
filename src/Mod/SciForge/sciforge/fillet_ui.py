@@ -1955,8 +1955,7 @@ class BlendPanel(Panel):
             )
             if limit is not None and self.error:
                 self._say(
-                    "⚠ %s\n%s"
-                    % (self.error, value_limits.hint(limit, "hi", self._unit(what)))
+                    "⚠ %s\n%s" % (self.error, value_limits.hint(limit, "hi", self._unit(what)))
                 )
         except Exception as exc:
             warn("%s size hint: %s" % (self.title, exc))

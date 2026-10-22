@@ -17,6 +17,7 @@ Box 40 x 30 x 10, Fillet on the front top edge (its faces are 10 and 30 mm wide)
 Chamfer on the right top edge: Distance and Angle with 50 typed is held at a limit (that
 chamfer is built in a throw-away document to find it); Equal Distance dragged far is held at
 the largest distance; OK."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -307,7 +308,9 @@ def angle_type_50():
 def angle_limited():
     p = panel()
     text = note(p)
-    h.check("Distance and Angle: 50 is held at a limit", text.startswith("50 mm does not fit"), text)
+    h.check(
+        "Distance and Angle: 50 is held at a limit", text.startswith("50 mm does not fit"), text
+    )
     h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
     d = p.options.get("distance") if p else 0
     h.check("the distance used is under 10 mm", 1.0 < d <= 10.0, d)

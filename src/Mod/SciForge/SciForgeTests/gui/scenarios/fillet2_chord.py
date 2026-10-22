@@ -177,10 +177,14 @@ def edit_open():
 
 
 def too_big():
+    """Luca, 2026-10-21: a chord past what fits is held at the largest that works (it was
+    refused before)."""
     p = b.blend_panel()
-    text = p.message.text() if p else ""
-    h.check("a chord too big is explained", "Chord length 100" in text and "too big" in text, text)
-    h.check("the preview keeps the good result", b.close(h.solid_volume(), s["v"]))
+    note = p.limit_label.text() if p and p.limit_label.isVisible() else ""
+    chord = p.options.get("chord", 0) if p else 0
+    h.check("a chord too big is held at the largest that fits", 2.0 < chord < 100.0, chord)
+    h.check("and said", note == "100 mm does not fit: limited to %.2f mm" % chord, note)
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
     h.press(QtCore.Qt.Key_Escape)
 
 

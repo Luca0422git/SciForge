@@ -16,14 +16,17 @@ constraints that were on the corner moved to it); its helper arc goes again and 
 become dimensions from that corner point: the first distance; Equal distance: the second
 distance follows the first (an expression, fx); Distance and angle: the angle between the
 first line and the chamfer; Two distances: both. The maths is sketch_chamfer_core.py.
-Never lets an exception out (warn() and carry on).
+Between two lines, a distance past what the lines can take (the pointer far out, or a
+number typed) stops at the largest that fits and the text by the pointer says so (Luca,
+2026-10-21; Fusion refuses it: value_limits.py). Never lets an exception out (warn() and
+carry on).
 """
 
 import math
 
 import FreeCAD as App
 
-from . import log, warn
+from . import log, value_limits, warn
 from . import sketch_chamfer_core as core
 from . import sketch_draw as draw
 from .compat import QtCore, QtWidgets
@@ -106,6 +109,7 @@ class SketchChamfer(draw.DrawTool):
         self.keeps = []  # per picked line: the click on the part that stays, or None
         self.chooser = None
         self.made = {}  # the last chamfer made (tests): line, corner point, constraints
+        self.limits = value_limits.Limiter()  # distances past what fits stop at the largest
 
     # -- life cycle ------------------------------------------------------------------------
     def start(self):
@@ -147,6 +151,8 @@ class SketchChamfer(draw.DrawTool):
     def _enter_step(self, step):
         if step == 0:
             self.keeps = []
+            if getattr(self, "limits", None) is not None:
+                self.limits.note = ""
         super()._enter_step(step)
 
     def prompt(self):
@@ -155,6 +161,9 @@ class SketchChamfer(draw.DrawTool):
             return "%s: click a corner, or the first line." % kind
         if self.step == 1:
             return "%s: click the second line." % kind
+        note = getattr(self, "limits", None) and self.limits.note
+        if note:
+            return "%s: %s (Enter makes it)." % (kind, note)
         if SketchChamfer.kind == "equal":
             return "%s: move to size it, or type the distance, Enter." % kind
         if SketchChamfer.kind == "two_distances":
@@ -288,16 +297,60 @@ class SketchChamfer(draw.DrawTool):
             f = self.boxes.field(name)
             if f is not None:
                 f.value = given.get(name)
-        d = self.boxes.typed("distance")
-        d = given["distance"] if d is None else d
+        typed_d = self.boxes.typed("distance")
+        d = given["distance"] if typed_d is None else typed_d
         second = None
+        typed_2 = None
         if kind == "two_distances":
-            second = self.boxes.typed("distance2")
-            second = given["distance2"] if second is None else second
+            typed_2 = self.boxes.typed("distance2")
+            second = given["distance2"] if typed_2 is None else typed_2
         elif kind == "distance_angle":
             second = self.boxes.typed("angle")
+        before = self.limits.note
+        d = self._held(
+            "distance", d, typed_d is not None, data, kind, second, lambda v: (v, second)
+        )
+        if kind == "two_distances":
+            second = self._held(
+                "distance2", second, typed_2 is not None, data, kind, d, lambda v: (d, v)
+            )
+        if self.limits.note != before:
+            self._tell()
+        for name, value in (("distance", d), ("distance2", second)):
+            f = self.boxes.field(name)
+            if f is not None and self.boxes.typed(name) is None and value is not None:
+                f.value = value
         s1, s2 = core.setbacks(kind, angle, d, second)
         return s1, s2, data
+
+    def _held(self, name, value, typed, data, kind, other, pair):
+        """Between two lines: `value` held at the largest that fits them (found once for this
+        corner and the other value, then reused on every pointer move)."""
+        if value is None or value <= 0:
+            return value
+        point, u1, u2, reach1, reach2, angle = data
+        try:
+            key = value_limits.make_key("sketch_chamfer", kind, data, other, name)
+            held = self.limits.clamp(key, value, typed)
+            if held != value:
+                return held
+
+            def works(v):
+                s1, s2 = core.setbacks(kind, angle, *pair(v))
+                core.check_fits(s1, s2, reach1, reach2)
+                return True
+
+            try:
+                works(value)
+            except core.ChamferError as exc:
+                if value_limits.is_limit_error(str(exc)):
+                    limit = self.limits.find(key, works, value, min(value / 2.0, 0.01))
+                    if limit is not None:
+                        self.limits.limited(key, value, limit, typed)
+                        return limit
+        except Exception:
+            pass
+        return value
 
     def arc_values(self, snap):
         """Line and arc: (setback on the line, chord on the arc, P1, P2, data)."""
@@ -573,3 +626,6 @@ class SketchChamfer(draw.DrawTool):
 
     def after_make(self, kept):
         log("Chamfer: %s corner cut" % core.LABELS[self.made.get("kind", "equal")])
+        if self.limits.note:
+            self.say(self.limits.note)  # a typed distance was held at the largest that fits
+            self.limits.note = ""

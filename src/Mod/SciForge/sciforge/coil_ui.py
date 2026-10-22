@@ -10,6 +10,7 @@ Square, Triangular (External), Triangular (Internal)), Section Position (Inside,
 Center, Outside), Section Size, Operation. A coil running into the part becomes a Cut
 (a thread groove), like Fusion, unless you picked the operation.
 """
+
 import math
 
 import FreeCAD as App
@@ -59,6 +60,9 @@ class CoilPanel(PlacedPanel):
 
     def _tool(self):
         return None
+
+    def limit_check(self, options):
+        coil.check(coil.with_defaults(options))
 
     def _auto(self, base):
         return coil.auto_operation(base, self.ref, self.options)

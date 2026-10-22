@@ -12,6 +12,7 @@ Draft, a second box, fixed plane XY, the front face: the angle handle turned far
 the steepest angle that works (the preview is the box with that face drafted); 80 typed is
 held there; an angle from a formula (parameter steep = 80°) is not rewritten: the dialog
 explains it with the steepest angle, OK waits; 5 typed, OK."""
+
 import math
 
 import FreeCAD as App
@@ -113,9 +114,11 @@ def shell_dragged_far():
         p.limits.searches - s["searches"] == 1,
         p.limits.searches - s["searches"],
     )
-    after = s["samples"][[abs(x - t) < 1e-9 for x in s["samples"]].index(True) :] if any(
-        abs(x - t) < 1e-9 for x in s["samples"]
-    ) else []
+    after = (
+        s["samples"][[abs(x - t) < 1e-9 for x in s["samples"]].index(True) :]
+        if any(abs(x - t) < 1e-9 for x in s["samples"])
+        else []
+    )
     h.check("held there while dragged on", after and max(after) <= t + 1e-9, s["samples"][-6:])
     h.check(
         "the arrow stopped at the limit",

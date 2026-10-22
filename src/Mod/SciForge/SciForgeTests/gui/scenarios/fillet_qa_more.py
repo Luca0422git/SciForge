@@ -120,10 +120,15 @@ def p15_pick2():
 
 
 def p15_too_big():
+    from sciforge import parameters
+
     p = b.blend_panel()
     h.check("P15 second fillet: edge picked", p is not None and len(p.refs) == 1, picks())
+    # A plain 40 would be held at the largest radius that fits (Luca, 2026-10-21); a radius
+    # from a formula is never rewritten, so it stays too big and OK must refuse it.
+    parameters.add_user(App.ActiveDocument, "big", "mm", "40")
     if p:
-        ui.type_into(p.radius.widget, "40")
+        ui.type_into(p.radius.widget, "big")
 
 
 def p15_menu_ok_refused():
