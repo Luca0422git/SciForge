@@ -28,3 +28,25 @@ def is_valid(shape):
     _VALID.append((key, shape, valid))
     del _VALID[:-_KEEP]
     return valid
+
+
+_FACE_BOXES = []  # [(key, shape, [(face, its bounding box)])], newest last
+_KEEP_FACES = 4
+
+
+def face_boxes(shape):
+    """[(face, face.BoundBox)] of every face of `shape`, remembered for the last few shapes
+    (the extrude dialog asks on every preview whether the extrusion lies on a face of each
+    body: listing a plate of 1700 faces with their boxes took 0.12 s each time). The list
+    and its boxes are shared: callers only read them."""
+    try:
+        key = _key(shape)
+    except Exception:
+        return [(f, f.BoundBox) for f in shape.Faces]
+    for k, kept, boxes in _FACE_BOXES:
+        if k == key and kept.isSame(shape):
+            return boxes
+    boxes = [(f, f.BoundBox) for f in shape.Faces]
+    _FACE_BOXES.append((key, shape, boxes))
+    del _FACE_BOXES[:-_KEEP_FACES]
+    return boxes

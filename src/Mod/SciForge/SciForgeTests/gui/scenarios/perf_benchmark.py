@@ -8,8 +8,11 @@ Measured, each on its own (a failure is reported and the next one runs):
   finish  OK (the steps after the marker catch up) or Cancel
 
 The report goes to perf-report.json and perf-report.md next to the other test output,
-slowest first, with the top of a profile for each. Nothing here fails on time (machines
-differ): the checks only say that each measurement ran; compare reports between versions.
+slowest first, with the top of a profile for each. Nothing here fails on time by default
+(machines differ): the checks say that each measurement ran, and the speed guard
+(perf_guard.py) lists every "change" more than twice as slow as the stored baseline
+(SciForgeTests/gui/perf_baseline.json, or SCIFORGE_PERF_BASELINE); SCIFORGE_PERF_STRICT=1
+makes that a failure.
 
 Run alone: tools/sciforge/run_tests.sh --scenario perf_benchmark
 """
@@ -27,6 +30,7 @@ from PySide import QtCore, QtGui, QtWidgets
 from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import perf_guard
 from SciForgeTests.gui import plane_input as pl
 from SciForgeTests.gui import timeline_input as ti
 
@@ -524,7 +528,8 @@ def report():
         return "" if v is None else "%.0f" % (v * 1000.0)
 
     rows = sorted(RESULTS, key=lambda r: -(r.get("change") or 0.0))
-    data = {"build_seconds": S.get("build"), "results": RESULTS}
+    guard = perf_guard.compare(RESULTS, perf_guard.baseline_path())
+    data = {"build_seconds": S.get("build"), "results": RESULTS, "guard": guard}
     with open(os.path.join(out_dir(), "perf-report.json"), "w") as f:
         json.dump(data, f, indent=1)
     lines = [
@@ -545,6 +550,7 @@ def report():
             % (r["label"], ms(r.get("open")), ms(r.get("change")), ms(r.get("change_max")), ms(r.get("finish")))
         )
     lines.append("")
+    lines += perf_guard.markdown(guard) + [""]
     for r in rows:
         for key, what in (("profile", "change"), ("profile_open", "open"), ("profile_finish", "finish")):
             if r.get(key):
@@ -552,7 +558,17 @@ def report():
     with open(os.path.join(out_dir(), "perf-report.md"), "w") as f:
         f.write("\n".join(lines))
     print("[SciForge] perf report: %s" % os.path.join(out_dir(), "perf-report.md"), flush=True)
+    for line in perf_guard.markdown(guard):
+        print("[SciForge] %s" % line, flush=True)
+    written = perf_guard.write_baseline(RESULTS)
+    if written:
+        print("[SciForge] speed baseline written: %s" % written, flush=True)
     h.check("report written", True)
+    h.check(
+        "no change over twice as slow as the baseline (SCIFORGE_PERF_STRICT)",
+        perf_guard.passed(guard),
+        guard.get("slower"),
+    )
 
 
 h.run(
