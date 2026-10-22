@@ -119,8 +119,12 @@ def scripted():
     drawing._make_mark(base(), (0.0, 0.0), fx.HOLE_R)
     drawing.add_text(page, ["NOTE 1", "SPEC https://example.com/spec"], NOTE_AT)
     drawing_annot.add_annotation(
-        page, {"kind": "leader", "lines": ["DEBURR ALL EDGES", "see www.sciforge.org/finish"],
-               "off": list(LEADER_AT)}
+        page,
+        {
+            "kind": "leader",
+            "lines": ["DEBURR ALL EDGES", "see www.sciforge.org/finish"],
+            "off": list(LEADER_AT),
+        },
     )
     drawing.add_parts_list(page, base(), TABLE_AT, balloons=False)
     drawing.set_title(page, {"Description": "Mounting block", "DrawnBy": "Luca"})
@@ -198,27 +202,44 @@ def a_written():
     with open(path, "rb") as handle:
         raw = handle.read()
     h.check("the XMP says so too", b"<xmp:CreatorTool>SciForge" in raw)
-    h.check("osifont embedded as a subset",
-            any(re.match(r"[A-Z]{6}\+osifont", f) for f in info["fonts"]), info["fonts"])
-    h.check("both URLs are links",
-            "https://example.com/spec" in info["links"]
-            and "http://www.sciforge.org/finish" in info["links"], info["links"])
+    h.check(
+        "osifont embedded as a subset",
+        any(re.match(r"[A-Z]{6}\+osifont", f) for f in info["fonts"]),
+        info["fonts"],
+    )
+    h.check(
+        "both URLs are links",
+        "https://example.com/spec" in info["links"]
+        and "http://www.sciforge.org/finish" in info["links"],
+        info["links"],
+    )
     text = words(path)
     if text is None:
         print("[SciForge] pdftotext not installed: the PDF's text is not checked", flush=True)
     else:
-        for word in ("DRAWN BY", "Mounting block", "Luca", "SECTION A-A", "NOTE 1",
-                     "DEBURR ALL EDGES", "QTY", "Body1", "1 / 1"):
+        for word in (
+            "DRAWN BY",
+            "Mounting block",
+            "Luca",
+            "SECTION A-A",
+            "NOTE 1",
+            "DEBURR ALL EDGES",
+            "QTY",
+            "Body1",
+            "1 / 1",
+        ):
             h.check("searchable: %s" % word, flat(word) in flat(text), text[-2000:])
-        h.check("the dimension 50 once", len(re.findall(r"(?<![\d.])50(?![\d.])", text)) == 1,
-                text)
+        h.check("the dimension 50 once", len(re.findall(r"(?<![\d.])50(?![\d.])", text)) == 1, text)
     page = state["page"]
     scene = drawing_pdf_export.scene_of(page)
     marker = drawing_pdf_export._marker_class().TYPE
     left = [i for i in scene.items() if i.type() == marker]
     h.check("no marker left in TechDraw's scene", not left, len(left))
-    h.check("nothing went into Undo", App.ActiveDocument.UndoCount == state["undo"],
-            (App.ActiveDocument.UndoCount, state["undo"]))
+    h.check(
+        "nothing went into Undo",
+        App.ActiveDocument.UndoCount == state["undo"],
+        (App.ActiveDocument.UndoCount, state["undo"]),
+    )
 
 
 # -- B --------------------------------------------------------------------------------------
@@ -229,8 +250,11 @@ def render(path, name):
     if shutil.which("pdftoppm") is None:
         return None
     prefix = os.path.join(OUT, name)
-    subprocess.run(["pdftoppm", "-r", str(DPI), "-png", "-singlefile", path, prefix],
-                   capture_output=True, timeout=120)
+    subprocess.run(
+        ["pdftoppm", "-r", str(DPI), "-png", "-singlefile", path, prefix],
+        capture_output=True,
+        timeout=120,
+    )
     image = QtGui.QImage(prefix + ".png")
     return None if image.isNull() else image
 
@@ -287,13 +311,15 @@ def b_rendered():
             1 for x in range(a.width()) for y in range(a.height()) if a.pixel(x, y) != b.pixel(x, y)
         )
 
-    h.check("every layer on: exactly what TechDraw printed", differ(ours, theirs) == 0,
-            differ(ours, theirs))
+    h.check(
+        "every layer on: exactly what TechDraw printed",
+        differ(ours, theirs) == 0,
+        differ(ours, theirs),
+    )
     # the markers change nothing either. Two prints of one sheet by TechDraw can differ in
     # a few anti-aliased pixels of SVG text (2026-10-22: 272 of 340000 between two prints
     # without markers, while a print with markers and the next one without were identical)
-    h.check("... and like a print without markers", differ(ours, again) < 1000,
-            differ(ours, again))
+    h.check("... and like a print without markers", differ(ours, again) < 1000, differ(ours, again))
     bx, by = drawing.view_position(base())
     wx, wy = drawing.view_position(state["below"])
     sx, sy = drawing.view_position(state["section"])
@@ -311,20 +337,43 @@ def b_rendered():
     counts = {k: {r: dark(img, *box) for r, box in regions.items()} for k, img in images.items()}
     print("[SciForge] dark pixels per layer and region: %s" % counts, flush=True)
     c = counts
-    h.check("visible edges: the views' outlines", c["visible"]["base"] > 50
-            and c["visible"]["below"] > 30 and c["visible"]["title"] == 0
-            and c["visible"]["notes"] == 0, c["visible"])
-    h.check("hidden edges: in the view below only", c["hidden"]["below"] > 5
-            and c["hidden"]["base"] == 0 and c["hidden"]["title"] == 0, c["hidden"])
-    h.check("centre lines and marks: the hole's mark only", c["centre"]["hole"] > 5
-            and c["centre"]["below"] == 0 and c["centre"]["title"] == 0, c["centre"])
-    h.check("hatching and section lines: the section", c["hatching"]["section"] > 20
-            and c["hatching"]["below"] == 0 and c["hatching"]["title"] == 0, c["hatching"])
-    h.check("dimensions and annotations: the notes", c["annotations"]["notes"] > 20
-            and c["annotations"]["title"] == 0 and c["annotations"]["below"] == 0,
-            c["annotations"])
-    h.check("border and title block: the title block only", c["border"]["title"] > 100
-            and c["border"]["base"] == 0 and c["border"]["below"] == 0, c["border"])
+    h.check(
+        "visible edges: the views' outlines",
+        c["visible"]["base"] > 50
+        and c["visible"]["below"] > 30
+        and c["visible"]["title"] == 0
+        and c["visible"]["notes"] == 0,
+        c["visible"],
+    )
+    h.check(
+        "hidden edges: in the view below only",
+        c["hidden"]["below"] > 5 and c["hidden"]["base"] == 0 and c["hidden"]["title"] == 0,
+        c["hidden"],
+    )
+    h.check(
+        "centre lines and marks: the hole's mark only",
+        c["centre"]["hole"] > 5 and c["centre"]["below"] == 0 and c["centre"]["title"] == 0,
+        c["centre"],
+    )
+    h.check(
+        "hatching and section lines: the section",
+        c["hatching"]["section"] > 20
+        and c["hatching"]["below"] == 0
+        and c["hatching"]["title"] == 0,
+        c["hatching"],
+    )
+    h.check(
+        "dimensions and annotations: the notes",
+        c["annotations"]["notes"] > 20
+        and c["annotations"]["title"] == 0
+        and c["annotations"]["below"] == 0,
+        c["annotations"],
+    )
+    h.check(
+        "border and title block: the title block only",
+        c["border"]["title"] > 100 and c["border"]["base"] == 0 and c["border"]["below"] == 0,
+        c["border"],
+    )
 
 
 b_rendered.wait_ms = 2000
@@ -339,8 +388,9 @@ def c_sheet():
     drawing._add(sheet, "App::PropertyString", "SciForgeSheet", "A4")
     sheet.Template.Template = drawing.template_file("ISO", "A4")
     sheet.Document.recompute()
-    drawing.add_base_view(sheet, drawing.design_bodies(sheet.Document), 100.0, 120.0,
-                          orientation="Top", scale=1.0)
+    drawing.add_base_view(
+        sheet, drawing.design_bodies(sheet.Document), 100.0, 120.0, orientation="Top", scale=1.0
+    )
     # a projection group (FreeCAD's own TechDraw makes them; SciForge reads them): its
     # views are items inside the group's item in TechDraw's scene
     group = sheet.Document.addObject(drawing.GROUP, "ProjGroup")
@@ -374,8 +424,11 @@ def c_command():
     markers, codes, _hidden = drawing_pdf_export.add_markers(sheet, scene)
     marked = {key for key, _kind, _band in codes.values()}
     drawing_pdf_export.remove_markers(markers)
-    h.check("markers for the group and the views inside it",
-            set(group_views) | {state["group"].Name} <= marked, (marked, group_views))
+    h.check(
+        "markers for the group and the views inside it",
+        set(group_views) | {state["group"].Name} <= marked,
+        (marked, group_views),
+    )
     left = [i for i in scene.items() if i.type() == drawing_pdf_export._marker_class().TYPE]
     h.check("... and none left", not left, len(left))
     h.ribbon("Export PDF")
@@ -401,16 +454,25 @@ def c_written():
     if not h.check("the two-sheet PDF is written", os.path.isfile(path), os.listdir(OUT)):
         return
     info = summary(path)
-    h.check("two pages: A3, then A4", info["pages"] == [[0, 0, 1191, 842], [0, 0, 842, 595]],
-            info["pages"])
-    h.check("one set of layers", info["layers"] == [n for _k, n in drawing_pdf_core.LAYERS],
-            info["layers"])
+    h.check(
+        "two pages: A3, then A4",
+        info["pages"] == [[0, 0, 1191, 842], [0, 0, 842, 595]],
+        info["pages"],
+    )
+    h.check(
+        "one set of layers",
+        info["layers"] == [n for _k, n in drawing_pdf_core.LAYERS],
+        info["layers"],
+    )
     leftovers = [f for f in os.listdir(OUT) if f.endswith(".tmp.pdf")]
     h.check("no part files left", not leftovers, leftovers)
     text = words(path, 2)
     if text is not None:
-        h.check("the A4 sheet's title block is searchable", "2/2" in flat(text) and "A4" in text,
-                text[-1500:])
+        h.check(
+            "the A4 sheet's title block is searchable",
+            "2/2" in flat(text) and "A4" in text,
+            text[-1500:],
+        )
 
 
 h.run(

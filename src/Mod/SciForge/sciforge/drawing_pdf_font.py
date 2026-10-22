@@ -57,7 +57,9 @@ class TrueType:
             raise FontError("This font file is too short.")
         version = data[:4]
         if version not in (b"\x00\x01\x00\x00", b"true"):
-            raise FontError("This is not a TrueType font (OpenType CFF and collections are not read).")
+            raise FontError(
+                "This is not a TrueType font (OpenType CFF and collections are not read)."
+            )
         self.data = data
         count = _u16(data, 4)
         self.tables = {}
@@ -117,7 +119,9 @@ class TrueType:
             at = 4 + 8 * i
             platform, encoding, offset = _u16(cmap, at), _u16(cmap, at + 2), _u32(cmap, at + 4)
             fmt = _u16(cmap, offset)
-            rank = {(3, 10): 4, (0, 4): 3, (0, 6): 3, (3, 1): 2, (0, 3): 1}.get((platform, encoding))
+            rank = {(3, 10): 4, (0, 4): 3, (0, 6): 3, (3, 1): 2, (0, 3): 1}.get(
+                (platform, encoding)
+            )
             if rank is None or fmt not in (4, 12):
                 continue
             if best is None or rank > best[0]:
@@ -272,19 +276,25 @@ def _assemble(tables):
     power = 1
     while power * 2 <= count:
         power *= 2
-    header = struct.pack(">IHHHH", 0x00010000, count, power * 16, power.bit_length() - 1,
-                         count * 16 - power * 16)
+    header = struct.pack(
+        ">IHHHH", 0x00010000, count, power * 16, power.bit_length() - 1, count * 16 - power * 16
+    )
     offset = 12 + 16 * count
     records = []
     body = bytearray()
     for tag in tags:
         data = tables[tag]
-        records.append(struct.pack(">4sIII", tag.encode("latin-1"), _checksum(data),
-                                   offset + len(body), len(data)))
+        records.append(
+            struct.pack(
+                ">4sIII", tag.encode("latin-1"), _checksum(data), offset + len(body), len(data)
+            )
+        )
         body += data + b"\0" * (-len(data) % 4)
     font = bytearray(header + b"".join(records) + body)
-    head_at = 12 + 16 * count + sum(
-        len(tables[t]) + (-len(tables[t]) % 4) for t in tags[: tags.index("head")]
+    head_at = (
+        12
+        + 16 * count
+        + sum(len(tables[t]) + (-len(tables[t]) % 4) for t in tags[: tags.index("head")])
     )
     struct.pack_into(">I", font, head_at + 8, (0xB1B0AFBA - _checksum(bytes(font))) & 0xFFFFFFFF)
     return bytes(font)
@@ -308,7 +318,9 @@ def _to_unicode(pairs):
         chunk = pairs[start : start + 100]
         lines.append(b"%d beginbfchar" % len(chunk))
         for gid, text in chunk:
-            lines.append(b"<%04X> <%s>" % (gid, text.encode("utf-16-be").hex().upper().encode("ascii")))
+            lines.append(
+                b"<%04X> <%s>" % (gid, text.encode("utf-16-be").hex().upper().encode("ascii"))
+            )
         lines.append(b"endbfchar")
     lines += [b"endcmap", b"CMapName currentdict /CMapResource defineresource pop", b"end", b"end"]
     return b"\n".join(lines) + b"\n"
@@ -403,12 +415,101 @@ class StandardFont:
 
     # Helvetica advances (thousandths) for ASCII 32..126
     _WIDTHS = [
-        278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
-        556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
-        1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
-        667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
-        333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
-        556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+        278,
+        278,
+        355,
+        556,
+        556,
+        889,
+        667,
+        191,
+        333,
+        333,
+        389,
+        584,
+        278,
+        333,
+        278,
+        278,
+        556,
+        556,
+        556,
+        556,
+        556,
+        556,
+        556,
+        556,
+        556,
+        556,
+        278,
+        278,
+        584,
+        584,
+        584,
+        556,
+        1015,
+        667,
+        667,
+        722,
+        722,
+        667,
+        611,
+        778,
+        722,
+        278,
+        500,
+        667,
+        556,
+        833,
+        722,
+        778,
+        667,
+        778,
+        722,
+        667,
+        611,
+        722,
+        667,
+        944,
+        667,
+        667,
+        611,
+        278,
+        278,
+        278,
+        469,
+        556,
+        333,
+        556,
+        556,
+        500,
+        556,
+        556,
+        278,
+        556,
+        556,
+        222,
+        222,
+        500,
+        222,
+        833,
+        556,
+        556,
+        556,
+        556,
+        333,
+        500,
+        278,
+        556,
+        500,
+        722,
+        500,
+        500,
+        500,
+        334,
+        260,
+        334,
+        584,
     ]
 
     def encode(self, text):

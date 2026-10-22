@@ -281,8 +281,15 @@ def outline_texts(page):
             elif drawing.kind(obj) == "PartsList":
                 layout, corner = drawing.table_layout_of(obj)
                 for x, y, size, text, anchor in layout["texts"]:
-                    add(corner[0] + x, corner[1] + y, size, text,
-                        "middle" if anchor == "middle" else "start", 0.0, "annotations")
+                    add(
+                        corner[0] + x,
+                        corner[1] + y,
+                        size,
+                        text,
+                        "middle" if anchor == "middle" else "start",
+                        0.0,
+                        "annotations",
+                    )
         except Exception as exc:
             warn("PDF text of %s: %s" % (getattr(obj, "Label", "?"), exc))
     return texts
@@ -308,8 +315,13 @@ def metadata(page):
     description = (values.get("Description") or "").strip()
     subject = " - ".join(p for p in (number if number != title else "", description) if p)
     keywords = []
-    for key, name in (("PartNumber", "Part number"), ("Material", "Material"),
-                      ("Revision", "Revision"), ("Scale", "Scale"), ("Size", "Size")):
+    for key, name in (
+        ("PartNumber", "Part number"),
+        ("Material", "Material"),
+        ("Revision", "Revision"),
+        ("Scale", "Scale"),
+        ("Size", "Size"),
+    ):
         value = (values.get(key) or "").strip()
         if value:
             keywords.append("%s: %s" % (name, value))
@@ -432,5 +444,7 @@ def improve(path, pages, infos):
             os.remove(path + ".part")
         except OSError:
             pass
-        warn("PDF kept as TechDraw printed it (no layers, searchable title block, links "
-             "or metadata): %s" % exc)
+        warn(
+            "PDF kept as TechDraw printed it (no layers, searchable title block, links "
+            "or metadata): %s" % exc
+        )

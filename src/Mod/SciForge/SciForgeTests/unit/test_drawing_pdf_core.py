@@ -136,9 +136,13 @@ class ObjectTests(unittest.TestCase):
         self.assertEqual(po.decode_text_string(raw), "Staffa Ø20")
 
     def test_operations_keep_their_bytes(self):
-        content = b"q 1 0 0 1 5 5 cm\nBT /F1 12 Tf [(A) -120 (B)] TJ ET\nBI /W 1 /H 1 ID \x00\x01 EI\nQ"
+        content = (
+            b"q 1 0 0 1 5 5 cm\nBT /F1 12 Tf [(A) -120 (B)] TJ ET\nBI /W 1 /H 1 ID \x00\x01 EI\nQ"
+        )
         ops = po.operations(content)
-        self.assertEqual([o.op for o in ops], [b"q", b"cm", b"BT", b"Tf", b"TJ", b"ET", b"BI", b"Q"])
+        self.assertEqual(
+            [o.op for o in ops], [b"q", b"cm", b"BT", b"Tf", b"TJ", b"ET", b"BI", b"Q"]
+        )
         self.assertEqual(ops[4].args, [[b"A", -120, b"B"]])
         self.assertEqual(content[ops[1].start : ops[1].stop], b"1 0 0 1 5 5 cm")
 
@@ -166,8 +170,14 @@ def tiny_font(fs_type=0):
 
     def simple(x):
         # one contour, 3 points
-        return struct.pack(">hhhhh", 1, 0, 0, x, 700) + struct.pack(">H", 2) + struct.pack(
-            ">H", 0) + bytes([1, 1, 1]) + struct.pack(">hhh", 0, x, -x) + struct.pack(">hhh", 0, 700, -700)
+        return (
+            struct.pack(">hhhhh", 1, 0, 0, x, 700)
+            + struct.pack(">H", 2)
+            + struct.pack(">H", 0)
+            + bytes([1, 1, 1])
+            + struct.pack(">hhh", 0, x, -x)
+            + struct.pack(">hhh", 0, 700, -700)
+        )
 
     composite = struct.pack(">hhhhh", -1, 0, 0, 500, 700) + struct.pack(">HHbb", 0x0000, 1, 0, 0)
     glyphs = [b"", simple(500), simple(600), composite]
@@ -191,8 +201,17 @@ def tiny_font(fs_type=0):
     cmap = struct.pack(">HHHHI", 0, 1, 3, 1, 12) + sub
     os2 = struct.pack(">HhHHH", 3, 500, 400, 5, fs_type) + b"\0" * 76 + struct.pack(">hh", 500, 700)
     post = struct.pack(">Ii", 0x00030000, 0) + b"\0" * 24
-    tables = {"head": head, "hhea": hhea, "maxp": maxp, "hmtx": hmtx, "loca": b"".join(
-        struct.pack(">I", o) for o in loca), "glyf": glyf, "cmap": cmap, "OS/2": os2, "post": post}
+    tables = {
+        "head": head,
+        "hhea": hhea,
+        "maxp": maxp,
+        "hmtx": hmtx,
+        "loca": b"".join(struct.pack(">I", o) for o in loca),
+        "glyf": glyf,
+        "cmap": cmap,
+        "OS/2": os2,
+        "post": post,
+    }
     return pf._assemble(tables)
 
 
@@ -296,13 +315,15 @@ class LayerTests(unittest.TestCase):
 
     def test_layers_of_a_page(self):
         content, codes = coded_page()
-        out, used, found = core.layer_content(
-            content, codes, {"View1": 3.5}
-        )
+        out, used, found = core.layer_content(content, codes, {"View1": 3.5})
         self.assertEqual(sorted(found), sorted(codes))
         self.assertEqual(used, {k for k, _n in core.LAYERS})
         segs = segments(out)
-        painted = [(layer, ops) for layer, ops in segs if any(o in core.PAINT_OPS or o == b"Tj" for o in ops)]
+        painted = [
+            (layer, ops)
+            for layer, ops in segs
+            if any(o in core.PAINT_OPS or o == b"Tj" for o in ops)
+        ]
         layers = []
         for layer, ops in painted:
             for o in ops:
@@ -310,8 +331,21 @@ class LayerTests(unittest.TestCase):
                     layers.append(layer)
         self.assertEqual(
             layers,
-            ["border", "border", "annotations", "hatching", "visible", "hidden", "centre",
-             "centre", "centre", "hatching", "annotations", "annotations", None],
+            [
+                "border",
+                "border",
+                "annotations",
+                "hatching",
+                "visible",
+                "hidden",
+                "centre",
+                "centre",
+                "centre",
+                "hatching",
+                "annotations",
+                "annotations",
+                None,
+            ],
         )
         # the markers are gone, and so are Qt's stray closepath and empty colour
         self.assertNotIn(b"0.1 0.1 re", out)
@@ -380,9 +414,22 @@ class TextTests(unittest.TestCase):
     def test_overlay(self):
         font = pf.StandardFont()
         texts = [
-            {"text": "Bracket", "x": 100, "y": 50, "size": 5, "anchor": "middle", "layer": "border"},
-            {"text": "go www.sciforge.org", "x": 10, "y": 10, "size": 3.5, "width": 30,
-             "layer": "annotations"},
+            {
+                "text": "Bracket",
+                "x": 100,
+                "y": 50,
+                "size": 5,
+                "anchor": "middle",
+                "layer": "border",
+            },
+            {
+                "text": "go www.sciforge.org",
+                "x": 10,
+                "y": 10,
+                "size": 3.5,
+                "width": 30,
+                "layer": "annotations",
+            },
         ]
         content, links, used = core.overlay(texts, font, A4, [0, 0, 842, 595])
         self.assertEqual(used, {"border", "annotations"})
@@ -429,8 +476,12 @@ class EnhanceTests(unittest.TestCase):
         ]
         sheets = [
             {"size": A3, "codes": codes, "hidden": {"View1": 3.5}, "texts": texts},
-            {"size": A4, "codes": {}, "hidden": {}, "texts": [
-                {"text": "Sheet 2", "x": 200, "y": 20, "size": 3.5, "layer": "border"}]},
+            {
+                "size": A4,
+                "codes": {},
+                "hidden": {},
+                "texts": [{"text": "Sheet 2", "x": 200, "y": 20, "size": 3.5, "layer": "border"}],
+            },
         ]
         merged = drawing_pdf.merge([first, second])
         return core.enhance(merged, sheets, META, pf.StandardFont())
@@ -465,8 +516,10 @@ class EnhanceTests(unittest.TestCase):
         data = page_pdf(*A4, content)
         doc = po.read(data)
         root = doc.get(doc.trailer[b"Root"])
-        root[b"Metadata"] = doc.add({b"Type": Name(b"Metadata")}, b"<pdfaid:part>1</pdfaid:part>"
-                                    b"<pdfaid:conformance>B</pdfaid:conformance>")
+        root[b"Metadata"] = doc.add(
+            {b"Type": Name(b"Metadata")},
+            b"<pdfaid:part>1</pdfaid:part>" b"<pdfaid:conformance>B</pdfaid:conformance>",
+        )
         out, report = core.enhance(doc.write(), [{"size": A4, "codes": codes, "texts": []}], META)
         self.assertTrue(report["pdfa"])
         self.assertEqual(core.summary(out)["layers"], [])
@@ -486,7 +539,9 @@ class EnhanceTests(unittest.TestCase):
         self.assertEqual(core._iso_date("D:20261022043408+02'00'"), "2026-10-22T04:34:08+02:00")
         self.assertIsNone(core._iso_date("yesterday"))
 
-    @unittest.skipUnless(shutil.which("pdftotext") and shutil.which("pdfinfo"), "poppler not installed")
+    @unittest.skipUnless(
+        shutil.which("pdftotext") and shutil.which("pdfinfo"), "poppler not installed"
+    )
     def test_poppler_reads_it(self):
         out, _report = self.two_sheets()
         folder = tempfile.mkdtemp()
@@ -505,9 +560,14 @@ class EnhanceTests(unittest.TestCase):
             self.assertNotIn("Syntax Error", words.stderr)
             # the added text is where it was asked for (page mm, y up), not moved by the
             # transformation the page's drawing left behind
-            boxes = subprocess.run(["pdftotext", "-bbox", "-f", "1", "-l", "1", path, "-"],
-                                   capture_output=True, text=True).stdout
-            found = re.search(r'xMin="([\d.]+)" yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">Bracket<', boxes)
+            boxes = subprocess.run(
+                ["pdftotext", "-bbox", "-f", "1", "-l", "1", path, "-"],
+                capture_output=True,
+                text=True,
+            ).stdout
+            found = re.search(
+                r'xMin="([\d.]+)" yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">Bracket<', boxes
+            )
             self.assertIsNotNone(found, boxes)
             self.assertAlmostEqual(float(found.group(1)), 300 * core.MM, delta=0.5)
             baseline_from_top = (297 - 30) * core.MM + (842 - 297 * core.MM)

@@ -154,7 +154,9 @@ def tokens(data, pos=0, end=None):
             yield "hex", HexString(bytes.fromhex(digits.decode("ascii"))), pos, stop
         elif kind == "name":
             raw = match.group()[1:]
-            yield "name", Name(_NAME_ESCAPE.sub(lambda m: bytes([int(m.group(1), 16)]), raw)), pos, stop
+            yield "name", Name(
+                _NAME_ESCAPE.sub(lambda m: bytes([int(m.group(1), 16)]), raw)
+            ), pos, stop
         elif kind == "word":
             word = match.group()
             if _NUMBER.match(word):

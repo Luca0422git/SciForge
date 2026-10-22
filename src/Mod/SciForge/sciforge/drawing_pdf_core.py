@@ -664,7 +664,9 @@ def _xml(text):
 
 def _iso_date(pdf_date):
     """'D:20261022043408Z' -> '2026-10-22T04:34:08Z' (None when it cannot be read)."""
-    m = re.match(r"D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(Z|[+-]\d{2}'?\d{2}'?)?", pdf_date or "")
+    m = re.match(
+        r"D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(Z|[+-]\d{2}'?\d{2}'?)?", pdf_date or ""
+    )
     if not m:
         return None
     parts = [m.group(i) or d for i, d in zip(range(1, 7), ("0000", "01", "01", "00", "00", "00"))]
@@ -690,7 +692,9 @@ def xmp(meta, created, modified, pdfa=None):
             % _xml(meta["title"])
         )
     if meta.get("author"):
-        rows.append("<dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>" % _xml(meta["author"]))
+        rows.append(
+            "<dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>" % _xml(meta["author"])
+        )
     if meta.get("subject"):
         rows.append(
             '<dc:description><rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>'
@@ -853,7 +857,11 @@ def enhance(data, sheets, meta, font=None):
                 b"Rect": [round(v, 3) for v in rect],
                 b"Border": [0, 0, 0],
                 b"F": 4,
-                b"A": {b"Type": Name(b"Action"), b"S": Name(b"URI"), b"URI": String(uri.encode("utf-8"))},
+                b"A": {
+                    b"Type": Name(b"Action"),
+                    b"S": Name(b"URI"),
+                    b"URI": String(uri.encode("utf-8")),
+                },
             }
             if layer and layer in ocg_refs:
                 annot[b"OC"] = ocg_refs[layer]
@@ -900,8 +908,13 @@ def enhance(data, sheets, meta, font=None):
     info[b"Trapped"] = Name(b"False")
     doc.trailer[b"Info"] = doc.add(info)
     full = dict(meta)
-    for key, field in ((b"Title", "title"), (b"Author", "author"), (b"Subject", "subject"),
-                       (b"Producer", "producer"), (b"Creator", "creator")):
+    for key, field in (
+        (b"Title", "title"),
+        (b"Author", "author"),
+        (b"Subject", "subject"),
+        (b"Producer", "producer"),
+        (b"Creator", "creator"),
+    ):
         if not full.get(field) and key in info:
             full[field] = po.decode_text_string(info[key])
     root[b"Metadata"] = doc.add(
