@@ -155,7 +155,7 @@ Implemented in `src/Mod/SciForge/`:
 
 | What | SciForge |
 |---|---|
-| Accurate | Every tool call in every document is run in real FreeCAD by the tests (`SciForgeTests/headless/docs_runner.py`, 330+ calls), each with what its answer must contain; every tool's reference example answer is recorded in FreeCAD and checked again on every run; a unit test fails when a generated page is out of date or a `sciforge://` link (anchor included) is broken. |
+| Accurate | Every tool call in every document is run in real FreeCAD by the tests (`SciForgeTests/headless/docs_runner.py`, 320 calls in 17 documents), each with what its answer must contain; every tool's reference example answer is recorded in FreeCAD and checked again on every run; a unit test fails when a generated page is out of date or a `sciforge://` link (anchor included) is broken. |
 | Searchable | `docs_search` "cut does nothing" finds the troubleshooting section; the unit tests ask 25 realistic questions and check the right page is in the first three answers. |
 | Complete | Every tool has a page with every argument (type, unit, default, limits), the answer, the errors and a complete example with its real answer; the person's own documentation is included. |
 

@@ -38,7 +38,7 @@ The call:
 
 The answer:
 
-```text
+~~~~text
 sciforge://docs/handbook.md#units-and-coordinates (SciForge handbook for AI models), section Units and coordinates, page 1 of 1:
 
 ## Units and coordinates
@@ -80,7 +80,7 @@ x / y axes; on a face that faces +Z (a top face) they are the design's X and Y, 
      "bodies.0.bbox_mm.max": [5.0, 20.0, 10.0]}}}
 ]
 ```
-```
+~~~~
 
 ## More argument examples
 

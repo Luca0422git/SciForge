@@ -38,7 +38,7 @@ The call:
 
 The answer:
 
-```text
+~~~~text
 3 of 576 matching sections (read one with docs_read and its path):
 {
  "query": "shell open top wall thickness",
@@ -73,7 +73,7 @@ The answer:
  ],
  "total": 576
 }
-```
+~~~~
 
 ## More argument examples
 

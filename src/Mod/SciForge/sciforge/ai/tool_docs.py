@@ -355,7 +355,8 @@ def _answer_block(answer):
     if len(lines) > MAX_ANSWER_LINES:
         more = len(lines) - MAX_ANSWER_LINES
         lines = lines[:MAX_ANSWER_LINES] + ["... (%d more lines)" % more]
-    out = ["```text"] + lines + ["```"]
+    fence = "~~~~" if any("```" in line for line in lines) else "```"  # (never closed early)
+    out = [fence + "text"] + lines + [fence]
     if answer.get("image"):
         out.append("")
         out.append(

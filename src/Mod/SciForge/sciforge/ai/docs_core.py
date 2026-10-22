@@ -167,11 +167,18 @@ def call_blocks(text):
     blocks = []
     lines = text.split("\n")
     inside = None
+    other = None  # the mark of another fenced block being skipped (its content is not ours)
     for number, line in enumerate(lines):
         match = _FENCE.match(line)
+        if other is not None:
+            if match and match.group(1)[0] == other and not match.group(2).strip():
+                other = None
+            continue
         if inside is None:
             if match and CALLS_TAG in match.group(2).split():
                 inside = (number, match.group(1), [])
+            elif match:
+                other = match.group(1)[0]
             continue
         if match and match.group(1)[0] == inside[1][0] and not match.group(2).strip():
             start, _mark, body = inside

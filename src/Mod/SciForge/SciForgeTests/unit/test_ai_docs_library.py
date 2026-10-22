@@ -111,6 +111,8 @@ class Markdown(unittest.TestCase):
         with self.assertRaises(ValueError):
             docs_core.call_blocks("```json sciforge-calls\n[]\n")
         self.assertEqual(docs_core.call_blocks("```json\n[1]\n```\n"), [])
+        quoted = '~~~~text\n```json sciforge-calls\n[{"tool": "undo"}]\n```\n~~~~\n'
+        self.assertEqual(docs_core.call_blocks(quoted), [])  # (a block quoted in an answer)
 
     def test_words(self):
         self.assertEqual(docs_core.words("Holes and sketches"), ["hole", "sketch"])
