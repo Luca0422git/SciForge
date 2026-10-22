@@ -14,9 +14,10 @@ the Claude extension's manifest (installers) and the generated documentation.
 The tools are defined in the modules below, grouped like Fusion's ribbon: core_tools (the
 first sixteen, whose names and argument shapes never change), sketch_tools, create_tools,
 modify_tools, more_tools (surface, construct, assemble, inspect), history_tools
-(timeline, parameters, files, drawings, view, help) and verify_tools (the tools an agent checks
-its own work with: inspect_design, query_geometry, check_design, render, diff_design). There is no tool that runs arbitrary
-code. Pure Python: no FreeCAD, no Qt (the MCP server an AI app starts imports it).
+(timeline, parameters, files, drawings, view, help), verify_tools (the tools an agent checks
+its own work with: inspect_design, query_geometry, check_design, render, diff_design) and
+docs_tools (the documentation: docs_search, docs_read, examples_search). There is no tool
+that runs arbitrary code. Pure Python: no FreeCAD, no Qt (the MCP server an AI app starts imports it).
 """
 
 import copy
@@ -29,6 +30,7 @@ from . import modify_tools  # noqa: F401
 from . import more_tools  # noqa: F401
 from . import history_tools  # noqa: F401
 from . import verify_tools  # noqa: F401  (checking: inspect_design, query_geometry, render...)
+from . import docs_tools  # noqa: F401  (documentation: docs_search, docs_read, examples_search)
 from .kit import (  # noqa: F401  (the shared texts, re-exported)
     BODY_PICK_HELP,
     CURVES_HELP,
@@ -152,6 +154,9 @@ def mcp_tools():
 CHAT_ORDER = (
     "list_tools",
     "get_help",
+    "docs_search",
+    "docs_read",
+    "examples_search",
     "inspect_design",
     "query_geometry",
     "check_design",
@@ -335,6 +340,17 @@ CHECKING_HELP = (
     "front, top... or a direction), highlight marks faces / edges in orange; it works "
     "without the window too (renderer software)."
 )
+DOCS_HELP = (
+    "SciForge's documentation for AI models is searchable: docs_search finds the sections "
+    "that match a few words (with a snippet and a path#anchor), docs_read reads a document or "
+    "one section, examples_search finds tested recipes and golden models by words, tool, op "
+    "or tag. Start with handbook.md (how SciForge works, Fusion's ideas mapped to it, "
+    "coordinates, undo, checking, recovering from failures), selectors.md (the selector "
+    "cookbook) and recipes/index.md (step-by-step parts); reference/<tool>.md has every "
+    "argument of a tool with a real example; user/ has SciForge's documentation for people. "
+    "Over MCP the same documents are resources sciforge://docs/<path>, and "
+    "sciforge://handbook is all of them in one file."
+)
 HELP = {
     "overview": OVERVIEW,
     "selectors": SELECTOR_HELP,
@@ -349,6 +365,7 @@ HELP = {
     "( ) and mm / deg units.",
     "workflow": WORKFLOW,
     "checking": CHECKING_HELP,
+    "docs": DOCS_HELP,
 }
 
 
@@ -389,4 +406,6 @@ INSTRUCTIONS = (
     + CURVES_HELP
     + " Checking: "
     + CHECKING_HELP
+    + " Documentation: "
+    + DOCS_HELP
 )

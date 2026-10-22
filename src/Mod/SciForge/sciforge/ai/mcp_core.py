@@ -6,7 +6,9 @@ An AI app (Claude Desktop, Gemini CLI, ...) starts sciforge_mcp.py and talks JSO
 to it over stdin / stdout. The stdio transport sends one JSON-RPC message per line: UTF-8
 JSON with no newline inside it; anything else the server wants to say goes to stderr.
 SciForge offers tools, resources and prompts: initialize, ping, tools/list and tools/call
-(with text and PNG image results), resources/list, resources/templates/list and
+(with text and PNG image results; the documentation tools docs_search, docs_read and
+examples_search are answered here from docs_core.py, so they work while SciForge is closed),
+resources/list, resources/templates/list and
 resources/read (the open design, the tool catalogue, the help topics and the documents for
 AI models: mcp_resources.py), prompts/list and prompts/get (workflow templates). The tools
 come from the catalogue (sciforge/ai/catalog). Arguments that break a tool's rules come
@@ -26,7 +28,7 @@ The tools part did not change between the versions below, so one answer fits the
 
 import json
 
-from . import catalog, mcp_resources, tools_core
+from . import catalog, docs_core, mcp_resources, tools_core
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 LATEST = PROTOCOL_VERSIONS[0]
@@ -188,6 +190,9 @@ def _call(request_id, params, call_tool, log):
     if problems:
         text = "The %s arguments are not right: %s." % (name, "; ".join(problems))
         return _result(request_id, tool_result(text, is_error=True))
+    if name in docs_core.TOOLS:  # the documentation is read here: works with SciForge closed
+        text, is_error = docs_core.tool_answer(name, args)
+        return _result(request_id, tool_result(text, is_error=is_error))
     try:
         answer = call_tool(name, args)
     except Exception as exc:

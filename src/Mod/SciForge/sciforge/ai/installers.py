@@ -45,10 +45,12 @@ _SERVER_MODULES = (
     "tools_core.py",
     "mcp_core.py",
     "mcp_resources.py",
+    "docs_core.py",
     "bridge_core.py",
     "sciforge_mcp.py",
 )
 _DOCS = ("docs", "ai")  # the documents for AI models (resources sciforge://docs/...)
+_GOLDEN = ("SciForgeTests", "golden", "models")  # examples (sciforge://examples/golden/...)
 _CATALOG = "catalog"  # a package: every .py file in it goes into the extension
 
 
@@ -280,6 +282,11 @@ def mcpb_files(mod_root):
             if name.endswith((".md", ".txt", ".json")) and not name.startswith("."):
                 rel = os.path.relpath(os.path.join(here, name), mod_root).replace(os.sep, "/")
                 files["server/" + rel] = os.path.join(here, name)
+    # the golden models, which examples_search and docs_read look up (server/SciForgeTests/...)
+    golden = os.path.join(mod_root, *_GOLDEN)
+    for name in sorted(os.listdir(golden)) if os.path.isdir(golden) else []:
+        if name.endswith(".json") and not name.startswith("."):
+            files["server/%s/%s" % ("/".join(_GOLDEN), name)] = os.path.join(golden, name)
     return files
 
 

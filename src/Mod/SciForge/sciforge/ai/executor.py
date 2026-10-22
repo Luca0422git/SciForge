@@ -344,6 +344,7 @@ class Context:
         steps = catalog.to_steps(self.tool, self.args, step_id)
         steps = [_at_marker(doc, s) for s in steps]
         before = _broken(doc)
+        shapes_before = shape_signature(doc) if self.tool not in KEEPS_SHAPES else None
         doc.openTransaction(self.title)
         try:
             for step in steps:
@@ -376,8 +377,13 @@ class Context:
             if made.Label not in (made.Name, step_id):
                 named = " Its id is %r (shown as %r)." % (made.Name, made.Label)
         log(self.title)
+        unchanged = ""
+        if shapes_before is not None and shape_signature(doc) == shapes_before:
+            unchanged = NOTHING_CHANGED
+            log("%s changed no solid" % self.title)
         return bridge_core.result(
-            "Done: %s.%s %s%s" % (self.title, named, summary(doc), broke_text(doc, before))
+            "Done: %s.%s %s%s%s"
+            % (self.title, named, summary(doc), broke_text(doc, before), unchanged)
         )
 
     def done(self, text, doc=None, before=None):
@@ -481,6 +487,66 @@ def summary(doc):
             % (body.Label, shape.Volume, box.XLength, box.YLength, box.ZLength)
         )
     return ("Bodies now: " + "; ".join(parts) + ".") if parts else "No solid body yet."
+
+
+# Step tools that never change a solid's shape by themselves (sketches, parameters,
+# construction geometry, surfaces, components): no "nothing changed" warning for them.
+KEEPS_SHAPES = frozenset(
+    (
+        "create_sketch",
+        "create_curve_sketch",
+        "sketch_polygon",
+        "sketch_trim",
+        "set_parameter",
+        "capture_design_history",
+        "construct_plane",
+        "construct_axis",
+        "construct_point",
+        "surface",
+        "thread",  # (a cosmetic thread changes no geometry)
+        "components_from_bodies",
+        "copy_component",
+        "pattern_components",
+        "insert_hardware",
+    )
+)
+NOTHING_CHANGED = (
+    " Warning: no solid changed (every body has the same volume, area, faces and size as "
+    "before), so this step did nothing to the part. Usual causes: it points away from the "
+    "part (an extrude goes along its sketch's normal, so a cut from a sketch on the top face "
+    "needs flip: true; a hole drills against its sketch's normal, into the face the sketch "
+    "lies on), a size that cannot fit (a wall thicker than the part), or a pick that missed. "
+    "Undo takes it back; diff_design since last_change confirms."
+)
+
+
+def shape_signature(doc):
+    """What a step can change about the solids: per body its volume, area, number of faces
+    and bounding box (rounded), and which bodies there are. Equal before and after a step
+    means the step changed nothing (a cut that missed, a shell thicker than the part)."""
+    from .. import bodies
+
+    out = {}
+    try:
+        found = bodies.solid_bodies(doc)
+    except Exception:
+        return None
+    for body in found:
+        try:
+            shape = body.Shape
+            box = shape.BoundBox
+            out[body.Name] = (
+                round(shape.Volume, 6),
+                round(shape.Area, 6),
+                len(shape.Faces),
+                tuple(
+                    round(v, 6)
+                    for v in (box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax)
+                ),
+            )
+        except Exception:
+            return None
+    return out
 
 
 def _broken(doc):

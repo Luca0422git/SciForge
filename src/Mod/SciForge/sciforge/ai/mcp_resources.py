@@ -14,7 +14,11 @@ Resources (MCP 2025-06-18 / 2025-11-25 server/resources):
   sciforge://help/{topic}      the rules the tools' descriptions refer to (get_help)
   sciforge://docs/index        the list of documents below
   sciforge://docs/{path}       every document under the docs root (<Mod>/SciForge/docs/ai,
-                               or $SCIFORGE_AI_DOCS): Markdown written for AI models
+                               or $SCIFORGE_AI_DOCS): Markdown written for AI models; with
+                               #anchor, only that section (docs_core.py finds sections)
+  sciforge://examples/golden/{id}  one golden model (a design-step list with measurements)
+  sciforge://handbook          every document in one file (sciforge://handbook/full adds
+                               SciForge's user documentation)
 The design resources ask SciForge through call_tool, so they work the same through the
 bridge, headless and in the tests; the rest is read here (the server never imports
 FreeCAD).
@@ -29,12 +33,12 @@ Pure Python: no FreeCAD, no Qt.
 import json
 import os
 
-from . import catalog
+from . import catalog, docs_core
 
 SCHEME = "sciforge://"
-ENV_DOCS = "SCIFORGE_AI_DOCS"
-DOC_TYPES = {".md": "text/markdown", ".txt": "text/plain", ".json": "application/json"}
-MAX_DOC_BYTES = 2 * 1024 * 1024
+ENV_DOCS = docs_core.ENV_DOCS
+DOC_TYPES = docs_core.DOC_TYPES
+MAX_DOC_BYTES = docs_core.MAX_DOC_BYTES
 
 RESOURCE_NOT_FOUND = -32002  # (the MCP specification's code for an unknown resource)
 INVALID_PARAMS = -32602
@@ -52,11 +56,7 @@ class ResourceError(Exception):
 def docs_root():
     """Where the documents for AI models are: $SCIFORGE_AI_DOCS, else <Mod>/SciForge/docs/ai
     (next to the sciforge package, in the source tree, an install and the Claude extension)."""
-    env = os.environ.get(ENV_DOCS)
-    if env:
-        return os.path.abspath(env)
-    here = os.path.dirname(os.path.abspath(__file__))  # <Mod>/SciForge/sciforge/ai
-    return os.path.join(os.path.dirname(os.path.dirname(here)), "docs", "ai")
+    return docs_core.docs_root()
 
 
 # -- the design: asked from SciForge ----------------------------------------------------------
@@ -120,8 +120,17 @@ TEMPLATES = (
         "name": "doc",
         "title": "A document for AI models",
         "description": "A document of SciForge's documentation for AI models; "
-        "sciforge://docs/index lists them.",
+        "sciforge://docs/index lists them. Add #anchor for one section.",
         "mimeType": "text/markdown",
+    },
+    {
+        "uriTemplate": "sciforge://examples/golden/{id}",
+        "name": "golden-model",
+        "title": "A golden model",
+        "description": "One of SciForge's golden models: a small design as design steps with "
+        "its measured volume, area and size (sciforge://docs/examples/golden-models.md lists "
+        "them by feature; examples_search finds them).",
+        "mimeType": "application/json",
     },
 )
 
@@ -154,50 +163,25 @@ def _from_tool(uri, tool, args, call_tool):
 
 # -- documents --------------------------------------------------------------------------------
 def doc_files(root=None):
-    """[(relative path with /, absolute path)] of the documents, sorted."""
-    root = root or docs_root()
-    found = []
-    if not os.path.isdir(root):
-        return found
-    for folder, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "_")))
-        for name in sorted(files):
-            if name.startswith(".") or os.path.splitext(name)[1].lower() not in DOC_TYPES:
-                continue
-            full = os.path.join(folder, name)
-            rel = os.path.relpath(full, root).replace(os.sep, "/")
-            found.append((rel, full))
-    return sorted(found)
+    """[(relative path with /, absolute path)] of the documents (docs_core.doc_files)."""
+    return docs_core.doc_files(root or docs_root())
 
 
 def _title_of(path):
     try:
         with open(path, encoding="utf-8") as handle:
-            for _ in range(20):
-                line = handle.readline()
-                if not line:
-                    break
-                if line.startswith("# "):
-                    return line[2:].strip()
+            head = handle.read(8192)
     except OSError:
-        pass
-    return os.path.splitext(os.path.basename(path))[0]
+        head = ""
+    fallback = os.path.splitext(os.path.basename(path))[0]
+    if not path.lower().endswith(".md"):
+        return fallback
+    return docs_core.title_of_text(head, fallback)
 
 
 def _doc_path(rel, root=None):
     """The absolute path of a document named in a URI, only inside the docs root."""
-    root = os.path.realpath(root or docs_root())
-    if not rel or rel.startswith(("/", "\\")) or "\\" in rel or ":" in rel:
-        return None
-    parts = rel.split("/")
-    if any(p in ("", ".", "..") or p.startswith(".") for p in parts):
-        return None
-    full = os.path.realpath(os.path.join(root, *parts))
-    if not full.startswith(root + os.sep) or not os.path.isfile(full):
-        return None
-    if os.path.splitext(full)[1].lower() not in DOC_TYPES:
-        return None
-    return full
+    return docs_core.safe_rel(rel, root or docs_root())
 
 
 def docs_index(root=None):
@@ -273,6 +257,26 @@ def resources(root=None):
             "mimeType": "text/markdown",
         }
     )
+    out.append(
+        {
+            "uri": "sciforge://handbook",
+            "name": "handbook",
+            "title": "SciForge for AI models (one file)",
+            "description": "Every document for AI models in one Markdown file: handbook, "
+            "recipes and the reference page of every tool.",
+            "mimeType": "text/markdown",
+        }
+    )
+    out.append(
+        {
+            "uri": "sciforge://handbook/full",
+            "name": "handbook-full",
+            "title": "SciForge for AI models, with the user documentation (one file)",
+            "description": "sciforge://handbook plus SciForge's documentation for people "
+            "(cheat sheet, known issues, the Fusion parity spec of every feature).",
+            "mimeType": "text/markdown",
+        }
+    )
     for rel, full in doc_files(root):
         row = {
             "uri": "sciforge://docs/%s" % rel,
@@ -316,6 +320,26 @@ def read(uri, call_tool, root=None):
         return _from_tool(uri, "get_step", {"step": rest[len("step/") :]}, call_tool)
     if rest == "docs/index":
         return [{"uri": uri, "mimeType": "text/markdown", "text": docs_index(root)}]
+    if rest in ("handbook", "handbook/full"):
+        lib = docs_core.library(root or docs_root())
+        text = docs_core.export_text(full=rest.endswith("/full"), lib=lib)
+        return [{"uri": uri, "mimeType": "text/markdown", "text": text}]
+    if rest.startswith("examples/golden/"):
+        ident = rest[len("examples/golden/") :]
+        models = {m["id"]: m for m in docs_core.golden_models()}
+        if ident in models:
+            with open(models[ident]["path"], encoding="utf-8") as handle:
+                text = handle.read()
+            return [{"uri": uri, "mimeType": "application/json", "text": text}]
+    if rest.startswith("docs/") and "#" in rest:
+        rel, _sep, anchor = rest[len("docs/") :].partition("#")
+        if _doc_path(rel, root) is not None and anchor:
+            lib = docs_core.library(root or docs_root())
+            sec = lib.find_section(rel, anchor) if lib.doc(rel) else None
+            if sec is not None:
+                lines = lib.doc(rel).text.split("\n")
+                text = "\n".join(lines[sec["start"] : sec["end"]]).strip("\n") + "\n"
+                return [{"uri": uri, "mimeType": "text/markdown", "text": text}]
     if rest.startswith("docs/"):
         full = _doc_path(rest[len("docs/") :], root)
         if full is not None:
