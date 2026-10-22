@@ -8,7 +8,7 @@ being able to drag the angle of a draft is to see it update in real time. I can 
 real time. And the angle dragger doesn't even update either: it waits behind for the model to
 update. It takes at least 1-3 seconds to update. Make it faster."
 
-STATUS: work in progress (this file is kept current; see "State" at the end).
+STATUS: done (see "State" at the end).
 
 ## Why it was slow (measured, plain language)
 
@@ -89,12 +89,65 @@ part grows while the button is still down"), unchanged.
 `harness.next_step` waits while a limit search runs (`value_limits.working()`), as it waits for
 a recompute.
 
-## State
+## Measured (scenario `perf_draft`, real mouse moves every 16 ms, sandbox with software OpenGL)
 
-- Built: live picture (draft_live.py, draft_live_core.py), preview waits for the mouse to rest
-  (taskui.Panel.schedule settle / SLOW_DRAG), handles polled on every mouse move
-  (taskui.PollOnMove), limit search in the background (value_limits.Background), faster
-  undrafted(), result cache, scratch objects never drawn, validity check.
-- Tests passing so far: perf_draft, limits_shell_draft, draft_curved, shell_draft_qa_draft.
-- To do: unit test of draft_live_core, GUI scenario draft_live (picture checks), baselines,
-  the full list of related scenarios, --only base.
+Milliseconds, two runs each, old code (c59634a) and new, run one after the other on the same
+loaded machine. "Freeze" = the longest time the program did not run while the mouse moved
+(the handle stands still that long); with software OpenGL each frame alone costs 30-50 ms.
+
+| What | before | after |
+|---|---:|---:|
+| Box: value box takes a mouse move (median) | 18-24 | 2 |
+| Box: longest freeze while moving | 55-60 | 55-58 (frames only) |
+| Box: live picture after a mouse move (median) | none | 26-43 |
+| Box: exact solid after the mouse stops | 78-93 (built during the drag) | 211-235 (0.2 s rest + build) |
+| Part (179 faces): value box takes a mouse move (median) | 26-79 | 2 |
+| Part: longest freeze while moving | 657-692 | 54-55 |
+| Part: live picture after a mouse move (median) | none | 14-26 |
+| Part: exact solid after the mouse stops | 0-421 | 627-720 |
+| Part: one exact rebuild (typed angle, with the redraw) | 821-908 | 356-364 |
+| Part: one trial build of the limit search | 428-436 | 229-272 |
+| Part, dragged past what fits: longest freeze while moving | 639-726 | 75-87 |
+| Part, past what fits: the dialog's work per handle move (worst) | 1-2 | 2-7 |
+| Part, past what fits: exact solid (held at the limit) after the mouse stops | 544-1192 | ~3550 (search in the background) |
+
+So the handle and the box follow every move (the dialog's own work per move is 0-7 ms), the
+picture shows the new angle within a frame, and nothing freezes for more than a frame. The
+exact solid now comes 0.2 s after the mouse rests (on purpose); on the big part past the limit
+the steepest angle is found in ~2-3 s with "Finding the steepest angle that fits…" shown and
+the handle free (before, the same search froze the handle in 0.6-0.7 s pieces during the drag).
+On Luca's PC with a real GPU the frames are much cheaper, so the freezes left are smaller still.
+Baselines for the speed guard are in `SciForgeTests/gui/perf_baseline.json` (20 entries).
+
+## Tests run (all passing)
+
+- `--only base`: unit 2188 (9 skipped), golden 451 + 2 known xfail, headless AI 282 calls, docs
+  runner, MCP agent, smoke, journey, restarts.
+- GUI scenarios (137, run in 3 parallel shards): every `shell*`, `draft*`, `modify2*`,
+  `limits*`, `undo_fast`, `extrude*`, `revolve*`, `fillet*`, `chamfer*`, `pattern*`, `hole*`,
+  `primitives*`, `gaps_edit_rollback`, `construct_live`, the rollback / timeline-edit ones
+  (`bodies_timeline`, `components*_marker`, `timeline_browser*`, `timeline_rolled_cut`,
+  `direct_*`, `fixpattern_marker`, `inspect_qa7`, `meshinspect2_groups`, `modify_remove`,
+  `polish2_timeline_groups`, `sweep_loft_qa_sweep`), `draft_live`, `perf_draft`. Two failed in
+  the parallel run: `draft_live` (the limit under load was 6.9 deg: the check now takes 6-8) and
+  `components2_marker` (passes alone; the old code fails it the same way under load).
+- `perf_benchmark`: passes; the guard once flagged "Move, X distance" 9-13 ms vs 2.9 ms, a third
+  run gave 2 ms (the old code gave 2-3 ms in the same conditions): noise.
+
+## Open / what other dialogs need
+
+- Only Draft has a live picture. Fillet, Chamfer, Shell, Press Pull, Extrude, Revolve, Pattern
+  now take every mouse move at once (PollOnMove) and stop rebuilding between mouse moves when a
+  rebuild takes longer than 0.25 s (`SLOW_DRAG`); below that they still rebuild while dragged
+  (as Luca asked for Extrude). For a big part they then show the result only at pauses: each
+  needs its own cheap picture (Press Pull / Shell: the moved faces; Fillet / Chamfer: the
+  blend's band; Extrude: the profile swept) to feel like Draft does now.
+- Their limit searches still run at once (`limit_refused`); `limit_refused_soon` is generic and
+  can be wired the same way as in `draft_ui.py`.
+- The validity check of FreeCAD's Draft result is skipped for angles no steeper than one found
+  sound (same picks): a part that breaks at a smaller angle but not a larger one would show a
+  broken preview until OK (which checks). Not seen.
+- The exact rebuild of the big part still costs ~0.3 s, mostly FreeCAD tessellating the new
+  solid for the view; a coarser display during the dialog would change a view property (an undo
+  step), so it was left.
+- Nothing measured on a real GPU (sandbox: software OpenGL).
