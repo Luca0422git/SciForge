@@ -28,6 +28,13 @@ Path G (review fix, 2026-10-22), a sketch dimension changed in MODIFY > Change P
         edit was rebuilt.
 Path H (review fix), a user parameter (depth, driving Extrude 1) changed in Change
         Parameters, OK; Ctrl+Z / Ctrl+Y: nothing rebuilt (Parameters holds only values), right.
+Path I (review of the merged branches, X1), a new step made as a dialog's OK makes it (one
+        transaction, recomputed inside it), Ctrl+Z: nothing rebuilt and nothing left touched
+        (FreeCAD left the Body touched, so the next transaction started "not up to date");
+        then Extrude 1 edited (14), OK, Ctrl+Z: still nothing rebuilt. (Runs before G and H,
+        which leave Extrude 1 driven by a parameter.)
+Path J (X1), the AI's new step: an AI fillet, Ctrl+Z: nothing rebuilt; an AI fillet again,
+        the AI's undo: nothing rebuilt either (it agrees with Ctrl+Z).
 """
 
 import FreeCAD as App
@@ -73,6 +80,7 @@ def setup():
     Gui.activateWorkbench("SciForgeWorkbench")
     doc = App.newDocument("UndoFast")
     builder = Builder(doc)
+    S["builder"] = builder
     for step in (
         {"op": "sketch", "id": "s1", "plane": "XY", "geometry": [{"rect": [0, 0, 40, 30]}]},
         {"op": "extrude", "id": "e1", "profile": "s1", "distance": 10},
@@ -338,6 +346,68 @@ def f_right_after_refusal():
     S["stats"] = stats()
 
 
+# -- Path I / J: Ctrl+Z of a new step, then the next Undo (review X1) -----------------------------
+TOP_EDGES = {"type": "line", "parallel": [1, 0, 0], "at": {"axis": "z", "value": "max"}}
+
+
+def i_start():
+    S["before_i"] = shapes()
+    S["stats"] = stats()
+
+
+def i_add():
+    """A new step made the way a dialog's OK makes it: one transaction, recomputed inside."""
+    doc = App.ActiveDocument
+    doc.openTransaction("Fillet")
+    S["builder"].run({"op": "fillet", "id": "i1", "edges": dict(TOP_EDGES, count=2), "radius": 1})
+    doc.recompute()
+    doc.commitTransaction()
+    h.check("I: the new step changed the part", shapes() != S["before_i"])
+
+
+def fast_since(what, label):
+    """Since S["stats"]: the last Undo rebuilt nothing, left nothing touched, and the design
+    is the one remembered under `label` (no full rebuild here: it would hide a touched Body)."""
+
+    def step():
+        from sciforge import undo_fast
+
+        before, after = S["stats"], stats()
+        h.check(
+            "%s: nothing rebuilt" % what,
+            after["skipped"] > before["skipped"] and after["rebuilt"] == before["rebuilt"],
+            (before, after),
+        )
+        left = undo_fast.touched(App.ActiveDocument)
+        h.check("%s: nothing left touched (the Body neither)" % what, not left, left)
+        h.check("%s: the design is as before" % what, shapes() == S[label], (shapes(), S[label]))
+        S["stats"] = stats()
+
+    step.__name__ = "fast_" + what.split(":")[0].replace(" ", "_")
+    step.wait_ms = 800
+    return step
+
+
+def j_start():
+    S["before_j"] = shapes()
+    S["stats"] = stats()
+
+
+def j_ai_fillet():
+    answer = ai("fillet", {"edges": dict(TOP_EDGES, count=2), "radius": 1})
+    h.check("J: the AI fillet is done", not answer["is_error"], answer["text"][:300])
+    S["stats"] = stats()
+
+
+def ij_rebuilt_same():
+    doc = App.ActiveDocument
+    now = shapes()
+    for o in doc.Objects:
+        o.touch()
+    doc.recompute()
+    h.check("I/J: a full rebuild gives the same shapes", shapes() == now, (shapes(), now))
+
+
 # -- Path G / H: Change Parameters (a sketch dimension, a user parameter) ------------------------
 def params_dialog():
     from sciforge import parameters_ui
@@ -498,6 +568,24 @@ h.run(
         f_refused, h.idle_step(),
         a_undo, h.idle_step(),
         f_right_after_refusal,
+        # I: Ctrl+Z of a new step, then an edit and its Ctrl+Z
+        i_start,
+        i_add, h.idle_step(),
+        a_undo, h.idle_step(),
+        fast_since("I Ctrl+Z of a new step", "before_i"),
+        a_edit, a_type("14"), a_ok, h.idle_step(), remember("edited_i"),
+        a_undo, h.idle_step(),
+        fast_since("I Ctrl+Z of the edit after it", "before_i"),
+        ij_rebuilt_same,
+        # J: the AI's new step, Ctrl+Z, then again with the AI's undo
+        j_start,
+        j_ai_fillet, h.idle_step(),
+        a_undo, h.idle_step(),
+        fast_since("J Ctrl+Z of an AI step", "before_j"),
+        j_ai_fillet, h.idle_step(),
+        f_undo("undo"), h.idle_step(),
+        fast_since("J AI undo of an AI step", "before_j"),
+        ij_rebuilt_same,
         # G: a sketch dimension in Change Parameters, Ctrl+Z / Ctrl+Y
         g_start,
         g_change("44"), h.idle_step(), g_edited(44),

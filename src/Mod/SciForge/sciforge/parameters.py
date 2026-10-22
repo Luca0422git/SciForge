@@ -292,9 +292,20 @@ SIGNED = ("DistanceX", "DistanceY")  # FreeCAD keeps their sign: it is their dir
 
 
 def broken_steps(doc, signs=None, typed=None):
-    """{object name: reason} of the steps that are broken now, in document order. `signs`
-    (from signs_of): a horizontal/vertical sketch dimension whose sign is not the one it had
-    has turned inside out (the profile flips), which breaks its sketch too. `typed`
+    """{object name: reason} of the steps that are broken now, in document order (the first
+    problem of each, see broken_problems for `signs` and `typed`)."""
+    return {
+        name: next(iter(found.values()))
+        for name, found in broken_problems(doc, signs, typed).items()
+    }
+
+
+def broken_problems(doc, signs=None, typed=None):
+    """{object name: {problem key: reason}} of the steps that are broken now: every problem
+    of a step, so that a step already broken in one way (a sketch's dimension of 0 written
+    before) still shows a new problem (review X2: one old problem hid every new one).
+    `signs` (from signs_of): a horizontal/vertical sketch dimension whose sign is not the one
+    it had has turned inside out (the profile flips), which breaks its sketch too. `typed`
     ({"Parameters.width": -5.0}): a value typed for a length parameter that FreeCAD held
     at 0 (a length is never negative to it), for the formulas that use it."""
     out = {}
@@ -302,11 +313,11 @@ def broken_steps(doc, signs=None, typed=None):
         if obj.TypeId in SKIP_TYPES:
             continue
         try:
-            reason = _broken(obj, signs, typed)
+            found = _problems(obj, signs, typed)
         except Exception:
-            reason = ""
-        if reason:
-            out[obj.Name] = reason
+            found = []
+        if found:
+            out[obj.Name] = dict(found)
     return out
 
 
@@ -340,20 +351,29 @@ def _formula_value(obj, index, value, typed=None):
 
 
 def _broken(obj, signs=None, typed=None):
+    found = _problems(obj, signs, typed)
+    return found[0][1] if found else ""
+
+
+def _problems(obj, signs=None, typed=None):
+    """[(key, reason)] of what is broken in `obj`, the first being what _broken says."""
     from . import sketch_explain_core as explain_core
 
     if obj.TypeId == "App::VarSet":
         # a parameter whose formula cannot be computed (an unknown name): it keeps its old
         # value, and every dimension that uses it silently stops following
+        out = []
         for prop, expr in dict(obj.ExpressionEngine).items():
             try:
                 obj.evalExpression(expr)
             except Exception:
-                return "the formula %s of %s cannot be computed (a name in it is unknown)" % (
+                reason = "the formula %s of %s cannot be computed (a name in it is unknown)" % (
                     core.from_freecad(expr),
                     prop.lstrip("."),
                 )
-        return ""
+                out.append((("formula", prop), reason))
+        return out
+    out = []
     if obj.TypeId == "Sketcher::SketchObject":
         from . import sketch_explain
 
@@ -362,25 +382,33 @@ def _broken(obj, signs=None, typed=None):
             if not c.Driving or c.Type not in explain_core.LENGTHS:
                 continue
             value = _formula_value(obj, i, c.Value, typed)
+            # an offset between two points (a shape placed at the origin: 'g0.x' = 0) may be 0
+            # and may change sides; a size may not (review X2)
+            offset = explain_core.is_offset(c.Type, c.First, c.Second)
             flipped = (
                 signs is not None
+                and not offset
                 and c.Type in SIGNED
                 and (obj.Name, i) in signs
                 and value * signs[(obj.Name, i)] < 0
             )
-            if flipped or explain_core.bad_size(c.Type, value):
+            if flipped or explain_core.bad_size(c.Type, value, offset):
                 info = sketch_explain.constraint_info(obj, i, c)
                 info["value"] = value
-                return explain_core.bad_size_reason(info, curve_names)
+                out.append((("size", i), explain_core.bad_size_reason(info, curve_names)))
         conflicting = [i - 1 for i in obj.ConflictingConstraints]
         if conflicting:
             text, _count = sketch_explain.words(obj, conflicting)
-            return "its constraints would conflict%s" % ((": " + text) if text else "")
+            reason = "its constraints would conflict%s" % ((": " + text) if text else "")
+            out.append((("conflict",), reason))
         if obj.MalformedConstraints:
-            return "its constraints would break"
+            out.append((("malformed",), "its constraints would break"))
         for i, g in enumerate(obj.Geometry):
             if sketch_explain.collapsed(g):
-                return "its %s would shrink to nothing" % curve_names.get(i, "curve")
+                reason = "its %s would shrink to nothing" % curve_names.get(i, "curve")
+                out.append((("collapsed", i), reason))
+        if out:
+            return out
     state = list(obj.State)
     if "Invalid" in state or "Error" in state:
         if obj.TypeId == "Sketcher::SketchObject":
@@ -389,16 +417,16 @@ def _broken(obj, signs=None, typed=None):
             except Exception:
                 failed = False
             if failed:  # the solver found no solution (no conflict list to name)
-                return NO_FIT
+                return [(("state",), NO_FIT)]
         from . import timeline_ops
 
         _kind, reason = timeline_ops.problem(obj)
-        return reason or "it could not be computed"
+        return [(("state",), reason or "it could not be computed")]
     if obj.TypeId.startswith("PartDesign::") and obj.TypeId not in NOT_SOLID_STEPS:
         shape = getattr(obj, "Shape", None)
         if shape is not None and (shape.isNull() or shape.Volume < 1e-6):
-            return "its solid would be empty"
-    return ""
+            return [(("empty",), "its solid would be empty")]
+    return []
 
 
 # PartDesign objects that are no solid step (a solid step whose solid is empty is broken)
@@ -541,7 +569,7 @@ def change_checked(doc, obj, path, apply, what):
     from . import log
     from . import sketch_explain_core as explain_core
 
-    before = broken_steps(doc)
+    before = broken_problems(doc)
     signs = signs_of(doc)
     snapshot = _snapshot(obj, path)
     try:
@@ -562,8 +590,12 @@ def change_checked(doc, obj, path, apply, what):
         log("parameters: refused %s: %s: %s" % (what, problem[0], reason))
         return explain_core.parameter_refusal(what, [problem])
     doc.recompute()
-    after = broken_steps(doc, signs, _held_back(obj, path, what))
-    new = [(name, reason) for name, reason in after.items() if name not in before]
+    new = []
+    after = broken_problems(doc, signs, _held_back(obj, path, what))
+    for name, found in after.items():
+        fresh = [reason for key, reason in found.items() if key not in before.get(name, {})]
+        if fresh:
+            new.append((name, fresh[0]))
     if not new:
         return ""
     labels = _step_names(doc)

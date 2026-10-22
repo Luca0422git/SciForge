@@ -9,8 +9,8 @@ For the AI tools and scripts (one call, no window needed):
     export_report.losses(doc, None, "STL (Binary)")   # whole design
     export_report.losses(doc, [body1, body2], "STEP")  # chosen bodies
     export_report.losses(doc, export.exportable_bodies(doc), "STEP", whole=True)
-        # the bodies a whole-design export took (the AI export tool, Export Everything):
-        # the hidden ones are reported too
+        # the bodies a whole-design export took (Export Everything, the AI tool's mesh
+        # exports): the hidden ones are reported too
     export_report.losses(doc, component, "3MF")        # a component
     export_report.losses(doc, sketch, "DXF")           # a sketch (or (body, "Face3"))
     export_report.losses(doc, page, "drawing_dxf", which="current")   # a drawing

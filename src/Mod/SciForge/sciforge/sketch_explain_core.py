@@ -432,14 +432,26 @@ def parameter_refusal(what, problems):
     return text
 
 
-def bad_size(kind, value):
+GEO_UNDEF = -2000  # FreeCAD's "no curve" in a constraint's First / Second
+
+
+def is_offset(kind, first, second):
+    """True for a horizontal or vertical distance between two different curves' points (or a
+    point and the origin): a signed offset, where 0 only says the two are lined up, as the AI's
+    create_sketch writes the place of a shape drawn at the origin ('g0.x' = 0). A curve's own
+    width or height (both ends of one curve, or the curve alone) is a size."""
+    return kind in ("DistanceX", "DistanceY") and second != GEO_UNDEF and first != second
+
+
+def bad_size(kind, value, offset=False):
     """True when a dimension's value is no size at all: a length or radius of 0 or less, a
     horizontal or vertical distance of 0 (FreeCAD keeps those signed: the sign is their
-    direction). Fusion refuses a dimension of 0 (SciForge's dimension box too)."""
+    direction). Fusion refuses a dimension of 0 (SciForge's dimension box too). `offset`
+    (is_offset): a horizontal / vertical offset between two points, which may be 0."""
     if kind in ("Distance", "Radius", "Diameter"):
         return value <= 1e-7
     if kind in ("DistanceX", "DistanceY"):
-        return abs(value) <= 1e-7
+        return not offset and abs(value) <= 1e-7
     return False
 
 

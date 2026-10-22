@@ -1167,6 +1167,54 @@ SESSION = [
     },
     {"tool": "open_design", "args": {"path": "{tmp}/all.step"}, "contains": ["Opened"]},
     {"tool": "open_design", "args": {"path": "{tmp}/tools.FCStd"}, "contains": ["Opened"]},
+    # A circle drawn at the origin gets offsets of 0 ('g0.x', 'g0.y'): they are no broken
+    # dimension, so Change Parameters still refuses a value that breaks the sketch, and the
+    # AI can put an offset back to 0 (review of the merged branches, X2)
+    {"tool": "new_design", "args": {"name": "OriginSketch"}},
+    {"tool": "set_parameter", "args": {"name": "d", "value": 10}},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"circle": [0, 0, 5]}]},
+        "save": "s_origin",
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.diameter", "expression": "d"},
+        "check": lambda a, r: _change_parameters_refuses(r, "d", "-4"),
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.x", "value": 5},
+        "contains": ["g0.x = 5"],
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.x", "value": 0},
+        "contains": ["g0.x = 0"],
+        "check": lambda a, r: _old_problem_hides_nothing(r),
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.diameter", "value": 0},
+        "expect": "error",
+        "contains": ["more than 0"],
+    },
+    # A refused call changes nothing, but trying it empties the Redo list: the answer says so
+    # (review X5)
+    {"tool": "extrude", "args": {"profile": "$s_origin", "distance": 5}},
+    {
+        "tool": "fillet",
+        "args": {"edges": {"type": "circle", "at": {"axis": "z", "value": "max"}, "count": 1},
+                 "radius": 1},
+    },
+    {"tool": "undo", "args": {}, "contains": ["Fillet 1 mm"]},
+    {
+        "tool": "fillet",
+        "args": {"edges": {"type": "circle", "at": {"axis": "z", "value": "max"}, "count": 1},
+                 "radius": 50},
+        "expect": "error",
+        "contains": ["that fits here", "emptied the Redo list: 'AI: Fillet 1 mm'"],
+    },
 ]
 
 
@@ -1622,6 +1670,63 @@ VERIFY_SESSION = [
         "contains": ["No AI change"],
     },
 ]
+
+
+def _old_problem_hides_nothing(run):
+    """A sketch already broken one way (a line's own width of 0, written by a script) is
+    still checked for new breakages: Change Parameters refuses d = -4 (the circle's
+    diameter), then the line is taken out again."""
+    import FreeCAD as App
+    import Part
+    import Sketcher
+
+    from sciforge import parameters
+
+    sketch = run.obj("s_origin")
+    doc = run.doc()
+    geo = sketch.addGeometry(Part.LineSegment(App.Vector(30, 0, 0), App.Vector(30, 10, 0)))
+    sketch.addConstraint(Sketcher.Constraint("DistanceX", geo, 1, geo, 2, 0.0))
+    doc.recompute()
+    try:
+        if not parameters.broken_steps(doc):
+            return "the line's width of 0 is not seen as broken"
+        message = parameters.change_checked(
+            doc,
+            parameters.container(doc),
+            "d",
+            lambda: parameters.set_user(doc, "d", "-4"),
+            "d = -4",
+        )
+        if "diameter" not in message:
+            return "d = -4 was not refused for the circle: %r" % message
+        return None
+    finally:
+        sketch.delGeometry(geo)
+        doc.recompute()
+
+
+def _change_parameters_refuses(run, name, value):
+    """What the Change Parameters dialog does with `name` = `value` (parameters.change_checked):
+    None when it is refused and nothing changed, else the problem."""
+    from sciforge import parameters
+
+    doc = run.doc()
+    if parameters.broken_steps(doc):
+        return "broken before any change: %s" % parameters.broken_steps(doc)
+    before = {p["name"]: p.get("value") for p in parameters.user_parameters(doc)}
+    message = parameters.change_checked(
+        doc,
+        parameters.container(doc),
+        name,
+        lambda: parameters.set_user(doc, name, value),
+        "%s = %s" % (name, value),
+    )
+    after = {p["name"]: p.get("value") for p in parameters.user_parameters(doc)}
+    if "would break" not in message:
+        return "%s = %s was not refused (%r), %s is now %s" % (name, value, message, name, after)
+    if after != before:
+        return "refused, but the parameters changed: %s -> %s" % (before, after)
+    return None
 
 
 def _ids_from(answer):

@@ -83,6 +83,8 @@ class Step(unittest.TestCase):
         """A STEP written body by body (Selected bodies, Export Everything) has no
         component structure (review F3)."""
         self.assertIn("components", keys(core.items("STEP", dict(DESIGN, components=1, flat=True))))
+        # the whole design's STEP keeps them (review of the merged branches, X4)
+        self.assertNotIn("components", keys(core.items("STEP", dict(DESIGN, components=1))))
 
     def test_iges_does_not_claim_the_file_has_no_names(self):
         """FreeCAD's IGES writer keeps the names (406 name property, entity labels); only

@@ -1,7 +1,8 @@
 # Troubleshooting: failures and how to recover
 
 What goes wrong most often when an AI builds in SciForge, what SciForge answers, and what to
-do. A call that fails changes nothing (there is nothing to undo); a call that worked but did
+do. A call that fails changes nothing (there is nothing to undo; only what `redo` could
+bring back is gone, as after any change, and the answer says so); a call that worked but did
 the wrong thing is taken back with `undo`. Every block below is run by SciForge's tests, so
 the messages are the real ones.
 
@@ -41,7 +42,11 @@ draft angle steeper than the face takes, a press pull deeper than the part: the 
 and changes nothing. SciForge never builds a smaller value in place of yours (you asked for
 an exact value); instead the answer ends with the largest value that does fit, found by
 trying smaller values (the same search SciForge's dialogs use when a person drags a value
-past what fits; it takes a few seconds at most): `Largest radius that fits here: 19.99 mm`.
+past what fits): `Largest radius that fits here: 19.99 mm`. Every try rebuilds the design, so
+the search has a time limit of a few seconds, every try counted: when it runs out the answer
+says `Largest radius found that fits here` (a little more may fit), and on a design so big
+that a single try takes longer than that, SciForge does not search at all and says so
+(`SciForge did not search for the largest radius that fits`): try a smaller value yourself.
 For a value that goes the other way (a press pull into the part, a negative angle) it says
 `Furthest ... that fits here`. Use that value or less, or rethink the size. Changing a step
 later with `edit_step` answers the same way. A size given as a formula (`expressions`) is

@@ -69,9 +69,7 @@ def _settle_after_undo(doc):
     from ... import timeline_ops, undo_fast
 
     try:
-        stale = any(
-            "Touched" in o.State or "Invalid" in o.State or "Error" in o.State for o in doc.Objects
-        )
+        stale = bool(undo_fast.touched(doc))  # (the objects timeline_ui.after_undo looks at)
         if not stale or undo_fast.settle_without_rebuild(doc):
             return
         timeline_ops.recompute(doc)
@@ -422,24 +420,19 @@ def export_file(ctx, args):
         return bridge_core.result("Exported %s.%s" % (files, lost))
     if fmt in ("step", "iges"):
         _check_overwrite(ctx, path)
-        options = {}
         if args.get("bodies"):
             chosen = _bodies_for_export(ctx, doc, args)
             if fmt == "step":
                 written = export.export_step(chosen, path)
             else:
                 written = exchange.export_cad(doc, fmt, path, scope="bodies", chosen=chosen)
-        elif fmt == "step" and not ctx.host.gui:
-            chosen = None  # the whole design, its components kept (File > Export)
-            written = exchange.export_cad(doc, "step", path, scope="design")
-        elif fmt == "step":
-            chosen = export.exportable_bodies(doc)
-            options["whole"] = True
-            written = export.export_step(chosen, path)
         else:
+            # the whole design as File > Export writes it, in the window too: STEP keeps the
+            # components (and the colours with the window open); the window wrote a flat list
+            # of bodies, unlike sciforge-cli (review X4)
             chosen = None
             written = exchange.export_cad(doc, fmt, path, scope="design")
-        lost = export_losses(doc, chosen, fmt, os.path.basename(str(written)), **options)
+        lost = export_losses(doc, chosen, fmt, os.path.basename(str(written)))
         return bridge_core.result("Exported %s.%s" % (written, lost))
     if fmt == "brep":
         import Part

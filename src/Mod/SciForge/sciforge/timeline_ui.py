@@ -621,12 +621,11 @@ class TimelineWidget(QtWidgets.QWidget):
             gdoc = Gui.ActiveDocument
             if gdoc is not None and gdoc.getInEdit() is not None:
                 return
-            stale = False
-            for obj, _body in ops.steps(doc):
-                state = list(obj.State)
-                if "Invalid" in state or "Touched" in state or "Error" in state:
-                    stale = True
-                    break
+            # Every object, not only the timeline's steps: Ctrl+Z of a new step leaves its
+            # Body touched (its Tip and list changed back), and a Body left touched made the
+            # next transaction start "not up to date", so its own Ctrl+Z rebuilt everything
+            # (undo_fast). The AI's Undo looks at the same objects.
+            stale = bool(undo_fast.touched(doc))
             # (undo_fast: when FreeCAD put back every shape built from the values it restored,
             # the design is already as built: no rebuild, which took 15-23 s on big designs)
             if stale and not undo_fast.settle_without_rebuild(doc):
