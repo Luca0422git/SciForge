@@ -8,7 +8,7 @@ being able to drag the angle of a draft is to see it update in real time. I can 
 real time. And the angle dragger doesn't even update either: it waits behind for the model to
 update. It takes at least 1-3 seconds to update. Make it faster."
 
-STATUS: done (see "State" at the end).
+STATUS: done, then reviewed (13 findings); the fixes are in "Review fixes" at the end.
 
 ## Why it was slow (measured, plain language)
 
@@ -151,3 +151,74 @@ Baselines for the speed guard are in `SciForgeTests/gui/perf_baseline.json` (20 
   solid for the view; a coarser display during the dialog would change a view property (an undo
   step), so it was left.
 - Nothing measured on a real GPU (sandbox: software OpenGL).
+
+## Review fixes (adversarial review, 13 findings; same branch)
+
+Each finding was reproduced first with the reviewers' own scenarios (rv_live2/6/7, rv_ok,
+rv_feel), then fixed, with a check that fails on the code before the fix and passes after.
+New scenarios: `draft_live_fixes` (F1-F6, 2-F7) and `drag_rest` (2-F1, 2-F2, 2-F3, 2-F5,
+2-F6); unit tests in `test_value_limits` (background search) and `test_draft_live_core`
+(sloping tops). Both scenarios fail on 5314634 (18 of 34 checks) and pass now.
+
+What was wrong and what changed, in plain language:
+
+- **F1 - OK / Enter right after typing a too-steep angle did nothing.** OK started the
+  search for the steepest angle in the background and then saw "no result yet". Now OK runs
+  that search to its end at once (with a wait cursor), takes the angle it finds and closes in
+  one press (`DraftPanel._limit_refuse`, `_accepting`). On the 179-face part this takes a few
+  seconds (each trial draft ~0.3 s); on a box ~0.5 s.
+- **F2 / 2-F1 - a search for an angle you had already left kept running.** Typing or
+  dragging back below the nearest angle the search had found to fail now stops it at once
+  (`LimitedValues._limit_stale`), and the new angle gets its exact preview at the normal pace
+  (3.4 s -> 0.7 s after typing 3). What the stopped search learnt is kept: if the new angle is
+  too steep too, the next search starts from there (`_limit_partial`, `find_steps(fails=)`).
+  While the mouse moves with the button held, the search builds nothing (`Background(paused=)`,
+  `DraftPanel._dragging`): no more 0.3-0.4 s freezes of the disc during a search.
+- **F3 - the live picture was off where a drafted wall meets a sloping top that is not
+  drafted** (a wedge; also a hole wall under its chamfer). The picture moved every point square
+  to the pull direction and kept its height, which cannot keep a point on a sloping face; its
+  outline moved half as far as its face. Now such points slide along the turned wall until they
+  are back on the sloping face (`draft_live_core.slanted_cap`, `turned_row`, `slide`;
+  `draft_live.Picture._cap_edges` / `_on_caps` / `_slide`). Wedge at 15 deg: 0.35 / 1.29 mm
+  off -> 0.000 mm (faces and lines).
+- **F4 - a live picture for picks that are refused whatever the angle.** When the refusal
+  does not depend on the angle (a round face in the chain, nothing on the pull side of the
+  parting line...: `drafting.angle_free`), no picture is drawn and the message stays.
+- **F5 - "the largest angle that fits" changed from run to run** (6.9 / 7.6 / 7.8 deg): the
+  search stopped on its 1.5 s time budget. Draft's search now runs to its end
+  (`DraftPanel.LIMIT_BUDGET`, 12 s of build time at most): 7.9 deg every time, the same as OK
+  finds. To keep that from taking longer, the search now tries tidy values (7.9, 8.0) when one
+  lies between the two it knows: the last one that works is the answer, no extra build to check
+  it (`value_limits._tidy_middle`, `_settled`): about a fifth fewer trial builds for every
+  dialog's limit search, the same limits (checked on 3000 random cases against the old search).
+- **F6 - wrong limit on bodies sketched on YZ / XZ** (also in c59634a). Their solid carries a
+  turned Placement, and the throw-away draft used for the limit search lost it: the face was
+  tilted about the wrong axis, so 60 deg was refused ("limited to 36.8"). The Placement is now
+  built into the shape first (`drafting._unplaced`): 71.5 deg, as for the same box sketched on
+  XY.
+- **2-F2 - on a heavy part the first move of a drag froze the arrow for 0.5-1.3 s** (Press
+  Pull, Extrude; also in c59634a). The dialog only knew the cost of its last rebuild, the
+  cheap one when it opened (nothing built yet). Now on a part of 120 faces or more, a drag waits
+  for the mouse to rest until a rebuild made during a drag has shown it is quick
+  (`taskui.Panel._slow`, `_held_cost`, `_heavy_part`).
+- **2-F3 - a short stop during a drag (0.2 s) started a rebuild that froze the next moves.**
+  While the button stays down, the rebuild now waits 1.5 times its last cost (0.1-0.45 s)
+  instead of 0.2 s (`Panel._rest_needed`, `HELD_REST*`): a hesitation of 0.32 s on the
+  179-face part no longer rebuilds; a longer stop, or letting go, does.
+- **2-F5 - the last result of a slow dialog came 0.2 s late after letting go.** Every drag
+  handle now tells the dialog when it is let go (`taskui.handle_released`, called by
+  ArrowDragger, handles3d's handles and the angle disc): the waiting rebuild runs at once.
+- **2-F6 - Press Pull and Extrude rebuilt the same value again after letting go** (a second
+  1.2 s freeze on the part; also in c59634a). Let go at the value of the last drag step, they
+  do not take it again (`PressPullPanel._released`, `ExtrudePanel._again`).
+- **2-F7 - the disc held at a limit inside its snap-to-0 zone jumped between 1.5 and 0 deg**
+  (also in c59634a). The disc no longer snaps an angle the dialog put there, nor one past a
+  limit the dialog holds (`AngleDragger.hold`, `_held_past`): it stays at 1.5 deg.
+- **2-F4 - past the steepest angle, the held exact solid comes ~3.5-4.5 s after the mouse
+  stops** (was 0.5-1.2 s in c59634a, which searched during the drag and froze the disc for it).
+  Partly improved (a fifth fewer trial builds), mostly deferred: each trial draft costs ~0.25 s,
+  two thirds of it the validity check of the whole solid (BRepCheck), and the search needs ~8 of
+  them. Checking only the faces the draft changed would cut a failing trial from ~0.2 to
+  ~0.03 s, but could miss a broken shell; running the trials on another thread is not possible
+  with FreeCAD's documents. The disc and the live picture stay free meanwhile, and letting go or
+  OK gives the result.
