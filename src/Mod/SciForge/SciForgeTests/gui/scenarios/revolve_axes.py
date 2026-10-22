@@ -15,9 +15,10 @@ A 40 x 30 x 10 box (Create Sketch on XY, Extrude, OK).
 3. A sketch on XZ with a 10 x 5 rectangle (x 50..60, z 0..5) and a construction line at
    x = 70. Revolve: the construction line is drawn as a dashed line to click; click it:
    a ring that does not touch the box: a New Body by itself (Fusion makes a new body for
-   a Join that touches nothing). Two Sides with 270 + 120 degrees: the dialog says the
-   angles add up to more than a turn and OK keeps it open. One Side 360, New Body, OK:
-   a second body.
+   a Join that touches nothing). Two Sides with 270 + 120 degrees: side two is set to 90
+   (both sides together one full turn: the whole ring) and the dialog's note says so, with
+   no error (Luca's decision of 2026-10-21: a value past the limit stops there; Fusion
+   refuses it). One Side 360, New Body, OK: a second body.
 
 Hand-derived: box 12000. 1: cylinder 8000 pi, inside the box 2000 pi -> join
 12000 + 6000 pi, intersect 2000 pi, new body 8000 pi. 2: cylinder r10 along the edge,
@@ -406,16 +407,36 @@ def two_sides_too_much():
     ui.type_into(p.angle2.widget, "120")
 
 
-def angles_refused():
+def note(p):
+    return p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+
+
+def angles_held():
+    # Luca's decision (2026-10-21): an angle typed past what fits is set to the limit and
+    # said; it used to be refused ("the two angles add up to more than 360 degrees")
     p = panel()
-    text = p.message.text()
-    h.check("the dialog says the angles add up to more than a turn", "360" in text, text)
-    h.task_button("OK")
+    h.check(
+        "side two is set to 90: with side one's 270 a full turn",
+        p is not None and near(p.options["angle2"], 90.0) and near(p.angle2.value(), 90.0),
+        p and (p.options["angle"], p.options["angle2"], p.angle2.value()),
+    )
+    h.check(
+        "the note says so",
+        note(p) == "120° does not fit: limited to 90.0° (both sides together make one full turn)",
+        note(p),
+    )
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+    other = [b for b in bodies() if b is not box_body()]
+    h.check(
+        "the preview is the whole ring (one full turn)",
+        len(other) == 1 and near(other[0].Shape.Volume, 1500 * PI, 1e-5),
+        [b.Shape.Volume for b in other],
+    )
 
 
 def still_open():
     p = panel()
-    h.check("OK refused: the dialog stays open", p is not None and Gui.Control.activeDialog())
+    h.check("the dialog is open", p is not None and Gui.Control.activeDialog())
     if p is None:
         return
     h.check("choose One Side", ui.choose(p.direction, "One Side"))
@@ -423,13 +444,17 @@ def still_open():
 
 def one_side_full():
     p = panel()
-    ui.type_into(p.angle.widget, "360")
+    h.check("One Side: the note goes", note(p) == "", note(p))
+    if p is not None:
+        ui.type_into(p.angle.widget, "360")
 
 
 def choose_new_body():
     p = panel()
-    h.check("error gone", p.message.text() == "", p.message.text())
-    h.check("choose New Body", ui.choose(p.operation, "New Body"))
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+    h.check("no note", note(p) == "", note(p))
+    if p is not None:
+        h.check("choose New Body", ui.choose(p.operation, "New Body"))
 
 
 def ring_ok():
@@ -499,7 +524,7 @@ h.run(
         construction_drawn,
         ring_axis,
         two_sides_too_much,
-        angles_refused,
+        angles_held,
         still_open,
         one_side_full,
         choose_new_body,

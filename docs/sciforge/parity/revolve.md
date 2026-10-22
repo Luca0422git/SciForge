@@ -32,8 +32,11 @@ can give that sort of error". So in SciForge (shared helper `sciforge/value_limi
 
 In this dialog the limits are fixed ones: 360 degrees, 180 a side for Symmetric, both sides
 together 360 for Two Sides. The arrows already stopped there; a number typed past them is
-now set to the limit with the note (the angle typed last yields). Scenario
-`limits_revolve`.
+now set to the limit with the note (the angle typed last yields). For Two Sides and
+Symmetric the note says why the limit is less than 360: "120° does not fit: limited to
+90.0° (both sides together make one full turn)", "200° does not fit: limited to 180.0°
+(180° each way make one full turn)"; the result is the full turn. Scenarios
+`limits_revolve`, `revolve_axes` (3: 270 + 120 typed), `revolve_qa` (P4: 400 typed).
 
 ## Wave 4: Objects To Cut (branch `sf/modeling-2`, 2026-10-14)
 

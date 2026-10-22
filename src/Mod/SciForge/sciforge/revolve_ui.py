@@ -1215,7 +1215,17 @@ class RevolvePanel(Panel):
             held = math.copysign(bound, value) if key == "angle" else bound
             self.options[key] = held
             value_limits.show_held(self._angle_shower, key, field, value, held)
-            self._angle_note = value_limits.note_typed(value, held, "deg")
+            self._angle_note = value_limits.note_typed(value, held, "deg") + self._bound_why(key)
+
+    def _bound_why(self, key):
+        """Why the limit of the value `key` is less than a plain 360 (added to its note): two
+        sides share one turn, a symmetric revolve turns its angle each way."""
+        direction = self.options.get("direction")
+        if direction == "two_sides":
+            return " (both sides together make one full turn)"
+        if direction == "symmetric" and key == "angle":
+            return " (180° each way make one full turn)"
+        return ""
 
     # -- formulas (preview.FormulaInput calls formula_typed / _cleared / _failed) -----------------
     FORMULA_NAMES = {"angle": "Angle", "angle2": "Side Two angle"}
@@ -2075,7 +2085,7 @@ class RevolvePanel(Panel):
         value = max(0.1, min(360.0 - abs(self.angle.value()), value))
         self._quiet = True
         try:
-            self._drag_note(value, self._angle_bound("angle2"))
+            self._drag_note(value, self._angle_bound("angle2"), "angle2")
             self.angle2.set_value(value)
         finally:
             self._quiet = False
@@ -2196,12 +2206,13 @@ class RevolvePanel(Panel):
     def feature(self):
         return self.target
 
-    def _drag_note(self, value, bound):
+    def _drag_note(self, value, bound, key="angle"):
         """The arrow stopped at the revolve's limit: the dialog says so."""
         self._angle_drag_note = ""
         if bound is not None and abs(abs(value) - bound) < 1e-9:
             side = "hi" if value > 0 else "lo"
-            self._angle_drag_note = value_limits.note_reached(value, side, "deg")
+            note = value_limits.note_reached(value, side, "deg")
+            self._angle_drag_note = note + self._bound_why(key)
 
     def show_status(self):
         value_limits.show_note(getattr(self, "limit_label", None), "")

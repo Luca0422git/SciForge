@@ -4,11 +4,11 @@
 Only real input.
 
 A 10 x 20 rectangle on XZ against the Z axis, Revolve, the Z axis. Two Sides, side two 10,
-side one 300: side two typed 100 would make 400 degrees: it is set to 60 and the dialog says "100°
-does not fit: limited to 60.0°", no error, the preview is the full turn (2000 pi). One
-Side 400 typed: set to 360. Two Sides again, side one 300, side two from a formula past the
-limit (parameter big = 100 deg) is not rewritten: explained, OK waits. Side two 30 typed,
-OK: 330 degrees in all."""
+side one 300: side two typed 100 would make 400 degrees: it is set to 60 and the dialog says
+"100° does not fit: limited to 60.0° (both sides together make one full turn)", no error,
+the preview is the full turn (2000 pi). One Side 400 typed: set to 360. Two Sides again,
+side one 300, side two from a formula past the limit (parameter big = 100 deg) is not
+rewritten: explained, OK waits. Side two 30 typed, OK: 330 degrees in all."""
 
 import math
 
@@ -92,7 +92,11 @@ def side_two_held():
     p = panel()
     a2 = p.options["angle2"] if p else 0
     h.check("side two is set to 60 (both 360)", ri.near(a2, 60.0), (p and p.options["angle"], a2))
-    h.check("and said", note(p) == "100° does not fit: limited to 60.0°", note(p))
+    h.check(
+        "and said, with why",
+        note(p) == "100° does not fit: limited to 60.0° (both sides together make one full turn)",
+        note(p),
+    )
     h.check("no error", msg(p) == "", msg(p))
     h.check("the box shows 60", p is not None and ri.near(p.angle2.value(), 60.0))
     h.check("the preview is the full turn", ri.near(h.solid_volume(), CYL, 1e-5), h.solid_volume())
