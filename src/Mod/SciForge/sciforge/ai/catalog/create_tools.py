@@ -351,7 +351,7 @@ define(
     selectors={"faces": "faces"},
     needs=("solid",),
     id_base="Thread",
-    title_fn=lambda a: "AI: Thread %s" % a.get("designation", ""),
+    title_fn=lambda a: ("AI: Thread %s" % a.get("designation", "")).rstrip(),
     examples=[
         example(
             {

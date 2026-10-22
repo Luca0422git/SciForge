@@ -292,8 +292,14 @@ SESSION = [
     {"tool": "center_of_mass", "args": {}, "contains": ["Centre of mass"]},
     {
         "tool": "section_analysis",
-        "args": {"plane": {"plane": "XZ"}, "distance": 15},
-        "contains": ["kept"],
+        "args": {"plane": {"plane": "XZ"}, "distance": -15},
+        "check": _json_check(
+            lambda d, r: (
+                None
+                if d["bodies"][0]["cut_area_mm2"] > 100 and d["plane_point_mm"][1] == 15
+                else "the cut through the middle of the plate: %s" % d
+            )
+        ),
     },
     {"tool": "undo", "args": {}, "contains": ["Undo"]},
     {"tool": "redo", "args": {}, "contains": ["Redo"]},
