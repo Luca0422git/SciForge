@@ -109,7 +109,8 @@ def tidy(value, step, toward):
 
 
 def fmt(value, unit="mm", step=None):
-    """A value as the dialog shows it in a note: '3.47 mm', '12.3°'."""
+    """A value as the dialog shows it in a note: '3.47 mm', '12.3°', '9.99' (unit "": a
+    count, the turns of a coil)."""
     step = step or step_for(unit)
     text = "%.*f" % (_digits(step), value)
     if text.startswith("-") and float(text) == 0.0:
@@ -124,7 +125,12 @@ def fmt_typed(value, unit="mm"):
 
 def note_reached(limit, side, unit="mm", step=None):
     """The note shown while a dragged value sits at its limit."""
-    word = "Largest" if side == "hi" else "Furthest"  # a push into the part, -30 deg...
+    if side == "hi":
+        word = "Largest"
+    elif limit > 0:
+        word = "Smallest"  # a value that must not get smaller (a pipe's section size)
+    else:
+        word = "Furthest"  # a push into the part, -30 deg...
     return "%s that fits here: %s" % (word, fmt(limit, unit, step))
 
 
@@ -149,16 +155,35 @@ def _safe(works):
     return run
 
 
-def search(works, good, bad, step, budget=BUDGET, good_known=False, clock=time.perf_counter):
+def _middle(lo, hi):
+    """The next value to try between `lo` (works) and `hi` (does not). Far apart on the same
+    side of zero (0.01 and 50): their geometric mean (0.71), so the first builds stay near the
+    value that worked and home in on the scale of the limit: a slow part's few trials then
+    give a useful limit, and values far past it (a 25 mm shell wall where 3 fits, which
+    crashed OpenCASCADE) are rarely built. Close together: the middle."""
+    if lo * hi > 0:
+        a, b = abs(lo), abs(hi)
+        if max(a, b) > 4.0 * min(a, b):
+            return math.copysign(math.sqrt(a * b), lo)
+    return (lo + hi) / 2.0
+
+
+def search(
+    works, good, bad, step, budget=BUDGET, good_known=False, clock=time.perf_counter, seen=None
+):
     """The value nearest `bad` that still works, between `good` (a value that works) and `bad`
     (one that does not): a tidy multiple of `step` on the side of `good`, built once more to be
     sure. Returns (limit, exact) or (None, False) when nothing between them works (then the
     refusal is not a limit). `exact` is False when the time budget stopped the bisection before
-    it reached `step` (the limit is then on the safe side of the real one).
+    it reached `step` (the limit is then on the safe side of the real one, maybe far from it).
+    `seen` (a dict, optional) gets "fails": the value nearest `good` that was built and did
+    not work (values between the limit and it were never tried).
     `works(value)` builds the result with that value and says if it is sound; an exception
     counts as "does not work"."""
     works = _safe(works)
     good, bad = float(good), float(bad)
+    if seen is not None:
+        seen["fails"] = bad
     if good == bad:
         return None, False
     if not good_known and not works(good):
@@ -171,12 +196,14 @@ def search(works, good, bad, step, budget=BUDGET, good_known=False, clock=time.p
             break
         if trials > 60:
             break
-        mid = (lo + hi) / 2.0
+        mid = _middle(lo, hi)
         trials += 1
         if works(mid):
             lo = mid
         else:
             hi = mid
+    if seen is not None:
+        seen["fails"] = hi
     exact = abs(hi - lo) <= step * 0.5
     toward = 1.0 if good > bad else -1.0
     digits = _digits(step) + 2
@@ -257,10 +284,14 @@ SLOTS = ("hi+", "hi-", "lo+", "lo-")
 
 class LimitCache:
     """The limits found, per set of inputs (make_key). Each entry has an upper ('hi') and a
-    lower ('lo') limit on each side of zero: (limit, bad) when found, or (None, bad) when a
-    search found that no smaller value helps (then it is not searched again for these
-    inputs). A limit holds only values on its own side of zero. `keep` holds objects the key
-    names by identity (the base shape), so their identity cannot be reused meanwhile."""
+    lower ('lo') limit on each side of zero: (limit, bad, wall) when found, or (None, bad,
+    None) when a search found that no smaller value helps (then it is not searched again for
+    these inputs). A value past `wall` is held at `limit` without being built: `wall` is the
+    limit itself when the search was exact, else the nearest value that was built and did not
+    work (a search cut short by its time budget: the values between the limit and the wall
+    were never tried, so they are tried, not refused). A limit holds only values on its own
+    side of zero. `keep` holds objects the key names by identity (the base shape), so their
+    identity cannot be reused meanwhile."""
 
     def __init__(self, size=48):
         self.size = size
@@ -281,11 +312,14 @@ class LimitCache:
     def searched(self, key, slot):
         return self.get(key, slot) is not None
 
-    def store(self, key, side, limit, bad, keep=None):
+    def store(self, key, side, limit, bad, keep=None, wall=None):
         """Keep `limit` (None: no limit) found when `bad` was refused; `side` is "hi" / "lo"
-        (the side of zero is the refused value's) or a slot ("hi+"...)."""
+        (the side of zero is the refused value's) or a slot ("hi+"...); `wall`: values past
+        it are held at `limit` (default: the limit itself, an exact limit)."""
         entry = self.entries.setdefault(key, {})
-        entry[slot_of(side, bad)] = (limit, bad)
+        if limit is not None and wall is None:
+            wall = limit
+        entry[slot_of(side, bad)] = (limit, bad, wall)
         if keep is not None:
             entry["keep"] = keep
         self.entries.move_to_end(key)
@@ -308,8 +342,8 @@ class LimitCache:
                 continue
             if (slot[2] == "+" and value <= 0) or (slot[2] == "-" and value >= 0):
                 continue  # the other side of zero: this limit says nothing about it
-            limit, side = found[0], slot[:2]
-            if (side == "hi" and value > limit + 1e-12) or (side == "lo" and value < limit - 1e-12):
+            limit, side, wall = found[0], slot[:2], found[2]
+            if (side == "hi" and value > wall + 1e-12) or (side == "lo" and value < wall - 1e-12):
                 return limit, limit, side
         return value, None, None
 
@@ -335,27 +369,54 @@ class Limiter:
         self.unit = unit
         self.budget = budget
         self.cache = LimitCache()
-        self.note = ""  # what the dialog shows under its boxes (not an error)
+        self._note = ""  # what the dialog shows under its boxes (not an error): .note
+        self.note_key = None  # the inputs the note was made for (None: any)
+        self.key_now = None  # the dialog's inputs now, for the value edited (a function)
         self.searches = 0  # bisections run (tests: never on every drag step)
+        self.search_clock = time.perf_counter  # tests give a fake clock
 
     def step(self, unit=None):
-        return step_for(unit or self.unit)
+        return step_for(self.unit if unit is None else unit)
+
+    @property
+    def note(self):
+        """The note, as long as the inputs it was made for have not changed: "80° does not
+        fit: limited to 71.5°" is not true any more once Flip is clicked (review finding L5)."""
+        if self._note and self.note_key is not None and self.key_now is not None:
+            try:
+                now = self.key_now()
+            except Exception:
+                now = None
+            if now is not None and now != self.note_key:
+                self._note = ""
+                self.note_key = None
+        return self._note
+
+    @note.setter
+    def note(self, text):
+        self._note = text or ""
+        self.note_key = None
+
+    def _say(self, text, key):
+        self._note = text or ""
+        self.note_key = key if text else None
 
     def clamp(self, key, value, typed=False, unit=None):
         """The value to use: held at the cached limit it went past (the note says so), else
         unchanged (and the note is cleared). Never builds anything."""
-        unit = unit or self.unit
+        unit = self.unit if unit is None else unit
         held, limit, side = self.cache.clamp(key, value)
         if limit is None:
             self.note = ""
             on = self.cache.on_limit(key, value)  # sitting right on it (the arrow let go there)
             if on is not None:
-                self.note = note_reached(on[0], on[1], unit, self.step(unit))
+                self._say(note_reached(on[0], on[1], unit, self.step(unit)), key)
             return value
-        self.note = (
+        self._say(
             note_typed(value, limit, unit, self.step(unit))
             if typed
-            else note_reached(limit, side, unit, self.step(unit))
+            else note_reached(limit, side, unit, self.step(unit)),
+            key,
         )
         return held
 
@@ -369,33 +430,54 @@ class Limiter:
         limit: the refusal stays) - remembered too, so it is not searched again."""
         side = side_of(value, good)
         slot = slot_of(side, value)
+        sign = 1 if side == "hi" else -1
         found = self.cache.get(key, slot)
+        wall = None
         if found is not None:
-            limit = found[0]
+            limit, wall = found[0], found[2]
             if limit is None:
                 return None
-            beyond = value > limit if side == "hi" else value < limit
-            if beyond:
+            if (value - wall) * sign > 1e-12:
                 return limit
-            # a value between the known limit and the first refused one: search that gap
+            # a value between the known limit and its wall (never tried, or the first refused
+            # value): search that gap
             good, good_known = limit, True
         self.searches += 1
-        limit, _exact = search(
-            works, good, value, self.step(unit), self.budget, good_known=good_known
+        seen = {}
+        limit, exact = search(
+            works,
+            good,
+            value,
+            self.step(unit),
+            self.budget,
+            good_known=good_known,
+            clock=self.search_clock,
+            seen=seen,
         )
-        if limit is not None and (limit - value) * (1 if side == "hi" else -1) >= 0:
+        if limit is not None and (limit - value) * sign >= 0:
             limit = None  # a "limit" beyond the refused value: the value works after all
-        self.cache.store(key, slot, limit, value, keep)
+        if limit is None and found is not None:
+            # the gap held nothing better: the known limit stays, `value` is a wall now
+            limit, exact, seen["fails"] = found[0], False, value
+        new_wall = None
+        if limit is not None and not exact:
+            # cut short by the time budget: only values past the nearest refused one are held
+            # without a build (Limiter.clamp); the ones before it are tried when they come
+            new_wall = seen.get("fails", value)
+            if wall is not None and (wall - new_wall) * sign < 0:
+                new_wall = wall
+        self.cache.store(key, slot, limit, value, keep, wall=new_wall)
         return limit
 
     def limited(self, key, value, limit, typed, unit=None):
         """Set the note for `value` held at `limit` (found just now)."""
-        unit = unit or self.unit
+        unit = self.unit if unit is None else unit
         side = side_of(value, limit) if value != limit else "hi"
-        self.note = (
+        self._say(
             note_typed(value, limit, unit, self.step(unit))
             if typed
-            else note_reached(limit, side, unit, self.step(unit))
+            else note_reached(limit, side, unit, self.step(unit)),
+            key,
         )
 
 
@@ -484,6 +566,7 @@ class LimitedValues:
 
     def limit_init(self):
         self.limits = Limiter()
+        self.limits.key_now = self._limit_key_now  # a note goes when its inputs change
         self.limit_shower = ShowWhenLeft()  # a typed number held: the box shows the limit
         self._limit_edit = None  # (value name, "typed" / "dragged" / "formula")
         self._limit_pending = False
@@ -492,6 +575,12 @@ class LimitedValues:
 
     def limit_unit(self, what):
         return "mm"
+
+    def _limit_key_now(self):
+        """The inputs now for the value edited last (None: nothing edited)."""
+        if self._limit_edit is None:
+            return None
+        return self.limit_key(self._limit_edit[0])
 
     def limit_forget(self):
         """A value that has no limit was edited (a count of teeth): nothing is held, and a

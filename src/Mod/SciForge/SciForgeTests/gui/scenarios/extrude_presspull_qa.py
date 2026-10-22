@@ -7,7 +7,9 @@ Path 2, wrong order: Direction and distance chosen before any profile, then the
         extrude leaves nothing behind and the sketch visible.
 Path 3, values while the preview runs: two distances typed back to back, the arrow
         dragged far up and far down through the part (auto Cut and back to Join), a
-        zero distance and an impossible taper (message in the dialog, OK refused).
+        zero distance (message in the dialog, OK refused) and a taper too steep for the
+        column (held at the steepest that fits and said: Luca's decision of 2026-10-21,
+        value_limits.py; a taper that stops fitting is explained: limits_extrude_other).
 Path 4, another command's key while a dialog is open: Q in Extrude, E in Press
         Pull, Ctrl+Z in a dialog with a preview.
 Path 5, editing from the timeline twice, then undo / redo of both edits (while a step is
@@ -437,14 +439,15 @@ def p3_five_mm():
 
 def p3_steep_taper():
     p = xpanel()
-    h.check(
-        "a taper that closes the profile is explained", "⚠" in p.message.text(), p.message.text()
-    )
-    h.task_button("OK")
+    t = p.options["taper"]
+    h.check("a taper that closes the profile is held at the steepest that fits", -60 < t < -40, t)
+    note = p.limit_label.text() if p.limit_label.isVisible() else ""
+    h.check("and said", note == "-60° does not fit: limited to %.1f°" % t, note)
+    h.check("no error", "⚠" not in p.message.text(), p.message.text())
 
 
 def p3_steep_ok():
-    h.check("OK refused for the impossible taper", dialog_open() and not xpanel()._closed)
+    h.check("the dialog stays open", dialog_open() and not xpanel()._closed)
     h.fit()
 
 

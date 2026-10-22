@@ -170,6 +170,11 @@ def typed_50():
         text,
     )
     h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+    h.check(  # review finding L7: problems are said in the dialog, not the Report view
+        "nothing about it in the Report view",
+        "does not fit" not in h.report_text() and "held at" not in h.report_text(),
+        [x for x in h.report_text().splitlines() if "held at" in x or "does not fit" in x],
+    )
     v = h.solid_volume()
     h.check("the preview shows the largest round", b.close(v, one_edge(s["limit"])), v)
 

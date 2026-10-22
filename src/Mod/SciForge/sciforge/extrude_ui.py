@@ -588,6 +588,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         self.limit_init()  # a taper / wall past what the profile takes stops at the limit
         self._limit_seen = {}  # value name -> the value _collect() read last
         self._limit_source = {}  # value name -> "dragged" for the next _collect()
+        self._limit_restore_to = None  # (profiles, options) the limit search puts back
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
@@ -982,6 +983,8 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         def works(value):
             trial = dict(options)
             trial[what] = value
+            if self._limit_restore_to is None:
+                self._limit_restore_to = (profiles, options)  # what limit_search puts back
             self.target = extrude.build(profiles, trial, feature=self.target, hide=False)
             preview.recompute(self.doc)
             if preview.failure(self.target):
@@ -989,6 +992,24 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
             return True
 
         return works
+
+    def limit_search(self, what, value):
+        """The search builds its trials in the extrude itself: the dialog's own values are put
+        back afterwards, so no trial value is left in the document (a taper changed nobody
+        asked for, made by OK)."""
+        self._limit_restore_to = None
+        try:
+            return value_limits.LimitedValues.limit_search(self, what, value)
+        finally:
+            restore, self._limit_restore_to = self._limit_restore_to, None
+            if restore is not None and self.target is not None:
+                try:
+                    self.target = extrude.build(
+                        restore[0], restore[1], feature=self.target, hide=False
+                    )
+                    preview.recompute(self.doc)
+                except Exception as exc:
+                    warn("extrude limit: %s" % exc)
 
     def limit_value(self, what):
         return float(self.options.get(what, 0.0))
@@ -2135,13 +2156,27 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         self._show_status()
         try:
             text = self.message.text()
-            if text.startswith("⚠ ") and not self.formula_error:
-                hinted = self.limit_hint(text[2:])  # a formula is not held: say the limit
+            if text.startswith("⚠ ") and not self.formula_error and not self._arrow_held():
+                # A formula, or a value that stopped fitting because another one changed (the
+                # distance dragged under a taper) is not held: say the limit. Not on every step
+                # of a drag (each distance has its own limit): once the arrow is let go.
+                hinted = self.limit_hint(text[2:])
                 if hinted != text[2:]:
                     self.message.setText("⚠ " + hinted)
             value_limits.show_note(self.limit_label, "" if text else self.limits.note)
         except Exception as exc:
             warn("extrude note: %s" % exc)
+
+    def _arrow_held(self):
+        """True while an arrow or disc of the dialog is being dragged."""
+        for dragger in list(self.draggers.values()):
+            try:
+                held = dragger.dragging if hasattr(dragger, "dragging") else dragger.box_active
+                if held():  # box_active of an arrow is also True while the pointer is over it
+                    return True
+            except Exception:
+                pass
+        return False
 
     def _show_status(self):
         self._update_bodies_row()
@@ -2766,7 +2801,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         text = _plain(preview.failure(self.target)) or self._followers_failure()
         text = text or self._bodies_problem
         if text:
-            self.message.setText("⚠ " + text)
+            self.message.setText("⚠ " + self.limit_hint(text))  # with the limit, if known
             return False
         feature = self.target
         # Fusion hides the profile's sketch once the extrude is made (inside this step:
