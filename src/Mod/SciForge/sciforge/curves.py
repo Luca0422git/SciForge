@@ -136,8 +136,9 @@ def _element(sub):
 
 def relink_users(old, new):
     """Point every link of the objects using `old` (but not the body's own history chain) at
-    `new`, which must be computed. Returns the objects changed."""
-    from . import follow
+    `new`, which must be computed. Returns the objects changed (a sketch's projected
+    edges are projected again: sketch_external)."""
+    from . import follow, sketch_external
 
     if old is None or new is None or old is new:
         return []
@@ -188,10 +189,22 @@ def relink_users(old, new):
             return out, changed
         return value, False
 
+    def projected(name):  # a sketch's projected edge on `new` (None: not there)
+        try:
+            return follow.find(new.Shape, old.Shape.getElement(name))
+        except Exception:
+            return None
+
     changed = []
     for user in users:
         for prop in user.PropertiesList:
             if prop in _CHAIN:
+                continue
+            if prop == "ExternalGeometry" and sketch_external.is_sketch(user):
+                # read-only in FreeCAD 1.1 (the setattr failed in silence and the
+                # projected edges froze when `old` went): projected again from `new`
+                if sketch_external.relink(user, old, new, projected) and user not in changed:
+                    changed.append(user)
                 continue
             try:
                 kind = user.getTypeIdOfProperty(prop)

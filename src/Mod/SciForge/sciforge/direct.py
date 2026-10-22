@@ -388,117 +388,17 @@ def _detach(obj):
 
 def _relink_external(sketch, step, base, shape):
     """Projected edges of a step that goes now come from the base (same edges found by
-    place); one that cannot be found there is taken out of the sketch with its
-    constraints.
+    place on `shape`); one that cannot be found there is taken out of the sketch with its
+    constraints. FreeCAD 1.1 makes ExternalGeometry read-only: sketch_external.relink
+    projects each link again (shared with Delete, Pattern, Shell/Draft, Revolve, Sweep and
+    Loft)."""
+    from . import sketch_external
 
-    FreeCAD 1.1 makes ExternalGeometry read-only (it was set directly before, which failed:
-    "could not re-link the projected edges"), and one link can hold several curves (a face
-    projected whole: Auto project). So each link of the step is projected again from the
-    base (addExternal, same Defining / intersection), the constraints on the old curves
-    move to the new ones in the same order, the old curves are deleted, and Auto project's
-    record of its curves (sketch_auto_project.PROPERTY) follows."""
-    try:
-        import Sketcher
+    def rename(name):
+        mapped = _map_subs(step, [name], shape)
+        return mapped[0] if mapped else None
 
-        geos = list(sketch.ExternalGeo)
-    except Exception:
-        return
-    types = list(getattr(sketch, "ExternalTypes", []) or [])
-    groups = {}  # sub of the step -> [(geo id, persistent id, defining, intersection)]
-    order = []
-    for index, geo in enumerate(geos):
-        if index < 2:
-            continue  # the sketch's own axes
-        try:
-            facade = Sketcher.ExternalGeometryFacade(geo)
-            ref = facade.Ref
-        except Exception:
-            continue
-        owner, _dot, sub = ref.rpartition(".")
-        if owner.split(".")[-1] != step.Name or not sub:
-            continue
-        if sub not in groups:
-            groups[sub] = []
-            order.append(sub)
-        intersection = index < len(types) and types[index] == 1
-        groups[sub].append(
-            (-(index + 1), facade.Id, bool(facade.testFlag("Defining")), intersection)
-        )
-    if not groups:
-        return
-    remap, ids = {}, {}
-    try:
-        for sub in order:
-            curves = groups[sub]
-            mapped = _map_subs(step, [_plain_sub(step, sub)], shape)
-            if mapped is None:
-                continue  # gone from the base: taken out with its constraints
-            before = len(sketch.ExternalGeo)
-            sketch.addExternal(base.Name, mapped[0], curves[0][2], curves[0][3])
-            sketch.recompute()  # (the new curves exist after it)
-            made = list(sketch.ExternalGeo)[before:]
-            for k, (geo_id, persistent, _d, _i) in enumerate(curves):
-                if k < len(made):
-                    remap[geo_id] = -(before + k + 1)
-                    ids[persistent] = Sketcher.ExternalGeometryFacade(made[k]).Id
-        if remap:
-            moved = []
-            for constraint in sketch.Constraints:
-                for attr in ("First", "Second", "Third"):
-                    value = getattr(constraint, attr)
-                    if value in remap:
-                        setattr(constraint, attr, remap[value])
-                moved.append(constraint)
-            sketch.Constraints = moved
-        # FreeCAD deletes every curve of a link with one of them: once per old link
-        for sub in order:
-            ref_index = _external_index(sketch, step.Name, sub)
-            if ref_index is not None:
-                sketch.delExternal(-(ref_index + 1))
-        _follow_auto_ids(sketch, ids)
-    except Exception as exc:
-        warn("could not re-link the projected edges of %s: %s" % (sketch.Label, exc))
-
-
-def _plain_sub(obj, sub):
-    """ "FaceN" / "EdgeN" for a sub-element name FreeCAD keeps in its mapped form
-    (";Face6;:M(...)", what a projection made with the topological naming records)."""
-    if sub and (sub.startswith(";") or ":" in sub):
-        try:
-            name = obj.Shape.getElementName(sub, 0)
-            if name and not name.startswith(";"):
-                return name
-        except Exception:
-            pass
-    return sub
-
-
-def _external_index(sketch, owner_name, sub):
-    """Index in ExternalGeo of a curve projected from `owner_name`.`sub`, or None."""
-    import Sketcher
-
-    for index, geo in enumerate(sketch.ExternalGeo):
-        if index < 2:
-            continue
-        try:
-            owner, _dot, name = Sketcher.ExternalGeometryFacade(geo).Ref.rpartition(".")
-        except Exception:
-            continue
-        if owner.split(".")[-1] == owner_name and name == sub:
-            return index
-    return None
-
-
-def _follow_auto_ids(sketch, ids):
-    from . import sketch_auto_project as auto
-
-    if auto.PROPERTY not in sketch.PropertiesList:
-        return
-    try:
-        kept = [ids.get(i, i) for i in getattr(sketch, auto.PROPERTY)]
-        setattr(sketch, auto.PROPERTY, kept)
-    except Exception as exc:
-        log("sketch: Auto project ids not kept: %s" % exc)
+    sketch_external.relink(sketch, step, base, rename, drop_lost=True)
 
 
 def freeze(doc, targets, base_id=None, fresh=None):
