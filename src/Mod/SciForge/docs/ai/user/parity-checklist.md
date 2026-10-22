@@ -26,6 +26,10 @@ What the number means:
   names are marked "(not sure)" below and wait for a look at real Fusion.
 - Entries are menu entries: a command in two places (Delete in MODIFY and in the
   marking menu) counts twice; panels Fusion repeats on several tabs count once.
+- One SciForge entry that does the work of several Fusion entries (one sketch Chamfer
+  for Fusion's three) counts for each of them: they are listed under "One SciForge
+  entry for several Fusion entries". A command found in another panel or menu than
+  Fusion's counts as present and is listed under "Present in another place".
 - SciForge's side is read from its source (`ribbon_config.py`, `sketch_marking.py`,
   `browser_core.MENUS`, the timeline / ViewCube / sheet bar menus). An entry shown greyed
   ("not available in SciForge yet") is not counted.
@@ -266,6 +270,18 @@ Fusion commands SciForge does not have (the entries left out on purpose are at t
 Counted as present: SciForge has the command, in another place than Fusion's.
 
 - APPLICATION BAR > Profile menu > Preferences: UTILITIES > UTILITY > Preferences
+- SOLID > CREATE > New Component: SOLID > ASSEMBLE > New Component
+- SOLID > FINISH BASE FEATURE > Finish Base Feature: SOLID > CREATE > Finish Base Feature
+- SOLID > POSITION > Capture Position: SOLID > ASSEMBLE > Capture Position
+- SOLID > POSITION > Revert: SOLID > ASSEMBLE > Revert Position
+
+## One SciForge entry for several Fusion entries
+
+Each of these Fusion entries counts as present through the same SciForge entry.
+
+- SOLID > ASSEMBLE > New Component: SOLID > CREATE > New Component; SOLID > ASSEMBLE > New Component
+- SOLID > CONSTRUCT > Axis Perpendicular to Face at Point: SOLID > CONSTRUCT > Axis Perpendicular at Point; SOLID > CONSTRUCT > Axis Perpendicular to Face at Point
+- SKETCH > MODIFY > Chamfer: SKETCH > MODIFY > Chamfer > Equal Distance Chamfer; SKETCH > MODIFY > Chamfer > Distance and Angle Chamfer; SKETCH > MODIFY > Chamfer > Two Distance Chamfer
 
 ## Left out on purpose
 

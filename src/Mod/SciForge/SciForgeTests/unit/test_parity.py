@@ -215,6 +215,51 @@ class TestMatching(unittest.TestCase):
         self.assertIn("- SURFACE > MODIFY > Fillet: SOLID > MODIFY > Fillet", text)
         self.assertIn("- sculpting (1 entries, 0 present): SOLID > CREATE > Create Form", text)
 
+    def test_another_panel_of_the_tab_is_elsewhere_and_shared_entries_are_listed(self):
+        # Fusion's CREATE > New Component is SciForge's ASSEMBLE > New Component: counted, but
+        # listed where it is; ASSEMBLE > Joint Origin is found in its own panel first
+        E = parity.Entry
+        entries = [
+            E("tab:solid", ("SOLID", "CREATE", "Joint Origin"), "Joint Origin", True),
+            E("tab:solid", ("SOLID", "ASSEMBLE", "New Component"), "New Component", True),
+            E("tab:solid", ("SOLID", "ASSEMBLE", "Joint Origin"), "Joint Origin", True),
+        ]
+        items = parity.parse_menus(
+            "SOLID [in=tab:solid]\n  CREATE\n    New Component\n"
+            "  ASSEMBLE\n    New Component\n    Joint Origin\n"
+        )
+        results = parity.compare(items, entries, [])
+        found = {r.item.path: (r.status, r.where.path) for r in results}
+        self.assertEqual(
+            found[("SOLID", "CREATE", "New Component")],
+            ("elsewhere", ("SOLID", "ASSEMBLE", "New Component")),
+        )
+        self.assertEqual(
+            found[("SOLID", "ASSEMBLE", "New Component")],
+            ("present", ("SOLID", "ASSEMBLE", "New Component")),
+        )
+        self.assertEqual(
+            found[("SOLID", "ASSEMBLE", "Joint Origin")],
+            ("present", ("SOLID", "ASSEMBLE", "Joint Origin")),
+        )
+        text = parity.render(results, entries, "2026-01-02")
+        self.assertIn("- SOLID > CREATE > New Component: SOLID > ASSEMBLE > New Component\n", text)
+        self.assertIn("## One SciForge entry for several Fusion entries", text)
+        self.assertIn(
+            "- SOLID > ASSEMBLE > New Component: SOLID > CREATE > New Component; "
+            "SOLID > ASSEMBLE > New Component\n",
+            text,
+        )
+
+    def test_a_byte_order_mark_is_ignored(self):
+        # Windows Notepad's "UTF-8 with BOM": the first line is still a comment
+        folder = tempfile.mkdtemp(prefix="sciforge-parity-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        with open(os.path.join(folder, "menus.txt"), "wb") as handle:
+            handle.write(b"\xef\xbb\xbf" + SAMPLE.lstrip("\n").encode("utf-8"))
+        text = parity._read(folder, "menus.txt")
+        self.assertEqual(parity.parse_menus(text), parity.parse_menus(SAMPLE.lstrip("\n")))
+
     def test_only_the_date_may_differ_for_check(self):
         text = parity.render(list(self.results.values()), self.entries, "2026-01-02")
         later = parity.render(list(self.results.values()), self.entries, "2027-05-06")
@@ -298,6 +343,47 @@ class TestRealMenus(unittest.TestCase):
                     stale.append("no SciForge label: %s" % target)
         self.assertEqual(stale, [])
 
+    # Names a row of remaining-gaps.md uses for a checklist entry (its words differ)
+    GAP_WORDS = {
+        "show/hide data panel": "view submenu",
+        "show/hide browser": "view submenu",
+        "show/hide text commands": "view submenu",
+        "show/hide navigation bar": "view submenu",
+        "show/hide viewcube": "view submenu",
+        "show/hide timeline": "view submenu",
+        "select component priority": "component priority",
+        "components": "selection filters > components",
+    }
+
+    def test_every_missing_entry_is_on_the_work_list(self):
+        # remaining-gaps.md is the one work list: an entry of the checklist's "Not in SciForge
+        # yet" (missing or greyed, not left out on purpose) that no row names is never worked on
+        with open(os.path.join(REPO, "docs", "sciforge", "dev", "remaining-gaps.md"), encoding="utf-8") as handle:
+            gaps = parity.norm(handle.read().replace("\n", " "))
+        forgotten = []
+        for result in parity.compare(self.items, self.entries, self.aliases):
+            if result.item.out or result.status in parity.PRESENT:
+                continue
+            name = parity.norm(result.item.name)
+            if name not in gaps and self.GAP_WORDS.get(name, "\0") not in gaps:
+                forgotten.append(" > ".join(result.item.path))
+        self.assertEqual(forgotten, [], "add them to docs/sciforge/dev/remaining-gaps.md")
+
+    def test_core_workflows_names_only_open_gaps(self):
+        # a gap closed on the work list must not stay "missing" on the workflow page
+        # (2026-10-22: workflow 1 still listed G-03 and G-06 after they were closed)
+        import re
+
+        dev = os.path.join(REPO, "docs", "sciforge", "dev")
+        with open(os.path.join(dev, "remaining-gaps.md"), encoding="utf-8") as handle:
+            gaps = handle.read()
+        with open(os.path.join(dev, "core-workflows.md"), encoding="utf-8") as handle:
+            page = handle.read()
+        open_ids = set(re.findall(r"^\|(?: *\d+ *\|)? *(G-\d+) *\|", gaps, re.M))
+        self.assertGreater(len(open_ids), 50)
+        named = set(re.findall(r"\bG-\d+\b", page))
+        self.assertEqual(sorted(named - open_ids), [], "closed or unknown gaps named")
+
     def test_the_numbers_add_up(self):
         results = parity.compare(self.items, self.entries, self.aliases)
         self.assertEqual(len(results), len(self.items))
@@ -340,6 +426,27 @@ class TestCheckMode(unittest.TestCase):
         code, printed = _run("--check", "--out", self.out)
         self.assertEqual(code, 1)
         self.assertIn("out of date", printed)
+
+    def test_writing_an_unchanged_checklist_keeps_its_date(self):
+        # two branches regenerating on different days must not conflict on the date line
+        self.assertEqual(_run("--out", self.out, "--date", "2026-01-02")[0], 0)
+        code, printed = _run("--out", self.out, "--date", "2026-02-03")
+        self.assertEqual(code, 0)
+        self.assertIn("already up to date", printed)
+        with open(self.out, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn("parity.py on 2026-01-02;", text)
+        with open(self.out, "w", encoding="utf-8") as handle:
+            handle.write(text.replace("| Area |", "| Tab |"))
+        self.assertEqual(_run("--out", self.out, "--date", "2026-02-03")[0], 0)
+        with open(self.out, encoding="utf-8") as handle:
+            self.assertIn("parity.py on 2026-02-03;", handle.read())
+
+    def test_a_checklist_that_cannot_be_written_is_reported_not_raised(self):
+        for target in (os.path.join(self.folder, "no-such-folder", "x.md"), self.folder):
+            code, printed = _run("--out", target, "--date", "2026-01-02")
+            self.assertEqual(code, 2, target)
+            self.assertIn("[SciForge] parity: could not write", printed)
 
     def test_check_fails_when_the_checklist_is_missing(self):
         code, printed = _run("--check", "--out", os.path.join(self.folder, "nothing.md"))

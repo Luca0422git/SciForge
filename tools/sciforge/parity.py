@@ -22,7 +22,8 @@ Deliberate naming differences are listed in tools/sciforge/data/parity-aliases.t
 A Fusion command is looked for where its [in=...] scope says (its own tab or menu). Ribbon
 commands of SOLID / SURFACE / UTILITIES and the File menu, application bar and workspace menu
 may also be found in another of those places (SURFACE's Fillet is SOLID's Fillet); the
-checklist says where. Context menus (marking menus, browser, timeline, ViewCube, sheet bar),
+checklist says where; so does it for a ribbon command found on its own tab but in another
+panel (Fusion's CREATE > New Component is SciForge's ASSEMBLE > New Component). Context menus (marking menus, browser, timeline, ViewCube, sheet bar),
 the navigation bar and the SKETCH, MESH and DRAWING tabs never borrow from elsewhere: a
 command that exists only on the ribbon is not in the right-click menu. A SciForge entry with
 no command (shown greyed, "not available in SciForge yet") does not count as present.
@@ -31,6 +32,7 @@ It counts presence (breadth), not depth: one entry with half of Fusion's options
 present. The generated file says so; docs/sciforge/dev/core-workflows.md is the depth check.
 
     python3 tools/sciforge/parity.py            write docs/sciforge/parity-checklist.md
+                                                (only when it changed: the date is kept)
     python3 tools/sciforge/parity.py --check    exit 1 if that file is out of date
     python3 tools/sciforge/parity.py --summary  print the headline only
 
@@ -431,6 +433,15 @@ def _in_scope(entry_scope, scopes):
     return any(entry_scope == s or entry_scope.startswith(s + ":") for s in scopes)
 
 
+def _other_panel(item, entry):
+    """True when a ribbon entry sits in another panel of the tab than Fusion's command
+    (Fusion's SOLID > CREATE > New Component, SciForge's in ASSEMBLE): Luca would not find
+    it where he looks, so the checklist lists it under "Present in another place"."""
+    if not entry.scope.startswith("tab:") or len(item.path) < 3 or len(entry.path) < 3:
+        return False
+    return norm(item.path[1]) != norm(entry.path[1])
+
+
 def match_item(item, entries, aliases):
     """The Result for one Fusion command."""
     names = [norm(item.name)] + [norm(t) for t in alias_targets(item, aliases)]
@@ -443,12 +454,15 @@ def match_item(item, entries, aliases):
                 return (ready or found)[0], bool(ready)
         return None, False
 
-    def rank(entry):  # the first scope of [in=...] is looked at first
-        return min(i for i, s in enumerate(item.scopes) if _in_scope(entry.scope, (s,)))
+    def rank(entry):  # the first scope of [in=...] is looked at first, its own panel first
+        place = min(i for i, s in enumerate(item.scopes) if _in_scope(entry.scope, (s,)))
+        return place, _other_panel(item, entry)
 
     home = sorted((e for e in entries if _in_scope(e.scope, item.scopes)), key=rank)
     entry, ready = look(home)
     if entry is not None:
+        if ready and _other_panel(item, entry):
+            return Result(item, "elsewhere", entry)  # on its tab, in another panel
         return Result(item, "present" if ready else "greyed", entry)
     if item.out:
         return Result(item, "out", None)
@@ -524,6 +538,10 @@ def render(results, entries, date):
         '  names are marked "(not sure)" below and wait for a look at real Fusion.',
         "- Entries are menu entries: a command in two places (Delete in MODIFY and in the",
         "  marking menu) counts twice; panels Fusion repeats on several tabs count once.",
+        "- One SciForge entry that does the work of several Fusion entries (one sketch Chamfer",
+        "  for Fusion's three) counts for each of them: they are listed under \"One SciForge",
+        "  entry for several Fusion entries\". A command found in another panel or menu than",
+        "  Fusion's counts as present and is listed under \"Present in another place\".",
         "- SciForge's side is read from its source (`ribbon_config.py`, `sketch_marking.py`,",
         "  `browser_core.MENUS`, the timeline / ViewCube / sheet bar menus). An entry shown greyed",
         '  ("not available in SciForge yet") is not counted.',
@@ -586,6 +604,22 @@ def render(results, entries, date):
     else:
         lines.append("None.")
     lines.append("")
+    lines += ["## One SciForge entry for several Fusion entries", ""]
+    shared = OrderedDict()
+    for result in results:
+        if result.status in PRESENT and result.where is not None:
+            key = (result.where.scope, result.where.path)
+            shared.setdefault(key, []).append(result)
+    shared = [(rows[0].where, rows) for rows in shared.values() if len(rows) > 1]
+    if shared:
+        lines.append("Each of these Fusion entries counts as present through the same SciForge entry.")
+        lines.append("")
+        for where, rows in shared:
+            names = "; ".join(" > ".join(r.item.path) for r in rows)
+            lines.append("- %s: %s" % (_where(where), names))
+    else:
+        lines.append("None.")
+    lines.append("")
     lines += ["## Left out on purpose", ""]
     reasons = OrderedDict()
     for result in out:
@@ -624,7 +658,9 @@ def render(results, entries, date):
 
 # ------------------------------------------------------------------------------ running
 def _read(repo, relative):
-    with open(os.path.join(repo, relative), encoding="utf-8") as handle:
+    # utf-8-sig: a byte order mark (Windows Notepad's "UTF-8 with BOM") is skipped, so the
+    # first line is still the comment it is, not a nameless area
+    with open(os.path.join(repo, relative), encoding="utf-8-sig") as handle:
         return handle.read()
 
 
@@ -680,9 +716,24 @@ def main(argv=None):
             return 1
         log("checklist up to date (%s)" % headline(results))
         return 0
-    with open(target, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
-    log("wrote %s: %s" % (os.path.relpath(target, args.repo), headline(results)))
+    shown = os.path.relpath(target, args.repo)
+    try:
+        with open(target, encoding="utf-8") as handle:
+            old = handle.read()
+    except OSError:
+        old = None
+    if old is not None and same_checklist(old, text):
+        # (the date of the header is kept: two branches that regenerate an unchanged
+        # checklist on different days must not conflict on it when they are merged)
+        log("%s already up to date: %s" % (shown, headline(results)))
+        return 0
+    try:
+        with open(target, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+    except OSError as exc:
+        log("could not write %s: %s" % (target, exc.strerror or exc))
+        return 2
+    log("wrote %s: %s" % (shown, headline(results)))
     return 0
 
 
