@@ -68,6 +68,8 @@ For a flatter panel use flatter arcs (a bigger radius over a shorter angle).
 
 ```json sciforge-calls
 [
+  {"tool": "inspect_design", "args": {"bodies": ["Surface1"]},
+   "expect": {"json": {"bodies.0.bbox_mm.max.2": [14.84, 0.05]}}},
   {"tool": "inspect_design", "args": {"bodies": ["Surface2"]},
    "expect": {"json": {"bodies.0.solid": true, "bodies.0.valid": true}}},
   {"tool": "render", "args": {"view": "iso", "width": 480, "height": 360},

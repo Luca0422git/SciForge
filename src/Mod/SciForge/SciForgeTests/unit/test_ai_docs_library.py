@@ -187,7 +187,7 @@ class Read(unittest.TestCase):
             ("handbok.md", "Close: handbook.md"),
             ("handbook.md#unitz-and-coordinates", "#units-and-coordinates"),
             ("golden/box_basik", "box_basic"),
-            ("sciforge://tools/extrude", "is not a document"),
+            ("sciforge://design", "is not a document"),  # (a tool URI reads its page)
             ("../secret.md", "There is no document"),
         ):
             with self.assertRaises(docs_core.NotFound) as caught:
