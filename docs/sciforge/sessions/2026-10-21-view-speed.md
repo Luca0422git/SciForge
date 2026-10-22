@@ -13,7 +13,10 @@ used to re-read the whole design twice a second "just in case", which on a desig
 ate a quarter of the processor and made orbiting stutter. Now they re-read only when FreeCAD
 says something changed. Undo and Redo after editing a big design take about a second instead
 of 15-19 s, because SciForge no longer rebuilds the whole design when FreeCAD has already put
-back exactly the right shapes (when it cannot be sure, it rebuilds as before). The timeline and
+back exactly the right shapes (when it cannot be sure, it rebuilds as before). (Review fix,
+2026-10-22, `2026-10-22-fix-speed.md`: this first version left drawings showing the edited
+part after Ctrl+Z and never applied to sketch dimensions or user parameters; both fixed
+there, with the list of which edits get the fast Undo.) The timeline and
 browser rebuild 3-6x faster, adding a step to a long design is 3x faster, and a few hidden
 slow spots (finding lost fillet edges again, copying big parts to check what an extrusion
 touches, writing an unchanged recovery copy every 5 minutes) are gone. What still takes time
@@ -138,6 +141,8 @@ noise under software GL, so none is changed (worth measuring again on a real GPU
   preview); `extrude_prism.farthest` tessellates a copy so a body's own shape keeps no mesh.
 - **Recovery copies** (`versions_ui.Recovery`) skip a design unchanged since its last copy
   (writing a big design froze the window ~2 s every 5 minutes while the person only looked).
+  (Review, 2026-10-22: with two changed designs open it did not work; fixed in
+  `2026-10-22-fix-speed.md`.)
 
 ## Ideas from the brief not done (and why)
 
@@ -184,7 +189,9 @@ Results (all on this branch's final code, real FreeCAD in the sandbox):
     `misc_scripts`, `misc_derive`, `shell_draft_hollow`;
   - the benchmarks: `perf_benchmark` (21 checks, guard: 16 measurements compared, none more
     than 2x slower) and `perf_big_model` (33 checks, guard: 27 compared, none 2x slower).
-- No existing scenario needed a changed expectation.
+- No existing scenario needed a changed expectation. (Review, 2026-10-22: wrong, the drawing
+  scenarios were not run and `drawing_update` failed: drawings kept the edited part after a
+  fast Undo. Fixed in `2026-10-22-fix-speed.md`.)
 
 Last `perf_big_model` run (third session, a quieter machine than the side-by-side runs, so
 everything is a little faster, FreeCAD's own work included): idle 17 ms/s, orbit / zoom /
@@ -200,6 +207,8 @@ open 3.8 s.
 - Undo / Redo still rebuild (as before) when the ledger cannot vouch for the shapes: a change
   made by a script outside a transaction in between, a spreadsheet / parameter step (no
   Shape to put back), or an undo stack whose start it did not see. That is the safe side:
-  the worst case is the old speed, never a wrong shape.
+  the worst case is the old speed, never a wrong shape. (Review, 2026-10-22: sketch
+  dimension edits always rebuilt too, and drawings could show a wrong shape; see
+  `2026-10-22-fix-speed.md`, which fixes both and lets user parameters be fast as well.)
 - Orbit / zoom drawing itself is software OpenGL in the sandbox; nothing measured there says
   how a real GPU behaves, and view settings (RenderCache, VBO) were left as they are.
