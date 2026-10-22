@@ -686,6 +686,8 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
         try:
             last = getattr(self, "_drag_last", None)
             if last is not None and abs(round(value, 2) - last) < 1e-12:
+                if not self._timer.isActive():
+                    self.show_status()
                 return
             self._dragged(value)
         except Exception as exc:

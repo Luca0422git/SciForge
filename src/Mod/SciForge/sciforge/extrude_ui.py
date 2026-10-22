@@ -1942,6 +1942,8 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
                     value *= 2.0
         if self._snapped("distance", self.distance, value, snap) and not again:
             self._changed()
+        elif again and not self._timer.isActive():
+            self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
 
     def _dragged2(self, value, released=False):
@@ -1951,6 +1953,8 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         value = snap[0] if snap is not None else round(max(value, 0.0), 2)
         if self._snapped("distance2", self.distance2, value, snap) and not again:
             self._changed()
+        elif again and not self._timer.isActive():
+            self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
 
     def _show_note(self):
