@@ -23,8 +23,11 @@ others are SciForge's own time. The checks also prove the drags still make the s
 
 Run alone: tools/sciforge/run_tests.sh --scenario perf_draft
 """
+import cProfile
+import io
 import json
 import os
+import pstats
 import statistics
 import time
 
@@ -196,9 +199,19 @@ class Probe:
         beats = [b for b in self.beats if t_first <= b <= t_last + 0.05]
         blocked = max((b - a for a, b in zip(beats, beats[1:])), default=None)
         final = float(self.p.options.get("angle", 0.0))
-        exact = self._after(
-            self.exact, t_last, lambda item: abs(item[1] - final) < 1e-9 and not item[2]
-        )
+        # when the dialog took the final angle (its last change): an exact rebuild at that
+        # angle ends after it; counted from the last mouse move (0 when it came before)
+        t_final = t_first
+        previous = None
+        for when, angle in self.taken:
+            if previous is None or abs(angle - previous) > 1e-9:
+                t_final = when
+            previous = angle
+        exact = None
+        for when, angle, error in self.exact:
+            if when >= t_final and abs(angle - final) < 1e-9 and not error:
+                exact = max(0.0, when - t_last)
+                break
         during = len([e for e in self.exact if t_first <= e[0] <= t_last])
         return {
             "moves": len(moved),
@@ -290,7 +303,11 @@ def same_solid(name, angle=None):
     options = dict(p.options)
     options["angle"] = angle
     spec = drafting.build_spec((xy_plane(), ""), options, p.base)
-    want = drafting.draft_shape(S["base_shape"], S["names"], spec)
+    try:
+        want = drafting.draft_shape(S["base_shape"], S["names"], spec)
+    except Exception as exc:
+        h.check("%s: the angle %.1f deg can be drafted" % (name, angle), False, str(exc))
+        return
     if p.target.Refine and hasattr(want, "removeSplitter"):
         try:
             want = want.removeSplitter()
@@ -373,6 +390,29 @@ def part_dragged():
 part_dragged.wait_ms = 1500
 
 
+def part_profile():
+    """One exact rebuild of the part's preview, typed (5.5 deg), profiled."""
+    p = panel()
+    if p is None:
+        return
+    p._typed(5.5)
+    p._timer.stop()
+    pr = cProfile.Profile()
+    t0 = time.perf_counter()
+    pr.enable()
+    p._recompute()
+    Gui.updateGui()
+    pr.disable()
+    seconds = time.perf_counter() - t0
+    out = io.StringIO()
+    pstats.Stats(pr, stream=out).sort_stats("cumulative").print_stats(30)
+    record("Draft, part: one exact rebuild (typed angle), with the redraw", seconds)
+    S["profile"] = [ln for ln in out.getvalue().splitlines() if ln.strip()][:45]
+
+
+part_profile.wait_ms = 1500
+
+
 def part_drag_far():
     drag_handle(20.0, hold_ms=3500)
 
@@ -418,6 +458,8 @@ def report():
     for r in RESULTS:
         lines.append("| %s | %s | %s |" % (r["label"], ms(r.get("change")), cells(r["label"])[0]))
     lines += [""] + perf_guard.markdown(guard) + [""]
+    if S.get("profile"):
+        lines += ["## One exact rebuild of the part, profiled", "", "```"] + S["profile"] + ["```", ""]
     with open(os.path.join(out_dir(), "perf-draft-report.md"), "w") as f:
         f.write("\n".join(lines))
     for line in lines:
@@ -444,6 +486,7 @@ h.run(
         part_open,
         part_drag,
         part_dragged,
+        part_profile,
         part_drag_far,
         part_dragged_far,
         part_close,

@@ -1300,6 +1300,11 @@ class Panel:
     PREVIEW_MS = 60
     PREVIEW_MAX_MS = 400
     STREAM_GAP = 0.15  # changes closer than this (seconds) are one stream (a drag)
+    # A rebuild that waits for the changes to rest (schedule(settle=True), or a dialog whose
+    # last rebuild took longer than SLOW_DRAG seconds) runs once no change came for PAUSE_MS:
+    # the mouse paused or was let go. Never between two mouse moves (see schedule()).
+    PAUSE_MS = 200
+    SLOW_DRAG = 0.25
 
     def __init__(self, doc, transaction):
         from . import ui_icon
@@ -1361,23 +1366,37 @@ class Panel:
                 pass
 
     # -- live preview ---------------------------------------------------------
-    def schedule(self):
+    # The handle never waits for the model (Luca, 2026-10-22: "the angle dragger doesn't even
+    # update either: it waits behind for the model to update"). A rebuild runs on the main
+    # thread and nothing else moves meanwhile, the dragged handle included. So:
+    #   * a dialog whose rebuild is quick (most: an extrude, a move) rebuilds while the handle
+    #     is dragged, at the pace below (the part grows while the button is still down);
+    #   * a dialog whose last rebuild took longer than SLOW_DRAG (a big part), and a dialog
+    #     with a live picture of its own (Draft: draft_live.py; it passes settle=True),
+    #     rebuild only once the changes have rested for PAUSE_MS (the mouse paused or was let
+    #     go): never between two mouse moves, and only for the latest value.
+    def schedule(self, settle=False):
         """Rebuild the preview soon. While changes keep coming (an arrow being dragged, keys
         typed) the preview follows them at a steady pace, like Fusion's, which moves with the
         mouse. A timer already running is left alone: restarting it on every change put the
         preview off until the mouse stopped moving. A change on its own (a click, a value
         typed) is shown after PREVIEW_MS; only while changes stream in (a drag sends one
         every few milliseconds) does the next rebuild wait for the calm gap after a slow one
-        (see _tick)."""
+        (see _tick). `settle`: the change comes from a handle being dragged and the dialog
+        shows it live by itself, so the rebuild waits until the changes rest (PAUSE_MS); a
+        dialog whose rebuild is slow (SLOW_DRAG) waits like that for every change."""
         if getattr(self, "_closed", False):
             return
         now = time.perf_counter()
         streaming = now - getattr(self, "_last_change", -1.0) < self.STREAM_GAP
         self._last_change = now
+        self._waits_rest = bool(settle) or self._slow()
         if self._timer.isActive():
             return
         wait = self.PREVIEW_MS
-        if streaming:
+        if self._waits_rest:
+            wait = self.PAUSE_MS
+        elif streaming:
             try:
                 calm = int((getattr(self, "_calm_until", 0.0) - now) * 1000.0)
                 wait = max(wait, min(self.PREVIEW_MAX_MS, calm))
@@ -1386,10 +1405,30 @@ class Panel:
         self._timer.setInterval(wait)
         self._timer.start()
 
+    def settle_now(self):
+        """The handle was let go: the waiting rebuild runs at once (not after PAUSE_MS)."""
+        if getattr(self, "_closed", False):
+            return
+        try:
+            self._waits_rest = False
+            self._last_change = time.perf_counter() - self.PAUSE_MS / 1000.0
+            if self._timer.isActive():
+                self._timer.stop()
+                self._timer.setInterval(0)
+                self._timer.start()
+        except Exception:
+            pass
+
+    def _slow(self):
+        """True when the last rebuild took so long that it would freeze a dragged handle."""
+        return getattr(self, "_preview_cost", 0.0) > self.SLOW_DRAG
+
     def _tick(self):
         """The preview timer fired: rebuild. While a drag streams changes in, the next
         rebuild waits for a calm gap of 1.5 times this one's time (at most PREVIEW_MAX_MS),
-        so the view and the arrow stay smooth on a heavy part."""
+        so the view and the arrow stay smooth on a heavy part. A rebuild that waits for the
+        changes to rest (schedule(settle=True), or a slow dialog) waits until no change came
+        for PAUSE_MS."""
         if getattr(self, "_closed", False):
             return
         try:
@@ -1402,13 +1441,25 @@ class Panel:
                 return
         except Exception:
             pass
+        try:
+            if getattr(self, "_waits_rest", False):
+                quiet = time.perf_counter() - getattr(self, "_last_change", -1.0)
+                left = self.PAUSE_MS / 1000.0 - quiet
+                if left > 0.001:  # still moving: look again when it may have rested
+                    self._timer.setInterval(max(1, int(left * 1000.0)))
+                    self._timer.start()
+                    return
+        except Exception:
+            pass
         self._pending = False
+        self._waits_rest = False
         started = time.perf_counter()
         try:
             self._recompute()
         except Exception as exc:
             warn("preview: %s" % exc)
         ended = time.perf_counter()
+        self._preview_cost = ended - started
         gap = min(self.PREVIEW_MAX_MS / 1000.0, 1.5 * (ended - started))
         self._calm_until = ended + gap
         try:
@@ -1416,11 +1467,17 @@ class Panel:
                 return
             if self._pending or self._timer.isActive():
                 # Changes came in while it rebuilt: one more rebuild, after the calm gap when
-                # they stream in (a drag), else at once.
+                # they stream in (a drag), else at once (a rebuild that waits for the changes
+                # to rest keeps waiting: _waits_rest).
                 self._pending = False
                 streaming = ended - getattr(self, "_last_change", -1.0) < self.STREAM_GAP
                 self._timer.stop()
-                self._timer.setInterval(max(self.PREVIEW_MS, int(gap * 1000.0) if streaming else 0))
+                if getattr(self, "_waits_rest", False):
+                    self._timer.setInterval(self.PAUSE_MS)
+                else:
+                    self._timer.setInterval(
+                        max(self.PREVIEW_MS, int(gap * 1000.0) if streaming else 0)
+                    )
                 self._timer.start()
         except Exception:
             pass
