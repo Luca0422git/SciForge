@@ -599,6 +599,18 @@ def _recomputing():
         return False
 
 
+def _searching():
+    """A dialog still looking for the largest value that fits, one build per turn of the
+    event loop (sciforge.value_limits.Background), or about to preview what it found: the
+    next step waits for it, as for a recompute."""
+    try:
+        from sciforge import value_limits
+
+        return value_limits.working()
+    except Exception:
+        return False
+
+
 def add_steps(steps):
     """Append steps while running (e.g. one per command found at start-up)."""
     state["queue"].extend(steps)
@@ -671,7 +683,7 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
         # a typed value lost). Wait until the document is done (at most 20 s), and until
         # input still being played (a held drag, BUSY) has ended: on a slow machine it can
         # outlast the step's wait_ms.
-        if (_recomputing() or BUSY) and state.get("waited", 0) < 200:
+        if (_recomputing() or BUSY or _searching()) and state.get("waited", 0) < 200:
             state["waited"] = state.get("waited", 0) + 1
             state["held"] = state.get("held") or bool(BUSY)
             QtCore.QTimer.singleShot(100, next_step)

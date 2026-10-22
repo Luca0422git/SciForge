@@ -28,6 +28,8 @@ Built on FreeCAD's PartDesign::Draft (Fixed Plane, One Side) or SciForge's Draft
 (drafting.py). Double-click the step in the timeline to edit it.
 """
 
+import time
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -61,6 +63,7 @@ PARTING_HELP = (
     "(a whole sketch in the browser). The faces turn about where they meet it."
 )
 FACES_HELP = "Click the faces to draft (click one again to drop it), also of other bodies."
+SEARCHING = "Finding the steepest angle that fits…"
 NO_MOVE = (
     "Not available yet: moving the parting line needs a step face where the two sides meet, "
     "which OpenCASCADE's draft does not make. Use Fix Parting Line."
@@ -171,6 +174,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         self._live_key = None  # the picks and options its pictures were made for
         self._live_failed = None  # a key the picture could not be made for (not retried)
         self._live_hid = False  # the preview solid is hidden behind the picture
+        self._sound_upto = {}  # picks and options -> the steepest angle found to give a sound solid
         self.limit_init()  # an angle past what the faces take stops at the steepest that works
         if feature is not None:
             self.body = drafting.owner_body(feature)
@@ -671,6 +675,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         return len(self.picked) != before
 
     def _picks_updated(self, schedule=True):
+        self.limit_cancel()  # a search for the old picks
         self.limits.note = ""  # a limit found for the old picks no longer applies
         self._hide_live()  # it shows the old picks
         if self.plane_ref is not None:
@@ -698,6 +703,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     def _flipped(self, *_):
         try:
             self.options["flip"] = self.flip.isChecked()
+            self.limit_cancel()
             self._hide_live()
             self._update_handles()
             self.schedule()
@@ -729,6 +735,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         try:
             self.options["sides"] = self.sides.currentData()
             self._rows()
+            self.limit_cancel()
             self._hide_live()
             self._update_handles()
             self.schedule()
@@ -1030,15 +1037,23 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         return ""
 
     def _preview(self):
-        """The exact preview (the step built in the document); the live picture goes."""
+        """The exact preview (the step built in the document); the live picture goes (it
+        stays while the steepest angle that fits is still being looked for)."""
+        built = None
         try:
-            self._build_preview()
+            built = self._build_preview()
         finally:
-            self._hide_live()
+            if built is not False:
+                self._hide_live()
 
     def _build_preview(self):
+        """Build the preview; False when it waits for the search of the steepest angle that
+        fits (value_limits.Background), which previews again when it ends."""
+        if self.limit_searching() and not self._closed:
+            return False  # the search's end previews the angle then
+        value_limits.busy(self, False)  # the preview after a search: this one
         if self._closed or self.base is None:
-            return
+            return None
         self._collect()
         if self.formula_error:
             self.show_status()
@@ -1066,9 +1081,11 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             # The handle may reach Draft's own 89.9 degree stop: a dragged / typed angle there
             # is held at the steepest one the faces take, like any angle that is too steep.
             steep = "between -89.9 and 89.9" in reason
-            if steep and self.limit_refused("too steep: " + reason):
-                self._build_preview()
-                return
+            held = self.limit_refused_soon("too steep: " + reason, self._limit_searched) if steep else None
+            if held == "again":
+                return self._build_preview()
+            if held == "later":
+                return self._searching()
             self.error = reason
             self.show_status()
             return
@@ -1109,7 +1126,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                     "%s could not be tilted with this plane and angle. Drop %s or try "
                     "another angle." % (", ".join(left), "it" if len(left) == 1 else "them")
                 )
-            elif not shape_checks.is_valid(self.target.Shape):
+            elif not self._sound():
                 # FreeCAD's Draft gives a broken solid without a word past what the faces
                 # take (OK then refused it silently): the same refusal as SciForge's own
                 # draft, so the angle is held at the steepest one that works
@@ -1119,9 +1136,11 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 if member.target is not None and _failed(member.target):
                     self.error = "%s: %s" % (member.body.Label, _status(member.target))
                     break
-        if self.error and self.limit_refused(self.error):
-            self._build_preview()  # held at the steepest angle that works: preview that
-            return
+        held = self.limit_refused_soon(self.error, self._limit_searched) if self.error else None
+        if held == "again":
+            return self._build_preview()  # held at the steepest angle that works: preview that
+        if held == "later":
+            return self._searching()  # looked for one build at a time; it previews when found
         if self.error:
             self.error = self.limit_hint(self.error)
         else:
@@ -1129,6 +1148,63 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         self.show_preview(True)
         self.show_status()
         self._live_soon()
+
+    def _sound(self):
+        """True when FreeCAD's Draft made a sound solid. Checking a part of a few hundred
+        faces takes ~0.15 s, so an angle no steeper than one found sound for the same picks
+        (on the same side of zero) is taken as sound: a steeper draft is what breaks a part.
+        OK checks the solid it keeps in any case."""
+        angle = float(self.options.get("angle", 0.0))
+        try:
+            key = self.limit_key("angle")
+        except Exception:
+            key = None
+        known = self._sound_upto.get(key) if key is not None else None
+        if known is not None and 0.0 < angle / known <= 1.0 + 1e-12:
+            return True
+        if not shape_checks.is_valid(self.target.Shape):
+            return False
+        if key is not None and (known is None or abs(angle) > abs(known) or angle * known < 0):
+            if known is not None and angle * known < 0:
+                return True  # the other side of zero: keep the side that was found first
+            if len(self._sound_upto) > 16:
+                self._sound_upto.clear()
+            self._sound_upto[key] = angle
+        return True
+
+    def _searching(self):
+        """While the steepest angle that fits is looked for (one build per turn of the event
+        loop, so the handle keeps moving): the failed preview is not shown, the dialog says
+        what happens. Returns False (the preview waits)."""
+        try:
+            self._hide_results()  # the failed solid away, the part before the step see-through
+            if self._live is not None:
+                self._live.hide()  # an angle that does not work is not shown either
+            self.error = None
+            self.limits.note = SEARCHING
+            self.say("")
+        except Exception as exc:
+            warn("Draft: %s" % exc)
+        return False
+
+    def _limit_searched(self, limit):
+        """The search of the steepest angle that fits ended (the angle is held at it when it
+        was still past it): preview now, or once the mouse rests when it is being dragged."""
+        try:
+            if self._closed:
+                return
+            if self.limits.note == SEARCHING:
+                self.limits.note = ""
+            value_limits.busy(self)  # until the preview it asks for has run
+            quiet = time.perf_counter() - self.last_moved()
+            if quiet < self.PAUSE_MS / 1000.0:
+                self.schedule(settle=True)
+            else:
+                self._timer.stop()
+                self._timer.setInterval(0)
+                self._timer.start()
+        except Exception as exc:
+            warn("Draft: %s" % exc)
 
     def _sync_members(self):
         try:
@@ -1324,6 +1400,8 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             if missing:
                 self.say("⚠ " + missing)
                 return False
+            self.limit_finish()  # a search of the steepest angle still running: its end now
+            self._timer.stop()
             self._preview()
             obj = self.target
             if self.formula_error or self.error or obj is None:
@@ -1342,6 +1420,8 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             return False
 
     def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
         self._drop_live()
         self._remove_handles()
         self._hide_planes()

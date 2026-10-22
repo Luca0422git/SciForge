@@ -1009,9 +1009,12 @@ def _occ_draft(shape, names, hinge, pull, angle):
     doc = _scratch_document()
     try:
         holder = doc.addObject("Part::Feature", "Solid")
+        _unseen(holder)
         holder.Shape = shape
         body = doc.addObject("PartDesign::Body", "Body")
+        _unseen(body)
         base = body.newObject("PartDesign::FeatureBase", "Base")
+        _unseen(base)
         base.BaseFeature = holder
         origin, normal = hinge
         plane = body.newObject("PartDesign::Plane", "Hinge")
@@ -1021,6 +1024,7 @@ def _occ_draft(shape, names, hinge, pull, angle):
         line.MapMode = "Deactivated"
         line.Placement = App.Placement(origin, App.Rotation(App.Vector(0, 0, 1), _unit(pull)))
         draft = body.newObject("PartDesign::Draft", "Draft")
+        _unseen(draft)
         draft.Base = (base, names)
         draft.NeutralPlane = (plane, [""])
         draft.PullDirection = (line, [""])
@@ -1030,18 +1034,46 @@ def _occ_draft(shape, names, hinge, pull, angle):
         for obj in (base, plane, line, draft):
             obj.recompute()
         state = list(draft.State)
-        out = draft.Shape.copy()
+        out = draft.Shape  # a shape of its own: it outlives the scratch objects (no copy)
         status = draft.getStatusString() if ("Invalid" in state or "Error" in state) else ""
     finally:
         _release_scratch(doc)
     if status or out.isNull() or not out.Solids or not out.isValid():
         raise DraftError(friendly(status))
-    if abs(out.Volume - shape.Volume) < 1e-9:
+    if abs(out.Volume - _volume(shape)) < 1e-9:
         raise DraftError(
             "The faces could not be tilted with this plane and angle. Try another angle or "
             "pick other faces."
         )
     return out
+
+
+def _unseen(obj):
+    """A scratch object is never drawn: in the GUI its view provider would tessellate every
+    shape it gets (the part, again and again during a limit search)."""
+    try:
+        view = getattr(obj, "ViewObject", None)
+        if view is not None:
+            view.Visibility = False
+        obj.Visibility = False
+    except Exception:
+        pass
+
+
+_VOLUMES = []  # [(shape key, shape, volume)], newest last
+
+
+def _volume(shape):
+    """shape.Volume, kept for the last few shapes (the part before the draft: every trial of
+    a limit search compares with it)."""
+    key = shape_key(shape)
+    for k, kept, volume in _VOLUMES:
+        if k == key and kept.isSame(shape):
+            return volume
+    volume = shape.Volume
+    _VOLUMES.append((key, shape, volume))
+    del _VOLUMES[:-4]
+    return volume
 
 
 # The throw-away document is kept and reused. In the GUI, closing a document ends the undo

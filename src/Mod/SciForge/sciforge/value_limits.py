@@ -180,7 +180,40 @@ def search(
     strict=False,
     per_try=0.0,
 ):
-    """The value nearest `bad` that still works, between `good` (a value that works) and `bad`
+    """search_steps() run to its end at once (see there)."""
+    return run_steps(
+        search_steps(
+            works, good, bad, step, budget, good_known, clock, seen, strict, per_try
+        )
+    )
+
+
+def run_steps(steps):
+    """Run a generator of steps (search_steps, Limiter.find_steps) to its end: its result."""
+    try:
+        while True:
+            next(steps)
+    except StopIteration as stop:
+        return stop.value
+
+
+def search_steps(
+    works,
+    good,
+    bad,
+    step,
+    budget=BUDGET,
+    good_known=False,
+    clock=time.perf_counter,
+    seen=None,
+    strict=False,
+    per_try=0.0,
+):
+    """The search as a generator: it yields before every build, so a dialog can run one build
+    per turn of the event loop (Background) and a dragged handle keeps moving in between; the
+    generator's return value is search()'s.
+
+    The value nearest `bad` that still works, between `good` (a value that works) and `bad`
     (one that does not): a tidy multiple of `step` on the side of `good`, built once more to be
     sure. Returns (limit, exact) or (None, False) when nothing between them works (then the
     refusal is not a limit). `exact` is False when the time budget stopped the bisection before
@@ -214,7 +247,10 @@ def search(
         return not strict or clock() - begun + slowest[0] <= budget
 
     if not good_known:
-        if not room() or not build(good):
+        if not room():
+            return None, False
+        yield
+        if not build(good):
             return None, False
     start = begun if strict else clock()
     lo, hi = good, bad  # lo works, hi does not (lo may be above hi for a lower limit)
@@ -229,6 +265,7 @@ def search(
             break
         mid = _middle(lo, hi)
         trials += 1
+        yield
         if build(mid):
             lo = mid
         else:
@@ -243,8 +280,10 @@ def search(
     above = tidy(hi, step, good)
     if abs(above - hi) < 1e-12:
         above = round(above + toward * step, digits)
-    if exact and (above - lo) * toward < -1e-12 and room() and build(above):
-        return above, exact
+    if exact and (above - lo) * toward < -1e-12 and room():
+        yield
+        if build(above):
+            return above, exact
     candidate = tidy(lo, step, good)
     for _ in range(VERIFY_TRIES):
         if (candidate - good) * toward > 1e-12:
@@ -256,6 +295,7 @@ def search(
             # worked, not built (the bisection's own value is untidy: shown rounded, it could
             # read as more than what worked)
             return candidate, False
+        yield
         if build(candidate):
             return candidate, exact
         candidate = round(candidate + toward * step, digits)
@@ -464,6 +504,13 @@ class Limiter:
         """The limit on the side of `value` (refused) for these inputs: from the cache, or
         searched once between `good` and `value`. None when nothing between works (not a
         limit: the refusal stays) - remembered too, so it is not searched again."""
+        return run_steps(self.find_steps(key, works, value, good, good_known, unit, keep))
+
+    def find_steps(
+        self, key, works, value, good, good_known=False, unit=None, keep=None, clock=None
+    ):
+        """find() as a generator that yields before every build (search_steps); `clock`: the
+        search's clock (Background gives one that counts only the builds' time)."""
         side = side_of(value, good)
         slot = slot_of(side, value)
         sign = 1 if side == "hi" else -1
@@ -480,14 +527,14 @@ class Limiter:
             good, good_known = limit, True
         self.searches += 1
         seen = {}
-        limit, exact = search(
+        limit, exact = yield from search_steps(
             works,
             good,
             value,
             self.step(unit),
             self.budget,
             good_known=good_known,
-            clock=self.search_clock,
+            clock=clock or self.search_clock,
             seen=seen,
         )
         if limit is not None and (limit - value) * sign >= 0:
@@ -505,6 +552,19 @@ class Limiter:
         self.cache.store(key, slot, limit, value, keep, wall=new_wall)
         return limit
 
+    def cached(self, key, value, good):
+        """(True, limit) when the cache answers find() for `value` without building anything
+        (limit None: no smaller value helps), else (False, None)."""
+        side = side_of(value, good)
+        sign = 1 if side == "hi" else -1
+        found = self.cache.get(key, slot_of(side, value))
+        if found is None:
+            return False, None
+        limit, wall = found[0], found[2]
+        if limit is None or (value - wall) * sign > 1e-12:
+            return True, limit
+        return False, None
+
     def limited(self, key, value, limit, typed, unit=None):
         """Set the note for `value` held at `limit` (found just now)."""
         unit = self.unit if unit is None else unit
@@ -515,6 +575,118 @@ class Limiter:
             else note_reached(limit, side, unit, self.step(unit)),
             key,
         )
+
+
+_WORKING = set()  # Background searches running, and dialogs with a preview still to come after one
+
+
+def working():
+    """True while a Background search runs, or a dialog's preview after one is still to come
+    (the GUI tests wait for it, as they wait for a recompute)."""
+    return bool(_WORKING)
+
+
+def busy(obj, on=True):
+    """Count `obj` as working (on) or not (working())."""
+    if on:
+        _WORKING.add(obj)
+    else:
+        _WORKING.discard(obj)
+
+
+class Background:
+    """Runs a search (Limiter.find_steps) one build per turn of Qt's event loop, so the dialog,
+    and a handle being dragged, keep running between the builds (Luca, 2026-10-22: "the angle
+    dragger doesn't even update either: it waits behind for the model to update"). The clock
+    it gives the search counts only the time spent in its builds, so the time budget means
+    what it means when the search runs at once. on_done(result) is called once at the end
+    (not after cancel())."""
+
+    def __init__(self, make_steps, on_done, key=None):
+        self.spent = 0.0
+        self._in = None
+        self.key = key
+        self.done = False
+        self.result = None
+        self.on_done = on_done
+        self.steps = make_steps(self.clock)
+        self.timer = None
+
+    def clock(self):
+        if self._in is None:
+            return self.spent
+        return self.spent + (time.perf_counter() - self._in)
+
+    def start(self):
+        from .compat import QtCore
+
+        self.timer = QtCore.QTimer()
+        self.timer.setSingleShot(True)
+        self.timer.setInterval(0)
+        self.timer.timeout.connect(self._tick)
+        busy(self)
+        self.timer.start()
+
+    def step(self):
+        """One build (or the end). True when the search has ended."""
+        if self.done:
+            return True
+        self._in = time.perf_counter()
+        try:
+            next(self.steps)
+            return False
+        except StopIteration as stop:
+            self.result = stop.value
+            self.done = True
+            return True
+        except Exception:
+            self.result = None
+            self.done = True
+            return True
+        finally:
+            self.spent += time.perf_counter() - self._in
+            self._in = None
+
+    def _tick(self):
+        try:
+            if self.done:
+                return
+            if self.step():
+                self._end()
+            elif self.timer is not None:
+                self.timer.start()
+        except Exception:
+            self.done = True
+            busy(self, False)
+
+    def _end(self):
+        callback, self.on_done = self.on_done, None
+        try:
+            if callback is not None:
+                callback(self.result)
+        finally:
+            busy(self, False)
+
+    def finish(self):
+        """Run what is left now (OK pressed meanwhile) and report the result."""
+        if self.timer is not None:
+            self.timer.stop()
+        while not self.step():
+            pass
+        self._end()
+        return self.result
+
+    def cancel(self):
+        """Forget the search (the inputs changed, the dialog closed): no report."""
+        self.on_done = None
+        self.done = True
+        busy(self, False)
+        if self.timer is not None:
+            self.timer.stop()
+        try:
+            self.steps.close()
+        except Exception:
+            pass
 
 
 def note_label():
@@ -717,6 +889,83 @@ class LimitedValues:
             return False
         finally:
             self._limit_busy = False
+
+    def limit_refused_soon(self, reason, done):
+        """limit_refused() without making the dialog wait for the search: "again" when the
+        limit was known (the value is held at it now: preview again), "later" when the search
+        started in the Background (done(limit) is called when it ends; the dialog's value is
+        held at the limit then if it is still past it), None when the refusal is no limit
+        (the error stays)."""
+        if self._limit_busy or not self._limit_pending or self._limit_edit is None:
+            return None
+        what, source = self._limit_edit
+        if source == "formula" or not is_limit_error(reason):
+            return None
+        try:
+            value = float(self.limit_value(what))
+            key = self.limit_key(what)
+            good, known = self._limit_from(what, key, value)
+            if good is None or abs(good - value) <= 1e-12:
+                return None
+            answered, limit = self.limits.cached(key, value, good)
+            if answered:
+                if limit is None:
+                    return None
+                self._limit_pending = False
+                self.limits.limited(key, value, limit, source == "typed", self.limit_unit(what))
+                self.limit_set(what, limit)
+                return "again"
+            self.limit_cancel()
+            works, unit, keep = self.limit_works(what), self.limit_unit(what), self.limit_keep()
+
+            def steps(clock):
+                return self.limits.find_steps(
+                    key, works, value, good, good_known=known, unit=unit, keep=keep, clock=clock
+                )
+
+            def ended(limit):
+                self._limit_job = None
+                self._limit_ended(what, key, value, source, limit)
+                done(limit)
+
+            self._limit_job = Background(steps, ended, key)
+            self._limit_job.start()
+            return "later"
+        except Exception:
+            return None
+
+    def _limit_ended(self, what, key, value, source, limit):
+        """A Background search ended: the value is held at the limit if it is still past it
+        and the inputs are the same."""
+        try:
+            if limit is None or key != self.limit_key(what):
+                return
+            now = float(self.limit_value(what))
+            sign = 1.0 if value > limit else -1.0
+            if (now - limit) * sign <= 1e-12 or now * value <= 0:
+                return  # moved back below the limit (or to the other side of zero) meanwhile
+            self._limit_pending = False
+            self.limits.limited(key, now, limit, source == "typed", self.limit_unit(what))
+            self.limit_set(what, limit)
+        except Exception:
+            pass
+
+    def limit_searching(self):
+        """True while a Background search runs."""
+        job = getattr(self, "_limit_job", None)
+        return job is not None and not job.done
+
+    def limit_finish(self):
+        """Finish a Background search now (OK pressed meanwhile)."""
+        job = getattr(self, "_limit_job", None)
+        if job is not None and not job.done:
+            job.finish()
+
+    def limit_cancel(self):
+        job = getattr(self, "_limit_job", None)
+        self._limit_job = None
+        if job is not None:
+            job.cancel()
 
     def limit_hint(self, error):
         """`error` with the limit added, for a value that is not held at it (a formula, or a

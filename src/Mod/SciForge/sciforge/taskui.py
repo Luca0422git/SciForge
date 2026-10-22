@@ -265,6 +265,76 @@ def view_widget():
     return None
 
 
+class PollOnMove:
+    """Runs a drag handle's poll right after each mouse move over the 3D view while a mouse
+    button is held, instead of up to POLL_MS later on its timer: the dialog and the value box
+    take a dragged handle's new value at once (Luca, 2026-10-22: "the angle dragger doesn't
+    even update"). Coin moves the handle itself while it handles the move; the poll queued
+    here runs just after that. At most one poll is queued at a time (a mouse can send moves
+    faster than a poll takes). The handle's timer keeps running (hover, a lost release).
+    remove() with the handle."""
+
+    def __init__(self, poll):
+        self.poll = poll
+        self.queued = False
+        self.alive = True
+        guard = self
+
+        class MoveFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                try:
+                    if (
+                        guard.alive
+                        and not guard.queued
+                        and event.type() == QtCore.QEvent.MouseMove
+                        and event.buttons() != QtCore.Qt.NoButton
+                    ):
+                        guard.queued = True
+                        QtCore.QTimer.singleShot(0, guard._run)
+                except Exception:
+                    pass
+                return False
+
+        self.filter = MoveFilter()
+        self.widget = view_widget()
+        if self.widget is not None:
+            self.widget.installEventFilter(self.filter)
+
+    def _run(self):
+        self.queued = False
+        if not self.alive:
+            return
+        try:
+            self.poll()
+        except Exception as exc:
+            warn("drag: %s" % exc)
+
+    def remove(self):
+        self.alive = False
+        widget, self.widget = self.widget, None
+        if widget is not None:
+            try:
+                widget.removeEventFilter(self.filter)
+            except Exception:
+                pass  # the view went with its document
+
+
+def poll_on_move(poll):
+    """A PollOnMove for a handle's poll, or None when the 3D view is not there."""
+    try:
+        return PollOnMove(poll)
+    except Exception as exc:
+        warn("drag: %s" % exc)
+        return None
+
+
+def drop_poll_on_move(handle):
+    mover = getattr(handle, "_move_poll", None)
+    handle._move_poll = None
+    if mover is not None:
+        mover.remove()
+
+
 def mm_per_pixel(view, point):
     """How many millimetres one pixel of the 3D view covers at the 3D `point`: from the
     camera (orthographic: its height over the view's height; perspective: the width of the
@@ -980,6 +1050,16 @@ class TypeOverView:
     def _filter(self, obj, event):
         try:
             kind = event.type()
+            if kind == QtCore.QEvent.MouseMove:
+                # a drag goes on (a handle, an orbit): a rebuild that waits for the mouse to
+                # rest keeps waiting (Panel._tick), also while the value does not change (a
+                # snapped angle)
+                try:
+                    if event.buttons() != QtCore.Qt.NoButton and self.panel is not None:
+                        self.panel._last_motion = time.perf_counter()
+                except Exception:
+                    pass
+                return False
             if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
                 return False
             panel = self.panel
@@ -1152,6 +1232,7 @@ class ArrowDragger(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        self._move_poll = poll_on_move(self._poll)  # dragged: polled on every mouse move
         if value_box is not None:
             self.attach_box(value_box)  # an ArrowValueBox that follows the arrow
 
@@ -1257,6 +1338,7 @@ class ArrowDragger(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        drop_poll_on_move(self)
         drag_guard.before_remove(self.dragger, self.root, self.view)
         try:
             self.view.getSceneGraph().removeChild(self.root)
@@ -1412,12 +1494,17 @@ class Panel:
         try:
             self._waits_rest = False
             self._last_change = time.perf_counter() - self.PAUSE_MS / 1000.0
+            self._last_motion = -1.0
             if self._timer.isActive():
                 self._timer.stop()
                 self._timer.setInterval(0)
                 self._timer.start()
         except Exception:
             pass
+
+    def last_moved(self):
+        """When the value last changed or the mouse last moved with a button held."""
+        return max(getattr(self, "_last_change", -1.0), getattr(self, "_last_motion", -1.0))
 
     def _slow(self):
         """True when the last rebuild took so long that it would freeze a dragged handle."""
@@ -1443,7 +1530,7 @@ class Panel:
             pass
         try:
             if getattr(self, "_waits_rest", False):
-                quiet = time.perf_counter() - getattr(self, "_last_change", -1.0)
+                quiet = time.perf_counter() - self.last_moved()
                 left = self.PAUSE_MS / 1000.0 - quiet
                 if left > 0.001:  # still moving: look again when it may have rested
                     self._timer.setInterval(max(1, int(left * 1000.0)))

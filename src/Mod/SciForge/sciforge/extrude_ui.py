@@ -222,6 +222,8 @@ class AngleDragger(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        # dragged: polled on every mouse move, so the dialog and the box take the angle at once
+        self._move_poll = taskui.poll_on_move(self._poll)
 
     def _shape_arc(self):
         """The arc runs handle_look_core.ARC_REACH_PX on each side of the disc (redrawn
@@ -365,6 +367,7 @@ class AngleDragger(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         self._wheel.hide()
         try:
             drag_guard.before_remove(self.dragger, self.root, self.view)

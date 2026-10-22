@@ -109,13 +109,16 @@ class Probe:
         self.live = []  # (time, angle) shown by the live preview
         self.exact = []  # (end time, angle, error) of each exact rebuild
         self.beats = []
+        self.work = []  # seconds the dialog worked on each angle the handle sent
         self.released = None
         self.handle = p.handle
         old_drag, old_release = self.handle.on_drag, self.handle.on_release
         self.saved = (old_drag, old_release)
 
         def drag(value, *args):
+            t0 = time.perf_counter()
             old_drag(value, *args)
+            self.work.append(time.perf_counter() - t0)
             self.taken.append((time.perf_counter(), float(p.options.get("angle", 0.0))))
 
         def release(value, *args):
@@ -224,6 +227,7 @@ class Probe:
             "exact": exact,
             "rebuilds_while_moving": during,
             "final": final,
+            "work": list(self.work),
         }
 
 
@@ -276,6 +280,8 @@ def finish_drag(name):
     s = probe.summary()
     record("Draft drag, %s: value box follows a mouse move (median)" % name, _ms(s["box"], "median"))
     record("Draft drag, %s: value box follows a mouse move (worst)" % name, _ms(s["box"], "max"))
+    record("Draft drag, %s: dialog's work per handle move (median)" % name, _ms(s["work"], "median"))
+    record("Draft drag, %s: dialog's work per handle move (worst)" % name, _ms(s["work"], "max"))
     record("Draft drag, %s: frame drawn after a mouse move (median)" % name, _ms(s["frame"], "median"))
     record("Draft drag, %s: live preview follows a mouse move (median)" % name, _ms(s["live"], "median"))
     record("Draft drag, %s: live preview follows a mouse move (worst)" % name, _ms(s["live"], "max"))
@@ -410,6 +416,21 @@ def part_profile():
     pstats.Stats(pr, stream=out).sort_stats("cumulative").print_stats(30)
     record("Draft, part: one exact rebuild (typed angle), with the redraw", seconds)
     S["profile"] = [ln for ln in out.getvalue().splitlines() if ln.strip()][:45]
+    # one trial build of the limit search (drafting.draft_shape, nothing in the document)
+    from sciforge import drafting
+
+    options = dict(p.options)
+    options["angle"] = 5.37  # an angle nothing built yet
+    spec = drafting.build_spec((xy_plane(), ""), options, p.base)
+    pr = cProfile.Profile()
+    t0 = time.perf_counter()
+    pr.enable()
+    drafting.draft_shape(S["base_shape"], S["names"], spec)
+    pr.disable()
+    record("Draft, part: one trial build of the limit search", time.perf_counter() - t0)
+    out = io.StringIO()
+    pstats.Stats(pr, stream=out).sort_stats("cumulative").print_stats(25)
+    S["profile_trial"] = [ln for ln in out.getvalue().splitlines() if ln.strip()][:40]
 
 
 part_profile.wait_ms = 1500
@@ -462,6 +483,9 @@ def report():
     lines += [""] + perf_guard.markdown(guard) + [""]
     if S.get("profile"):
         lines += ["## One exact rebuild of the part, profiled", "", "```"] + S["profile"] + ["```", ""]
+    if S.get("profile_trial"):
+        lines += ["## One trial build of the limit search, profiled", "", "```"]
+        lines += S["profile_trial"] + ["```", ""]
     with open(os.path.join(out_dir(), "perf-draft-report.md"), "w") as f:
         f.write("\n".join(lines))
     for line in lines:
