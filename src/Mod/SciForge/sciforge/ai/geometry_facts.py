@@ -22,6 +22,20 @@ import math
 
 from .ops import selectors
 
+
+def tight_box(shape):
+    """The shape's bounding box measured on its real geometry. FreeCAD's BoundBox is quick but
+    loose on free-form (B-spline) faces: it encloses their control points, so a loft 24 mm
+    wide was reported as 29.8 mm. optimalBoundingBox measures the faces themselves; the loose
+    box is the fallback."""
+    try:
+        box = shape.optimalBoundingBox(False, False)
+        if box.isValid():
+            return box
+    except Exception:
+        pass
+    return shape.BoundBox
+
 TOL = 1e-4  # the selectors' "at" tolerance (selectors.select keeps |c - target| < 1e-4)
 
 
@@ -75,7 +89,7 @@ def face_facts(face):
             out["axis"] = _xyz(surface.Axis)
     except Exception:
         pass
-    out["bbox_mm"] = _bbox(face.BoundBox)
+    out["bbox_mm"] = _bbox(tight_box(face))
     out["edges"] = len(face.Edges)
     return out
 

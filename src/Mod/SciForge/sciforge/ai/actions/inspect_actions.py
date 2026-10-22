@@ -4,7 +4,7 @@ properties, centre of mass, interference, section analysis, the material librari
 and the tool list. Built on SciForge's own INSPECT code (measure.py, analysis.py,
 section.py, material.py)."""
 
-from .. import bridge_core, catalog
+from .. import bridge_core, catalog, geometry_facts
 from ..executor import UserError, json_result, state
 from . import action
 
@@ -43,7 +43,7 @@ def get_design(ctx, args):
             "label": body.Label,
             "volume_mm3": round(shape.Volume, 6),
             "area_mm2": round(shape.Area, 6),
-            "bbox_mm": _bbox(shape.BoundBox),
+            "bbox_mm": _bbox(geometry_facts.tight_box(shape)),
             "solids": len(shape.Solids),
             "faces": len(shape.Faces),
             "tip": body.Tip.Name if body.Tip is not None else None,
@@ -230,7 +230,7 @@ def physical_properties(ctx, args):
             density_kg_m3=_round(rho * 1e9, 3) if rho else None,
             mass_g=_round(shape.Volume * rho * 1000.0) if rho else None,
             center_of_mass_mm=_centre(shape),
-            bbox_mm=_bbox(shape.BoundBox),
+            bbox_mm=_bbox(geometry_facts.tight_box(shape)),
             faces=len(shape.Faces),
             edges=len(shape.Edges),
             solids=len(shape.Solids),

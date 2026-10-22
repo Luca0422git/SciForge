@@ -23,7 +23,7 @@ import math
 import FreeCAD as App
 
 from .. import log, warn
-from . import bridge_core, catalog
+from . import bridge_core, catalog, geometry_facts
 
 DEFAULT_IDS = {
     "create_sketch": "Sketch",
@@ -377,13 +377,18 @@ class Context:
             if made.Label not in (made.Name, step_id):
                 named = " Its id is %r (shown as %r)." % (made.Name, made.Label)
         log(self.title)
+        broke = broke_text(doc, before)
         unchanged = ""
-        if shapes_before is not None and shape_signature(doc) == shapes_before:
+        if (
+            shapes_before is not None
+            and not broke
+            and _marker_at_end(doc)
+            and shape_signature(doc) == shapes_before
+        ):
             unchanged = NOTHING_CHANGED
             log("%s changed no solid" % self.title)
         return bridge_core.result(
-            "Done: %s.%s %s%s%s"
-            % (self.title, named, summary(doc), broke_text(doc, before), unchanged)
+            "Done: %s.%s %s%s%s" % (self.title, named, summary(doc), broke, unchanged)
         )
 
     def done(self, text, doc=None, before=None):
@@ -481,7 +486,7 @@ def summary(doc):
         found = []
     for body in found:
         shape = body.Shape
-        box = shape.BoundBox
+        box = geometry_facts.tight_box(shape)
         parts.append(
             "%s: %.6g mm3, %.4g x %.4g x %.4g mm"
             % (body.Label, shape.Volume, box.XLength, box.YLength, box.ZLength)
@@ -518,6 +523,17 @@ NOTHING_CHANGED = (
     "lies on), a size that cannot fit (a wall thicker than the part), or a pick that missed. "
     "Undo takes it back; diff_design since last_change confirms."
 )
+
+
+def _marker_at_end(doc):
+    """True unless the timeline's history marker is rolled back (then a new feature goes in
+    at the marker and the bodies show it only once the marker is at the end again)."""
+    try:
+        from .. import timeline_ops
+
+        return bool(timeline_ops.timeline(doc).at_end)
+    except Exception:
+        return True
 
 
 def shape_signature(doc):

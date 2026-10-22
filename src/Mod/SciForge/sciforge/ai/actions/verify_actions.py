@@ -13,7 +13,7 @@ the design with either, or with the solid as it was after a step."""
 import base64
 import time
 
-from .. import bridge_core
+from .. import bridge_core, geometry_facts
 from ..executor import UserError, json_result
 from . import action
 
@@ -89,9 +89,10 @@ def body_row(body, full=True):
         return row
     row.update(_shape_counts(shape))
     row["solid"] = bool(shape.Solids)
-    row["volume_mm3"] = _r(shape.Volume)
+    # a surface body has no volume (FreeCAD's Volume of a lone face is meaningless)
+    row["volume_mm3"] = _r(sum(s.Volume for s in shape.Solids)) if shape.Solids else 0.0
     row["area_mm2"] = _r(shape.Area)
-    row["bbox_mm"] = _bbox(shape.BoundBox)
+    row["bbox_mm"] = _bbox(geometry_facts.tight_box(shape))
     if not full:
         return row
     try:
@@ -961,9 +962,9 @@ def _since_step(ctx, doc, ident):
     before.update(_shape_counts(old_shape))
     before.update(
         solid=bool(old_shape.Solids),
-        volume_mm3=_r(old_shape.Volume),
+        volume_mm3=_r(sum(s.Volume for s in old_shape.Solids)) if old_shape.Solids else 0.0,
         area_mm2=_r(old_shape.Area),
-        bbox_mm=_bbox(old_shape.BoundBox),
+        bbox_mm=_bbox(geometry_facts.tight_box(old_shape)),
     )
     now = body_row(body, full=False)
     later = []
