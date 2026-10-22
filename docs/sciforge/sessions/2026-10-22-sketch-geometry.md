@@ -157,3 +157,98 @@ and passes now.
   the facade's `InternalType` ("EllipseMajorDiameter", "EllipseFocus1", ...).
 - `sketch.addConstraint` from Python solves a sketch that is not open (a test that wants the
   curves off their constraints must add a constraint that makes the solve fail).
+
+## Review follow-up (same branch): three more ways a sketch did not stay what it was
+
+Adversarial reviewers found three problems (SKETCH-1-F1..F3). Each was reproduced in real
+FreeCAD 1.1.4 first (all three were already in c59634a, so not regressions of this branch).
+
+### What Luca sees now (plain language)
+
+- **Purple (projected) edges keep following the part.** When a step is deleted (say a
+  fillet) or replaced by SciForge (a pattern edited into SciForge's own pattern, a shell that
+  becomes a draft, a revolve switched from Join to Cut, a sweep or loft rebuilt), a sketch
+  built on it used to move to the step before, but its projected edges stayed glued to the
+  deleted step: FreeCAD kept them as frozen copies ("missing reference" in the log). Lines
+  drawn against them held on to that dead copy, so making the box wider no longer moved
+  them. Now the projected edges are projected again from the step that remains, and every
+  constraint on them moves along: widen the box and the purple edge and the line attached to
+  it follow, also after saving and reopening.
+- **Deleting a sketch Scale puts the sketch back exactly.** A sketch whose width follows a
+  parameter keeps that width when scaled, so the solver moves the rest of the sketch. Taking
+  the Scale away (or changing its factor) used to shift the whole sketch (and the extrusion)
+  by several millimetres. The Scale step now remembers the curves from before it and puts
+  them back.
+- **Derived ellipses and splines keep their helper curves tied to them.** In a sketch
+  derived from another design, an ellipse's focus points and a spline's knot points became
+  loose construction points, and the helper lines were not tied to their curve. They now
+  keep their role and are tied exactly as in the source.
+
+### F1: projected edges of a replaced or deleted step (sciforge/sketch_external.py, new)
+
+Root cause: FreeCAD 1.1.4 makes `ExternalGeometry` read-only, and the five helpers that move
+later steps to a new step (delete._relink_to_base, pattern.relink_dependents,
+shelling._repoint (also used by drafting), revolve._relink_users, curves.relink_users (used
+by sweep and loft)) set every link property with `setattr`, swallowing the error. Only
+direct._relink_external (Delete Face / Move Face) re-projected.
+
+Fix: direct's re-projection moved to the shared `sketch_external.relink(sketch, old, new,
+rename, drop_lost=False)`; all six places use it for a sketch's ExternalGeometry, each with
+its own way of finding the element again on the new step (the one it already used for the
+attachment, but returning None when nothing is found). Each link of the old step is
+projected again from the new one (addExternal, same Defining / intersection), the
+constraints on the old curves move to the new ones, the old curves are deleted, Auto
+project's record of its curve ids follows. An element not found on the new step: left as it
+was (FreeCAD's frozen copy, as before) except in direct (taken out with its constraints, as
+before).
+
+Two more FreeCAD facts found on the way (both handled in sketch_external):
+
+- A projected curve that is a **point** (a projected vertex, or an edge seen end-on) has no
+  readable reference from Python: `sketch.ExternalGeo` hands points without their
+  extensions (the same GeomPoint::getPyObject root cause as the rest of this branch), so
+  `ExternalGeometryFacade(geo).Ref` is ''. Such a link is matched to its point by where the
+  element projects onto the sketch plane.
+- `ExternalTypes` has one entry per ExternalGeometry link (0 projection, 1 intersection, 2
+  both), not one per curve: direct indexed it per curve (so it always read "projection").
+  Now read per link. A link of type 2 (both) is re-made as a projection only (rare; not
+  reproduced).
+
+### F2: deleting or editing a sketch Scale (sciforge/scale.py)
+
+The Scale step keeps each sketch's curves before and after the scale (hidden properties
+`Before`, `After` (Part::PropertyGeometryList, saved with the file) and `Counts`). Delete
+(the watcher) and an edit (factor change, point change) first scale the dimensions back as
+before, then, when the sketch's curves are still exactly those the scale made (nothing
+changed the sketch since), put the kept curves back (sketch_geometry.set_geometry: flags and
+ids kept) and solve. When the sketch was changed after the scale, or the step comes from an
+older SciForge (no kept curves), it is scaled back as before (and a log line says so).
+
+### F3: Derive and internal-alignment helpers (sciforge/derive.py)
+
+read_doc also keeps each source sketch's `GeometryFacadeList` (every curve with its id,
+construction flag and internal role) and its InternalAlignment constraints. _fill_sketch
+sets the facades into the empty derived sketch in one go (the blocked flag cleared: the
+Block constraints added after give it), adds Block to every normal curve (as before) and
+the source's InternalAlignment constraints. Old way kept as a fallback.
+
+### Tests
+
+- New GUI scenario **sketch_geometry_follow** (53 checks): A the Fillet clicked in the
+  timeline, MODIFY > Delete (real input), the box widened to 60, saved and reopened; B a
+  FreeCAD LinearPattern edited into SciForge's pattern with Auto project on a copy's face,
+  the boss widened; C shelling._repoint, curves.relink_users, revolve._relink_users with a
+  projected edge and a projected point; S sketch Scale with a parameter-bound width: x2,
+  edit to x3, delete; again, save, reopen, delete; D derive of an ellipse and a B-spline with
+  their helpers, and an update. On the code before this follow-up (87370a0) 17 checks fail
+  (A, B, C, S and D each); all 53 pass now.
+
+### Results (final code)
+
+(filled in below when the runs finish)
+
+### Not done / for later
+
+- follow.repair and timeline_ops also set link properties of later steps generically; they
+  were not part of the review and were not checked for ExternalGeometry (FreeCAD's own
+  topological naming usually keeps those references).

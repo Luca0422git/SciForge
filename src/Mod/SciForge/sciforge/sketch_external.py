@@ -56,14 +56,6 @@ def plain_sub(obj, sub):
     return (sub or "").split(".")[-1]
 
 
-def uses(sketch, old):
-    """True when some projected curve of `sketch` comes from `old`."""
-    try:
-        return any(entry[0] is old for entry in (sketch.ExternalGeometry or []))
-    except Exception:
-        return False
-
-
 def _types(sketch):
     """{(object name, sub): ExternalTypes value} (1: an intersection curve)."""
     out = {}
