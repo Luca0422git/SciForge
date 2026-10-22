@@ -149,31 +149,63 @@ def _safe(works):
     return run
 
 
-def search(works, good, bad, step, budget=BUDGET, good_known=False, clock=time.perf_counter):
+def search(
+    works,
+    good,
+    bad,
+    step,
+    budget=BUDGET,
+    good_known=False,
+    clock=time.perf_counter,
+    strict=False,
+    per_try=0.0,
+):
     """The value nearest `bad` that still works, between `good` (a value that works) and `bad`
     (one that does not): a tidy multiple of `step` on the side of `good`, built once more to be
     sure. Returns (limit, exact) or (None, False) when nothing between them works (then the
     refusal is not a limit). `exact` is False when the time budget stopped the bisection before
     it reached `step` (the limit is then on the safe side of the real one).
     `works(value)` builds the result with that value and says if it is sound; an exception
-    counts as "does not work"."""
+    counts as "does not work".
+    `strict` (the AI tools, where every try rebuilds the design): `budget` bounds the whole
+    search, every build counted (the check of `good`, the bisection, the tidy value's builds):
+    no build is started that the time left cannot hold, judged by the slowest build so far
+    (at first `per_try`, the caller's estimate). The dialogs build only a shape: at least
+    MIN_TRIALS builds, and the bisection alone is budgeted."""
     works = _safe(works)
     good, bad = float(good), float(bad)
     if good == bad:
         return None, False
-    if not good_known and not works(good):
-        return None, False
-    start = clock()
+    begun = clock()
+    slowest = [max(float(per_try or 0.0), 0.0)]
+
+    def build(value):
+        t0 = clock()
+        try:
+            return works(value)
+        finally:
+            slowest[0] = max(slowest[0], clock() - t0)
+
+    def room():
+        return not strict or clock() - begun + slowest[0] <= budget
+
+    if not good_known:
+        if not room() or not build(good):
+            return None, False
+    start = begun if strict else clock()
     lo, hi = good, bad  # lo works, hi does not (lo may be above hi for a lower limit)
     trials = 0
     while abs(hi - lo) > step * 0.5:
-        if trials >= MIN_TRIALS and clock() - start > budget:
+        if strict:
+            if not room():
+                break
+        elif trials >= MIN_TRIALS and clock() - start > budget:
             break
         if trials > 60:
             break
         mid = (lo + hi) / 2.0
         trials += 1
-        if works(mid):
+        if build(mid):
             lo = mid
         else:
             hi = mid
@@ -185,7 +217,7 @@ def search(works, good, bad, step, budget=BUDGET, good_known=False, clock=time.p
     above = tidy(hi, step, good)
     if abs(above - hi) < 1e-12:
         above = round(above + toward * step, digits)
-    if exact and (above - lo) * toward < -1e-12 and works(above):
+    if exact and (above - lo) * toward < -1e-12 and room() and build(above):
         return above, exact
     candidate = tidy(lo, step, good)
     for _ in range(VERIFY_TRIES):
@@ -193,7 +225,12 @@ def search(works, good, bad, step, budget=BUDGET, good_known=False, clock=time.p
             break  # walked past `good`: `good` itself is the answer
         if abs(candidate - lo) < 1e-12:
             return candidate, exact  # built already (by the bisection, or `good` itself)
-        if works(candidate):
+        if not room():
+            # out of time (strict): the tidy value on the safe side of the last one that
+            # worked, not built (the bisection's own value is untidy: shown rounded, it could
+            # read as more than what worked)
+            return candidate, False
+        if build(candidate):
             return candidate, exact
         candidate = round(candidate + toward * step, digits)
     # no tidy value works near the edge (a jumpy kernel): the last value that worked

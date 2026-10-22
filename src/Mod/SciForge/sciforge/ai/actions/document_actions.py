@@ -62,9 +62,7 @@ def _settle_after_undo(doc):
     from ... import timeline_ops, undo_fast
 
     try:
-        stale = any(
-            "Touched" in o.State or "Invalid" in o.State or "Error" in o.State for o in doc.Objects
-        )
+        stale = bool(undo_fast.touched(doc))  # (the objects timeline_ui.after_undo looks at)
         if not stale or undo_fast.settle_without_rebuild(doc):
             return
         timeline_ops.recompute(doc)

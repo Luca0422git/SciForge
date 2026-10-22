@@ -102,6 +102,45 @@ class Largest(unittest.TestCase):
 
         self.assertIn("1.00 mm", value_fit.largest("fillet", {"radius": 4}, trial))
 
+    def test_whole_search_within_its_budget(self):
+        # review X3: every try is a full rebuild in the AI; the budget holds the whole search
+        # (the check of the smallest value, the bisection and the tidy value's builds)
+        now = [0.0]
+
+        def trial(args):
+            now[0] += 0.5
+            return args["radius"] < 3.4789
+
+        text = value_fit.largest(
+            "fillet", {"radius": 100}, trial, budget=3.0, per_try=0.5, clock=lambda: now[0]
+        )
+        self.assertLessEqual(now[0], 3.0)
+        self.assertIn("Largest radius found that fits here", text)
+        self.assertIn("time limit", text)
+
+    def test_too_slow_to_search(self):
+        tried = []
+        text = value_fit.largest(
+            "fillet", {"radius": 100}, tried.append, budget=3.0, per_try=4.1, clock=lambda: 0.0
+        )
+        self.assertEqual(tried, [])
+        self.assertIn("did not search for the largest radius that fits", text)
+        self.assertIn("about 4 s", text)
+        self.assertIn("100 mm does not fit", text)
+
+    def test_a_slow_try_stops_the_search(self):
+        """No estimate given, but the first try takes 2 s of a 3 s budget: no second one."""
+        now = [0.0]
+
+        def trial(args):
+            now[0] += 2.0
+            return args["radius"] < 3.4789
+
+        text = value_fit.largest("fillet", {"radius": 100}, trial, budget=3.0, clock=lambda: now[0])
+        self.assertEqual(now[0], 2.0)
+        self.assertIn("did not search", text)
+        self.assertIn("about 2 s", text)  # (the try it timed, not the estimate it had)
+
     def test_limit_words(self):
         self.assertTrue(value_fit.is_limit("Radius 10 mm is too big here: the round does not fit"))
         self.assertFalse(value_fit.is_limit("selector picked 2 faces, expected 1"))

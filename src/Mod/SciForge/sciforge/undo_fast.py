@@ -16,8 +16,9 @@ ledger per document, from FreeCAD's document signals:
 - every property change made outside a transaction (not by Undo / Redo themselves, not while
   a file is read) moves a counter (`seq`);
 - when a transaction starts, the counter and whether the design was up to date then (no step
-  touched, invalid or in error) are written down; when it is committed, whether it was up to
-  date at its end;
+  touched, invalid or in error; an object the transaction itself creates does not count: its
+  Undo deletes it) are written down; when it is committed, whether it was up to date at its
+  end;
 - during an Undo / Redo, the objects whose Shape FreeCAD put back are noted.
 
 An Undo may skip the rebuild when the transaction it undoes started on an up-to-date design
@@ -60,9 +61,23 @@ class Ledger:
     def shape_restored(self, name):
         self.restored.add(name)
 
-    def opened(self, clean):
-        self.pending = {"start": self.seq, "clean_start": bool(clean)}
+    def opened(self, clean, dirty=()):
+        """A transaction started; `clean`: the design was up to date then, `dirty`: the names
+        of the objects that were not (see created)."""
+        self.pending = {"start": self.seq, "clean_start": bool(clean), "dirty": set(dirty)}
         self.restored = set()
+
+    def created(self, name):
+        """An object was created inside the transaction being recorded. FreeCAD opens a
+        transaction at its first change, and when that change is a new object (a dialog's or
+        the AI's new step) the object is already there, touched, when the transaction is
+        opened: the Undo deletes it, so it never made the start "not up to date"."""
+        p = self.pending
+        if p is None or p["clean_start"] or name not in p.get("dirty", ()):
+            return
+        p["dirty"].discard(name)
+        if not p["dirty"]:
+            p["clean_start"] = True
 
     def committed(self, clean, count):
         entry, self.pending = self.pending, None
@@ -177,6 +192,14 @@ def _clean(doc):
         return False
 
 
+def _dirty(doc):
+    """Names of the objects not up to date (None when they cannot be read)."""
+    try:
+        return [name for name, _shape, _broken in touched(doc)]
+    except Exception:
+        return None
+
+
 class _Watch:
     """Document observer feeding the ledgers. Never raises."""
 
@@ -197,6 +220,12 @@ class _Watch:
             pass
 
     def slotCreatedObject(self, obj):
+        try:
+            doc = obj.Document
+            if doc.HasPendingTransaction and not doc.Transacting and not doc.Restoring:
+                ledger(doc.Name).created(obj.Name)
+        except Exception:
+            pass
         self._structure(obj)
 
     def slotDeletedObject(self, obj):
@@ -212,9 +241,13 @@ class _Watch:
 
     def slotOpenTransaction(self, doc, _name):
         try:
+            dirty = _dirty(doc)
             if _DEBUG:
-                print("[SciForge] undo ledger: open %s clean=%s" % (_name, _clean(doc)), flush=True)
-            ledger(doc.Name).opened(_clean(doc))
+                print("[SciForge] undo ledger: open %s not up to date: %s" % (_name, dirty), flush=True)
+            if dirty is None:
+                ledger(doc.Name).opened(False)
+            else:
+                ledger(doc.Name).opened(not dirty, dirty)
         except Exception:
             pass
 

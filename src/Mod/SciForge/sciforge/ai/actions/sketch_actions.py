@@ -565,7 +565,8 @@ def set_sketch_dimension(ctx, args):
 
     from ... import sketch_explain_core
 
-    if "value" in args and sketch_explain_core.bad_size(c.Type, float(args["value"])):
+    offset = sketch_explain_core.is_offset(c.Type, c.First, c.Second)
+    if "value" in args and sketch_explain_core.bad_size(c.Type, float(args["value"]), offset):
         raise UserError("The value must be more than 0.")
 
     def conflict():

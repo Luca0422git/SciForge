@@ -271,6 +271,18 @@ class ParameterTests(unittest.TestCase):
         self.assertFalse(core.bad_size("DistanceX", -5.0), "the sign is the direction")
         self.assertFalse(core.bad_size("Angle", 0.0))
 
+    def test_offsets_may_be_zero(self):
+        # review X2: the AI's create_sketch places a shape drawn at the origin with offsets
+        # of 0 from it ('g0.x'); a curve's own width of 0 stays no size
+        self.assertTrue(core.is_offset("DistanceX", -1, 0))  # origin to a point of curve 0
+        self.assertTrue(core.is_offset("DistanceY", 0, 1))  # between two curves' points
+        self.assertFalse(core.is_offset("DistanceX", 0, 0))  # both ends of one line
+        self.assertFalse(core.is_offset("DistanceX", 0, core.GEO_UNDEF))  # the line alone
+        self.assertFalse(core.is_offset("Distance", -1, 0))
+        self.assertFalse(core.bad_size("DistanceX", 0.0, offset=True))
+        self.assertTrue(core.bad_size("DistanceX", 0.0, offset=False))
+        self.assertTrue(core.bad_size("Diameter", 0.0, offset=True))
+
     def test_refusal(self):
         reason = core.bad_size_reason(con("Radius", 4, value=-2.0, name="r"), NAMES)
         self.assertEqual(

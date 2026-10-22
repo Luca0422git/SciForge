@@ -150,6 +150,34 @@ class LedgerTest(unittest.TestCase):
         led.outside_change()
         self.assertEqual(led.restored, set())
 
+    def test_a_new_step_touched_when_the_transaction_opens(self):
+        # FreeCAD opens the transaction at its first change: a new step is already there,
+        # touched; the Undo deletes it, so the start was up to date (review X1)
+        led = Ledger()
+        led.opened(False, ["Fillet"])
+        led.created("Fillet")
+        led.committed(True, 1)
+        undo(led, restored=("Body",))
+        self.assertEqual(led.why_not([("Body", True, False)]), "")
+
+    def test_an_object_touched_before_the_transaction_still_counts(self):
+        led = Ledger()
+        led.opened(False, ["Body", "Fillet"])  # a Body left touched, then the new step
+        led.created("Fillet")
+        led.created("Body001")  # (not touched at the start: changes nothing)
+        led.committed(True, 1)
+        undo(led)
+        self.assertIn("not up to date when the transaction started", led.why_not(TOUCHED))
+
+    def test_created_without_the_names_changes_nothing(self):
+        led = Ledger()
+        led.opened(False)
+        led.created("Fillet")
+        self.assertFalse(led.pending["clean_start"])
+        led.aborted()
+        led.created("Fillet")  # no transaction: ignored
+        self.assertIsNone(led.pending)
+
     def test_no_undo_seen(self):
         self.assertIn("no Undo", Ledger().why_not(TOUCHED))
 

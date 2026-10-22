@@ -19,6 +19,7 @@ sentences, JSON for the read-only tools, a PNG for screenshots. Never raises.
 
 import json
 import math
+import time
 
 import FreeCAD as App
 
@@ -344,11 +345,14 @@ class Context:
         before = _broken(doc)
         shapes_before = shape_signature(doc) if self.tool not in KEEPS_SHAPES else None
         limited = bool(value_fit.candidates(self.tool, self.args))
+        began = time.perf_counter()
         failed = self._run_steps(doc, builder, steps, step_id, before, shapes_before, limited)
         if failed is not None:
             text, no_change = failed
             if limited and (no_change or value_fit.is_limit(text)):
-                extra = self._largest(doc, builder, step_id, before, shapes_before)
+                # (how long the refused call took: what one try of the search will take)
+                took = time.perf_counter() - began
+                extra = self._largest(doc, builder, step_id, before, shapes_before, took)
                 if extra:
                     text = text.rstrip()
                     if not text.endswith("."):
@@ -452,7 +456,7 @@ class Context:
             builder.objects.pop(step_id, None)
         return ok
 
-    def _largest(self, doc, builder, step_id, before, shapes_before):
+    def _largest(self, doc, builder, step_id, before, shapes_before, per_try=0.0):
         """The sentence giving the largest value that fits (value_fit), or "". The design
         is left exactly as it was."""
         try:
@@ -460,6 +464,7 @@ class Context:
                 self.tool,
                 self.args,
                 lambda args: self._trial(doc, builder, step_id, args, before, shapes_before),
+                per_try=per_try,
             )
         except Exception as exc:
             warn("AI %s: the largest value that fits was not found (%s)" % (self.tool, exc))

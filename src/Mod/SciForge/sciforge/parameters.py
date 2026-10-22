@@ -293,50 +293,69 @@ SKIP_TYPES = (
 
 def broken_steps(doc):
     """{object name: reason} of the steps that are broken now, in document order."""
+    return {name: next(iter(found.values())) for name, found in broken_problems(doc).items()}
+
+
+def broken_problems(doc):
+    """{object name: {problem key: reason}} of the steps that are broken now: every problem
+    of a step, so that a step already broken in one way (a sketch's dimension of 0 written
+    before) still shows a new problem (review X2: one old problem hid every new one)."""
     out = {}
     for obj in doc.Objects:
         if obj.TypeId in SKIP_TYPES:
             continue
         try:
-            reason = _broken(obj)
+            found = _problems(obj)
         except Exception:
-            reason = ""
-        if reason:
-            out[obj.Name] = reason
+            found = []
+        if found:
+            out[obj.Name] = dict(found)
     return out
 
 
 def _broken(obj):
+    found = _problems(obj)
+    return found[0][1] if found else ""
+
+
+def _problems(obj):
+    """[(key, reason)] of what is broken in `obj`, the first being what _broken says."""
     from . import sketch_explain_core as explain_core
 
+    out = []
     if obj.TypeId == "Sketcher::SketchObject":
         from . import sketch_explain
 
         curve_names, _kinds = sketch_explain.names(obj)
         for i, c in enumerate(obj.Constraints):
-            if c.Driving and explain_core.bad_size(c.Type, c.Value):
+            offset = explain_core.is_offset(c.Type, c.First, c.Second)
+            if c.Driving and explain_core.bad_size(c.Type, c.Value, offset):
                 info = sketch_explain.constraint_info(obj, i, c)
-                return explain_core.bad_size_reason(info, curve_names)
+                out.append((("size", i), explain_core.bad_size_reason(info, curve_names)))
         conflicting = [i - 1 for i in obj.ConflictingConstraints]
         if conflicting:
             text, _count = sketch_explain.words(obj, conflicting)
-            return "its constraints would conflict%s" % ((": " + text) if text else "")
+            reason = "its constraints would conflict%s" % ((": " + text) if text else "")
+            out.append((("conflict",), reason))
         if obj.MalformedConstraints:
-            return "its constraints would break"
+            out.append((("malformed",), "its constraints would break"))
         for i, g in enumerate(obj.Geometry):
             if sketch_explain.collapsed(g):
-                return "its %s would shrink to nothing" % curve_names.get(i, "curve")
+                reason = "its %s would shrink to nothing" % curve_names.get(i, "curve")
+                out.append((("collapsed", i), reason))
+        if out:
+            return out
     state = list(obj.State)
     if "Invalid" in state or "Error" in state:
         from . import timeline_ops
 
         _kind, reason = timeline_ops.problem(obj)
-        return reason or "it could not be computed"
+        return [(("state",), reason or "it could not be computed")]
     if obj.TypeId.startswith("PartDesign::") and obj.TypeId not in NOT_SOLID_STEPS:
         shape = getattr(obj, "Shape", None)
         if shape is not None and (shape.isNull() or shape.Volume < 1e-6):
-            return "its solid would be empty"
-    return ""
+            return [(("empty",), "its solid would be empty")]
+    return []
 
 
 # PartDesign objects that are no solid step (a solid step whose solid is empty is broken)
@@ -405,7 +424,7 @@ def change_checked(doc, obj, path, apply, what):
     from . import log
     from . import sketch_explain_core as explain_core
 
-    before = broken_steps(doc)
+    before = broken_problems(doc)
     snapshot = _snapshot(obj, path)
     try:
         apply()
@@ -417,8 +436,11 @@ def change_checked(doc, obj, path, apply, what):
             pass
         raise
     doc.recompute()
-    after = broken_steps(doc)
-    new = [(name, reason) for name, reason in after.items() if name not in before]
+    new = []
+    for name, found in broken_problems(doc).items():
+        fresh = [reason for key, reason in found.items() if key not in before.get(name, {})]
+        if fresh:
+            new.append((name, fresh[0]))
     if not new:
         return ""
     labels = _step_names(doc)

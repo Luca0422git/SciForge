@@ -6,6 +6,8 @@ code behind the timeline's menus and drags, each one Undo step of its own); edit
 "*_edit" design steps of sciforge/ai/ops or the dialogs' own read / apply functions, so the
 later steps keep their faces and edges (follow.py)."""
 
+import time
+
 from ... import warn
 from .. import bridge_core, executor, value_fit
 from ..executor import UserError, _broken, json_result, jsonable, summary
@@ -409,13 +411,15 @@ def edit_step(ctx, args):
             builder.run({"op": "edit", "target": target, "set": changes})
         doc.recompute()
 
+    began = time.perf_counter()
     try:
         ctx.change(work)
     except Exception as exc:
         text = executor._plain(exc)
         extra = ""
         if value_fit.is_limit(text) and edit_candidates(kind, changes):
-            extra = _largest_edit(ctx, doc, kind, changes, work)
+            took = time.perf_counter() - began  # (what one try of the search will take)
+            extra = _largest_edit(ctx, doc, kind, changes, work, took)
         if not extra:
             raise
         text = executor._clean(text).rstrip()
@@ -479,10 +483,9 @@ def edit_candidates(kind, changes):
     return out
 
 
-def _largest_edit(ctx, doc, kind, changes, work):
+def _largest_edit(ctx, doc, kind, changes, work, per_try=0.0):
     """The sentence giving the largest value of an edit that fits (value_fit, found by
-    trying values in transactions that are taken back), or ""."""
-    from ... import value_limits
+    trying values in transactions that are taken back, within one time budget), or ""."""
 
     def trial(key, value):
         new = dict(changes)
@@ -498,23 +501,13 @@ def _largest_edit(ctx, doc, kind, changes, work):
             doc.abortTransaction()
 
     try:
+        items = []
         for key, value in edit_candidates(kind, changes):
             unit = "deg" if "angle" in key.lower() or "taper" in key.lower() else "mm"
-            step = value_limits.step_for(unit)
-            if abs(value) <= step:
-                continue
-            limit, exact = value_limits.search(
-                lambda v, k=key: trial(k, v),
-                step if value > 0 else -step,
-                value,
-                step,
-                budget=value_fit.BUDGET,
+            items.append(
+                (lambda v, k=key: trial(k, v), value_fit.words_for(key), unit, value, "set." + key)
             )
-            if limit is not None:
-                return value_fit.sentence(
-                    value_fit.words_for(key), unit, value, limit, exact, "set." + key
-                )
-        return ""
+        return value_fit.search_sentence(items, value_fit.BUDGET, per_try)
     except Exception as exc:
         warn("AI edit_step: the largest value that fits was not found (%s)" % exc)
         return ""

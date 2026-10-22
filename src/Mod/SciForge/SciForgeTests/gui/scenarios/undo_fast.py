@@ -21,6 +21,12 @@ Path F (integration), the AI tools: edit_step of Fillet 1 through the bridge (on
         refused with the largest radius that fits (value_fit tries values in transactions it
         takes back): the design and the undo stack are as before, and the next Ctrl+Z still
         gives the right part.
+Path G (review of the merged branches, X1), a new step made as a dialog's OK makes it (one
+        transaction, recomputed inside it), Ctrl+Z: nothing rebuilt and nothing left touched
+        (FreeCAD left the Body touched, so the next transaction started "not up to date");
+        then Extrude 1 edited (14), OK, Ctrl+Z: still nothing rebuilt.
+Path H (X1), the AI's new step: an AI fillet, Ctrl+Z: nothing rebuilt; an AI fillet again,
+        the AI's undo: nothing rebuilt either (it agrees with Ctrl+Z).
 """
 
 import FreeCAD as App
@@ -66,6 +72,7 @@ def setup():
     Gui.activateWorkbench("SciForgeWorkbench")
     doc = App.newDocument("UndoFast")
     builder = Builder(doc)
+    S["builder"] = builder
     for step in (
         {"op": "sketch", "id": "s1", "plane": "XY", "geometry": [{"rect": [0, 0, 40, 30]}]},
         {"op": "extrude", "id": "e1", "profile": "s1", "distance": 10},
@@ -331,6 +338,68 @@ def f_right_after_refusal():
     S["stats"] = stats()
 
 
+# -- Path G / H: Ctrl+Z of a new step, then the next Undo (review X1) -----------------------------
+TOP_EDGES = {"type": "line", "parallel": [1, 0, 0], "at": {"axis": "z", "value": "max"}}
+
+
+def g_start():
+    S["before_g"] = shapes()
+    S["stats"] = stats()
+
+
+def g_add():
+    """A new step made the way a dialog's OK makes it: one transaction, recomputed inside."""
+    doc = App.ActiveDocument
+    doc.openTransaction("Fillet")
+    S["builder"].run({"op": "fillet", "id": "g1", "edges": dict(TOP_EDGES, count=2), "radius": 1})
+    doc.recompute()
+    doc.commitTransaction()
+    h.check("G: the new step changed the part", shapes() != S["before_g"])
+
+
+def fast_since(what, label):
+    """Since S["stats"]: the last Undo rebuilt nothing, left nothing touched, and the design
+    is the one remembered under `label` (no full rebuild here: it would hide a touched Body)."""
+
+    def step():
+        from sciforge import undo_fast
+
+        before, after = S["stats"], stats()
+        h.check(
+            "%s: nothing rebuilt" % what,
+            after["skipped"] > before["skipped"] and after["rebuilt"] == before["rebuilt"],
+            (before, after),
+        )
+        left = undo_fast.touched(App.ActiveDocument)
+        h.check("%s: nothing left touched (the Body neither)" % what, not left, left)
+        h.check("%s: the design is as before" % what, shapes() == S[label], (shapes(), S[label]))
+        S["stats"] = stats()
+
+    step.__name__ = "fast_" + what.split(":")[0].replace(" ", "_")
+    step.wait_ms = 800
+    return step
+
+
+def h_start():
+    S["before_h"] = shapes()
+    S["stats"] = stats()
+
+
+def h_ai_fillet():
+    answer = ai("fillet", {"edges": dict(TOP_EDGES, count=2), "radius": 1})
+    h.check("H: the AI fillet is done", not answer["is_error"], answer["text"][:300])
+    S["stats"] = stats()
+
+
+def h_rebuilt_same():
+    doc = App.ActiveDocument
+    now = shapes()
+    for o in doc.Objects:
+        o.touch()
+    doc.recompute()
+    h.check("G/H: a full rebuild gives the same shapes", shapes() == now, (shapes(), now))
+
+
 h.run(
     "undo_fast",
     [
@@ -389,5 +458,23 @@ h.run(
         f_refused, h.idle_step(),
         a_undo, h.idle_step(),
         f_right_after_refusal,
+        # G: Ctrl+Z of a new step, then an edit and its Ctrl+Z
+        g_start,
+        g_add, h.idle_step(),
+        a_undo, h.idle_step(),
+        fast_since("G Ctrl+Z of a new step", "before_g"),
+        a_edit, a_type("14"), a_ok, h.idle_step(), remember("edited_g"),
+        a_undo, h.idle_step(),
+        fast_since("G Ctrl+Z of the edit after it", "before_g"),
+        h_rebuilt_same,
+        # H: the AI's new step, Ctrl+Z, then again with the AI's undo
+        h_start,
+        h_ai_fillet, h.idle_step(),
+        a_undo, h.idle_step(),
+        fast_since("H Ctrl+Z of an AI step", "before_h"),
+        h_ai_fillet, h.idle_step(),
+        f_undo("undo"), h.idle_step(),
+        fast_since("H AI undo of an AI step", "before_h"),
+        h_rebuilt_same,
     ],
 )
