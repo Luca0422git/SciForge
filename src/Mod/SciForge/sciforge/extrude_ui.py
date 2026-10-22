@@ -289,7 +289,11 @@ class AngleDragger(BoxCarrier):
     def set_angle(self, degrees):
         self._turn_to(degrees)
         # the angle as the disc reads it back (80 came back as 80.0000026): the poll must
-        # not take that rounding for a turn (it dropped a formula typed in the box)
+        # not take that rounding for a turn (it dropped a formula typed in the box). Read
+        # back next to `degrees`: a handle that counts past half a turn (the pattern's
+        # Total Angle, pattern_ui._TurnDragger) unwraps from the last reading, and 270
+        # reads back as -90 on the disc itself
+        self._last = degrees
         self._last = self.angle()
 
     def _turn_to(self, degrees):
