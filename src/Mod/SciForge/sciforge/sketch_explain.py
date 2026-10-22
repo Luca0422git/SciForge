@@ -272,26 +272,13 @@ def _restore_geometry(sketch, geometry):
     while constraints were switched off (it should not: the curves already met every
     constraint). Construction flags and geometry ids stay (sketch_geometry.restore)."""
     try:
-        now = sketch.Geometry
-        if len(now) != len(geometry):
+        if len(sketch.Geometry) != len(geometry):
             return
-        for a, b in zip(now, sketch_geometry.curves(geometry)):
-            if not _same_curve(a, b):
-                sketch_geometry.restore(sketch, geometry)
-                sketch.solve()
-                return
+        if sketch_geometry.moved(sketch, geometry):
+            sketch_geometry.restore(sketch, geometry)
+            sketch.solve()
     except Exception as exc:
         warn("explain: could not compare the curves: %s" % exc)
-
-
-def _same_curve(a, b, tol=1e-9):
-    for name in ("StartPoint", "EndPoint", "Center"):
-        pa, pb = getattr(a, name, None), getattr(b, name, None)
-        if pa is not None and pb is not None and (pa - pb).Length > tol:
-            return False
-    if hasattr(a, "X") and hasattr(b, "X"):  # a point
-        return abs(a.X - b.X) <= tol and abs(a.Y - b.Y) <= tol
-    return True
 
 
 FAILED = -1  # SketchObject.solve(): the solver found no solution

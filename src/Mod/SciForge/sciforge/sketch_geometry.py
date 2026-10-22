@@ -136,6 +136,39 @@ def restore(sketch, snap):
             warn("sketch geometry: ids not kept (%s)" % exc)
 
 
+_POINTS = ("StartPoint", "EndPoint", "Center", "Location", "XAxis")  # (vectors)
+_SIZES = ("Radius", "MajorRadius", "MinorRadius", "X", "Y", "Z")
+
+
+def same_curve(a, b, tol=1e-9):
+    """Two Part curves of a sketch at the same place with the same size (ends, centre,
+    radii, an ellipse's direction, a point's coordinates, a B-spline's poles)."""
+    if a.TypeId != b.TypeId:
+        return False
+    for name in _POINTS:
+        pa, pb = getattr(a, name, None), getattr(b, name, None)
+        if pa is not None and pb is not None and (pa - pb).Length > tol:
+            return False
+    for name in _SIZES:
+        va, vb = getattr(a, name, None), getattr(b, name, None)
+        if isinstance(va, float) and isinstance(vb, float) and abs(va - vb) > tol:
+            return False
+    if hasattr(a, "getPoles") and hasattr(b, "getPoles"):
+        pa, pb = a.getPoles(), b.getPoles()
+        if len(pa) != len(pb) or any((p - q).Length > tol for p, q in zip(pa, pb)):
+            return False
+    return True
+
+
+def moved(sketch, snap, tol=1e-9):
+    """True when a curve of the sketch is not where it was in `snap` (or the count changed)."""
+    now = sketch.Geometry
+    then = curves(snap)
+    if len(now) != len(then):
+        return True
+    return not all(same_curve(a, b, tol) for a, b in zip(now, then))
+
+
 def state(sketch):
     """[(type, construction, id, internal role, blocked)] of every curve: what set_geometry
     and restore keep (for tests and diagnostics)."""

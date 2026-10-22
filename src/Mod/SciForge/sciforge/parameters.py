@@ -481,17 +481,14 @@ def _sketch_shots(doc):
 def _put_back_sketches(doc, shots):
     """Every sketch's curves where they were before the change (construction flags and ids
     kept); only sketches whose curves moved are touched."""
-    from . import sketch_explain, sketch_geometry
+    from . import sketch_geometry
 
     for name, shot in shots.items():
         sketch = doc.getObject(name)
         if sketch is None or len(sketch.Geometry) != len(shot):
             continue
         try:
-            if all(
-                sketch_explain._same_curve(a, b, 1e-9)
-                for a, b in zip(sketch.Geometry, sketch_geometry.curves(shot))
-            ):
+            if not sketch_geometry.moved(sketch, shot):
                 continue
             sketch_geometry.restore(sketch, shot)
             sketch.touch()
