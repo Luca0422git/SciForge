@@ -1010,7 +1010,7 @@ def _occ_draft(shape, names, hinge, pull, angle):
     try:
         holder = doc.addObject("Part::Feature", "Solid")
         _unseen(holder)
-        holder.Shape = shape
+        holder.Shape = _unplaced(shape)
         body = doc.addObject("PartDesign::Body", "Body")
         _unseen(body)
         base = body.newObject("PartDesign::FeatureBase", "Base")
@@ -1046,6 +1046,36 @@ def _occ_draft(shape, names, hinge, pull, angle):
             "pick other faces."
         )
     return out
+
+
+def _unplaced(shape):
+    """`shape` with its Placement built into its geometry (same faces, same order). A body's
+    solid made from a YZ or XZ sketch carries a turned Placement; given to the scratch
+    Part::Feature, the Placement went to the feature and the PartDesign Draft worked on the
+    shape without it: the hinge and pull (body coordinates) met the faces in the wrong frame,
+    so the trial drafts of the limit search tilted the wrong way and the dialog held angles at
+    a false limit (review finding DRAFT-1-F6). Kept for the last few shapes."""
+    try:
+        if shape.Placement.isIdentity():
+            return shape
+    except Exception:
+        return shape
+    key = shape_key(shape)
+    for k, kept, baked in _UNPLACED:
+        if k == key and kept.isSame(shape):
+            return baked
+    import FreeCAD as App
+
+    matrix = shape.Placement.toMatrix()
+    baked = shape.copy()
+    baked.Placement = App.Placement()
+    baked = baked.transformed(matrix, True)
+    _UNPLACED.append((key, shape, baked))
+    del _UNPLACED[:-4]
+    return baked
+
+
+_UNPLACED = []  # [(shape key, shape, the same shape without a Placement)], newest last
 
 
 def _unseen(obj):
