@@ -8,7 +8,7 @@ a quarter of the processor while the person only looks at the part, and a hitch 
 middle of an orbit every half second (SciForge speed with big designs, 2026-10-21; Fusion
 does not stutter there). Now a tick first compares key(): this counter (moved by FreeCAD's
 document signals: an object made, changed, deleted or recomputed, undo / redo, a document
-opened, renamed, closed or switched to, a view provider changed, an edit started or ended)
+opened, renamed, closed or switched to, an edit started or ended)
 and the active document, body and component (FreeCAD signals no change of those). The
 whole design is read only when the key changed, and at least every SAFETY seconds in case
 something changed without a signal (a flag FreeCAD sets without telling anyone). An
@@ -80,15 +80,17 @@ _APP_SLOTS = (
     "slotFinishRestoreDocument",
     "slotFinishSaveDocument",
 )
+# No slotCreatedObject / slotChangedObject here: FreeCAD calls them with the view provider
+# while it is still being built, and asking for its Python object then fixes that object's
+# type for good as a plain one (PartDesign's makeTemporaryVisible was gone: "Fillet could not
+# start picking"). FreeCAD's own Visibility follows the view's, and the App watch sees it.
 _GUI_SLOTS = (
     "slotCreatedDocument",
     "slotDeletedDocument",
     "slotRelabelDocument",
     "slotRenameDocument",
     "slotActivateDocument",
-    "slotCreatedObject",
     "slotDeletedObject",
-    "slotChangedObject",
     "slotInEdit",
     "slotResetEdit",
 )

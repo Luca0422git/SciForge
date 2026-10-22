@@ -517,8 +517,8 @@ def _measured(label, fn, settle=1.0):
 
 
 def _edit(label, feature, a, b):
-    """The step's distance changed the way a dialog's OK does (a transaction, then the
-    timeline's recompute), then Ctrl+Z and Ctrl+Y."""
+    """The step's distance changed the way a dialog's OK does (the timeline's recompute
+    inside the transaction), then Ctrl+Z and Ctrl+Y."""
     from sciforge import timeline_ops
 
     doc = App.ActiveDocument
@@ -527,8 +527,8 @@ def _edit(label, feature, a, b):
     def edit():
         doc.openTransaction("Perf edit")
         feature.Length = b if abs(feature.Length.Value - a) < 1e-6 else a
+        timeline_ops.recompute(doc)  # inside the transaction, like a dialog's OK
         doc.commitTransaction()
-        timeline_ops.recompute(doc)
         Gui.updateGui()
 
     _measured("%s: recompute + redisplay" % label, edit)

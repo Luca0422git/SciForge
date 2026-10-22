@@ -20,7 +20,7 @@ timeline_ops.py, the layout logic by timeline_core.py."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import _remember, components, doc_epoch, timeline_core as core
+from . import _remember, components, doc_epoch, timeline_core as core, undo_fast
 from . import timeline_ops as ops
 from . import ui_icon, warn
 from .compat import QtCore, QtGui, QtWidgets, Signal
@@ -573,6 +573,7 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def start(self):
         doc_epoch.install()
+        undo_fast.install()
         try:
             ops.install_guard(_defer)
             if self._undo_watch is None:
@@ -597,7 +598,8 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def after_undo(self):
         """Fusion recomputes after Undo/Redo; FreeCAD puts the shapes back but leaves
-        steps that were red (or waiting) in that state until the next recompute."""
+        steps that were red (or waiting) in that state until the next recompute. When the
+        shapes it put back are already the right ones, nothing is rebuilt (undo_fast)."""
         try:
             doc = _doc()
             if doc is None or Gui.Control.activeDialog():
@@ -617,7 +619,9 @@ class TimelineWidget(QtWidgets.QWidget):
                 if "Invalid" in state or "Touched" in state or "Error" in state:
                     stale = True
                     break
-            if stale:
+            # (undo_fast: when FreeCAD put back every shape built from the values it restored,
+            # the design is already as built: no rebuild, which took 15-23 s on big designs)
+            if stale and not undo_fast.settle_without_rebuild(doc):
                 ops.recompute(doc)
             ops.show_marker_state(doc)  # sketches/planes drawn as the marker says
             self.refresh(force=True)
