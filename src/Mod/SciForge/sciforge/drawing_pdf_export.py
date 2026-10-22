@@ -115,9 +115,10 @@ def _rez(scene, page):
     return 10.0
 
 
-def add_markers(page, scene):
-    """Markers into every view item of the page's scene. Returns (markers, codes,
-    hidden widths per view)."""
+def add_markers(page, scene, markers):
+    """Markers into every view item of the page's scene, each also put into the list
+    `markers` (so they can be taken out whatever happens). Returns (codes, hidden line
+    widths per view)."""
     QtCore, QtGui, QtWidgets = _qt()
     doc = page.Document
     rez = _rez(scene, page)
@@ -144,7 +145,6 @@ def add_markers(page, scene):
     plan, codes = core.marker_plan(items)
     Marker = _marker_class()
     page_rect = QtCore.QRectF(0.0, -height * rez, width * rez, height * rez)
-    markers = []
     by_item = {}
     for name, _band, z, _code, colour in plan:
         by_item.setdefault(name, []).append((z, colour))
@@ -155,10 +155,10 @@ def add_markers(page, scene):
         mine = []
         for z, colour in wanted:
             marker = Marker(colour, parent)
+            markers.append(marker)
             marker.setZValue(z)
             marker.setPos(spot)
             mine.append(marker)
-        markers += mine
         if parent.boundingRect() != before:
             # a marker outside what the view covers makes it bigger, and TechDraw puts
             # the caption under a view's extent: try the middle of what it covered
@@ -167,7 +167,7 @@ def add_markers(page, scene):
                 marker.setPos(middle)
             if parent.boundingRect() != before:
                 log("PDF: a marker changes the extent of %s (its caption may move)" % name)
-    return markers, codes, hidden
+    return codes, hidden
 
 
 def _marker_spot(item, page_rect):
@@ -364,7 +364,7 @@ def print_sheet(page, path):
     try:
         if scene is not None:
             try:
-                markers, info["codes"], info["hidden"] = add_markers(page, scene)
+                info["codes"], info["hidden"] = add_markers(page, scene, markers)
             except Exception as exc:
                 remove_markers(markers)
                 info["codes"] = None

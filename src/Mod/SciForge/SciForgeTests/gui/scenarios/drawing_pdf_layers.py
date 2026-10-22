@@ -421,7 +421,8 @@ def c_command():
     group_views = [v.Name for v in state["group"].Views]
     h.check("the group has its two views", len(group_views) == 2, group_views)
     scene = drawing_pdf_export.scene_of(sheet)
-    markers, codes, _hidden = drawing_pdf_export.add_markers(sheet, scene)
+    markers = []
+    codes, _hidden = drawing_pdf_export.add_markers(sheet, scene, markers)
     marked = {key for key, _kind, _band in codes.values()}
     drawing_pdf_export.remove_markers(markers)
     h.check(
