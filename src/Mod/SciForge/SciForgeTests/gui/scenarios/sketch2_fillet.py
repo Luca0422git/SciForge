@@ -10,8 +10,9 @@ Four shapes on the XY plane, each a line ending on a quarter arc (radius 15) at 
   A  MODIFY > Fillet: the line, then the arc of S1, type 3, Enter: an arc of radius 3
      tangent to both, the line and the arc cut back to it, a Radius dimension 3; Ctrl+Z
      takes it back in one step, Ctrl+Y brings it again
-  B  Fillet at the corner point (0, 0) of two lines: 50 is refused (too big, the reason by
-     the pointer, nothing made), then 4, Enter: radius 4, the old corner kept as a
+  B  Fillet at the corner point (0, 0) of two lines: 50 is held at the largest radius that
+     fits (the 30 mm line) and said by the pointer (Luca's decision of 2026-10-21: it was
+     refused); Ctrl+Z; the corner again, 4, Enter: radius 4, the old corner kept as a
      construction point
   C  MODIFY > Chamfer, Equal distance, the corner point (40, -40) of S2: type 4, Enter: the
      chamfer from 4 along the line to 4 (straight) from the corner on the arc, two 4 mm
@@ -221,12 +222,38 @@ b_too_big.wait_ms = 900
 
 
 def b_refused():
-    h.check("B 50 is refused: nothing made", geo_count() == s["n"], geo_count() - s["n"])
-    h.check("B ...the reason by the pointer", "larger" in hint() or "smaller" in hint(), hint())
-    st.keys("4\n")
+    g = sk().Geometry
+    new = list(range(s["n"], len(g)))
+    arcs = [i for i in new if g[i].TypeId == "Part::GeomArcOfCircle"]
+    r = g[arcs[0]].Radius if len(arcs) == 1 else 0
+    h.check("B 50 makes the largest fillet that fits (the 30 mm line)", 25.0 < r <= 30.0, r)
+    h.check(
+        "B ...and the pointer says so",
+        "50 mm does not fit: limited to %.2f mm" % r in hint(),
+        hint(),
+    )
+    st.esc()
+    st.undo()
 
 
 b_refused.wait_ms = 900
+
+
+def b_undone():
+    h.check("B Ctrl+Z takes it back", geo_count() == s["n"], geo_count() - s["n"])
+    si.menu_item("MODIFY", "Fillet")
+
+
+def b_corner_again():
+    st.click(V(0, 0, 0))
+
+
+def b_four():
+    h.check("B the corner again", st.tool() is not None and st.tool().step == 2)
+    st.keys("4\n")
+
+
+b_four.wait_ms = 900
 
 
 def b_check():
@@ -479,6 +506,9 @@ h.run(
             b_corner,
             b_too_big,
             b_refused,
+            b_undone,
+            b_corner_again,
+            b_four,
             b_check,
             c_open,
             c_type,

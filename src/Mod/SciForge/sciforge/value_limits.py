@@ -392,6 +392,48 @@ def show_note(label, text):
         pass  # the dialog went away
 
 
+class ShowWhenLeft:
+    """A number typed in a box and held at a limit while it is being typed: the box keeps
+    what is typed (rewriting it under the cursor would be rude) and shows the limit once it
+    is left (Enter, Tab, a click elsewhere), unless something else was typed meanwhile.
+    For taskui.DistanceField boxes (FreeCAD's number box)."""
+
+    def __init__(self):
+        self.pending = {}  # value name -> (the number typed, the limit it was held at)
+        self.watched = set()
+
+    def hold(self, key, field, typed, held):
+        """Show `held` in `field` once it is left (if it then still holds `typed`)."""
+        self.pending[key] = (float(typed), float(held))
+        if key in self.watched:
+            return
+        try:
+            field.widget.editingFinished.connect(lambda k=key, f=field: self._left(k, f))
+            self.watched.add(key)
+        except Exception:
+            pass
+
+    def _left(self, key, field):
+        try:
+            item = self.pending.pop(key, None)
+            if item is None or getattr(field, "_typed", None) is not None:
+                return
+            if abs(float(field.value()) - item[0]) < 1e-9:
+                field.set_value(item[1])
+        except Exception:
+            pass  # the box went with its dialog
+
+
+def show_held(shower, key, field, typed, held):
+    """`held` in `field` now when nothing is being typed in it, else once it is left."""
+    if field is None:
+        return
+    if getattr(field, "_typed", None) is None:
+        field.set_value(held)
+    elif shower is not None:
+        shower.hold(key, field, typed, held)
+
+
 class LimitedValues:
     """The part of a dialog that holds its values at their limits (a mixin: Shell, Draft,
     Press Pull, Thicken...). The dialog gives:
@@ -411,6 +453,7 @@ class LimitedValues:
 
     def limit_init(self):
         self.limits = Limiter()
+        self.limit_shower = ShowWhenLeft()  # a typed number held: the box shows the limit
         self._limit_edit = None  # (value name, "typed" / "dragged" / "formula")
         self._limit_pending = False
         self._limit_busy = False

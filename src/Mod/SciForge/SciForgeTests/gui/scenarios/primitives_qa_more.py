@@ -5,7 +5,8 @@ M1. A conical spring. Coil on XY, centre on the origin, a point at (10, 0): d20.
     Revolution and Pitch (the same coil described another way: 5 revolutions, pitch 4);
     Revolutions 4, Pitch 5; Angle -10: Fusion's coil narrows as it rises. It must stay
     above the plane (FreeCAD's helix gave the mirror image: down through the plane,
-    widening). Angle -60 closes the coil before its end: said, OK waits; -10 again, OK.
+    widening). Angle -60 would close the coil before its end: held at the steepest angle
+    that still works and said (Luca's decision of 2026-10-21); -10 again, OK.
     Edited from the timeline: the dialog shows what was left; Section Triangular
     (Internal), Section Position Outside; OK. Ctrl+Z, Ctrl+Y. Saved to a temporary file,
     closed, reopened: the same spring; edited again to Angle 10 (it widens), OK.
@@ -30,6 +31,7 @@ the axis; pi = PI, t = tan 10 deg):
   d4 (r 2): + 32 pi^2; Inside (R 6): + 24 pi^2; Cut: - 24 pi^2; tube t: - pi^2 (8 - t/2)
   (t/2)^2; Outside (R 10): - 40 pi^2. Pipe d2 along a 40 mm top edge, 3/4 outside: + 30 pi.
 """
+
 import math
 import os
 import tempfile
@@ -197,9 +199,14 @@ m1_narrows.wait_ms = 2500
 
 
 def m1_too_steep():
+    """Luca, 2026-10-21: an angle that closes the coil is held at the steepest that works
+    (it was refused, and OK waited)."""
     p = coil_panel()
-    h.check("M1 -60 closes the coil: said", "narrows" in msg(p), msg(p))
-    h.task_button("OK")
+    note = p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+    a = p.options.get("angle", 0) if p is not None else 0
+    h.check("M1 -60 is held at the steepest angle that still rises", -60.0 < a < -10.0, a)
+    h.check("M1 and said", note == "-60° does not fit: limited to %.1f°" % a, note)
+    h.check("M1 no error", msg(p) == "", msg(p))
 
 
 m1_too_steep.wait_ms = 1500
@@ -207,7 +214,6 @@ m1_too_steep.wait_ms = 1500
 
 def m1_waits():
     p = coil_panel()
-    h.check("M1 OK waits", p is not None)
     if p is not None:
         ui.type_into(p.angle.widget, "-10")
 

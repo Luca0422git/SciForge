@@ -334,12 +334,7 @@ class PipePanel(Panel, value_limits.LimitedValues):
                 held = self.limit_held(key, value)
             if held != value:
                 self.options[key] = held
-                if field._typed is None:  # not while a number is being typed in it
-                    self._quiet = True
-                    try:
-                        field.set_value(held)
-                    finally:
-                        self._quiet = False
+                value_limits.show_held(self.limit_shower, key, field, value, held)
                 handle = self.handles.get(key)
                 if handle is not None:
                     try:
@@ -368,12 +363,8 @@ class PipePanel(Panel, value_limits.LimitedValues):
     def limit_set(self, what, value):
         self.options[what] = value
         field = self.formula_fields.get(what)
-        if field is not None and field._typed is None:
-            self._quiet = True
-            try:
-                field.set_value(value)
-            finally:
-                self._quiet = False
+        if field is not None:
+            value_limits.show_held(self.limit_shower, what, field, field.value(), value)
         handle = self.handles.get(what)
         if handle is not None:
             try:

@@ -1974,8 +1974,8 @@ class ThickenPanel(SurfacePanel, value_limits.LimitedValues):
     def limit_set(self, what, value):
         self.options[what] = float(value)
         field = self.number_fields.get(what)
-        if isinstance(field, taskui.DistanceField) and field._typed is None:
-            field.set_value(value)
+        if isinstance(field, taskui.DistanceField):
+            value_limits.show_held(self.limit_shower, what, field, field.value(), value)
         handle = self.handles.get(what)
         if handle is not None:
             try:
@@ -1993,8 +1993,8 @@ class ThickenPanel(SurfacePanel, value_limits.LimitedValues):
             held = self.limit_edit(key, float(value), source)
             if held != value:
                 field = self.number_fields.get(key)
-                if isinstance(field, taskui.DistanceField) and field._typed is None:
-                    field.set_value(held)
+                if isinstance(field, taskui.DistanceField):
+                    value_limits.show_held(self.limit_shower, key, field, value, held)
                 value = held
         super()._number(key, value)
 

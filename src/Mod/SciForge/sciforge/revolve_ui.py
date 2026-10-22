@@ -17,7 +17,10 @@ Type To turns as far as an object: click an origin plane (its square is drawn wh
 Object box waits), a flat face, an edge or a corner of the part, a construction plane or
 point; the revolve stops there and follows the object when it moves.
 Revolving into material switches to Cut, unless you picked the operation yourself.
-Problems are shown in the dialog, which then stays open.
+Problems are shown in the dialog, which then stays open. An angle typed past what the
+revolve allows (360 degrees, 180 a side for Symmetric, both sides together 360) is set to
+that limit and the dialog says so, as the arrow already stops there (Luca, 2026-10-21;
+Fusion refuses it: value_limits.py); a formula is explained instead.
 """
 
 import math
@@ -27,7 +30,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import bodies_row_ui, commands, drag_guard, extrude, handle_look, handles3d, log, preview
-from . import origin_look, profile_pick, protractor, revolve, ui_icon_path, warn
+from . import origin_look, profile_pick, protractor, revolve, ui_icon_path, value_limits, warn
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
 
@@ -1110,6 +1113,11 @@ class RevolvePanel(Panel):
         self.formulas.setStyleSheet("color: #b8c7d9;")
         form.addRow(self.formulas)
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # an angle held at its limit
+        form.addRow(self.limit_label)
+        self._angle_note = ""  # a typed angle set to the limit
+        self._angle_drag_note = ""  # the arrow stopped at the limit
+        self._angle_shower = value_limits.ShowWhenLeft()  # a typed angle held: shown on leave
         # Fusion takes a parameter or a formula in every value field ("turn", "turn / 2").
         self.formula_inputs = [
             preview.FormulaInput(self, "angle", self.angle),
@@ -1170,6 +1178,44 @@ class RevolvePanel(Panel):
         self.options["angle"] = self.angle.value()
         self.options["angle2"] = self.angle2.value()
         self.options["operation"] = self.operation.currentData()
+        self._hold_angles()
+
+    # -- angles past what a revolve allows (value_limits) ----------------------------------------
+    def _angle_bound(self, key):
+        """The largest angle (degrees, as a size) the value `key` may take now, or None."""
+        if self.options.get("type") != "angle":
+            return None
+        direction = self.options.get("direction")
+        if key == "angle":
+            if direction == "symmetric":
+                return 180.0
+            if direction == "two_sides":
+                return max(0.1, 360.0 - abs(float(self.options.get("angle2", 0.0))))
+            return 360.0
+        if direction == "two_sides":
+            return max(0.1, 360.0 - abs(float(self.options.get("angle", 0.0))))
+        return None
+
+    def _hold_angles(self):
+        """A typed angle past the limit is set to it (the arrow stops there already); the
+        note says so. A formula's value is never rewritten (its refusal stays)."""
+        # the angle typed last yields to the limit (also later, when the box is left)
+        edited = getattr(self, "_angle_edited", None)
+        if not hasattr(self, "limit_label"):
+            return
+        expressions = self.options.get("expressions") or {}
+        self._angle_note = ""
+        for key, field in (("angle", self.angle), ("angle2", self.angle2)):
+            if key != edited or expressions.get(key):
+                continue  # only the angle just typed yields, never a formula's
+            value = float(self.options.get(key, 0.0))
+            bound = self._angle_bound(key)
+            if bound is None or abs(value) <= bound + 1e-9:
+                continue
+            held = math.copysign(bound, value) if key == "angle" else bound
+            self.options[key] = held
+            value_limits.show_held(self._angle_shower, key, field, value, held)
+            self._angle_note = value_limits.note_typed(value, held, "deg")
 
     # -- formulas (preview.FormulaInput calls formula_typed / _cleared / _failed) -----------------
     FORMULA_NAMES = {"angle": "Angle", "angle2": "Side Two angle"}
@@ -1965,6 +2011,8 @@ class RevolvePanel(Panel):
     def _angle_typed(self, value):
         if self._quiet:
             return
+        self._angle_drag_note = ""
+        self._angle_edited = "angle"
         handle = self.handles.get("angle")
         if handle is not None:
             handle.set_angle(self._handle_angle(value))
@@ -1974,6 +2022,8 @@ class RevolvePanel(Panel):
     def _angle2_typed(self, value):
         if self._quiet:
             return
+        self._angle_drag_note = ""
+        self._angle_edited = "angle2"
         handle = self.handles.get("angle2")
         if handle is not None:
             handle.set_angle(-self._side_sign() * value)
@@ -2006,6 +2056,7 @@ class RevolvePanel(Panel):
             value = max(-360.0, min(360.0, value))
         self._quiet = True
         try:
+            self._drag_note(value, self._angle_bound("angle"))
             self.angle.set_value(value)
         finally:
             self._quiet = False
@@ -2024,6 +2075,7 @@ class RevolvePanel(Panel):
         value = max(0.1, min(360.0 - abs(self.angle.value()), value))
         self._quiet = True
         try:
+            self._drag_note(value, self._angle_bound("angle2"))
             self.angle2.set_value(value)
         finally:
             self._quiet = False
@@ -2144,7 +2196,15 @@ class RevolvePanel(Panel):
     def feature(self):
         return self.target
 
+    def _drag_note(self, value, bound):
+        """The arrow stopped at the revolve's limit: the dialog says so."""
+        self._angle_drag_note = ""
+        if bound is not None and abs(abs(value) - bound) < 1e-9:
+            side = "hi" if value > 0 else "lo"
+            self._angle_drag_note = value_limits.note_reached(value, side, "deg")
+
     def show_status(self):
+        value_limits.show_note(getattr(self, "limit_label", None), "")
         if self.formula_error:
             self.message.setText("⚠ " + self.formula_error)
             return
@@ -2154,6 +2214,9 @@ class RevolvePanel(Panel):
         text = _plain(preview.failure(self.target)) or revolve.problem(self.target)
         text = text or extrude_bodies_problem(self.target) or self.bodies_row.problem
         self.message.setText("⚠ " + text if text else "")
+        if not text:
+            note = self._angle_note or self._angle_drag_note
+            value_limits.show_note(getattr(self, "limit_label", None), note)
 
     # -- handles --------------------------------------------------------------------------------------
     def _remove_handles(self):

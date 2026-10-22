@@ -11,6 +11,41 @@ maths in `sciforge/fillet_core.py` (unit tested); value boxes in `sciforge/blend
 Status: **first pass + QA pass (2026-10-11, branch `sf/fillet-qa`), part 2 (2026-10-14,
 branch `sf/fillet-2`), not yet signed off by Luca**.
 
+## Values past what fits stop at the limit (Luca's decision, 2026-10-21)
+
+**This deliberately differs from Fusion.** Fusion refuses a value that does not fit (a
+radius too big, a wall too thick, an angle too steep) with an error, and the dialog waits
+until a smaller value is typed. Luca (2026-10-21): "limit edits to stop at that limit, so if
+I want to chamfer something to the max I can quickly drag it without having to type
+whatever obscure value the error spits out", and "add the functionality to any tool that
+can give that sort of error". So in SciForge (shared helper `sciforge/value_limits.py`):
+
+- an arrow (or disc) dragged past the limit stops there, like the end of a slider; the
+  preview shows that result and a blue note under the message says "Largest that fits
+  here: 3.47 mm" ("Furthest that fits here" for a limit on the other side: a push into the
+  part, a negative angle); OK works at once;
+- a plain number typed past the limit is set to it and the note says so: "5 mm does not
+  fit: limited to 3.47 mm" (the box keeps what is being typed and shows the limit once it
+  is left);
+- the limit is found once (a time-budgeted bisection), rounded toward the safe side to the
+  box's precision (0.01 mm, 0.1 deg) and built once more to be sure; it is kept for the
+  inputs it was found for (the part, the picks, the other values), so a drag never runs a
+  search on every mouse move;
+- a value from a formula or parameter ("width / 2") is never rewritten: the dialog keeps
+  the explanation, with "Largest that fits here: ..." added, and OK waits.
+
+In this dialog: Fillet (Constant radius, Chord Length, the Variable start / end / point
+radii, Rule Fillet's radius), Chamfer (Equal Distance, both distances of Two Distances, the
+distance and the angle of Distance and Angle), in FreeCAD's steps and in SciForge's own
+(several sets: the limit of the set being edited). Press Pull's fillet / chamfer editing
+too (see extrude-presspull.md). A Distance and Angle chamfer is checked as the same bevel
+built as Two Distances: FreeCAD's own Distance and Angle builder crashed (an OpenCASCADE
+segfault in `ChFi3d_Builder`) for some sizes where the bevel runs into a fillet, and its
+step kept the last good shape without a reason when a size did not fit. Picking more
+edges does not change the size: if it no longer fits it is refused, with the limit.
+Scenario `limits_fillet`; `fillet`, `fillet_qa` P4, `fillet_qa_chamfer` P12, `fillet2_*`
+updated (P6 and P15, which need a fillet that does not fit, now use a formula).
+
 ## Behaviour spec, part 2 (researched 2026-10-14)
 
 Source column: Autodesk = Fusion help or the Fusion API reference (read through search
@@ -99,7 +134,9 @@ Picks of every set stay highlighted; clicking one drops it from its set. Type ch
 the picks over (each type picks something else). Rule Fillet shows Rule, one or two
 "Faces/Features" boxes, Radius, Rounds / Fillets; Full Round shows "Center Face" and the
 radius it found ("Half the width between the side faces: 2.00 mm"). A size that does not fit
-names its set ("Set 2: Radius 40 mm is too big here ..."); OK waits.
+names its set ("Set 2: Radius 40 mm is too big here ..."); a plain size dragged or
+typed there is held at the largest that fits that set instead (Luca, 2026-10-21, see
+the top); OK waits only for a formula that does not fit.
 
 ## What the user does (and what SciForge does)
 
@@ -118,7 +155,7 @@ names its set ("Set 2: Radius 40 mm is too big here ..."); OK waits.
 | The chamfer's arrow is where you can see it | Same since 2026-10-13 (Luca: "the chamfer tool doesn't have an arrow to drag"): Equal Distance and Distance and Angle put the arrow on the face toward the viewer, as the fillet does; it is sized for the screen (about 75 px, never longer than about half the picked edge, never shorter than about 1 mm), so it shows on a 400 mm part and on a 4 mm part. Two Distances keeps one arrow per face. Drawn in front of the part and grabbable through it |
 | Radius field, units, parameters and formulas (`r`, `r * 2`, `0.1 in`) | Same: a formula is kept on the feature as an expression (the value follows the parameter) and listed under the boxes ("Radius = r*2"); a bare number is always mm (degrees for an angle); a typo is explained in the dialog and OK waits; no FreeCAD pop-up |
 | Dragging the arrow back through the edge | The size stops at 0.1 mm and the arrow comes back to the value shown when the mouse is let go |
-| Impossible radius: the dialog says so, OK stays disabled | The dialog explains it in plain words and proposes the largest radius that fits; OK waits; the preview keeps the last good result; **nothing** is printed to the Report view |
+| Impossible radius: the dialog says so, OK stays disabled | **Differs (Luca, 2026-10-21):** dragged or typed, the radius stops at the largest that fits, the preview shows it and a blue note says "Largest that fits here: 9.99 mm" (typed: "50 mm does not fit: limited to 9.99 mm"); OK works. A radius from a formula is not rewritten: explained, with the largest radius, and OK waits. **Nothing** is printed to the Report view |
 | OK / Enter finishes, Cancel / Esc cancels, one undo step | Same (Esc also works with the mouse over the 3D view) |
 | Ctrl+Z while the dialog is open | Ends the dialog and takes the unfinished fillet away; Ctrl+Y brings it back as a normal step |
 | Double-click the fillet in the timeline: edit with the edges shown and editable | Same. The model rolls back to the fillet while editing (later steps hidden) and comes back after OK |
@@ -126,7 +163,7 @@ names its set ("Set 2: Radius 40 mm is too big here ..."); OK waits.
 | Right-click marking menu while the command is open | OK (3 o'clock) and Cancel (9 o'clock) work like the dialog's buttons |
 | Edits earlier in the timeline keep later fillets on "their" edges | A fillet inserted with the marker rolled back, or an earlier fillet edited to round one more edge, used to break the later fillets/chamfers ("Invalid edge link"): their edges are now found again by geometry (`blend.References`), also when an edge got shorter |
 | A body made of several separate solids | Fillets work on it (it used to say "would cut the part into pieces") |
-| Distance and Angle chamfer with an angle the bevel cannot reach | The dialog names the largest angle that works here (below 90° on a box edge) |
+| Distance and Angle chamfer with an angle the bevel cannot reach | The angle stops at the steepest one whose bevel still fits (Luca, 2026-10-21); a formula's angle is explained with that limit |
 | Every pick dropped again | The preview step goes away: the body, the timeline and a measurement show the part as it was |
 
 Chamfer: the same picking, plus **Chamfer Type** Equal Distance / Two Distances / Distance and

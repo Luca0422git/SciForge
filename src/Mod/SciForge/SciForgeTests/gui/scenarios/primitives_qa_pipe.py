@@ -5,7 +5,8 @@ Q1. A new design with nothing in it: Pipe says to draw a path first (next to the
     dialog left open, no pop-up).
 Q2. A 40 x 30 x 10 block. Pipe with nothing selected: OK says to pick the path, the dialog
     stays. The top front edge clicked: a pipe d2 along it (a quarter inside: Join).
-    Cut. Hollow with a wall of 1 (as thick as the radius): said, OK waits; 0.5: a hollow
+    Cut. Hollow with a wall of 1 (as thick as the radius): held at 0.99 and said (Luca's
+    decision of 2026-10-21; it was refused); 0.5: a hollow
     groove. The top right edge clicked too: the pipe turns the corner. Clicked again:
     dropped. 5 typed with the mouse over the 3D view goes into the Section Size handle's
     value box (Fusion's box next to the handle; FreeCAD's key 5 would have turned the
@@ -153,14 +154,20 @@ q2_wall.wait_ms = 2000
 
 
 def q2_wall_said():
+    """Luca, 2026-10-21: a wall as thick as the radius is held at the thickest that works."""
     p = panel()
-    h.check("Q2 a wall as thick as the radius is said", "thick" in msg(p), msg(p))
-    h.task_button("OK")
+    note = p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+    t = p.options.get("thickness") if p is not None else 0
+    h.check("Q2 a wall as thick as the radius is held at 0.99", near(t, 0.99), t)
+    h.check("Q2 and said", note == "1 mm does not fit: limited to 0.99 mm", note)
+    h.check("Q2 no error", msg(p) == "", msg(p))
+
+
+q2_wall_said.wait_ms = 1500
 
 
 def q2_wall_waits():
     p = panel()
-    h.check("Q2 OK waits", p is not None)
     if p is not None:
         ui.type_into(p.thickness.widget, "0.5")
 

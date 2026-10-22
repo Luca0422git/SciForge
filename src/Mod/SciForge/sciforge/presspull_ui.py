@@ -657,9 +657,8 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
             return
         held = self.limit_edit("value", value, "formula" if self.formula else "typed")
         if held != value:
+            value_limits.show_held(self.limit_shower, "value", self.field, value, held)
             value = held
-            if self.field._typed is None:  # not while a number is being typed in it
-                self.field.set_value(value)
         self._apply_value(value)
 
     def _apply_value(self, value):
@@ -772,8 +771,7 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
         return 0.1  # a fillet radius / chamfer size
 
     def limit_set(self, what, value):
-        if self.field._typed is None:
-            self.field.set_value(value)
+        value_limits.show_held(self.limit_shower, what, self.field, self.field.value(), value)
         if self.dragger is not None:
             self.dragger.set_distance(value)
         if self.mode == "faces":

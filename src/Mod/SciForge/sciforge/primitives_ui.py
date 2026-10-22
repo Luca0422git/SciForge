@@ -1225,10 +1225,8 @@ class PlacedPanel(Panel, value_limits.LimitedValues):
         elif self.state == "ready" and key in self.fields:
             formula = bool(self.options.get("expressions", {}).get(key))
             held = self.limit_edit(key, value, "formula" if formula else "typed")
-            if held != value:
-                field = self.fields[key]
-                if field._typed is None:  # not while a number is being typed in it
-                    self.set_field(field, held)
+            if held != value:  # the box shows it now, or once it is left
+                value_limits.show_held(self.limit_shower, key, self.fields[key], value, held)
                 value = held
         self.options[key] = value
         if self.state in ("plane", "place"):
@@ -1420,8 +1418,8 @@ class PlacedPanel(Panel, value_limits.LimitedValues):
     def limit_set(self, what, value):
         self.options[what] = value
         field = self.fields.get(what)
-        if field is not None and field._typed is None:
-            self.set_field(field, value)
+        if field is not None:
+            value_limits.show_held(self.limit_shower, what, field, field.value(), value)
         handle = self.handles.get(what)
         if handle is not None:
             try:

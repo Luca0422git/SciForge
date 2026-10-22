@@ -742,8 +742,8 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     def _limit_typed(self, what, field, value, formula):
         """A typed angle held at the steepest one known to work (not a formula's)."""
         held = self.limit_edit(what, value, "formula" if formula else "typed")
-        if held != value and field._typed is None:  # not while a number is being typed
-            field.set_value(held)
+        if held != value:  # the box shows it now, or once it is left
+            value_limits.show_held(self.limit_shower, what, field, value, held)
         return held
 
     def _turned(self, degrees, released=False):
@@ -809,8 +809,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     def limit_set(self, what, value):
         self.options[what] = value
         field = self.angle if what == "angle" else self.angle2
-        if field._typed is None:
-            field.set_value(value)
+        value_limits.show_held(self.limit_shower, what, field, field.value(), value)
         if what == "angle" and self.handle is not None:
             try:
                 self.handle.set_angle(value)

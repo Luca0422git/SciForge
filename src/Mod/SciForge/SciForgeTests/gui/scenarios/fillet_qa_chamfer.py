@@ -131,11 +131,11 @@ def p12_angle_zero_said():
 
 def p12_angle_90():
     """Luca, 2026-10-21: 90 degrees (the bevel never meets the face) is held at the steepest
-    angle whose bevel still fits the 10 mm front face (2 tan a <= 10: about 78.6 degrees)."""
+    angle whose bevel still fits the face beside it (2 tan a <= 30: about 86 degrees)."""
     p = b.blend_panel()
     a = p.options.get("angle", 0) if p else 0
     note = p.limit_label.text() if p and p.limit_label.isVisible() else ""
-    h.check("P12 90 degrees is held at the steepest angle that fits", 70.0 < a < 79.0, a)
+    h.check("P12 90 degrees is held at the steepest angle that fits", 80.0 < a < 89.9, a)
     h.check("P12 and said", note == "90° does not fit: limited to %.1f°" % a, note)
     h.check("P12 no error", "⚠" not in message(), message())
     v = legs(2, 2 * math.tan(math.radians(a)))

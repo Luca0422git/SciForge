@@ -949,12 +949,8 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
                 self.options[key] = held
                 field = self._limit_field(key)
                 if field is not None and field._typed is None:
-                    self._quiet = True
-                    try:
-                        field.set_value(held)
-                    finally:
-                        self._quiet = False
                     self._limit_seen[key] = held
+                value_limits.show_held(self.limit_shower, key, field, value, held)
                 disc = self.draggers.get(key)
                 if disc is not None and hasattr(disc, "set_angle"):
                     disc.set_angle(held)  # the taper disc stops at the limit
@@ -1001,12 +997,8 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         self.options[what] = value
         self._limit_seen[what] = value
         field = self._limit_field(what)
-        if field is not None and field._typed is None:
-            self._quiet = True
-            try:
-                field.set_value(value)
-            finally:
-                self._quiet = False
+        if field is not None:
+            value_limits.show_held(self.limit_shower, what, field, field.value(), value)
         disc = self.draggers.get(what)
         if disc is not None and hasattr(disc, "set_angle"):
             disc.set_angle(value)

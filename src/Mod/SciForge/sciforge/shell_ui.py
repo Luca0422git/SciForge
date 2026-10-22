@@ -459,9 +459,8 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         source = "formula" if self.formulas.get(what) else "typed"
         held = self.limit_edit(what, value, source)
         if held != value:
+            value_limits.show_held(self.limit_shower, what, field, value, held)
             value = held
-            if field._typed is None:  # not while a number is being typed in it
-                field.set_value(value)
         self.options[what] = value
         found = False
         for dragger, spot, _origin, _direction in self.arrows:
@@ -538,8 +537,7 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     def limit_set(self, what, value):
         self.options[what] = value
         field = self.inside if what == "inside" else self.outside
-        if field._typed is None:
-            field.set_value(value)
+        value_limits.show_held(self.limit_shower, what, field, field.value(), value)
         self._arrow_to(what, value)
 
     def limit_keep(self):
