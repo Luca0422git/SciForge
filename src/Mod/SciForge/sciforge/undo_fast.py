@@ -154,16 +154,18 @@ class Ledger:
 
 def followers(stale, dependents):
     """Names of the objects to recompute when the design itself is not: of `dependents`
-    ((name, has a Shape) of everything built on the `stale` objects, the objects an Undo /
-    Redo left touched), those that keep no Shape FreeCAD could put back. A drawing's views
-    and dimensions, its page, a component: what they show was computed from the old shapes
-    and is not in the undo stack, so they would keep showing the undone design (a drawing
-    with the R8 fillets after the R8 edit was undone, 2026-10-22). An object with a Shape is
-    right: the Undo / Redo put it back, or it did not change."""
+    ((name, has a Shape, an object with a Shape is built on it) of everything built on the
+    `stale` objects, the objects an Undo / Redo left touched), those that keep no Shape
+    FreeCAD could put back. A drawing's views and dimensions, its page: what they show was
+    computed from the old shapes and is not in the undo stack, so they would keep showing the
+    undone design (a drawing with the R8 fillets after the R8 edit was undone, 2026-10-22).
+    An object with a Shape is right: the Undo / Redo put it back, or it did not change. One
+    that feeds a shape (a spreadsheet a feature reads) is left alone: recomputed, it would
+    mark the design touched again."""
     stale = set(stale)
     out = []
-    for name, has_shape in dependents:
-        if not has_shape and name not in stale and name not in out:
+    for name, has_shape, feeds_shape in dependents:
+        if not has_shape and not feeds_shape and name not in stale and name not in out:
             out.append(name)
     return out
 
@@ -323,7 +325,14 @@ def _dependents(doc, names):
         for dep in obj.InListRecursive:
             if dep.Document is doc and dep not in found:
                 found.append(dep)
-    keep = followers(names, [(o.Name, "Shape" in o.PropertiesList) for o in found])
+    rows = []
+    for obj in found:
+        has_shape = "Shape" in obj.PropertiesList
+        feeds = not has_shape and any(
+            "Shape" in o.PropertiesList for o in obj.InListRecursive if o.Document is doc
+        )
+        rows.append((obj.Name, has_shape, feeds))
+    keep = followers(names, rows)
     return [doc.getObject(name) for name in keep if doc.getObject(name) is not None]
 
 

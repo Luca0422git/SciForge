@@ -161,21 +161,27 @@ class FollowersTest(unittest.TestCase):
 
     def test_a_drawing_of_the_design(self):
         deps = [
-            ("Fillet001", True),  # a later step: its Shape was put back
-            ("Body", True),
-            ("View", False),  # TechDraw::DrawViewPart of the body
-            ("Dimension", False),
-            ("Page", False),
+            ("Fillet001", True, False),  # a later step: its Shape was put back
+            ("Body", True, False),
+            ("View", False, False),  # TechDraw::DrawViewPart of the body
+            ("Dimension", False, False),
+            ("Page", False, False),
         ]
         self.assertEqual(followers(["Fillet"], deps), ["View", "Dimension", "Page"])
 
     def test_nothing_built_on_it(self):
-        self.assertEqual(followers(["Fillet"], [("Body", True), ("Fillet001", True)]), [])
+        deps = [("Body", True, False), ("Fillet001", True, False)]
+        self.assertEqual(followers(["Fillet"], deps), [])
 
     def test_stale_objects_and_repeats_are_not_followers(self):
-        deps = [("Sheet", False), ("View", False), ("View", False)]
+        deps = [("Sheet", False, False), ("View", False, False), ("View", False, False)]
         self.assertEqual(followers(["Sheet"], deps), ["View"])
 
+    def test_an_object_a_shape_is_built_on_is_left_alone(self):
+        # a spreadsheet that reads the fillet and that a later pad reads: recomputed, it
+        # would mark the pad touched again
+        deps = [("Sheet", False, True), ("Pad", True, False), ("View", False, False)]
+        self.assertEqual(followers(["Fillet"], deps), ["View"])
 
 if __name__ == "__main__":
     unittest.main()
