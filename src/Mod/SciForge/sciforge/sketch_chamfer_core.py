@@ -18,6 +18,7 @@ Points are (x, y) tuples, angles radians.
 import math
 
 KINDS = ("equal", "distance_angle", "two_distances")
+WHOLE = 1e-6  # a setback this close to a line's reach takes the line whole (mm)
 LABELS = {
     "equal": "Equal distance",
     "distance_angle": "Distance and angle",
@@ -143,11 +144,35 @@ def chamfer_angle(angle, s1, s2):
 
 
 def check_fits(s1, s2, reach1, reach2):
-    """The chamfer must leave something of each line."""
-    if s1 >= reach1 - 1e-7:
+    """The chamfer must not run past the far end of a line. It may reach it: the chamfer
+    then takes that line whole (takes_whole) and meets the next corner."""
+    if s1 > reach1 + WHOLE:
         raise ChamferError("The chamfer is longer than the first line: make it smaller.")
-    if s2 >= reach2 - 1e-7:
+    if s2 > reach2 + WHOLE:
         raise ChamferError("The chamfer is longer than the second line: make it smaller.")
+
+
+def takes_whole(setback, reach):
+    """True when the setback reaches the far end of its line: nothing of the line is left
+    (it is kept as construction, the chamfer runs to its far end)."""
+    return setback >= reach - WHOLE
+
+
+def largest(kind, name, angle, reach1, reach2, second=None):
+    """The largest value of `name` ("distance" or "distance2") that fits the two lines at a
+    corner of `angle`: the chamfer then runs to the far end of a line. `second`: the angle
+    of Distance and angle (None: default_angle). None when nothing limits it."""
+    if kind == "equal":
+        return min(reach1, reach2)
+    if kind == "two_distances":
+        return reach1 if name == "distance" else reach2
+    if kind != "distance_angle" or name != "distance":
+        return None
+    alpha = default_angle(angle) if second is None else second
+    ratio = math.sin(alpha) / math.sin(angle + alpha)  # second setback per unit of the first
+    if ratio <= EPS:
+        return reach1
+    return min(reach1, reach2 / ratio)
 
 
 def points(point, u1, u2, s1, s2):

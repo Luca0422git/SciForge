@@ -8,9 +8,14 @@ A 40 x 20 rectangle from (10, 10) to (50, 30) (fully dimensioned: 40, 20, its co
    Enter: the chamfer runs from (45, 10) to (50, 10 + 5 tan 30); a 5 mm dimension from the old
    corner (kept as a construction point) and a 30 degree angle between the bottom line and
    the chamfer; the sketch stays fully constrained.
-2. Equal distance: click the corner (50, 30); 30 is refused (longer than the side, the reason
-   beside the pointer); type 4, Enter: (50, 26) to (46, 30); two 4 mm
-   dimensions, the second follows the first (fx): changing the first to 6 moves both.
+2. Equal distance: click the corner (50, 30); 30 is longer than what is left of the right
+   side (17.11 mm): it is held at the largest that fits and the text beside the pointer says
+   so (Luca's decision of 2026-10-21; Fusion refuses it); Enter makes it: the chamfer takes
+   the right side whole, so it runs from the first chamfer's end to (32.89, 30) and no
+   sliver of the side is left (the side stays as a construction line, with its constraints);
+   still fully constrained. Ctrl+Z; the corner again, type 4, Enter: (50, 26) to (46, 30);
+   two 4 mm dimensions, the second follows the first (fx): changing the first to 6 moves
+   both.
 3. Two distances: click the top line, then the left line, type 3, Tab, 6, Enter: 3 along
    the top line, 6 down the left one. Ctrl+Z takes it away, Ctrl+Y brings it back.
 MODIFY > Fillet (SciForge's, since sketch-2): click the two lines at the corner (10, 10),
@@ -169,18 +174,61 @@ def eq_corner():
 
 
 def eq_too_long():
-    st.keys("30\n")  # longer than the right side (17 mm left of it): refused
+    s["before_largest"] = len(sk().Geometry)
+    st.keys("30\n")  # longer than the right side (17.11 mm left of it): the largest that fits
 
 
-def eq_refused():
+def eq_largest():
+    # Luca's decision (2026-10-21): a value past what fits stops at the largest that does (it
+    # used to be refused); that largest chamfer takes the right side whole
     t = st.tool()
     hint = t.hint_text() if t is not None else ""
     h.check(
-        "a chamfer longer than the line is refused with the reason",
-        "longer than" in hint and t.step == 2,
-        (hint, t and t.step),
+        "30 is held at the largest chamfer that fits, and said",
+        "30 mm does not fit: limited to 17.11 mm" in hint,
+        hint,
     )
-    h.check("nothing changed", chamfer_line(V(50, 0, 0), V(20, 30, 0)) is None)
+    reach = 30 - (10 + 5 * T30)  # what the first chamfer left of the right side
+    h.check(
+        "the chamfer runs from the first chamfer's end to (32.89, 30)",
+        chamfer_line(V(50, 10 + 5 * T30, 0), V(50 - reach, 30, 0)) is not None,
+        sk().Geometry,
+    )
+    lines = [(i, g) for i, g in enumerate(sk().Geometry) if g.TypeId == "Part::GeomLineSegment"]
+    slivers = [g for i, g in lines if not sk().getConstruction(i) and g.length() < 0.01]
+    h.check("no sliver of the right side is left", not slivers, slivers)
+    kept = [
+        i
+        for i, g in lines
+        if sk().getConstruction(i)
+        and {(round(p.x, 6), round(p.y, 6)) for p in (g.StartPoint, g.EndPoint)}
+        == {(50.0, round(10 + 5 * T30, 6)), (50.0, 30.0)}
+    ]
+    h.check("the right side stays whole, as a construction line", len(kept) == 1, sk().Geometry)
+    dims = [round(c.Value, 4) for c in sk().Constraints if c.Type == "Distance" and c.Driving]
+    h.check("a dimension of the largest value", round(reach, 4) in dims, dims)
+    st.sketch_ok("the largest equal chamfer")
+    h.check(
+        "still fully constrained",
+        getattr(sk(), "FullyConstrained", True),
+        getattr(sk(), "FullyConstrained", None),
+    )
+    st.esc()
+    st.undo()
+
+
+def eq_largest_undone():
+    h.check(
+        "Ctrl+Z: the largest chamfer goes",
+        len(sk().Geometry) == s["before_largest"] and not sk().getConstruction(1),
+        len(sk().Geometry) - s["before_largest"],
+    )
+    open_chamfer()  # Equal distance is remembered
+
+
+def eq_corner_again():
+    st.click(V(50, 30, 0))
+    st.hover(V(47, 27, 0))
 
 
 def eq_keys():
@@ -419,7 +467,9 @@ h.run(
             eq_type,
             eq_corner,
             eq_too_long,
-            eq_refused,
+            eq_largest,
+            eq_largest_undone,
+            eq_corner_again,
             eq_keys,
             eq_check,
             two_type,

@@ -79,6 +79,53 @@ class LineAndArc(unittest.TestCase):
         self.assertTrue(near(points[-1], t2, 1e-9))
 
 
+class Largest(unittest.TestCase):
+    """Luca's limits (2026-10-21): the largest fillet runs to the far end of a curve and
+    takes it whole: found exactly, so no sliver of the curve is left."""
+
+    def test_square_corner_the_shorter_line(self):
+        refs = ((20.0, 0.0), (40.0, 15.0))
+        r = core.largest_radius(BOTTOM, RIGHT, refs[0], refs[1], 5.0)
+        self.assertAlmostEqual(r, 30.0, places=9)  # the 30 mm line runs out
+        self.assertEqual(core.takes_whole(BOTTOM, RIGHT, r, *refs), (False, True))
+        rest1, rest2 = core.leftovers(BOTTOM, RIGHT, r, *refs)
+        self.assertAlmostEqual(rest1, 10.0, places=6)
+        self.assertGreaterEqual(rest2, 0.0)
+        self.assertLess(rest2, 1e-9)
+        # from a radius too big, the same limit
+        self.assertAlmostEqual(core.largest_radius(BOTTOM, RIGHT, refs[0], refs[1], 80.0), r)
+
+    def test_reaching_the_end_fits(self):
+        refs = ((20.0, 0.0), (40.0, 15.0))
+        core.check(BOTTOM, RIGHT, 30.0, *refs)  # the whole 30 mm line
+        with self.assertRaises(core.FilletError):
+            core.check(BOTTOM, RIGHT, 30.01, *refs)
+        self.assertEqual(core.takes_whole(BOTTOM, RIGHT, 29.0, *refs), (False, False))
+
+    def test_line_and_arc(self):
+        refs = ((20.0, 0.0), (44.4, 10.6))
+        r = core.largest_radius(BOTTOM, ARC, refs[0], refs[1], 4.0)
+        self.assertIsNotNone(r)
+        self.assertEqual(core.takes_whole(BOTTOM, ARC, r, *refs), (True, False))
+        core.check(BOTTOM, ARC, r, *refs)
+        with self.assertRaises(core.FilletError):
+            core.check(BOTTOM, ARC, r * 1.001, *refs)
+
+    def test_a_short_arc_runs_out(self):
+        short = ("arc", (55.0, 0.0), 15.0, math.pi * 0.8, math.pi)
+        refs = (
+            (20.0, 0.0),
+            (55.0 + 15.0 * math.cos(math.pi * 0.9), 15.0 * math.sin(math.pi * 0.9)),
+        )
+        r = core.largest_radius(BOTTOM, short, refs[0], refs[1], 4.0)
+        self.assertEqual(core.takes_whole(BOTTOM, short, r, *refs), (False, True))
+        self.assertAlmostEqual(core.leftovers(BOTTOM, short, r, *refs)[1], 0.0, places=9)
+
+    def test_circles_have_no_limit_from_their_length(self):
+        a = ("circle", (0.0, 0.0), 10.0)
+        self.assertEqual(core.leftover(a, (10.0, 0.0), (10.0, 0.0)), None)
+
+
 class Circles(unittest.TestCase):
     def test_two_circles(self):
         a = ("circle", (0.0, 0.0), 10.0)

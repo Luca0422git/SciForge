@@ -126,3 +126,68 @@ The branches were built side by side, so some of them could not use each other y
 - Values that must not get *smaller* (a coil's pitch, a torus' inner diameter, a gear's
   rim) are not searched: only values whose safe side is toward 0.
 - set_model_parameter (fillet sets' sizes) is not searched.
+
+## Later the same day: the four scenarios that failed in the full GUI run
+
+The full GUI suite (427 scenarios) passed except four, which failed every time, also alone.
+Each is now fixed (code bug, or an expectation still written for the old refusal).
+
+- **`patterns_qa_more`, Circular Pattern Total Angle 270 typed (code bug).** The curved
+  handle said -90 instead of 270 and a drag from there gave -70.9. Cause: the limits branch
+  made `extrude_ui.AngleDragger.set_angle` remember the angle as the disc reads it back (80
+  came back as 80.0000026), but the disc itself only knows -180..180: 270 reads back as -90,
+  and the pattern's handle (`pattern_ui._TurnDragger`, which counts past half a turn from
+  its last reading) then started from -90. Now the read-back is unwrapped next to the angle
+  asked for (270 stays 270, 80 still keeps its read-back rounding). It passed on 0b1da82,
+  before the merge of wf/limits.
+- **`revolve_qa` P4 (expectation).** 400 typed is set to 360 and said ("400° does not fit:
+  limited to 360.0°"), the preview is a full turn: Luca's approved behaviour. The scenario
+  checked the old error; updated.
+- **`revolve_axes` 3 (expectation, plus a clearer note).** Two Sides 270 + 120: side two is
+  set to 90 (the two sides together one full turn, the whole ring) and OK works, so the
+  scenario's "OK refused" and everything after it (the dialog had closed) failed. Updated:
+  it checks the held angle, the note, no error and the full ring in the preview, then goes
+  on with One Side 360, New Body, OK as before. The note now says why the limit is less
+  than 360: "120° does not fit: limited to 90.0° (both sides together make one full turn)"
+  (Symmetric: "(180° each way make one full turn)"), also for the arrow's "Largest that
+  fits here"; `limits_revolve` updated to those words.
+- **`modeling2_sketch` 2 (expectation, and a real bug).** The equal chamfer typed 30 on a
+  side with 17.1132 mm left is now held at the largest that fits (Luca's decision), so the
+  old "refused" check and the steps after it failed. The real bug: the largest value was
+  rounded down to the box's precision (17.11), which left a line of 0.0032 mm in the sketch
+  (and a sliver face once extruded). The sketch Fillet had the same problem (`sketch2_fillet`
+  B: radius 29.99 left 0.01 mm of the 30 mm line). Decision: **the largest sketch fillet or
+  chamfer takes the curve whole.** Its limit is worked out exactly (chamfer between two
+  lines: `sketch_chamfer_core.largest`, from the lines' lengths; fillet:
+  `sketch_fillet_core.largest_radius`, a bisection to 1e-12 with no rounding), reaching
+  the far end of a curve now fits (`check_fits`, `fits`), and a value within the box's
+  precision (0.01 mm) of the limit counts as the limit, so no sliver can be left by a drag
+  or a typed 17.11 either. The used-up curve is not cut to nothing (a zero-length line
+  breaks FreeCAD's corner constraints): FreeCAD's fillet first cuts half as far, then
+  `sketch_fillet_tool.give_back` gives the curve back whole as construction geometry (every
+  constraint and dimension it had stays), puts the chamfer line / fillet arc exactly where
+  it ends up (so the solver moves nothing, also in a sketch with free curves, where it
+  otherwise dragged a line 3.6 mm away) and joins it to the curve's far end (the fillet
+  tangent there). A fully constrained sketch stays so; the chamfer's dimension on the
+  used-up side becomes a reference. Works for lines and arcs (checked headless: line + arc
+  with the line used up, a short arc used up). Scenario updated: 30 Enter makes the largest
+  chamfer (from the first chamfer's end to (32.89, 30), no line under 0.01 mm, the right
+  side kept whole as construction, the sketch still fully constrained), Ctrl+Z, then 4 as
+  before. `sketch2_fillet` B now also checks that the 30 mm line is kept whole and the arc
+  ends at (0, 30).
+- Found on the way: the line + arc chamfer (`_build_arc`) set `sketch.Geometry`, which in
+  FreeCAD 1.1.4 turns construction *points* into normal points and gives them new geometry
+  ids: an earlier fillet's old corner point lost its construction look. Now
+  `sketch_fillet_tool.set_geometry` keeps every curve's construction flag and id
+  (`sketch2_fillet` C checks B's old corner). `sketch_explain.py` (restoring curves after a
+  squeezed solve), `scale.py` and `text.py` assign `sketch.Geometry` the same way (not
+  changed here).
+
+Tests (real FreeCAD 1.1.4 under xvfb): unit `test_sketch_chamfer_core.py`,
+`test_sketch_fillet_core.py` (exact limits, reaching the end fits, line + arc, short arc);
+`run_tests.sh --only unit` passes. The four scenarios pass (modeling2_sketch 142 checks,
+patterns_qa_more 52, revolve_axes 80, revolve_qa 347), and so do the related ones:
+fixsketch_fillet, sketch2_fillet, sketch2_palette, sketch_qa, sketch_pattern, the eight
+sketch_tools_*, the eight revolve*, the twelve patterns*, components2_pattern,
+fixpattern_circ and the ten limits_* (45 scenarios on the final code, sketch_qa just
+before the last small change to `give_back`).

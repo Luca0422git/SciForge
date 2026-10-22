@@ -35,6 +35,19 @@ lines (Distance and Distance 2). Not held: the chamfer's angle and a chamfer bet
 line and an arc (their refusals stay); Offset has no such limit. `sketch2_fillet` B
 updated.
 
+**The largest sketch fillet or chamfer takes the curve whole** (2026-10-22, integration
+fixes). In a sketch the limit is where the fillet or chamfer reaches the far end of a curve.
+It is worked out exactly (not rounded to the box's precision, which left a sliver: a 30 mm
+equal chamfer on a 17.1132 mm side was held at 17.11 and left a line of 0.003 mm), and a
+value within the box's precision of it (0.01 mm) counts as that largest one too. The curve
+the fillet or chamfer uses up is not cut to nothing: it stays whole as a construction line
+(or arc) with every constraint and dimension it had, and the chamfer line or fillet arc
+ends at its far end, joined to whatever met it there (the fillet arc tangent to it). The
+note says "30 mm does not fit: limited to 17.11 mm" (typed) or "Largest that fits here:
+17.11 mm" (pointer). A sketch that was fully constrained stays so; the chamfer's dimension
+on the used-up side is a reference (the side fixes it). Scenarios `modeling2_sketch` (2),
+`sketch2_fillet` (B).
+
 ## Sketch, part 2: chain selection, Project to Surface in the sketch, 3D Sketch, fillet and chamfer with arcs, the text frame, Slice (branch `sf/sketch-2`, 2026-10-16)
 
 Researched before building. Autodesk's hosts cannot be opened from the sandbox, so the
@@ -169,12 +182,13 @@ in Luca's Fusion.
 |---|---|
 | SKETCH > MODIFY > Chamfer, with a type: Equal distance, Distance and angle, Two distances (Autodesk) | SciForge's own tool (`sketch_chamfer_tool.py`, the maths in `sketch_chamfer_core.py`): while it runs a "Chamfer Type" box sits at the top left of the 3D view; the last type is remembered (Guess) |
 | Pick the corner: the two lines, or the point where they meet (Autodesk) | Click a point where exactly two lines meet, or click the two lines on the parts that stay (lines that do not touch are cut back to where their extensions cross). Lines or a corner point selected before the command count. Parallel lines, a point where more lines meet, an arc: refused with the reason beside the pointer |
-| Drag, or type the values; Enter (Autodesk) | The pointer gives the size as it moves (Equal distance: the chamfer runs through the pointer). Value boxes beside the corner: D (Equal distance), D and A (Distance and angle; A starts at the angle that cuts both lines back equally, 45 degrees in a square corner), D1 and D2 (Two distances, D1 on the first line picked). Tab moves between them, Enter makes the chamfer, the tool waits for the next corner, Esc ends it. A chamfer longer than a line is refused with the reason |
+| Drag, or type the values; Enter (Autodesk) | The pointer gives the size as it moves (Equal distance: the chamfer runs through the pointer). Value boxes beside the corner: D (Equal distance), D and A (Distance and angle; A starts at the angle that cuts both lines back equally, 45 degrees in a square corner), D1 and D2 (Two distances, D1 on the first line picked). Tab moves between them, Enter makes the chamfer, the tool waits for the next corner, Esc ends it. A chamfer longer than a line was refused with the reason; since Luca's decision of 2026-10-21 it is held at the largest that fits, which takes that line whole (see the top of this page) |
 | The values stay as sketch dimensions (Autodesk; their exact form: Guess) | FreeCAD's sketch chamfer trims the lines and keeps the old corner as a construction point (the constraints that were on the corner move to it); the values become dimensions from that point: the distance to the chamfer's end on each line, and for Distance and angle the angle between the first line and the chamfer. Equal distance: the second distance is an expression of the first (fx), so a new value in the first moves both. One undo step per chamfer |
 | Sketch Fillet: pick a corner or two curves, type the radius (Autodesk) | Unchanged, now checked by a scenario: FreeCAD's fillet, then the radius box opens on a new Radius dimension |
 | A typed line angle is measured from the sketch's X axis (its positive side), not from the previous line: to get an angle between two lines users add an angular dimension afterwards, or type 180 minus the angle when the line before is level (Forum, three threads; no Autodesk page found that says otherwise) | Same: FreeCAD's line tool measures the typed angle anticlockwise from the X axis, its value box shows that angle with an arc from the X axis, and the typed angle becomes an Angle dimension from the X axis. Checked with a chain whose second line is typed at 135 degrees |
 
-Tests: scenario `modeling2_sketch` (the three types with their dimensions, a refused chamfer,
+Tests: scenario `modeling2_sketch` (the three types with their dimensions, a chamfer too long
+held at the largest that fits (it takes the side whole),
 the command without a sketch, undo / redo, the fillet radius, two typed line angles, the plate
 extruded, save / reopen with the fx dimension still following), unit tests
 `test_sketch_chamfer_core.py`.

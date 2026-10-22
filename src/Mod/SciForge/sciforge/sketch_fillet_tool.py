@@ -34,6 +34,7 @@ from .sketch_draw import LENGTH, Field
 LINE = "Part::GeomLineSegment"
 ARC = "Part::GeomArcOfCircle"
 CIRCLE = "Part::GeomCircle"
+POINT = "Part::GeomPoint"
 KINDS = (LINE, ARC, CIRCLE)
 
 
@@ -61,6 +62,164 @@ def curve_of(geometry):
     return None
 
 
+def _cut_end(sketch, geo, joint):
+    """(the end of curve `geo` that FreeCAD's fillet tied to the fillet arc / chamfer line
+    `joint`, i.e. the end it cut back; the end of `joint` there), or (None, None)."""
+    for c in sketch.Constraints:
+        refs = ((c.First, c.FirstPos), (c.Second, c.SecondPos))
+        mine = [pos for g, pos in refs if g == geo and pos in (1, 2)]
+        theirs = [pos for g, pos in refs if g == joint and pos in (1, 2)]
+        if mine and theirs:
+            return mine[0], theirs[0]
+    return None, None
+
+
+def set_geometry(sketch, changes):
+    """Replace some curves of the sketch ({index: new geometry}), keeping every curve's
+    construction flag and geometry id (assigning sketch.Geometry loses them: points came
+    back as normal points with new ids)."""
+    count = len(sketch.Geometry)
+    flags = [sketch.getConstruction(i) for i in range(count)]
+    ids = []
+    for i in range(count):
+        try:
+            ids.append((i, sketch.getGeometryId(i)))
+        except Exception:
+            pass
+    geos = list(sketch.Geometry)
+    for index, geometry in changes.items():
+        geos[index] = geometry
+    sketch.Geometry = geos
+    for i, flag in enumerate(flags):
+        if sketch.getConstruction(i) != flag:
+            sketch.setConstruction(i, flag)
+    if ids:
+        try:
+            sketch.setGeometryIds(ids)
+        except Exception:
+            pass
+
+
+def _end_point(geometry, pos):
+    return geometry.StartPoint if pos == 1 else geometry.EndPoint
+
+
+def _with_end(geometry, pos, point):
+    """A copy of a line or arc with its end `pos` (1 start, 2 end) moved to `point` (an arc
+    keeps its circle: its range changes)."""
+    g = geometry.copy()
+    v = App.Vector(point[0], point[1], 0)
+    if g.TypeId == LINE:
+        if pos == 1:
+            g.StartPoint = v
+        else:
+            g.EndPoint = v
+        return g
+    u = g.parameter(v)
+    first, last = g.FirstParameter, g.LastParameter
+    if pos == 1:
+        first = u
+        while first >= last:
+            first -= 2 * math.pi
+    else:
+        last = u
+        while last <= first:
+            last += 2 * math.pi
+    g.setParameterRange(first, last)
+    return g
+
+
+def _joint(starts_at, ends_at, centre_radius):
+    """The fillet arc (centre_radius: (centre, radius)) or chamfer line from `starts_at` to
+    `ends_at` (its start and end as FreeCAD made them), or None when the arc would turn the
+    other way round (then the solver places it)."""
+    import Part
+
+    s = App.Vector(starts_at[0], starts_at[1], 0)
+    e = App.Vector(ends_at[0], ends_at[1], 0)
+    if centre_radius is None:
+        return Part.LineSegment(s, e)
+    (cx, cy), radius = centre_radius
+    a = math.atan2(s.y - cy, s.x - cx)
+    b = math.atan2(e.y - cy, e.x - cx)
+    while b <= a:
+        b += 2 * math.pi
+    if b - a > math.pi + 1e-6:  # FreeCAD's fillet arcs turn the short way, anticlockwise
+        return None
+    circle = Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), radius)
+    return Part.ArcOfCircle(circle, a, b)
+
+
+def give_back(sketch, picks, whole, joint, targets, originals, corner_point=None, arc=None):
+    """The curves of `picks` the fillet / chamfer takes whole (`whole`: a flag each) are given
+    back whole as construction geometry, with every constraint they had, and `joint` (the
+    fillet arc, tangent to them; the chamfer line) ends at their far end: no sliver of them
+    is left (Luca's limits, 2026-10-21: "chamfer something to the max"). FreeCAD's fillet
+    first cut them back only part of the way (a curve cut to nothing breaks its corner
+    constraints); here every curve is put where it ends up (`targets`: where the joint meets
+    each pick; `originals`: the picks as they were; `arc`: (centre, radius) of the fillet
+    arc, None for a chamfer line), so the solver moves nothing (in a sketch with free
+    curves it otherwise dragged them away). The old corner stays: `corner_point` (two lines:
+    FreeCAD's construction point, on both) or the curve's own end there, kept on the other
+    curve. Raises RuntimeError when FreeCAD's tie at a cut end is missing (the caller's
+    transaction is then aborted). Returns {curve given back: its far end}."""
+    import Sketcher
+
+    ends = {geo: _cut_end(sketch, geo, joint) for geo in picks}
+    if any(cut is None for cut, _j in ends.values()):
+        raise RuntimeError("FreeCAD's fillet left a curve without its tie")
+    taken = [geo for geo, flag in zip(picks, whole) if flag]
+    for geo in taken:
+        cut = ends[geo][0]
+        for index in range(len(sketch.Constraints) - 1, -1, -1):
+            c = sketch.Constraints[index]
+            refs = ((c.First, c.FirstPos), (c.Second, c.SecondPos), (c.Third, c.ThirdPos))
+            on_corner = (
+                corner_point is not None
+                and c.Type == "PointOnObject"
+                and c.First == corner_point
+                and c.Second == geo
+            )
+            if (geo, cut) in refs or on_corner:
+                sketch.delConstraint(index)  # the tie at the cut end; the corner on it
+    changes = {}
+    at = {}  # joint end -> where it goes
+    for geo in picks:
+        cut, joint_end = ends[geo]
+        at[joint_end] = targets[geo]
+        if geo in taken:
+            changes[geo] = originals[geo]
+        else:
+            changes[geo] = _with_end(sketch.Geometry[geo], cut, targets[geo])
+    if set(at) == {1, 2}:
+        made = _joint(at[1], at[2], arc)
+        if made is not None:
+            changes[joint] = made
+    set_geometry(sketch, changes)
+    added = []
+    for geo in taken:
+        cut, joint_end = ends[geo]
+        if corner_point is not None:
+            added.append(Sketcher.Constraint("Coincident", corner_point, 1, geo, cut))
+        else:  # the curve's own end stays at the corner, if it was there (curves that met)
+            other = [g for g in picks if g != geo][0]
+            end = _end_point(originals[geo], cut)
+            if other not in taken:
+                if sketch.isPointOnCurve(other, end.x, end.y):
+                    added.append(Sketcher.Constraint("PointOnObject", geo, cut, other))
+            elif geo == taken[-1]:
+                if (end - _end_point(originals[other], ends[other][0])).Length < 1e-7:
+                    added.append(Sketcher.Constraint("Coincident", geo, cut, other, ends[other][0]))
+        kind = "Tangent" if arc is not None else "Coincident"
+        added.append(Sketcher.Constraint(kind, geo, 3 - cut, joint, joint_end))
+    if added:
+        sketch.addConstraint(added)
+    for geo in taken:
+        if not sketch.getConstruction(geo):
+            sketch.toggleConstruction(geo)
+    return {geo: 3 - ends[geo][0] for geo in taken}
+
+
 def middle(geometry):
     """A point in the middle of a curve (FreeCAD's corner fillet uses the lines' middles
     as the parts that stay)."""
@@ -83,6 +242,7 @@ class SketchFillet(draw.DrawTool):
         self.refs = []  # per picked curve: the click on the part that stays
         self.made = {}  # the last fillet made (tests): arc, radius, constraint
         self.limits = value_limits.Limiter()  # radii past what fits stop at the largest
+        self._largest = {}  # the largest radius that fits, per pair of curves and picks
 
     def steps(self):
         return 3
@@ -92,6 +252,7 @@ class SketchFillet(draw.DrawTool):
             self.refs = []
             if getattr(self, "limits", None) is not None:
                 self.limits.note = ""
+            self._largest = {}
         super()._enter_step(step)
 
     def prompt(self):
@@ -228,31 +389,31 @@ class SketchFillet(draw.DrawTool):
         return held
 
     def _held(self, c1, c2, r, typed):
-        """`r` held at the largest radius that fits these two curves (found once for them,
-        then reused on every pointer move); the text by the pointer says so."""
+        """`r` held at the largest radius that fits these two curves: the fillet then runs to
+        the far end of one of them and takes it whole (found once for them, exactly, then
+        reused on every pointer move). A radius within the box's precision of it is that
+        largest one too, so no sliver of a curve is left. The text by the pointer says so."""
         before = self.limits.note
+        held, note = r, ""
         try:
-            key = value_limits.make_key("sketch_fillet", c1, c2, self.refs)
-            held = self.limits.clamp(key, r, typed)
-            if held == r and r > 0:
-                try:
-                    core.check(c1, c2, r, self.refs[0], self.refs[1])
-                except core.FilletError as exc:
-                    if value_limits.is_limit_error(str(exc)):
-                        refs = list(self.refs)
-
-                        def works(value):
-                            core.check(c1, c2, value, refs[0], refs[1])
-                            return True
-
-                        start = min(r / 2.0, core.suggested(c1, c2) * 0.01)
-                        limit = self.limits.find(key, works, r, start)
-                        if limit is not None:
-                            self.limits.limited(key, r, limit, typed)
-                            held = limit
+            if r is not None and r > 0:
+                key = value_limits.make_key("sketch_fillet", c1, c2, self.refs)
+                if key not in self._largest:
+                    self._largest[key] = core.largest_radius(c1, c2, self.refs[0], self.refs[1], r)
+                cap = self._largest[key]
+                if cap is not None and r > cap + 1e-9:
+                    held = cap
+                    if typed:
+                        note = value_limits.note_typed(r, cap)
+                    else:
+                        note = value_limits.note_reached(cap, "hi")
+                elif cap is not None and cap - r < self.limits.step():
+                    held = cap  # less than the box's precision short of it: take it whole
+                    note = value_limits.note_reached(cap, "hi")
         except Exception:
             return r
-        if self.limits.note != before:
+        self.limits.note = note
+        if note != before:
             self._tell()
         return held
 
@@ -308,15 +469,26 @@ class SketchFillet(draw.DrawTool):
         g1, g2 = self.picks
         lines = all(sketch.Geometry[g].TypeId == LINE for g in (g1, g2))
         refs = [App.Vector(x, y, 0) for x, y in self.refs]
+        c1, c2 = self._curve(g1), self._curve(g2)
+        whole = core.takes_whole(c1, c2, r, self.refs[0], self.refs[1])
+        originals = {g: sketch.Geometry[g].copy() for g in (g1, g2)}
         before = len(sketch.Geometry)
         # FreeCAD's fillet: the arc, the curves trimmed to it, tangents; two lines keep
-        # their corner as a construction point with its constraints (FreeCAD's tool too)
-        sketch.fillet(g1, g2, refs[0], refs[1], r, True, lines, False)
+        # their corner as a construction point with its constraints (FreeCAD's tool too).
+        # A curve the fillet takes whole: first a smaller one (a curve cut to nothing breaks
+        # FreeCAD's corner constraints), then the curve is given back whole (give_back).
+        sketch.fillet(g1, g2, refs[0], refs[1], r * 0.5 if any(whole) else r, True, lines, False)
         new = list(range(before, len(sketch.Geometry)))
         arcs = [i for i in new if sketch.Geometry[i].TypeId == ARC]
         if len(arcs) != 1:
             raise RuntimeError("FreeCAD's sketch fillet did not round that corner")
         arc = arcs[0]
+        if any(whole):
+            centre, t1, t2 = core.check(c1, c2, r, self.refs[0], self.refs[1])
+            points = [i for i in new if sketch.Geometry[i].TypeId == POINT]
+            corner = points[0] if points else None
+            targets = {g1: t1, g2: t2}
+            give_back(sketch, (g1, g2), whole, arc, targets, originals, corner, (centre, r))
         if construction:
             sketch.toggleConstruction(arc)
         index = sketch.addConstraint(Sketcher.Constraint("Radius", arc, r))
