@@ -34,6 +34,16 @@ the observer need FreeCAD.
 """
 
 PROBLEMS = ("Touched", "Invalid", "Error")
+# Objects that hold only values (no shape, nothing computed): an Undo / Redo that puts their
+# values back leaves them exactly as they were (user parameters).
+VALUE_ONLY = {"App::VarSet"}
+# Objects without a Shape that depend on the restored shapes but compute nothing that an Undo
+# could have left stale (groups, links, the origin, value holders: what they show is in their
+# properties or is the linked shape itself). Every other dependent without a Shape (a drawing
+# view keeps its projected lines in memory, an analysis its picture) is recomputed after an
+# Undo / Redo that skipped the rebuild.
+NOTHING_COMPUTED = {"App::Origin", "App::Line", "App::Plane", "App::Point", "App::VarSet", "Spreadsheet::Sheet"}
+NOTHING_COMPUTED_EXTENSIONS = ("App::GroupExtension", "App::LinkBaseExtension")
 # Properties that never feed a shape: changed outside a transaction (a dialog shows its
 # sketch again after OK, a step is renamed), they leave every shape as it was built.
 NOT_GEOMETRY = {"Visibility", "_GroupTouched", "Label", "Label2"}
@@ -51,20 +61,44 @@ class Ledger:
         self.redo = []  # entries undone, the next to redo last
         self.restored = set()  # objects whose Shape the running Undo / Redo put back
         self.decision = None  # {"ok", "seq", "restored"} of the last Undo / Redo
+        # FreeCAD applies an Undo / Redo, then lets some objects finish it before it signals
+        # the Undo / Redo (SketchObject::onUndoRedoFinished solves the sketch again), with
+        # its "undoing" flag already cleared: those changes are part of the Undo / Redo.
+        self.applying = False  # an Undo / Redo (or an abort) is being applied
+        self.follow_up = 0  # sketch changes since, not counted (yet) as outside changes
 
     # -- recording
-    def outside_change(self):
+    def outside_change(self, sketch=False):
+        """A change made outside a transaction. `sketch`: a sketch's own change, which right
+        after an Undo / Redo was applied is FreeCAD finishing it (the sketch solved again)."""
+        if sketch and self.applying:
+            self.follow_up += 1
+            return
         self.seq += 1
         self.restored = set()  # (an Undo / Redo is one block of changes)
 
+    def transacting_change(self):
+        """FreeCAD changed a property while it applies an Undo / Redo (or an abort)."""
+        self.applying = True
+
     def shape_restored(self, name):
+        self.applying = True
         self.restored.add(name)
 
+    def _end_applying(self, finished):
+        """The Undo / Redo was signalled (`finished`: its follow-up changes were part of it),
+        or something else came first (they count as outside changes, the safe side)."""
+        if not finished:
+            self.seq += self.follow_up
+        self.applying, self.follow_up = False, 0
+
     def opened(self, clean):
+        self._end_applying(False)
         self.pending = {"start": self.seq, "clean_start": bool(clean)}
         self.restored = set()
 
     def committed(self, clean, count):
+        self._end_applying(False)
         entry, self.pending = self.pending, None
         self.redo = []  # FreeCAD drops its redo stack on a new transaction
         if entry is None:
@@ -79,16 +113,19 @@ class Ledger:
                 del self.undo[: len(self.undo) - count]  # FreeCAD forgot its oldest
 
     def aborted(self):
+        self._end_applying(False)
         self.pending = None
         self.restored = set()
 
     def forget(self):
+        self._end_applying(False)
         self.undo, self.redo, self.pending = [], [], None
         self.decision = None
 
     # -- Undo / Redo
     def undone(self, count):
         """FreeCAD undid its newest transaction (`count`: UndoCount after it)."""
+        self._end_applying(True)
         restored, self.restored = self.restored, set()
         if not self.undo or len(self.undo) - 1 != count:
             why = "the ledger is out of step with FreeCAD's undo stack (%d, %s)" % (len(self.undo), count)
@@ -109,6 +146,7 @@ class Ledger:
 
     def redone(self, count):
         """FreeCAD redid the transaction undone last (`count`: UndoCount after it)."""
+        self._end_applying(True)
         restored, self.restored = self.restored, set()
         if not self.redo or len(self.undo) + 1 != count:
             why = "the ledger is out of step with FreeCAD's redo stack (%d, %s)" % (len(self.undo), count)
@@ -157,6 +195,7 @@ import os as _os
 _DEBUG = bool(_os.environ.get("SCIFORGE_UNDO_DEBUG"))
 _ledgers = {}
 _observer = {"app": None}
+_quiet = set()  # (document, object) whose changes are SciForge's own refresh (not counted)
 stats = {"skipped": 0, "rebuilt": 0}  # Undo / Redo settled without / with a rebuild (tests)
 
 
@@ -186,11 +225,15 @@ class _Watch:
             if doc.Restoring:
                 return
             if doc.Transacting:
-                if prop == "Shape":
+                if prop == "Shape" or obj.TypeId in VALUE_ONLY:
                     ledger(doc.Name).shape_restored(obj.Name)
+                else:
+                    ledger(doc.Name).transacting_change()
+                return
+            if (doc.Name, obj.Name) in _quiet:
                 return
             if not doc.HasPendingTransaction and prop not in NOT_GEOMETRY:
-                ledger(doc.Name).outside_change()
+                ledger(doc.Name).outside_change(obj.isDerivedFrom("Sketcher::SketchObject"))
                 if _DEBUG:
                     print("[SciForge] undo ledger: outside change %s.%s" % (obj.Name, prop), flush=True)
         except Exception:
@@ -283,15 +326,73 @@ def install():
 
 
 def touched(doc):
-    """[(name, has a Shape, in error)] of the objects not up to date."""
+    """[(name, has a Shape (or holds only values), in error)] of the objects not up to date."""
     out = []
     for obj in doc.Objects:
         state = obj.State
         if "Touched" in state or "Invalid" in state or "Error" in state:
             out.append(
-                (obj.Name, "Shape" in obj.PropertiesList, "Invalid" in state or "Error" in state)
+                (
+                    obj.Name,
+                    "Shape" in obj.PropertiesList or obj.TypeId in VALUE_ONLY,
+                    "Invalid" in state or "Error" in state,
+                )
             )
     return out
+
+
+def _computes_outside_properties(obj):
+    """True for an object without a Shape that computes something an Undo cannot put back
+    (a drawing view's projected lines, an analysis), see NOTHING_COMPUTED."""
+    if "Shape" in obj.PropertiesList or obj.TypeId in NOTHING_COMPUTED:
+        return False
+    for ext in NOTHING_COMPUTED_EXTENSIONS:
+        try:
+            if obj.hasExtension(ext):
+                return False
+        except Exception:
+            pass
+    return True
+
+
+def stale_dependents(doc, names):
+    """The objects (in any open document) that depend on the objects `names` of `doc` and
+    keep what they computed outside their properties: an Undo / Redo restored the shapes
+    they were made from but not what they made from them (review finding F1, 2026-10-22: a
+    drawing still showed the edited part after Ctrl+Z, and its dimensions the edited values)."""
+    import FreeCAD as App
+
+    wanted = {(doc.Name, name) for name in names}
+    out = []
+    if not wanted:
+        return out
+    for other in App.listDocuments().values():
+        for obj in other.Objects:
+            try:
+                if not _computes_outside_properties(obj):
+                    continue
+                if any((dep.Document.Name, dep.Name) in wanted for dep in obj.OutListRecursive):
+                    out.append(obj)
+            except Exception:
+                continue
+    return out
+
+
+def _refresh(objs):
+    """Recompute `objs` only (the shapes they depend on are up to date), document by
+    document. Their own changes are not counted as outside changes: they feed no shape."""
+    by_doc = {}
+    for obj in objs:
+        by_doc.setdefault(obj.Document.Name, (obj.Document, []))[1].append(obj)
+    for other, group in by_doc.values():
+        keys = {(other.Name, obj.Name) for obj in group}
+        _quiet.update(keys)
+        try:
+            for obj in group:
+                obj.touch()
+            other.recompute(group)
+        finally:
+            _quiet.difference_update(keys)
 
 
 def settle_without_rebuild(doc):
@@ -307,11 +408,29 @@ def settle_without_rebuild(doc):
             stats["rebuilt"] += 1
             _info("after Undo / Redo, %s rebuilt: %s" % (doc.Label, why))
             return False
+        restored = set(led.decision.get("restored") or ())
         for name, _has_shape, _broken in stale:
+            restored.add(name)
             obj = doc.getObject(name)
             if obj is not None:
                 obj.purgeTouched()
         led.decision = None  # once
+        try:
+            # what depends on the shapes put back but computed something from them that the
+            # Undo / Redo could not put back (a drawing view): recomputed, nothing else
+            dependents = stale_dependents(doc, restored)
+            if dependents:
+                _refresh(dependents)
+                if _DEBUG:
+                    _info("after Undo / Redo, recomputed %s" % ", ".join(o.Name for o in dependents))
+        except Exception as exc:
+            _info("after Undo / Redo, refreshing what depends on %s: %s" % (doc.Label, exc))
+            for name, _has_shape, _broken in stale:
+                obj = doc.getObject(name)
+                if obj is not None:
+                    obj.touch()  # (the caller's recompute rebuilds the design as before)
+            stats["rebuilt"] += 1
+            return False
         stats["skipped"] += 1
         return True
     except Exception:

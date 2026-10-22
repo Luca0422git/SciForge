@@ -21,6 +21,13 @@ Path F (integration), the AI tools: edit_step of Fillet 1 through the bridge (on
         refused with the largest radius that fits (value_fit tries values in transactions it
         takes back): the design and the undo stack are as before, and the next Ctrl+Z still
         gives the right part.
+Path G (review fix, 2026-10-22), a sketch dimension changed in MODIFY > Change Parameters
+        (Sketch 1's 40 typed 44), OK; Ctrl+Z / Ctrl+Y: nothing rebuilt, right. FreeCAD solves
+        the sketch again while it finishes the Undo (SketchObject::onUndoRedoFinished): those
+        changes are part of the Undo, they used to count as script changes and every sketch
+        edit was rebuilt.
+Path H (review fix), a user parameter (depth, driving Extrude 1) changed in Change
+        Parameters, OK; Ctrl+Z / Ctrl+Y: nothing rebuilt (Parameters holds only values), right.
 """
 
 import FreeCAD as App
@@ -331,6 +338,108 @@ def f_right_after_refusal():
     S["stats"] = stats()
 
 
+# -- Path G / H: Change Parameters (a sketch dimension, a user parameter) ------------------------
+def params_dialog():
+    from sciforge import parameters_ui
+
+    return parameters_ui.ParametersDialog.last
+
+
+def g_change(text):
+    """MODIFY > Change Parameters, Sketch 1's width typed `text`, OK (what the dialog does
+    when a value is typed in its table: parameters.change_checked inside its transaction)."""
+
+    def step():
+        from sciforge import parameters, parameters_ui
+
+        doc = App.ActiveDocument
+        S["stats"] = stats()
+        dialog = parameters_ui.ParametersDialog(doc)
+        dialog.show()
+        sketch = t.obj("Sketch 1")
+        rows = [
+            r
+            for r in parameters.model_parameters(doc)
+            if r["object"] == sketch.Name and abs(r["value"] - 40) < 1e-6
+        ]
+        h.check(
+            "G: Sketch 1's 40 mm is in Change Parameters",
+            bool(rows),
+            [(r["owner"], r["label"], r["value"]) for r in parameters.model_parameters(doc)][:12],
+        )
+        if not rows:
+            dialog.reject()
+            return
+        row = rows[0]
+        dialog._apply(
+            lambda: parameters.set_model(doc, row, text),
+            (sketch, row["path"], "%s = %s" % (row["label"], text)),
+        )
+        dialog.accept()
+
+    step.__name__ = "g_change_%s" % text
+    step.wait_ms = 1500
+    return step
+
+
+def g_edited(width):
+    def step():
+        box = h.body().Tip.Shape.BoundBox
+        h.check("G: the part is %s mm wide" % width, abs(box.XLength - width) < 1e-6, box.XLength)
+        S["edited_g"] = shapes()
+        S["stats"] = stats()
+
+    step.__name__ = "g_edited_%s" % width
+    return step
+
+
+def g_start():
+    S["before_g"] = shapes()
+    S["stats"] = stats()
+
+
+def h_start():
+    """A user parameter depth = 10 drives Extrude 1 (made by script: the dialog is tested)."""
+    from sciforge import parameters
+
+    doc = App.ActiveDocument
+    parameters.add_user(doc, "depth", "mm", "10")
+    t.obj("Extrude 1").setExpression("Length", parameters.container(doc).Name + ".depth")
+    doc.recompute()
+    S["before_h"] = shapes()
+    S["stats"] = stats()
+
+
+def h_change(text):
+    def step():
+        from sciforge import parameters, parameters_ui
+
+        doc = App.ActiveDocument
+        S["stats"] = stats()
+        dialog = parameters_ui.ParametersDialog(doc)
+        dialog.show()
+        dialog._apply(
+            lambda: parameters.set_user(doc, "depth", text),
+            (parameters.container(doc), "depth", "depth = %s" % text),
+        )
+        dialog.accept()
+
+    step.__name__ = "h_change_%s" % text
+    step.wait_ms = 1500
+    return step
+
+
+def h_edited(depth):
+    def step():
+        box = h.body().Tip.Shape.BoundBox
+        h.check("H: the part is %s mm high" % depth, abs(box.ZLength - depth) < 1e-6, box.ZLength)
+        S["edited_h"] = shapes()
+        S["stats"] = stats()
+
+    step.__name__ = "h_edited_%s" % depth
+    return step
+
+
 h.run(
     "undo_fast",
     [
@@ -389,5 +498,23 @@ h.run(
         f_refused, h.idle_step(),
         a_undo, h.idle_step(),
         f_right_after_refusal,
+        # G: a sketch dimension in Change Parameters, Ctrl+Z / Ctrl+Y
+        g_start,
+        g_change("44"), h.idle_step(), g_edited(44),
+        a_undo, h.idle_step(),
+        expect("before_g", True, "G Ctrl+Z of a sketch dimension"),
+        g_change("44"), h.idle_step(), g_edited(44),
+        a_undo, h.idle_step(), remember("undone_g"),
+        a_redo, h.idle_step(),
+        expect("edited_g", True, "G Ctrl+Y of a sketch dimension"),
+        # H: a user parameter in Change Parameters, Ctrl+Z / Ctrl+Y
+        h_start,
+        h_change("13"), h.idle_step(), h_edited(13),
+        a_undo, h.idle_step(),
+        expect("before_h", True, "H Ctrl+Z of a user parameter"),
+        h_change("13"), h.idle_step(), h_edited(13),
+        a_undo, h.idle_step(), remember("undone_h"),
+        a_redo, h.idle_step(),
+        expect("edited_h", True, "H Ctrl+Y of a user parameter"),
     ],
 )

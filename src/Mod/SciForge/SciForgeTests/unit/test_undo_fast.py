@@ -150,6 +150,64 @@ class LedgerTest(unittest.TestCase):
         led.outside_change()
         self.assertEqual(led.restored, set())
 
+    # FreeCAD solves a sketch again after it applied an Undo / Redo and before it signals it
+    # (SketchObject::onUndoRedoFinished), with its "undoing" flag cleared (review F3)
+    def test_sketch_solved_while_freecad_finishes_the_undo(self):
+        led = Ledger()
+        edit(led)
+        edit(led)
+        for name in ("Pad", "Fillet", "Body"):
+            led.shape_restored(name)
+        for _ in range(4):
+            led.outside_change(sketch=True)  # Constraints, Geometry, FullyConstrained...
+        led.undone(len(led.undo) - 1)
+        self.assertEqual(led.why_not(TOUCHED), "")
+        led.decision = None
+        led.transacting_change()  # (a sketch property put back, no Shape among them yet)
+        led.shape_restored("Pad")
+        led.shape_restored("Fillet")
+        led.shape_restored("Body")
+        led.outside_change(sketch=True)
+        led.undone(len(led.undo) - 1)
+        self.assertEqual(led.why_not(TOUCHED), "")  # the next undo too: the counter held
+        led.decision = None
+        led.shape_restored("Body")
+        led.outside_change(sketch=True)
+        led.redone(len(led.undo) + 1)
+        self.assertEqual(led.why_not([("Body", True, False)]), "")
+
+    def test_sketch_change_outside_an_undo_counts(self):
+        led = Ledger()
+        edit(led)
+        led.outside_change(sketch=True)  # a script solving the sketch: not part of an Undo
+        undo(led)
+        self.assertIn("outside a transaction", led.why_not(TOUCHED))
+
+    def test_sketch_change_after_the_undo_signal_counts(self):
+        led = Ledger()
+        edit(led)
+        undo(led)
+        led.outside_change(sketch=True)
+        self.assertIn("since the Undo", led.why_not(TOUCHED))
+
+    def test_sketch_change_after_an_abort_counts(self):
+        led = Ledger()
+        edit(led)
+        led.opened(True)
+        led.transacting_change()  # the abort puts the values back
+        led.outside_change(sketch=True)
+        led.aborted()
+        undo(led)
+        self.assertIn("outside a transaction", led.why_not(TOUCHED))
+
+    def test_other_changes_while_freecad_finishes_the_undo_count(self):
+        led = Ledger()
+        edit(led)
+        led.shape_restored("Pad")
+        led.outside_change()  # not a sketch: counted as before
+        undo(led)
+        self.assertIn("outside a transaction", led.why_not(TOUCHED))
+
     def test_no_undo_seen(self):
         self.assertIn("no Undo", Ledger().why_not(TOUCHED))
 
