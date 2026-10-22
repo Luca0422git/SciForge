@@ -70,8 +70,8 @@ The answer:
    "diameter_mm": 8.0,
    "bbox_mm": [26.0, 16.0, 0.0, 34.0, 24.0, 10.0],
    "edges": 3,
-   "ref": {"type": "cylinder", "radius": 4.0, "count": 1},
-   "pick": {"face": {"type": "cylinder", "radius": 4.0, "count": 1}}
+   "ref": {"type": "cylinder", "radius": 4.0, "count": 1, "body": "Body"},
+   "pick": {"face": {"type": "cylinder", "radius": 4.0, "count": 1, "body": "Body"}}
   }
  ],
  "note": "name (Face3...) is FreeCAD's number for the element now and changes when the model changes; ref is a selector that picks the same element by its geometry: use ref (or pick) in other tools. Coordinates are in mm, in Body's own coordinates."
@@ -120,14 +120,16 @@ The answer:
     "type": "line",
     "parallel": [1.0, 0.0, 0.0],
     "at": [{"axis": "y", "value": "min"}, {"axis": "z", "value": "max"}],
-    "count": 1
+    "count": 1,
+    "body": "Body"
    },
    "pick": {
     "edge": {
      "type": "line",
      "parallel": [1.0, 0.0, 0.0],
      "at": [{"axis": "y", "value": "min"}, {"axis": "z", "value": "max"}],
-     "count": 1
+     "count": 1,
+     "body": "Body"
     }
    }
   },
@@ -144,14 +146,16 @@ The answer:
     "type": "line",
     "parallel": [0.0, 1.0, 0.0],
     "at": [{"axis": "x", "value": "max"}, {"axis": "z", "value": "max"}],
-    "count": 1
+    "count": 1,
+    "body": "Body"
    },
    "pick": {
     "edge": {
      "type": "line",
      "parallel": [0.0, 1.0, 0.0],
      "at": [{"axis": "x", "value": "max"}, {"axis": "z", "value": "max"}],
-     "count": 1
+     "count": 1,
+     "body": "Body"
     }
    }
   },
@@ -165,11 +169,7 @@ The answer:
    "closed": false,
    "direction": [-1.0, 0.0, 0.0],
    "ref": {
-    "type": "line",
-    "parallel": [-1.0, 0.0, 0.0],
-    "at": [{"axis": "y", "value": "max"}, {"axis": "z", "value": "max"}],
-    "count": 1
-... (37 more lines)
+... (45 more lines)
 ```
 
 ## More argument examples

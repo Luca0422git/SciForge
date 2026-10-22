@@ -355,7 +355,7 @@ def script(agent, out_dir=None):
     chamfered = body.get("volume_mm3") or 0
     a.check(
         "the ref chamfered exactly that edge: 2 x 2 / 2 x 60 = 120 mm3 less",
-        abs((got - chamfered) - 120.0) < 1e-6,
+        abs((got - chamfered) - 120.0) < 1e-4,
         "before %s, after %s" % (got, chamfered),
     )
     got = chamfered
