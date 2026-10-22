@@ -395,30 +395,47 @@ class GuiHost(executor.Host):
         return rows
 
     def push_highlight(self, doc, marked):
-        source = marked.get("source") if marked else None
-        if source is None:
-            return None
-        saved = []
-        for sel in Gui.Selection.getSelectionEx(doc.Name, 0):
-            names = sel.SubElementNames or ("",)
-            saved += [(sel.Object.Name, n) for n in names]
-        Gui.Selection.clearSelection()
-        for name in sorted(marked["faces"]) + sorted(marked["edges"]):
+        """Before render takes a picture from the window: the person's selection taken off
+        (saveImage draws a selected body tinted, and never draws selected faces or edges,
+        so selecting them marked nothing) and the marked faces and edges added to the 3D
+        view in orange (_highlight_node). pop_highlight puts everything back."""
+        saved = {"selection": [], "node": None, "root": None, "drawn": None}
+        try:
+            for sel in Gui.Selection.getSelectionEx(doc.Name, 0):
+                names = sel.SubElementNames or ("",)
+                saved["selection"] += [(sel.Object.Name, n) for n in names]
+            Gui.Selection.clearSelection(doc.Name)
+            Gui.Selection.clearPreselection()
+        except Exception as exc:
+            warn("AI render: %s" % exc)
+        if marked and marked.get("source") is not None:
+            saved["drawn"] = False
             try:
-                Gui.Selection.addSelection(doc.Name, source.Name, name)
+                view = self.view(doc)
+                node = _highlight_node(doc, marked)
+                if view is not None and node is not None:
+                    root = view.getSceneGraph()
+                    root.addChild(node)
+                    saved.update(node=node, root=root, drawn=True)
             except Exception as exc:
-                warn("AI render: %s" % exc)
+                warn("AI render: the highlight could not be drawn: %s" % exc)
         return saved
 
     def pop_highlight(self, doc, saved):
-        if saved is None:
-            return
+        if not saved:
+            return None
         try:
-            Gui.Selection.clearSelection()
-            for name, sub in saved:
+            if saved["node"] is not None:
+                saved["root"].removeChild(saved["node"])
+        except Exception as exc:
+            warn("AI render: %s" % exc)
+        try:
+            Gui.Selection.clearSelection(doc.Name)
+            for name, sub in saved["selection"]:
                 Gui.Selection.addSelection(doc.Name, name, sub)
         except Exception as exc:
             warn("AI render: %s" % exc)
+        return saved["drawn"]
 
     def screenshot(self, doc, width, height):
         from .. import capture_ui
@@ -434,6 +451,90 @@ class GuiHost(executor.Host):
                 os.remove(path)
             except OSError:
                 pass
+
+
+HIGHLIGHT_RGB = (1.0, 136 / 255.0, 0.0)  # render_core.HIGHLIGHT: the same orange
+
+
+def _highlight_node(doc, marked):
+    """A Coin node drawing the marked faces and edges of marked["source"] in orange where
+    that solid is in the design. The faces are tessellated on the very shape the window
+    shows, with a deflection no finer than its own, so OpenCASCADE hands back the window's
+    triangles and the orange lies exactly on them (pulled forward a little: the window's
+    faces are pushed back by their own polygon offset). An earlier step's solid, not shown,
+    is drawn alone and its edges on top."""
+    from pivy import coin
+
+    from .. import bodies
+
+    source = marked["source"]
+    shape = source.Shape
+    parent = source.getParentGeoFeatureGroup()
+    place = parent.getGlobalPlacement() if parent is not None else App.Placement()
+    shown = any(
+        b is source or getattr(b, "Tip", None) is source
+        for b in bodies.list_bodies(doc)
+        if bodies.is_shown(b)
+    )
+    try:
+        deviation = float(source.ViewObject.Deviation)
+    except Exception:
+        deviation = 0.5
+    box = shape.BoundBox
+    deflection = max((box.XLength + box.YLength + box.ZLength) / 300.0 * deviation * 1.5, 1e-3)
+    root = coin.SoSeparator()
+    root.setName("SciForgeAIHighlight")
+    points, indexes = [], []
+    for name in sorted(marked["faces"]):
+        verts, tris = shape.getElement(name).tessellate(deflection)
+        start = len(points)
+        points += [tuple(place.multVec(v)) for v in verts]
+        for a, b, c in tris:
+            indexes += [a + start, b + start, c + start, -1]
+    if indexes:
+        faces = coin.SoSeparator()
+        material = coin.SoMaterial()
+        material.diffuseColor.setValue(*HIGHLIGHT_RGB)
+        material.emissiveColor.setValue(*[0.35 * c for c in HIGHLIGHT_RGB])
+        hints = coin.SoShapeHints()
+        hints.vertexOrdering = coin.SoShapeHints.UNKNOWN_ORDERING  # (lit on both sides)
+        offset = coin.SoPolygonOffset()
+        offset.factor.setValue(-1.0)
+        offset.units.setValue(-1.0)
+        coords = coin.SoCoordinate3()
+        coords.point.setValues(0, len(points), points)
+        faceset = coin.SoIndexedFaceSet()
+        faceset.coordIndex.setValues(0, len(indexes), indexes)
+        for child in (material, hints, offset, coords, faceset):
+            faces.addChild(child)
+        root.addChild(faces)
+    lines, counts = [], []
+    for name in sorted(marked["edges"]):
+        verts = shape.getElement(name).discretize(Deflection=deflection / 1.5)
+        lines += [tuple(place.multVec(v)) for v in verts]
+        counts.append(len(verts))
+    if counts:
+        edges = coin.SoSeparator()
+        material = coin.SoMaterial()
+        material.diffuseColor.setValue(*HIGHLIGHT_RGB)
+        model = coin.SoLightModel()
+        model.model = coin.SoLightModel.BASE_COLOR
+        style = coin.SoDrawStyle()
+        style.lineWidth.setValue(4.0)
+        for child in (material, model, style):
+            edges.addChild(child)
+        if not shown:
+            depth = coin.SoDepthBuffer()
+            depth.test.setValue(False)
+            edges.addChild(depth)
+        coords = coin.SoCoordinate3()
+        coords.point.setValues(0, len(lines), lines)
+        lineset = coin.SoLineSet()
+        lineset.numVertices.setValues(0, len(counts), counts)
+        edges.addChild(coords)
+        edges.addChild(lineset)
+        root.addChild(edges)
+    return root if (indexes or counts) else None
 
 
 _HOST = []
