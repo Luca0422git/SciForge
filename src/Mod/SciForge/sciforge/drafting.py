@@ -210,22 +210,48 @@ def check(shape, plane_ref, names, options):
 
 def undrafted(base_shape, result_shape, names):
     """Faces of `names` the result left as they were (FreeCAD skips a face it cannot tilt
-    and only says so in the Report view)."""
+    and only says so in the Report view). Only the result's faces with the same box as a
+    picked face are measured (comparing every face's area and centre took 0.5 s a preview
+    on a part of 180 faces; the boxes are kept per shape: shape_checks.face_boxes)."""
+    from . import shape_checks
+
+    boxes = shape_checks.face_boxes(result_shape)
     left = []
     for name in names:
         try:
             face = base_shape.getElement(name)
         except Exception:
             continue
-        for other in result_shape.Faces:
+        box = face.BoundBox
+        kind = face.Surface.__class__
+        area = center = None
+        for other, other_box in boxes:
+            if not _same_box(box, other_box):
+                continue
+            if other.Surface.__class__ is not kind:
+                continue
+            if area is None:
+                area, center = face.Area, face.CenterOfMass
             if (
-                abs(other.Area - face.Area) < 1e-7 * max(1.0, face.Area)
-                and (other.CenterOfMass - face.CenterOfMass).Length < 1e-6
-                and other.Surface.__class__ is face.Surface.__class__
+                abs(other.Area - area) < 1e-7 * max(1.0, area)
+                and (other.CenterOfMass - center).Length < 1e-6
             ):
                 left.append(name)
                 break
     return left
+
+
+def _same_box(a, b, tol=1e-4):
+    """Two bounding boxes alike (an unchanged face keeps its box; the tolerance allows for a
+    box grown by a changed edge tolerance)."""
+    return (
+        abs(a.XMin - b.XMin) < tol
+        and abs(a.XMax - b.XMax) < tol
+        and abs(a.YMin - b.YMin) < tol
+        and abs(a.YMax - b.YMax) < tol
+        and abs(a.ZMin - b.ZMin) < tol
+        and abs(a.ZMax - b.ZMax) < tol
+    )
 
 
 # -- the angle handle --------------------------------------------------------------------
@@ -760,10 +786,80 @@ def _hinge(piece, spec, pull, point):
 
 def draft_shape(shape, names, spec):
     """`shape` (body coordinates) with faces `names` drafted as `spec` says (build_spec).
-    Raises DraftError with the reason."""
+    Raises DraftError with the reason.
+
+    The last few results (and refusals) are kept per shape, faces and spec: the limit search
+    builds an angle (value_limits) and the preview then builds the same one in the document
+    (a DraftFeature's execute) - once is enough. The result is shared: callers do not change
+    it (DraftFeature refines a copy)."""
+    _check_spec(spec)
+    key = _result_key(shape, names, spec)
+    if key is not None:
+        for k, kept, result in _RESULTS:
+            if k == key and kept.isSame(shape):
+                if isinstance(result, DraftError):
+                    raise DraftError(str(result))
+                return result
+    try:
+        result = _draft_shape(shape, names, spec)
+    except DraftError as exc:
+        _remember(key, shape, DraftError(str(exc)))
+        raise
+    _remember(key, shape, result)
+    return result
+
+
+_RESULTS = []  # [(key, base shape, result or DraftError)], newest last
+_KEEP_RESULTS = 8
+
+
+def _remember(key, shape, result):
+    if key is None:
+        return
+    _RESULTS.append((key, shape, result))
+    del _RESULTS[:-_KEEP_RESULTS]
+
+
+def _result_key(shape, names, spec):
+    """What a draft_shape() result depends on, as a hashable key (None: do not keep it)."""
+    try:
+
+        def vec(v):
+            return (round(v.x, 9), round(v.y, 9), round(v.z, 9))
+
+        plane = spec.get("plane")
+        curves = spec.get("curves")
+        curve_key = None
+        if curves is not None:
+            curve_key = tuple(
+                (
+                    e.Curve.__class__.__name__,
+                    round(e.Length, 9),
+                    vec(e.valueAt(e.FirstParameter)),
+                    vec(e.valueAt(e.LastParameter)),
+                    vec(e.valueAt(0.5 * (e.FirstParameter + e.LastParameter))),
+                )
+                for e in curves.Edges
+            )
+        return (
+            shape_key(shape),
+            tuple(names),
+            spec.get("type"),
+            spec.get("sides"),
+            round(float(spec.get("angle", 0.0)), 9),
+            round(float(spec.get("angle2", 0.0)), 9),
+            vec(spec["pull"]),
+            None if plane is None else (vec(plane[0]), vec(plane[1])),
+            curve_key,
+            tuple(vec(v) for v in spec.get("sweeps") or []),
+        )
+    except Exception:
+        return None
+
+
+def _draft_shape(shape, names, spec):
     import Part
 
-    _check_spec(spec)
     faces = []
     for name in names:
         try:

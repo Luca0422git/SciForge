@@ -199,17 +199,19 @@ class Probe:
         beats = [b for b in self.beats if t_first <= b <= t_last + 0.05]
         blocked = max((b - a for a, b in zip(beats, beats[1:])), default=None)
         final = float(self.p.options.get("angle", 0.0))
-        # when the dialog took the final angle (its last change): an exact rebuild at that
-        # angle ends after it; counted from the last mouse move (0 when it came before)
-        t_final = t_first
-        previous = None
+        # the last time the dialog held another angle than the final one (moved by the mouse,
+        # or an exact rebuild at another angle): the exact solid at the final angle comes after
+        # it; counted from the last mouse move (0 when it came before)
+        t_other = t_first
         for when, angle in self.taken:
-            if previous is None or abs(angle - previous) > 1e-9:
-                t_final = when
-            previous = angle
+            if abs(angle - final) > 1e-9:
+                t_other = max(t_other, when)
+        for when, angle, _error in self.exact:
+            if abs(angle - final) > 1e-9:
+                t_other = max(t_other, when)
         exact = None
         for when, angle, error in self.exact:
-            if when >= t_final and abs(angle - final) < 1e-9 and not error:
+            if when >= t_other and abs(angle - final) < 1e-9 and not error:
                 exact = max(0.0, when - t_last)
                 break
         during = len([e for e in self.exact if t_first <= e[0] <= t_last])
