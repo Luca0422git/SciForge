@@ -186,6 +186,20 @@ def direction_keeps_z_up():
 direction_keeps_z_up.wait_ms = 800
 
 
+def turn_without_fit():
+    """fit false: the camera turns about the point it looks at (the part stays in view)."""
+    Gui.ActiveDocument.ActiveView.viewIsometric()
+    Gui.SendMsgToActiveView("ViewFit")
+    answer = call(
+        "render", {"renderer": "window", "view": "front", "fit": False, "width": 300, "height": 200}
+    )
+    box, _mask = part_box(pixels(picture(answer)))
+    h.check("render front without fit still shows the part", box is not None, answer["text"])
+
+
+turn_without_fit.wait_ms = 800
+
+
 # -- Path 4 -------------------------------------------------------------------------------------
 def framing_fills_the_picture():
     for width, height in ((1600, 200), (200, 900)):
@@ -229,6 +243,7 @@ h.run(
         selection_does_not_tint,
         highlight_is_orange,
         direction_keeps_z_up,
+        turn_without_fit,
         framing_fills_the_picture,
         done,
     ],

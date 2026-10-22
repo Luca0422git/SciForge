@@ -980,7 +980,14 @@ def _turn(view, right, up, forward):
             0, 0, 0, 1,
         )
     )  # fmt: skip
-    view.getCameraNode().orientation.setValue(coin.SbRotation(*rot.Q))
+    cam = view.getCameraNode()
+    # turn about the point the camera looks at, as FreeCAD's standard views do
+    pos = App.Vector(*cam.position.getValue().getValue())
+    old = cam.orientation.getValue().multVec(coin.SbVec3f(0, 0, -1)).getValue()
+    distance = cam.focalDistance.getValue()
+    focal = pos + App.Vector(*old) * distance
+    cam.orientation.setValue(coin.SbRotation(*rot.Q))
+    cam.position.setValue(*(focal + App.Vector(*eye) * distance))
 
 
 def _corners(doc, marked):
