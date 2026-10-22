@@ -1525,6 +1525,12 @@ integration). Summary:
 - **Drawing PDFs** (drawing_pdf_*.py): same page pixel for pixel, plus 6 switchable layers,
   searchable text for everything TechDraw draws as shapes (title block, parts list), links,
   metadata; PDF/A gets no layers.
+- Full suite on the merge: 409 / 427 scenarios first time, 12 more alone (load timing), the
+  last 4 fixed: the circular pattern's 270 deg handle (a limits regression), Revolve notes
+  ("both sides together make one full turn"), and the largest sketch fillet/chamfer now uses
+  the curve up whole (kept as construction, no 0.003 mm sliver; `set_geometry` keeps
+  construction points). Open: sketch_explain.py, scale.py, text.py also reset sketch geometry
+  in the unsafe way (construction points become normal) - a suggested task.
 - Findings: Fusion menu names are from memory; FreeCAD's Coin/OCC cannot build the picture off
   the main thread (no background tessellation); the RenderCache/VBO settings showed no effect
   under software GL (measure on a real GPU).
