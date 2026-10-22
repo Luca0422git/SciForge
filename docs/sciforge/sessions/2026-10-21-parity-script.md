@@ -134,7 +134,7 @@ agents work in parallel); merge these notes into it.
   and the line, no traceback).
 - `run_tests.sh --only base`: unit 1823 OK (9 skipped), golden 446 pass + 2 known xfail,
   smoke, journey, restart: all passed.
-- No SciForge module was changed, so no existing scenario is affected. The 52 scenarios cited
+- No SciForge module was changed, so no existing scenario is affected. The 54 scenarios cited
   as evidence in core-workflows.md were run here with real FreeCAD 1.1.4 under xvfb, all
   passed:
   - workflows 1-2: fillet_qa_part, fixsketch_fillet / _hole / _join / _move / _presspull /
