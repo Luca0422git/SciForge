@@ -78,3 +78,14 @@ merged branches work together (findings X1-X6). No FreeCAD core file changed (no
 - The reviewer's own repro scenarios `xreview_a` (path A deletes Sketch1 with two undos,
   then reads it) and `xreview_c` (its ledger wrapper takes the old one-argument `opened`)
   fail for reasons of their own; the behaviour they probe is covered by the tests above.
+
+## Test results (real FreeCAD 1.1.4)
+
+- `run_tests.sh --only base`: all passed (golden 451 pass + the 2 known xfails, headless AI
+  213 calls / 117 tools, docs 137 items, MCP agent 70 checks, smoke, journey, restart).
+- GUI scenarios, all PASS: undo_fast, ai_tools_gui, ai_docs_gui, parameters_trial,
+  sketch_explain, sketch_infer_undo, export_report, export_everything, export_formats,
+  exchange2_export, import_report, mesh_print, drawing_export, drawing_assembly,
+  timeline_browser_qa 1-4, keys, direct_history, polish2_timeline_groups,
+  gaps_timeline_start, components_basic, fillet, fillet_chamfer, limits_fillet,
+  gaps_formula_units, patterns_params, misc_scripts, hole.
