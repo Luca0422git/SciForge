@@ -159,10 +159,20 @@ def remove_user(doc, name):
 
 
 def _users_of(doc, name):
+    import re
+
     needle = "%s.%s" % (core.CONTAINER, name)
+    # Another parameter's formula ("half = w / 2") lives in the container itself, where
+    # FreeCAD writes the reference without the container's name ("w / 2"): look for the bare
+    # name there (before, deleting w left half with a broken formula).
+    bare = re.compile(r"(?<![A-Za-z0-9_.])%s(?![A-Za-z0-9_])" % re.escape(name))
+    holder = container(doc)
     found = []
     for obj in doc.Objects:
-        for _path, expr in obj.ExpressionEngine:
+        for path, expr in obj.ExpressionEngine:
+            if obj is holder and path != name and bare.search(expr):
+                found.append("the parameter %s" % path)
+                continue
             if needle in expr or ("<<%s>>.%s" % (core.CONTAINER, name)) in expr:
                 found.append(obj.Label)
                 break

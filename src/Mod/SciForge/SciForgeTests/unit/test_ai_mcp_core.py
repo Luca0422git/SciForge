@@ -43,7 +43,14 @@ class Lifecycle(unittest.TestCase):
             self.assertEqual(reply["id"], 1)
             result = reply["result"]
             self.assertEqual(result["protocolVersion"], version)
-            self.assertEqual(result["capabilities"], {"tools": {"listChanged": False}})
+            self.assertEqual(
+                result["capabilities"],
+                {
+                    "tools": {"listChanged": False},
+                    "resources": {"subscribe": False, "listChanged": False},
+                    "prompts": {"listChanged": False},
+                },
+            )
             self.assertEqual(
                 result["serverInfo"], {"name": "sciforge", "title": "SciForge", "version": "1.2.3"}
             )
@@ -83,7 +90,7 @@ class Lifecycle(unittest.TestCase):
         )
 
     def test_unknown_method(self):
-        reply = self.handle(request("resources/list"))
+        reply = self.handle(request("completion/complete"))  # (resources/list exists now)
         self.assertEqual(reply["error"]["code"], mcp_core.METHOD_NOT_FOUND)
         self.assertEqual(reply["id"], 1)
 

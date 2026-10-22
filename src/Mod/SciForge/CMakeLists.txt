@@ -36,7 +36,9 @@ FILE(GLOB SciForge_Fixtures RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPEN
 # What the Home tab's welcome line opens offline: the cheat sheet (a copy of
 # docs/sciforge/cheat-sheet.md; a unit test keeps the two the same) and the Raspberry Pi 5
 # case design (a copy of docs/sciforge/examples/pi5-case/pi5_case.FCStd).
-FILE(GLOB SciForge_Docs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS docs/*.md)
+# docs/ai/ (recursive): the documents for AI models the MCP server offers as resources
+# (sciforge/ai/mcp_resources.py).
+FILE(GLOB_RECURSE SciForge_Docs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS docs/*.md)
 FILE(GLOB_RECURSE SciForge_Examples RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
     examples/*.FCStd)
 

@@ -51,8 +51,8 @@ RETRIES = 2  # a read-only tool whose reply was lost is asked again this many ti
 RETRY_WAIT = 0.5  # seconds before asking again
 MAYBE_APPLIED = (
     "The answer from SciForge was lost (%s), so the change %s may or may not have been "
-    "applied. Do not repeat it blindly: inspect the design first (get_design or "
-    "get_timeline), then decide."
+    "applied. Do not repeat it blindly: inspect the design first (inspect_design, or "
+    "diff_design since a snapshot you took before), then decide."
 )
 
 

@@ -855,8 +855,10 @@ define(
     "INSPECT > Measure",
     "Measure between two picks a and b of the current body or the origin: "
     "the minimum distance (mm) and, where it makes sense, the angle (degrees), like "
-    "SciForge's Measure tool. " + kit.PICK_HELP + " " + SELECTOR_HELP,
-    schema({"a": pick("the first pick"), "b": pick("the second pick")}, ["a", "b"]),
+    "SciForge's Measure tool; also the X / Y / Z distances, the two nearest points and what "
+    "each pick is (length, area, radius...). Only a: the size of that one pick (an edge's "
+    "length and radius, a face's area and perimeter). " + kit.PICK_HELP + " " + SELECTOR_HELP,
+    schema({"a": pick("the first pick"), "b": pick("the second pick (optional)")}, ["a"]),
     changes=False,
     needs=("design",),
     extra=_extra_measure,
@@ -920,7 +922,8 @@ define(
     "Extrude a sketch's areas into a solid (SciForge's Extrude). distance "
     "goes along the sketch normal; flip: true goes the other way, for cuts too: a cut "
     "from a sketch lying on top of the part needs flip: true. regions picks some areas by "
-    "a point inside each ([x, y] in sketch coordinates); without it every area is used. "
+    "a point inside each ([x, y] in sketch coordinates); without it the outer areas are used "
+    "and shapes inside them are holes (a point in the ring and one in the disc fill it). "
     "direction one_side (default), symmetric (distance is the whole length, half on each "
     "side) or two_sides (distance one way, distance2 the other). through_all goes through "
     "the whole part instead of a distance. taper in degrees. "

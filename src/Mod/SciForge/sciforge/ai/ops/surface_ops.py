@@ -108,9 +108,16 @@ def _finish(builder, step, feature, where, before=()):
     from sciforge import bodies
 
     builder.doc.recompute()
-    broken = [
-        builder.doc.getObject(name).Label for name in sorted(_broken(builder.doc) - set(before))
-    ]
+    broken = []
+    for name in sorted(_broken(builder.doc) - set(before)):
+        obj = builder.doc.getObject(name)
+        why = ""
+        try:
+            why = str(obj.getStatusString() or "").strip()
+        except Exception:
+            pass
+        # the reason with the name (before, an AI only learned "Surface1 failed")
+        broken.append("%s (%s)" % (obj.Label, why) if why and why != "Valid" else obj.Label)
     if broken:
         raise BuildError("%s: these steps failed: %s" % (where, ", ".join(broken)))
     body = bodies.body_of(feature)

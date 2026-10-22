@@ -85,7 +85,8 @@ GEOMETRY_HELP = (
     "(one open line: it makes no area). Optional name: dimensions <name>.width, <name>.height, "
     "<name>.x, <name>.y (rectangles) or <name>.diameter, <name>.x, <name>.y (circles). Shapes "
     "inside each other make separate areas (a circle inside a rectangle makes a ring area and "
-    "a disc area)."
+    "a disc area); extrude and revolve without regions use the outer areas with the shapes "
+    "inside them as holes (that rectangle with its circle extrudes as a plate with a hole)."
 )
 
 MORE_GEOMETRY_HELP = (

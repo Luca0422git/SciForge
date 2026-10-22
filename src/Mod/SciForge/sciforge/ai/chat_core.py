@@ -35,16 +35,38 @@ SYSTEM_PROMPT = (
     "shell, patterns, assemblies, drawings and parameters, each as a step in the design's "
     "timeline; get_timeline, get_step and edit_step read and change what exists, list_tools "
     "lists every tool and get_help explains selectors, picks and curves. All lengths are "
-    "millimetres (mm) and all angles degrees. Call get_design before changing a design, and use "
-    "get_design or screenshot after a change to check that it came out as intended. Every "
+    "millimetres (mm) and all angles degrees. Call get_design (or inspect_design) before "
+    "changing a design, and use get_design or screenshot after a change to check that it came "
+    "out as intended: diff_design since last_change says what a change did, query_geometry "
+    "lists the faces and edges a selector picks, check_design finds broken steps and bad "
+    "solids, render returns a picture. Trust the numbers before the picture. Every "
     "tool call that changes the design is one undo step in SciForge; undo takes back the "
     "last one. Refer to earlier steps by the ids get_design and the tools report (for "
     "example the sketch id as an extrude's profile). If a tool answers with an error, read "
     "it, fix the arguments and try again. When the request is unclear or a choice matters "
     "(a size, which face, whether to replace a file), ask the person instead of guessing. "
     "Keep answers short and plain: the person may be new to CAD. How to pick faces and "
-    "edges: " + catalog.SELECTOR_HELP.replace("\n", " ")
+    "edges: " + catalog.SELECTOR_HELP.replace("\n", " ") + " Before guessing how a tool or "
+    "feature behaves, search SciForge's documentation with docs_search and read the part "
+    "you need with docs_read; examples_search finds tested recipes and examples. Long "
+    "documents are read with these tools, never all at once."
 )
+
+
+def _docs_index():
+    """The short list of the documentation for the system prompt ("" when it is not
+    installed); never raises."""
+    try:
+        from . import docs_core
+
+        return docs_core.prompt_index()
+    except Exception:
+        return ""
+
+
+DOCS_INDEX = _docs_index()
+if DOCS_INDEX:
+    SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + DOCS_INDEX
 
 COST_NOTE = (
     "Using an AI through its API is billed by that provider for each use, separately from "

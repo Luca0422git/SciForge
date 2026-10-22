@@ -2,7 +2,9 @@
 # Runs every SciForge test that does not need a full SciForge build:
 #   1. unit tests          (plain Python, no FreeCAD)
 #   2. golden models       (real FreeCAD, headless)
-#   2b. headless AI tools  (every AI tool once, real FreeCAD without a window)
+#   2b. headless AI tools  (every AI tool once, real FreeCAD without a window, every tool
+#                           call of the documentation for AI models, and an AI agent
+#                           building and checking a part only through MCP)
 #   3. GUI smoke test      (real FreeCAD GUI on a virtual screen via xvfb-run)
 #
 #   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR]
@@ -133,6 +135,27 @@ except Exception as exc:
     print("no headless report: %s" % exc); sys.exit(1)
 sys.exit(0 if report.get("passed") else 1)
 EOF2
+    # Every tool call shown in the documentation for AI models, and every tool's reference
+    # example, run in real FreeCAD (SciForgeTests/headless/docs_runner.py).
+    echo "== [SciForge] documentation examples (headless)"
+    SCIFORGE_HEADLESS_OUT="${OUT}" timeout 1200 "${FC_CMD[@]}" -c \
+        "from SciForgeTests.headless import docs_runner; docs_runner.main()" > "${OUT}/docs.log" 2>&1
+    grep -aoE "\[SciForge\] docs (FAIL|summary).*" "${OUT}/docs.log"
+    python3 - "${OUT}/docs-report.json" <<'EOF3' || FAILED+=("docs examples")
+import json, sys
+try:
+    report = json.load(open(sys.argv[1]))
+except Exception as exc:
+    print("no docs report: %s" % exc); sys.exit(1)
+sys.exit(0 if report.get("passed") else 1)
+EOF3
+    # An AI agent builds a part and checks it only through MCP, as an AI app does
+    # (tools/sciforge/sciforge-cli mcp --headless; SciForgeTests/headless/agent_e2e.py).
+    echo "== [SciForge] AI agent end to end (MCP, headless)"
+    SCIFORGE_FREECAD="${FREECAD_DIR}" SCIFORGE_CLI_PROFILE="${PROFILE}" timeout 900 python3 \
+        "${MODULE}/SciForgeTests/headless/agent_e2e.py" --out "${OUT}" \
+        > "${OUT}/agent-e2e.log" 2>&1 || FAILED+=("agent e2e")
+    grep -aoE "\[SciForge\] agent (FAIL|summary).*" "${OUT}/agent-e2e.log"
 }
 
 # run_gui_script NAME SCRIPT LOG RESULT: one GUI test in a real FreeCAD window.
