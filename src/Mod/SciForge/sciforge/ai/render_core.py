@@ -145,7 +145,9 @@ def render(
             continue
         if tris.min() < 0 or tris.max() >= len(pts):
             raise RenderError("A triangle refers to a point that is not there.")
-        prepared.append((pts, tris, mesh.get("color") or BODY_COLORS[0], bool(mesh.get("in_front"))))
+        prepared.append(
+            (pts, tris, mesh.get("color") or BODY_COLORS[0], bool(mesh.get("in_front")))
+        )
         pts_all.append(pts)
     line_items = []
     for line in lines:
@@ -288,7 +290,9 @@ def _fill(np, image, zbuf, scr, tris, colors):
             c = counts[a:b]
             tri = np.repeat(t[a:b], c)
             row_of = np.repeat(row[a:b], c)
-            col = np.repeat(first[a:b], c) + (np.arange(int(c.sum())) - np.repeat(np.cumsum(c) - c, c))
+            col = np.repeat(first[a:b], c) + (
+                np.arange(int(c.sum())) - np.repeat(np.cumsum(c) - c, c)
+            )
             a = b
             px, py = col + 0.5, row_of + 0.5
             ax, bx, cx = tx[tri, 0], tx[tri, 1], tx[tri, 2]

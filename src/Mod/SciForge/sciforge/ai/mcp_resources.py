@@ -348,9 +348,7 @@ def read(uri, call_tool, root=None):
         if topic in help_topics():
             return [{"uri": uri, "mimeType": "text/plain", "text": catalog.help_text(topic)}]
     if rest.startswith("step/") and len(rest) > len("step/"):
-        return _from_tool(
-            uri, "get_step", {"step": rest[len("step/") :]}, call_tool, template=True
-        )
+        return _from_tool(uri, "get_step", {"step": rest[len("step/") :]}, call_tool, template=True)
     if rest == "docs/index":
         return [{"uri": uri, "mimeType": "text/markdown", "text": docs_index(root)}]
     if rest in ("handbook", "handbook/full", "handbook/compact"):

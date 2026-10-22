@@ -1031,9 +1031,7 @@ def _frame(view, points, right, up, width, height):
     pos = cam.position.getValue().getValue()
     shift_x = (max(xs) + min(xs)) / 2.0 - sum(pos[i] * right[i] for i in range(3))
     shift_y = (max(ys) + min(ys)) / 2.0 - sum(pos[i] * up[i] for i in range(3))
-    cam.position.setValue(
-        *[pos[i] + shift_x * right[i] + shift_y * up[i] for i in range(3)]
-    )
+    cam.position.setValue(*[pos[i] + shift_x * right[i] + shift_y * up[i] for i in range(3)])
     if cam.getTypeId() != coin.SoOrthographicCamera.getClassTypeId():
         return
     # Coin fits "height" to the picture's height when it is wide, to its width when tall

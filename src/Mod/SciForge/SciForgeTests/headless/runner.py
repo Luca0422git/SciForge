@@ -1193,7 +1193,10 @@ def _box_edge(data, run):
     ref = (row or {}).get("ref") or {}
     if ref.get("body") != run.ids["v_box_body"]:
         return "the ref does not name its body: %s" % row
-    if data.get("active_body") != run.ids["v_plate_body"] or "not the active body" not in data["note"]:
+    if (
+        data.get("active_body") != run.ids["v_plate_body"]
+        or "not the active body" not in data["note"]
+    ):
         return "no word that another body is active: %s" % data.get("note")
     run.ids["v_edge_ref"] = ref
     return None
@@ -1202,7 +1205,10 @@ def _box_edge(data, run):
 def _volumes(plate, box):
     def check(answer, run):
         rows = {b["id"]: b for b in json_of(answer)["bodies"]}
-        got = (rows[run.ids["v_plate_body"]]["volume_mm3"], rows[run.ids["v_box_body"]]["volume_mm3"])
+        got = (
+            rows[run.ids["v_plate_body"]]["volume_mm3"],
+            rows[run.ids["v_box_body"]]["volume_mm3"],
+        )
         if abs(got[0] - plate) > 1e-6 or abs(got[1] - box) > 1e-6:
             return "volumes (plate, box) %s, expected %s" % (got, (plate, box))
         return None
@@ -1251,14 +1257,20 @@ def _refs_round_trip(data, run):
 
     obj = run.obj(data["shape_of"])
     for row in data["elements"]:
-        if row["ref"] is None or selectors.select(obj.Shape, row["ref"], data["element"]) != [row["name"]]:
+        if row["ref"] is None or selectors.select(obj.Shape, row["ref"], data["element"]) != [
+            row["name"]
+        ]:
             return "the ref of %s does not pick it: %s" % (row["name"], row["ref"])
     return None if data["elements"] else "no elements"
 
 
 VERIFY_SESSION = [
     {"tool": "new_design", "args": {"name": "VerifyTwoBodies"}},
-    {"tool": "create_sketch", "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 60, 40]}]}, "save": "v_sk1"},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 60, 40]}]},
+        "save": "v_sk1",
+    },
     {"tool": "extrude", "args": {"profile": "$v_sk1", "distance": 10}, "save": "v_plate"},
     {
         "tool": "query_geometry",
@@ -1272,7 +1284,11 @@ VERIFY_SESSION = [
         "save": "v_sk2",
     },
     {"tool": "extrude", "args": {"profile": "$v_sk2", "distance": 20}, "save": "v_box"},
-    {"tool": "components_from_bodies", "args": {"bodies": ["$v_box_body"], "label": "C1"}, "save": "v_comp"},
+    {
+        "tool": "components_from_bodies",
+        "args": {"bodies": ["$v_box_body"], "label": "C1"},
+        "save": "v_comp",
+    },
     {"tool": "move_copy", "args": {"components": ["$v_comp"], "move_type": "translate", "dx": 100}},
     {"tool": "activate", "args": {"target": "Body"}},
     {"tool": "inspect_design", "args": {}, "check": _json_check(_two_bodies)},
@@ -1303,7 +1319,11 @@ VERIFY_SESSION = [
     {"tool": "inspect_design", "args": {"snapshot": False}, "check": _volumes(24000.0, BOX)},
     {"tool": "activate", "args": {"target": "$v_box_body"}},
     {"tool": "fillet", "args": {"edges": "$v_edge_ref", "radius": 2}, "save": "v_fillet"},
-    {"tool": "inspect_design", "args": {"snapshot": False}, "check": _volumes(24000.0, FILLETED_BOX)},
+    {
+        "tool": "inspect_design",
+        "args": {"snapshot": False},
+        "check": _volumes(24000.0, FILLETED_BOX),
+    },
     {"tool": "diff_design", "args": {"since": "$v_snapshot"}, "check": _json_check(_diff_two)},
     {
         "tool": "render",

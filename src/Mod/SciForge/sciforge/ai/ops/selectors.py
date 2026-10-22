@@ -235,8 +235,8 @@ def _check_body(shape, name):
     if owner is None:
         return
     raise SelectionError(
-        "this selector was made for body %s (its \"body\"), but the tool works on body %s "
-        "(%s): activate %s first (activate {\"target\": \"%s\"}), or query_geometry %s for "
+        'this selector was made for body %s (its "body"), but the tool works on body %s '
+        '(%s): activate %s first (activate {"target": "%s"}), or query_geometry %s for '
         "a ref of its own" % (name, owner.Name, owner.Label, name, name, owner.Name)
     )
 

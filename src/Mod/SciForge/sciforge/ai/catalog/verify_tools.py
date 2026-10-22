@@ -85,7 +85,7 @@ define(
     "element by its geometry (stable when FreeCAD renumbers faces), and pick: the same ready "
     "for measure, create_sketch face, construct_plane... Pass ref straight to fillet, chamfer, "
     "shell, draft (edges / faces) to change exactly that element; ref names its body "
-    "(\"body\"), and those tools work on the active body, so activate that body first (a "
+    '("body"), and those tools work on the active body, so activate that body first (a '
     "tool working on another body refuses the ref). of: a body or step id "
     "(default the body being worked on; a step: the solid as it was after that step). "
     "element: faces (default), edges or vertices. select: a selector (default all; for "

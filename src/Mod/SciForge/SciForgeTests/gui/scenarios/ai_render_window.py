@@ -90,7 +90,9 @@ def selection_does_not_tint():
         for p, q in zip(a, b)
         if sum(abs(x - y) for x, y in zip(p, q)) > 30
     )
-    h.check("a selected body does not tint a plain render", differ < 20, "%d pixels differ" % differ)
+    h.check(
+        "a selected body does not tint a plain render", differ < 20, "%d pixels differ" % differ
+    )
     after = [x.ObjectName for x in Gui.Selection.getSelectionEx(doc.Name, 0)]
     h.check("the person's selection is put back", after == ["Body"], after)
     Gui.Selection.clearSelection()
@@ -139,9 +141,7 @@ def highlight_is_orange():
         },
     )
     count = orange(pixels(picture(earlier)))
-    h.check(
-        "an earlier step's face is orange", count > 1000, "%d: %s" % (count, earlier["text"])
-    )
+    h.check("an earlier step's face is orange", count > 1000, "%d: %s" % (count, earlier["text"]))
     h.check("nothing of the highlight is left in the 3D view", not _leftover())
 
 
@@ -151,7 +151,9 @@ highlight_is_orange.wait_ms = 800
 def _leftover():
     root = Gui.ActiveDocument.ActiveView.getSceneGraph()
     return [
-        i for i in range(root.getNumChildren()) if root.getChild(i).getName() == "SciForgeAIHighlight"
+        i
+        for i in range(root.getNumChildren())
+        if root.getChild(i).getName() == "SciForgeAIHighlight"
     ]
 
 
@@ -159,7 +161,9 @@ def _leftover():
 def direction_keeps_z_up():
     view = Gui.ActiveDocument.ActiveView
     view.setCameraOrientation(App.Rotation(App.Vector(1, 1, 0), 70).Q)  # (some roll to undo)
-    answer = call("render", {"renderer": "window", "direction": [1, 0, 0], "width": 300, "height": 300})
+    answer = call(
+        "render", {"renderer": "window", "direction": [1, 0, 0], "width": 300, "height": 300}
+    )
     box, mask = part_box(pixels(picture(answer)))
     h.check("the part is in the picture", box is not None, answer["text"])
     if box is None:
@@ -171,7 +175,9 @@ def direction_keeps_z_up():
     bottom = [mask[y1 - 2][x] for x in range(x0, x1)]
     h.check(
         "from +X the boss stands up on the right (Z up, Y to the right)",
-        above_left < 0.02 * max(above_right, 1) and above_right > 100 and sum(bottom) > 0.8 * len(bottom),
+        above_left < 0.02 * max(above_right, 1)
+        and above_right > 100
+        and sum(bottom) > 0.8 * len(bottom),
         "box %s, left %d, right %d, bottom row %d/%d"
         % (box, above_left, above_right, sum(bottom), len(bottom)),
     )
@@ -183,10 +189,15 @@ direction_keeps_z_up.wait_ms = 800
 # -- Path 4 -------------------------------------------------------------------------------------
 def framing_fills_the_picture():
     for width, height in ((1600, 200), (200, 900)):
-        answer = call("render", {"renderer": "window", "view": "top", "width": width, "height": height})
+        answer = call(
+            "render", {"renderer": "window", "view": "top", "width": width, "height": height}
+        )
         image = picture(answer)
         box, _mask = part_box(pixels(image))
-        h.check("a %d x %d picture" % (width, height), (image.width(), image.height()) == (width, height))
+        h.check(
+            "a %d x %d picture" % (width, height),
+            (image.width(), image.height()) == (width, height),
+        )
         if box is None:
             h.check("the part is in the %d x %d picture" % (width, height), False)
             continue
@@ -198,7 +209,9 @@ def framing_fills_the_picture():
             short > 0.8,
             "part box %s: %.2f of the short side" % (box, short),
         )
-    print("[SciForge] render scenario camera type: %s" % Gui.ActiveDocument.ActiveView.getCameraType())
+    print(
+        "[SciForge] render scenario camera type: %s" % Gui.ActiveDocument.ActiveView.getCameraType()
+    )
 
 
 framing_fills_the_picture.wait_ms = 800
@@ -211,5 +224,12 @@ def done():
 
 h.run(
     "ai_render_window",
-    [build, selection_does_not_tint, highlight_is_orange, direction_keeps_z_up, framing_fills_the_picture, done],
+    [
+        build,
+        selection_does_not_tint,
+        highlight_is_orange,
+        direction_keeps_z_up,
+        framing_fills_the_picture,
+        done,
+    ],
 )

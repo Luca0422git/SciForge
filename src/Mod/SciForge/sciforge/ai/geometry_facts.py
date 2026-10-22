@@ -186,7 +186,9 @@ class _Index:
         """The elements that pass the selector's filters (no "at"), worked out once per
         distinct filter set: the 400 holes of a plate share one, so a ref for each of them
         does not go through every element again."""
-        key = repr(sorted((k, spec[k]) for k in ("type", "normal", "parallel", "radius") if k in spec))
+        key = repr(
+            sorted((k, spec[k]) for k in ("type", "normal", "parallel", "radius") if k in spec)
+        )
         found = self._seen.get(key)
         if found is None:
             found = self._seen[key] = [j for j in range(len(self.items)) if self.matches(j, spec)]
