@@ -78,8 +78,8 @@ Design check: OK, 0 problems, 0 warnings.
  "failed_steps": [],
  "interference": [],
  "sketches": [
-  {"id": "Sketch1", "closed_areas": 1, "fully_constrained": true},
-  {"id": "Sketch2", "closed_areas": 1, "fully_constrained": true}
+  {"id": "Sketch1", "closed_areas": 1, "fully_constrained": true, "degrees_of_freedom": 0},
+  {"id": "Sketch2", "closed_areas": 1, "fully_constrained": true, "degrees_of_freedom": 0}
  ]
 }
 ```

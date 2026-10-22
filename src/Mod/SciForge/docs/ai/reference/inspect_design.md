@@ -117,7 +117,7 @@ Example: 1 body, 4 steps. Snapshot S1.
    "kind": "hole",
    "type": "PartDesign::Hole",
    "body": "Body",
-... (22 more lines)
+... (36 more lines)
 ```
 
 ## More argument examples

@@ -52,6 +52,8 @@ The answer:
 
 ```text
 Exported Example Drawing to /home/me/sciforge/plate.dxf.
+Not kept in this file:
+- the font of the text (the DXF names none: other programs use their own)
 ```
 
 ## More argument examples

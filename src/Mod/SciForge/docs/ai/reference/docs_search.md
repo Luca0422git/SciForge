@@ -39,39 +39,39 @@ The call:
 The answer:
 
 ~~~~text
-3 of 576 matching sections (read one with docs_read and its path):
+3 of 623 matching sections (read one with docs_read and its path):
 {
  "query": "shell open top wall thickness",
  "results": [
-  {
-   "uri": "sciforge://docs/reference/docs_search.md#example-1",
-   "path": "reference/docs_search.md",
-   "anchor": "example-1",
-   "document": "`docs_search`: Search the documentation",
-   "section": "Example 1:",
-   "score": 19.814,
-   "snippet": "... ```json {\"tool\": \"docs_search\", \"args\": {\"query\": \"shell open top wall thickness\", \"limit\": 3}} ``` The answer: ```text 3 of 98 matching sections (read one with docs_read and its path): { \"query\": \"shell open top wall thickness\", \"results\": [ { \"uri\": \"sciforge://docs/tools.md#shell-shell\", ..."
-  },
   {
    "uri": "sciforge://docs/examples/golden-models.md#shell-14",
    "path": "examples/golden-models.md",
    "anchor": "shell-14",
    "document": "Golden models by feature",
    "section": "shell (14)",
-   "score": 19.338,
+   "score": 18.511,
    "snippet": "... hollow] - `sf_shell_open_box`: Box 40x30x10, Shell: top face taken away, 2 mm inside [sciforge-shell] - `sf_shell_outside_rounded`: Box, Shell Outside 1 mm (top taken away), Shell Type Rounded [sciforge-shell] - `sf_shell_outside_sharp`: Box, Shell Outside 1 mm (top taken away), sharp corners ..."
   },
   {
-   "uri": "sciforge://docs/reference/shell.md#what-it-does",
+   "uri": "sciforge://docs/reference/shell.md#example-1-hollow-the-plate-open-at-the-top-2-mm-walls",
    "path": "reference/shell.md",
-   "anchor": "what-it-does",
+   "anchor": "example-1-hollow-the-plate-open-at-the-top-2-mm-walls",
    "document": "`shell`: Shell",
-   "section": "What it does",
-   "score": 18.185,
-   "snippet": "Hollow the current body out with a wall thickness (SciForge's Shell). faces: the faces to remove (open), a face selector, e.g. the top face {\"normal\": [0, 0, 1], \"count\": 1}. direction inside (default: the outside stays where it is) or ..."
+   "section": "Example 1: hollow the plate, open at the top, 2 mm walls",
+   "score": 18.498,
+   "snippet": "... \"geometry\": [{\"rect\": [0, 0, 60, 40], \"name\": \"base\"}]}}, {\"tool\": \"extrude\", \"args\": {\"profile\": \"Sketch1\", \"distance\": 10}} ] ``` The call: ```json {\"tool\": \"shell\", \"args\": {\"faces\": {\"normal\": [0, 0, 1], \"at\": {\"axis\": \"z\", \"value\": \"max\"}, \"count\": 1}, \"thickness\": 2}} ``` The answer: ..."
+  },
+  {
+   "uri": "sciforge://docs/reference/docs_search.md#example-1-find-how-to-hollow-a-part",
+   "path": "reference/docs_search.md",
+   "anchor": "example-1-find-how-to-hollow-a-part",
+   "document": "`docs_search`: Search the documentation",
+   "section": "Example 1: find how to hollow a part",
+   "score": 17.729,
+   "snippet": "... taken away, 2 mm inside [sciforge-shell] - `sf_shell_outside_rounded`: Box, Shell Outside 1 mm (top taken away), Shell Type Rounded [sciforge-shell] - `sf_shell_outside_sharp`: Box, Shell Outside 1 mm (top taken away), sharp corners ...\" }, { \"uri\": \"sciforge://docs/reference/shell.md#what-it-does\", \"path\": \"reference/shell.md\", \"anchor\": ..."
   }
  ],
- "total": 576
+ "total": 623
 }
 ~~~~
 

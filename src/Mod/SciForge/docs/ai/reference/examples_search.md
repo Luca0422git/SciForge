@@ -77,7 +77,7 @@ The answer:
    "note": "A pipe flange: a 100 mm disc, 10 mm thick, with a 40 mm hub 30 mm tall, a 20 mm bore, a",
    "calls": 12,
    "uri": "sciforge://docs/recipes/flange-bolt-pattern.md",
-   "score": 22.185
+   "score": 22.22
   },
   {
    "kind": "golden",
@@ -89,7 +89,7 @@ The answer:
    "note": "The picked wall is closed with the top and bottom faces into the hole's cylinder, which is cut at 60 degree steps. V = pi*40^2*10 - 6*pi*4^2*10; A = 2*1600pi + 2pi*40*10 - 12*16pi + 6*2pi*4*10 (same as flange_polar_holes).",
    "known_gap": false,
    "uri": "sciforge://examples/golden/pattern_circ_faces_bolt_circle",
-   "score": 14.973
+   "score": 14.999
   },
   {
    "kind": "recipe",
@@ -110,7 +110,7 @@ The answer:
    "note": "A hex head bolt M8 x 30: a 13 mm across-flats head 5.3 mm high (ISO 4017), a 30 mm shank",
    "calls": 10,
    "uri": "sciforge://docs/recipes/threaded-fastener.md",
-   "score": 8.977
+   "score": 8.989
   }
 ... (3 more lines)
 ```

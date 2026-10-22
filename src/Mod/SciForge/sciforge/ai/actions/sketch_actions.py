@@ -354,6 +354,16 @@ def _explained(ctx, sketch, text, culprits):
     return text
 
 
+def _listed(sketch, new):
+    """The constraints the last solve called redundant, apart from `new`, on the curves
+    connected to them (sketch_explain.component)."""
+    from ... import sketch_explain
+
+    _conflicting, redundant = sketch_explain.bad_sets(sketch)
+    near = sketch_explain.component(sketch, new)
+    return sorted(i for i in redundant if i not in new and i in near)
+
+
 def _add_checked(ctx, sketch, constraints, title):
     """Add constraints; if one conflicts with the sketch or says what it says already, take
     them out again and say which constraints it fights or repeats, in the words the
@@ -366,6 +376,12 @@ def _add_checked(ctx, sketch, constraints, title):
     added = list(range(first, len(sketch.Constraints)))
     finding = sketch_explain.check_new(sketch, added, probe=True)
     code = sketch.solve() if not finding else -1
+    if not finding and code != 0 and before == 0:
+        # the solver failed without listing the new ones (two fixed circles made
+        # concentric: it lists the Blocks): the others it lists are what they fight
+        culprits = sketch_explain.conflict_culprits(sketch, added) or _listed(sketch, added)
+        if culprits:
+            finding = sketch_explain.Finding("conflict", added, culprits)
     if finding or (code != 0 and before == 0):
         text = ""
         if finding:
