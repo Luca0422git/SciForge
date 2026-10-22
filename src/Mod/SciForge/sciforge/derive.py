@@ -213,7 +213,22 @@ def read_doc(doc):
                 except Exception:
                     gid = None
                 geos.append((geo.copy(), construction, gid))
-            items[key] = {"label": obj.Label, "geometry": geos, "global": glob, "local": local}
+            # Each curve with everything FreeCAD keeps on it (obj.Geometry hands points
+            # without it: an ellipse's foci and a B-spline's knots lost their role), and the
+            # constraints that tie those helper curves to their ellipse or B-spline.
+            try:
+                facades = list(obj.GeometryFacadeList)
+            except Exception:
+                facades = None
+            internal = [c for c in obj.Constraints if c.Type == "InternalAlignment"]
+            items[key] = {
+                "label": obj.Label,
+                "geometry": geos,
+                "facades": facades,
+                "internal": internal,
+                "global": glob,
+                "local": local,
+            }
         elif obj.TypeId in DATUM_TYPES:
             if getattr(obj, "SciForgeTimeline", True) is False and not getattr(
                 obj, DERIVED_PROP, ""
@@ -556,13 +571,29 @@ def _copy_look(body, data):
 
 
 def _fill_sketch(sketch, data):
-    """The derived sketch's curves: the source's, fixed (Block). Each curve takes the
-    geometry id of its source curve, so an update (every curve deleted and added again)
-    keeps the ids that later steps and references name (they were new on every update)."""
+    """The derived sketch's curves: the source's, fixed (Block). Each curve keeps what
+    FreeCAD keeps on its source curve: its geometry id (an update deletes and adds every
+    curve; later steps and references name the ids), its construction flag, and the role of
+    an ellipse's or B-spline's helper curves (axes, foci, poles, knots), which stay tied to
+    their curve by the source's InternalAlignment constraints."""
     import Sketcher
 
     if sketch.GeometryCount:
         sketch.deleteAllGeometry()
+    facades = data.get("facades")
+    if facades and len(facades) == len(data["geometry"]) and _set_facades(sketch, facades):
+        for index, item in enumerate(data["geometry"]):
+            if not item[1]:
+                try:
+                    sketch.addConstraint(Sketcher.Constraint("Block", index))
+                except Exception:
+                    pass
+        for constraint in data.get("internal") or []:
+            try:
+                sketch.addConstraint(constraint)
+            except Exception as exc:
+                warn("derive: %s: a helper curve is not tied (%s)" % (sketch.Label, exc))
+        return
     ids = []
     for item in data["geometry"]:
         geo, construction = item[0], item[1]
@@ -579,6 +610,26 @@ def _fill_sketch(sketch, data):
             sketch.setGeometryIds(ids)
         except Exception as exc:
             warn("derive: %s keeps new curve ids (%s)" % (sketch.Label, exc))
+
+
+def _set_facades(sketch, facades):
+    """The source's curves into the (empty) derived sketch with every extension (id,
+    construction, internal role, layers); the blocked state comes from the Block
+    constraints added after. False when it did not work (the caller adds them plainly)."""
+    try:
+        for facade in facades:
+            if facade.Blocked:
+                facade.Blocked = False
+        sketch.GeometryFacadeList = facades
+        return len(sketch.Geometry) == len(facades)
+    except Exception as exc:
+        log("derive: %s: curves added one by one (%s)" % (sketch.Label, exc))
+        try:
+            if sketch.GeometryCount:
+                sketch.deleteAllGeometry()
+        except Exception:
+            pass
+        return False
 
 
 def _build_sketch(master, data, body):
