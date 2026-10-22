@@ -65,10 +65,14 @@ VIEW_BANDS = (
     ("begin", -1.0e9),  # caption, label: annotations
     ("faces", 5.0),  # faces, hatching, detail highlights: hatching and section lines
     ("edges", 55.0),  # edges: by their dash pattern
+    # cosmetic edges and TechDraw centre lines (drawing_pdf_export lifts them from the
+    # edges' z 70 to COSMETIC_Z while printing): dashed ones are centre lines and marks
+    ("cosmetic", 72.0),
     ("marks", 75.0),  # centre marks: centre lines and marks
     ("lines", 85.0),  # section, break lines, matting: hatching and section lines
     ("end", 1.0e9),
 )
+COSMETIC_Z = 73.0
 OTHER_BANDS = (("begin", -1.0e9), ("end", 1.0e9))
 BAND_LAYER = {"begin": "annotations", "faces": "hatching", "marks": "centre", "lines": "hatching"}
 
@@ -148,13 +152,14 @@ def _fill_of(op, current):
     return current
 
 
-def layer_content(content, codes, hidden_widths=None):
+def layer_content(content, codes, hidden_widths=None, layers=True):
     """The page's content with every painted path put on its layer, the markers taken
     out (and stray closepaths Qt writes, which viewers complain about). Returns
-    (content, the layer keys used, the marker codes found)."""
+    (content, the layer keys used, the marker codes found). With layers=False (PDF/A,
+    where Qt paints the markers opaque) only the markers and Qt's stray operators go."""
     hidden_widths = hidden_widths or {}
     ops = po.operations(content)
-    if any(op.op in (b"BMC", b"BDC", b"EMC") for op in ops):
+    if layers and any(op.op in (b"BMC", b"BDC", b"EMC") for op in ops):
         raise LayerError("the page already has marked content")
     n = len(ops)
     cat = [None] * n
@@ -178,6 +183,12 @@ def layer_content(content, codes, hidden_widths=None):
             return "annotations"
         if band == "edges":
             return edge_layer(dash, width, hidden_widths.get(key)) if painting else "visible"
+        if band == "cosmetic":
+            # SciForge's centre marks are cosmetic lines; a dashed one is never a hidden
+            # edge, whatever its width (TechDraw's "FC 0.35mm" line group draws hidden
+            # edges at the same 0.18 mm and the same dash)
+            solid = edge_layer(dash, width, None) == "visible"
+            return "visible" if solid or not painting else "centre"
         return BAND_LAYER.get(band, "")
 
     for i, op in enumerate(ops):
@@ -264,7 +275,7 @@ def layer_content(content, codes, hidden_widths=None):
     for i, op in enumerate(ops):
         if drop[i]:
             continue
-        c = cat[i]
+        c = cat[i] if layers else None
         if c:
             if c != open_cat:
                 if open_cat:
@@ -620,6 +631,11 @@ def overlay(texts, font, sheet_mm, media):
                 out.append(b"/OC /SF%s BDC" % layer.encode("ascii"))
                 used.add(layer)
             open_layer = layer or None
+        # a character the font lacks is drawn as .notdef, which has no text: the whole
+        # text is then given as ActualText, so search and copy still find all of it
+        spoken = not getattr(font, "covers", lambda _t: True)(text)
+        if spoken:
+            out.append(b"/Span << /ActualText " + po.serialize(po.text_string(text)) + b" >> BDC")
         out.append(b"BT")
         out.append(b"3 Tr")
         out.append(b"/SFText " + po.serialize(round(size, 4)) + b" Tf")
@@ -629,6 +645,8 @@ def overlay(texts, font, sheet_mm, media):
         out.append(b" ".join(po.serialize(round(v, 4)) for v in matrix) + b" Tm")
         out.append(po.serialize(font.encode(text)) + b" Tj")
         out.append(b"ET")
+        if spoken:
+            out.append(b"EMC")
         for start, end, uri in find_links(text):
             k = scale / 100.0 * size / 1000.0
             a = font.width(text[:start]) * k
@@ -682,9 +700,38 @@ def pdf_date(when=None):
     return when.strftime("D:%Y%m%d%H%M%SZ")
 
 
-def xmp(meta, created, modified, pdfa=None):
+# XMP properties of the printed file that say what it is (PDF/A, PDF/X: part,
+# conformance, version; its document and version ids): kept when the packet is rewritten
+KEPT_XMP = {
+    "xmpMM": "http://ns.adobe.com/xap/1.0/mm/",
+    "pdfaid": "http://www.aiim.org/pdfa/ns/id/",
+    "pdfxid": "http://www.npes.org/pdfx/ns/id/",
+}
+
+
+def kept_xmp(packet):
+    """[(prefix, name, value as XML text)] of the KEPT_XMP properties with a simple value
+    in an XMP packet, written as attributes (Qt) or as elements."""
+    text = (packet or b"").decode("utf-8", "replace")
+    prefixes = "|".join(KEPT_XMP)
+    found, seen = [], set()
+    patterns = (
+        r"\b(%s):(\w+)\s*=\s*\"([^\"<]*)\"" % prefixes,
+        r"\b(%s):(\w+)\s*=\s*'([^'<]*)'" % prefixes,
+        r"<(%s):(\w+)>([^<]*)</\1:\2>" % prefixes,
+    )
+    for pattern in patterns:
+        for m in re.finditer(pattern, text):
+            if (m.group(1), m.group(2)) not in seen:
+                seen.add((m.group(1), m.group(2)))
+                found.append((m.group(1), m.group(2), m.group(3).strip()))
+    return found
+
+
+def xmp(meta, created, modified, kept=(), trapped="False"):
     """The XMP metadata packet for `meta` (title, author, subject, keywords, creator,
-    producer)."""
+    producer), with the `kept` properties (kept_xmp) of the file it replaces and
+    pdf:Trapped as the document information has it (PDF/A wants the two to agree)."""
     rows = ["<dc:format>application/pdf</dc:format>"]
     if meta.get("title"):
         rows.append(
@@ -711,31 +758,33 @@ def xmp(meta, created, modified, pdfa=None):
     if modified:
         rows.append("<xmp:ModifyDate>%s</xmp:ModifyDate>" % modified)
         rows.append("<xmp:MetadataDate>%s</xmp:MetadataDate>" % modified)
-    if pdfa:
-        rows.append("<pdfaid:part>%s</pdfaid:part>" % _xml(pdfa[0]))
-        if pdfa[1]:
-            rows.append("<pdfaid:conformance>%s</pdfaid:conformance>" % _xml(pdfa[1]))
+    if trapped:
+        rows.append("<pdf:Trapped>%s</pdf:Trapped>" % _xml(trapped))
+    spaces = {"pdfaid"}
+    for prefix, name, value in kept:
+        rows.append("<%s:%s>%s</%s:%s>" % (prefix, name, value, prefix, name))
+        spaces.add(prefix)
+    extra = "".join(' xmlns:%s="%s"' % (p, KEPT_XMP[p]) for p in sorted(spaces))
     text = (
         '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n'
         '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
         '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
         '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" '
-        'xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" '
-        'xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">\n%s\n</rdf:Description>\n'
-        "</rdf:RDF>\n</x:xmpmeta>\n" % "\n".join(rows)
+        'xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/"'
+        "%s>\n%s\n</rdf:Description>\n"
+        "</rdf:RDF>\n</x:xmpmeta>\n" % (extra, "\n".join(rows))
     )
     return (text + " " * 200 + '\n<?xpacket end="w"?>').encode("utf-8")
 
 
-def _pdfa_of(doc, root):
-    if not isinstance(root.get(b"Metadata"), Ref):
-        return None
-    data = doc.stream_data(root[b"Metadata"].num) or b""
-    part = re.search(rb"pdfaid:part(?:>|=\")\s*(\d)", data)
-    if not part:
-        return None
-    conf = re.search(rb"pdfaid:conformance(?:>|=\")\s*([A-Za-z])", data)
-    return part.group(1).decode(), (conf.group(1).decode() if conf else "")
+def _identity_of(doc, root):
+    """(the kept_xmp properties of the file's XMP, its PDF/A part or None, its PDF/X
+    version or None)."""
+    kept = []
+    if isinstance(root.get(b"Metadata"), Ref):
+        kept = kept_xmp(doc.stream_data(root[b"Metadata"].num))
+    values = {(p, n): v for p, n, v in kept}
+    return kept, values.get(("pdfaid", "part")), values.get(("pdfxid", "GTS_PDFXVersion"))
 
 
 # ------------------------------------------------------------------ the whole file
@@ -752,8 +801,14 @@ def enhance(data, sheets, meta, font=None):
     if not isinstance(root, dict):
         raise po.PdfError("This PDF has no catalogue.")
     pages = doc.pages()
-    pdfa = _pdfa_of(doc, root)
-    report = {"pages": [], "pdfa": bool(pdfa)}
+    kept, pdfa, pdfx = _identity_of(doc, root)
+    # PDF/A-1 forbids layers, PDF/X before X-4 too; both want every font embedded and
+    # PDF/X wants no annotations on the printed area (so no links there)
+    layers_allowed = not pdfa and (not pdfx or bool(re.match(r"PDF/X-[4-9]", pdfx)))
+    archival = bool(pdfa or pdfx)
+    if archival and not getattr(font, "embedded", False):
+        font = None  # Helvetica is not embedded: no added text
+    report = {"pages": [], "pdfa": bool(pdfa), "pdfx": pdfx or ""}
     ocg_refs = {}  # layer key -> its OCG, made in LAYERS order once every page is read
     page_plans = []
     for index, num in enumerate(pages):
@@ -771,11 +826,15 @@ def enhance(data, sheets, meta, font=None):
         new = content
         used = set()
         codes = (info or {}).get("codes")
-        if codes is not None and not pdfa:
+        if codes is not None:
             try:
-                new, used, found = layer_content(content, codes, (info or {}).get("hidden"))
+                new, used, found = layer_content(
+                    content, codes, (info or {}).get("hidden"), layers_allowed
+                )
                 entry["markers"] = len(found)
-                if codes and not found:
+                if not layers_allowed:
+                    entry["note"] = "%s: no layers" % ("PDF/A-%s" % pdfa if pdfa else pdfx)
+                elif codes and not found:
                     # no marker printed: the layers would all be wrong
                     new, used = content, set()
                     entry["note"] = "no markers were printed: no layers"
@@ -784,6 +843,8 @@ def enhance(data, sheets, meta, font=None):
                 entry["note"] = "no layers: %s" % exc
         links = []
         runs = []
+        if pdfx:
+            entry["note"] = (entry["note"] + "; " if entry["note"] else "") + "no links (PDF/X)"
         try:
             runs = text_runs(doc, num, content)
         except (po.PdfError, LayerError, KeyError, TypeError, ValueError) as exc:
@@ -817,6 +878,8 @@ def enhance(data, sheets, meta, font=None):
             links += extra_links
             used |= extra_used
             entry["texts"] = len(added)
+        if pdfx:
+            links = []
         entry["links"] = len(links)
         entry["layers"] = [k for k, _n in LAYERS if k in used]
         for key in used:
@@ -889,7 +952,7 @@ def enhance(data, sheets, meta, font=None):
     old_info = old_info if isinstance(old_info, dict) else {}
     created = po.decode_text_string(old_info.get(b"CreationDate")) or pdf_date()
     modified = pdf_date()
-    info = {}
+    info = dict(old_info)  # what is not set here (a PDF/X version...) stays
     for key, field in (
         (b"Title", "title"),
         (b"Author", "author"),
@@ -901,11 +964,13 @@ def enhance(data, sheets, meta, font=None):
         value = meta.get(field)
         if value:
             info[key] = po.text_string(str(value))
-        elif key in old_info:
-            info[key] = old_info[key]
     info[b"CreationDate"] = String(created.encode("ascii", "replace"))
     info[b"ModDate"] = String(modified.encode("ascii"))
-    info[b"Trapped"] = Name(b"False")
+    trapped = old_info.get(b"Trapped")
+    trapped = bytes(trapped).decode("latin-1") if isinstance(trapped, Name) else "False"
+    if trapped not in ("True", "False"):
+        trapped = "False"  # "Unknown" is not allowed in PDF/A or PDF/X
+    info[b"Trapped"] = Name(trapped.encode("ascii"))
     doc.trailer[b"Info"] = doc.add(info)
     full = dict(meta)
     for key, field in (
@@ -919,10 +984,11 @@ def enhance(data, sheets, meta, font=None):
             full[field] = po.decode_text_string(info[key])
     root[b"Metadata"] = doc.add(
         {b"Type": Name(b"Metadata"), b"Subtype": Name(b"XML")},
-        xmp(full, _iso_date(created), _iso_date(modified), pdfa),
+        xmp(full, _iso_date(created), _iso_date(modified), kept, trapped),
     )
     doc.objects[doc.trailer[b"Root"].num] = root
-    version = doc.version if pdfa else max(doc.version, b"1.5")
+    version = doc.version if archival else max(doc.version, b"1.5")
+    doc.prune()  # the replaced contents, the old metadata...: not in the file twice
     return doc.write(version), report
 
 

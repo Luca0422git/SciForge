@@ -495,6 +495,44 @@ class Document:
             self.streams[num] = stream
         return Ref(num)
 
+    def prune(self):
+        """Drop the objects nothing reaches from the trailer any more (a page's replaced
+        content, Length objects now written directly, the catalogues of merged files) and
+        number the rest 1, 2, 3... in their old order. Returns how many were dropped."""
+        seen = set()
+        todo = [v for k, v in self.trailer.items() if k not in (b"Prev", b"XRefStm", b"Size")]
+        while todo:
+            value = todo.pop()
+            if isinstance(value, Ref):
+                if value.num in seen or value.num not in self.objects:
+                    continue
+                seen.add(value.num)
+                head = self.objects[value.num]
+                if value.num in self.streams and isinstance(head, dict):
+                    # write() puts the stream's real length in: a Length object is dead
+                    head = {k: v for k, v in head.items() if k != b"Length"}
+                todo.append(head)
+            elif isinstance(value, dict):
+                todo.extend(value.values())
+            elif isinstance(value, (list, tuple)):
+                todo.extend(value)
+        dropped = len(self.objects) - len(seen)
+        new_num = {old: i + 1 for i, old in enumerate(sorted(seen))}
+
+        def renumber(value):
+            if isinstance(value, Ref):
+                return Ref(new_num[value.num]) if value.num in new_num else None
+            if isinstance(value, dict):
+                return {k: renumber(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [renumber(v) for v in value]
+            return value
+
+        self.objects = {new_num[n]: renumber(self.objects[n]) for n in sorted(seen)}
+        self.streams = {new_num[n]: s for n, s in self.streams.items() if n in new_num}
+        self.trailer = {k: renumber(v) for k, v in self.trailer.items()}
+        return dropped
+
     # -- writing
     def write(self, version=None):
         version = version or self.version

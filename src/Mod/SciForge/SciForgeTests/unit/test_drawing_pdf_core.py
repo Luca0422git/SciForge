@@ -283,6 +283,8 @@ def coded_page():
     content += marker(c["View1", "edges"])
     content += line(3, 3, 4, 4) + line(5, 5, 6, 6, b"[42 10.5]", b"3.5")
     content += line(7, 7, 8, 8, b"[21.6 5.4]", b"1.8") + line(9, 9, 10, 10, b"[24 3 1 3]", b"1.8")
+    content += marker(c["View1", "cosmetic"])  # SciForge's centre marks, a solid cosmetic line
+    content += line(19, 19, 20, 20, b"[21.6 5.4]", b"1.8") + line(21, 21, 22, 22, width=b"1.8")
     content += marker(c["View1", "marks"]) + line(11, 11, 12, 12, width=b"1")
     content += marker(c["View1", "lines"]) + line(13, 13, 14, 14, b"[84 42 42 42]", b"3.5")
     content += b"/CSp CS\nSCN\n"  # a colour without its values (Qt)
@@ -299,11 +301,13 @@ class LayerTests(unittest.TestCase):
         self.assertEqual(len(plan), len(core.VIEW_BANDS) + len(core.OTHER_BANDS))
         self.assertEqual(plan[0][4], (165, 0, 1))
         self.assertEqual(codes[1], ("View1", "view", "begin"))
-        self.assertEqual(codes[7], ("Dim1", "other", "begin"))
-        zs = [z for _k, _b, z, _c, _rgb in plan[:6]]
+        self.assertEqual(codes[8], ("Dim1", "other", "begin"))
+        zs = [z for _k, _b, z, _c, _rgb in plan[:7]]
         self.assertEqual(zs, sorted(zs))
-        # between TechDraw's z-values: captions 0 < faces 10 < edges 70 < marks 80 < lines 90
-        self.assertTrue(zs[0] < 0 < zs[1] < 10 and 41 < zs[2] < 60 and 70 < zs[3] < 80 < zs[4] < 90)
+        # between TechDraw's z-values: captions 0 < faces 10 < edges 70 < cosmetic edges
+        # (lifted to COSMETIC_Z while printing) < marks 80 < lines 90
+        self.assertTrue(zs[0] < 0 < zs[1] < 10 and 41 < zs[2] < 60)
+        self.assertTrue(70 < zs[3] < core.COSMETIC_Z < zs[4] < 80 < zs[5] < 90)
 
     def test_edge_layers(self):
         self.assertEqual(core.edge_layer([], 7, 3.5), "visible")
@@ -341,6 +345,8 @@ class LayerTests(unittest.TestCase):
                 "centre",
                 "centre",
                 "centre",
+                "visible",
+                "centre",
                 "hatching",
                 "annotations",
                 "annotations",
@@ -360,6 +366,33 @@ class LayerTests(unittest.TestCase):
                 depth = None
             elif depth is not None:
                 self.assertNotIn(op.op, (b"q", b"Q"))
+
+    def test_line_group_where_marks_and_hidden_edges_look_alike(self):
+        # TechDraw's line group "FC 0.35mm": hidden edges at 0.18 mm, dashed exactly like
+        # SciForge's centre marks; only the cosmetic band tells them apart (PDF-4)
+        content, codes = coded_page()
+        out, used, _found = core.layer_content(content, codes, {"View1": 1.8})
+        layers = []
+        for layer, ops in segments(out):
+            layers += [layer] * sum(1 for o in ops if o == b"S")
+        # edges: solid, dashed at 0.35 mm (not the hidden width now), dashed at the hidden
+        # width, four dashes; cosmetic: dashed, solid; centre marks
+        self.assertEqual(
+            layers[2:9], ["visible", "centre", "hidden", "centre", "centre", "visible", "centre"]
+        )
+
+    def test_pdf_a_markers_go_without_layers(self):
+        # PDF/A: Qt paints the markers opaque; they and Qt's empty colours go, no layer
+        content, codes = coded_page()
+        out, used, found = core.layer_content(content, codes, {"View1": 3.5}, layers=False)
+        self.assertEqual(used, set())
+        self.assertEqual(sorted(found), sorted(codes))
+        self.assertNotIn(b"0.1 0.1 re", out)
+        self.assertNotIn(b"\nSCN\n", out)
+        self.assertNotIn(b"BDC", out)
+        # it does not mind marked content already there
+        out, _u, _f = core.layer_content(b"/Span BMC " + marker(1) + b"EMC", codes, layers=False)
+        self.assertNotIn(b"re", out)
 
     def test_without_markers_everything_is_the_template(self):
         content = line(0, 0, 1, 1) + text(1, 1, b"A3")
@@ -573,6 +606,186 @@ class EnhanceTests(unittest.TestCase):
             baseline_from_top = (297 - 30) * core.MM + (842 - 297 * core.MM)
             self.assertLess(float(found.group(2)), baseline_from_top)
             self.assertGreater(float(found.group(3)), baseline_from_top - 1)
+        finally:
+            shutil.rmtree(folder)
+
+
+# ------------------------------------------------------------------ PDF/A, PDF/X, file size
+QT_XMP = (
+    "<?xpacket begin='\ufeff' id='W5M0MpCehiHzreSzNTczkc9d'?>\n"
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"'
+    ' xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/"'
+    ' xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/">'
+    "<rdf:RDF>"
+    '<rdf:Description rdf:about="" pdf:Producer="Qt 6.8.3" pdf:Trapped="False"/>'
+    '<rdf:Description rdf:about="" xmpMM:DocumentID="uuid:b4d2e09f" xmpMM:VersionID="1"'
+    ' xmpMM:RenditionClass="default"/>'
+    '<rdf:Description rdf:about="" %s/>'
+    "</rdf:RDF></x:xmpmeta>\n<?xpacket end='w'?>"
+)
+PDFA_1B = 'pdfaid:part="1" pdfaid:conformance="B"'
+PDFX_4 = 'pdfxid:GTS_PDFXVersion="PDF/X-4"'
+
+
+def archival_pdf(identity, content):
+    """A one-page PDF with Qt's XMP for PDF/A-1b or PDF/X-4 and /Trapped /False."""
+    doc = po.read(page_pdf(*A4, content))
+    root = doc.get(doc.trailer[b"Root"])
+    root[b"Metadata"] = doc.add(
+        {b"Type": Name(b"Metadata"), b"Subtype": Name(b"XML")},
+        (QT_XMP % identity).encode("utf-8"),
+    )
+    doc.get(doc.trailer[b"Info"])[b"Trapped"] = Name(b"False")
+    return doc.write()
+
+
+def reachable(doc):
+    seen, todo = set(), list(doc.trailer.values())
+    while todo:
+        value = todo.pop()
+        if isinstance(value, Ref) and value.num not in seen and value.num in doc.objects:
+            seen.add(value.num)
+            todo.append(doc.objects[value.num])
+        elif isinstance(value, dict):
+            todo += list(value.values())
+        elif isinstance(value, list):
+            todo += value
+    return seen
+
+
+class ArchivalTests(unittest.TestCase):
+    def enhanced(self, identity, font=None, texts=None):
+        content, codes = coded_page()
+        content += b"BT /F1 10 Tf 100 100 Td (see https://sciforge.org/spec) Tj ET\n"
+        texts = texts if texts is not None else [{"text": "AB", "x": 10, "y": 10, "size": 5}]
+        sheet = {"size": A4, "codes": codes, "hidden": {"View1": 3.5}, "texts": texts}
+        font = font or pf.EmbeddedFont(pf.TrueType(tiny_font()))
+        return core.enhance(archival_pdf(identity, content), [sheet], META, font)
+
+    def metadata(self, doc):
+        import xml.etree.ElementTree as ET
+
+        root = doc.get(doc.trailer[b"Root"])
+        packet = doc.stream_data(root[b"Metadata"].num).decode("utf-8")
+        ET.fromstring(packet.split("?>", 1)[1].rsplit("<?xpacket", 1)[0])  # well formed
+        return packet
+
+    def test_pdf_a_stays_pdf_a(self):
+        # PDF-1, PDF-2: CIDSet for the added subset, Info and XMP agree on Trapped, the
+        # file's identity kept; markers out although no layers go in
+        out, report = self.enhanced(PDFA_1B)
+        self.assertTrue(report["pdfa"])
+        self.assertIn("no layers", report["pages"][0]["note"])
+        self.assertEqual(report["pages"][0]["texts"], 1)
+        doc = po.read(out)
+        self.assertEqual(doc.version, b"1.4")
+        self.assertEqual(core.summary(out)["layers"], [])
+        content = core.page_content(doc, doc.pages()[0])
+        self.assertNotIn(b"0.1 0.1 re", content)  # the markers
+        self.assertNotIn(b"\nSCN\n", content)  # Qt's colour without values
+        self.assertNotIn(b"BDC", content.replace(b"/Span", b""))
+        descriptors = [
+            o for o in doc.objects.values()
+            if isinstance(o, dict) and o.get(b"Type") == b"FontDescriptor"
+        ]
+        self.assertEqual(len(descriptors), 1)
+        cid_set = doc.stream_data(descriptors[0][b"CIDSet"].num)
+        self.assertEqual(cid_set, bytes([0b11100000]))  # .notdef, A, B
+        packet = self.metadata(doc)
+        for prop in (
+            "<pdfaid:part>1</pdfaid:part>",
+            "<pdfaid:conformance>B</pdfaid:conformance>",
+            "<xmpMM:DocumentID>uuid:b4d2e09f</xmpMM:DocumentID>",
+            "<pdf:Trapped>False</pdf:Trapped>",
+            "<dc:title>",
+        ):
+            self.assertIn(prop, packet)
+        info = doc.get(doc.trailer[b"Info"])
+        self.assertEqual(info[b"Trapped"], b"False")
+        self.assertEqual(len(core.summary(out)["links"]), 1)
+
+    def test_pdf_a_without_an_embeddable_font_adds_no_text(self):
+        out, report = self.enhanced(PDFA_1B, font=pf.StandardFont())
+        self.assertEqual(report["pages"][0]["texts"], 0)
+        self.assertNotIn(b"SFText", out)
+
+    def test_pdf_x_stays_pdf_x(self):
+        # PDF-3: the PDF/X-4 version, document ids and Trapped stay; X-4 may have layers
+        out, report = self.enhanced(PDFX_4)
+        self.assertEqual(report["pdfx"], "PDF/X-4")
+        info = core.summary(out)
+        self.assertEqual(info["layers"], [n for _k, n in core.LAYERS])
+        self.assertEqual(info["links"], [])  # no annotations on a print-ready page
+        packet = self.metadata(po.read(out))
+        for prop in (
+            "<pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion>",
+            "<xmpMM:DocumentID>uuid:b4d2e09f</xmpMM:DocumentID>",
+            "<xmpMM:VersionID>1</xmpMM:VersionID>",
+            "<xmpMM:RenditionClass>default</xmpMM:RenditionClass>",
+            "<pdf:Trapped>False</pdf:Trapped>",
+        ):
+            self.assertIn(prop, packet)
+
+    def test_kept_xmp_reads_attributes_and_elements(self):
+        found = core.kept_xmp(
+            b'<a xmlns:pdfaid="x" pdfaid:part="2"/><pdfaid:conformance>U</pdfaid:conformance>'
+        )
+        self.assertEqual(found, [("pdfaid", "part", "2"), ("pdfaid", "conformance", "U")])
+        self.assertEqual(core.kept_xmp(None), [])
+
+    def test_no_dead_objects(self):
+        # PDF-5: the replaced page contents, Length objects and merged files' catalogues
+        # are not written; what is left is numbered without gaps
+        content, codes = coded_page()
+        first = page_pdf(*A3, content)
+        second = page_pdf(*A4, line(0, 0, 50, 50))
+        merged = drawing_pdf.merge([first, second])
+        sheets = [{"size": A3, "codes": codes, "texts": []}, {"size": A4, "codes": {}, "texts": []}]
+        out, _report = core.enhance(merged, sheets, META, pf.StandardFont())
+        doc = po.read(out)
+        self.assertEqual(reachable(doc), set(doc.objects))
+        self.assertEqual(sorted(doc.objects), list(range(1, len(doc.objects) + 1)))
+
+    def test_prune(self):
+        doc = po.Document({}, {}, {})
+        doc.add({b"Dead": True})
+        length = doc.add(3)
+        stream = doc.add({b"Length": length}, b"abc")
+        root = doc.add({b"Type": Name(b"Catalog"), b"S": stream, b"Gone": Ref(99)})
+        doc.trailer = {b"Root": root, b"Size": 9}
+        self.assertEqual(doc.prune(), 2)  # the dead object and the Length object
+        root = doc.get(doc.trailer[b"Root"])
+        self.assertEqual(sorted(doc.objects), [1, 2])
+        self.assertEqual(doc.stream_data(root[b"S"].num), b"abc")
+        self.assertIsNone(root[b"Gone"])
+        po.read(doc.write())
+
+    def test_characters_the_font_lacks_stay_searchable(self):
+        # PDF-6: a character the font has no glyph for: the text goes in as ActualText
+        font = pf.EmbeddedFont(pf.TrueType(tiny_font()))
+        texts = [{"text": "AB 30\u2032 \u672c", "x": 10, "y": 10, "size": 5}]
+        content, _links, _used = core.overlay(texts, font, A4, [0, 0, 842, 595])
+        self.assertIn(b"/Span << /ActualText (\xfe\xff\x00A\x00B", content)
+        plain, _links, _used = core.overlay([{"text": "ABC", "x": 1, "y": 1}], font, A4, [0, 0, 842, 595])
+        self.assertNotIn(b"ActualText", plain)
+        self.assertNotIn(b"ActualText", core.overlay([{"text": "A\u00e9", "x": 1, "y": 1}], pf.StandardFont(), A4, [0, 0, 842, 595])[0])
+        self.assertIn(b"ActualText", core.overlay([{"text": "A\u2032", "x": 1, "y": 1}], pf.StandardFont(), A4, [0, 0, 842, 595])[0])
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "poppler not installed")
+    def test_poppler_reads_actual_text(self):
+        font = pf.EmbeddedFont(pf.TrueType(tiny_font()))
+        texts = [{"text": "AB 30\u2032 \u672c", "x": 10, "y": 100, "size": 5}]
+        out, _report = core.enhance(
+            page_pdf(*A4, b""), [{"size": A4, "codes": None, "texts": texts}], META, font
+        )
+        folder = tempfile.mkdtemp()
+        try:
+            path = os.path.join(folder, "actual.pdf")
+            with open(path, "wb") as handle:
+                handle.write(out)
+            words = subprocess.run(["pdftotext", path, "-"], capture_output=True)
+            self.assertIn("AB 30\u2032 \u672c", words.stdout.decode("utf-8"))
+            self.assertNotIn(b"Syntax Error", words.stderr)
         finally:
             shutil.rmtree(folder)
 
