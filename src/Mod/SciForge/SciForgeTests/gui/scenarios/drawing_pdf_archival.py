@@ -111,9 +111,9 @@ def read(path):
 def words(path):
     if shutil.which("pdftotext") is None:
         return None
-    return subprocess.run(
-        ["pdftotext", path, "-"], capture_output=True, timeout=60
-    ).stdout.decode("utf-8", "replace")
+    return subprocess.run(["pdftotext", path, "-"], capture_output=True, timeout=60).stdout.decode(
+        "utf-8", "replace"
+    )
 
 
 def flat(text):
@@ -191,7 +191,11 @@ def a_normal():
     if not h.check("the PDF is written", os.path.isfile(path), os.listdir(OUT)):
         return
     info = summary(path)
-    h.check("the centre lines layer is there", "Centerlines and Center Marks" in info["layers"], info["layers"])
+    h.check(
+        "the centre lines layer is there",
+        "Centerlines and Center Marks" in info["layers"],
+        info["layers"],
+    )
     printed = os.path.getsize(os.path.join(OUT, "normal-printed.pdf"))
     size = os.path.getsize(path)
     # the added font subset, text and layers are a few tens of kilobytes; before the
@@ -203,7 +207,10 @@ def a_normal():
             h.check("searchable: %s" % word, flat(word) in flat(text), text[-1500:])
     bx, by = drawing.view_position(base())
     wx, wy = drawing.view_position(state["below"])
-    regions = {"hole": (bx - 9, by - 9, bx + 9, by + 9), "below": (wx - 32, wy - 12, wx + 32, wy + 12)}
+    regions = {
+        "hole": (bx - 9, by - 9, bx + 9, by + 9),
+        "below": (wx - 32, wy - 12, wx + 32, wy + 12),
+    }
     counts = {}
     for key in ("hidden", "centre"):
         image, _err = render(only(path, key, os.path.join(OUT, "only_%s.pdf" % key)), key)
@@ -253,7 +260,12 @@ def b_pdfa():
     h.check("SciForge's osifont subset is there", any("osifont" in n for n, _h in fonts), fonts)
     h.check("every embedded font has a CIDSet", all(has for _n, has in fonts), fonts)
     packet = metadata(doc)
-    for prop in ("pdfaid:part>1<", "pdfaid:conformance>B<", "xmpMM:DocumentID>", "pdf:Trapped>False<"):
+    for prop in (
+        "pdfaid:part>1<",
+        "pdfaid:conformance>B<",
+        "xmpMM:DocumentID>",
+        "pdf:Trapped>False<",
+    ):
         h.check("the XMP has %s" % prop, prop in packet, packet[-1500:])
     trapped = doc.get(doc.trailer[b"Info"]).get(b"Trapped")
     h.check("the document information says Trapped False too", trapped == b"False", trapped)

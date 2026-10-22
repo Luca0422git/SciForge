@@ -687,7 +687,8 @@ class ArchivalTests(unittest.TestCase):
         self.assertNotIn(b"\nSCN\n", content)  # Qt's colour without values
         self.assertNotIn(b"BDC", content.replace(b"/Span", b""))
         descriptors = [
-            o for o in doc.objects.values()
+            o
+            for o in doc.objects.values()
             if isinstance(o, dict) and o.get(b"Type") == b"FontDescriptor"
         ]
         self.assertEqual(len(descriptors), 1)
@@ -768,10 +769,22 @@ class ArchivalTests(unittest.TestCase):
         texts = [{"text": "AB 30\u2032 \u672c", "x": 10, "y": 10, "size": 5}]
         content, _links, _used = core.overlay(texts, font, A4, [0, 0, 842, 595])
         self.assertIn(b"/Span << /ActualText (\xfe\xff\x00A\x00B", content)
-        plain, _links, _used = core.overlay([{"text": "ABC", "x": 1, "y": 1}], font, A4, [0, 0, 842, 595])
+        plain, _links, _used = core.overlay(
+            [{"text": "ABC", "x": 1, "y": 1}], font, A4, [0, 0, 842, 595]
+        )
         self.assertNotIn(b"ActualText", plain)
-        self.assertNotIn(b"ActualText", core.overlay([{"text": "A\u00e9", "x": 1, "y": 1}], pf.StandardFont(), A4, [0, 0, 842, 595])[0])
-        self.assertIn(b"ActualText", core.overlay([{"text": "A\u2032", "x": 1, "y": 1}], pf.StandardFont(), A4, [0, 0, 842, 595])[0])
+        self.assertNotIn(
+            b"ActualText",
+            core.overlay(
+                [{"text": "A\u00e9", "x": 1, "y": 1}], pf.StandardFont(), A4, [0, 0, 842, 595]
+            )[0],
+        )
+        self.assertIn(
+            b"ActualText",
+            core.overlay(
+                [{"text": "A\u2032", "x": 1, "y": 1}], pf.StandardFont(), A4, [0, 0, 842, 595]
+            )[0],
+        )
 
     @unittest.skipUnless(shutil.which("pdftotext"), "poppler not installed")
     def test_poppler_reads_actual_text(self):

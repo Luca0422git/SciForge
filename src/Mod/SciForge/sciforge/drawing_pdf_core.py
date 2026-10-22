@@ -160,9 +160,19 @@ def _same_line(points, lines, tol=0.05):
     """True when the path's two points are the ends of one of `lines` (either way)."""
     (ax, ay), (bx, by) = points
     for (px, py), (qx, qy) in lines or ():
-        if abs(ax - px) <= tol and abs(ay - py) <= tol and abs(bx - qx) <= tol and abs(by - qy) <= tol:
+        if (
+            abs(ax - px) <= tol
+            and abs(ay - py) <= tol
+            and abs(bx - qx) <= tol
+            and abs(by - qy) <= tol
+        ):
             return True
-        if abs(ax - qx) <= tol and abs(ay - qy) <= tol and abs(bx - px) <= tol and abs(by - py) <= tol:
+        if (
+            abs(ax - qx) <= tol
+            and abs(ay - qy) <= tol
+            and abs(bx - px) <= tol
+            and abs(by - py) <= tol
+        ):
             return True
     return False
 

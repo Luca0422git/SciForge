@@ -118,14 +118,21 @@ class FrameTests(unittest.TestCase):
     def test_spoken_symbols_for_searchable_pdf_text(self):
         # the drawn symbols as text for a PDF's searchable text (review PDF-6), never drawn
         data = {
-            "row1": {"char": "position", "dia": True, "tol": "0.05", "mod": "M",
-                     "datums": [["A", ""], ["B", ""]]}
+            "row1": {
+                "char": "position",
+                "dia": True,
+                "tol": "0.05",
+                "mod": "M",
+                "datums": [["A", ""], ["B", ""]],
+            }
         }
         drawn, _box = ac.feature_control(None, (0.0, 0.0), data)
         self.assertEqual(ac.texts_of(drawn), ["0.05", "M", "A", "B"])
         spoken, _box = ac.feature_control(None, (0.0, 0.0), data, spoken=True)
         self.assertEqual(ac.texts_of(spoken), ["⌖", "⌀0.05", "M", "A", "B"])
-        self.assertEqual([p for p in spoken if p[0] != "text"], [p for p in drawn if p[0] != "text"])
+        self.assertEqual(
+            [p for p in spoken if p[0] != "text"], [p for p in drawn if p[0] != "text"]
+        )
         self.assertEqual(set(ac.CHARACTERISTIC_CHARS), set(ac.CHARACTERISTIC_NAMES))
 
 

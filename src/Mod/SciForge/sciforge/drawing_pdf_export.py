@@ -413,9 +413,7 @@ def print_sheet(page, path):
     try:
         if scene is not None:
             try:
-                info["codes"], info["hidden"] = add_markers(
-                    page, scene, markers, info["cosmetic"]
-                )
+                info["codes"], info["hidden"] = add_markers(page, scene, markers, info["cosmetic"])
             except Exception as exc:
                 remove_markers(markers)
                 info["codes"] = None
