@@ -376,7 +376,7 @@ class Limiter:
         self.search_clock = time.perf_counter  # tests give a fake clock
 
     def step(self, unit=None):
-        return step_for(unit or self.unit)
+        return step_for(self.unit if unit is None else unit)
 
     @property
     def note(self):
@@ -404,7 +404,7 @@ class Limiter:
     def clamp(self, key, value, typed=False, unit=None):
         """The value to use: held at the cached limit it went past (the note says so), else
         unchanged (and the note is cleared). Never builds anything."""
-        unit = unit or self.unit
+        unit = self.unit if unit is None else unit
         held, limit, side = self.cache.clamp(key, value)
         if limit is None:
             self.note = ""
@@ -471,7 +471,7 @@ class Limiter:
 
     def limited(self, key, value, limit, typed, unit=None):
         """Set the note for `value` held at `limit` (found just now)."""
-        unit = unit or self.unit
+        unit = self.unit if unit is None else unit
         side = side_of(value, limit) if value != limit else "hi"
         self._say(
             note_typed(value, limit, unit, self.step(unit))

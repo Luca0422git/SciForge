@@ -60,6 +60,10 @@ class Notes(unittest.TestCase):
             vl.note_typed(20.0, 9.99, ""), "20 does not fit: limited to 9.99"
         )
         self.assertEqual(vl.note_reached(9.99, "hi", ""), "Largest that fits here: 9.99")
+        limiter = vl.Limiter()
+        limiter.cache.store(vl.make_key("coil"), "hi", 9.99, 20.0)
+        self.assertEqual(limiter.clamp(vl.make_key("coil"), 20.0, typed=True, unit=""), 9.99)
+        self.assertEqual(limiter.note, "20 does not fit: limited to 9.99")
         self.assertEqual(vl.note_reached(12.3, "hi", "deg"), "Largest that fits here: 12.3°")
         self.assertEqual(vl.note_typed(5, 3.47), "5 mm does not fit: limited to 3.47 mm")
         self.assertEqual(vl.note_typed(40, 12.3, "deg"), "40° does not fit: limited to 12.3°")
