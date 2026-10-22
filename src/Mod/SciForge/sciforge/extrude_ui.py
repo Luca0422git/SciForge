@@ -1006,14 +1006,17 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
     def _settle_limits(self):
         """After a rebuild: a value just typed or dragged that the extrude refused is held
         at the limit and built again; a good one is remembered."""
-        if self.formula_error or self.waiting:
-            return
-        text = self.error or _plain(preview.failure(self.target))
-        if text and self.limit_refused(text):
-            self._apply()
-            preview.recompute(self.doc)
-        elif not text and self.target is not None:
-            self.limit_good()
+        try:
+            if self.formula_error or self.waiting:
+                return
+            text = self.error or _plain(preview.failure(self.target))
+            if text and self.limit_refused(text):
+                self._apply()
+                preview.recompute(self.doc)
+            elif not text and self.target is not None:
+                self.limit_good()
+        except Exception as exc:
+            warn("extrude limit: %s" % exc)
 
     def _refresh_extend(self):
         """Each side's Extend choices follow what its object is (a face or a body; a plane
