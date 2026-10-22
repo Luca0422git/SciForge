@@ -21,9 +21,12 @@ Rules for this page:
   the G- numbers here in the same commit; the unit test `test_parity` fails while this page
   names a G- number the work list no longer has open.
 
-Checked 2026-10-22 on `experimental` at 0b1da82 (`tools/sciforge/run_tests.sh` with the
-real FreeCAD 1.1.4): unit tests, the 448 golden models (446 pass, 2 known xfail: OpenCASCADE
-volume limits), smoke and journey test, and every scenario named below.
+First checked 2026-10-22 on `experimental` at 0b1da82. Re-checked the same day on the merged
+code (`integration` at 3e515b5 with the fixes of `fix/parity`; `tools/sciforge/run_tests.sh`
+with the real FreeCAD 1.1.4): unit tests, the 453 golden models (451 pass, 2 known xfail:
+OpenCASCADE volume limits), the headless AI and documentation runs, smoke and journey test,
+and every scenario named below. On the merged code `drawing_update.py` failed until
+fix/parity (the drawing did not follow an Undo, see workflow 4).
 
 | # | Workflow | Works end to end |
 |---|---|---|
