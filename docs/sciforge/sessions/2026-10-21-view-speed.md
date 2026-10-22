@@ -3,8 +3,8 @@
 To be copied into MEMORY.md by whoever merges (this branch does not edit MEMORY.md).
 Luca approved idea 6 of `docs/sciforge/dev/cadcraft-lessons.md` ("Faster and smoother on big
 models"); it follows the "Session log: speed all round" (EDIT previews) in MEMORY.md. The work
-was started by one session, cut off by a machine restart, and finished by a second one (which
-re-ran every measurement and test below). No core patch: only `src/Mod/SciForge/` changed.
+was started by one session, cut off by machine restarts twice, and finished by a second and a
+third one (which re-ran the measurements and tests below). No core patch: only `src/Mod/SciForge/` changed.
 
 ## In plain words (for Luca)
 
@@ -48,7 +48,9 @@ the machine the baseline came from). Baseline: `SciForgeTests/gui/perf_baseline.
 (written from this session's runs in the sandbox) or `SCIFORGE_PERF_BASELINE=<file>` (any
 perf report json or a `{label: seconds}` map; `none` switches it off).
 `SCIFORGE_PERF_WRITE_BASELINE=<file>` stores a run's times there (merged: both benchmarks can
-share one file).
+share one file). Each report's table also shows, next to every time, the stored baseline and
+(perf_big_model) the time before this work (`SciForgeTests/gui/perf_before.json`: the
+benchmark run at commit 0b1da82), so a report says by itself how far things have come.
 
 ## Before / after (same benchmark, same design, run side by side on the same machine)
 
