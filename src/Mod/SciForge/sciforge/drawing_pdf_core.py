@@ -18,8 +18,9 @@ line is. Five things are added afterwards, without touching how anything looks:
   printed where they sit in the drawing order, so everything between two markers is of
   the kind the first one announces. The markers are taken out of the PDF again; the
   edges of a view are told apart by their dash pattern (solid: visible; dashed at the
-  view's hidden line width: hidden; any other dash: centre lines and marks), and
-  everything before the first marker is the sheet's template (border and title block).
+  view's hidden line width: hidden, unless it is one of the view's cosmetic lines, as
+  SciForge's centre marks are; any other dash: centre lines and marks), and everything
+  before the first marker is the sheet's template (border and title block).
   Each painted path is wrapped in a marked-content sequence (/OC ... BDC ... EMC) that
   never crosses a q/Q, so the stream stays valid.
 * Searchable, selectable text with an embedded font where TechDraw draws text as
@@ -27,14 +28,21 @@ line is. Five things are added afterwards, without touching how anything looks:
   which Qt prints as paths): invisible text (render mode 3, as scanned documents carry
   their recognised text) placed over the drawn text, on the same layer, with osifont
   embedded as a subset (drawing_pdf_font.py). Text Qt already printed as text (dimensions,
-  notes, balloons, captions) is found by reading the page and is not added twice there.
+  notes, balloons, captions) is found by reading the page and is not added twice there. A
+  text with a character osifont lacks (′ ″, Chinese...) also carries its ActualText, so
+  search and copy find all of it.
 * Links: a URL (https://..., www....) or mailto: in any text becomes a clickable link.
 * Metadata: title, author, subject and keywords from the drawing's title block,
   SciForge as the creating tool, in the document information and its XMP twin.
 * Several sheets in one file (drawing_pdf.merge), each page keeping its own size.
+  Objects nothing uses any more (the pages' old contents...) are not written.
 
-A PDF/A file (FreeCAD's PDF preferences can ask Qt for one) keeps its conformance: PDF/A-1
-forbids layers, so none are added to it.
+A PDF/A or PDF/X file (FreeCAD's PDF preferences can ask Qt for PDF/A-1b or PDF/X-4)
+stays one as far as these additions go: PDF/A-1 forbids layers, so none are added (the
+markers are still taken out: Qt paints them opaque there), the embedded subset has a
+CIDSet, the XMP keeps Qt's pdfaid / pdfxid / xmpMM entries and has pdf:Trapped like the
+document information; PDF/X gets no link annotations; without an embeddable font no text
+is added.
 """
 
 import datetime

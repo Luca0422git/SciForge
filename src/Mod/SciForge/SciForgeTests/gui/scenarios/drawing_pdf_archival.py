@@ -258,6 +258,15 @@ def b_pdfa():
     trapped = doc.get(doc.trailer[b"Info"]).get(b"Trapped")
     h.check("the document information says Trapped False too", trapped == b"False", trapped)
     h.check("PDF 1.4 still", doc.version == b"1.4", doc.version)
+    from sciforge import drawing_pdf_core
+
+    printed = read(os.path.join(OUT, "pdfa-printed.pdf"))
+    for name, pdf in (("TechDraw's print", printed), ("the export", doc)):
+        content = drawing_pdf_core.page_content(pdf, pdf.pages()[0])
+        _out, _used, found = drawing_pdf_core.layer_content(content, {}, layers=False)
+        state[name] = len(found)
+    h.check("Qt painted the markers (opaque in PDF/A)", state["TechDraw's print"] > 0, state)
+    h.check("no marker left in the export's content", state["the export"] == 0, state)
     image, err = render(path, "pdfa600", 600)
     if image is None:
         print("[SciForge] pdftoppm not installed: the PDF/A picture is not checked", flush=True)
