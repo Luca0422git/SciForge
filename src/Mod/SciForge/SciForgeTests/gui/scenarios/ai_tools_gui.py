@@ -14,6 +14,10 @@ Path 6, undo takes the last change back; a tool that needs the window is never r
 Path 7 (integration, 2026-10-22), export STEP with the window open: the answer says what the
   file does not keep (the timeline, the sketch) and the window shows the same message card
   (export_report_ui); colours are written with the window, so no colour line.
+Path 8 (review fixes, 2026-10-22), One File Per Body over files that exist: the person is
+  asked once, naming every file; denied, nothing is written; allowed, both are replaced. Two
+  designs where one's name is the other's id: switch_design refuses and names both ids;
+  closing a design makes another one active and the answer says which.
 """
 
 import base64
@@ -174,10 +178,99 @@ def export_report():
     cards = export_report_ui.recent()
     h.check(
         "the window shows the same message card",
-        bool(cards) and cards[-1]["title"] == "Exported ai-gui.step"
+        bool(cards)
+        and cards[-1]["title"] == "Exported ai-gui.step"
         and all(line in a["text"] for line in cards[-1]["lines"]),
         cards[-1:] if cards else cards,
     )
 
 
-h.run("ai_tools_gui", [block, camera, hide_and_edit, save, drawing, undo, export_report])
+# -- Path 8 -------------------------------------------------------------------------------------
+def per_body_overwrite():
+    import glob
+
+    from sciforge.ai import bridge
+
+    asked = []
+    s["allow"] = False
+
+    def answer(title, text):
+        asked.append(text)
+        return s["allow"]
+
+    bridge.ASK = answer
+    try:
+        call("create_sketch", {"plane": "XY", "geometry": [{"rect": [60, 0, 20, 20]}]})
+        sketch = [
+            o.Name for o in App.ActiveDocument.Objects if o.TypeId == "Sketcher::SketchObject"
+        ][-1]
+        a = call("extrude", {"profile": sketch, "distance": 5, "operation": "new_body"})
+        ok("a second body for One File Per Body", a)
+        args = {
+            "format": "stl",
+            "path": os.path.join(s["dir"], "parts.stl"),
+            "one_file_per_body": True,
+        }
+        a = call("export", args)
+        files = sorted(glob.glob(os.path.join(s["dir"], "parts-*.stl")))
+        ok("one file per body wrote two files", a, len(files) == 2 and not asked)
+        for path in files:
+            with open(path, "w") as stream:
+                stream.write("kept")
+        a = call("export", args)
+        kept = all(open(p).read() == "kept" for p in files)
+        h.check(
+            "replacing them asks the person once, naming both files",
+            len(asked) == 1 and all(os.path.basename(p) in asked[0] for p in files),
+            asked,
+        )
+        h.check("denied: refused and nothing written", a["is_error"] and kept, a["text"][:300])
+        s["allow"] = True
+        a = call("export", args)
+        replaced = all(open(p).read() != "kept" for p in files)
+        ok("allowed: both files replaced", a, len(asked) == 2 and replaced)
+    finally:
+        bridge.ASK = None
+
+
+def same_names():
+    first = App.ActiveDocument.Name
+    call("new_design", {"name": first})  # its name is the first design's id
+    second = App.ActiveDocument
+    a = call("switch_design", {"design": first})
+    h.check(
+        "a name that is another design's id is refused with both ids",
+        a["is_error"] and repr(first) in a["text"] and repr(second.Name) in a["text"],
+        a["text"][:300],
+    )
+    h.check("the active design stayed", App.ActiveDocument is second, App.ActiveDocument.Name)
+    from sciforge.ai import bridge
+
+    bridge.ASK = lambda title, text: True  # (close it without saving: allowed)
+    try:
+        a = call("close_design", {"design": second.Name, "discard_changes": True})
+    finally:
+        bridge.ASK = None
+    doc = App.ActiveDocument
+    ok(
+        "closing a design names the one that is now active",
+        a,
+        doc is not None and ("now %s (id %r)" % (doc.Label, doc.Name)) in a["text"],
+    )
+    h.check("no pop-up left", not h.popups(), h.popups())
+
+
+h.run(
+    "ai_tools_gui",
+    [
+        block,
+        camera,
+        hide_and_edit,
+        save,
+        drawing,
+        undo,
+        export_report,
+        per_body_overwrite,
+        same_names,
+    ],
+)

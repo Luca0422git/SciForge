@@ -274,9 +274,11 @@ def close_design(ctx, args):
         "Closed %s.%s"
         % (
             label,
-            (" The active design is now %s (id %r)." % (left.Label, left.Name))
-            if left
-            else " No design is open now.",
+            (
+                (" The active design is now %s (id %r)." % (left.Label, left.Name))
+                if left
+                else " No design is open now."
+            ),
         )
     )
 

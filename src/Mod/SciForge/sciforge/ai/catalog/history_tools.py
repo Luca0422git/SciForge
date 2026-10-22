@@ -68,7 +68,11 @@ define(
     "distance, angle...; shell, draft, scale, sweep, loft, rib, primitives, coil, pipe, gear, "
     "hardware, emboss, thread, surface, combine, split, move, align, construction planes...). "
     "A fillet or chamfer also takes add_edges / add_faces (more edges). The steps after it "
-    "update and keep their faces and edges; steps that break are named in the answer.",
+    "update and keep their faces and edges; steps that break are named in the answer. An "
+    "option name the step does not have is refused with the names it has (get_step's values "
+    "spellings, like Radius, are taken too; a shell takes thickness); an edit that changes "
+    "nothing says so and adds no Undo step. An extrude's distance keeps the side it goes "
+    "to: flip: true reverses it.",
     schema(
         {
             "step": step_id("the step to change"),
@@ -324,7 +328,7 @@ define(
     "Open a design (.FCStd) or a STEP / IGES file as a new design (its components and bodies "
     "kept). A design that is already open comes to the front. It becomes the active design. "
     "For a STEP / IGES file the answer also lists what the file had that did not come in or "
-    "came in changed (\"Not brought in, or changed:\" and one line each: loose faces, "
+    'came in changed ("Not brought in, or changed:" and one line each: loose faces, '
     "curves and points, surface bodies, bodies with geometry errors).",
     schema({"path": string("full path of the file")}, ["path"]),
     needs=(),
@@ -425,7 +429,7 @@ define(
     "unit), DXF (its curves into a new sketch on sketch_plane XY | XZ | YZ, ready to "
     "extrude), FCStd (another design's bodies as a component). label names what is made. "
     "The answer also lists what the file had that did not come in or came in changed "
-    "(\"Not brought in, or changed:\" and one line each, as INSERT's message says: an "
+    '("Not brought in, or changed:" and one line each, as INSERT\'s message says: an '
     "open mesh, a 3MF's unit or colours, DXF texts, hatches and points, loose faces of a "
     "STEP...); a mesh whose file says another unit can be inserted again with unit.",
     schema(
@@ -683,7 +687,7 @@ define(
     "Export a drawing: format pdf (every sheet in one PDF; needs the SciForge window) or dxf "
     "(the sheet: frame, views on their own layers, dimensions, text). Replacing an existing "
     "file must be confirmed by the person in SciForge. The answer lists what the file does "
-    "not keep (\"Not kept in this file:\": other sheets, dimensions written as plain lines "
+    'not keep ("Not kept in this file:": other sheets, dimensions written as plain lines '
     "and text, hatching as lines, the font...), as the drawing's Export message does.",
     schema(
         {

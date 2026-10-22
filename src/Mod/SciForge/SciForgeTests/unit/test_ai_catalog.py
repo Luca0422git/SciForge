@@ -580,6 +580,43 @@ class CommandLine(unittest.TestCase):
             ["run", "--tool", 'extrude {"a": 1}', "--save", "/x y/z.FCStd"],
         )
 
+    def test_bad_tool_calls_are_a_bad_command_line(self):
+        """Exit status 2 (bad command line) for a --tool or a --tools-file item that cannot
+        be read, said before FreeCAD is even needed (review 2026-10-22, F6)."""
+        import tempfile
+
+        script = os.path.join(AI, "cli.py")
+        done = subprocess.run(
+            [sys.executable, script, "run", "--tool", "extrude {bad json"],
+            capture_output=True,
+            timeout=60,
+        )
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("not JSON", done.stderr.decode("utf-8"))
+        for items, words in (
+            ('[{"name": "extrude"}]', 'no "tool" name'),
+            ('{"tool": "extrude"}', "must hold a list"),
+            ('[{"tool": "extrude", "arguments": [1]}]', "must be a JSON object"),
+            ("[{", "is not JSON"),
+        ):
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+                handle.write(items)
+            self.addCleanup(os.remove, handle.name)
+            done = subprocess.run(
+                [sys.executable, script, "run", "--tools-file", handle.name],
+                capture_output=True,
+                timeout=60,
+            )
+            self.assertEqual(done.returncode, 2, items)
+            self.assertIn(words, done.stderr.decode("utf-8"), items)
+
+    def test_close_design_names_its_design(self):
+        """close_design with design names one: it runs with no active design (headless
+        FreeCAD may have none after a close; review 2026-10-22, F4)."""
+        self.assertEqual(catalog.tool("close_design")["needs"], ())
+        state = {"gui": False, "design": False, "solid": False, "drawing": False}
+        self.assertTrue(catalog.availability("close_design", state)[0])
+
     def test_needs_freecad_said_plainly(self):
         script = os.path.join(AI, "cli.py")
         done = subprocess.run(

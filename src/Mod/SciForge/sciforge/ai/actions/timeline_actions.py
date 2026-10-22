@@ -461,7 +461,9 @@ def _edit_state(doc, obj, kind):
             round(shape.Length, 6),
             len(shape.Faces),
             len(shape.Edges),
-            tuple(round(v, 6) for v in (box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax)),
+            tuple(
+                round(v, 6) for v in (box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax)
+            ),
         )
     except Exception:
         own = None

@@ -1168,6 +1168,225 @@ SESSION = [
 ]
 
 
+# -- the review fixes of 2026-10-22 (docs/sciforge/sessions/2026-10-22-fix-aitools.md) --------
+def _undo_mark(answer, run):
+    """Remember how many Undo steps the active design has (_undo_same checks it later)."""
+    doc = run.doc()
+    run.ids["undo_count"] = len(doc.UndoNames) if doc is not None else 0
+    return None
+
+
+def _undo_same(answer, run):
+    doc = run.doc()
+    now = len(doc.UndoNames) if doc is not None else 0
+    if now != run.ids.get("undo_count"):
+        return "the Undo steps went from %s to %d: %s" % (
+            run.ids.get("undo_count"),
+            now,
+            list(doc.UndoNames[:3]) if doc is not None else None,
+        )
+    return None
+
+
+def _value(name, prop, expected):
+    def check(answer, run):
+        obj = run.obj(name)
+        got = getattr(obj, prop, None) if obj is not None else None
+        got = getattr(got, "Value", got)
+        return close(expected)(got)
+
+    return check
+
+
+def _designs_open(*names):
+    def check(answer, run):
+        import FreeCAD as App
+
+        missing = [n for n in names if n not in App.listDocuments()]
+        return "closed by mistake: %s" % missing if missing else None
+
+    return check
+
+
+def _active_design(answer, run):
+    """After a close the answer names the design that is active, as the window does."""
+    import FreeCAD as App
+
+    doc = App.ActiveDocument
+    if doc is None:
+        return "no design is active after the close"
+    if "The active design is now %s (id %r)" % (doc.Label, doc.Name) not in answer["text"]:
+        return "the answer does not name the active design %s: %s" % (doc.Name, answer["text"])
+    return None
+
+
+def _tilde_path(answer, run):
+    """~ in a path is the home folder (here: the test folder), never a folder named "~"."""
+    from sciforge.ai import headless
+
+    home = os.environ.get("HOME")
+    os.environ["HOME"] = run.folder
+    try:
+        got = headless.call("export", {"format": "stl", "path": "~/tilde.stl"}, run.host)
+    finally:
+        if home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = home
+    if got["is_error"] or not os.path.isfile(run.path("tilde.stl")):
+        return "export to ~/tilde.stl: %s" % got["text"][:300]
+    if os.path.exists(os.path.join(os.getcwd(), "~")):
+        return "a folder named ~ was made in %s" % os.getcwd()
+    return None
+
+
+def _command_line_paths(answer, run):
+    """sciforge-cli's host: a relative path is read from where the command was typed, and a
+    file that exists is refused with the command's own option (--force)."""
+    from sciforge.ai import headless
+
+    host = headless.HeadlessHost(overwrite_option="--force", relative_base=run.folder)
+    got = headless.call("export", {"format": "step", "path": "cli-relative.step"}, host)
+    if got["is_error"] or not os.path.isfile(run.path("cli-relative.step")):
+        return "relative path on the command line: %s" % got["text"][:300]
+    got = headless.call("export", {"format": "step", "path": "cli-relative.step"}, host)
+    if not got["is_error"] or "add --force" not in got["text"] or "allow-overwrite" in got["text"]:
+        return "an existing file on the command line: %s" % got["text"][:300]
+    return None
+
+
+FIX_SESSION = [
+    # F1: a design's name that is another design's id is refused, not closed blindly
+    {"tool": "new_design", "args": {"name": "Part"}},
+    {"tool": "create_sketch", "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 40, 20]}]}},
+    {"tool": "extrude", "args": {"profile": "Sketch1", "distance": 10}, "save": "fx_pad"},
+    {"tool": "save_as", "args": {"path": "{tmp}/housing.FCStd"}},
+    {"tool": "fillet", "args": {"edges": TOP4, "radius": 1}, "save": "fx_fillet"},
+    {"tool": "new_design", "args": {"name": "Part"}, "contains": ["(id 'Part1')"]},
+    {
+        "tool": "close_design",
+        "args": {"design": "Part", "discard_changes": True},
+        "expect": "error",
+        "contains": ["could mean 2 open designs", "give 'housing'", "give 'Part1'"],
+    },
+    {
+        "tool": "switch_design",
+        "args": {"design": "Part"},
+        "expect": "error",
+        "contains": ["could mean 2 open designs"],
+    },
+    {
+        "tool": "switch_design",
+        "args": {"design": "housing"},
+        "contains": ["now housing"],
+        "check": _designs_open("Part", "Part1"),
+    },
+    {"tool": "switch_design", "args": {"design": "id:Part1"}, "contains": ["now Part"]},
+    {"tool": "switch_design", "args": {"design": "housing.FCStd"}, "contains": ["now housing"]},
+    # F3: edit_step refuses option names the step does not have, takes get_step's spellings
+    # and says when it changed nothing (no Undo step)
+    {"tool": "get_design", "args": {}, "check": _undo_mark},
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_fillet", "set": {"size": 1.5}},
+        "expect": "error",
+        "contains": ["no option 'size'", "radius"],
+    },
+    {"tool": "get_design", "args": {}, "check": _undo_same},
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_fillet", "set": {"Radius": 1.5}},
+        "contains": ["Done"],
+        "check": _all(_value("fx_fillet", "Radius", 1.5), _undo_mark),
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_fillet", "set": {"radius": 1.5}},
+        "contains": ["No change", "no Undo step"],
+        "check": _undo_same,
+    },
+    {"tool": "new_design", "args": {"name": "Names"}},
+    {
+        "tool": "primitive",
+        "args": {"kind": "box", "plane": "XY", "length": 40, "width": 20, "height": 10},
+        "save": "fx_box",
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_box", "set": {"lenght": 60}},
+        "expect": "error",
+        "contains": ["no option 'lenght'", "length"],
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_box", "set": {"Length": 60}},
+        "check": _volume("fx_box", 12000),
+    },
+    {"tool": "shell", "args": {"faces": TOP, "thickness": 2}, "save": "fx_shell"},
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_shell", "set": {"thickness": 1}},
+        "check": _volume("fx_shell", 2604),
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_shell", "set": {"Thickness": 1}},
+        "contains": ["No change"],
+    },
+    # F7: a step named as get_timeline shows it ("Sketch 1") is taken by the step tools too
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [80, 0, 20, 20]}]},
+        "save": "fx_sketch",
+    },
+    {
+        "tool": "extrude",
+        "args": {"profile": "Sketch 1", "distance": 5, "operation": "new_body"},
+        "save": "fx_pad2",
+        "check": _volume("fx_pad2", 2000),
+    },
+    # F2: One File Per Body never replaces the files it writes without asking
+    {
+        "tool": "export",
+        "args": {"format": "stl", "path": "{tmp}/parts.stl", "one_file_per_body": True},
+        "contains": ["parts-"],
+    },
+    {
+        "tool": "export",
+        "args": {"format": "stl", "path": "{tmp}/parts.stl", "one_file_per_body": True},
+        "expect": "error",
+        "contains": ["already exist", "parts-"],
+    },
+    # F5 / F6: ~ is the home folder, a relative path is refused (the command line reads it
+    # from its folder), and the command line names its own option
+    {
+        "tool": "export",
+        "args": {"format": "step", "path": "relative.step"},
+        "expect": "error",
+        "contains": ["not a full path"],
+    },
+    {
+        "tool": "save_as",
+        "args": {"path": "relative.FCStd"},
+        "expect": "error",
+        "contains": ["not a full path"],
+    },
+    {"tool": "get_design", "args": {}, "check": _all(_tilde_path, _command_line_paths)},
+    # F4: closing a design makes another one active (command-line FreeCAD leaves none)
+    {
+        "tool": "close_design",
+        "args": {"design": "Names", "discard_changes": True},
+        "check": _active_design,
+    },
+    {
+        "tool": "close_design",
+        "args": {"design": "housing", "discard_changes": True},
+        "check": _active_design,
+    },
+    {"tool": "get_design", "args": {}},
+]
+
+
 def _ids_from(answer):
     match = re.search(r"Its id is '([^']+)'", answer["text"])
     if match:
@@ -1312,7 +1531,7 @@ def main():
     }
     try:
         run = Run(folder)
-        run_session(run, SESSION, os.environ.get("SCIFORGE_HEADLESS_FILTER", ""))
+        run_session(run, SESSION + FIX_SESSION, os.environ.get("SCIFORGE_HEADLESS_FILTER", ""))
         report["results"] = run.results
         report["missing"] = [] if os.environ.get("SCIFORGE_HEADLESS_FILTER") else missing_tools(run)
         report["tools_called"] = len(run.called)

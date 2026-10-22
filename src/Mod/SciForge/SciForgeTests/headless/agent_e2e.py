@@ -380,6 +380,25 @@ def command_line(agent, path, out_dir):
         done.returncode == 0 and size == (300, 200),
         (size, done.stderr.decode()[-300:]),
     )
+    # review 2026-10-22, F6: the refusal names the command's own option, and a --tool that
+    # is not JSON is a bad command line (exit status 2)
+    step = os.path.join(out_dir, "agent-cli.step")
+    for _ in range(2):  # (the second run finds the file there)
+        done = subprocess.run([cli, "convert", path, step], capture_output=True, timeout=TIMEOUT)
+    out = done.stdout.decode("utf-8", "replace")
+    agent.check(
+        "sciforge-cli convert over an existing file says to add --force",
+        done.returncode == 1 and "add --force" in out and "--allow-overwrite" not in out,
+        (done.returncode, out[:300]),
+    )
+    done = subprocess.run(
+        [cli, "run", "--tool", "extrude {bad json"], capture_output=True, timeout=TIMEOUT
+    )
+    agent.check(
+        "sciforge-cli run with a --tool that is not JSON exits 2",
+        done.returncode == 2 and b"not JSON" in done.stderr,
+        (done.returncode, done.stderr.decode()[-300:]),
+    )
 
 
 # -- the headless run ----------------------------------------------------------------------------

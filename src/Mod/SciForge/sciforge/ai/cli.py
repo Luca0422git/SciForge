@@ -163,8 +163,9 @@ def read_calls(options):
             except ValueError as exc:
                 raise ValueError("%s is not JSON: %s" % (options.tools_file, exc))
         if not isinstance(items, list):
-            raise ValueError('%s must hold a list: [{"tool": name, "arguments": {...}}]'
-                             % options.tools_file)
+            raise ValueError(
+                '%s must hold a list: [{"tool": name, "arguments": {...}}]' % options.tools_file
+            )
         for i, item in enumerate(items, start=1):
             if not isinstance(item, dict) or not isinstance(item.get("tool"), str):
                 raise ValueError('item %d of %s has no "tool" name' % (i, options.tools_file))
