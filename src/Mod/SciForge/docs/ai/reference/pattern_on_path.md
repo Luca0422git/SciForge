@@ -20,8 +20,8 @@ Fusion's Pattern on Path: repeat features, faces or the body along a sketch curv
 | `suppressed` | array of integers |  |  |  | copies left out, by their number among the copies (Suppression) |
 | `compute` | `optimized` \| `identical` \| `adjust` |  |  |  | Compute Option |
 | `path` (required) | object |  |  |  | {"sketch": id} or {"sketch": id, "edge": n} |
-| `quantity` | integer | count | `3` | >= 1 |  |
-| `distance` | number | mm |  |  | (mm) |
+| `quantity` | integer | count | `2` | >= 1 |  |
+| `distance` | number | mm | `20` |  | (mm) |
 | `distribution` | `extent` \| `spacing` |  | `"extent"` |  |  |
 | `direction_type` | `one` \| `symmetric` |  | `"one"` |  |  |
 | `orientation` | `identical` \| `path` |  | `"identical"` |  |  |

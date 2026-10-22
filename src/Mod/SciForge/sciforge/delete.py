@@ -444,7 +444,7 @@ def run(doc, found, title="Delete"):
         raise DeleteError(found.get("refused") or "Select what to delete.")
     if not doc.UndoMode:
         doc.UndoMode = 1
-    doc.openTransaction(title)
+    doc.openTransaction(timeline_ops.transaction_title(title))  # (an AI call names it)
     made = []
     try:
         for sketch, indices in found["curves"].items():

@@ -7,7 +7,7 @@ It builds the design step(s) `hole`, `hole_points`, `hole_at` (the golden models
 
 ## What it does
 
-Drill holes into the part (SciForge's Hole). First create_sketch on the face where the holes start (for example plane XY with offset = the top's height) with a small circle at each hole centre; the holes go at the circles' centres, whatever their size. Give depth or through_all. Optional counterbore {diameter, depth} or countersink {diameter, angle} (angle in degrees, default 90). Single Hole instead of a sketch: face (the flat face clicked) and at ([x, y, z] on it), with up to two references [{edge: edge selector, distance}] that place the centre from straight edges. All of Fusion's Hole dialog: hole_type simple | counterbore | countersink (cbore_diameter, cbore_depth, csink_diameter, csink_angle), extent distance | all | to (to: a plane or face), drill_point flat | angle (drill_angle), tap_type simple | clearance | tapped | taper, standard iso | ansi, size / designation (e.g. M6x1, 1/4-20 UNC), fit close | normal | loose, fastener socket_head | hex_head | countersunk, fastener_head (head pocket sized for it), taper_kind npt | bspt with taper_size, thread_class, thread_direction right | left, modeled (real thread), full_tap, tap_depth, flip. All lengths are in millimetres (mm) and all angles in degrees.
+Drill holes into the part (SciForge's Hole). First create_sketch on the face where the holes start (for example plane XY with offset = the top's height) with a small circle at each hole centre; the holes go at the circles' centres, whatever their size; the holes go into the part (also from a sketch under it). Give depth or through_all. Optional counterbore {diameter, depth} or countersink {diameter, angle} (angle in degrees, default 90). Single Hole instead of a sketch: face (the flat face clicked) and at ([x, y, z] on it), with up to two references [{edge: edge selector, distance}] that place the centre from straight edges. All of Fusion's Hole dialog: hole_type simple | counterbore | countersink (cbore_diameter, cbore_depth, csink_diameter, csink_angle), extent distance | all | to (to: a plane or face), drill_point flat | angle (drill_angle), tap_type simple | clearance | tapped | taper, standard iso | ansi, size / designation (e.g. M6x1, 1/4-20 UNC), fit close | normal | loose, fastener socket_head | hex_head | countersunk, fastener_head (head pocket sized for it), taper_kind npt | bspt with taper_size, thread_class, thread_direction right | left, modeled (real thread), full_tap, tap_depth, flip. All lengths are in millimetres (mm) and all angles in degrees.
 
 ## Arguments
 
@@ -37,7 +37,7 @@ Drill holes into the part (SciForge's Hole). First create_sketch on the face whe
 | `drill_angle` | number | deg |  | > 0, <= 180 | drill point angle (degrees) |
 | `tap_type` | `simple` \| `clearance` \| `tapped` \| `taper` |  | `"simple"` |  |  |
 | `standard` | `iso` \| `ansi` |  | `"iso"` |  |  |
-| `size` | string |  |  |  | nominal size, e.g. 6 (M6) or 1/4 |
+| `size` | string |  |  |  | nominal size, e.g. 8 (M8: its coarse thread) or 1/4 |
 | `designation` | string |  |  |  | thread designation, e.g. M6x1 or 1/4-20 UNC |
 | `fit` | `close` \| `normal` \| `loose` |  | `"normal"` |  | clearance hole fit |
 | `fastener` | `socket_head` \| `hex_head` \| `countersunk` |  |  |  | clearance: the fastener the hole is for |
@@ -49,7 +49,7 @@ Drill holes into the part (SciForge's Hole). First create_sketch on the face whe
 | `modeled` | boolean |  |  |  | cut the real thread (default: cosmetic) |
 | `full_tap` | boolean |  |  |  | thread the whole depth |
 | `tap_depth` | number | mm |  | > 0 | thread depth (mm) |
-| `flip` | boolean |  |  |  | drill the other way |
+| `flip` | boolean |  |  |  | drill along the sketch's normal (left out: into the part, whichever side the sketch is on) |
 
 ## Answer
 
@@ -83,7 +83,7 @@ The call:
 The answer:
 
 ```text
-Done: AI: Hole 6 mm. Its id is 'Hole1'. Bodies now: Body1: 23756.8 mm3, 60 x 40 x 10 mm.
+Done: AI: Hole 6 mm. Its id is 'Hole1'. Bodies now: Body1: 23773.8 mm3, 60 x 40 x 10 mm.
 ```
 
 ## Example 2: a counterbored hole for an M5 socket head screw

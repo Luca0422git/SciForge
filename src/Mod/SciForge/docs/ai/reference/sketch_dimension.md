@@ -15,7 +15,7 @@ Add a driving dimension to a sketch, like Fusion's Sketch Dimension: distance (b
 | `sketch` (required) | string |  |  |  | the sketch |
 | `kind` (required) | `distance` \| `distance_x` \| `distance_y` \| `radius` \| `diameter` \| `angle` |  |  |  |  |
 | `items` (required) | array of objects |  |  | at least 1 item(s), at most 2 item(s) | the curves / points measured |
-| `value` | number | deg |  |  | mm (lengths) or degrees (angles) |
+| `value` | number | mm or deg |  |  | mm (lengths) or degrees (angles) |
 | `expression` | string |  |  |  | a formula instead of value, e.g. width / 2 |
 | `name` | string |  |  |  | a name, e.g. slot.width |
 

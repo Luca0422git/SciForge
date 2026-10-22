@@ -54,4 +54,5 @@ Undo: AI: Fillet 5 mm. Bodies now: Body1: 24000 mm3, 60 x 40 x 10 mm.
 
 ## See also
 
+- Recipe: [flange with a bolt circle](sciforge://docs/recipes/flange-bolt-pattern.md)
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

@@ -2,11 +2,11 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-Fusion: BROWSER > the eye icon (Show / Hide). Category: View. Changes the design (one undo step). Its undo step is named like "AI: Show". Needs an open design.
+Fusion: BROWSER > the eye icon (Show / Hide). Category: View. Not an undo step: `undo` after it takes back the step before it; call it again to reverse it. Needs an open design.
 
 ## What it does
 
-Show or hide bodies, components, sketches, construction geometry or drawings in the 3D view (they stay in the design). targets: ids; visible: true shows, false hides.
+Show or hide bodies, components, sketches, construction geometry or drawings in the 3D view (they stay in the design). targets: ids; visible: true shows, false hides. Not an undo step: call it again to reverse it (undo would take back the step before it).
 
 ## Arguments
 

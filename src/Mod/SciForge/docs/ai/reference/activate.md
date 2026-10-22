@@ -2,12 +2,12 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-Fusion: BROWSER > a body or component > Activate. Category: Assemble. Changes the design (one undo step). Its undo step is named like "AI: Activate Extrude1". Needs an open design.
+Fusion: BROWSER > a body or component > Activate. Category: Assemble. Not an undo step: `undo` after it takes back the step before it; call it again to reverse it. Needs an open design.
 It builds the design step(s) `use_body` (the golden models' step language).
 
 ## What it does
 
-Make a body (by any step in it) or a component the one you work in: the next sketches and features go into it (Fusion's Activate Component).
+Make a body (by any step in it) or a component the one you work in: the next sketches and features go into it (Fusion's Activate Component). Not an undo step: activate the previous one again to go back (undo would take back the step before it).
 
 ## Arguments
 

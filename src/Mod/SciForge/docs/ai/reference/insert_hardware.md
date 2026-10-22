@@ -22,7 +22,7 @@ Insert a fastener with the hole it needs: click a flat face of the current body 
 | `flip` | boolean |  | `false` |  |  |
 | `make_hole` | boolean |  | `true` |  |  |
 | `fit` | `close` \| `normal` \| `loose` |  | `"normal"` |  |  |
-| `sink_head` | boolean |  | `false` |  |  |
+| `sink_head` | boolean |  |  |  | counterbore / countersink for the head; default true, false for iso7380 (a button head sits on the face) |
 | `hole_depth` | `all` \| `length` |  | `"all"` |  |  |
 | `clearance` | number | mm |  | >= 0 | mm |
 
