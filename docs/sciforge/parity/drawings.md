@@ -16,7 +16,7 @@ inference, parts-list rows and table, hatch lines, a DXF writer; unit tests
 before / after, precision, tolerances, fits, basic, reference; `test_drawing_dims_core.py`),
 `drawing_annot_core.py` (leaders, feature control frames, datum identifiers, surface
 texture, ordinates, arc lengths as shapes, their SVG and DXF; `test_drawing_annot_core.py`),
-`drawing_pdf.py` (one PDF from the sheets' PDFs; tested there too), `drawing.py` (the
+`drawing_pdf.py` (one PDF from the sheets' PDFs; tested there too), `drawing_pdf_core.py`, `drawing_pdf_objects.py`, `drawing_pdf_font.py` (no FreeCAD, no Qt: the PDF rewritten with layers, searchable text, links and metadata, a small PDF reader / writer, osifont embedded as a subset; `test_drawing_pdf_core.py`), `drawing_pdf_export.py` (Export PDF: markers in TechDraw's scene, the texts and metadata from the drawing), `drawing.py` (the
 TechDraw objects, no GUI), `drawing_annot.py` (dimension settings and annotations that
 follow their edges), `drawing_sheets.py` (several sheets per drawing, export of all
 sheets), `drawing_depth.py` (Section Depth, and no seam line across a cut hole: the
@@ -130,7 +130,7 @@ wording, artwork or templates is copied (the title block is SciForge's own drawi
 | Table (parts list) and balloons | TABLES > Table: the table follows the mouse (an outline), a click places its top left corner; rows Item, Qty, Part Number (the component's name), Description, Material, one row per component (same names counted in Qty); in the lower half of the sheet the header is at the bottom; a balloon per row is put on the view, outside it, pointing at an edge of that component. A second Table is refused ("This drawing already has a parts list."). The rows follow renamed components, and in a Full Assembly drawing a component added to the design later comes into the views and the parts list (its balloon is added with Balloon) |
 | Balloon | Click an edge of a component on a view, then where the balloon goes: its number is the component's item; the next component, Enter / Esc ends; all balloons of one command are one undo step. Without a parts list it is refused ("make the parts list first (TABLES > Table)"); a click on empty paper says to click a component's edge |
 | Delete | Select views, dimensions, notes, balloons or the parts list on the sheet and press Del (or MODIFY > Delete): a view takes its dimensions, balloons, sections, details and projected views with it, one undo step |
-| Export PDF | EXPORT > Export PDF: Name (the drawing's), Sheets (All Sheets / Current Sheet), Location (the design's folder, or Documents), *Open the PDF afterwards* (ticked); Export writes the sheets as one vector PDF, each page its sheet's size (white paper, hatching, text), and opens it. An empty name or no folder is said in the dialog, which stays |
+| Export PDF | EXPORT > Export PDF: Name (the drawing's), Sheets (All Sheets / Current Sheet), Location (the design's folder, or Documents), *Open the PDF afterwards* (ticked); Export writes the sheets as one vector PDF, each page its sheet's size (white paper, hatching, text), and opens it. An empty name or no folder is said in the dialog, which stays. The PDF has **layers** the viewer's layer panel switches on and off: Visible Edges, Hidden Edges, Centerlines and Center Marks, Hatching and Section Lines (also the section and break lines, detail circles), Dimensions and Annotations (also captions, notes, balloons, symbols, the parts list), Border and Title Block; all of its **text can be searched and copied** (dimensions, notes, captions as TechDraw prints them; the title block, SciForge's leaders / symbols and the parts list, which TechDraw prints as outlines, get invisible text over them in osifont, embedded as a subset); a URL (https://..., www....) or mailto: in a note, leader or title block field is a **clickable link**; the **document properties** are the title block's: Title, Author (Drawn By), Subject (Part Number - Description), Keywords (part number, material, scale, size), Creator SciForge. With every layer on the page looks exactly as TechDraw printed it |
 | Export DXF | EXPORT > Export DXF: the same dialog (*Open afterwards* not ticked); All Sheets writes one DXF per sheet named after it ("name - Sheet 1.dxf"). The DXF (R12, the sheet in millimetres, dimension values as written on the sheet, tolerances on one line) has layers SHEET (frame, title block), VISIBLE, HIDDEN, CENTER (centre marks, automated ones, centre lines, section lines with their bends), HATCH, DIMENSIONS (lines, arrows, values as on the sheet, ordinates, arc lengths), TEXT (notes, captions, balloons, leaders), SYMBOLS (feature control frames, datums, surface texture) and TABLE (the parts list) |
 | The drawing follows the design | Immediately: the views, dimensions (their values), centre marks, title block and parts list update when the design changes (an edit in the timeline, Undo in the design), also after the design was saved and opened again |
 | Undo / redo | Every command is one undo step on the design's undo list (Ctrl+Z / Ctrl+Y on the sheet or the quick-access buttons) |
@@ -159,6 +159,10 @@ wording, artwork or templates is copied (the title block is SciForge's own drawi
 | Ordinate dimensions with separate X and Y origins, jogged ordinate leaders, an origin on an edge's middle | One origin point per set; straight leaders |
 | Renumber and Align Balloons; patent balloons; sub-assembly structure in the parts list; column choice and order | Not built: the parts list lists the components the view shows, first level only, with fixed columns |
 | Export DWG; Export CSV of the parts list; uniform line weights in the PDF | No DWG writer in FreeCAD's Python API; CSV not built |
+| PDF layers in a PDF/A file; layers for a view that is off the sheet | FreeCAD's PDF preferences can make Qt write PDF/A-1b, which forbids layers: such a file keeps its conformance and gets no layers (text, links and metadata still). Qt does not print what is off the sheet, so a view that lies wholly outside it has nothing to sort |
+| PDF: the title block's searchable text exactly over the drawn letters | The title block is an SVG that Qt prints as outlines; the searchable text is invisible text placed at the same point, stretched to the width Qt measures for the font the SVG asks for: selecting it highlights roughly, not glyph by glyph, where the letters are |
+| PDF: centre lines told from hidden edges by their meaning | In a view TechDraw draws every edge at one stacking level; SciForge sorts them by how they are drawn: solid is visible, dashed at the view's hidden line width is hidden, any other dash (SciForge's centre marks are dashed at 0.18 mm, centre lines dash-dot) is a centre line. An edge a person formats as dashed at the hidden width counts as hidden |
+| PDF: each sheet its own size | Every page keeps its sheet's size (tested with an A3 and an A4 sheet made by script), but SciForge cannot yet make sheets of different sizes (see above) |
 | Rotate a view; Move with snapping | Views move by dragging their frame (TechDraw), no rotation command |
 | Title block attributes Mass, Project Folder, custom attributes | Not filled: the title block has fixed fields |
 
@@ -221,6 +225,32 @@ Part 2 (2026-10-14):
 - One PDF per page from `TechDrawGui.exportPageAsPdf`; TechDraw's "print all" writes
   every page of the document (all drawings), so SciForge merges the sheets' PDFs itself
   (`drawing_pdf.py`: Qt's PDFs have a plain cross-reference table).
+- What Qt's PDF from TechDraw holds (FreeCAD 1.1.4, Qt 6.8.3, looked at 2026-10-22):
+  vector paths in one Flate content stream per page, PDF 1.4, a plain cross-reference
+  table; text TechDraw draws as text (dimensions, notes, captions, balloons, section
+  letters) is real text in subset TrueType fonts with ToUnicode maps (searchable), but
+  everything from an SVG (the template's title block and zone letters, `DrawViewSymbol`s:
+  SciForge's annotations and parts list) is outlines; no layers, no links; Title is the
+  page's internal name ("Drawing001"), Creator "FreeCAD 1.1.4 TechDraw", Producer Qt, no
+  author or subject. Qt also writes closepaths without a current point and colour
+  operators without values, which viewers report as syntax errors (SciForge's rewrite
+  leaves them out: they draw nothing).
+- Layers come from markers: Qt items SciForge puts into TechDraw's scene as children of
+  each view item for the print, stacked by z-value between the kinds of things TechDraw
+  draws in a view (`ZVALUE.h`: faces / hatching 10-41, edges 70 (hidden ones too: their
+  60 is overwritten), centre marks 80, section / break lines 90, caption 0). TechDraw
+  rebuilds a view's edges when it prints (`refreshViews`) but removes only its own
+  primitives, so the markers stay. A marker under the template item crashed FreeCAD in
+  the print (`ViewProviderTemplate::setMarkers`): none go there; what is printed before
+  the first marker is the template. A marker's `type()` must not be Qt's default
+  `UserType` (TechDraw's `QGCustomBorder`). A marker outside what a view covers makes the
+  view's extent bigger and TechDraw put the view's caption under it: markers sit at the
+  view's middle (its origin). Fully transparent painting is skipped by Qt's PDF writer:
+  markers are painted with alpha 1/255 and taken out of the PDF.
+- `TechDrawGui.getSceneForPage(page)` gives a page's scene even when its tab is closed (a
+  sheet not shown); it comes back as a plain QObject and is cast to `QGraphicsScene`.
+- Two prints of the same sheet can differ in a few anti-aliased pixels of SVG text (272 of
+  340000 at 50 dpi); a print with markers and the next one without were identical.
 - FreeCAD's MDI view is a QMainWindow: the sheet bar is a toolbar at its bottom. FreeCAD
   makes the MDI tabs movable (`setTabsMovable(True)`), so a new sheet's tab can take the
   old sheet's place.
@@ -283,7 +313,14 @@ the view label with undo, a text box dragged open, following the design),
 `drawing2_update` (fillet edited in the timeline, a hole moved and resized, Undo in the
 design: tolerances, ordinates, leaders, frames, marks, extensions, sections follow),
 `drawing2_reopen` (save, close, open: everything back, the dialog edits and undoes,
-still following the design). Unit tests: `test_drawing_fits.py`,
+still following the design), `drawing_pdf_layers` (Export PDF by its dialog: the six
+layers, metadata from the title block, osifont subset, the title block, a leader and the
+parts list searchable, the dimension once, two links, no marker left, nothing in Undo;
+rendered: every layer on looks exactly like TechDraw's print, each layer alone shows only
+its things; an A3 and an A4 sheet in one file with one set of layers; a projection
+group's items). Unit tests: `test_drawing_pdf_core.py` (the PDF reader / writer, the
+font subset and its licence check, layers from markers, text read back, links, the
+invisible text, metadata, PDF/A, poppler reading the result), `test_drawing_fits.py`,
 `test_drawing_dims_core.py`, `test_drawing_annot_core.py` (with the PDF merge),
 `test_drawing_core.py` (section types).
 
