@@ -5739,7 +5739,7 @@
   },
   "note": "close a design that was never saved (a new design counts as changed)",
   "answer": {
-   "text": "Closed Second. No design is open now.",
+   "text": "Closed Second. The active design is now Example (id 'Example').",
    "is_error": false
   }
  },

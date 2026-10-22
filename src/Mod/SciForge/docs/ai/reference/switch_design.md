@@ -6,13 +6,13 @@ Fusion: click a design tab. Category: Designs and files. Changes which design is
 
 ## What it does
 
-Make another open design the active one (the tools then work on it).
+Make another open design the active one (the tools then work on it). A text that fits several open designs (one's id is another's name) is refused with their ids.
 
 ## Arguments
 
 | Argument | Type | Unit | Default | Limits | Description |
 |---|---|---|---|---|---|
-| `design` (required) | string |  |  |  | its name or label (list_designs) |
+| `design` (required) | string |  |  |  | its id or name (list_designs) |
 
 ## Answer
 

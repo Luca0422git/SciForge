@@ -1336,7 +1336,7 @@ FIX_SESSION = [
     # F7: a step named as get_timeline shows it ("Sketch 1") is taken by the step tools too
     {
         "tool": "create_sketch",
-        "args": {"plane": "XY", "geometry": [{"rect": [80, 0, 20, 20]}]},
+        "args": {"plane": "XY", "geometry": [{"rect": [80, 0, 100, 20]}]},
         "save": "fx_sketch",
     },
     {
