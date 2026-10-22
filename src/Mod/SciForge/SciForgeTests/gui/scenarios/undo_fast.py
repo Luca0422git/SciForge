@@ -404,7 +404,7 @@ def h_start():
 
     doc = App.ActiveDocument
     parameters.add_user(doc, "depth", "mm", "10")
-    t.obj("Extrude 1").setExpression("Length", "depth")
+    t.obj("Extrude 1").setExpression("Length", parameters.container(doc).Name + ".depth")
     doc.recompute()
     S["before_h"] = shapes()
     S["stats"] = stats()
