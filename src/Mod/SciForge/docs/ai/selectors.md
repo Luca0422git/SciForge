@@ -48,7 +48,9 @@ Facts that matter:
 axis and radius, start / end, bounding box) and a `ref`: a selector SciForge built and checked
 that picks exactly that one element by its geometry, plus `pick`, the same as a pick
 (`{"edge": ref}`) for `measure`, `construct_*` or `create_sketch` `face`. Give `ref` straight
-to fillet / chamfer / shell / draft; join several with `any_of`.
+to fillet / chamfer / shell / draft; join several with `any_of`. A `ref` carries `body`, the
+body it was made for: those tools work on the active body and refuse a ref made for another
+one (activate it first), instead of changing the matching element of the wrong body.
 
 <a id="cookbook"></a>
 

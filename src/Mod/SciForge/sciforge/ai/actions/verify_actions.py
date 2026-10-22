@@ -18,7 +18,7 @@ from ..executor import UserError, json_result
 from . import action
 
 MAX_SNAPSHOTS = 20  # per design, oldest dropped first
-_SNAPSHOTS = {}  # document name -> {"S1": record, ...}
+_SNAPSHOTS = {}  # document name -> {"S1": record, ...} (records of that very document only)
 _LAST = {}  # document name -> the record taken before the latest change
 _COUNTER = {"n": 0}
 
@@ -70,6 +70,52 @@ def _chosen(ctx, args, doc):
     return bodies.list_bodies(doc)
 
 
+def _global(body):
+    """The body's solid in design coordinates (read only: not copied when not moved), or
+    None."""
+    from ... import bodies
+
+    try:
+        return bodies.global_shape(body, copy=False) if not body.Shape.isNull() else None
+    except Exception:
+        return None
+
+
+def _numbers(shape, row):
+    """Put the shape's counts, volume, area and size in row; False when it is empty."""
+    if shape is None or shape.isNull():
+        row.update(solid=False, empty=True)
+        return False
+    row.update(_shape_counts(shape))
+    row["solid"] = bool(shape.Solids)
+    # a surface body has no volume (FreeCAD's Volume of a lone face is meaningless)
+    row["volume_mm3"] = _r(sum(s.Volume for s in shape.Solids)) if shape.Solids else 0.0
+    row["area_mm2"] = _r(shape.Area)
+    row["bbox_mm"] = _bbox(geometry_facts.tight_box(shape))
+    return True
+
+
+_VALID = []  # [(shape, valid)]: the latest answers (the shapes kept, so none is reused)
+
+
+def _valid(shape):
+    """shape.isValid(), remembered for the same solid (a part of 800 faces took 3 s to
+    check, and inspect_design and check_design both ask while nothing changed)."""
+    for kept, valid in _VALID:
+        try:
+            if kept.isSame(shape):
+                return valid
+        except Exception:
+            pass
+    try:
+        valid = bool(shape.isValid())
+    except Exception:
+        valid = False
+    _VALID.insert(0, (shape, valid))
+    del _VALID[8:]
+    return valid
+
+
 def body_row(body, full=True):
     """What inspect_design tells about one body."""
     from ... import bodies
@@ -79,26 +125,10 @@ def body_row(body, full=True):
         row["shown"] = bool(bodies.is_shown(body))
     except Exception:
         pass
-    shape = None
-    try:
-        shape = bodies.global_shape(body) if not body.Shape.isNull() else None
-    except Exception:
-        shape = None
-    if shape is None or shape.isNull():
-        row.update(solid=False, empty=True)
+    shape = _global(body)
+    if not _numbers(shape, row) or not full:
         return row
-    row.update(_shape_counts(shape))
-    row["solid"] = bool(shape.Solids)
-    # a surface body has no volume (FreeCAD's Volume of a lone face is meaningless)
-    row["volume_mm3"] = _r(sum(s.Volume for s in shape.Solids)) if shape.Solids else 0.0
-    row["area_mm2"] = _r(shape.Area)
-    row["bbox_mm"] = _bbox(geometry_facts.tight_box(shape))
-    if not full:
-        return row
-    try:
-        row["valid"] = bool(shape.isValid())
-    except Exception:
-        row["valid"] = False
+    row["valid"] = _valid(shape)
     if shape.Solids:
         row["center_of_mass_mm"] = _centre(shape)
         try:
@@ -289,13 +319,23 @@ def _assembly(doc, info):
 
 # -- snapshots --------------------------------------------------------------------------------
 def record(doc):
-    """A small record of the design for diff_design (cheap: no validity checks)."""
+    """A small record of the design for diff_design (cheap: the bodies' solids are kept and
+    measured only when compared, see measured())."""
     from ... import bodies, timeline_ops
     from .timeline_actions import _values_of
 
-    out = {"doc": doc.Name, "time": time.time(), "bodies": {}, "steps": {}, "order": []}
+    out = {
+        "doc": doc.Name,
+        "uid": identity(doc),
+        "time": time.time(),
+        "bodies": {},
+        "steps": {},
+        "order": [],
+    }
     for body in bodies.list_bodies(doc):
-        out["bodies"][body.Name] = body_row(body, full=False)
+        # the numbers are worked out when a diff needs them (measured): the executor takes
+        # a record before every change, and measuring a part of 800 faces took 0.4 s
+        out["bodies"][body.Name] = {"id": body.Name, "label": body.Label, "_shape": _global(body)}
     try:
         values = _values_of(doc)
         for item in timeline_ops.timeline(doc).items:
@@ -316,10 +356,42 @@ def record(doc):
     return out
 
 
+def identity(doc):
+    """What tells this document from a later one with the same internal name (FreeCAD gives
+    "Unnamed" again once the first is closed, also when it was closed in the window, where
+    forget() is not called): its Uid, new for every new document."""
+    try:
+        return str(doc.Uid)
+    except Exception:
+        return "%s@%x" % (doc.Name, id(doc))
+
+
+def _snapshots(doc):
+    """The snapshots of this document ({id: record}); those of a closed document that had
+    the same name are dropped."""
+    uid = identity(doc)
+    store = _SNAPSHOTS.get(doc.Name)
+    if store and any(rec.get("uid") != uid for rec in store.values()):
+        store = None
+    if store is None:
+        store = _SNAPSHOTS[doc.Name] = {}
+    if _LAST.get(doc.Name) is not None and _LAST[doc.Name].get("uid") != uid:
+        _LAST.pop(doc.Name, None)
+    return store
+
+
+def measured(rec):
+    """The record with its bodies' numbers worked out (once: kept in the record)."""
+    for row in rec["bodies"].values():
+        if "_shape" in row:
+            _numbers(row.pop("_shape"), row)
+    return rec
+
+
 def keep_snapshot(doc):
     _COUNTER["n"] += 1
     ident = "S%d" % _COUNTER["n"]
-    store = _SNAPSHOTS.setdefault(doc.Name, {})
+    store = _snapshots(doc)
     store[ident] = record(doc)
     while len(store) > MAX_SNAPSHOTS:
         store.pop(next(iter(store)))
@@ -391,7 +463,8 @@ def inspect_design(ctx, args):
         "invalid_bodies": [b["id"] for b in invalid],
         "total_volume_mm3": _r(sum(b.get("volume_mm3", 0.0) for b in rows if b.get("solid"))),
     }
-    info["snapshot"] = keep_snapshot(doc)
+    if args.get("snapshot", True):
+        info["snapshot"] = keep_snapshot(doc)
     words = "%s: %d bod%s, %d step%s" % (
         doc.Label,
         len(rows),
@@ -403,7 +476,9 @@ def inspect_design(ctx, args):
         words += ", %d failed (%s)" % (len(failed), ", ".join(s["id"] for s in failed))
     if invalid:
         words += ", %d invalid bod%s" % (len(invalid), "y" if len(invalid) == 1 else "ies")
-    return json_result(info, words + ". Snapshot %s." % info["snapshot"], compact=True)
+    if info.get("snapshot"):
+        words += ". Snapshot %s" % info["snapshot"]
+    return json_result(info, words + ".", compact=True)
 
 
 # -- query_geometry ---------------------------------------------------------------------------
@@ -453,9 +528,17 @@ def query_geometry(ctx, args):
         raise UserError("The selector does not fit %s: %s." % (words, exc))
     limit = int(args.get("limit", 60))
     shown = names[:limit]
+    from ... import bodies
+
+    try:
+        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+    except Exception:
+        body = None
     refs = {}
     if args.get("refs", True) and element != "vertices":
         refs = gf.stable_refs(shape, element, wanted=set(shown))
+        if body is not None:  # (a tool working on another body refuses the ref: selectors)
+            gf.tie_to_body(refs, body.Name)
     rows = []
     for name in shown:
         sub = shape.getElement(name)
@@ -480,9 +563,17 @@ def query_geometry(ctx, args):
         % obj.Name,
     }
     try:
-        from ... import bodies
-
-        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+        active = ctx.host.find_body(ctx.doc)
+        if body is not None and rows and active is not None and active is not body:
+            out["active_body"] = active.Name
+            out["note"] += (
+                " %s is not the active body (%s is): activate %s before passing these refs to "
+                "a tool that changes the active body (fillet, chamfer...), which refuses them "
+                "otherwise." % (body.Name, active.Name, body.Name)
+            )
+    except Exception:
+        pass
+    try:
         place = body.getGlobalPlacement() if body is not None else None
         if place is not None and not place.isIdentity():
             out["body_placement"] = {
@@ -651,6 +742,64 @@ def _highlights(ctx, highlight):
     return marked
 
 
+def face_meshes(shape, tol):
+    """(points, [the triangles of Face1, of Face2, ...]) of a shape, the triangles as index
+    triples into points. The whole shape is meshed at once by MeshPart, one segment per face
+    (meshing face by face took 25 s on a plate with 400 chamfered holes, 2 s this way), with
+    FreeCAD's 3D view's angular deflection; face by face when MeshPart cannot (or its
+    segments do not match the faces, checked by their bounding boxes)."""
+    import numpy
+
+    faces = shape.Faces
+    try:
+        import MeshPart
+
+        mesh = MeshPart.meshFromShape(
+            Shape=shape, LinearDeflection=tol, AngularDeflection=0.5, Relative=False, Segments=True
+        )
+        if mesh.countSegments() == len(faces):
+            verts, facets = mesh.Topology
+            points = numpy.array([(p.x, p.y, p.z) for p in verts], dtype=float).reshape(-1, 3)
+            facets = numpy.asarray(facets, dtype=numpy.int64).reshape(-1, 3)
+            per_face = []
+            for i, face in enumerate(faces):
+                tris = facets[numpy.asarray(mesh.getSegment(i), dtype=numpy.int64)]
+                if len(tris):
+                    box = face.BoundBox
+                    corner = points[tris.reshape(-1)]
+                    lo, hi = corner.min(axis=0), corner.max(axis=0)
+                    slack = 2.0 * tol + 1e-6
+                    if (
+                        lo[0] < box.XMin - slack
+                        or lo[1] < box.YMin - slack
+                        or lo[2] < box.ZMin - slack
+                        or hi[0] > box.XMax + slack
+                        or hi[1] > box.YMax + slack
+                        or hi[2] > box.ZMax + slack
+                    ):
+                        raise ValueError("segment %d is not face %d" % (i, i + 1))
+                per_face.append(tris)
+            return points, per_face
+    except Exception:
+        pass
+    points, per_face = [], []
+    for face in faces:
+        try:
+            verts, tris = face.tessellate(tol)
+        except Exception:
+            verts, tris = [], []
+        start = len(points)
+        points.extend((p.x, p.y, p.z) for p in verts)
+        per_face.append(numpy.asarray(tris, dtype=numpy.int64).reshape(-1, 3) + start)
+    return numpy.asarray(points, dtype=float).reshape(-1, 3), per_face
+
+
+def _joined(parts):
+    import numpy
+
+    return numpy.concatenate(parts) if parts else numpy.zeros((0, 3), dtype=numpy.int64)
+
+
 def scene(ctx, doc, marked, edges=True):
     """(meshes, lines) of the design for render_core: every shown body with a solid or
     faces, the shown sketches as blue lines, and the marked faces / edges in orange."""
@@ -670,19 +819,14 @@ def scene(ctx, doc, marked, edges=True):
         color = render_core.BODY_COLORS[n % len(render_core.BODY_COLORS)]
         tol = _tolerance(shape)
         mark_here = source is not None and (source is body or getattr(body, "Tip", None) is source)
-        for i, face in enumerate(shape.Faces, start=1):
-            try:
-                points, tris = face.tessellate(tol)
-            except Exception:
-                continue
-            hot = mark_here and ("Face%d" % i) in marked["faces"]
-            meshes.append(
-                {
-                    "points": [(p.x, p.y, p.z) for p in points],
-                    "triangles": tris,
-                    "color": render_core.HIGHLIGHT if hot else color,
-                }
-            )
+        points, per_face = face_meshes(shape, tol)
+        plain, hot = [], []
+        for i, tris in enumerate(per_face, start=1):
+            marked_face = mark_here and ("Face%d" % i) in marked["faces"]
+            (hot if marked_face else plain).append(tris)
+        for parts, tint in ((plain, color), (hot, render_core.HIGHLIGHT)):
+            if parts:  # (one mesh per colour: the renderer draws it in one go)
+                meshes.append({"points": points, "triangles": _joined(parts), "color": tint})
         if edges or mark_here:
             for i, edge in enumerate(shape.Edges, start=1):
                 hot = mark_here and ("Edge%d" % i) in marked["edges"]
@@ -701,16 +845,22 @@ def scene(ctx, doc, marked, edges=True):
                 )
     if source is not None and not any(
         source is b or getattr(b, "Tip", None) is source for b in shown
-    ):  # an earlier step (not what the body shows now): its marked faces / edges drawn alone
-        shape = marked["shape"]
+    ):  # an earlier step (not what the body shows now): its marked faces / edges drawn alone,
+        # where that solid is in the design (its body's and component's placement applied)
+        try:
+            shape = bodies.global_shape(source)
+        except Exception:
+            shape = marked["shape"]
         tol = _tolerance(shape)
-        for name in sorted(marked["faces"]):
-            points, tris = shape.getElement(name).tessellate(tol)
+        if marked["faces"]:
+            points, per_face = face_meshes(shape, tol)
+            parts = [per_face[int(name[4:]) - 1] for name in sorted(marked["faces"])]
             meshes.append(
                 {
-                    "points": [(p.x, p.y, p.z) for p in points],
-                    "triangles": tris,
+                    "points": points,
+                    "triangles": _joined(parts),
                     "color": render_core.HIGHLIGHT,
+                    "in_front": True,  # (over the body's face it may lie on)
                 }
             )
         for name in sorted(marked["edges"]):
@@ -774,8 +924,11 @@ def _software(ctx, doc, args, marked):
 
 
 def _window(ctx, doc, args, marked):
-    """The picture from SciForge's own 3D view (the person's camera is put back after)."""
-    from .view_actions import ORIENTATIONS
+    """The picture from SciForge's own 3D view (the person's camera and selection are put
+    back after). The camera is turned like the software renderer's (Z up, render_core.camera)
+    and framed for the picture's own shape; the host takes the person's selection off (a
+    selected body would come out tinted) and draws the marked faces and edges in orange."""
+    from .. import render_core
 
     view = ctx.host.view(doc)
     if view is None:
@@ -784,19 +937,20 @@ def _window(ctx, doc, args, marked):
         camera = view.getCamera()
     except Exception:
         camera = None
-    selection = ctx.host.push_highlight(doc, marked)
+    width, height = int(args.get("width", 800)), int(args.get("height", 600))
     try:
-        if args.get("direction"):
-            d = args["direction"]
-            view.setViewDirection((-d[0], -d[1], -d[2]))
-        else:
-            getattr(view, ORIENTATIONS[args.get("view", "iso")])()
+        right, up, forward = render_core.camera(args.get("view", "iso"), args.get("direction"))
+    except render_core.RenderError as exc:
+        raise UserError(str(exc))
+    saved = ctx.host.push_highlight(doc, marked)
+    try:
+        _turn(view, right, up, forward)
         if args.get("fit", True):
             view.fitAll()
-        width, height = int(args.get("width", 800)), int(args.get("height", 600))
+            _frame(view, _corners(doc, marked), right, up, width, height)
         data = ctx.host.screenshot(doc, width, height)
     finally:
-        ctx.host.pop_highlight(doc, selection)
+        drawn = ctx.host.pop_highlight(doc, saved)
         if camera is not None:
             try:
                 view.setCamera(camera)
@@ -806,7 +960,91 @@ def _window(ctx, doc, args, marked):
         "width": width,
         "height": height,
         "view": args.get("direction") or args.get("view", "iso"),
+        "highlight_drawn": drawn is not False,
     }
+
+
+def _turn(view, right, up, forward):
+    """Point the window's camera like render_core.camera: set on the camera itself, so it
+    is not animated (FreeCAD's setViewDirection kept whatever roll the camera had: looking
+    from +X, the part lay on its side)."""
+    import FreeCAD as App
+    from pivy import coin
+
+    eye = [-c for c in forward]  # the camera looks along its -Z, its up is +Y
+    rot = App.Rotation(
+        App.Matrix(
+            right[0], up[0], eye[0], 0,
+            right[1], up[1], eye[1], 0,
+            right[2], up[2], eye[2], 0,
+            0, 0, 0, 1,
+        )
+    )  # fmt: skip
+    cam = view.getCameraNode()
+    # turn about the point the camera looks at, as FreeCAD's standard views do
+    pos = App.Vector(*cam.position.getValue().getValue())
+    old = cam.orientation.getValue().multVec(coin.SbVec3f(0, 0, -1)).getValue()
+    distance = cam.focalDistance.getValue()
+    focal = pos + App.Vector(*old) * distance
+    cam.orientation.setValue(coin.SbRotation(*rot.Q))
+    cam.position.setValue(*(focal + App.Vector(*eye) * distance))
+
+
+def _corners(doc, marked):
+    """The corners of the bounding boxes of what the picture shows (the shown bodies and
+    sketches, an earlier step's marked solid), in design coordinates."""
+    import FreeCAD as App
+
+    from ... import bodies
+
+    objects = [b for b in bodies.list_bodies(doc) if bodies.is_shown(b)]
+    objects += [o for o in doc.Objects if o.TypeId == "Sketcher::SketchObject" and _sketch_shown(o)]
+    if marked.get("source") is not None:
+        objects.append(marked["source"])
+    points = []
+    for obj in objects:
+        try:
+            box = obj.Shape.BoundBox
+            if not box.isValid():
+                continue
+            parent = obj.getParentGeoFeatureGroup()
+            place = parent.getGlobalPlacement() if parent is not None else App.Placement()
+        except Exception:
+            continue
+        for x in (box.XMin, box.XMax):
+            for y in (box.YMin, box.YMax):
+                for z in (box.ZMin, box.ZMax):
+                    points.append(place.multVec(App.Vector(x, y, z)))
+    return points
+
+
+def _frame(view, points, right, up, width, height):
+    """Fill a width x height picture with the points' extent and render_core's margin
+    (fitAll fits the window's own shape, so a picture of another shape got the part small
+    in a wide frame). Only an orthographic camera is zoomed; its distance (and so what
+    fitAll worked out about near and far) stays."""
+    from pivy import coin
+
+    from .. import render_core
+
+    if not points:
+        return
+    xs = [p.x * right[0] + p.y * right[1] + p.z * right[2] for p in points]
+    ys = [p.x * up[0] + p.y * up[1] + p.z * up[2] for p in points]
+    span_x, span_y = max(xs) - min(xs), max(ys) - min(ys)
+    if span_x < 1e-9 and span_y < 1e-9:
+        return
+    cam = view.getCameraNode()
+    pos = cam.position.getValue().getValue()
+    shift_x = (max(xs) + min(xs)) / 2.0 - sum(pos[i] * right[i] for i in range(3))
+    shift_y = (max(ys) + min(ys)) / 2.0 - sum(pos[i] * up[i] for i in range(3))
+    cam.position.setValue(*[pos[i] + shift_x * right[i] + shift_y * up[i] for i in range(3)])
+    if cam.getTypeId() != coin.SoOrthographicCamera.getClassTypeId():
+        return
+    # Coin fits "height" to the picture's height when it is wide, to its width when tall
+    aspect = float(width) / float(height)
+    needed = max(span_x / max(aspect, 1.0), span_y * min(aspect, 1.0))
+    cam.height.setValue(max(needed, 1e-6) / (1.0 - 2.0 * render_core.MARGIN))
 
 
 @action("render")
@@ -834,8 +1072,13 @@ def render(ctx, args):
         what,
         info["renderer"],
     )
-    if marked["words"]:
+    if marked["words"] and info.get("highlight_drawn", True):
         text += "; in orange: %s" % "; ".join(marked["words"])
+    elif marked["words"]:
+        text += (
+            "; the window could not mark %s (use renderer software to see them in orange)"
+            % "; ".join(marked["words"])
+        )
     if info.get("mm_per_pixel"):
         text += "; 1 pixel = %.4g mm" % info["mm_per_pixel"]
     return bridge_core.result(text + ".", data)
@@ -975,6 +1218,23 @@ def _since_step(ctx, doc, ident):
     if body is None:
         raise UserError("%s is not in a body: give a step of a body, or a snapshot id." % ident)
     try:
+        tl = timeline_ops.timeline(doc)
+        item = next((i for i in tl.items if i.name == obj.Name), None)
+    except Exception:
+        tl, item = None, None
+    if item is not None and item.state == "rolled_back":
+        # (FreeCAD keeps the solid it had before the marker was rolled back: not its result)
+        raise UserError(
+            "%s is after the history marker (rolled back), so its solid is not computed: "
+            'roll_timeline {"to": "end"} (or to after %s) first, or diff since a snapshot.'
+            % (obj.Name, obj.Name)
+        )
+    if item is not None and item.status == "error":
+        raise UserError(
+            "%s failed, so the solid it holds is not its result: repair it first (check_design "
+            "says why), or diff since a snapshot." % obj.Name
+        )
+    try:
         old_shape = bodies.global_shape(obj)
     except Exception:
         old_shape = None
@@ -994,7 +1254,6 @@ def _since_step(ctx, doc, ident):
     now = body_row(body, full=False)
     later = []
     try:
-        tl = timeline_ops.timeline(doc)
         names = tl.names()
         if obj.Name in names:
             start = names.index(obj.Name)
@@ -1033,6 +1292,7 @@ def _since_step(ctx, doc, ident):
 def diff_design(ctx, args):
     doc = ctx.need_doc()
     since = args["since"]
+    snapshots = _snapshots(doc)  # (also drops a last_change of a closed namesake)
     if since == "last_change":
         old = _LAST.get(doc.Name)
         if old is None:
@@ -1041,8 +1301,8 @@ def diff_design(ctx, args):
                 "last_change: call inspect_design for a snapshot id and diff since it later."
             )
         label = "the last change"
-    elif since in _SNAPSHOTS.get(doc.Name, {}):
-        old = _SNAPSHOTS[doc.Name][since]
+    elif since in snapshots:
+        old = snapshots[since]
         label = since
     elif since[:1] == "S" and since[1:].isdigit():
         raise UserError(
@@ -1051,6 +1311,6 @@ def diff_design(ctx, args):
         )
     else:
         return _since_step(ctx, doc, since)
-    diff = compare(old, record(doc))
+    diff = compare(measured(old), measured(record(doc)))
     diff["since"] = since
     return json_result(diff, "Since %s: %s." % (label, _words(diff)), compact=True)

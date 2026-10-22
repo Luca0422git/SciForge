@@ -49,6 +49,7 @@ BACKGROUND_TOP = (250, 251, 253)
 BACKGROUND_BOTTOM = (218, 224, 232)
 AXIS_COLORS = ((220, 50, 47), (40, 160, 60), (40, 90, 220))
 SUPERSAMPLE = 2
+SUPERSAMPLE_UP_TO = 2048 * 2048  # pixels; a bigger picture is drawn once (memory)
 MARGIN = 0.06  # of the picture, around a fitted scene
 
 
@@ -105,6 +106,11 @@ def camera(view="iso", direction=None, up=None):
 
 
 # -- the scene ------------------------------------------------------------------------------
+def _items(value):
+    """A list or an array of points / triangles as given (None: none)."""
+    return [] if value is None else value
+
+
 def render(
     meshes,
     lines=(),
@@ -118,6 +124,8 @@ def render(
     """Draw the scene; returns (png bytes, info).
 
     meshes: [{"points": [(x, y, z), ...], "triangles": [(i, j, k), ...], "color": (r, g, b)}]
+    (lists or numpy arrays; several meshes may share one points array; "in_front": true
+    draws it over a face it lies on)
     lines: [{"points": [(x, y, z), ...] (a polyline), "color": (r, g, b), "width": px,
     "on_top": draw also where hidden}]. info: {"width", "height", "view", "mm_per_pixel",
     "triangles"}."""
@@ -131,17 +139,19 @@ def render(
     pts_all = []
     prepared = []
     for mesh in meshes:
-        pts = np.asarray(mesh.get("points") or [], dtype=float).reshape(-1, 3)
-        tris = np.asarray(mesh.get("triangles") or [], dtype=np.int64).reshape(-1, 3)
+        pts = np.asarray(_items(mesh.get("points")), dtype=float).reshape(-1, 3)
+        tris = np.asarray(_items(mesh.get("triangles")), dtype=np.int64).reshape(-1, 3)
         if len(pts) == 0 or len(tris) == 0:
             continue
         if tris.min() < 0 or tris.max() >= len(pts):
             raise RenderError("A triangle refers to a point that is not there.")
-        prepared.append((pts, tris, mesh.get("color") or BODY_COLORS[0]))
+        prepared.append(
+            (pts, tris, mesh.get("color") or BODY_COLORS[0], bool(mesh.get("in_front")))
+        )
         pts_all.append(pts)
     line_items = []
     for line in lines:
-        pts = np.asarray(line.get("points") or [], dtype=float).reshape(-1, 3)
+        pts = np.asarray(_items(line.get("points")), dtype=float).reshape(-1, 3)
         if len(pts) < 2:
             continue
         line_items.append(
@@ -149,16 +159,16 @@ def render(
         )
         pts_all.append(pts)
 
-    s = SUPERSAMPLE
+    s = SUPERSAMPLE if width * height <= SUPERSAMPLE_UP_TO else 1
     W, H = width * s, height * s
-    image = np.empty((H, W, 3), dtype=float)
+    image = np.empty((H, W, 3), dtype=np.float32)  # (float32: half the memory)
     if background:
         top, bottom = np.array(BACKGROUND_TOP, float), np.array(BACKGROUND_BOTTOM, float)
         t = np.linspace(0.0, 1.0, H)[:, None]
         image[:] = (top * (1 - t) + bottom * t)[:, None, :]
     else:
         image[:] = 255.0
-    zbuf = np.full((H, W), np.inf)
+    zbuf = np.full((H, W), np.inf, dtype=np.float32)
 
     if pts_all:
         every = np.vstack(pts_all) @ basis
@@ -184,8 +194,10 @@ def render(
         (_unit(tuple(-forward[i] * 0.5 - up[i] * 0.3 + right[i] * 0.6 for i in range(3))), 0.18),
     ]
     count = 0
-    for pts, tris, color in prepared:
+    for pts, tris, color, in_front in prepared:
         scr = to_screen(pts)
+        if in_front:  # (wins over a face it lies on: the polygon offset of OpenGL)
+            scr[:, 2] -= depth_span * 2e-3
         a, b, c = pts[tris[:, 0]], pts[tris[:, 1]], pts[tris[:, 2]]
         normals = np.cross(b - a, c - a)
         lengths = np.linalg.norm(normals, axis=1)
@@ -216,100 +228,91 @@ def render(
     return png_bytes(rgb), info
 
 
+ROW_BUDGET = 1 << 18  # (triangle, pixel row) pairs handled at once
+PIXEL_BUDGET = 1 << 20  # covered pixels handled at once: memory stays near 100 MB
+
+
 def _fill(np, image, zbuf, scr, tris, colors):
-    """Draw the triangles with the depth buffer. Returns how many covered a pixel. Small
-    triangles (most of a tessellated part) are drawn many at a time on a small square of
-    pixels each; big ones one by one on their bounding box."""
+    """Draw the triangles with the depth buffer; returns how many covered a pixel. Every
+    triangle is drawn row by row on the pixels whose centre it covers, all triangles at
+    once in batches (no Python loop per triangle: the long thin triangles of a face with
+    hundreds of holes made that loop take tens of seconds), the batches bounded so a big
+    picture does not take gigabytes."""
     H, W = zbuf.shape
     tx, ty, tz = scr[:, 0][tris], scr[:, 1][tris], scr[:, 2][tris]
-    xmin = np.floor(tx.min(axis=1)).astype(np.int64)
-    xmax = np.ceil(tx.max(axis=1)).astype(np.int64)
-    ymin = np.floor(ty.min(axis=1)).astype(np.int64)
-    ymax = np.ceil(ty.max(axis=1)).astype(np.int64)
     area = (tx[:, 1] - tx[:, 0]) * (ty[:, 2] - ty[:, 0]) - (tx[:, 2] - tx[:, 0]) * (
         ty[:, 1] - ty[:, 0]
     )
-    keep = (np.abs(area) > 1e-12) & (xmax >= 0) & (ymax >= 0) & (xmin < W) & (ymin < H)
-    size = np.maximum(xmax - xmin, ymax - ymin) + 1
-    drawn = set()
+    # the pixel rows whose centre (row + 0.5) lies within the triangle's height
+    y0 = np.maximum(np.ceil(ty.min(axis=1) - 0.5), 0).astype(np.int64)
+    y1 = np.minimum(np.floor(ty.max(axis=1) - 0.5), H - 1).astype(np.int64)
+    keep = (np.abs(area) > 1e-12) & (y1 >= y0) & (tx.max(axis=1) >= 0) & (tx.min(axis=1) < W)
+    which = np.nonzero(keep)[0]
+    drawn = np.zeros(len(tris), dtype=bool)
+    if not len(which):
+        return 0
+    heights = y1[which] - y0[which] + 1
+    ends = np.cumsum(heights)
     zflat = zbuf.reshape(-1)
     iflat = image.reshape(-1, 3)
-    low = 0
-    for k in (2, 4, 8, 16, 24):
-        group = np.nonzero(keep & (size > low) & (size <= k))[0]
-        low = k
-        chunk = max(1, 3000000 // (k * k))
-        for start in range(0, len(group), chunk):
-            idx = group[start : start + chunk]
-            ox = xmin[idx][:, None, None] + np.arange(k)[None, None, :]
-            oy = ymin[idx][:, None, None] + np.arange(k)[None, :, None]
-            px, py = ox + 0.5, oy + 0.5
-            ax, bx, cx = (tx[idx, i][:, None, None] for i in range(3))
-            ay, by, cy = (ty[idx, i][:, None, None] for i in range(3))
-            inv = (1.0 / area[idx])[:, None, None]
-            w0 = ((bx - px) * (cy - py) - (cx - px) * (by - py)) * inv
-            w1 = ((cx - px) * (ay - py) - (ax - px) * (cy - py)) * inv
-            w2 = 1.0 - w0 - w1
-            inside = (w0 >= -1e-9) & (w1 >= -1e-9) & (w2 >= -1e-9)
-            inside &= (ox >= 0) & (ox < W) & (oy >= 0) & (oy < H)
-            if not inside.any():
-                continue
-            depth = w0 * tz[idx, 0][:, None, None] + w1 * tz[idx, 1][:, None, None]
-            depth += w2 * tz[idx, 2][:, None, None]
-            which = np.broadcast_to(idx[:, None, None], inside.shape)[inside]
-            pix = (oy * W + ox)[inside]
-            dep = depth[inside]
-            order = np.lexsort((dep, pix))  # by pixel, the nearest first
-            pix, dep, which = pix[order], dep[order], which[order]
-            first = np.ones(len(pix), dtype=bool)
-            first[1:] = pix[1:] != pix[:-1]
-            pix, dep, which = pix[first], dep[first], which[first]
-            nearer = dep < zflat[pix]
-            pix, dep, which = pix[nearer], dep[nearer], which[nearer]
-            zflat[pix] = dep
-            iflat[pix] = colors[which]
-            drawn.update(np.unique(which).tolist())
-    for t in np.nonzero(keep & (size > low))[0]:  # big ones: row by row, only their pixels
-        y0, y1 = max(int(ymin[t]), 0), min(int(ymax[t]), H - 1)
-        if y0 > y1:
-            continue
-        rows = np.arange(y0, y1 + 1)
-        yc = rows + 0.5
-        left = np.full(len(rows), np.inf)
-        right = np.full(len(rows), -np.inf)
+    first_tri = 0
+    while first_tri < len(which):
+        done_before = ends[first_tri] - heights[first_tri]
+        last_tri = int(np.searchsorted(ends, done_before + ROW_BUDGET, side="right"))
+        last_tri = max(last_tri, first_tri + 1)
+        sub, h = which[first_tri:last_tri], heights[first_tri:last_tri]
+        first_tri = last_tri
+        t = np.repeat(sub, h)
+        row = np.repeat(y0[sub], h) + (np.arange(int(h.sum())) - np.repeat(np.cumsum(h) - h, h))
+        yc = row + 0.5
+        left = np.full(len(t), np.inf)
+        right = np.full(len(t), -np.inf)
         for i, j in ((0, 1), (1, 2), (2, 0)):
             ya, yb, xa, xb = ty[t, i], ty[t, j], tx[t, i], tx[t, j]
-            if abs(yb - ya) < 1e-12:
-                continue
-            on = (yc - ya) * (yc - yb) <= 0
-            x = xa + (yc - ya) * (xb - xa) / (yb - ya)
+            dy = yb - ya
+            slanted = np.abs(dy) >= 1e-12
+            on = slanted & ((yc - ya) * (yc - yb) <= 0)
+            x = xa + (yc - ya) * (xb - xa) / np.where(slanted, dy, 1.0)
             left = np.where(on, np.minimum(left, x), left)
             right = np.where(on, np.maximum(right, x), right)
-        first = np.maximum(np.ceil(left - 0.5), 0)
-        last = np.minimum(np.floor(right - 0.5), W - 1)
-        ok = np.isfinite(left) & (last >= first)
-        if not ok.any():
-            continue
-        first, last, rows = first[ok].astype(np.int64), last[ok].astype(np.int64), rows[ok]
+        ok = np.isfinite(left)
+        first = np.maximum(np.ceil(left[ok] - 0.5), 0).astype(np.int64)
+        last = np.minimum(np.floor(right[ok] - 0.5), W - 1).astype(np.int64)
+        t, row = t[ok], row[ok]
+        ok = last >= first
+        t, row, first, last = t[ok], row[ok], first[ok], last[ok]
         counts = last - first + 1
-        row_of = np.repeat(rows, counts)
-        offsets = np.arange(counts.sum()) - np.repeat(np.cumsum(counts) - counts, counts)
-        col = np.repeat(first, counts) + offsets
-        px, py = col + 0.5, row_of + 0.5
-        ax, bx, cx = tx[t]
-        ay, by, cy = ty[t]
-        inv = 1.0 / area[t]
-        w0 = ((bx - px) * (cy - py) - (cx - px) * (by - py)) * inv
-        w1 = ((cx - px) * (ay - py) - (ax - px) * (cy - py)) * inv
-        depth = w0 * tz[t, 0] + w1 * tz[t, 1] + (1.0 - w0 - w1) * tz[t, 2]
-        pix = row_of * W + col
-        nearer = depth < zflat[pix]
-        if not nearer.any():
-            continue
-        zflat[pix[nearer]] = depth[nearer]
-        iflat[pix[nearer]] = colors[t]
-        drawn.add(int(t))
-    return len(drawn)
+        done = np.cumsum(counts)
+        a = 0
+        while a < len(t):
+            before = done[a] - counts[a]
+            b = max(int(np.searchsorted(done, before + PIXEL_BUDGET, side="right")), a + 1)
+            c = counts[a:b]
+            tri = np.repeat(t[a:b], c)
+            row_of = np.repeat(row[a:b], c)
+            col = np.repeat(first[a:b], c) + (
+                np.arange(int(c.sum())) - np.repeat(np.cumsum(c) - c, c)
+            )
+            a = b
+            px, py = col + 0.5, row_of + 0.5
+            ax, bx, cx = tx[tri, 0], tx[tri, 1], tx[tri, 2]
+            ay, by, cy = ty[tri, 0], ty[tri, 1], ty[tri, 2]
+            inv = 1.0 / area[tri]
+            w0 = ((bx - px) * (cy - py) - (cx - px) * (by - py)) * inv
+            w1 = ((cx - px) * (ay - py) - (ax - px) * (cy - py)) * inv
+            depth = w0 * tz[tri, 0] + w1 * tz[tri, 1] + (1.0 - w0 - w1) * tz[tri, 2]
+            pix = row_of * W + col
+            order = np.lexsort((depth, pix))  # by pixel, the nearest first
+            pix, depth, tri = pix[order], depth[order], tri[order]
+            nearest = np.ones(len(pix), dtype=bool)
+            nearest[1:] = pix[1:] != pix[:-1]
+            pix, depth, tri = pix[nearest], depth[nearest], tri[nearest]
+            nearer = depth < zflat[pix]
+            pix, depth, tri = pix[nearer], depth[nearer], tri[nearer]
+            zflat[pix] = depth
+            iflat[pix] = colors[tri]
+            drawn[tri] = True
+    return int(drawn.sum())
 
 
 def _polyline(np, image, zbuf, scr, color, width, bias, on_top=False):

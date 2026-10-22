@@ -165,7 +165,9 @@ class Host:
         return None
 
     def pop_highlight(self, doc, saved):
-        pass
+        """Put back what push_highlight changed; False when the marked faces / edges could
+        not be drawn."""
+        return None
 
     def screenshot(self, doc, width, height):
         raise UserError(catalog.NEEDS["gui"])

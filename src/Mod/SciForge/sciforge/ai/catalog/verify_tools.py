@@ -36,6 +36,11 @@ define(
                 ("summary", "full"), "full adds every step's definition", default="summary"
             ),
             "bodies": step_ids("only these bodies (default: all)"),
+            "snapshot": boolean(
+                "false: keep no snapshot (the resource sciforge://design reads this way, so "
+                "reading it does not push out the snapshot ids you hold)",
+                default=True,
+            ),
         }
     ),
     changes=False,
@@ -79,7 +84,9 @@ define(
     "of edges, bounding box. Each comes with ref: a selector that picks exactly that one "
     "element by its geometry (stable when FreeCAD renumbers faces), and pick: the same ready "
     "for measure, create_sketch face, construct_plane... Pass ref straight to fillet, chamfer, "
-    "shell, draft (edges / faces) to change exactly that element. of: a body or step id "
+    "shell, draft (edges / faces) to change exactly that element; ref names its body "
+    '("body"), and those tools work on the active body, so activate that body first (a '
+    "tool working on another body refuses the ref). of: a body or step id "
     "(default the body being worked on; a step: the solid as it was after that step). "
     "element: faces (default), edges or vertices. select: a selector (default all; for "
     "vertices only at / all / count). limit: at most this many (default 60).",

@@ -6,7 +6,7 @@ Fusion: Selection filters + INSPECT > Measure (on what a selector picks). Catego
 
 ## What it does
 
-List the faces, edges or corners (vertices) of a body or step that a selector picks, with facts about each: type (plane, cylinder... / line, circle...), area mm2 or length mm, centre, normal of flat faces, axis and radius of round ones, start / end and direction of edges, bounding box. Each comes with ref: a selector that picks exactly that one element by its geometry (stable when FreeCAD renumbers faces), and pick: the same ready for measure, create_sketch face, construct_plane... Pass ref straight to fillet, chamfer, shell, draft (edges / faces) to change exactly that element. of: a body or step id (default the body being worked on; a step: the solid as it was after that step). element: faces (default), edges or vertices. select: a selector (default all; for vertices only at / all / count). limit: at most this many (default 60).
+List the faces, edges or corners (vertices) of a body or step that a selector picks, with facts about each: type (plane, cylinder... / line, circle...), area mm2 or length mm, centre, normal of flat faces, axis and radius of round ones, start / end and direction of edges, bounding box. Each comes with ref: a selector that picks exactly that one element by its geometry (stable when FreeCAD renumbers faces), and pick: the same ready for measure, create_sketch face, construct_plane... Pass ref straight to fillet, chamfer, shell, draft (edges / faces) to change exactly that element; ref names its body ("body"), and those tools work on the active body, so activate that body first (a tool working on another body refuses the ref). of: a body or step id (default the body being worked on; a step: the solid as it was after that step). element: faces (default), edges or vertices. select: a selector (default all; for vertices only at / all / count). limit: at most this many (default 60).
 
 ## Arguments
 
@@ -70,8 +70,8 @@ The answer:
    "diameter_mm": 8.0,
    "bbox_mm": [26.0, 16.0, 0.0, 34.0, 24.0, 10.0],
    "edges": 3,
-   "ref": {"type": "cylinder", "radius": 4.0, "count": 1},
-   "pick": {"face": {"type": "cylinder", "radius": 4.0, "count": 1}}
+   "ref": {"type": "cylinder", "radius": 4.0, "count": 1, "body": "Body"},
+   "pick": {"face": {"type": "cylinder", "radius": 4.0, "count": 1, "body": "Body"}}
   }
  ],
  "note": "name (Face3...) is FreeCAD's number for the element now and changes when the model changes; ref is a selector that picks the same element by its geometry: use ref (or pick) in other tools. Coordinates are in mm, in Body's own coordinates."
@@ -120,14 +120,16 @@ The answer:
     "type": "line",
     "parallel": [1.0, 0.0, 0.0],
     "at": [{"axis": "y", "value": "min"}, {"axis": "z", "value": "max"}],
-    "count": 1
+    "count": 1,
+    "body": "Body"
    },
    "pick": {
     "edge": {
      "type": "line",
      "parallel": [1.0, 0.0, 0.0],
      "at": [{"axis": "y", "value": "min"}, {"axis": "z", "value": "max"}],
-     "count": 1
+     "count": 1,
+     "body": "Body"
     }
    }
   },
@@ -144,14 +146,16 @@ The answer:
     "type": "line",
     "parallel": [0.0, 1.0, 0.0],
     "at": [{"axis": "x", "value": "max"}, {"axis": "z", "value": "max"}],
-    "count": 1
+    "count": 1,
+    "body": "Body"
    },
    "pick": {
     "edge": {
      "type": "line",
      "parallel": [0.0, 1.0, 0.0],
      "at": [{"axis": "x", "value": "max"}, {"axis": "z", "value": "max"}],
-     "count": 1
+     "count": 1,
+     "body": "Body"
     }
    }
   },
@@ -165,11 +169,7 @@ The answer:
    "closed": false,
    "direction": [-1.0, 0.0, 0.0],
    "ref": {
-    "type": "line",
-    "parallel": [-1.0, 0.0, 0.0],
-    "at": [{"axis": "y", "value": "max"}, {"axis": "z", "value": "max"}],
-    "count": 1
-... (37 more lines)
+... (45 more lines)
 ```
 
 ## More argument examples

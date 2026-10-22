@@ -13,7 +13,8 @@ it keeps working when FreeCAD renumbers "Face7", and the AI can hand it straight
 chamfer, measure or create_sketch. It is built from the cheapest filters that make the
 pick unique (the type, then the normal / direction / radius, then the position along x, y
 and z, "max" / "min" when the element is at the extreme, so "the top face" stays the top
-face when the part grows), then checked with the selector code itself.
+face when the part grows), then checked by the selector's rules (_Index.select, the same
+tests as selectors.select on facts measured once).
 
 Needs FreeCAD (Part shapes); no Qt.
 """
@@ -149,6 +150,7 @@ class _Index:
         self.direction = []
         self.radius = []
         self.center = []
+        self._seen = {}
         classify = selectors.face_type if element == "faces" else selectors.edge_type
         for _name, sub in self.items:
             kind = classify(sub)
@@ -179,6 +181,31 @@ class _Index:
         if self.radius[i] is not None:
             spec["radius"] = _r(self.radius[i], 9)
         return spec
+
+    def candidates(self, spec):
+        """The elements that pass the selector's filters (no "at"), worked out once per
+        distinct filter set: the 400 holes of a plate share one, so a ref for each of them
+        does not go through every element again."""
+        key = repr(
+            sorted((k, spec[k]) for k in ("type", "normal", "parallel", "radius") if k in spec)
+        )
+        found = self._seen.get(key)
+        if found is None:
+            found = self._seen[key] = [j for j in range(len(self.items)) if self.matches(j, spec)]
+        return found
+
+    def select(self, spec):
+        """The indexes a selector made of type / normal / parallel / radius / at / count picks,
+        by selectors.select's rules (the same tests and tolerances, in the same order) on
+        the facts worked out above: how a ref is checked without measuring every element
+        again for each ref (that made 500 refs of a holed plate take 50 s)."""
+        kept = self.candidates(spec)
+        conditions = spec.get("at", [])
+        for at in conditions if isinstance(conditions, list) else [conditions]:
+            if not kept:
+                break
+            kept = _filter_at(self, kept, str(at["axis"]).lower(), at["value"])
+        return kept
 
     def matches(self, j, spec):
         """Element j passes the selector's filters (selectors.select's rules)."""
@@ -219,7 +246,7 @@ def _unique(index, i):
     spec = index.base(i)
     if not spec:
         return None
-    candidates = [j for j in range(len(index.items)) if index.matches(j, spec)]
+    candidates = index.candidates(spec)
     if i not in candidates:
         return None
     conditions = []
@@ -269,12 +296,22 @@ def stable_refs(shape, element, wanted=None, verify=True):
         spec = _unique(index, i)
         if spec is not None and verify:
             try:
-                if selectors.select(shape, spec, element) != [name]:
+                if index.select(spec) != [i]:
                     spec = None
             except Exception:
                 spec = None
         out[name] = spec
     return out
+
+
+def tie_to_body(refs, body_name):
+    """Put the body the refs were made for in each of them ({"body": "Body001", ...}): a tool
+    that works on another body refuses such a ref (selectors._check_body) instead of
+    picking the matching element of that other body."""
+    for spec in refs.values():
+        if spec is not None:
+            spec["body"] = body_name
+    return refs
 
 
 def pick_of(name, element, ref, sub=None):

@@ -32,6 +32,7 @@ import subprocess
 import sys
 import threading
 import time
+import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", "..", "..", ".."))
@@ -123,6 +124,53 @@ def png_size(data):
     if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
         return None
     return struct.unpack(">II", data[16:24])
+
+
+def png_rgb(data):
+    """The pixels of a PNG (8-bit RGB or RGBA, not interlaced, any row filter: what SciForge's
+    renderer and Qt write) as rows of (r, g, b), or None."""
+    size = png_size(data)
+    if size is None or data[24:25] != b"\x08" or data[25:26] not in (b"\x02", b"\x06"):
+        return None
+    if data[28:29] != b"\x00":
+        return None
+    width, height = size
+    channels = 3 if data[25:26] == b"\x02" else 4
+    pos, idat = 8, b""
+    while pos < len(data):
+        length = struct.unpack(">I", data[pos : pos + 4])[0]
+        if data[pos + 4 : pos + 8] == b"IDAT":
+            idat += data[pos + 8 : pos + 8 + length]
+        pos += 12 + length
+    raw = zlib.decompress(idat)
+    stride = width * channels
+    rows, prev = [], bytearray(stride)
+    for y in range(height):
+        kind = raw[y * (stride + 1)]
+        line = bytearray(raw[y * (stride + 1) + 1 : (y + 1) * (stride + 1)])
+        for i in range(stride):
+            left = line[i - channels] if i >= channels else 0
+            up = prev[i]
+            corner = prev[i - channels] if i >= channels else 0
+            if kind == 1:
+                line[i] = (line[i] + left) & 255
+            elif kind == 2:
+                line[i] = (line[i] + up) & 255
+            elif kind == 3:
+                line[i] = (line[i] + (left + up) // 2) & 255
+            elif kind == 4:
+                p = left + up - corner
+                pa, pb, pc = abs(p - left), abs(p - up), abs(p - corner)
+                near = left if pa <= pb and pa <= pc else up if pb <= pc else corner
+                line[i] = (line[i] + near) & 255
+        rows.append([tuple(line[x * channels : x * channels + 3]) for x in range(width)])
+        prev = line
+    return rows
+
+
+def orange_pixels(rows):
+    """How many pixels are the highlight's orange (render_core.HIGHLIGHT, shaded)."""
+    return sum(1 for row in rows for r, g, b in row if r > 200 and 90 < g < 180 and b < 80)
 
 
 def made_id(result):
@@ -285,6 +333,32 @@ def script(agent, out_dir=None):
         == [a.ids[k] for k in ("sketch", "extrude", "hole_sketch", "hole", "pattern", "fillet")],
         names,
     )
+    # 6b. a ref from query_geometry drives a change: the plate's front bottom edge
+    edge = json_of(
+        a.call(
+            "query_geometry",
+            {
+                "element": "edges",
+                "select": {
+                    "type": "line",
+                    "parallel": [1, 0, 0],
+                    "at": [{"axis": "y", "value": "min"}, {"axis": "z", "value": "min"}],
+                },
+            },
+        )
+    )
+    ref = ((edge or {}).get("elements") or [{}])[0].get("ref")
+    a.check("query_geometry gives the edge a ref", ref and ref.get("count") == 1, edge)
+    r = a.call("chamfer", {"edges": ref, "distance": 2})
+    a.ids["chamfer"] = made_id(r)
+    body, _ = a.body()
+    chamfered = body.get("volume_mm3") or 0
+    a.check(
+        "the ref chamfered exactly that edge: 2 x 2 / 2 x 60 = 120 mm3 less",
+        abs((got - chamfered) - 120.0) < 1e-4,
+        "before %s, after %s" % (got, chamfered),
+    )
+    got = chamfered
     # 7. a mistake: changes nothing and says why
     r = a.call("fillet", {"edges": TOP4, "radius": 50}, expect_error=True)
     a.check(
@@ -305,6 +379,7 @@ def script(agent, out_dir=None):
     )
     changed = [s["id"] for s in (diff or {}).get("steps", {}).get("changed", [])]
     a.check("... and the extrude changed", a.ids["extrude"] in changed, diff and diff["steps"])
+    pictures = {}
     for args in (
         {},
         {
@@ -314,6 +389,12 @@ def script(agent, out_dir=None):
             "renderer": "software",
             "highlight": {"faces": {"type": "cylinder", "radius": 3}},
         },
+        {  # the default renderer (the window's when SciForge is open): holes seen from above
+            "view": "iso",
+            "width": 400,
+            "height": 300,
+            "highlight": {"faces": {"normal": [0, 0, 1], "count": 1}},
+        },
     ):
         r = a.call("render", args)
         images = [c for c in r.get("content", []) if c["type"] == "image"]
@@ -321,8 +402,12 @@ def script(agent, out_dir=None):
         if images and images[0].get("mimeType") == "image/png":
             data = base64.b64decode(images[0]["data"])
             size = png_size(data)
+            pictures[len(pictures)] = data
             if out_dir:
-                name = "agent-render-%s.png" % (args.get("view") or "iso")
+                name = "agent-render-%s%s.png" % (
+                    args.get("view") or "iso",
+                    "-highlight" if args.get("highlight") else "",
+                )
                 with open(os.path.join(out_dir, name), "wb") as handle:
                     handle.write(data)
         want = (args.get("width", 800), args.get("height", 600))
@@ -331,6 +416,16 @@ def script(agent, out_dir=None):
             size == want,
             size,
         )
+        rows = png_rgb(data) if size == want else None
+        count = orange_pixels(rows) if rows else None
+        if not args.get("highlight"):
+            a.check("a plain render has no orange", count == 0, count)
+        elif args.get("view") == "iso":  # the top face, seen from above, is a big orange area
+            a.check(
+                "the highlighted top face is orange in the picture (%s)" % text_of(r)[:60],
+                count is not None and count > 0.1 * want[0] * want[1] and "in orange" in text_of(r),
+                "%s orange pixels: %s" % (count, text_of(r)[:200]),
+            )
     if out_dir:
         path = os.path.join(out_dir, "agent-plate.FCStd")
         if os.path.exists(path):

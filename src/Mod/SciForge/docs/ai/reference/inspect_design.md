@@ -14,6 +14,7 @@ Read the whole design as numbers, to check work before trusting a picture: every
 |---|---|---|---|---|---|
 | `detail` | `summary` \| `full` |  | `"summary"` |  | full adds every step's definition |
 | `bodies` | array of strings |  |  | at least 1 item(s) | only these bodies (default: all) |
+| `snapshot` | boolean |  | `true` |  | false: keep no snapshot (the resource sciforge://design reads this way, so reading it does not push out the snapshot ids you hold) |
 
 ## Answer
 

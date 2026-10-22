@@ -26,6 +26,9 @@ Filters (all optional, combined with AND, applied in this order):
     count        integer    the selection must contain exactly this many, or the
                             model fails loudly (protects against silent drift)
     any_of       [selector, ...]   union of several selectors (each may have count)
+    body         string     the id of the body the selector was made for (the refs of the
+                            AI tool query_geometry carry it): picking on another body's
+                            solid fails loudly instead of changing that other body
 """
 
 TOL = 1e-6
@@ -103,6 +106,8 @@ def select(shape, spec, element="edges"):
     """Return sorted element names (e.g. ["Edge3", "Edge9"]) matching spec."""
     if not isinstance(spec, dict):
         raise SelectionError("selector must be an object, got %r" % (spec,))
+    if "body" in spec:
+        _check_body(shape, spec["body"])
     if "any_of" in spec:
         names = set()
         for sub in spec["any_of"]:
@@ -192,6 +197,48 @@ def select(shape, spec, element="edges"):
     result = ["%s%d" % (prefix, i) for i, _ in items]
     _check_count(spec, result, element)
     return result
+
+
+def _holds(body, shape):
+    """Whether `shape` is the solid of the body or of one of its steps (the same OCC shape,
+    wherever it is placed)."""
+    for obj in [body] + list(getattr(body, "Group", []) or []):
+        try:
+            own = obj.Shape
+            if not own.isNull() and own.isPartner(shape):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _check_body(shape, name):
+    """A selector made for one body ("body", from query_geometry) used on another body's
+    solid: refused, saying which body the tool works on. The tools pick on the active body,
+    so without this a ref of Body2 rounded the matching edge of Body1, or picked nothing
+    with no reason given. A shape that belongs to no body (a moved copy) is not refused."""
+    if not isinstance(name, str) or not name:
+        raise SelectionError("'body' must be the id of a body, got %r" % (name,))
+    try:
+        import FreeCAD as App
+
+        docs = list(App.listDocuments().values())
+    except Exception:  # (plain Python: nothing to check against)
+        return
+    bodies = []
+    for doc in docs:
+        named = doc.getObject(name)
+        if named is not None and _holds(named, shape):
+            return
+        bodies += [o for o in doc.Objects if o.TypeId == "PartDesign::Body" and o.Name != name]
+    owner = next((b for b in bodies if _holds(b, shape)), None)
+    if owner is None:
+        return
+    raise SelectionError(
+        'this selector was made for body %s (its "body"), but the tool works on body %s '
+        '(%s): activate %s first (activate {"target": "%s"}), or query_geometry %s for '
+        "a ref of its own" % (name, owner.Name, owner.Label, name, name, owner.Name)
+    )
 
 
 def _natural(name):

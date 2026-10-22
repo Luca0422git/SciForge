@@ -321,6 +321,8 @@ A selector picks edges or faces by their geometry, the way a person would click 
 
   any_of: [selector, ...]: the union of several selectors (each may have its own count).
 
+  body: the id of the body the selector was made for (query_geometry's refs carry it): a tool that works on another body (the active one) refuses it instead of changing that body; activate this body first.
+
 Examples: the 4 top edges of a box {"type": "line", "at": {"axis": "z", "value": "max"}, "count": 4}; the top face {"normal": [0, 0, 1], "count": 1}; one specific edge {"type": "line", "parallel": [0, 1, 0], "at": [{"axis": "x", "value": 5}, {"axis": "z", "value": 5}], "count": 1}.
 
 Selectors look at the current body as it is now; call get_design first to see its size.

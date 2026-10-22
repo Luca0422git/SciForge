@@ -73,14 +73,17 @@ to fillet exactly the edge you looked at:
 ```
 
 (The chamfer's selector is the `ref` `query_geometry` answered for the front top edge; a
-1 mm chamfer along 60 mm removes 0.5 x 60 = 30 mm3.)
+1 mm chamfer along 60 mm removes 0.5 x 60 = 30 mm3.) A `ref` also names the body it came
+from (`"body": "Body001"`): fillet, chamfer and the other changing tools work on the active
+body, and refuse a ref of another body, so `activate` that body first.
 
 ## Pictures
 
 `render` returns the picture itself (MCP image content). `view` is iso (Fusion's Home: from
 the front-right-top), front, back, top, bottom, left, right, or `direction` [x, y, z] (where
 the camera looks from); `highlight` marks what a selector picks in orange (`of` a body or a
-step). In the SciForge window it uses the 3D view (the person's camera is put back after);
+step). In the SciForge window it uses the 3D view (the person's camera and selection are put
+back after, and the selection does not show in the picture);
 without the window SciForge's own software renderer draws flat-shaded solids, edges and
 sketches (no appearances, no transparency, no text). The answer says how many mm one pixel
 is. `screenshot` (window only) is the view as the person sees it.
