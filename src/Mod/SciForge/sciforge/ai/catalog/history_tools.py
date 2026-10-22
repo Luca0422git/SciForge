@@ -363,15 +363,18 @@ define(
     "document",
     "File > Close",
     "Close a design (default: the active one). Unsaved changes are refused unless "
-    "discard_changes is true (the person in SciForge is asked first).",
+    "discard_changes is true (the person in SciForge is asked first). A design text that "
+    "fits several open designs (one's id is another's name) is refused with their ids. "
+    "Another open design becomes the active one.",
     schema(
         {
-            "design": string("the design's name (list_designs)"),
+            "design": string("the design's id or name (list_designs)"),
             "discard_changes": boolean("close even with unsaved changes", default=False),
         }
     ),
     destructive=True,
     own_id=False,
+    needs=(),  # (design names one: no active design needed)
     title_fn=lambda a: "AI: Close design",
     extra=_extra_close,
     examples=[example({}, "close the active design (it must be saved)")],
@@ -393,8 +396,9 @@ define(
     "Switch design",
     "document",
     "click a design tab",
-    "Make another open design the active one (the tools then work on it).",
-    schema({"design": string("its name or label (list_designs)")}, ["design"]),
+    "Make another open design the active one (the tools then work on it). A text that fits "
+    "several open designs (one's id is another's name) is refused with their ids.",
+    schema({"design": string("its id or name (list_designs)")}, ["design"]),
     changes=False,
     needs=(),
     examples=[example({"design": "Bracket"}, "work on Bracket")],

@@ -23,9 +23,12 @@ from . import bridge_core, catalog, executor
 class HeadlessHost(executor.Host):
     gui = False
 
-    def __init__(self, allow_overwrite=False):
+    def __init__(self, allow_overwrite=False, overwrite_option=None, relative_base=None):
         executor.Host.__init__(self)
         self.allow_overwrite = bool(allow_overwrite)
+        if overwrite_option:
+            self.overwrite_option = overwrite_option  # (sciforge-cli: --force)
+        self.relative_base = relative_base  # (sciforge-cli: where the command was typed)
 
 
 def call(tool, args=None, host=None):

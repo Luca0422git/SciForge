@@ -34,12 +34,19 @@ def is_modified(ctx, doc):
     return doc.Name in executor.MODIFIED or not doc.FileName
 
 
-def _check_overwrite(ctx, path, own=None):
+def _check_overwrite(ctx, paths, own=None):
+    """Refuse (headless) or ask the person once (the window) when the file, or any of the
+    files (a list: One File Per Body), already exists."""
     from ... import versions
 
-    if os.path.exists(path) and not (own and versions.same_path(path, own)):
-        if not ctx.host.confirm_overwrite(path):
-            raise UserError(ctx.host.refuse_overwrite_text(path))
+    if isinstance(paths, str):
+        paths = [paths]
+    taken = [p for p in paths if os.path.exists(p) and not (own and versions.same_path(p, own))]
+    if not taken:
+        return
+    what = taken[0] if len(taken) == 1 else taken
+    if not ctx.host.confirm_overwrite(what):
+        raise UserError(ctx.host.refuse_overwrite_text(what))
 
 
 # -- undo / redo ------------------------------------------------------------------------------
@@ -99,7 +106,7 @@ def save(ctx, args):
         written = ctx.host.save(doc, None)
         executor.MODIFIED.discard(doc.Name)
         return bridge_core.result("Saved %s." % written)
-    path = os.path.abspath(path)
+    path = ctx.full_path(path)
     if not versions.is_design(path):
         raise UserError("The path must end in .FCStd.")
     _check_overwrite(ctx, path, doc.FileName)
@@ -131,13 +138,61 @@ def _hidden(doc):
         return False
 
 
+def _answers_to(doc, name):
+    """True when name is the design's id, its name, its file's name or its file's path."""
+    from ... import versions
+
+    if name in (doc.Name, doc.Label):
+        return True
+    if not doc.FileName:
+        return False
+    return os.path.basename(doc.FileName) == name or (
+        os.path.isabs(name) and versions.same_path(doc.FileName, name)
+    )
+
+
+def _handle(doc, designs):
+    """The shortest text that names this design alone ("id:<id>" when nothing else does)."""
+    names = [doc.Label, doc.Name]
+    if doc.FileName:
+        names[1:1] = [os.path.basename(doc.FileName), doc.FileName]
+    for name in names:
+        if [d for d in designs if _answers_to(d, name)] == [doc]:
+            return name
+    return "id:" + doc.Name
+
+
 def _find_design(name):
-    for doc in _designs():
-        if name in (doc.Name, doc.Label) or (
-            doc.FileName and os.path.basename(doc.FileName) == name
-        ):
-            return doc
-    raise UserError("No open design is called %r (list_designs lists them)." % name)
+    """The open design name names: its id, its name, its file's name or path, or "id:<id>"
+    (the id alone). A text that names several designs (one design's id is another's name: a
+    new "Part" beside a saved design whose id is "Part") is refused with each one's id, so
+    a close or a switch never acts on another design than the one meant."""
+    designs = _designs()
+    if name.startswith("id:"):
+        found = [d for d in designs if d.Name == name[3:]]
+    else:
+        found = [d for d in designs if _answers_to(d, name)]
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        raise UserError("No open design is called %r (list_designs lists them)." % name)
+    raise UserError(
+        "%r could mean %d open designs: %s. Nothing was done: give the one you mean exactly."
+        % (
+            name,
+            len(found),
+            "; ".join(
+                "%s (id %r, %s): give %r"
+                % (
+                    d.Label,
+                    d.Name,
+                    ("file %s" % os.path.basename(d.FileName)) if d.FileName else "never saved",
+                    _handle(d, designs),
+                )
+                for d in found
+            ),
+        )
+    )
 
 
 @action("new_design")
@@ -157,7 +212,7 @@ def new_design(ctx, args):
 def open_design(ctx, args):
     from ... import exchange_core, step_import
 
-    path = os.path.abspath(args["path"])
+    path = ctx.full_path(args["path"])
     if not os.path.isfile(path):
         raise UserError("There is no file %s." % path)
     notes = ""
@@ -209,11 +264,19 @@ def close_design(ctx, args):
     executor.forget(name, closed=True)
     executor.MODIFIED.discard(name)
     left = App.ActiveDocument
+    others = _designs()
+    if (left is None or left not in others) and others:
+        # The window makes another tab active; command-line FreeCAD leaves none active,
+        # and every later tool would answer that no design is open.
+        left = others[-1]
+        ctx.host.show_document(left)
     return bridge_core.result(
         "Closed %s.%s"
         % (
             label,
-            (" The active design is now %s." % left.Label) if left else " No design is open now.",
+            (" The active design is now %s (id %r)." % (left.Label, left.Name))
+            if left
+            else " No design is open now.",
         )
     )
 
@@ -310,7 +373,7 @@ def export_file(ctx, args):
 
     doc = ctx.need_doc()
     fmt = args["format"]
-    path = os.path.abspath(args["path"])
+    path = ctx.full_path(args["path"])
     if fmt == "dxf":
         if "sketch" in args:
             target = (ctx.resolve(args["sketch"], "sketch"), "")
@@ -335,11 +398,11 @@ def export_file(ctx, args):
     if fmt in MESH_LABELS:
         label = MESH_LABELS[fmt]
         path = export.with_extension(path, export.extension_of(label))
-        _check_overwrite(ctx, path)
         body_list = _bodies_for_export(ctx, doc, args)
         level = args.get("refinement", export.DEFAULT_REFINEMENT)
         unit = args.get("unit", "Millimeter")
         per_body = bool(args.get("one_file_per_body"))
+        _check_overwrite(ctx, _mesh_files(export, body_list, path, label, per_body))
         written = export.export_mesh_files(
             doc, body_list, label, path, level=level, unit=unit, per_body=per_body
         )
@@ -396,6 +459,17 @@ def export_file(ctx, args):
     raise UserError("SciForge cannot export %s." % fmt)
 
 
+def _mesh_files(export, body_list, path, label, per_body):
+    """The files a mesh export writes (export_mesh_files: one per body with One File Per
+    Body and several bodies, else the one path)."""
+    if per_body and len(body_list) > 1:
+        base = os.path.splitext(os.path.basename(path))[0]
+        return export.body_file_names(
+            [b.Label for b in body_list], os.path.dirname(path), base, export.extension_of(label)
+        )
+    return [path]
+
+
 def _files_label(paths):
     """A file's name, or "N files" (One File Per Body), as the window's message says."""
     if len(paths) == 1:
@@ -413,7 +487,7 @@ def _tip(ctx, doc):
 # -- insert -----------------------------------------------------------------------------------
 @action("import_file")
 def import_file(ctx, args):
-    path = os.path.abspath(args["path"])
+    path = ctx.full_path(args["path"])
     if not os.path.isfile(path):
         raise UserError("There is no file %s." % path)
     ext = os.path.splitext(path)[1].lower()
