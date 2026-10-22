@@ -220,12 +220,14 @@ def run(tool, args, host):
                 return bridge_core.error_result("SciForge cannot do %s yet." % tool)
         # the undo steps SciForge's timeline and history operations open are named after
         # the call too ("AI: Suppress", not "Suppress Fillet 1"): Undo last AI step finds them
+        failed = True
         try:
             with timeline_ops.undo_title(ctx.title):
                 answer = ctx.build() if handler is None else handler(ctx, args)
+            failed = bool(answer.get("is_error"))
         finally:
             if entry["changes_design"]:
-                _close_empty_transaction(ctx.title)
+                _close_left_transaction(ctx.title, failed)
         if before is not None and not answer.get("is_error"):
             verify_actions.after_change(before["doc"], before)  # (diff_design last_change)
         return answer
@@ -236,17 +238,19 @@ def run(tool, args, host):
         return bridge_core.error_result("Not done (%s): %s" % (tool, _plain(exc)))
 
 
-def _close_empty_transaction(title):
-    """FreeCAD keeps a transaction open after commitTransaction when nothing was recorded in
-    it (a Visibility change is not recorded, for one): the next change made outside a
-    transaction would land in that step. Close ours (`title`; it is empty, nothing is lost);
-    a transaction someone else opened (a dialog in the window) is left alone."""
+def _close_left_transaction(title, failed):
+    """FreeCAD keeps a transaction open after commitTransaction / abortTransaction when
+    nothing was recorded in it yet (a Visibility change is not recorded, for one): the next
+    change, made outside a transaction (a failed edit's search for the largest value that
+    fits, the person's next click), would land in that step. Close ours (`title`): taken
+    back when the call failed (a failed call changes nothing), kept otherwise. A transaction
+    someone else opened (a dialog in the window) is left alone."""
     try:
         active = App.getActiveTransaction()
         if active and active[0] == title:
-            App.closeActiveTransaction(False)
+            App.closeActiveTransaction(bool(failed))
     except Exception as exc:
-        warn("AI: closing an empty undo step: %s" % exc)
+        warn("AI: closing an undo step left open: %s" % exc)
 
 
 def _plain(exc):
@@ -339,8 +343,10 @@ class Context:
         try:
             value = fn()
             doc.commitTransaction()
+            _close_left_transaction(title, False)
         except BaseException:
             doc.abortTransaction()
+            _close_left_transaction(title, True)  # (else the recompute below lands in it)
             try:
                 doc.recompute()
             except Exception:
@@ -422,9 +428,11 @@ class Context:
             if limited and self._changed_nothing(doc, before, shapes_before):
                 raise _NoChange(self.title)  # (a shell thicker than the part)
             doc.commitTransaction()
+            _close_left_transaction(self.title, False)
             return None
         except Exception as exc:
             doc.abortTransaction()
+            _close_left_transaction(self.title, True)
             try:
                 doc.recompute()
             except Exception:
@@ -469,6 +477,7 @@ class Context:
             ok = False
         finally:
             doc.abortTransaction()
+            _close_left_transaction("AI: trying a value", True)
             builder.objects.pop(step_id, None)
         return ok
 
