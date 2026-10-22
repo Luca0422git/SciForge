@@ -71,4 +71,14 @@ The AI copies of the three docs (`src/Mod/SciForge/docs/ai/user/...`) were regen
 
 ## Tests run
 
-See the report of this session (the run results are in the commit that adds this file).
+All with the real FreeCAD 1.1.4 (`tools/sciforge/run_tests.sh`), on this branch:
+
+- `--only base`: all passed (2101 unit tests, 453 golden models with the 2 known xfail,
+  headless AI tools, documentation examples, AI agent end to end, smoke, journey).
+- Before the fix, `drawing_update` failed with the reviewer's three checks; after it, it
+  passes (39 checks).
+- 61 scenarios, all passing: every scenario named in core-workflows.md (49), `sketch_explain`,
+  the new `gaps_edit_rollback`, the other drawing scenarios (`drawing2_breakout`,
+  `drawing2_reopen`, `drawing2_sections`, `drawing_reopen`, `drawing_close`,
+  `drawing_pdf_layers`) and the ones that use the faster Undo (`undo_fast`, `versions_link`,
+  `perf_big_model`, `ai_tools_gui`).
