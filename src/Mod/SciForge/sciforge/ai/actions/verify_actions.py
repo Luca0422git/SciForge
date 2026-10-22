@@ -938,7 +938,13 @@ def _words(diff):
 def _since_step(ctx, doc, ident):
     from ... import bodies, timeline_ops
 
-    obj = ctx.resolve(ident, "snapshot id, step")
+    try:
+        obj = ctx.resolve(ident, "step")
+    except UserError:
+        raise UserError(
+            "There is no step or snapshot called %r: give a snapshot id that inspect_design "
+            'answered ("S1"), "last_change", or a step id from get_timeline.' % ident
+        )
     body = obj if bodies.is_body(obj) else bodies.body_of(obj)
     if body is None:
         raise UserError("%s is not in a body: give a step of a body, or a snapshot id." % ident)
