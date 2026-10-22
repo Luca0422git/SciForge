@@ -11,6 +11,9 @@ Path 4, save_as through SciForge's own saving (the file exists, the design is na
 Path 5, create_drawing, get_drawing, export_drawing to a PDF (TechDraw prints only with the
   window).
 Path 6, undo takes the last change back; a tool that needs the window is never refused here.
+Path 7 (integration, 2026-10-22), export STEP with the window open: the answer says what the
+  file does not keep (the timeline, the sketch) and the window shows the same message card
+  (export_report_ui); colours are written with the window, so no colour line.
 """
 
 import base64
@@ -153,4 +156,28 @@ def undo():
     h.check("no pop-up left", not h.popups(), h.popups())
 
 
-h.run("ai_tools_gui", [block, camera, hide_and_edit, save, drawing, undo])
+# -- Path 7 -------------------------------------------------------------------------------------
+def export_report():
+    from sciforge import export_report_ui
+
+    export_report_ui.clear_recent()
+    path = os.path.join(s["dir"], "ai-gui.step")
+    a = call("export", {"format": "step", "path": path})
+    ok(
+        "export says what the STEP does not keep",
+        a,
+        os.path.isfile(path)
+        and "Not kept in this file:" in a["text"]
+        and "- the timeline (" in a["text"]
+        and "colours" not in a["text"],
+    )
+    cards = export_report_ui.recent()
+    h.check(
+        "the window shows the same message card",
+        bool(cards) and cards[-1]["title"] == "Exported ai-gui.step"
+        and all(line in a["text"] for line in cards[-1]["lines"]),
+        cards[-1:] if cards else cards,
+    )
+
+
+h.run("ai_tools_gui", [block, camera, hide_and_edit, save, drawing, undo, export_report])
