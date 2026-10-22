@@ -27,7 +27,8 @@ every object left touched had its Shape put back by that Undo / Redo (an object 
 Shape, a spreadsheet, a component: rebuilt as before), and none is in error. Anything the
 ledger cannot vouch for (a transaction it did not see start, its stack out of step with
 FreeCAD's) is rebuilt as before. The touched marks are then cleared (the design is up to
-date: nothing for the next recompute to redo).
+date: nothing for the next recompute to redo). What is built on the design but keeps no
+Shape in the undo stack (a drawing's views and dimensions) is recomputed, alone (followers).
 
 Ledger (the decisions) is pure Python and unit tested (test_undo_fast.py); install() and
 the observer need FreeCAD.
@@ -151,13 +152,31 @@ class Ledger:
         return ""
 
 
+def followers(stale, dependents):
+    """Names of the objects to recompute when the design itself is not: of `dependents`
+    ((name, has a Shape) of everything built on the `stale` objects, the objects an Undo /
+    Redo left touched), those that keep no Shape FreeCAD could put back. A drawing's views
+    and dimensions, its page, a component: what they show was computed from the old shapes
+    and is not in the undo stack, so they would keep showing the undone design (a drawing
+    with the R8 fillets after the R8 edit was undone, 2026-10-22). An object with a Shape is
+    right: the Undo / Redo put it back, or it did not change."""
+    stale = set(stale)
+    out = []
+    for name, has_shape in dependents:
+        if not has_shape and name not in stale and name not in out:
+            out.append(name)
+    return out
+
+
 # -- FreeCAD ----------------------------------------------------------------------------------
 import os as _os
 
 _DEBUG = bool(_os.environ.get("SCIFORGE_UNDO_DEBUG"))
 _ledgers = {}
 _observer = {"app": None}
-stats = {"skipped": 0, "rebuilt": 0}  # Undo / Redo settled without / with a rebuild (tests)
+# Undo / Redo settled without / with a rebuild, and the objects without a Shape recomputed
+# after one settled without (followers()) (tests)
+stats = {"skipped": 0, "rebuilt": 0, "followers": 0}
 
 
 def ledger(doc_name):
@@ -294,6 +313,20 @@ def touched(doc):
     return out
 
 
+def _dependents(doc, names):
+    """The objects followers() picks among everything built on the objects `names`."""
+    found = []
+    for name in names:
+        obj = doc.getObject(name)
+        if obj is None:
+            continue
+        for dep in obj.InListRecursive:
+            if dep.Document is doc and dep not in found:
+                found.append(dep)
+    keep = followers(names, [(o.Name, "Shape" in o.PropertiesList) for o in found])
+    return [doc.getObject(name) for name in keep if doc.getObject(name) is not None]
+
+
 def settle_without_rebuild(doc):
     """After an Undo / Redo: True (and the touched marks cleared) when every shape FreeCAD
     put back is already the right one, so no recompute is needed; False to recompute."""
@@ -307,12 +340,20 @@ def settle_without_rebuild(doc):
             stats["rebuilt"] += 1
             _info("after Undo / Redo, %s rebuilt: %s" % (doc.Label, why))
             return False
+        after = _dependents(doc, [name for name, _has_shape, _broken in stale])
         for name, _has_shape, _broken in stale:
             obj = doc.getObject(name)
             if obj is not None:
                 obj.purgeTouched()
         led.decision = None  # once
         stats["skipped"] += 1
+        if after:
+            # (the design is as built, but a drawing of it is not: recompute those only)
+            for obj in after:
+                obj.touch()
+            doc.recompute(after)
+            stats["followers"] += len(after)
+            _info("after Undo / Redo, %s: recomputed %s" % (doc.Label, ", ".join(o.Name for o in after)))
         return True
     except Exception:
         stats["rebuilt"] += 1

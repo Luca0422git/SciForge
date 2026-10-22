@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from sciforge.undo_fast import Ledger  # noqa: E402
+from sciforge.undo_fast import Ledger, followers  # noqa: E402
 
 TOUCHED = [("Pad", True, False), ("Fillet", True, False), ("Body", True, False)]
 
@@ -152,6 +152,29 @@ class LedgerTest(unittest.TestCase):
 
     def test_no_undo_seen(self):
         self.assertIn("no Undo", Ledger().why_not(TOUCHED))
+
+
+class FollowersTest(unittest.TestCase):
+    """What is built on the design but keeps no Shape in the undo stack is recomputed after an
+    Undo / Redo that skips the rebuild (2026-10-22: a drawing kept the R8 fillets after the R8
+    edit was undone)."""
+
+    def test_a_drawing_of_the_design(self):
+        deps = [
+            ("Fillet001", True),  # a later step: its Shape was put back
+            ("Body", True),
+            ("View", False),  # TechDraw::DrawViewPart of the body
+            ("Dimension", False),
+            ("Page", False),
+        ]
+        self.assertEqual(followers(["Fillet"], deps), ["View", "Dimension", "Page"])
+
+    def test_nothing_built_on_it(self):
+        self.assertEqual(followers(["Fillet"], [("Body", True), ("Fillet001", True)]), [])
+
+    def test_stale_objects_and_repeats_are_not_followers(self):
+        deps = [("Sheet", False), ("View", False), ("View", False)]
+        self.assertEqual(followers(["Sheet"], deps), ["View"])
 
 
 if __name__ == "__main__":

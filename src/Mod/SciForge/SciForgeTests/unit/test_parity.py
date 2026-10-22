@@ -215,6 +215,51 @@ class TestMatching(unittest.TestCase):
         self.assertIn("- SURFACE > MODIFY > Fillet: SOLID > MODIFY > Fillet", text)
         self.assertIn("- sculpting (1 entries, 0 present): SOLID > CREATE > Create Form", text)
 
+    def test_another_panel_of_the_tab_is_elsewhere_and_shared_entries_are_listed(self):
+        # Fusion's CREATE > New Component is SciForge's ASSEMBLE > New Component: counted, but
+        # listed where it is; ASSEMBLE > Joint Origin is found in its own panel first
+        E = parity.Entry
+        entries = [
+            E("tab:solid", ("SOLID", "CREATE", "Joint Origin"), "Joint Origin", True),
+            E("tab:solid", ("SOLID", "ASSEMBLE", "New Component"), "New Component", True),
+            E("tab:solid", ("SOLID", "ASSEMBLE", "Joint Origin"), "Joint Origin", True),
+        ]
+        items = parity.parse_menus(
+            "SOLID [in=tab:solid]\n  CREATE\n    New Component\n"
+            "  ASSEMBLE\n    New Component\n    Joint Origin\n"
+        )
+        results = parity.compare(items, entries, [])
+        found = {r.item.path: (r.status, r.where.path) for r in results}
+        self.assertEqual(
+            found[("SOLID", "CREATE", "New Component")],
+            ("elsewhere", ("SOLID", "ASSEMBLE", "New Component")),
+        )
+        self.assertEqual(
+            found[("SOLID", "ASSEMBLE", "New Component")],
+            ("present", ("SOLID", "ASSEMBLE", "New Component")),
+        )
+        self.assertEqual(
+            found[("SOLID", "ASSEMBLE", "Joint Origin")],
+            ("present", ("SOLID", "ASSEMBLE", "Joint Origin")),
+        )
+        text = parity.render(results, entries, "2026-01-02")
+        self.assertIn("- SOLID > CREATE > New Component: SOLID > ASSEMBLE > New Component\n", text)
+        self.assertIn("## One SciForge entry for several Fusion entries", text)
+        self.assertIn(
+            "- SOLID > ASSEMBLE > New Component: SOLID > CREATE > New Component; "
+            "SOLID > ASSEMBLE > New Component\n",
+            text,
+        )
+
+    def test_a_byte_order_mark_is_ignored(self):
+        # Windows Notepad's "UTF-8 with BOM": the first line is still a comment
+        folder = tempfile.mkdtemp(prefix="sciforge-parity-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        with open(os.path.join(folder, "menus.txt"), "wb") as handle:
+            handle.write(b"\xef\xbb\xbf" + SAMPLE.lstrip("\n").encode("utf-8"))
+        text = parity._read(folder, "menus.txt")
+        self.assertEqual(parity.parse_menus(text), parity.parse_menus(SAMPLE.lstrip("\n")))
+
     def test_only_the_date_may_differ_for_check(self):
         text = parity.render(list(self.results.values()), self.entries, "2026-01-02")
         later = parity.render(list(self.results.values()), self.entries, "2027-05-06")
@@ -340,6 +385,27 @@ class TestCheckMode(unittest.TestCase):
         code, printed = _run("--check", "--out", self.out)
         self.assertEqual(code, 1)
         self.assertIn("out of date", printed)
+
+    def test_writing_an_unchanged_checklist_keeps_its_date(self):
+        # two branches regenerating on different days must not conflict on the date line
+        self.assertEqual(_run("--out", self.out, "--date", "2026-01-02")[0], 0)
+        code, printed = _run("--out", self.out, "--date", "2026-02-03")
+        self.assertEqual(code, 0)
+        self.assertIn("already up to date", printed)
+        with open(self.out, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn("parity.py on 2026-01-02;", text)
+        with open(self.out, "w", encoding="utf-8") as handle:
+            handle.write(text.replace("| Area |", "| Tab |"))
+        self.assertEqual(_run("--out", self.out, "--date", "2026-02-03")[0], 0)
+        with open(self.out, encoding="utf-8") as handle:
+            self.assertIn("parity.py on 2026-02-03;", handle.read())
+
+    def test_a_checklist_that_cannot_be_written_is_reported_not_raised(self):
+        for target in (os.path.join(self.folder, "no-such-folder", "x.md"), self.folder):
+            code, printed = _run("--out", target, "--date", "2026-01-02")
+            self.assertEqual(code, 2, target)
+            self.assertIn("[SciForge] parity: could not write", printed)
 
     def test_check_fails_when_the_checklist_is_missing(self):
         code, printed = _run("--check", "--out", os.path.join(self.folder, "nothing.md"))
