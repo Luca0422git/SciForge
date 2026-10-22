@@ -298,6 +298,7 @@ class _Handle(BoxCarrier):
                 touch()  # also a release found from Qt's mouse state (pickpanel.Arrow)
                 if self.on_release:
                     self.on_release(self.value())
+                taskui.handle_released()  # the dialog's waiting rebuild now
             self.follow_box()
         except Exception as exc:
             warn("handle drag: %s" % exc)

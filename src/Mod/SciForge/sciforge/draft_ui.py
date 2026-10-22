@@ -43,6 +43,7 @@ from . import (
     pickpanel,
     preview,
     shape_checks,
+    taskui,
     ui_icon_path,
     value_limits,
     warn,
@@ -151,6 +152,11 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     # the live picture follows every change at once (draft_live); the exact solid is built
     # once the changes rest (taskui.Panel.schedule), never while the mouse drags something
     REST_FIRST = True
+    # The steepest angle that fits is looked for until it is exact (to the 0.1 deg step):
+    # with the search's usual 1.5 s budget a part whose trial drafts take 0.3 s got a
+    # different, too small "largest" angle from run to run (review finding DRAFT-1-F5). The
+    # search runs in the background (the budget counts only its builds) or at OK.
+    LIMIT_BUDGET = 12.0
 
     def __init__(self, doc, feature=None, picks=None, body=None):
         super().__init__(doc, "Draft" if feature is None else "Edit Draft")
@@ -177,8 +183,13 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         self._live_key = None  # the picks and options its pictures were made for
         self._live_failed = None  # a key the picture could not be made for (not retried)
         self._live_hid = False  # the preview solid is hidden behind the picture
+        # the live picture's key while the picks are refused whatever the angle (no picture
+        # then: the refusal stays in sight, review finding DRAFT-1-F4)
+        self._refused_for = None
+        self._accepting = False  # OK is running: a limit search runs to its end at once
         self._sound_upto = {}  # picks and options -> the steepest angle found to give a sound solid
         self.limit_init()  # an angle past what the faces take stops at the steepest that works
+        self.limits.budget = self.LIMIT_BUDGET
         if feature is not None:
             self.body = drafting.owner_body(feature)
             base, plane_ref, names, options, formula = drafting.read(feature)
@@ -986,6 +997,10 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 on_release=lambda d: self._turned(d, True),
             )
             hole_common.on_top(self.handle.root)
+            # a dragged angle past a limit found is held there: the disc's snaps leave it alone
+            self.handle.hold = lambda d: self.limit_held(
+                "angle", round(max(-89.9, min(89.9, d)), 1)
+            )
             field = self.angle
             self.value_boxes.attach(
                 self.handle,
@@ -1086,12 +1101,13 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             steep = "between -89.9 and 89.9" in reason
             held = None
             if steep:
-                held = self.limit_refused_soon("too steep: " + reason, self._limit_searched)
+                held = self._limit_refuse("too steep: " + reason)
             if held == "again":
                 return self._build_preview()
             if held == "later":
                 return self._searching()
             self.error = reason
+            self._note_refusal()
             self.show_status()
             return
         self.error = None
@@ -1141,7 +1157,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 if member.target is not None and _failed(member.target):
                     self.error = "%s: %s" % (member.body.Label, _status(member.target))
                     break
-        held = self.limit_refused_soon(self.error, self._limit_searched) if self.error else None
+        held = self._limit_refuse(self.error) if self.error else None
         if held == "again":
             return self._build_preview()  # held at the steepest angle that works: preview that
         if held == "later":
@@ -1150,9 +1166,39 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             self.error = self.limit_hint(self.error)
         else:
             self.limit_good()
+        self._note_refusal()
         self.show_preview(True)
         self.show_status()
         self._live_soon()
+
+    def _limit_refuse(self, reason):
+        """An angle refused as too steep: held at the steepest one that fits. While OK runs
+        the search runs to its end at once (OK takes the held angle and closes in one press:
+        review finding DRAFT-1-F1), else in the background (limit_refused_soon)."""
+        if self._accepting:
+            return "again" if self.limit_refused(reason) else None
+        return self.limit_refused_soon(reason, self._limit_searched, self._dragging)
+
+    def _dragging(self):
+        """True while a handle is being dragged (the mouse moved with a button held within
+        the rest time): the background search builds nothing then (a trial draft freezes the
+        handle for its whole length, review finding DRAFT-2-F1)."""
+        if self._closed or not taskui.button_held():
+            return False
+        return time.perf_counter() - self.last_moved() < self.PAUSE_MS / 1000.0
+
+    def _note_refusal(self):
+        """Remember the picks when they are refused for a reason that does not depend on the
+        angle (a face that cannot be drafted, nothing on the pull side of the parting line):
+        the live picture is not shown for them (_show_live)."""
+        try:
+            if self.error and drafting.angle_free(self.error):
+                self._refused_for = self._live_key_now()
+                self._hide_live()
+            else:
+                self._refused_for = None
+        except Exception:
+            self._refused_for = None
 
     def _sound(self):
         """True when FreeCAD's Draft made a sound solid. Checking a part of a few hundred
@@ -1202,7 +1248,7 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 self.limits.note = ""
             value_limits.busy(self)  # until the preview it asks for has run
             quiet = time.perf_counter() - self.last_moved()
-            if quiet < self.PAUSE_MS / 1000.0:
+            if quiet < self._rest_needed():
                 self.schedule(settle=True)
             else:
                 self._timer.stop()
@@ -1338,6 +1384,9 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         if self._closed or self.formula_error:
             return
         try:
+            if self._refused_for is not None and self._refused_for == self._live_key_now():
+                self._hide_live()  # refused whatever the angle: the refusal stays in sight
+                return
             overlay = self._live_overlay()
             if overlay is None:
                 return
@@ -1405,9 +1454,13 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             if missing:
                 self.say("⚠ " + missing)
                 return False
-            self.limit_finish()  # a search of the steepest angle still running: its end now
-            self._timer.stop()
-            self._preview()
+            self._accepting = True
+            try:
+                self.limit_finish()  # a search of the steepest angle still running: its end now
+                self._timer.stop()
+                self._preview()  # an angle past what fits is held at the limit here (at once)
+            finally:
+                self._accepting = False
             obj = self.target
             if self.formula_error or self.error or obj is None:
                 self.show_status()

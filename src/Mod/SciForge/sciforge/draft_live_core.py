@@ -22,6 +22,11 @@ the picked faces' own triangles, each point moved square to the pull direction:
   faces it lies on move it (two faces at an angle: where both moved planes meet; tangent
   faces: one shift; one face: straight out).
 
+  A wall that ends on a slanted face that is not drafted (a wedge's sloping top, a curved
+  top) cannot keep its points at their heights there: the point moves along the turned wall
+  (and the faces beside it) until it is back on the slanted face (slide(); review finding
+  DRAFT-1-F3: the outline moved half as far as its face, both off the exact solid).
+
   Two Side / Symmetric (and a Parting Line's One Side) split the faces at the hinge: the
   side away from the pull direction turns the other way (Angle 2, or no turn for One Side).
   The picture's triangles that cross the hinge are split there (split_triangles), so the
@@ -144,6 +149,57 @@ def solve(normals, pull, parallel=1e-3):
         for i, sign in members:
             weights[i] = scale(w, sign / len(members))
     return weights
+
+
+# -- a point on a slanted face that stays ------------------------------------------------------
+def slanted_cap(normal, pull, drafted_flats, parallel=0.9):
+    """True when a face that is not drafted, with outward `normal` at the point, is a slanted
+    cap for it: neither upright nor square to the pull direction, and facing (nearly) the same
+    way as a drafted face the point lies on (`drafted_flats`: their normals laid flat). Moving
+    square to the pull direction cannot keep the point on both (solve() would share the shift
+    between them); slide() keeps it on the cap instead."""
+    n = unit(normal)
+    up = abs(dot(n, pull))
+    if up < 1e-3 or up > 1.0 - 1e-9:
+        return False
+    f = flat(n, pull)
+    return any(abs(dot(f, d)) > parallel for d in drafted_flats)
+
+
+def turned_row(flat_normal, ta, pull):
+    """The normal (not unit) of a drafted face turned to lean by atan(ta): a point moved by d
+    stays on it when dot(row, d) is the face's shift (flat_normal: its outward normal laid
+    flat, unit)."""
+    return add(flat_normal, scale(pull, ta))
+
+
+def slide(move, cap, rows, pull):
+    """`move` (the point's move square to the pull direction, on the moved faces) slid along
+    the faces of `rows` (the normals of the faces the point stays on, as moved: turned_row()
+    for a drafted face) until the point is back on the slanted face with normal `cap` (which
+    passes through the point before the move). Along two faces at an angle: their common
+    line; along one: its steepest line."""
+    picked = []
+    for r in rows:
+        u = unit(r)
+        if dot(u, u) < 0.5:
+            continue
+        if picked and math.sqrt(max(0.0, dot(cross(picked[0], u), cross(picked[0], u)))) < 0.05:
+            continue  # (nearly) the same plane as the first (tangent faces)
+        picked.append(u)
+        if len(picked) == 2:
+            break
+    if len(picked) == 2:
+        along = cross(picked[0], picked[1])
+    elif picked:
+        r = picked[0]
+        along = sub(pull, scale(r, dot(r, pull)))
+    else:
+        along = pull
+    den = dot(cap, along)
+    if abs(den) < 1e-9:
+        return move
+    return add(move, scale(along, -dot(cap, move) / den))
 
 
 # -- bending at the hinge ------------------------------------------------------------------------

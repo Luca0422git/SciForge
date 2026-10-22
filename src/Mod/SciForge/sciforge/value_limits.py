@@ -211,7 +211,8 @@ def search_steps(
 ):
     """The search as a generator: it yields before every build, so a dialog can run one build
     per turn of the event loop (Background) and a dragged handle keeps moving in between; the
-    generator's return value is search()'s.
+    generator's return value is search()'s. `seen` (a dict) follows its progress: "works" the
+    nearest value built that works, "fails" the nearest one that does not.
 
     The value nearest `bad` that still works, between `good` (a value that works) and `bad`
     (one that does not): a tidy multiple of `step` on the side of `good`, built once more to be
@@ -252,6 +253,8 @@ def search_steps(
         yield
         if not build(good):
             return None, False
+    if seen is not None:
+        seen["works"] = good  # the progress so far: a value that works, one that does not
     start = begun if strict else clock()
     lo, hi = good, bad  # lo works, hi does not (lo may be above hi for a lower limit)
     trials = 0
@@ -270,6 +273,8 @@ def search_steps(
             lo = mid
         else:
             hi = mid
+        if seen is not None:
+            seen["works"], seen["fails"] = lo, hi
     if seen is not None:
         seen["fails"] = hi
     exact = abs(hi - lo) <= step * 0.5
@@ -507,10 +512,23 @@ class Limiter:
         return run_steps(self.find_steps(key, works, value, good, good_known, unit, keep))
 
     def find_steps(
-        self, key, works, value, good, good_known=False, unit=None, keep=None, clock=None
+        self,
+        key,
+        works,
+        value,
+        good,
+        good_known=False,
+        unit=None,
+        keep=None,
+        clock=None,
+        progress=None,
+        fails=None,
     ):
         """find() as a generator that yields before every build (search_steps); `clock`: the
-        search's clock (Background gives one that counts only the builds' time)."""
+        search's clock (Background gives one that counts only the builds' time); `progress`:
+        a dict that follows the search (search_steps' `seen`); `fails`: a value between `good`
+        and `value` already known not to work (an earlier search cut off): the search starts
+        from there."""
         side = side_of(value, good)
         slot = slot_of(side, value)
         sign = 1 if side == "hi" else -1
@@ -526,11 +544,14 @@ class Limiter:
             # value): search that gap
             good, good_known = limit, True
         self.searches += 1
-        seen = {}
+        seen = progress if progress is not None else {}
+        bad = value
+        if fails is not None and (fails - good) * sign > 1e-12 and (value - fails) * sign > 1e-12:
+            bad = fails
         limit, exact = yield from search_steps(
             works,
             good,
-            value,
+            bad,
             self.step(unit),
             self.budget,
             good_known=good_known,
@@ -600,15 +621,22 @@ class Background:
     dragger doesn't even update either: it waits behind for the model to update"). The clock
     it gives the search counts only the time spent in its builds, so the time budget means
     what it means when the search runs at once. on_done(result) is called once at the end
-    (not after cancel())."""
+    (not after cancel()).
 
-    def __init__(self, make_steps, on_done, key=None):
+    `paused()` (optional): True while no build may run now (a handle is being dragged: a
+    trial build would freeze it for its whole length, review finding DRAFT-2-F1); the job
+    looks again every PAUSE_POLL_MS. finish() does not wait for it."""
+
+    PAUSE_POLL_MS = 25
+
+    def __init__(self, make_steps, on_done, key=None, paused=None):
         self.spent = 0.0
         self._in = None
         self.key = key
         self.done = False
         self.result = None
         self.on_done = on_done
+        self.paused = paused
         self.steps = make_steps(self.clock)
         self.timer = None
 
@@ -651,13 +679,26 @@ class Background:
         try:
             if self.done:
                 return
+            if self._waits():
+                self.timer.setInterval(self.PAUSE_POLL_MS)
+                self.timer.start()
+                return
             if self.step():
                 self._end()
             elif self.timer is not None:
+                self.timer.setInterval(0)
                 self.timer.start()
         except Exception:
             self.done = True
             busy(self, False)
+
+    def _waits(self):
+        if self.paused is None or self.timer is None:
+            return False
+        try:
+            return bool(self.paused())
+        except Exception:
+            return False
 
     def _end(self):
         callback, self.on_done = self.on_done, None
@@ -780,6 +821,10 @@ class LimitedValues:
         self._limit_pending = False
         self._limit_busy = False
         self._limit_good = {}  # value name -> (key, value whose preview worked)
+        self._limit_job = None  # a Background search running (limit_refused_soon)
+        # value name -> (key, a value that works, one that does not): what a search learnt
+        # before it was cut off (the value went back below what it had found to fail)
+        self._limit_partial = {}
 
     def limit_unit(self, what):
         return "mm"
@@ -809,6 +854,7 @@ class LimitedValues:
         these inputs (never a formula's). Builds nothing."""
         self._limit_edit = (what, source)
         self._limit_pending = True
+        self._limit_stale(what, value)
         if source == "formula":
             self.limits.note = ""
             return value
@@ -818,6 +864,43 @@ class LimitedValues:
             )
         except Exception:
             return value
+
+    def _limit_stale(self, what, value):
+        """A Background search for `what` is cut off once the value goes back below the
+        nearest value it found not to work (review findings DRAFT-1-F2, DRAFT-2-F1): the new
+        value may work, and its preview must not wait for a search it does not need. What the
+        search learnt is kept (_limit_partial): if the new value is refused too, the next
+        search starts from there. A value still past what failed keeps the search going (its
+        limit holds that value too)."""
+        job = getattr(self, "_limit_job", None)
+        if job is None or job.done or getattr(job, "what", None) != what:
+            return
+        try:
+            value = float(value)
+            sign = job.sign
+            fails = job.progress.get("fails", job.value)
+            if value * job.value > 0 and (value - fails) * sign >= -1e-12:
+                return
+            works = job.progress.get("works")
+            if works is not None and value * job.value > 0:
+                self._limit_partial[what] = (job.key, works, fails)
+        except Exception:
+            pass
+        self.limit_cancel()
+
+    def _limit_bracket(self, what, key, value, good, known):
+        """(good, known, fails) for a search of `value`: an earlier search cut off for the same
+        inputs may have found a value nearer `value` that works and one that does not."""
+        found = self._limit_partial.get(what)
+        if found is None or found[0] != key:
+            return good, known, None
+        works, fails = found[1], found[2]
+        sign = 1.0 if value > good else -1.0
+        if works * value > 0 and (works - good) * sign > 1e-12 and (value - works) * sign > 1e-12:
+            good, known = works, True
+        if (fails - good) * sign > 1e-12 and (value - fails) * sign > -1e-12:
+            return good, known, fails
+        return good, known, None
 
     def limit_held(self, what, value):
         """`value` held at the limit known for these inputs (no note, nothing built): what a
@@ -855,14 +938,18 @@ class LimitedValues:
         good, known = self._limit_from(what, key, value)
         if good is None or abs(good - value) <= 1e-12:
             return None
-        return self.limits.find(
-            key,
-            self.limit_works(what),
-            value,
-            good,
-            good_known=known,
-            unit=self.limit_unit(what),
-            keep=self.limit_keep(),
+        good, known, fails = self._limit_bracket(what, key, value, good, known)
+        return run_steps(
+            self.limits.find_steps(
+                key,
+                self.limit_works(what),
+                value,
+                good,
+                good_known=known,
+                unit=self.limit_unit(what),
+                keep=self.limit_keep(),
+                fails=fails,
+            )
         )
 
     def limit_refused(self, reason):
@@ -890,12 +977,12 @@ class LimitedValues:
         finally:
             self._limit_busy = False
 
-    def limit_refused_soon(self, reason, done):
+    def limit_refused_soon(self, reason, done, paused=None):
         """limit_refused() without making the dialog wait for the search: "again" when the
         limit was known (the value is held at it now: preview again), "later" when the search
         started in the Background (done(limit) is called when it ends; the dialog's value is
         held at the limit then if it is still past it), None when the refusal is no limit
-        (the error stays)."""
+        (the error stays). `paused()`: True while the search must not build (Background)."""
         if self._limit_busy or not self._limit_pending or self._limit_edit is None:
             return None
         what, source = self._limit_edit
@@ -917,19 +1004,34 @@ class LimitedValues:
                 return "again"
             self.limit_cancel()
             works, unit, keep = self.limit_works(what), self.limit_unit(what), self.limit_keep()
+            good, known, fails = self._limit_bracket(what, key, value, good, known)
+            progress = {}
 
             def steps(clock):
                 return self.limits.find_steps(
-                    key, works, value, good, good_known=known, unit=unit, keep=keep, clock=clock
+                    key,
+                    works,
+                    value,
+                    good,
+                    good_known=known,
+                    unit=unit,
+                    keep=keep,
+                    clock=clock,
+                    progress=progress,
+                    fails=fails,
                 )
 
             def ended(limit):
                 self._limit_job = None
+                self._limit_partial.pop(what, None)
                 self._limit_ended(what, key, value, source, limit)
                 done(limit)
 
-            self._limit_job = Background(steps, ended, key)
-            self._limit_job.start()
+            job = Background(steps, ended, key, paused)
+            job.what, job.value, job.progress = what, value, progress
+            job.sign = 1.0 if value > good else -1.0
+            self._limit_job = job
+            job.start()
             return "later"
         except Exception:
             return None

@@ -109,6 +109,54 @@ class Corners(unittest.TestCase):
         self.assertTrue(close(w[0], (0.0, -1.0, 0.0)))
 
 
+class SlantedCap(unittest.TestCase):
+    """Review finding DRAFT-1-F3: a wall drafted under a sloping top that is not drafted (a
+    wedge: YZ profile (0,0) (30,0) (30,6) (0,10), the 10 mm wall at y = 0 drafted 15 deg).
+    The exact top edge ends at (y, z) = (2.587, 9.655); the picture's edge moved half as far
+    as its face (1.34 vs 2.68), both off the exact solid."""
+
+    WALL = (0.0, -1.0, 0.0)
+    TOP = core.unit((0.0, 4.0, 30.0))  # the sloping top: up and toward +y
+
+    def test_the_sloping_top_is_a_cap(self):
+        self.assertTrue(core.slanted_cap(self.TOP, UP, [self.WALL]))
+        self.assertFalse(core.slanted_cap(UP, UP, [self.WALL]))  # a flat cap: as before
+        self.assertFalse(core.slanted_cap((1.0, 0.0, 0.0), UP, [self.WALL]))  # upright
+        # a slope facing sideways (oblique to the wall): moving flat keeps the point on both
+        self.assertFalse(core.slanted_cap(core.unit((3.0, 0.0, 1.0)), UP, [self.WALL]))
+
+    def test_the_top_edge_slides_onto_the_slope(self):
+        ta = math.tan(math.radians(15.0))
+        h = 10.0
+        shift = -h * core.k_factor(15.0, 0.0)  # into the part
+        move = core.scale(self.WALL, shift)  # square to the pull: y = 2.68, z kept
+        self.assertAlmostEqual(move[1], 2.6795, places=4)
+        row = core.turned_row(self.WALL, ta, UP)
+        d = core.slide(move, self.TOP, [row], UP)
+        self.assertAlmostEqual(d[1], 2.5871, places=3)
+        self.assertAlmostEqual(10.0 + d[2], 9.6551, places=3)
+        self.assertAlmostEqual(core.dot(self.TOP, d), 0.0, places=9)  # on the slope
+        # and on the turned wall: y = (10 + dz) * tan(15)
+        self.assertAlmostEqual(d[1], (10.0 + d[2]) * ta, places=9)
+
+    def test_a_corner_with_an_upright_side_slides_along_both(self):
+        # the corner (0, 0, 10): the side x = 0 (normal -x, not drafted) stays put
+        side = (-1.0, 0.0, 0.0)
+        ta = math.tan(math.radians(15.0))
+        move = core.scale(self.WALL, -10.0 * ta)
+        d = core.slide(move, self.TOP, [core.turned_row(self.WALL, ta, UP), side], UP)
+        self.assertAlmostEqual(d[0], 0.0, places=9)
+        self.assertAlmostEqual(core.dot(self.TOP, d), 0.0, places=9)
+        self.assertAlmostEqual(d[1], (10.0 + d[2]) * ta, places=9)
+
+    def test_nothing_to_slide_on(self):
+        self.assertEqual(core.slide((0.0, 1.0, 0.0), UP, [], UP), (0.0, 1.0, 0.0))
+        # a cap along the slide direction: the move is kept as it is
+        self.assertEqual(
+            core.slide((0.0, 1.0, 0.0), (1.0, 0.0, 0.0), [(1.0, 0.0, 0.0)], UP), (0.0, 1.0, 0.0)
+        )
+
+
 class Bend(unittest.TestCase):
     def test_a_triangle_across_the_hinge_is_cut_there(self):
         heights = [-1.0, 1.0, 1.0]

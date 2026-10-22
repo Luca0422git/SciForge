@@ -587,7 +587,7 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
                 self.field.value(),
                 size,
                 on_drag=self._dragged,
-                on_release=self._dragged,
+                on_release=self._released,
             )
             self._value_box()
         except Exception as exc:
@@ -678,9 +678,25 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
             setattr(self.target, self.prop, max(value, 0.01))
         self.schedule()
 
+    def _released(self, value):
+        """The arrow let go. At the value of its last drag step that step did everything
+        already (the rebuild waiting for it runs now: taskui.handle_released); taking it again
+        rebuilt the same value a second time, 1.2 s on a part of 180 faces (review finding
+        DRAFT-2-F6)."""
+        try:
+            last = getattr(self, "_drag_last", None)
+            if last is not None and abs(round(value, 2) - last) < 1e-12:
+                return
+            self._dragged(value)
+        except Exception as exc:
+            warn("press pull arrow: %s" % exc)
+        finally:
+            self._drag_last = None
+
     def _dragged(self, value):
         self.formula_cleared("value")  # a drag gives a plain number
         value = round(value, 2)
+        self._drag_last = value
         held = self.limit_edit("value", value, "dragged")
         if held != value:
             value = held

@@ -70,6 +70,9 @@ class Picture:
         self.triangles = []
         self.line_points, self.line_heights, self.line_terms = [], [], []
         self.lines = []  # point counts per polyline
+        # points on a slanted face that is not drafted (draft_live_core.slide):
+        # [(index, cap normal, [(row vector, tb, drafted)])], for the faces and the lines
+        self.slants, self.line_slants = [], []
         self._prepare(shape)
         self._compile()
 
@@ -135,20 +138,38 @@ class Picture:
         return found
 
     def _terms(self, p, own, normals_faces):
-        """The weighted terms of a point on `own` (drafted) and the faces of `normals_faces`
-        [(face, normal)] it also lies on."""
+        """(terms, slant) of a point on `own` (drafted) and the faces of `normals_faces`
+        [(face, normal)] it also lies on: the weighted terms of its move square to the pull
+        direction, and (cap normal, rows) when it also lies on a slanted face that is not
+        drafted (it slides back onto it: draft_live_core.slide), else None."""
         entries = [(own, self._normal(own, p, self._flat_normal(own)))]
         entries += normals_faces
-        entries = [(f, n) for f, n in entries if n is not None]
-        normals = [n for _f, n in entries]
-        weights = core.solve(normals, self.pull)
+        entries = [(f, n, f is own or self._is_drafted(f)) for f, n in entries if n is not None]
+        flats = [core.flat(n, self.pull) for _f, n, drafted in entries if drafted]
+        caps, kept = [], []
+        for face, normal, drafted in entries:
+            if not drafted and core.slanted_cap(normal, self.pull, flats):
+                caps.append(core.unit(normal))
+            else:
+                kept.append((face, normal, drafted))
+        weights = core.solve([n for _f, n, _d in kept], self.pull)
         out = []
-        for (face, normal), w in zip(entries, weights):
+        for (face, normal, drafted), w in zip(kept, weights):
             if abs(w[0]) + abs(w[1]) + abs(w[2]) < 1e-15:
                 continue
-            drafted = face is own or self._is_drafted(face)
             out.append((w, core.lean_tan(normal, self.pull) if drafted else 0.0, drafted))
-        return out
+        slant = None
+        if caps:
+            rows = []
+            for _face, normal, drafted in kept:
+                if drafted:
+                    rows.append(
+                        (core.flat(normal, self.pull), core.lean_tan(normal, self.pull), True)
+                    )
+                else:
+                    rows.append((core.unit(normal), 0.0, False))
+            slant = (caps[0], rows)
+        return out, slant
 
     def _beside(self, p, sides, others):
         """[(face, its outward normal at p)] of the faces beside the drafted one that point p
@@ -169,10 +190,60 @@ class Picture:
                     found.append(other)
         return [(o, self._normal(o, p, self._flat_normal(o))) for o in found]
 
+    def _cap_edges(self, face, neighbours):
+        """[(edge, its box, [faces])] of the edges of a drafted face where it meets a face
+        that is not drafted and leans (neither upright nor square to the pull direction)."""
+        found = []
+        for edge, others in neighbours:
+            leaning = []
+            for other in others:
+                if self._is_drafted(other):
+                    continue
+                try:
+                    mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+                    n = self._normal(other, _tuple(mid), self._flat_normal(other))
+                except Exception:
+                    n = None
+                if n is None:
+                    continue
+                up = abs(core.dot(core.unit(n), self.pull))
+                if 1e-3 <= up <= 1.0 - 1e-9:
+                    leaning.append(other)
+            if leaning:
+                box = edge.BoundBox
+                box.enlarge(self.tol * 10.0)
+                found.append((edge, box, leaning))
+        return found
+
+    def _on_caps(self, p, caps):
+        """The leaning faces of `caps` (_cap_edges) whose edge point p lies on."""
+        if not caps:
+            return []
+        import FreeCAD as App
+        import Part
+
+        out = []
+        vertex = None
+        for edge, box, faces in caps:
+            if not box.isInside(App.Vector(*p)):
+                continue
+            if vertex is None:
+                vertex = Part.Vertex(App.Vector(*p))
+            try:
+                if edge.distToShape(vertex)[0] > self.tol * 10.0:
+                    continue
+            except Exception:
+                continue
+            out += [f for f in faces if not any(f.isSame(o) for o in out)]
+        return out
+
     def _prepare(self, shape):
         done_edges = []
         for face in self.drafted:
             neighbours = self._neighbours(shape, face)
+            # edges where the face meets a slanted face that is not drafted (its points slide
+            # back onto that face: the face's own points there too, not only the edge's)
+            caps = self._cap_edges(face, neighbours)
             # straight edges that run up the face (the corners with the faces beside it)
             sides = []
             for edge, others in neighbours:
@@ -190,12 +261,15 @@ class Picture:
             heights = []
             for q in points:
                 p = _tuple(q)
-                beside = self._beside(p, sides, [])
+                beside = self._beside(p, sides, self._on_caps(p, caps))
                 h = self.height(p)
                 heights.append(h)
+                terms, slant = self._terms(p, face, beside)
+                if slant is not None:
+                    self.slants.append((len(self.points), slant[0], slant[1]))
                 self.points.append(p)
                 self.heights.append(h)
-                self.terms.append(self._terms(p, face, beside))
+                self.terms.append(terms)
             tris = [tuple(t) for t in triangles]
             if self.bends:
                 made, tris = core.split_triangles(heights, tris)
@@ -224,9 +298,12 @@ class Picture:
                     if i == j:
                         p = line[i]
                         beside = self._beside(p, sides, others)
+                        terms, slant = self._terms(p, face, beside)
+                        if slant is not None:
+                            self.line_slants.append((len(self.line_points), slant[0], slant[1]))
                         self.line_points.append(p)
                         self.line_heights.append(hs[i])
-                        self.line_terms.append(self._terms(p, face, beside))
+                        self.line_terms.append(terms)
                     else:
                         self.line_points.append(core.lerp(line[i], line[j], t))
                         self.line_heights.append(0.0)
@@ -308,11 +385,31 @@ class Picture:
         if self._arrays is not None:
             faces = self._move_np(self._arrays[0], angle, angle2)
             lines = self._move_np(self._arrays[1], angle, angle2)
+            self._slide(faces, self.points, self.heights, self.slants, angle, angle2)
+            self._slide(lines, self.line_points, self.line_heights, self.line_slants, angle, angle2)
             faces, lines = self._place_np(faces), self._place_np(lines)
             return faces.tolist(), lines.tolist()
         faces = self._move_py(self.points, self.heights, self.terms, angle, angle2)
         lines = self._move_py(self.line_points, self.line_heights, self.line_terms, angle, angle2)
+        self._slide(faces, self.points, self.heights, self.slants, angle, angle2)
+        self._slide(lines, self.line_points, self.line_heights, self.line_slants, angle, angle2)
         return self._place_py(faces), self._place_py(lines)
+
+    def _slide(self, moved, points, heights, slants, angle, angle2):
+        """The points on a slanted face that is not drafted slid back onto it (in place)."""
+        for i, cap, rows in slants:
+            p, h = points[i], heights[i]
+            q = moved[i]
+            move = (float(q[0]) - p[0], float(q[1]) - p[1], float(q[2]) - p[2])
+            turned = []
+            for vector, tb, drafted in rows:
+                if drafted:
+                    ta = self._k(tb, h < 0.0, angle, angle2) + tb  # the lean it ends with
+                    turned.append(core.turned_row(vector, ta, self.pull))
+                else:
+                    turned.append(vector)
+            d = core.slide(move, cap, turned, self.pull)
+            moved[i] = (p[0] + d[0], p[1] + d[1], p[2] + d[2])
 
     def _matrix(self):
         if self.placement is None:

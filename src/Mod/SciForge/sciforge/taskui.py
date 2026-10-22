@@ -44,6 +44,27 @@ def set_current(dialog):
     _OPEN["dialog"] = dialog
 
 
+def handle_released():
+    """A drag handle was let go (after its on_release): the open dialog's rebuild that waits
+    for the changes to rest runs now, not PAUSE_MS later (review finding DRAFT-2-F5: every
+    slow dialog's last result came 0.2 s late)."""
+    try:
+        dialog = current()
+        settle = getattr(dialog, "settle_now", None)
+        if settle is not None:
+            settle()
+    except Exception as exc:
+        warn("drag release: %s" % exc)
+
+
+def button_held():
+    """True while a mouse button is down (Qt keeps the state, whatever widget has it)."""
+    try:
+        return QtWidgets.QApplication.mouseButtons() != QtCore.Qt.NoButton
+    except Exception:
+        return False
+
+
 # Editors for existing features: {type key: function(obj)}. The type key is the
 # FreeCAD TypeId ("PartDesign::Fillet") or "SciForge::<SciForgeType>" for SciForge's
 # own Python features. Feature modules declare EDITORS = {...}; commands.py collects
@@ -1313,8 +1334,10 @@ class ArrowDragger(BoxCarrier):
                 self._last = value
                 if self.on_drag:
                     self.on_drag(value)
-            if self._was_active and not active and self.on_release:
-                self.on_release(value)
+            if self._was_active and not active:
+                if self.on_release:
+                    self.on_release(value)
+                handle_released()
             self._was_active = active
             self._draw()
             # lighter under the mouse (the dragged arrow is the dragger's own lit part)
@@ -1388,6 +1411,19 @@ class Panel:
     PAUSE_MS = 200
     SLOW_DRAG = 0.25
     REST_FIRST = False  # every rebuild waits for the rest (a dialog with its own live picture)
+    # While the mouse button stays down, a short stop to look is not a rest: the rebuild
+    # waits HELD_REST times its last cost (between HELD_REST_MIN_MS and HELD_REST_MAX_MS), so
+    # a hesitation on a heavy part does not start a rebuild that then freezes the next mouse
+    # moves (review finding DRAFT-2-F3); letting go rebuilds at once (handle_released).
+    HELD_REST = 2.0
+    HELD_REST_MIN_MS = 100
+    HELD_REST_MAX_MS = 900
+    # A rebuild cheaper than this tells nothing of the cost (Press Pull or Extrude at 0
+    # builds nothing): on a part with HEAVY_FACES faces or more, a drag then waits for the
+    # rest until a real rebuild was timed (review finding DRAFT-2-F2: the first move of a
+    # drag froze the handle for 0.5-1.3 s)
+    TRIVIAL_COST = 0.03
+    HEAVY_FACES = 120
 
     def __init__(self, doc, transaction):
         from . import ui_icon
@@ -1511,8 +1547,51 @@ class Panel:
         return max(getattr(self, "_last_change", -1.0), getattr(self, "_last_motion", -1.0))
 
     def _slow(self):
-        """True when the last rebuild took so long that it would freeze a dragged handle."""
-        return getattr(self, "_preview_cost", 0.0) > self.SLOW_DRAG
+        """True when the last rebuild took so long that it would freeze a dragged handle, or
+        when its cost is not known yet (a trivial rebuild so far) and a handle is dragged on
+        a heavy part."""
+        cost = getattr(self, "_preview_cost", None)
+        if cost is not None and cost > self.SLOW_DRAG:
+            return True
+        if (cost is None or cost < self.TRIVIAL_COST) and button_held():
+            return self._heavy_part()
+        return False
+
+    def _heavy_part(self):
+        """True when the design has a solid of HEAVY_FACES faces or more (kept per dialog)."""
+        heavy = getattr(self, "_heavy", None)
+        if heavy is not None:
+            return heavy
+        heavy = False
+        try:
+            for obj in self.doc.Objects:
+                if obj.TypeId != "PartDesign::Body" and not (
+                    obj.isDerivedFrom("Part::Feature") and obj.Visibility
+                ):
+                    continue
+                shape = getattr(obj, "Shape", None)
+                if shape is not None and not shape.isNull():
+                    if len(shape.Faces) >= self.HEAVY_FACES:
+                        heavy = True
+                        break
+        except Exception:
+            heavy = False
+        self._heavy = heavy
+        return heavy
+
+    def _rest_needed(self):
+        """Seconds without a change before a rebuild that waits for the rest runs: PAUSE_MS,
+        or while the mouse button stays down HELD_REST times the last rebuild's cost."""
+        rest = self.PAUSE_MS / 1000.0
+        if not button_held():
+            return rest
+        cost = getattr(self, "_preview_cost", None)
+        if cost is None or cost < self.TRIVIAL_COST:
+            return rest
+        return max(
+            self.HELD_REST_MIN_MS / 1000.0,
+            min(self.HELD_REST_MAX_MS / 1000.0, self.HELD_REST * cost),
+        )
 
     def _tick(self):
         """The preview timer fired: rebuild. While a drag streams changes in, the next
@@ -1535,7 +1614,7 @@ class Panel:
         try:
             if getattr(self, "_waits_rest", False):
                 quiet = time.perf_counter() - self.last_moved()
-                left = self.PAUSE_MS / 1000.0 - quiet
+                left = self._rest_needed() - quiet
                 if left > 0.001:  # still moving: look again when it may have rested
                     self._timer.setInterval(max(1, int(left * 1000.0)))
                     self._timer.start()

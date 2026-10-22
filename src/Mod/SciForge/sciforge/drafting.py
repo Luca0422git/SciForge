@@ -493,6 +493,34 @@ def remove(feature):
     shelling.remove(feature)
 
 
+# Refusals that no other angle cures: the picks themselves (a face that cannot be drafted
+# with this pull direction, nothing on the pull side of the parting line...). The dialog
+# shows no live picture for such picks (review finding DRAFT-1-F4).
+_ANGLE_FREE = (
+    "Only faces that run along the pull direction",
+    "cannot be drafted",
+    "no longer exists",
+    "Pick the",
+    "Pick one plane",
+    "The fixed plane",
+    "None of the faces lies on the pull side",
+    "cannot be split at the parting line",
+    "Splitting the faces at the parting line",
+    "The parting line is not flat",
+    "The parting tool has no curves",
+    "Move Parting Line is not available",
+    "The draft has no pull direction",
+    "Make a solid first",
+    "The draft is not in a body",
+)
+
+
+def angle_free(reason):
+    """True when the refusal `reason` does not depend on the draft angle."""
+    text = reason or ""
+    return any(words in text for words in _ANGLE_FREE)
+
+
 def friendly(text):
     """FreeCAD's error text for a failed Draft (often empty), in plain words."""
     low = (text or "").lower()
