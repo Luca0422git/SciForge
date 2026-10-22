@@ -94,14 +94,22 @@ def _refs(builder, specs, where):
     return out
 
 
-def _finish(builder, step, feature, where):
+def _broken(doc):
+    return {
+        o.Name
+        for o in doc.Objects
+        if "Invalid" in list(getattr(o, "State", [])) or "Error" in list(getattr(o, "State", []))
+    }
+
+
+def _finish(builder, step, feature, where, before=()):
+    """Recompute; steps this one broke fail it (steps broken before it are not its doing:
+    an AI working on a design with one broken step can still use the SURFACE tools)."""
     from sciforge import bodies
 
     builder.doc.recompute()
     broken = [
-        o.Label
-        for o in builder.doc.Objects
-        if "Invalid" in list(getattr(o, "State", [])) or "Error" in list(getattr(o, "State", []))
+        builder.doc.getObject(name).Label for name in sorted(_broken(builder.doc) - set(before))
     ]
     if broken:
         raise BuildError("%s: these steps failed: %s" % (where, ", ".join(broken)))
@@ -116,6 +124,7 @@ def op_sf_surface(self, step):
     from sciforge import surface_core as core
 
     where = "sf_surface %r" % step["id"]
+    before = _broken(self.doc)
     kind = step["kind"]
     refs = {key: _refs(self, step.get(key), where) for key in REF_KEYS}
     options = dict(step.get("options") or {})
@@ -148,7 +157,7 @@ def op_sf_surface(self, step):
         raise BuildError("%s: %s" % (where, exc))
     self.objects[step["id"]] = feature
     self.ops[step["id"]] = "sf_surface"
-    _finish(self, step, feature, where)
+    _finish(self, step, feature, where, before)
     if feature.Shape.isNull() or not bodies.alive(feature):
         raise BuildError("%s: no shape" % where)
     return feature
@@ -162,6 +171,7 @@ def op_sf_surface_edit(self, step):
     target = self.objects.get(step["target"])
     if target is None or self.ops.get(step["target"]) != "sf_surface":
         raise BuildError("%s: not a sf_surface step" % where)
+    before = _broken(self.doc)
     kind, refs, options = surface.read(target)
     options.update(step["set"])
     try:
@@ -169,7 +179,7 @@ def op_sf_surface_edit(self, step):
     except core.SurfaceError as exc:
         raise BuildError("%s: %s" % (where, exc))
     self.objects[step["target"]] = feature
-    return _finish(self, step, feature, where)
+    return _finish(self, step, feature, where, before)
 
 
 Builder.op_sf_surface = op_sf_surface

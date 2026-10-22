@@ -136,6 +136,11 @@ class Builder:
             if len(names) != 1:
                 raise BuildError("sketch %r: 'face' must select one face" % step["id"])
             sketch.AttachmentSupport = [(tip, names[0])]
+        elif "on" in step:  # a construction plane made earlier (CONSTRUCT > Offset Plane...)
+            plane = self.objects.get(step["on"])
+            if plane is None or plane.TypeId not in ("PartDesign::Plane", "App::Plane"):
+                raise BuildError("sketch %r: 'on' must name a construction plane" % step["id"])
+            sketch.AttachmentSupport = [(plane, "")]
         else:
             sketch.AttachmentSupport = (self._origin(_PLANE_ROLE[step["plane"]]), [""])
         sketch.MapMode = "FlatFace"
@@ -151,46 +156,7 @@ class Builder:
             sketch.AttachmentOffset = App.Placement(
                 App.Vector(0, 0, step["offset"]), App.Rotation()
             )
-        for i, item in enumerate(step["geometry"]):
-            name = item.get("name", "g%d" % i)
-            if "rect" in item:
-                x0, y0, x1, y1 = item["rect"]
-                _rect(sketch, name, min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
-            elif "center_rect" in item:
-                cx, cy, w, h = item["center_rect"]
-                _center_rect(sketch, name, cx, cy, w, h)
-            elif "circle" in item:
-                _circle(sketch, name, *item["circle"])
-            elif "polyline" in item:
-                _polyline(sketch, item["polyline"])
-            elif "polygon" in item:
-                spec = item["polygon"]
-                cx, cy = spec["center"]
-                r, n = spec["radius"], spec["sides"]
-                start = math.radians(spec.get("rotation", 0))
-                pts = [
-                    [
-                        cx + r * math.cos(start + 2 * math.pi * k / n),
-                        cy + r * math.sin(start + 2 * math.pi * k / n),
-                    ]
-                    for k in range(n)
-                ]
-                _polyline(sketch, pts)
-            elif "slot" in item:
-                _slot(sketch, *item["slot"])
-            elif "line" in item:  # one open line (a line across a face to find its middle)
-                x0, y0, x1, y1 = item["line"]
-                sketch.addGeometry(Part.LineSegment(_v(x0, y0), _v(x1, y1)))
-            elif "ellipse" in item:  # [cx, cy, major radius (along X), minor radius]
-                cx, cy, major, minor = item["ellipse"]
-                sketch.addGeometry(Part.Ellipse(_v(cx, cy), major, minor))
-            elif "spline_loop" in item:  # a closed smooth B-spline through the points
-                curve = Part.BSplineCurve()
-                curve.interpolate([_v(x, y) for x, y in item["spline_loop"]], PeriodicFlag=True)
-                sketch.addGeometry(curve)
-            elif "segments" in item:  # a closed chain of lines, arcs and open splines
-                for segment in item["segments"]:
-                    sketch.addGeometry(_segment(segment))
+        draw(sketch, step["geometry"])
         self.objects[step["id"]] = sketch
         self.ops[step["id"]] = "sketch"
         self.doc.recompute()
@@ -642,6 +608,52 @@ class Builder:
 
 
 # -- sketch geometry with Fusion-like dimensions --------------------------
+def draw(sketch, geometry, first_index=0):
+    """Add create_sketch geometry items (rect, center_rect, circle, polyline, polygon, slot,
+    line, ellipse, spline_loop, segments) to a sketch, with Fusion-style named dimensions.
+    Used by the "sketch" step and by the AI tool that draws in an existing sketch."""
+    for i, item in enumerate(geometry):
+        name = item.get("name", "g%d" % (i + first_index))
+        if "rect" in item:
+            x0, y0, x1, y1 = item["rect"]
+            _rect(sketch, name, min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+        elif "center_rect" in item:
+            cx, cy, w, h = item["center_rect"]
+            _center_rect(sketch, name, cx, cy, w, h)
+        elif "circle" in item:
+            _circle(sketch, name, *item["circle"])
+        elif "polyline" in item:
+            _polyline(sketch, item["polyline"])
+        elif "polygon" in item:
+            spec = item["polygon"]
+            cx, cy = spec["center"]
+            r, n = spec["radius"], spec["sides"]
+            start = math.radians(spec.get("rotation", 0))
+            pts = [
+                [
+                    cx + r * math.cos(start + 2 * math.pi * k / n),
+                    cy + r * math.sin(start + 2 * math.pi * k / n),
+                ]
+                for k in range(n)
+            ]
+            _polyline(sketch, pts)
+        elif "slot" in item:
+            _slot(sketch, *item["slot"])
+        elif "line" in item:  # one open line (a line across a face to find its middle)
+            x0, y0, x1, y1 = item["line"]
+            sketch.addGeometry(Part.LineSegment(_v(x0, y0), _v(x1, y1)))
+        elif "ellipse" in item:  # [cx, cy, major radius (along X), minor radius]
+            cx, cy, major, minor = item["ellipse"]
+            sketch.addGeometry(Part.Ellipse(_v(cx, cy), major, minor))
+        elif "spline_loop" in item:  # a closed smooth B-spline through the points
+            curve = Part.BSplineCurve()
+            curve.interpolate([_v(x, y) for x, y in item["spline_loop"]], PeriodicFlag=True)
+            sketch.addGeometry(curve)
+        elif "segments" in item:  # a closed chain of lines, arcs and open splines
+            for segment in item["segments"]:
+                sketch.addGeometry(_segment(segment))
+
+
 def _v(x, y):
     return App.Vector(x, y, 0)
 

@@ -64,34 +64,43 @@ SWEEP_KEYS = (
 )
 
 
+def draw_curves(sketch, curves, where="curves", construction=False):
+    """Add open curves and points ({"line": [x1, y1, x2, y2]}, {"arc": [cx, cy, r, a0, a1]},
+    {"circle": [cx, cy, r]}, {"point": [x, y]}, {"polyline": [[x, y], ...]}) to a sketch;
+    the "sf_curves" step and the AI tool that draws in an existing sketch use it."""
+    for item in curves:
+        if "line" in item:
+            x1, y1, x2, y2 = item["line"]
+            geometry = [Part.LineSegment(App.Vector(x1, y1, 0), App.Vector(x2, y2, 0))]
+        elif "arc" in item:
+            cx, cy, r, a0, a1 = item["arc"]
+            circle = Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), r)
+            geometry = [Part.ArcOfCircle(circle, math.radians(a0), math.radians(a1))]
+        elif "circle" in item:
+            cx, cy, r = item["circle"]
+            geometry = [Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), r)]
+        elif "point" in item:
+            x, y = item["point"]
+            geometry = [Part.Point(App.Vector(x, y, 0))]
+        elif "polyline" in item:
+            pts = item["polyline"]
+            geometry = [
+                Part.LineSegment(App.Vector(a[0], a[1], 0), App.Vector(b[0], b[1], 0))
+                for a, b in zip(pts, pts[1:])
+            ]
+        else:
+            raise BuildError("%s: unknown curve %r" % (where, item))
+        for geo in geometry:
+            sketch.addGeometry(geo, construction)
+
+
 def op_sf_curves(self, step):
     sketch = self.body.newObject("Sketcher::SketchObject", step["id"])
     sketch.AttachmentSupport = (self._origin(_PLANE_ROLE[step["plane"]]), [""])
     sketch.MapMode = "FlatFace"
     if step.get("offset"):
         sketch.AttachmentOffset = App.Placement(App.Vector(0, 0, step["offset"]), App.Rotation())
-    for item in step["curves"]:
-        if "line" in item:
-            x1, y1, x2, y2 = item["line"]
-            sketch.addGeometry(Part.LineSegment(App.Vector(x1, y1, 0), App.Vector(x2, y2, 0)))
-        elif "arc" in item:
-            cx, cy, r, a0, a1 = item["arc"]
-            circle = Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), r)
-            sketch.addGeometry(Part.ArcOfCircle(circle, math.radians(a0), math.radians(a1)))
-        elif "circle" in item:
-            cx, cy, r = item["circle"]
-            sketch.addGeometry(Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), r))
-        elif "point" in item:
-            x, y = item["point"]
-            sketch.addGeometry(Part.Point(App.Vector(x, y, 0)))
-        elif "polyline" in item:
-            pts = item["polyline"]
-            for a, b in zip(pts, pts[1:]):
-                sketch.addGeometry(
-                    Part.LineSegment(App.Vector(a[0], a[1], 0), App.Vector(b[0], b[1], 0))
-                )
-        else:
-            raise BuildError("sf_curves %r: unknown curve %r" % (step["id"], item))
+    draw_curves(sketch, step["curves"], "sf_curves %r" % step["id"])
     self.objects[step["id"]] = sketch
     self.ops[step["id"]] = "sf_curves"
     self.doc.recompute()

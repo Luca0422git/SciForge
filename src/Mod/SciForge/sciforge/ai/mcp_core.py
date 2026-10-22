@@ -6,7 +6,11 @@ An AI app (Claude Desktop, Gemini CLI, ...) starts sciforge_mcp.py and talks JSO
 to it over stdin / stdout. The stdio transport sends one JSON-RPC message per line: UTF-8
 JSON with no newline inside it; anything else the server wants to say goes to stderr.
 SciForge only offers tools, so the subset is small: initialize, ping, tools/list and
-tools/call (with text and PNG image results).
+tools/call (with text and PNG image results). The tools come from the catalogue
+(sciforge/ai/catalog). Arguments that break a tool's rules come back as a tool result with
+isError and plain sentences (MCP 2025-11-25: input validation errors are tool execution
+errors, so the model can correct itself); an unknown tool or params that are not an object
+are protocol errors (-32602).
 
 Checked against the MCP specification's text on GitHub
 (modelcontextprotocol/modelcontextprotocol, docs/specification/2025-06-18/basic/transports
@@ -20,7 +24,7 @@ The tools part did not change between the versions below, so one answer fits the
 
 import json
 
-from . import tools_core
+from . import catalog, tools_core
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 LATEST = PROTOCOL_VERSIONS[0]
@@ -31,17 +35,10 @@ METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 
-INSTRUCTIONS = (
-    "SciForge is a parametric CAD program (a FreeCAD-based app that works like Autodesk "
-    "Fusion). These tools build and change the design open in SciForge on this computer, "
-    "step by step in its timeline: create_sketch, then extrude, revolve, hole, fillet, "
-    "chamfer, shell, pattern, set_parameter. All lengths are millimetres (mm) and all "
-    "angles degrees. Edges and faces are picked with selectors that describe their geometry "
-    "(see each tool). Call get_design before changing a design and get_design or screenshot "
-    "after each change to check the result. Every change is one undo step in SciForge, and "
-    "undo takes back the last one. Errors come back as plain sentences: read them, fix the "
-    "arguments and try again."
-)
+# What every AI app reads first (MCP "instructions"): what SciForge is, the workflow and the
+# shared rules the tools' descriptions refer to (selectors, picks, sketch planes, curves). From
+# the catalogue, like the tools.
+INSTRUCTIONS = catalog.INSTRUCTIONS
 
 
 def error_response(request_id, code, message):

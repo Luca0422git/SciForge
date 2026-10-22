@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# SciForge on the command line: the AI tools without the window (src/Mod/SciForge/sciforge/ai/
+# cli.py says everything it does).
+#
+#   tools/sciforge/sciforge-cli info part.FCStd
+#   tools/sciforge/sciforge-cli convert part.FCStd part.step
+#   tools/sciforge/sciforge-cli run --tool 'create_sketch {"plane": "XY", "geometry":
+#       [{"rect": [0, 0, 40, 20]}]}' --tool 'extrude {"profile": "Sketch1", "distance": 10}' \
+#       --save box.FCStd
+#   tools/sciforge/sciforge-cli tools
+#   tools/sciforge/sciforge-cli mcp --headless
+#
+# FreeCAD is looked for in $SCIFORGE_FREECAD (an unpacked AppImage folder or an install prefix),
+# then .sciforge-cache/freecad (tools/sciforge/get_freecad.sh), then sciforgecmd / freecadcmd on
+# the PATH. With stock FreeCAD, SciForge's module is linked in through a throw-away profile so
+# your own FreeCAD settings are not touched (unless SCIFORGE_CLI_PROFILE names a profile).
+set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+MODULE="${REPO}/src/Mod/SciForge"
+CLI="${MODULE}/sciforge/ai/cli.py"
+
+# "tools" needs no FreeCAD: any Python reads the catalogue.
+if [ "${1:-}" = "tools" ] && command -v python3 >/dev/null; then
+    exec python3 "${CLI}" "$@"
+fi
+
+FREECAD_DIR="${SCIFORGE_FREECAD:-${REPO}/.sciforge-cache/freecad}"
+FC_CMD=()
+ADDON=0
+if [ -x "${FREECAD_DIR}/squashfs-root/AppRun" ]; then
+    if [ -x "${FREECAD_DIR}/squashfs-root/usr/bin/sciforgecmd" ]; then
+        FC_CMD=("${FREECAD_DIR}/squashfs-root/AppRun" sciforgecmd)
+    else
+        FC_CMD=("${FREECAD_DIR}/squashfs-root/AppRun" freecadcmd)
+    fi
+    [ -d "${FREECAD_DIR}/squashfs-root/usr/Mod/SciForge" ] || ADDON=1
+elif ls "${FREECAD_DIR}"/bin/{SciForgeCmd,sciforgecmd,FreeCADCmd,freecadcmd} >/dev/null 2>&1; then
+    FC_CMD=("$(ls "${FREECAD_DIR}"/bin/{SciForgeCmd,sciforgecmd,FreeCADCmd,freecadcmd} 2>/dev/null | head -1)")
+elif command -v sciforgecmd >/dev/null; then
+    FC_CMD=("$(command -v sciforgecmd)")
+elif command -v freecadcmd >/dev/null; then
+    FC_CMD=("$(command -v freecadcmd)")
+    ADDON=1
+fi
+if [ ${#FC_CMD[@]} -eq 0 ]; then
+    echo "[SciForge] FreeCAD's command-line program was not found: set SCIFORGE_FREECAD or run" \
+        "tools/sciforge/get_freecad.sh" >&2
+    exit 2
+fi
+
+if [ -z "${SCIFORGE_CLI_PROFILE:-}" ]; then
+    PROFILE="$(mktemp -d)"
+    trap 'rm -rf "${PROFILE}" "${ARGFILE:-}"' EXIT
+    mkdir -p "${PROFILE}/Mod"
+    [ "${ADDON}" = 1 ] && ln -s "${MODULE}" "${PROFILE}/Mod/SciForge"
+    export FREECAD_USER_HOME="${PROFILE}"
+else
+    export FREECAD_USER_HOME="${SCIFORGE_CLI_PROFILE}"
+fi
+export LANG="${LANG:-C.UTF-8}"
+
+# FreeCAD's command-line program reads options itself (only one argument may follow --pass),
+# so the arguments travel in a file, NUL-separated. (Relative paths are taken from where the
+# command was typed.)
+ARGFILE="$(mktemp)"
+printf '%s\0' "$@" > "${ARGFILE}"
+SCIFORGE_CLI_ARGFILE="${ARGFILE}" "${FC_CMD[@]}" "${CLI}"
+CODE=$?
+rm -f "${ARGFILE}"
+exit ${CODE}

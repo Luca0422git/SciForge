@@ -15,7 +15,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from sciforge.ai import chat_core, providers  # noqa: E402
+from sciforge.ai import catalog, chat_core, providers  # noqa: E402
 from sciforge.ai.providers import anthropic, gemini, openai, openai_compat  # noqa: E402
 
 KEY = "sk-ant-api03-SECRETSECRET0123456789"
@@ -163,7 +163,10 @@ class Building(unittest.TestCase):
         self.assertEqual(second[-1]["content"][0]["tool_use_id"], "toolu_1")
         self.assertEqual(second[-1]["content"][0]["content"][0]["text"], "Created sketch1.")
         self.assertEqual(model.requests[0]["body"]["system"], chat_core.SYSTEM_PROMPT)
-        self.assertEqual(len(model.requests[0]["body"]["tools"]), 16)
+        # Anthropic takes every tool of the catalogue, the first sixteen first
+        tools = model.requests[0]["body"]["tools"]
+        self.assertEqual(len(tools), len(catalog.TOOLS))
+        self.assertEqual([t["name"] for t in tools[:16]], list(catalog.LEGACY_NAMES))
         # The history: user, assistant, results, assistant, results, assistant.
         self.assertEqual(
             [h["role"] for h in chat.history],

@@ -1,0 +1,89 @@
+{
+  "id": "sf_rib_far_from_origin",
+  "title": "Rib: the gusset of sf_rib_gusset 450 mm along X (the sketch's origin far from the part)",
+  "tags": [
+    "rib",
+    "fusion-rib",
+    "ai-tools"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              450,
+              0
+            ],
+            [
+              490,
+              0
+            ],
+            [
+              490,
+              5
+            ],
+            [
+              455,
+              5
+            ],
+            [
+              455,
+              40
+            ],
+            [
+              450,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            455,
+            25,
+            475,
+            5
+          ]
+        }
+      ],
+      "offset": 10
+    },
+    {
+      "op": "sf_rib",
+      "id": "rib",
+      "curves": "r",
+      "thickness": 2
+    }
+  ],
+  "expect": {
+    "volume": 7900.0,
+    "faces": 11,
+    "bbox": [
+      450,
+      -20,
+      0,
+      490,
+      0,
+      40
+    ],
+    "note": "sf_rib_gusset moved 450 mm along X: 7500 + 400 = 7900. The rib's outline is found where the sketch plane cuts the part; that plane must reach the part however far it is from the sketch's origin (found by the AI tools' headless test, 2026-10-22).",
+    "solids": 1,
+    "source": "analytic"
+  }
+}
