@@ -241,12 +241,27 @@ def log_finding(where, sketch, finding):
 
 
 # -- highlighting ---------------------------------------------------------------------------------
-_highlight = {"doc": None, "sketch": None, "subs": [], "timer": None, "filter": None}
+_highlight = {
+    "doc": None,
+    "sketch": None,
+    "subs": [],
+    "timer": None,
+    "filter": None,
+    "overlay": None,
+    "key": None,
+}
+
+
+RING_COLOUR = "#ff6b5c"  # SciForge's own: a warm red apart from the blue/white sketch
+RING_PIXELS = 13
 
 
 def highlight(sketch, indices, ms=HIGHLIGHT_MS):
-    """Select the constraints `indices` in the open sketch for a moment, so FreeCAD draws
-    them in the selection colour. The next click or key anywhere, or `ms`, ends it."""
+    """Show the constraints `indices` of the open sketch for a moment: a red ring around
+    each in the 3D view (on a dimension's value, or where FreeCAD draws the constraint's
+    symbol: by its curves), and selected, so FreeCAD draws them in the selection colour
+    (while one of FreeCAD's own constraint tools runs it lets only curves be selected: the
+    rings still show). The next click, wheel turn or key anywhere, or `ms`, ends it."""
     clear_highlight()
     indices = [i for i in indices if 0 <= i < len(sketch.Constraints)]
     if not indices or not App.GuiUp:
@@ -254,27 +269,46 @@ def highlight(sketch, indices, ms=HIGHLIGHT_MS):
     try:
         import FreeCADGui as Gui
 
-        from .compat import QtCore, QtWidgets
+        from .compat import QtCore
 
         doc, name = sketch.Document.Name, sketch.Name
-        Gui.Selection.clearSelection()
         subs = ["Constraint%d" % (i + 1) for i in indices]
-        for sub in subs:
-            Gui.Selection.addSelection(doc, name, sub)
         _highlight.update(doc=doc, sketch=name, subs=subs)
+        try:
+            Gui.Selection.clearSelection()
+            for sub in subs:
+                Gui.Selection.addSelection(doc, name, sub)
+        except Exception:
+            pass  # a selection gate (FreeCAD's running tool) refused them: the rings show
+        _highlight["overlay"] = _show_rings(sketch, indices)
         timer = QtCore.QTimer()
         timer.setSingleShot(True)
         timer.setInterval(ms)
         timer.timeout.connect(clear_highlight)
         timer.start()
         _highlight["timer"] = timer
+        # the filter starts after the event being handled now (the Enter that set a value
+        # would otherwise end the highlight on its way up to the box's parents)
+        key = object()
+        _highlight["key"] = key
+        QtCore.QTimer.singleShot(0, lambda: _watch_next_action(key))
+    except Exception as exc:
+        warn("explain: could not highlight the constraints: %s" % exc)
+
+
+def _watch_next_action(key):
+    try:
+        if _highlight.get("key") is not key or not _highlight["subs"]:
+            return
+        from .compat import QtWidgets
+
         app = QtWidgets.QApplication.instance()
         if app is not None:
             watcher = _NextAction()
             app.installEventFilter(watcher)
             _highlight["filter"] = watcher
     except Exception as exc:
-        warn("explain: could not highlight the constraints: %s" % exc)
+        warn("explain: highlight: %s" % exc)
 
 
 def highlighted():
@@ -282,13 +316,25 @@ def highlighted():
     return [int(s[len("Constraint") :]) - 1 for s in _highlight["subs"]]
 
 
+def highlight_rings():
+    """The view pixels (x, y) of the rings shown now (tests)."""
+    overlay = _highlight.get("overlay")
+    try:
+        return overlay.pixels() if overlay is not None and overlay.isVisible() else []
+    except RuntimeError:
+        return []
+
+
 def clear_highlight():
     """Unselect what highlight() selected (only that: a selection the user made meanwhile
-    stays)."""
+    stays) and take the rings away."""
     subs = _highlight["subs"]
     doc, name = _highlight["doc"], _highlight["sketch"]
     timer, watcher = _highlight["timer"], _highlight["filter"]
-    _highlight.update(doc=None, sketch=None, subs=[], timer=None, filter=None)
+    overlay = _highlight.get("overlay")
+    _highlight.update(
+        doc=None, sketch=None, subs=[], timer=None, filter=None, overlay=None, key=None
+    )
     try:
         if timer is not None:
             timer.stop()
@@ -301,6 +347,12 @@ def clear_highlight():
             QtWidgets.QApplication.instance().removeEventFilter(watcher)
     except Exception:
         pass
+    try:
+        if overlay is not None:
+            overlay.hide()
+            overlay.deleteLater()
+    except Exception:
+        pass  # already gone with its view
     if not subs:
         return
     try:
@@ -312,6 +364,115 @@ def clear_highlight():
             Gui.Selection.removeSelection(doc, name, sub)
     except Exception:
         pass  # the document or the sketch went meanwhile
+
+
+def _ref_point(sketch, geo, pos):
+    """The sketch point a constraint refers to: a curve's end (1, 2) or centre (3), its
+    middle for the whole curve (0, where FreeCAD puts the constraint's symbol), the origin
+    for the root point; None for the axes and projected curves."""
+    if geo == -1 and pos == 1:
+        return App.Vector(0, 0, 0)
+    if geo is None or geo < 0:
+        return None
+    g = sketch.Geometry[geo]
+    if g.TypeId == "Part::GeomPoint":
+        return App.Vector(g.X, g.Y, 0)
+    if pos == 1:
+        return g.StartPoint
+    if pos == 2:
+        return g.EndPoint
+    if pos == 3:
+        return getattr(g, "Center", None)
+    try:
+        return g.value((g.FirstParameter + g.LastParameter) / 2.0)
+    except Exception:
+        return None
+
+
+def anchors(sketch, index):
+    """Where to ring constraint `index` (sketch points): a dimension at its value, a
+    Coincident at its point, others by the middle of the curves they are on."""
+    c = sketch.Constraints[index]
+    if c.Type in core.LENGTHS:
+        try:
+            from . import sketch_mode
+
+            point = sketch_mode.label_point(sketch, index)
+            if point is not None:
+                return [point]
+        except Exception:
+            pass
+    refs = [(c.First, c.FirstPos), (c.Second, c.SecondPos)]
+    third = getattr(c, "Third", core.GEO_UNDEF)
+    if third != core.GEO_UNDEF:
+        refs.append((third, getattr(c, "ThirdPos", 0)))
+    points = [p for p in (_ref_point(sketch, g, pos) for g, pos in refs) if p is not None]
+    if not points:
+        return []
+    if c.Type in ("Coincident", "PointOnObject") or (
+        c.Type in ("Horizontal", "Vertical") and c.FirstPos == 0
+    ):
+        return points[:1]
+    if c.Type in ("Horizontal", "Vertical", "Distance", "DistanceX", "DistanceY"):
+        return [(points[0] + points[-1]) * 0.5]
+    unique = []
+    for p in points:
+        if all((p - q).Length > 1e-6 for q in unique):
+            unique.append(p)
+    return unique[:2]
+
+
+def _show_rings(sketch, indices):
+    """A see-through layer over the 3D view drawing the rings (mouse clicks go through)."""
+    from . import sketch_mode
+    from .compat import QtCore, QtGui, QtWidgets
+
+    gl = sketch_mode.gl_widget()
+    if gl is None:
+        return None
+    import FreeCADGui as Gui
+
+    view = Gui.ActiveDocument.ActiveView
+    points = [p for i in indices for p in anchors(sketch, i)]
+    placement = sketch.getGlobalPlacement()
+
+    class Rings(QtWidgets.QWidget):
+        def pixels(self):
+            out = []
+            ratio = gl.devicePixelRatioF()
+            for p in points:
+                try:
+                    x, y = view.getPointOnViewport(placement.multVec(p))
+                    out.append((int(x / ratio), int(gl.height() - y / ratio)))
+                except Exception:
+                    pass
+            return out
+
+        def paintEvent(self, event):
+            try:
+                painter = QtGui.QPainter(self)
+                painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+                colour = QtGui.QColor(RING_COLOUR)
+                pen = QtGui.QPen(colour)
+                pen.setWidthF(2.5)
+                painter.setPen(pen)
+                fill = QtGui.QColor(colour)
+                fill.setAlpha(50)
+                painter.setBrush(fill)
+                for x, y in self.pixels():
+                    painter.drawEllipse(QtCore.QPointF(x, y), RING_PIXELS, RING_PIXELS)
+                painter.end()
+            except Exception:
+                pass
+
+    rings = Rings(gl)
+    rings.setObjectName("SciForgeConstraintRings")
+    rings.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+    rings.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+    rings.setGeometry(gl.rect())
+    rings.show()
+    rings.raise_()
+    return rings
 
 
 def _next_action_filter():
