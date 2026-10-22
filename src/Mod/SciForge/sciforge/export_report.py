@@ -30,6 +30,11 @@ SHAPE_ONLY_STEPS = ("InsertSTEP", "InsertMesh")
 DIMENSION_TYPES = ("Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle")
 HELPER_CONSTRAINTS = ("InternalAlignment", "Block")
 MAX_TOPOLOGY_FACETS = 2000000  # open-edge counting is plain Python: skipped beyond this
+# The validity check of an imported part (OpenCASCADE's BRepCheck) costs about 5 ms a face:
+# on a plate with 324 holes it took longer than reading the file. Only this many faces per
+# import are checked (small parts, where it is cheap); bigger parts are not looked at, so
+# the import report never makes Open / Insert STEP noticeably slower.
+MAX_VALIDITY_FACES = 300
 
 
 # ==================================================================== exports
@@ -188,6 +193,8 @@ def design_facts(doc, objects=None, fmt="step", unit="Millimeter", per_body=Fals
         "unit": unit or "Millimeter",
         "per_body": bool(per_body),
         "colours_written": False,
+        # body by body (Selected bodies, Export Everything): a STEP holds no components
+        "flat": scope == "bodies",
     }
     # left out
     if scope == "bodies":
@@ -239,7 +246,7 @@ def design_facts(doc, objects=None, fmt="step", unit="Millimeter", per_body=Fals
     out["timeline"] = len(steps)
     out["sketches"] = len([o for o in steps if o.TypeId == "Sketcher::SketchObject"])
     out["construction"] = len([o for o in steps if _is_datum(o)])
-    out["parameters"] = _parameter_count(doc)
+    out["parameters"] = _parameter_count(doc, None if history_scope == "design" else steps)
     out["joints"] = _joint_count(doc) if history_scope == "design" else 0
     # structure
     comps = set()
@@ -357,11 +364,41 @@ def _is_datum(obj):
         return obj.TypeId in ("PartDesign::Plane", "PartDesign::Line", "PartDesign::Point")
 
 
-def _parameter_count(doc):
+def _parameter_count(doc, steps=None):
+    """The user's parameters whose values the file has built in: all of them for the whole
+    design; for some bodies or a component, the ones the steps in that scope use (through
+    their formulas, and the parameters those formulas use in turn)."""
     try:
+        import re
+
         from . import parameters
 
-        return len(parameters.own_names(doc))
+        own = parameters.own_names(doc)
+        if steps is None or not own:
+            return len(own)
+        container = parameters.container(doc)
+        holder = parameters.core.CONTAINER
+        reference = re.compile(
+            r"(?<![A-Za-z0-9_.])(?:<<%s>>|%s)\.([A-Za-z_][A-Za-z0-9_]*)"
+            % (re.escape(holder), re.escape(holder))
+        )
+        used = set()
+        for obj in steps:
+            for _path, expr in getattr(obj, "ExpressionEngine", None) or []:
+                used.update(reference.findall(expr))
+        # a parameter's formula ("depth = width / 4") names the others without the holder
+        formulas = dict(container.ExpressionEngine) if container is not None else {}
+        todo = list(used)
+        while todo:
+            name = todo.pop()
+            expr = formulas.get(name, "")
+            for other in own:
+                if other not in used and re.search(
+                    r"(?<![A-Za-z0-9_.])%s(?![A-Za-z0-9_])" % re.escape(other), expr
+                ):
+                    used.add(other)
+                    todo.append(other)
+        return len([n for n in own if n in used])
     except Exception:
         return 0
 
@@ -461,12 +498,13 @@ def _open_meshes(mesh_bodies):
 
 
 def _curved_faces(solids):
-    from . import bodies
-
+    """Faces that are not flat. A face's kind does not depend on where the body sits, so the
+    shape is read as it is (no copy moved into design coordinates: on a big design those
+    copies cost more than the count)."""
     count = 0
     for body in solids:
         try:
-            for face in bodies.global_shape(body).Faces:
+            for face in body.Shape.Faces:
                 if face.Surface.TypeId == "Part::GeomPlane":
                     continue
                 try:
@@ -584,15 +622,34 @@ def sketch_facts(sketch):
                 out["points"] += 1
     except Exception:
         pass
-    try:
-        out["projected"] = sum(len(subs or [""]) for _obj, subs in sketch.ExternalGeometry)
-    except Exception:
-        out["projected"] = 0
+    out["projected"] = _reference_curves(sketch)
     try:
         out["off_plane"] = not sketch.getGlobalPlacement().isIdentity()
     except Exception:
         out["off_plane"] = False
     return out
+
+
+def _reference_curves(sketch):
+    """Projected curves the DXF does not get: the ones that are only references. Curves
+    projected as "defining" (SciForge's Project and Auto project) are part of the sketch's
+    shape and are written. Counts curves, not the edges or faces they were projected from."""
+    try:
+        import Sketcher
+
+        count = 0
+        for geometry in list(sketch.ExternalGeo)[2:]:  # the first two are the sketch axes
+            try:
+                if geometry.TypeId == "Part::GeomPoint":
+                    continue
+                if Sketcher.ExternalGeometryFacade(geometry).testFlag("Defining"):
+                    continue
+                count += 1
+            except Exception:
+                continue
+        return count
+    except Exception:
+        return 0
 
 
 # -- a drawing -------------------------------------------------------------------------------
@@ -776,13 +833,20 @@ def shape_notes(shape, notes):
 
 
 def piece_notes(pieces, notes):
-    """Add the sewn surface bodies and the shapes with errors of a part's pieces."""
+    """Add the sewn surface bodies and the shapes with errors of a part's pieces. The
+    validity check stops after MAX_VALIDITY_FACES faces per import (notes["_faces_checked"]
+    keeps the count): it is the slow part of reading a big file."""
     if notes is None:
         return
     for shape, _colours, surface in pieces:
         try:
             if surface:
                 notes["sewn"] = notes.get("sewn", 0) + 1
+            faces = len(shape.Faces)
+            checked = notes.get("_faces_checked", 0)
+            if checked + faces > MAX_VALIDITY_FACES:
+                continue
+            notes["_faces_checked"] = checked + faces
             if not shape.isValid():
                 notes["invalid"] = notes.get("invalid", 0) + 1
         except Exception:

@@ -5,7 +5,11 @@ what did not come in (export_report.py counts, export_report_core.py words it).
 One small card in the bottom right corner of the 3D view, over the design: a title
 ("Exported two.stl"), "Not kept in this file:" and a line per item. No popup, no button to
 press: it goes away by itself after a few seconds (longer for a longer list; the mouse
-over it keeps it), or with its x. Nothing is shown when nothing is lost. Every report also
+over it keeps it), or with its x. Nothing is shown when nothing is lost, and a card still up
+from an earlier export goes away then (it would read as if it described this one). Its
+height follows its lines at its fixed width (every wrapped line shows), and it keeps clear
+of the navigation bar at the bottom of the 3D view (above it when a small window would put
+the two on top of each other). Every report also
 goes to the Report view ([SciForge] Not in two.stl: ...), and the last ones are kept in
 recent() for the AI tools and the tests.
 
@@ -50,6 +54,17 @@ def current():
     return None
 
 
+def hide_current():
+    """Take the card off the screen, if it is up (a newer export or import lost nothing)."""
+    try:
+        widget = current()
+        if widget is not None:
+            widget.timer.stop()
+            widget.hide()
+    except Exception as exc:
+        warn("the export / import message could not be hidden: %s" % exc)
+
+
 def show(title, lead, lines, kind="export"):
     """Show the card (GUI) and remember the report. `lines`: the items' sentences."""
     entry = {"title": title, "lead": lead, "lines": list(lines), "kind": kind}
@@ -74,6 +89,7 @@ def report_export(file_name, entries, verb="Exported", lead="Not kept in this fi
     Returns the entries."""
     try:
         if not entries:
+            hide_current()
             return entries
         export_report.log_report(file_name, entries)
         show(
@@ -110,6 +126,7 @@ def report_import(file_name, entries, verb="Inserted"):
     """After an import: what the file had that did not come in (or came in changed)."""
     try:
         if not entries:
+            hide_current()
             return entries
         log(
             "%s %s. Not brought in, or changed: %s."
@@ -199,14 +216,31 @@ def _make_notice(window):
             self.title.setText(title)
             self.lead.setText(lead)
             self.body.setText("\n".join("• " + line for line in lines))
-            self.adjustSize()
+            self.fit_height()
             self.place()
             self.show()
             self.raise_()
             self.timer.start(min(30000, 10000 + 2000 * len(lines)))
 
+        def fit_height(self):
+            """The height the lines need at the card's fixed width. (adjustSize() guesses
+            the height of word-wrapped labels from a width they do not get: with a wrapped
+            title and several wrapped lines the card came out too short and the last lines
+            were cut off.)"""
+            try:
+                layout = self.layout()
+                layout.activate()
+                need = self.heightForWidth(self.width())
+                if need <= 0:
+                    need = layout.sizeHint().height()
+                self.setFixedHeight(need)
+            except Exception as exc:
+                warn("message: height not set (%s)" % exc)
+                self.adjustSize()
+
         def place(self):
-            """Bottom right of the 3D view area (the MDI area), 12 px in."""
+            """Bottom right of the 3D view area (the MDI area), 12 px in; above the
+            navigation bar when the card would cover part of it."""
             try:
                 window = self.parentWidget()
                 area = window.centralWidget()
@@ -214,9 +248,13 @@ def _make_notice(window):
                     corner = area.mapTo(window, QtCore.QPoint(area.width(), area.height()))
                 else:
                     corner = QtCore.QPoint(window.width(), window.height())
-                self.adjustSize()
                 x = max(0, corner.x() - self.width() - 12)
                 y = max(0, corner.y() - self.height() - 12)
+                bar = _navbar_rect(window)
+                if bar is not None and bar.intersects(
+                    QtCore.QRect(x, y, self.width(), self.height())
+                ):
+                    y = max(0, bar.top() - self.height() - 8)
                 self.move(x, y)
             except Exception:
                 pass
@@ -225,9 +263,18 @@ def _make_notice(window):
             try:
                 if event.type() == QtCore.QEvent.Resize and self.isVisible():
                     self.place()
+                    # the navigation bar moves after this resize: place again after it
+                    QtCore.QTimer.singleShot(0, self._place_later)
             except Exception:
                 pass
             return False
+
+        def _place_later(self):
+            try:
+                if self.isVisible():
+                    self.place()
+            except Exception:
+                pass
 
         def enterEvent(self, event):
             try:
@@ -258,3 +305,17 @@ def _make_notice(window):
                 pass
 
     return Notice(window)
+
+
+def _navbar_rect(window):
+    """The navigation bar's rectangle in the main window's coordinates, or None."""
+    try:
+        from . import navbar_ui
+        from .compat import QtCore
+
+        bar = navbar_ui.bar()
+        if bar is None or not bar.isVisible():
+            return None
+        return QtCore.QRect(bar.mapTo(window, QtCore.QPoint(0, 0)), bar.size())
+    except Exception:
+        return None

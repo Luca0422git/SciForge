@@ -189,7 +189,7 @@ d_ok.wait_ms = 1500
 def d_check():
     text = notice_text()
     h.check("D the message shows", "Inserted extras.dxf" in text, text)
-    h.check("D the hatch FreeCAD cannot read", "1 hatch (FreeCAD cannot read them)" in text, text)
+    h.check("D the hatch FreeCAD cannot read", "1 hatch (FreeCAD cannot read it)" in text, text)
     h.check("D the text", "1 text or dimension" in text, text)
     h.check("D the point", "1 point" in text, text)
     sk = i.sketches()[-1] if i.sketches() else None

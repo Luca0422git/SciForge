@@ -547,7 +547,7 @@ Each model is listed under its first tag; its other tags follow it.
 ### export (2)
 
 - `export_report_design`: Export report: what STEP, IGES, STL, 3MF and OBJ leave out of a design with components, a hidden body and a material [export-report, components]
-- `export_report_sketch_dxf`: Export report: what Save As DXF leaves out of a sketch (dimensions, constraints, construction, points, its place in 3D) [export-report, dxf, sketch]
+- `export_report_sketch_dxf`: Export report: what Save As DXF leaves out of a sketch (dimensions, constraints, construction, points, reference curves, its place in 3D) [export-report, dxf, sketch]
 
 ### picks (2)
 
@@ -606,7 +606,7 @@ Each model is listed under its first tag; its other tags follow it.
 | `delete` | `delete_step` | 5 | `extrude_multi_cut_timeline`, `extrude_multi_join_delete`, `hole_second_survives_first`, `tl_delete_before_fillet`, `tl_delete_hole` |
 | `delete_bodies` | `delete_bodies` | 2 | `bodies_combine_new_body_target_deleted`, `bodies_combine_tool_deleted` |
 | `delete_face` | `delete_face` | 2 | `bodies_delete_face_fillet`, `bodies_delete_face_hole` |
-| `edit` | `set_sketch_dimension`, `edit_step` | 31 | `blend_fillet_edit_radius`, `bodies_combine_follows_tool`, `comp_paste_instance_follows`, `comp_paste_new_independent`, `edit_extrude_then_shell` |
+| `edit` | `set_sketch_dimension`, `edit_step` | 32 | `blend_fillet_edit_radius`, `bodies_combine_follows_tool`, `comp_paste_instance_follows`, `comp_paste_new_independent`, `edit_extrude_then_shell` |
 | `emboss` | `emboss` | 4 | `emboss_cylinder_deboss`, `emboss_cylinder_rect`, `emboss_flat_deboss`, `emboss_flat_rect` |
 | `expect_bodies` | (a test helper) | 38 | `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit`, `extrude_multi_cut_excluded` |
 | `expect_component` | (a test helper) | 1 | `sf_cylinder_new_component` |

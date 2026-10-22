@@ -1,6 +1,6 @@
 {
   "id": "export_report_sketch_dxf",
-  "title": "Export report: what Save As DXF leaves out of a sketch (dimensions, constraints, construction, points, its place in 3D)",
+  "title": "Export report: what Save As DXF leaves out of a sketch (dimensions, constraints, construction, points, reference curves, its place in 3D)",
   "tags": [
     "export",
     "export-report",
@@ -106,6 +106,65 @@
         "off_plane": 1
       },
       "comment": "on XZ (the DXF is flat in the sketch's own X and Y), with 2 points and a construction line"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "face": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "auto_project": true,
+      "geometry": [
+        {
+          "circle": [
+            10,
+            10,
+            3
+          ],
+          "name": "pin"
+        }
+      ]
+    },
+    {
+      "op": "export_report_expect",
+      "format": "DXF",
+      "target": "s3",
+      "expect": {
+        "dimensions": 3,
+        "off_plane": 1
+      },
+      "comment": "on e1's top face with Auto project (on by default): the face's 5 edges are projected as defining curves, so they are curves of the sketch and the DXF has them (the round trip counts them): no projected curve is reported lost (review F4); the pin's 3 dimensions and its place in 3D are"
+    },
+    {
+      "op": "sketch_extras",
+      "target": "s3",
+      "references": [
+        [
+          "e1",
+          "Edge3"
+        ],
+        [
+          "e1",
+          "Edge14"
+        ]
+      ],
+      "comment": "two of e1's bottom edges (a line and the hole's circle) projected as references only (not defining)"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "DXF",
+      "target": "s3",
+      "expect": {
+        "dimensions": 3,
+        "projected": 2,
+        "off_plane": 1
+      },
+      "comment": "the 2 reference curves are not in the DXF: 2 projected curves (curves, not the references they come from)"
     }
   ],
   "expect": {

@@ -65,5 +65,5 @@ Done: AI: Edit Extrude1. Bodies now: Body1: 35497.3 mm3, 60 x 40 x 15 mm.
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `blend_fillet_edit_radius`, `bodies_combine_follows_tool`, `comp_paste_instance_follows`, `comp_paste_new_independent`, `edit_extrude_then_shell`, `edit_fillet_radius`, `edit_pattern_count`, `edit_width_after_fillet_and_hole`, `extrude_multi_cut_edit`, `extrude_multi_cut_profile_body_excluded`, `extrude_multi_cut_reopen`, `extrude_start_object_follows` and 57 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `blend_fillet_edit_radius`, `bodies_combine_follows_tool`, `comp_paste_instance_follows`, `comp_paste_new_independent`, `edit_extrude_then_shell`, `edit_fillet_radius`, `edit_pattern_count`, `edit_width_after_fillet_and_hole`, `export_report_design`, `extrude_multi_cut_edit`, `extrude_multi_cut_profile_body_excluded`, `extrude_multi_cut_reopen` and 58 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)
