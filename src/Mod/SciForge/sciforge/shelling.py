@@ -844,11 +844,24 @@ def _renamer(old, new):
 def _repoint(old, new):
     """Steps that used `old` (a sketch on one of its faces, a later fillet...) use `new`,
     and the same faces of it."""
+    from . import follow, sketch_external
+
     rename = _renamer(old, new)
+
+    def projected(name):  # a sketch's projected edge on `new` (None: not there)
+        try:
+            return follow.find(new.Shape, old.Shape.getElement(name))
+        except Exception:
+            return None
+
     for dep in list(old.InList):
         if dep is new or dep.TypeId == "PartDesign::Body":
             continue
         for prop in dep.PropertiesList:
+            if prop == "ExternalGeometry" and sketch_external.is_sketch(dep):
+                # read-only in FreeCAD 1.1: projected again from `new` (they froze)
+                sketch_external.relink(dep, old, new, projected)
+                continue
             try:
                 kind = dep.getTypeIdOfProperty(prop)
             except Exception:

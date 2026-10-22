@@ -461,6 +461,43 @@ def _snapshot(obj, path):
     return expressions, value
 
 
+def _sketch_shots(doc):
+    """{sketch name: its curves} of every sketch (sketch_geometry.snapshot), to put them
+    back after a refused change: with the value back, the solver starts from where the
+    change moved the curves, and a sketch that is not fully constrained stayed moved (a
+    rectangle with only its width set came back shifted and twice as tall)."""
+    from . import sketch_geometry
+
+    shots = {}
+    for obj in doc.Objects:
+        if obj.TypeId == "Sketcher::SketchObject":
+            try:
+                shots[obj.Name] = sketch_geometry.snapshot(obj)
+            except Exception:
+                pass
+    return shots
+
+
+def _put_back_sketches(doc, shots):
+    """Every sketch's curves where they were before the change (construction flags and ids
+    kept); only sketches whose curves moved are touched."""
+    from . import sketch_geometry
+
+    for name, shot in shots.items():
+        sketch = doc.getObject(name)
+        if sketch is None or len(sketch.Geometry) != len(shot):
+            continue
+        try:
+            if not sketch_geometry.moved(sketch, shot):
+                continue
+            sketch_geometry.restore(sketch, shot)
+            sketch.touch()
+        except Exception as exc:
+            from . import warn
+
+            warn("parameters: %s not put back as it was: %s" % (sketch.Label, exc))
+
+
 def _put_back(obj, path, snapshot):
     expressions, value = snapshot
     now = dict(obj.ExpressionEngine)
@@ -572,6 +609,7 @@ def change_checked(doc, obj, path, apply, what):
     before = broken_problems(doc)
     signs = signs_of(doc)
     snapshot = _snapshot(obj, path)
+    shots = _sketch_shots(doc)
     try:
         apply()
     except Exception as exc:
@@ -580,6 +618,7 @@ def change_checked(doc, obj, path, apply, what):
         reason = _solver_refusal(obj, path, exc, what)
         try:
             _put_back(obj, path, snapshot)
+            _put_back_sketches(doc, shots)
         except Exception:
             pass
         if not reason:
@@ -606,5 +645,6 @@ def change_checked(doc, obj, path, apply, what):
     message = explain_core.parameter_refusal(what, problems)
     log("parameters: refused %s: %s" % (what, "; ".join("%s: %s" % p for p in problems)))
     _put_back(obj, path, snapshot)
+    _put_back_sketches(doc, shots)  # (the recompute then solves them from where they were)
     doc.recompute()
     return message

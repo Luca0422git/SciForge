@@ -31,7 +31,8 @@ from . import sketch_chamfer_core as core
 from . import sketch_draw as draw
 from .compat import QtCore, QtWidgets
 from .sketch_draw import ANGLE, LENGTH, Field
-from .sketch_fillet_tool import give_back, set_geometry
+from .sketch_fillet_tool import give_back
+from .sketch_geometry import set_geometry
 
 CHOOSER_NAME = "SciForgeSketchChamferType"
 CHOOSER_STYLE = (
