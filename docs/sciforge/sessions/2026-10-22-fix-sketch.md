@@ -129,4 +129,24 @@ fails on the old code and passes now. No FreeCAD core file changed (nothing for
 
 ## Test results
 
-(filled in below)
+All with real FreeCAD 1.1.4 (`tools/sciforge/run_tests.sh`), on the final code:
+
+- `--only base`: unit 2097 tests OK (9 skipped); golden 451 pass + the 2 known XFAIL; journey,
+  smoke and restarts pass; documentation examples 137 items / 874 calls / 0 failed; agent end
+  to end 70 / 70. The headless AI run had one failure on the first pass: a Concentric of two
+  circles whose centres are both pinned to (30, 0) was expected to say "conflicts with"; it is
+  a repeat (FreeCAD flags the old dimensions), and the answer now says "Concentric: not added,
+  the 30 mm dimension 'g3.x' and the 0 mm dimension 'g3.y' already make it so". The
+  expectation in `SciForgeTests/headless/runner.py` was changed to that; rerun: 202 calls /
+  117 tools / 0 failed.
+- The reviewer's own scenarios (rv_sketch_a, b, c2, d, e, run from the scratch folder, not
+  committed): every check of the findings passes. (rv_sketch_a's "D: palette follows undo"
+  check expects "not fully constrained" for a sketch whose 11 constraints leave 0 degrees of
+  freedom: its expectation, not a fault.)
+- 97 related GUI scenarios (every `sketch*`, `fixsketch_*`, `sketch2_*`, `parameters*`,
+  timeline/browser and parameter scenarios, everything that uses `sketch_explain`, Change
+  Parameters or `inspect_design`, and the three new/extended ones): 95 PASS.
+  `modeling2_sketch` (a too-long sketch chamfer is expected to be refused, item 8 now limits
+  it: "Chamfer: 30 mm does not fit: limited to 17.11 mm") and `revolve_qa` ("P4 400 is
+  explained": item 8 limits the revolve angle) fail identically on `integration` 3e515b5
+  without these changes: expectations left behind by `wf/limits`, not this work.
