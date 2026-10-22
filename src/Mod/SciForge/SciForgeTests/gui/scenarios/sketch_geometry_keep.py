@@ -26,6 +26,9 @@ lines), then:
   T  the sketch opened again from the timeline, SKETCH > CREATE > Text (real input), its
      frame's corner dragged (text.set_frame): the rectangle's curves keep their flags and ids
   R  Finish Sketch, save, close, reopen: the old corner is still a construction point
+  P  MODIFY > Change Parameters, a sketch width typed -60 (real input in the dialog): refused,
+     and every curve of that sketch (only its width is set: it can move) is where it was
+     (it came back shifted and twice as tall: the solver started from where -60 put it)
   D  a sketch derived from a saved design (derive.update deletes and adds every curve):
      the derived curves keep their source's ids over an update
 """
@@ -463,6 +466,132 @@ def r_check():
     same_state("R", sketch, s["base"], upto=len(s["base"]))
 
 
+# -- P: a refused parameter change puts the sketch's curves back -----------------------------
+def _dialog():
+    from sciforge import parameters_ui
+
+    d = parameters_ui.ParametersDialog.last
+    return d if d is not None and d.isVisible() else None
+
+
+def _positions(sketch):
+    out = []
+    for g in sketch.Geometry:
+        if g.TypeId == "Part::GeomPoint":
+            out.append((round(g.X, 7), round(g.Y, 7)))
+        else:
+            a, b = g.StartPoint, g.EndPoint
+            out.append((round(a.x, 7), round(a.y, 7), round(b.x, 7), round(b.y, 7)))
+    return out
+
+
+def p_setup():
+    """A 40 x 20 rectangle with only its width set (it can move and change height), a line
+    hanging on a corner, a construction point; extruded 10."""
+    import Part
+    import Sketcher
+
+    d = App.newDocument("KeepTrial")
+    body = d.addObject("PartDesign::Body", "Body")
+    sketch = body.newObject("Sketcher::SketchObject", "Sketch")
+    sketch.AttachmentSupport = [(body.Origin.OriginFeatures[3], "")]  # XY plane
+    sketch.MapMode = "FlatFace"
+    pts = [V(0, 0, 0), V(40, 0, 0), V(40, 20, 0), V(0, 20, 0)]
+    lines = [sketch.addGeometry(Part.LineSegment(pts[i], pts[(i + 1) % 4])) for i in range(4)]
+    cons = [Sketcher.Constraint("Coincident", lines[i], 2, lines[(i + 1) % 4], 1) for i in range(4)]
+    cons += [
+        Sketcher.Constraint("Horizontal", lines[0]),
+        Sketcher.Constraint("Horizontal", lines[2]),
+        Sketcher.Constraint("Vertical", lines[1]),
+        Sketcher.Constraint("Vertical", lines[3]),
+    ]
+    sketch.addConstraint(cons)
+    s["p_w"] = sketch.addConstraint(Sketcher.Constraint("DistanceX", 0, 1, 0, 2, 40.0))
+    free = sketch.addGeometry(Part.LineSegment(V(40, 20, 0), V(55, 33, 0)), True)
+    sketch.addConstraint(Sketcher.Constraint("Coincident", free, 1, lines[1], 2))
+    sketch.addConstraint(Sketcher.Constraint("Distance", free, 20.0))
+    sketch.addGeometry(Part.Point(V(20, 10, 0)), True)
+    pad = body.newObject("PartDesign::Pad", "Pad")
+    pad.Profile = sketch
+    pad.Length = 10
+    sketch.Visibility = False
+    d.recompute()
+    s["p_sk"], s["p_pad"] = sketch, pad
+    s["p_pos"] = _positions(sketch)
+    s["p_state"] = state(sketch)
+    s["p_volume"] = pad.Shape.Volume
+    h.fit()
+
+
+def p_open():
+    si.menu_item("MODIFY", "Change Parameters")
+
+
+def p_type():
+    from PySide import QtCore, QtWidgets
+    from PySide6 import QtTest
+
+    from SciForgeTests.gui import widget_input as w
+
+    d = _dialog()
+    if not h.check("P: Change Parameters opened", d is not None):
+        return
+    label = "d%d" % (s["p_w"] + 1)
+    item = None
+    for i in range(d.model.topLevelItemCount()):
+        group = d.model.topLevelItem(i)
+        if group.text(0) != s["p_sk"].Label:
+            continue
+        group.setExpanded(True)
+        for j in range(group.childCount()):
+            if group.child(j).text(1) == label:
+                item = group.child(j)
+    if not h.check("P: the width is listed", item is not None):
+        return
+    d.model.scrollToItem(item)
+    rect = d.model.visualItemRect(item)
+    x = d.model.header().sectionPosition(2) + 10
+    view = d.model
+    view.window().activateWindow()
+    QtWidgets.QApplication.processEvents()
+    w.double_click(view.viewport(), QtCore.QRect(x, rect.top(), 20, rect.height()).center())
+    editors = [e for e in view.findChildren(QtWidgets.QLineEdit) if e.isVisible()]
+    if not h.check("P: an editor opened in the cell", bool(editors)):
+        return
+    QtTest.QTest.keyClick(editors[0], QtCore.Qt.Key_A, QtCore.Qt.ControlModifier)
+    QtTest.QTest.keyClicks(editors[0], "-60")
+    QtTest.QTest.keyClick(editors[0], QtCore.Qt.Key_Return)
+    QtWidgets.QApplication.processEvents()
+    QtTest.QTest.qWait(500)
+    h.check("P: FreeCAD reported the trial's failure (expected)", True, h.new_errors())
+
+
+def p_check():
+    sketch = s["p_sk"]
+    d = _dialog()
+    text = d.message.text() if d is not None else ""
+    h.check("P: refused, and says so", "Not changed" in text, text)
+    h.check("P: the width stays 40", abs(sketch.getDatum(s["p_w"]).Value - 40) < 1e-9)
+    moved = [(i, a, b) for i, (a, b) in enumerate(zip(s["p_pos"], _positions(sketch))) if a != b]
+    h.check("P: every curve is where it was (nothing changes)", not moved, moved)
+    h.check("P: construction flags and ids kept", state(sketch) == s["p_state"], state(sketch))
+    h.check(
+        "P: the part is unchanged",
+        abs(s["p_pad"].Shape.Volume - s["p_volume"]) < 1e-6,
+        (s["p_pad"].Shape.Volume, s["p_volume"]),
+    )
+    if d is not None:
+        d.reject()
+
+
+p_check.wait_ms = 1200
+
+
+def p_closed():
+    h.check("P: the dialog closed", _dialog() is None)
+    App.closeDocument(App.ActiveDocument.Name)
+
+
 # -- D: a derived sketch keeps its ids over an update -----------------------------------------
 def d_derive():
     import Part
@@ -551,6 +680,11 @@ h.run(
             r_save,
             r_reopen,
             r_check,
+            p_setup,
+            p_open,
+            p_type,
+            p_check,
+            p_closed,
             d_derive,
         ]
     ),
