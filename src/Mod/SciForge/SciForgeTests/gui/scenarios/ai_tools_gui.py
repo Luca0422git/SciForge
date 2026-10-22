@@ -186,6 +186,11 @@ def export_report():
 
 
 # -- Path 8 -------------------------------------------------------------------------------------
+def _read(path):
+    with open(path, "rb") as stream:
+        return stream.read()
+
+
 def per_body_overwrite():
     import glob
 
@@ -218,7 +223,7 @@ def per_body_overwrite():
             with open(path, "w") as stream:
                 stream.write("kept")
         a = call("export", args)
-        kept = all(open(p).read() == "kept" for p in files)
+        kept = all(_read(p) == b"kept" for p in files)
         h.check(
             "replacing them asks the person once, naming both files",
             len(asked) == 1 and all(os.path.basename(p) in asked[0] for p in files),
@@ -227,7 +232,7 @@ def per_body_overwrite():
         h.check("denied: refused and nothing written", a["is_error"] and kept, a["text"][:300])
         s["allow"] = True
         a = call("export", args)
-        replaced = all(open(p).read() != "kept" for p in files)
+        replaced = all(_read(p) != b"kept" for p in files)
         ok("allowed: both files replaced", a, len(asked) == 2 and replaced)
     finally:
         bridge.ASK = None
