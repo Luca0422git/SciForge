@@ -147,7 +147,10 @@ class PickConstraint(draw.DrawTool):
             ours = finding.bad if finding.kind == "redundant" else []
             if ours and len(ours) == len(new):
                 # nothing of it is new: say what already makes it so
-                finding.culprits = explain.redundant_culprits(sketch, ours[0], exclude=new)
+                if not finding.culprits:
+                    finding.culprits = explain.redundant_culprits(
+                        sketch, ours[0], exclude=new, solved=True
+                    )
                 refused = (explain.refusal(sketch, self.title, finding), finding.culprits)
                 explain.log_finding(self.title, sketch, finding)
                 raise ValueError("it is so already")

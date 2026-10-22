@@ -188,11 +188,14 @@ class Palette(theme.OwnBackground, QtWidgets.QFrame):
         """The "left to define" note, from what the solver last found (no solve)."""
         from . import sketch_explain, sketch_explain_core
 
-        dof, locked, conflicting = sketch_explain.freedom(self.session.sketch)
-        text = sketch_explain_core.freedom_note(dof, locked, conflicting)
+        sketch = self.session.sketch
+        dof, locked, conflicting = sketch_explain.freedom(sketch)
+        redundant = bool(sketch.RedundantConstraints)
+        text = sketch_explain_core.freedom_note(dof, locked, conflicting, redundant)
         if text != self.freedom.text():
             self.freedom.setText(text)
-            colour = "#ff8a80" if conflicting else ("#f5f5f5" if locked else "#9fd2ff")
+            bad = conflicting or redundant
+            colour = "#ff8a80" if bad else ("#f5f5f5" if locked else "#9fd2ff")
             self.freedom.setStyleSheet("color: %s;" % colour)
 
     def _refresh_mode(self):

@@ -286,19 +286,21 @@ SKIP_TYPES = (
     "PartDesign::Body",
     "App::Part",
     "App::Origin",
-    "App::VarSet",
     "App::DocumentObjectGroup",
 )
+SIGNED = ("DistanceX", "DistanceY")  # FreeCAD keeps their sign: it is their direction
 
 
-def broken_steps(doc):
-    """{object name: reason} of the steps that are broken now, in document order."""
+def broken_steps(doc, signs=None):
+    """{object name: reason} of the steps that are broken now, in document order. `signs`
+    (from signs_of): a horizontal/vertical sketch dimension whose sign is not the one it had
+    has turned inside out (the profile flips), which breaks its sketch too."""
     out = {}
     for obj in doc.Objects:
         if obj.TypeId in SKIP_TYPES:
             continue
         try:
-            reason = _broken(obj)
+            reason = _broken(obj, signs)
         except Exception:
             reason = ""
         if reason:
@@ -306,16 +308,63 @@ def broken_steps(doc):
     return out
 
 
-def _broken(obj):
+def signs_of(doc):
+    """{(sketch name, constraint index): +1/-1} of the horizontal/vertical dimensions."""
+    out = {}
+    for obj in doc.Objects:
+        if obj.TypeId != "Sketcher::SketchObject":
+            continue
+        for i, c in enumerate(obj.Constraints):
+            if c.Type in SIGNED and c.Driving and abs(c.Value) > 1e-7:
+                out[(obj.Name, i)] = 1 if c.Value > 0 else -1
+    return out
+
+
+def _formula_value(obj, index, value):
+    """The value a sketch dimension's formula gives (FreeCAD stores 0 for a length whose
+    formula gives less: the message says what it gave)."""
+    expr = dict(obj.ExpressionEngine).get(".Constraints[%d]" % index)
+    if not expr:
+        return value
+    try:
+        got = obj.evalExpression(expr)
+        return float(got.Value) if hasattr(got, "Value") else float(got)
+    except Exception:
+        return value
+
+
+def _broken(obj, signs=None):
     from . import sketch_explain_core as explain_core
 
+    if obj.TypeId == "App::VarSet":
+        # a parameter whose formula cannot be computed (an unknown name): it keeps its old
+        # value, and every dimension that uses it silently stops following
+        for prop, expr in dict(obj.ExpressionEngine).items():
+            try:
+                obj.evalExpression(expr)
+            except Exception:
+                return "the formula %s of %s cannot be computed (a name in it is unknown)" % (
+                    core.from_freecad(expr),
+                    prop.lstrip("."),
+                )
+        return ""
     if obj.TypeId == "Sketcher::SketchObject":
         from . import sketch_explain
 
         curve_names, _kinds = sketch_explain.names(obj)
         for i, c in enumerate(obj.Constraints):
-            if c.Driving and explain_core.bad_size(c.Type, c.Value):
+            if not c.Driving or c.Type not in explain_core.LENGTHS:
+                continue
+            value = _formula_value(obj, i, c.Value)
+            flipped = (
+                signs is not None
+                and c.Type in SIGNED
+                and (obj.Name, i) in signs
+                and value * signs[(obj.Name, i)] < 0
+            )
+            if flipped or explain_core.bad_size(c.Type, value):
                 info = sketch_explain.constraint_info(obj, i, c)
+                info["value"] = value
                 return explain_core.bad_size_reason(info, curve_names)
         conflicting = [i - 1 for i in obj.ConflictingConstraints]
         if conflicting:
@@ -328,6 +377,13 @@ def _broken(obj):
                 return "its %s would shrink to nothing" % curve_names.get(i, "curve")
     state = list(obj.State)
     if "Invalid" in state or "Error" in state:
+        if obj.TypeId == "Sketcher::SketchObject":
+            try:
+                failed = "solving the sketch failed" in obj.getStatusString().lower()
+            except Exception:
+                failed = False
+            if failed:  # the solver found no solution (no conflict list to name)
+                return NO_FIT
         from . import timeline_ops
 
         _kind, reason = timeline_ops.problem(obj)
@@ -396,6 +452,56 @@ def _put_back(obj, path, snapshot):
         setattr(obj, path, value)
 
 
+# a sketch whose solver finds no solution with the new value (no conflict list to name)
+NO_FIT = "that value does not fit its other dimensions and constraints"
+
+# FreeCAD's setDatum words for a value its solver cannot take (SketchObjectPyImp.cpp): -1 no
+# solution ("Invalid constraint index", the index itself is valid here), -2 redundant, -3
+# conflicting, -4 over-constrained or negative ("Negative datum"), -5 zero
+SOLVER_WORDS = (
+    "invalid constraint index",
+    "is invalid",
+    "conflicting constraints",
+    "negative datum",
+    "zero is not a valid datum",
+)
+
+
+def _solver_refusal(obj, path, exc, what):
+    """Why the sketch could not take a typed dimension value (setDatum raised), in words:
+    a size of 0 or less, what it conflicts with, or that it does not fit. "" when `exc` is
+    something else (a formula FreeCAD cannot read)."""
+    if obj.TypeId != "Sketcher::SketchObject" or not path.startswith(".Constraints["):
+        return ""
+    if not any(w in str(exc).lower() for w in SOLVER_WORDS):
+        return ""
+    from . import sketch_explain
+    from . import sketch_explain_core as explain_core
+
+    index = int(path[len(".Constraints[") : -1])
+    c = obj.Constraints[index]
+    typed = None
+    if " = " in what:
+        try:
+            typed = App.Units.Quantity(what.split(" = ", 1)[1]).Value
+        except Exception:
+            typed = None
+    if typed is not None and c.Type in explain_core.LENGTHS and typed <= 1e-7:
+        info = sketch_explain.constraint_info(obj, index, c)
+        info["value"] = typed
+        curve_names, _kinds = sketch_explain.names(obj)
+        return explain_core.bad_size_reason(info, curve_names)
+    try:
+        # FreeCAD's failed solve still knows what fought the value
+        culprits = sketch_explain.conflict_culprits(obj, [index])
+        text, _count = sketch_explain.words(obj, culprits)
+    except Exception:
+        text = ""
+    if text:
+        return "that value conflicts with %s" % text
+    return NO_FIT
+
+
 def change_checked(doc, obj, path, apply, what):
     """Make a parameter change (`apply()`), recompute, and take it back when it breaks a step
     that was fine before. `obj`/`path`: the property `apply` changes (a user parameter: the
@@ -406,18 +512,27 @@ def change_checked(doc, obj, path, apply, what):
     from . import sketch_explain_core as explain_core
 
     before = broken_steps(doc)
+    signs = signs_of(doc)
     snapshot = _snapshot(obj, path)
     try:
         apply()
-    except Exception:
-        # refused half-way (a formula FreeCAD cannot read): what it did is put back too
+    except Exception as exc:
+        # refused half-way (a formula FreeCAD cannot read, a value the sketch's solver cannot
+        # reach): what it did is put back too
+        reason = _solver_refusal(obj, path, exc, what)
         try:
             _put_back(obj, path, snapshot)
         except Exception:
             pass
-        raise
+        if not reason:
+            raise
+        doc.recompute()
+        labels = _step_names(doc)
+        problem = (labels.get(obj.Name) or obj.Label, reason)
+        log("parameters: refused %s: %s: %s" % (what, problem[0], reason))
+        return explain_core.parameter_refusal(what, [problem])
     doc.recompute()
-    after = broken_steps(doc)
+    after = broken_steps(doc, signs)
     new = [(name, reason) for name, reason in after.items() if name not in before]
     if not new:
         return ""

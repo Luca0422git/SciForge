@@ -186,6 +186,30 @@ class MessageTests(unittest.TestCase):
         self.assertIsNone(core.constraint_step_title("Inferred Constraints"))
         self.assertIsNone(core.constraint_step_title(""))
 
+    def test_other_constraint_steps(self):
+        # the Horizontal/Vertical tool on a preselected line: the type added names it
+        step = "Add horizontal/vertical constraint"
+        self.assertEqual(core.constraint_step_title(step, ["Vertical"]), "Vertical")
+        self.assertEqual(core.constraint_step_title(step, ["Horizontal"]), "Horizontal")
+        self.assertEqual(core.constraint_step_title(step), "Horizontal/Vertical")
+        # two points made level or upright
+        self.assertEqual(core.constraint_step_title("Add vertical alignment"), "Vertical")
+        self.assertEqual(core.constraint_step_title("Add horizontal alignment"), "Horizontal")
+        self.assertEqual(
+            core.constraint_step_title("Add horizontal/vertical alignment", ["Horizontal"]),
+            "Horizontal",
+        )
+        # tangent through a new point, and the swap of a join for an end-to-end tangency
+        self.assertEqual(core.constraint_step_title("Add tangent constraint point"), "Tangent")
+        swap = "Swap coincident+tangency with ptp tangency"
+        self.assertEqual(core.constraint_step_title(swap), "Tangent")
+        self.assertTrue(core.is_swap_step(swap))
+        self.assertFalse(core.is_swap_step("Add tangent constraint"))
+        # horizontal/vertical distances are dimensions
+        self.assertIsNone(
+            core.constraint_step_title("Add point to point horizontal distance constraint")
+        )
+
 
 class PriorityTests(unittest.TestCase):
     def test_order(self):
@@ -241,6 +265,63 @@ class PriorityTests(unittest.TestCase):
         self.assertEqual(kept, ["Coincident"])
 
 
+class KeepStrongestTests(unittest.TestCase):
+    """The fallback of the inferred constraints that did not all fit, with a fake sketch:
+    `bad(present)` says when the sketch is not clean."""
+
+    def run_case(self, items, bad):
+        rank = {"Coincident": 0, "Horizontal": 2, "Perpendicular": 4, "Parallel": 5}.get
+        present = list(items)
+        calls = {"drop": 0, "try": 0}
+
+        def drop(item):
+            calls["drop"] += 1
+            present.remove(item)
+            return not bad(present)
+
+        def try_add(item):
+            calls["try"] += 1
+            present.append(item)
+            if bad(present):
+                present.remove(item)
+                return False
+            return True
+
+        kept = core.keep_strongest(items, rank, drop, try_add)
+        return kept, present, calls
+
+    def test_one_weak_guess_too_many_costs_one_drop(self):
+        # the closing segment of an outline: its Horizontal repeats the Parallel
+        items = ["Coincident", "Horizontal", "Parallel"]
+        kept, present, calls = self.run_case(
+            items, lambda p: "Horizontal" in p and "Parallel" in p
+        )
+        self.assertEqual(kept, ["Coincident", "Horizontal"])
+        self.assertEqual(sorted(present), ["Coincident", "Horizontal"])
+        self.assertEqual(calls, {"drop": 1, "try": 0})
+
+    def test_a_weak_guess_that_fits_is_tried_again(self):
+        # the Horizontal fights the Coincident; the Parallel fits: dropped on the way, kept
+        items = ["Coincident", "Horizontal", "Parallel"]
+        kept, present, calls = self.run_case(
+            items, lambda p: "Horizontal" in p and "Coincident" in p
+        )
+        self.assertEqual(kept, ["Coincident", "Parallel"])
+        self.assertEqual(sorted(present), ["Coincident", "Parallel"])
+        self.assertEqual(calls, {"drop": 2, "try": 1})
+
+    def test_never_a_weak_guess_over_a_strong_one(self):
+        items = ["Parallel", "Coincident"]
+        kept, present, _calls = self.run_case(items, lambda p: len(p) == 2)
+        self.assertEqual(kept, ["Coincident"])
+        self.assertEqual(present, ["Coincident"])
+
+    def test_not_clean_before(self):
+        kept, present, _calls = self.run_case(["Coincident", "Parallel"], lambda p: True)
+        self.assertIsNone(kept)
+        self.assertEqual(present, [])
+
+
 class PadlockTests(unittest.TestCase):
     def test_rule(self):
         ok = core.is_fully_constrained
@@ -250,9 +331,13 @@ class PadlockTests(unittest.TestCase):
         self.assertFalse(ok(4, True, 0, [3, 5], [], []), "FreeCAD's flag stays on in a conflict")
         self.assertFalse(ok(4, True, -1, [], [], []))
         self.assertFalse(ok(4, True, 0, [], [2], []))
-        # FreeCAD does not update its flag when the solve only found redundancy
-        self.assertTrue(ok(4, False, 0, [], [], [7]))
         self.assertFalse(ok(4, False, 0, [], [], []))
+        # a redundant sketch is an error to FreeCAD 1.1: no padlock, even when FreeCAD's
+        # flag is still on (it is not updated by a solve that only found redundancy)
+        self.assertFalse(ok(4, True, 0, [], [], [12]))
+        self.assertFalse(ok(4, False, 0, [], [], [7]))
+        # its last recompute failed (the solver found no solution: no list at all)
+        self.assertFalse(ok(4, True, 0, [], [], [], broken=True))
 
     def test_freedom_note(self):
         self.assertEqual(core.freedom_note(0, True), "Fully constrained")
@@ -260,6 +345,7 @@ class PadlockTests(unittest.TestCase):
         self.assertEqual(core.freedom_note(0, False), "")
         self.assertEqual(core.freedom_note(None, False), "")
         self.assertEqual(core.freedom_note(2, False, True), "Conflicting constraints")
+        self.assertEqual(core.freedom_note(0, False, False, True), "Redundant constraints")
 
 
 class ParameterTests(unittest.TestCase):

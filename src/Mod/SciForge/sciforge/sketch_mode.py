@@ -914,7 +914,8 @@ class SketchSession:
             self.fillet_watch.committed()
         if kind == "commit" and grew:
             QtCore.QTimer.singleShot(0, lambda: self._new_dimension(count - 1))
-        if kind in ("commit", "redo") and grew:
+        if kind in ("commit", "redo"):
+            # (FreeCAD's Tangent on joined ends swaps the join: the count does not grow)
             QtCore.QTimer.singleShot(0, lambda: self._check_added(before, kind))
         if kind in ("undo", "redo") and self.editor is not None:
             QtCore.QTimer.singleShot(0, self._close_editor_after_undo)
@@ -1022,8 +1023,12 @@ class SketchSession:
         """FreeCAD's own constraint tools (Horizontal/Vertical, Parallel, Equal...) add what
         was clicked even when it fights the sketch (the sketch turns red) or repeats it.
         Fusion refuses such a constraint and shows which ones it fights: the step is taken
-        back and the message names them, highlighted (sketch_explain.py). Dimensions are
-        handled by _new_dimension (made driven); a Redo of a refused step is refused again."""
+        back and the message names them, highlighted (sketch_explain.py). Whatever the tool
+        was started with: a preselected line, two points (FreeCAD's "alignment"), or a
+        Tangent on joined ends (FreeCAD swaps the join for an end-to-end tangency: the new
+        one is the last). Dimensions are handled by _new_dimension (made driven); a Redo of
+        a refused step is refused again. A refused step leaves nothing to Redo (Fusion keeps
+        no trace of it)."""
         if self.closed:
             return
         try:
@@ -1033,11 +1038,16 @@ class SketchSession:
             from . import sketch_explain_core as explain_core
 
             step = (doc.UndoNames or [""])[0]
-            title = explain_core.constraint_step_title(step)
-            if title is None:  # not a constraint tool's step (a dimension's: made driven)
+            count = len(sketch.Constraints)
+            if count > first:
+                new = list(range(first, count))
+            elif explain_core.is_swap_step(step) and count:
+                new = [count - 1]
+            else:
                 return
-            new = list(range(first, len(sketch.Constraints)))
-            if not new:
+            types = [sketch.Constraints[i].Type for i in new]
+            title = explain_core.constraint_step_title(step, types)
+            if title is None:  # not a constraint tool's step (a dimension's: made driven)
                 return
 
             finding = explain.check_new(sketch, new, probe=True)
@@ -1046,6 +1056,8 @@ class SketchSession:
             explain.log_finding(title, sketch, finding)
             text = explain.refusal(sketch, title, finding)
             doc.undo()
+            if kind == "commit":
+                _drop_redo(doc, sketch, step)
             commands.tell(text)
             explain.highlight(sketch, finding.culprits)
         except Exception as exc:
@@ -1999,6 +2011,23 @@ def remove_stray_editors(gl, keep=None):
     return removed
 
 
+def _drop_redo(doc, sketch, step):
+    """Forget the Redo of a refused step (taken back with Undo: FreeCAD would offer it
+    again). FreeCAD clears the Redo list when a step starts recording, so a throw-away step
+    records one change (the sketch's description, put back by the abort). Only when the
+    refused step is all there is to Redo: the commit had cleared the rest already."""
+    if list(doc.RedoNames) != [step]:
+        return
+    label = sketch.Label2
+    doc.openTransaction("SciForge")
+    try:
+        sketch.Label2 = label + " "
+    finally:
+        doc.abortTransaction()
+    if sketch.Label2 != label:
+        sketch.Label2 = label
+
+
 class DimensionEditor(theme.OwnBackground, QtWidgets.QFrame):
     """Fusion's in-place dimension box: shows the measured value selected; type a
     value or an expression (=width*2), Enter keeps it, Esc keeps the measured one."""
@@ -2242,6 +2271,7 @@ class DimensionEditor(theme.OwnBackground, QtWidgets.QFrame):
         from . import sketch_explain_core as explain_core
 
         culprits = []
+        broken_before = _broken_state(self.sketch)
         doc.openTransaction("Edit Dimension")
         try:
             if expression is not None:
@@ -2249,13 +2279,15 @@ class DimensionEditor(theme.OwnBackground, QtWidgets.QFrame):
 
                 # Fusion's parameter names (=width*2) in FreeCAD's spelling (Parameters.width)
                 formula = parameters_core.to_freecad(expression, parameters.user_names(doc))
-                was_broken = bool({"Invalid", "Error"} & set(self.sketch.State))
+                # a formula FreeCAD cannot compute (an unknown name): said, not kept. Asked
+                # of the formula itself, not of the sketch's State (it can be left from an
+                # earlier try, or the sketch can be broken for another reason)
+                try:
+                    self.sketch.evalExpression(formula)
+                except Exception:
+                    raise ValueError("That formula cannot be computed: %s" % expression)
                 self.sketch.setExpression(".Constraints[%d]" % self.index, formula)
                 self.sketch.recompute()
-                state = list(self.sketch.State)
-                if not was_broken and ("Invalid" in state or "Error" in state):
-                    # a formula FreeCAD cannot compute (an unknown name): said, not kept
-                    raise ValueError("That formula cannot be computed: %s" % expression)
                 # a formula is checked like a typed value: no size of 0 or less
                 kind = self._constraint().Type
                 got = self.sketch.getDatum(self.index).getValueAs("mm").Value
@@ -2278,6 +2310,9 @@ class DimensionEditor(theme.OwnBackground, QtWidgets.QFrame):
             doc.abortTransaction()
             try:
                 self.sketch.solve()
+                if _broken_state(self.sketch) and not broken_before:
+                    # the try's recompute failed: the sketch is fine again, and says so
+                    self.sketch.recompute()
             except Exception:
                 pass
             if culprits:
@@ -2300,6 +2335,10 @@ class DimensionEditor(theme.OwnBackground, QtWidgets.QFrame):
         self.edit.selectAll()
 
 
+def _broken_state(obj):
+    return bool({"Invalid", "Error"} & set(obj.State))
+
+
 def _short(exc):
     text = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
     return text[:160]
@@ -2313,6 +2352,8 @@ CONFLICT = "That value does not fit the other dimensions and constraints of the 
 PLAIN = (
     ("conflicting", CONFLICT),
     ("Negative datum", CONFLICT),
+    # setDatum's words for a solve that found no solution (its code -1); the index is valid
+    ("Invalid constraint index", CONFLICT),
     ("is invalid", "That value is not possible here."),
     ("redundant", "That size is already set by other dimensions."),
 )
