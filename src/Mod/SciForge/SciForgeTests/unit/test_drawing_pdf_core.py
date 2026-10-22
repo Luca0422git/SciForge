@@ -421,7 +421,11 @@ class EnhanceTests(unittest.TestCase):
         second = page_pdf(*A4, line(0, 0, 50, 50) + text(5, 5, b"A4"))
         texts = [
             {"text": "Bracket", "x": 300, "y": 30, "size": 5, "layer": "border"},
-            {"text": "50", "x": 0, "y": 0, "size": 3.5, "layer": "annotations"},  # Qt's text
+            # Qt printed "50" as text near the top left corner (its 20, 20 are in the page's
+            # flipped, scaled coordinates): not added there again...
+            {"text": "50", "x": 1.0, "y": 296.0, "size": 3.5, "layer": "annotations"},
+            # ...but a "50" elsewhere is added
+            {"text": "50", "x": 200, "y": 100, "size": 3.5, "layer": "annotations"},
         ]
         sheets = [
             {"size": A3, "codes": codes, "hidden": {"View1": 3.5}, "texts": texts},
@@ -442,7 +446,7 @@ class EnhanceTests(unittest.TestCase):
         self.assertEqual(info["info"]["Creator"], "SciForge 0.1.0")
         self.assertEqual(info["info"]["CreationDate"], "D:20261022043408Z")
         self.assertEqual(info["links"], ["https://sciforge.org/spec"])
-        self.assertEqual(report["pages"][0]["texts"], 1)  # "50" was printed already
+        self.assertEqual(report["pages"][0]["texts"], 2)  # one "50" was printed already
         self.assertEqual(report["pages"][1]["layers"], ["border"])
         doc = po.read(out)
         self.assertEqual(doc.version, b"1.5")
@@ -497,7 +501,7 @@ class EnhanceTests(unittest.TestCase):
             words = subprocess.run(["pdftotext", path, "-"], capture_output=True, text=True)
             self.assertIn("Bracket", words.stdout)
             self.assertIn("Sheet 2", words.stdout)
-            self.assertEqual(words.stdout.count("50"), 1)
+            self.assertEqual(words.stdout.count("50"), 2)
             self.assertNotIn("Syntax Error", words.stderr)
             # the added text is where it was asked for (page mm, y up), not moved by the
             # transformation the page's drawing left behind

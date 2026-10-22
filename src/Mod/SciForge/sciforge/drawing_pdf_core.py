@@ -27,7 +27,7 @@ line is. Five things are added afterwards, without touching how anything looks:
   which Qt prints as paths): invisible text (render mode 3, as scanned documents carry
   their recognised text) placed over the drawn text, on the same layer, with osifont
   embedded as a subset (drawing_pdf_font.py). Text Qt already printed as text (dimensions,
-  notes, balloons, captions) is found by reading the page and is not added twice.
+  notes, balloons, captions) is found by reading the page and is not added twice there.
 * Links: a URL (https://..., www....) or mailto: in any text becomes a clickable link.
 * Metadata: title, author, subject and keywords from the drawing's title block,
   SciForge as the creating tool, in the document information and its XMP twin.
@@ -529,6 +529,23 @@ def _norm(text):
     return "".join(text.split()).casefold()
 
 
+def _printed_here(printed, key, item, sheet_mm, media):
+    """The entry of `printed` ([(text, box)]) with the same text as `item` near where the
+    item goes (within three times its size), or None."""
+    try:
+        x, y = sheet_point(float(item["x"]), float(item["y"]), sheet_mm, media)
+        reach = 3.0 * float(item.get("size") or 3.5) * MM + 0.5 * float(item.get("width") or 0) * MM
+    except (KeyError, TypeError, ValueError):
+        return None
+    for entry in printed:
+        text, box = entry
+        if text != key or box is None:
+            continue
+        if box[0] - reach <= x <= box[2] + reach and box[1] - reach <= y <= box[3] + reach:
+            return entry
+    return None
+
+
 # ------------------------------------------------------------------ links
 def find_links(text):
     """[(start, end, uri)] of the links in a text."""
@@ -767,7 +784,7 @@ def enhance(data, sheets, meta, font=None):
             runs = text_runs(doc, num, content)
         except (po.PdfError, LayerError, KeyError, TypeError, ValueError) as exc:
             entry["note"] = (entry["note"] + "; " if entry["note"] else "") + "text: %s" % exc
-        printed = [_norm(r["text"]) for r in runs]
+        printed = [(_norm(r["text"]), _union(r["boxes"])) for r in runs]
         for run in runs:
             for start, end, uri in find_links(run["text"]):
                 rect = _union(run["boxes"][start:end])
@@ -780,8 +797,9 @@ def enhance(data, sheets, meta, font=None):
                 key = _norm(str(item.get("text") or ""))
                 if not key:
                     continue
-                if key in printed:
-                    printed.remove(key)  # Qt printed it as text: not twice
+                same = _printed_here(printed, key, item, size, media)
+                if same is not None:
+                    printed.remove(same)  # Qt printed it as text there: not twice
                     continue
                 item = dict(item)
                 if not used:
