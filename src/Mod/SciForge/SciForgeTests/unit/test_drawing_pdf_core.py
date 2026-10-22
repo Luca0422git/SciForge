@@ -283,7 +283,7 @@ def coded_page():
     content += marker(c["View1", "edges"])
     content += line(3, 3, 4, 4) + line(5, 5, 6, 6, b"[42 10.5]", b"3.5")
     content += line(7, 7, 8, 8, b"[21.6 5.4]", b"1.8") + line(9, 9, 10, 10, b"[24 3 1 3]", b"1.8")
-    content += marker(c["View1", "cosmetic"])  # SciForge's centre marks, a solid cosmetic line
+    # SciForge's centre mark (a cosmetic line, COSMETIC below), a solid cosmetic line
     content += line(19, 19, 20, 20, b"[21.6 5.4]", b"1.8") + line(21, 21, 22, 22, width=b"1.8")
     content += marker(c["View1", "marks"]) + line(11, 11, 12, 12, width=b"1")
     content += marker(c["View1", "lines"]) + line(13, 13, 14, 14, b"[84 42 42 42]", b"3.5")
@@ -295,19 +295,20 @@ def coded_page():
     return content, codes
 
 
+COSMETIC = {"View1": [((20.0, 20.0), (19.0, 19.0)), ((21.0, 21.0), (22.0, 22.0))]}
+
+
 class LayerTests(unittest.TestCase):
     def test_marker_plan(self):
         plan, codes = core.marker_plan(CODES_ITEMS)
         self.assertEqual(len(plan), len(core.VIEW_BANDS) + len(core.OTHER_BANDS))
         self.assertEqual(plan[0][4], (165, 0, 1))
         self.assertEqual(codes[1], ("View1", "view", "begin"))
-        self.assertEqual(codes[8], ("Dim1", "other", "begin"))
-        zs = [z for _k, _b, z, _c, _rgb in plan[:7]]
+        self.assertEqual(codes[7], ("Dim1", "other", "begin"))
+        zs = [z for _k, _b, z, _c, _rgb in plan[:6]]
         self.assertEqual(zs, sorted(zs))
-        # between TechDraw's z-values: captions 0 < faces 10 < edges 70 < cosmetic edges
-        # (lifted to COSMETIC_Z while printing) < marks 80 < lines 90
-        self.assertTrue(zs[0] < 0 < zs[1] < 10 and 41 < zs[2] < 60)
-        self.assertTrue(70 < zs[3] < core.COSMETIC_Z < zs[4] < 80 < zs[5] < 90)
+        # between TechDraw's z-values: captions 0 < faces 10 < edges 70 < marks 80 < lines 90
+        self.assertTrue(zs[0] < 0 < zs[1] < 10 and 41 < zs[2] < 60 and 70 < zs[3] < 80 < zs[4] < 90)
 
     def test_edge_layers(self):
         self.assertEqual(core.edge_layer([], 7, 3.5), "visible")
@@ -319,7 +320,7 @@ class LayerTests(unittest.TestCase):
 
     def test_layers_of_a_page(self):
         content, codes = coded_page()
-        out, used, found = core.layer_content(content, codes, {"View1": 3.5})
+        out, used, found = core.layer_content(content, codes, {"View1": 3.5}, cosmetic=COSMETIC)
         self.assertEqual(sorted(found), sorted(codes))
         self.assertEqual(used, {k for k, _n in core.LAYERS})
         segs = segments(out)
@@ -369,14 +370,15 @@ class LayerTests(unittest.TestCase):
 
     def test_line_group_where_marks_and_hidden_edges_look_alike(self):
         # TechDraw's line group "FC 0.35mm": hidden edges at 0.18 mm, dashed exactly like
-        # SciForge's centre marks; only the cosmetic band tells them apart (PDF-4)
+        # SciForge's centre marks; only the view's cosmetic lines tell them apart (PDF-4)
         content, codes = coded_page()
-        out, used, _found = core.layer_content(content, codes, {"View1": 1.8})
+        out, used, _found = core.layer_content(content, codes, {"View1": 1.8}, cosmetic=COSMETIC)
         layers = []
         for layer, ops in segments(out):
             layers += [layer] * sum(1 for o in ops if o == b"S")
         # edges: solid, dashed at 0.35 mm (not the hidden width now), dashed at the hidden
-        # width, four dashes; cosmetic: dashed, solid; centre marks
+        # width, four dashes, the cosmetic centre mark (dashed at the hidden width too), the
+        # solid cosmetic line; centre marks
         self.assertEqual(
             layers[2:9], ["visible", "centre", "hidden", "centre", "centre", "visible", "centre"]
         )

@@ -64,15 +64,11 @@ MARK_RED = 165
 VIEW_BANDS = (
     ("begin", -1.0e9),  # caption, label: annotations
     ("faces", 5.0),  # faces, hatching, detail highlights: hatching and section lines
-    ("edges", 55.0),  # edges: by their dash pattern
-    # cosmetic edges and TechDraw centre lines (drawing_pdf_export lifts them from the
-    # edges' z 70 to COSMETIC_Z while printing): dashed ones are centre lines and marks
-    ("cosmetic", 72.0),
+    ("edges", 55.0),  # edges: by their dash pattern (and the view's cosmetic lines)
     ("marks", 75.0),  # centre marks: centre lines and marks
     ("lines", 85.0),  # section, break lines, matting: hatching and section lines
     ("end", 1.0e9),
 )
-COSMETIC_Z = 73.0
 OTHER_BANDS = (("begin", -1.0e9), ("end", 1.0e9))
 BAND_LAYER = {"begin": "annotations", "faces": "hatching", "marks": "centre", "lines": "hatching"}
 
@@ -152,12 +148,28 @@ def _fill_of(op, current):
     return current
 
 
-def layer_content(content, codes, hidden_widths=None, layers=True):
+def _same_line(points, lines, tol=0.05):
+    """True when the path's two points are the ends of one of `lines` (either way)."""
+    (ax, ay), (bx, by) = points
+    for (px, py), (qx, qy) in lines or ():
+        if abs(ax - px) <= tol and abs(ay - py) <= tol and abs(bx - qx) <= tol and abs(by - qy) <= tol:
+            return True
+        if abs(ax - qx) <= tol and abs(ay - qy) <= tol and abs(bx - px) <= tol and abs(by - py) <= tol:
+            return True
+    return False
+
+
+def layer_content(content, codes, hidden_widths=None, layers=True, cosmetic=None):
     """The page's content with every painted path put on its layer, the markers taken
     out (and stray closepaths Qt writes, which viewers complain about). Returns
-    (content, the layer keys used, the marker codes found). With layers=False (PDF/A,
-    where Qt paints the markers opaque) only the markers and Qt's stray operators go."""
+    (content, the layer keys used, the marker codes found). `cosmetic` is {view key:
+    [((x1, y1), (x2, y2))]}, the view's straight cosmetic lines in the coordinates its
+    paths are written in: a dashed one is a centre line or mark, never a hidden edge
+    (TechDraw's line group "FC 0.35mm" draws hidden edges at the same 0.18 mm and dash
+    as SciForge's centre marks). With layers=False (PDF/A, where Qt paints the markers
+    opaque) only the markers and Qt's stray operators go."""
     hidden_widths = hidden_widths or {}
+    cosmetic = cosmetic or {}
     ops = po.operations(content)
     if layers and any(op.op in (b"BMC", b"BDC", b"EMC") for op in ops):
         raise LayerError("the page already has marked content")
@@ -173,7 +185,7 @@ def layer_content(content, codes, hidden_widths=None, layers=True):
     has_point = False
     text_start = None
 
-    def classify(painting):
+    def classify(painting, points=None):
         if not seen:
             return "border"
         if not stack:
@@ -182,13 +194,12 @@ def layer_content(content, codes, hidden_widths=None, layers=True):
         if kind != "view":
             return "annotations"
         if band == "edges":
-            return edge_layer(dash, width, hidden_widths.get(key)) if painting else "visible"
-        if band == "cosmetic":
-            # SciForge's centre marks are cosmetic lines; a dashed one is never a hidden
-            # edge, whatever its width (TechDraw's "FC 0.35mm" line group draws hidden
-            # edges at the same 0.18 mm and the same dash)
-            solid = edge_layer(dash, width, None) == "visible"
-            return "visible" if solid or not painting else "centre"
+            if not painting:
+                return "visible"
+            layer = edge_layer(dash, width, hidden_widths.get(key))
+            if layer == "hidden" and points and _same_line(points, cosmetic.get(key)):
+                return "centre"
+            return layer
         return BAND_LAYER.get(band, "")
 
     for i, op in enumerate(ops):
@@ -245,7 +256,13 @@ def layer_content(content, codes, hidden_widths=None, layers=True):
                             stack[depth] = (key, kind, band)
                             break
                 continue
-            c = classify(True)
+            points = None
+            if [ops[j].op for j in range(start, i)] == [b"m", b"l"]:
+                try:
+                    points = [tuple(float(v) for v in ops[j].args[:2]) for j in (start, start + 1)]
+                except (TypeError, ValueError):
+                    points = None
+            c = classify(True, points)
             for j in range(start, i + 1):
                 cat[j] = c
             continue
@@ -792,7 +809,8 @@ def enhance(data, sheets, meta, font=None):
     """The PDF `data` (one page per sheet, in order) with layers, searchable text, links
     and metadata. `sheets` is one dict (or None) per page:
       {"size": (width, height) in mm, "codes": {code: (key, kind, band)} or None,
-       "hidden": {key: hidden line width in the PDF's units}, "texts": [...]}
+       "hidden": {key: hidden line width in the PDF's units},
+       "cosmetic": {key: straight cosmetic lines (layer_content)}, "texts": [...]}
     (texts as drawing_pdf_core.overlay wants them); `meta` has title, author, subject,
     keywords, creator, producer; `font` is a drawing_pdf_font font for the added text.
     Returns (bytes, report) where report says what was done per page."""
@@ -829,7 +847,11 @@ def enhance(data, sheets, meta, font=None):
         if codes is not None:
             try:
                 new, used, found = layer_content(
-                    content, codes, (info or {}).get("hidden"), layers_allowed
+                    content,
+                    codes,
+                    (info or {}).get("hidden"),
+                    layers_allowed,
+                    (info or {}).get("cosmetic"),
                 )
                 entry["markers"] = len(found)
                 if not layers_allowed:
