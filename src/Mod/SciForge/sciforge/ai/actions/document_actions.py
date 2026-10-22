@@ -49,10 +49,28 @@ def _undo_redo(ctx, which):
     if not names:
         raise UserError("There is nothing to %s." % which)
     getattr(doc, which)()
-    doc.recompute()
+    _settle_after_undo(doc)
     ctx.host.after_change(doc)
     mark_modified(doc)
     return bridge_core.result("%s: %s. %s" % (which.capitalize(), names[0], summary(doc)))
+
+
+def _settle_after_undo(doc):
+    """What the timeline does after Ctrl+Z / Ctrl+Y (timeline_ui.after_undo): no rebuild
+    when FreeCAD already put back every shape built from the values it restored (undo_fast,
+    whose ledger the window keeps), else the design is rebuilt the Fusion way."""
+    from ... import timeline_ops, undo_fast
+
+    try:
+        stale = any(
+            "Touched" in o.State or "Invalid" in o.State or "Error" in o.State for o in doc.Objects
+        )
+        if not stale or undo_fast.settle_without_rebuild(doc):
+            return
+        timeline_ops.recompute(doc)
+    except Exception as exc:
+        warn("AI undo: %s" % exc)
+        doc.recompute()
 
 
 @action("undo")

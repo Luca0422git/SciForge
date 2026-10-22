@@ -892,6 +892,7 @@ class TimelineWidget(QtWidgets.QWidget):
             item.state,
             item.status,
             bool(item.suppressed),
+            bool(item.locked),  # the padlock (sketch_explain), drawn on the button
             item.display,
             core.tooltip(item),
         )

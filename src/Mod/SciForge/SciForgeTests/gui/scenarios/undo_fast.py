@@ -13,6 +13,14 @@ Path C, an edit, then a change made outside any transaction (a script moving the
         sketch): the next Ctrl+Z cannot vouch for the shapes and rebuilds, and the part is
         rebuilt with the moved hole, as a recompute would.
 Path D, two edits, two Ctrl+Z in a row: neither rebuilds, the part is the original one.
+Path E (integration, 2026-10-22), Fillet 1 edited with 50 typed: the dialog holds it at the
+        largest radius that fits (value_limits), OK; Ctrl+Z and Ctrl+Y: nothing rebuilt, right.
+Path F (integration), the AI tools: edit_step of Fillet 1 through the bridge (one undo step
+        "AI: ..."), then the AI's own undo / redo: nothing rebuilt, right (the AI tools settle
+        an undo like the timeline does). An AI edit with a radius that does not fit is
+        refused with the largest radius that fits (value_fit tries values in transactions it
+        takes back): the design and the undo stack are as before, and the next Ctrl+Z still
+        gives the right part.
 """
 
 import FreeCAD as App
@@ -227,6 +235,102 @@ def d_start():
     S["before_d"] = shapes()
 
 
+# -- Path E: a value held at its limit, then Undo / Redo -------------------------------------------
+def e_start():
+    S["before_e"] = shapes()
+    S["stats"] = stats()
+
+
+def e_held():
+    p = b.blend_panel()
+    text = p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+    h.check("E: 50 is held at the largest radius that fits", text.startswith("50 mm does not fit"), text)
+
+
+e_held.wait_ms = 1500
+
+
+def e_edited():
+    fillet = t.obj("Fillet 1")
+    radius = fillet.Radius.Value if fillet is not None else 0.0
+    h.check("E: the fillet is at the limit (between 3 and 50)", 3 < radius < 50, radius)
+    S["edited_e"] = shapes()
+    S["stats"] = stats()
+
+
+# -- Path F: the AI tools' undo steps -------------------------------------------------------------
+def ai(tool, args):
+    from sciforge.ai import bridge
+
+    try:
+        return bridge.call(tool, args, from_chat=True)
+    except Exception as exc:  # (the bridge must never raise)
+        return {"text": "raised %s" % exc, "is_error": True}
+
+
+def f_start():
+    S["before_f"] = shapes()
+    S["stats"] = stats()
+
+
+def f_edit(radius):
+    def step():
+        before = shapes()
+        answer = ai("edit_step", {"step": t.obj("Fillet 1").Name, "set": {"radius": radius}})
+        h.check("F: the AI edit_step R%s is done" % radius, not answer["is_error"], answer["text"][:300])
+        names = list(App.ActiveDocument.UndoNames)
+        h.check(
+            "F: the rounds changed, the last undo step is named AI: ...",
+            shapes() != before and names and names[0].startswith("AI:"),
+            names[:3],
+        )
+        S["edited_f"] = shapes()
+        S["stats"] = stats()
+
+    step.__name__ = "f_edit_%s" % radius
+    return step
+
+
+def f_undo(which):
+    def step():
+        answer = ai(which, {})
+        h.check("F: the AI %s is done" % which, not answer["is_error"], answer["text"][:300])
+
+    step.__name__ = "f_" + which
+    return step
+
+
+def f_refused():
+    S["undo_names"] = list(App.ActiveDocument.UndoNames)
+    before = shapes()
+    answer = ai("edit_step", {"step": t.obj("Fillet 1").Name, "set": {"radius": 50}})
+    h.check(
+        "F: R50 is refused with the largest radius that fits",
+        answer["is_error"] and "Largest radius that fits here" in answer["text"],
+        answer["text"][:400],
+    )
+    h.check("F: the design is as before", shapes() == before, (shapes(), before))
+    names = list(App.ActiveDocument.UndoNames)
+    h.check("F: the undo stack is as before", names == S["undo_names"], (names[:3], S["undo_names"][:3]))
+    S["stats"] = stats()
+
+
+def f_right_after_refusal():
+    """Ctrl+Z after the refused AI value: the part is the one before the AI edit, whether or
+    not the ledger could vouch for the shapes (the trials' transactions were taken back)."""
+    now = shapes()
+    after = stats()
+    skipped = after["skipped"] > S["stats"]["skipped"]
+    h.check("F: Ctrl+Z gives the part before the AI edit", now == S["before_f"], (now, S["before_f"]))
+    print("[SciForge] undo_fast F: Ctrl+Z after the refusal %s" % ("rebuilt nothing" if skipped else "rebuilt"), flush=True)
+    doc = App.ActiveDocument
+    for o in doc.Objects:
+        o.touch()
+    doc.recompute()
+    h.check("F: a full rebuild gives the same shapes", shapes() == now, (shapes(), now))
+    S["stats"] = stats()
+
+
 h.run(
     "undo_fast",
     [
@@ -262,5 +366,28 @@ h.run(
         b_edit, b_type("2.5"), a_ok, h.idle_step(), d_check_one,
         a_undo, h.idle_step(), a_undo, h.idle_step(),
         d_both_fast, d_expect,
+        # E: a value held at its limit by the dialog, OK, Ctrl+Z / Ctrl+Y
+        e_start,
+        b_edit, b_type("50"), e_held, a_ok, h.idle_step(), e_edited,
+        a_undo, h.idle_step(),
+        expect("before_e", True, "E Ctrl+Z after a value held at its limit"),
+        b_edit, b_type("50"), e_held, a_ok, h.idle_step(), e_edited,
+        a_undo, h.idle_step(), remember("undone_e"),
+        a_redo, h.idle_step(),
+        expect("edited_e", True, "E Ctrl+Y"),
+        # F: the AI tools' undo steps
+        f_start,
+        f_edit(2.5), h.idle_step(),
+        f_undo("undo"), h.idle_step(),
+        expect("before_f", True, "F AI undo"),
+        f_edit(2.5), h.idle_step(),
+        f_undo("undo"), h.idle_step(), remember("undone_f"),
+        f_undo("redo"), h.idle_step(),
+        expect("edited_f", True, "F AI redo"),
+        f_start,
+        f_edit(3.5), h.idle_step(),
+        f_refused, h.idle_step(),
+        a_undo, h.idle_step(),
+        f_right_after_refusal,
     ],
 )
