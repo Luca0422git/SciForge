@@ -180,11 +180,63 @@ def _first_line(answer):
     return dict(answer, text=_NUMBER.sub("#", text))
 
 
+# Tools whose calls the undo check below leaves alone: they change which design is open, or
+# are undo / redo themselves.
+_UNDO_UNCHECKED = (
+    "new_design",
+    "open_design",
+    "switch_design",
+    "close_design",
+    "undo",
+    "redo",
+    "import",
+)
+
+
+def _undo_state():
+    import FreeCAD as App
+
+    doc = App.ActiveDocument
+    return (doc.Name if doc is not None else None), list(doc.UndoNames) if doc else []
+
+
+def undo_problems(tool, before, after, answer):
+    """What the documentation says about undo steps, checked on one call (review of
+    2026-10-22): a call that changes the design adds at most one undo step, named after the
+    call ("AI: ..."), so the AI panel's Undo last AI step finds it; a call that fails, or a
+    tool whose page says it is no undo step (show_hide, activate), adds none; and no
+    transaction is left open for the next change to land in."""
+    import FreeCAD as App
+
+    from sciforge.ai import catalog, tool_docs
+
+    problems = []
+    active = App.getActiveTransaction()
+    if active:
+        problems.append("an undo step is left open: %r" % (active[0],))
+    entry = catalog.tool(tool) if tool in catalog.TOOL_NAMES else None
+    if entry is None or tool in _UNDO_UNCHECKED or before[0] != after[0]:
+        return problems
+    old, new = before[1], after[1]
+    if old == new:
+        return problems
+    added = len(new) - len(old)
+    if answer["is_error"] or not entry["changes_design"] or tool in tool_docs.VIEW_STATE_ONLY:
+        problems.append("made an undo step %r although it %s" % (
+            new[:1], "failed" if answer["is_error"] else "is documented as none"))
+    elif added > 1 or not new or not new[0].startswith("AI:"):
+        problems.append(
+            "should make one undo step named 'AI: ...', the undo list is now %r" % (new[:3],)
+        )
+    return problems
+
+
 class Session:
     def __init__(self, gui=False):
         self.folder = tempfile.mkdtemp(prefix="sciforge-docs-")
         self.gui = gui
         self.host = self._host()
+        self.undo_problems = []
 
     def _host(self):
         if self.gui:
@@ -198,6 +250,7 @@ class Session:
     def call(self, tool, args):
         from sciforge.ai import executor
 
+        before = _undo_state()
         try:
             answer = executor.run(tool, fill_tmp(args or {}, self.folder), self.host)
         except Exception as exc:  # executor.run never raises: this would be a bug
@@ -206,6 +259,8 @@ class Session:
                 "is_error": True,
                 "image_png_base64": None,
             }
+        for problem in undo_problems(tool, before, _undo_state(), answer):
+            self.undo_problems.append("%s: %s" % (tool, problem))
         return shown(answer, self.folder)
 
     def close(self):
@@ -262,6 +317,7 @@ def run_documents(text_filter="", root=None):
                     break
         finally:
             session.close()
+        problems += session.undo_problems
         results.append(_row("doc " + rel, problems, count, time.time() - start))
     return results
 
@@ -361,6 +417,7 @@ def run_examples(record=False, text_filter="", gui=False, path=RESULTS):
                             )
         finally:
             session.close()
+        problems += session.undo_problems
         rows.append(
             _row("example " + key, problems, len(spec["setup_calls"]) + 1, time.time() - start)
         )

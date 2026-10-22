@@ -305,7 +305,8 @@ def tool_list(state=None, category=None):
 OVERVIEW = (
     "SciForge is a parametric CAD program (built on FreeCAD) that works like Autodesk Fusion. "
     "These tools build and change the design open in SciForge step by step in its timeline, "
-    "with the same code as SciForge's own dialogs; every change is one undo step. "
+    "with the same code as SciForge's own dialogs; every change is one undo step (show_hide and "
+    "activate are none). "
     + UNITS
     + " Faces and edges are picked with selectors that describe their geometry (get_help "
     "topic selectors), never by internal names. " + STEP_HELP + " Errors come back as plain "

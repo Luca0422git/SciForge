@@ -657,7 +657,7 @@ define(
             _WHAT,
             direction=either("X, Y, Z or a pick"),
             quantity=integer(minimum=1, default=2),
-            distance=length("span or spacing"),
+            distance=length("span or spacing", default=20),
             distribution=enum(["extent", "spacing"], default="extent"),
             direction_type=enum(["one", "symmetric"], default="one"),
             direction2=either("X, Y, Z or a pick"),
@@ -752,8 +752,8 @@ define(
         dict(
             _WHAT,
             path=kit.free_object('{"sketch": id} or {"sketch": id, "edge": n}'),
-            quantity=integer(minimum=1, default=3),
-            distance=length(),
+            quantity=integer(minimum=1, default=2),
+            distance=length(default=20),
             distribution=enum(["extent", "spacing"], default="extent"),
             direction_type=enum(["one", "symmetric"], default="one"),
             orientation=enum(["identical", "path"], default="identical"),
@@ -905,7 +905,10 @@ define(
             "flip": boolean(default=False),
             "make_hole": boolean(default=True),
             "fit": enum(["close", "normal", "loose"], default="normal"),
-            "sink_head": boolean(default=False),
+            "sink_head": boolean(
+                "counterbore / countersink for the head; default true, false for iso7380 (a "
+                "button head sits on the face)"
+            ),
             "hole_depth": enum(["all", "length"], default="all"),
             "clearance": number("mm", minimum=0),
         },

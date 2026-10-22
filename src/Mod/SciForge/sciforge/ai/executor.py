@@ -208,17 +208,24 @@ def run(tool, args, host):
             return bridge_core.error_result(why)
         ctx = Context(host, tool, args)
         from . import actions
+        from .. import timeline_ops
         from .actions import verify_actions
 
         doc = App.ActiveDocument
         before = verify_actions.before_change(doc) if entry["changes_design"] else None
-        if entry["kind"] == "steps":
-            answer = ctx.build()
-        else:
+        handler = None
+        if entry["kind"] != "steps":
             handler = actions.ACTIONS.get(tool)
             if handler is None:
                 return bridge_core.error_result("SciForge cannot do %s yet." % tool)
-            answer = handler(ctx, args)
+        # the undo steps SciForge's timeline and history operations open are named after
+        # the call too ("AI: Suppress", not "Suppress Fillet 1"): Undo last AI step finds them
+        try:
+            with timeline_ops.undo_title(ctx.title):
+                answer = ctx.build() if handler is None else handler(ctx, args)
+        finally:
+            if entry["changes_design"]:
+                _close_empty_transaction(ctx.title)
         if before is not None and not answer.get("is_error"):
             verify_actions.after_change(before["doc"], before)  # (diff_design last_change)
         return answer
@@ -227,6 +234,19 @@ def run(tool, args, host):
     except Exception as exc:  # never let a tool call end SciForge
         warn("AI tool %s: %s" % (tool, exc))
         return bridge_core.error_result("Not done (%s): %s" % (tool, _plain(exc)))
+
+
+def _close_empty_transaction(title):
+    """FreeCAD keeps a transaction open after commitTransaction when nothing was recorded in
+    it (a Visibility change is not recorded, for one): the next change made outside a
+    transaction would land in that step. Close ours (`title`; it is empty, nothing is lost);
+    a transaction someone else opened (a dialog in the window) is left alone."""
+    try:
+        active = App.getActiveTransaction()
+        if active and active[0] == title:
+            App.closeActiveTransaction(False)
+    except Exception as exc:
+        warn("AI: closing an empty undo step: %s" % exc)
 
 
 def _plain(exc):
@@ -637,8 +657,8 @@ NOTHING_CHANGED = (
     " Warning: no solid changed (every body has the same volume, area, faces and size as "
     "before), so this step did nothing to the part. Usual causes: it points away from the "
     "part (an extrude goes along its sketch's normal, so a cut from a sketch on the top face "
-    "needs flip: true; a hole drills against its sketch's normal, into the face the sketch "
-    "lies on), a size that cannot fit (a wall thicker than the part), or a pick that missed. "
+    "needs flip: true; a hole drills into the part from its sketch, and flip: true makes it "
+    "drill along the sketch's normal), a size that cannot fit (a wall thicker than the part), or a pick that missed. "
     "Undo takes it back; diff_design since last_change confirms."
 )
 

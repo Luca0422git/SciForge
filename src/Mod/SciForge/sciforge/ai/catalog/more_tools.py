@@ -357,7 +357,8 @@ define(
     "assemble",
     "BROWSER > a body or component > Activate",
     "Make a body (by any step in it) or a component the one you work in: the next sketches "
-    "and features go into it (Fusion's Activate Component).",
+    "and features go into it (Fusion's Activate Component). Not an undo step: activate the "
+    "previous one again to go back (undo would take back the step before it).",
     schema({"target": step_id("a body, a step in it, or a component")}, ["target"]),
     ops=["use_body"],
     own_id=False,

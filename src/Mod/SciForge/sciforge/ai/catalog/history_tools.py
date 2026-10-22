@@ -764,7 +764,8 @@ define(
     "view",
     "BROWSER > the eye icon (Show / Hide)",
     "Show or hide bodies, components, sketches, construction geometry or drawings in the 3D "
-    "view (they stay in the design). targets: ids; visible: true shows, false hides.",
+    "view (they stay in the design). targets: ids; visible: true shows, false hides. Not an "
+    "undo step: call it again to reverse it (undo would take back the step before it).",
     schema(
         {"targets": step_ids("what to show or hide"), "visible": boolean()}, ["targets", "visible"]
     ),
