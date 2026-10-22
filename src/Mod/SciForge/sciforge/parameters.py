@@ -397,7 +397,15 @@ def change_checked(doc, obj, path, apply, what):
 
     before = broken_steps(doc)
     snapshot = _snapshot(obj, path)
-    apply()
+    try:
+        apply()
+    except Exception:
+        # refused half-way (a formula FreeCAD cannot read): what it did is put back too
+        try:
+            _put_back(obj, path, snapshot)
+        except Exception:
+            pass
+        raise
     doc.recompute()
     after = broken_steps(doc)
     new = [(name, reason) for name, reason in after.items() if name not in before]
