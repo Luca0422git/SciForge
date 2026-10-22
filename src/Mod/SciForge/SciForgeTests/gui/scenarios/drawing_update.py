@@ -11,7 +11,8 @@ A  Workspace > Design; the timeline's Fillet 1 double-clicked; radius 8; OK.
 B  Workspace > Drawing > the drawing: the corners are R8 arcs on the view; the radius
    dimension reads 8, the bottom edge's 44 (60 - 2 x 8); the hole's is still 12; the
    centre mark is still on the hole; the title block is unchanged.
-C  Back in the design, Ctrl+Z (the fillet edit undone): on the drawing R5 and 50 again.
+C  Back in the design, Ctrl+Z (the fillet edit undone): on the drawing R5 and 50 again (the
+   design is not rebuilt, undo_fast; the drawing built on it is recomputed).
 D  The hole moved 10 mm to the right (by script: the subject is the drawing): the centre
    mark goes with it, the diameter dimension still reads 12.
 """
@@ -206,6 +207,9 @@ c_design.wait_ms = 1200
 
 
 def c_undo():
+    from sciforge import undo_fast
+
+    state["undo_stats"] = dict(undo_fast.stats)
     h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
 
 
@@ -216,6 +220,16 @@ def c_undone():
     body = App.ActiveDocument.getObject("Body")
     h.check(
         "the fillets are R5 again", abs(body.Shape.Volume - fx.VOLUME) < 1e-3, body.Shape.Volume
+    )
+    # (undo_fast: the design is not rebuilt, but the drawing built on it is recomputed;
+    # 2026-10-22 the drawing kept the R8 corners after this Ctrl+Z)
+    from sciforge import undo_fast
+
+    before, now = state["undo_stats"], undo_fast.stats
+    h.check(
+        "the undo skipped the rebuild and recomputed the drawing",
+        now["skipped"] > before["skipped"] and now["followers"] > before["followers"],
+        (before, dict(now)),
     )
     d.workspace("Drawing", state["label"])
 

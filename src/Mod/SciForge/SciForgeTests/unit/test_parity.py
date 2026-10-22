@@ -343,6 +343,32 @@ class TestRealMenus(unittest.TestCase):
                     stale.append("no SciForge label: %s" % target)
         self.assertEqual(stale, [])
 
+    # Names a row of remaining-gaps.md uses for a checklist entry (its words differ)
+    GAP_WORDS = {
+        "show/hide data panel": "view submenu",
+        "show/hide browser": "view submenu",
+        "show/hide text commands": "view submenu",
+        "show/hide navigation bar": "view submenu",
+        "show/hide viewcube": "view submenu",
+        "show/hide timeline": "view submenu",
+        "select component priority": "component priority",
+        "components": "selection filters > components",
+    }
+
+    def test_every_missing_entry_is_on_the_work_list(self):
+        # remaining-gaps.md is the one work list: an entry of the checklist's "Not in SciForge
+        # yet" (missing or greyed, not left out on purpose) that no row names is never worked on
+        with open(os.path.join(REPO, "docs", "sciforge", "dev", "remaining-gaps.md"), encoding="utf-8") as handle:
+            gaps = parity.norm(handle.read().replace("\n", " "))
+        forgotten = []
+        for result in parity.compare(self.items, self.entries, self.aliases):
+            if result.item.out or result.status in parity.PRESENT:
+                continue
+            name = parity.norm(result.item.name)
+            if name not in gaps and self.GAP_WORDS.get(name, "\0") not in gaps:
+                forgotten.append(" > ".join(result.item.path))
+        self.assertEqual(forgotten, [], "add them to docs/sciforge/dev/remaining-gaps.md")
+
     def test_the_numbers_add_up(self):
         results = parity.compare(self.items, self.entries, self.aliases)
         self.assertEqual(len(results), len(self.items))
