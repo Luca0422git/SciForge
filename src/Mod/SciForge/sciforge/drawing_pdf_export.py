@@ -29,6 +29,8 @@ from . import drawing_pdf_core as core
 from . import drawing_pdf_font
 
 MARKER_SIZE = 0.1  # scene units (0.01 mm): invisible, and printed almost transparent
+# TechDraw's QGIEdge::type() (QGIUserTypes.h: UserType + 19)
+EDGE_TYPE = 65536 + 19
 # tests: a path where the PDF as TechDraw printed it (before the rewrite) is copied
 KEEP_PRINTED = {"path": None}
 
@@ -115,9 +117,10 @@ def _rez(scene, page):
     return 10.0
 
 
-def add_markers(page, scene, markers):
+def add_markers(page, scene, markers, cosmetic=None):
     """Markers into every view item of the page's scene, each also put into the list
-    `markers` (so they can be taken out whatever happens). Returns (codes, hidden line
+    `markers` (so they can be taken out whatever happens); the straight cosmetic lines of
+    every view into the dict `cosmetic` (cosmetic_lines). Returns (codes, hidden line
     widths per view)."""
     QtCore, QtGui, QtWidgets = _qt()
     doc = page.Document
@@ -148,6 +151,7 @@ def add_markers(page, scene, markers):
     by_item = {}
     for name, _band, z, _code, colour in plan:
         by_item.setdefault(name, []).append((z, colour))
+    kinds = dict(items)
     for name, wanted in by_item.items():
         parent = owners[name]
         before = parent.boundingRect()
@@ -167,7 +171,46 @@ def add_markers(page, scene, markers):
                 marker.setPos(middle)
             if parent.boundingRect() != before:
                 log("PDF: a marker changes the extent of %s (its caption may move)" % name)
+        if cosmetic is not None and kinds.get(name) == "view":
+            try:
+                lines = cosmetic_lines(parent, doc.getObject(name))
+                if lines:
+                    cosmetic[name] = lines
+            except Exception as exc:
+                log("PDF: the cosmetic lines of %s are not known (%s)" % (name, exc))
     return codes, hidden
+
+
+def cosmetic_lines(item, view):
+    """[((x1, y1), (x2, y2))] of a view's straight cosmetic edges and TechDraw centre
+    lines (SciForge's centre marks are cosmetic lines), in the view item's coordinates,
+    as Qt writes them into the PDF: drawing_pdf_core tells a dashed centre mark from a
+    hidden edge of the same width and dash by them. TechDraw adds them after the
+    projected edges, so they are the view's last edge items. Read before printing:
+    TechDraw rebuilds its edge items when it prints (and the copies have the same
+    paths)."""
+    QtCore, QtGui, QtWidgets = _qt()
+    import shiboken6
+
+    count = 0
+    for prop in ("CosmeticEdges", "CenterLines"):
+        count += len(getattr(view, prop, None) or [])
+    if not count:
+        return []
+    edges = [child for child in item.childItems() if child.type() == EDGE_TYPE]
+    if count > len(edges):
+        log("PDF: %s has fewer edges than cosmetic lines" % view.Name)
+        return []
+    lines = []
+    for child in edges[len(edges) - count :]:
+        path = shiboken6.wrapInstance(
+            shiboken6.getCppPointer(child)[0], QtWidgets.QGraphicsPathItem
+        ).path()
+        if path.elementCount() != 2:
+            continue  # a circle or an arc: only straight lines are dashed centre lines
+        a, b = path.elementAt(0), path.elementAt(1)
+        lines.append(((round(a.x, 4), round(a.y, 4)), (round(b.x, 4), round(b.y, 4))))
+    return lines
 
 
 def _marker_spot(item, page_rect):
@@ -275,7 +318,7 @@ def outline_texts(page):
                 from . import drawing_annot
 
                 rec = _Recorder()
-                drawing_annot.to_dxf(rec, obj)
+                drawing_annot.to_dxf(rec, obj, spoken=True)  # symbols as text too
                 for x, y, size, text, anchor, rot in rec.texts:
                     add(x, y, size, text, anchor, rot, "annotations")
             elif drawing.kind(obj) == "PartsList":
@@ -358,13 +401,19 @@ def font_path():
 def print_sheet(page, path):
     """One sheet printed by TechDraw with markers in it; returns what the rewrite needs
     to know about it."""
-    info = {"size": drawing.sheet_size_of(page), "codes": None, "hidden": {}, "texts": []}
+    info = {
+        "size": drawing.sheet_size_of(page),
+        "codes": None,
+        "hidden": {},
+        "cosmetic": {},
+        "texts": [],
+    }
     scene = scene_of(page)
     markers = []
     try:
         if scene is not None:
             try:
-                info["codes"], info["hidden"] = add_markers(page, scene, markers)
+                info["codes"], info["hidden"] = add_markers(page, scene, markers, info["cosmetic"])
             except Exception as exc:
                 remove_markers(markers)
                 info["codes"] = None

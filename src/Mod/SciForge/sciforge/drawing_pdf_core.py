@@ -18,8 +18,9 @@ line is. Five things are added afterwards, without touching how anything looks:
   printed where they sit in the drawing order, so everything between two markers is of
   the kind the first one announces. The markers are taken out of the PDF again; the
   edges of a view are told apart by their dash pattern (solid: visible; dashed at the
-  view's hidden line width: hidden; any other dash: centre lines and marks), and
-  everything before the first marker is the sheet's template (border and title block).
+  view's hidden line width: hidden, unless it is one of the view's cosmetic lines, as
+  SciForge's centre marks are; any other dash: centre lines and marks), and everything
+  before the first marker is the sheet's template (border and title block).
   Each painted path is wrapped in a marked-content sequence (/OC ... BDC ... EMC) that
   never crosses a q/Q, so the stream stays valid.
 * Searchable, selectable text with an embedded font where TechDraw draws text as
@@ -27,14 +28,21 @@ line is. Five things are added afterwards, without touching how anything looks:
   which Qt prints as paths): invisible text (render mode 3, as scanned documents carry
   their recognised text) placed over the drawn text, on the same layer, with osifont
   embedded as a subset (drawing_pdf_font.py). Text Qt already printed as text (dimensions,
-  notes, balloons, captions) is found by reading the page and is not added twice there.
+  notes, balloons, captions) is found by reading the page and is not added twice there. A
+  text with a character osifont lacks (′ ″, Chinese...) also carries its ActualText, so
+  search and copy find all of it.
 * Links: a URL (https://..., www....) or mailto: in any text becomes a clickable link.
 * Metadata: title, author, subject and keywords from the drawing's title block,
   SciForge as the creating tool, in the document information and its XMP twin.
 * Several sheets in one file (drawing_pdf.merge), each page keeping its own size.
+  Objects nothing uses any more (the pages' old contents...) are not written.
 
-A PDF/A file (FreeCAD's PDF preferences can ask Qt for one) keeps its conformance: PDF/A-1
-forbids layers, so none are added to it.
+A PDF/A or PDF/X file (FreeCAD's PDF preferences can ask Qt for PDF/A-1b or PDF/X-4)
+stays one as far as these additions go: PDF/A-1 forbids layers, so none are added (the
+markers are still taken out: Qt paints them opaque there), the embedded subset has a
+CIDSet, the XMP keeps Qt's pdfaid / pdfxid / xmpMM entries and has pdf:Trapped like the
+document information; PDF/X gets no link annotations; without an embeddable font no text
+is added.
 """
 
 import datetime
@@ -64,7 +72,7 @@ MARK_RED = 165
 VIEW_BANDS = (
     ("begin", -1.0e9),  # caption, label: annotations
     ("faces", 5.0),  # faces, hatching, detail highlights: hatching and section lines
-    ("edges", 55.0),  # edges: by their dash pattern
+    ("edges", 55.0),  # edges: by their dash pattern (and the view's cosmetic lines)
     ("marks", 75.0),  # centre marks: centre lines and marks
     ("lines", 85.0),  # section, break lines, matting: hatching and section lines
     ("end", 1.0e9),
@@ -148,13 +156,40 @@ def _fill_of(op, current):
     return current
 
 
-def layer_content(content, codes, hidden_widths=None):
+def _same_line(points, lines, tol=0.05):
+    """True when the path's two points are the ends of one of `lines` (either way)."""
+    (ax, ay), (bx, by) = points
+    for (px, py), (qx, qy) in lines or ():
+        if (
+            abs(ax - px) <= tol
+            and abs(ay - py) <= tol
+            and abs(bx - qx) <= tol
+            and abs(by - qy) <= tol
+        ):
+            return True
+        if (
+            abs(ax - qx) <= tol
+            and abs(ay - qy) <= tol
+            and abs(bx - px) <= tol
+            and abs(by - py) <= tol
+        ):
+            return True
+    return False
+
+
+def layer_content(content, codes, hidden_widths=None, layers=True, cosmetic=None):
     """The page's content with every painted path put on its layer, the markers taken
     out (and stray closepaths Qt writes, which viewers complain about). Returns
-    (content, the layer keys used, the marker codes found)."""
+    (content, the layer keys used, the marker codes found). `cosmetic` is {view key:
+    [((x1, y1), (x2, y2))]}, the view's straight cosmetic lines in the coordinates its
+    paths are written in: a dashed one is a centre line or mark, never a hidden edge
+    (TechDraw's line group "FC 0.35mm" draws hidden edges at the same 0.18 mm and dash
+    as SciForge's centre marks). With layers=False (PDF/A, where Qt paints the markers
+    opaque) only the markers and Qt's stray operators go."""
     hidden_widths = hidden_widths or {}
+    cosmetic = cosmetic or {}
     ops = po.operations(content)
-    if any(op.op in (b"BMC", b"BDC", b"EMC") for op in ops):
+    if layers and any(op.op in (b"BMC", b"BDC", b"EMC") for op in ops):
         raise LayerError("the page already has marked content")
     n = len(ops)
     cat = [None] * n
@@ -168,7 +203,7 @@ def layer_content(content, codes, hidden_widths=None):
     has_point = False
     text_start = None
 
-    def classify(painting):
+    def classify(painting, points=None):
         if not seen:
             return "border"
         if not stack:
@@ -177,7 +212,12 @@ def layer_content(content, codes, hidden_widths=None):
         if kind != "view":
             return "annotations"
         if band == "edges":
-            return edge_layer(dash, width, hidden_widths.get(key)) if painting else "visible"
+            if not painting:
+                return "visible"
+            layer = edge_layer(dash, width, hidden_widths.get(key))
+            if layer == "hidden" and points and _same_line(points, cosmetic.get(key)):
+                return "centre"
+            return layer
         return BAND_LAYER.get(band, "")
 
     for i, op in enumerate(ops):
@@ -234,7 +274,13 @@ def layer_content(content, codes, hidden_widths=None):
                             stack[depth] = (key, kind, band)
                             break
                 continue
-            c = classify(True)
+            points = None
+            if [ops[j].op for j in range(start, i)] == [b"m", b"l"]:
+                try:
+                    points = [tuple(float(v) for v in ops[j].args[:2]) for j in (start, start + 1)]
+                except (TypeError, ValueError):
+                    points = None
+            c = classify(True, points)
             for j in range(start, i + 1):
                 cat[j] = c
             continue
@@ -264,7 +310,7 @@ def layer_content(content, codes, hidden_widths=None):
     for i, op in enumerate(ops):
         if drop[i]:
             continue
-        c = cat[i]
+        c = cat[i] if layers else None
         if c:
             if c != open_cat:
                 if open_cat:
@@ -620,6 +666,11 @@ def overlay(texts, font, sheet_mm, media):
                 out.append(b"/OC /SF%s BDC" % layer.encode("ascii"))
                 used.add(layer)
             open_layer = layer or None
+        # a character the font lacks is drawn as .notdef, which has no text: the whole
+        # text is then given as ActualText, so search and copy still find all of it
+        spoken = not getattr(font, "covers", lambda _t: True)(text)
+        if spoken:
+            out.append(b"/Span << /ActualText " + po.serialize(po.text_string(text)) + b" >> BDC")
         out.append(b"BT")
         out.append(b"3 Tr")
         out.append(b"/SFText " + po.serialize(round(size, 4)) + b" Tf")
@@ -629,6 +680,8 @@ def overlay(texts, font, sheet_mm, media):
         out.append(b" ".join(po.serialize(round(v, 4)) for v in matrix) + b" Tm")
         out.append(po.serialize(font.encode(text)) + b" Tj")
         out.append(b"ET")
+        if spoken:
+            out.append(b"EMC")
         for start, end, uri in find_links(text):
             k = scale / 100.0 * size / 1000.0
             a = font.width(text[:start]) * k
@@ -682,9 +735,38 @@ def pdf_date(when=None):
     return when.strftime("D:%Y%m%d%H%M%SZ")
 
 
-def xmp(meta, created, modified, pdfa=None):
+# XMP properties of the printed file that say what it is (PDF/A, PDF/X: part,
+# conformance, version; its document and version ids): kept when the packet is rewritten
+KEPT_XMP = {
+    "xmpMM": "http://ns.adobe.com/xap/1.0/mm/",
+    "pdfaid": "http://www.aiim.org/pdfa/ns/id/",
+    "pdfxid": "http://www.npes.org/pdfx/ns/id/",
+}
+
+
+def kept_xmp(packet):
+    """[(prefix, name, value as XML text)] of the KEPT_XMP properties with a simple value
+    in an XMP packet, written as attributes (Qt) or as elements."""
+    text = (packet or b"").decode("utf-8", "replace")
+    prefixes = "|".join(KEPT_XMP)
+    found, seen = [], set()
+    patterns = (
+        r"\b(%s):(\w+)\s*=\s*\"([^\"<]*)\"" % prefixes,
+        r"\b(%s):(\w+)\s*=\s*'([^'<]*)'" % prefixes,
+        r"<(%s):(\w+)>([^<]*)</\1:\2>" % prefixes,
+    )
+    for pattern in patterns:
+        for m in re.finditer(pattern, text):
+            if (m.group(1), m.group(2)) not in seen:
+                seen.add((m.group(1), m.group(2)))
+                found.append((m.group(1), m.group(2), m.group(3).strip()))
+    return found
+
+
+def xmp(meta, created, modified, kept=(), trapped="False"):
     """The XMP metadata packet for `meta` (title, author, subject, keywords, creator,
-    producer)."""
+    producer), with the `kept` properties (kept_xmp) of the file it replaces and
+    pdf:Trapped as the document information has it (PDF/A wants the two to agree)."""
     rows = ["<dc:format>application/pdf</dc:format>"]
     if meta.get("title"):
         rows.append(
@@ -711,31 +793,33 @@ def xmp(meta, created, modified, pdfa=None):
     if modified:
         rows.append("<xmp:ModifyDate>%s</xmp:ModifyDate>" % modified)
         rows.append("<xmp:MetadataDate>%s</xmp:MetadataDate>" % modified)
-    if pdfa:
-        rows.append("<pdfaid:part>%s</pdfaid:part>" % _xml(pdfa[0]))
-        if pdfa[1]:
-            rows.append("<pdfaid:conformance>%s</pdfaid:conformance>" % _xml(pdfa[1]))
+    if trapped:
+        rows.append("<pdf:Trapped>%s</pdf:Trapped>" % _xml(trapped))
+    spaces = {"pdfaid"}
+    for prefix, name, value in kept:
+        rows.append("<%s:%s>%s</%s:%s>" % (prefix, name, value, prefix, name))
+        spaces.add(prefix)
+    extra = "".join(' xmlns:%s="%s"' % (p, KEPT_XMP[p]) for p in sorted(spaces))
     text = (
         '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n'
         '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
         '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
         '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" '
-        'xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" '
-        'xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">\n%s\n</rdf:Description>\n'
-        "</rdf:RDF>\n</x:xmpmeta>\n" % "\n".join(rows)
+        'xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/"'
+        "%s>\n%s\n</rdf:Description>\n"
+        "</rdf:RDF>\n</x:xmpmeta>\n" % (extra, "\n".join(rows))
     )
     return (text + " " * 200 + '\n<?xpacket end="w"?>').encode("utf-8")
 
 
-def _pdfa_of(doc, root):
-    if not isinstance(root.get(b"Metadata"), Ref):
-        return None
-    data = doc.stream_data(root[b"Metadata"].num) or b""
-    part = re.search(rb"pdfaid:part(?:>|=\")\s*(\d)", data)
-    if not part:
-        return None
-    conf = re.search(rb"pdfaid:conformance(?:>|=\")\s*([A-Za-z])", data)
-    return part.group(1).decode(), (conf.group(1).decode() if conf else "")
+def _identity_of(doc, root):
+    """(the kept_xmp properties of the file's XMP, its PDF/A part or None, its PDF/X
+    version or None)."""
+    kept = []
+    if isinstance(root.get(b"Metadata"), Ref):
+        kept = kept_xmp(doc.stream_data(root[b"Metadata"].num))
+    values = {(p, n): v for p, n, v in kept}
+    return kept, values.get(("pdfaid", "part")), values.get(("pdfxid", "GTS_PDFXVersion"))
 
 
 # ------------------------------------------------------------------ the whole file
@@ -743,7 +827,8 @@ def enhance(data, sheets, meta, font=None):
     """The PDF `data` (one page per sheet, in order) with layers, searchable text, links
     and metadata. `sheets` is one dict (or None) per page:
       {"size": (width, height) in mm, "codes": {code: (key, kind, band)} or None,
-       "hidden": {key: hidden line width in the PDF's units}, "texts": [...]}
+       "hidden": {key: hidden line width in the PDF's units},
+       "cosmetic": {key: straight cosmetic lines (layer_content)}, "texts": [...]}
     (texts as drawing_pdf_core.overlay wants them); `meta` has title, author, subject,
     keywords, creator, producer; `font` is a drawing_pdf_font font for the added text.
     Returns (bytes, report) where report says what was done per page."""
@@ -752,8 +837,14 @@ def enhance(data, sheets, meta, font=None):
     if not isinstance(root, dict):
         raise po.PdfError("This PDF has no catalogue.")
     pages = doc.pages()
-    pdfa = _pdfa_of(doc, root)
-    report = {"pages": [], "pdfa": bool(pdfa)}
+    kept, pdfa, pdfx = _identity_of(doc, root)
+    # PDF/A-1 forbids layers, PDF/X before X-4 too; both want every font embedded and
+    # PDF/X wants no annotations on the printed area (so no links there)
+    layers_allowed = not pdfa and (not pdfx or bool(re.match(r"PDF/X-[4-9]", pdfx)))
+    archival = bool(pdfa or pdfx)
+    if archival and not getattr(font, "embedded", False):
+        font = None  # Helvetica is not embedded: no added text
+    report = {"pages": [], "pdfa": bool(pdfa), "pdfx": pdfx or ""}
     ocg_refs = {}  # layer key -> its OCG, made in LAYERS order once every page is read
     page_plans = []
     for index, num in enumerate(pages):
@@ -771,11 +862,19 @@ def enhance(data, sheets, meta, font=None):
         new = content
         used = set()
         codes = (info or {}).get("codes")
-        if codes is not None and not pdfa:
+        if codes is not None:
             try:
-                new, used, found = layer_content(content, codes, (info or {}).get("hidden"))
+                new, used, found = layer_content(
+                    content,
+                    codes,
+                    (info or {}).get("hidden"),
+                    layers_allowed,
+                    (info or {}).get("cosmetic"),
+                )
                 entry["markers"] = len(found)
-                if codes and not found:
+                if not layers_allowed:
+                    entry["note"] = "%s: no layers" % ("PDF/A-%s" % pdfa if pdfa else pdfx)
+                elif codes and not found:
                     # no marker printed: the layers would all be wrong
                     new, used = content, set()
                     entry["note"] = "no markers were printed: no layers"
@@ -784,6 +883,8 @@ def enhance(data, sheets, meta, font=None):
                 entry["note"] = "no layers: %s" % exc
         links = []
         runs = []
+        if pdfx:
+            entry["note"] = (entry["note"] + "; " if entry["note"] else "") + "no links (PDF/X)"
         try:
             runs = text_runs(doc, num, content)
         except (po.PdfError, LayerError, KeyError, TypeError, ValueError) as exc:
@@ -817,6 +918,8 @@ def enhance(data, sheets, meta, font=None):
             links += extra_links
             used |= extra_used
             entry["texts"] = len(added)
+        if pdfx:
+            links = []
         entry["links"] = len(links)
         entry["layers"] = [k for k, _n in LAYERS if k in used]
         for key in used:
@@ -889,7 +992,7 @@ def enhance(data, sheets, meta, font=None):
     old_info = old_info if isinstance(old_info, dict) else {}
     created = po.decode_text_string(old_info.get(b"CreationDate")) or pdf_date()
     modified = pdf_date()
-    info = {}
+    info = dict(old_info)  # what is not set here (a PDF/X version...) stays
     for key, field in (
         (b"Title", "title"),
         (b"Author", "author"),
@@ -901,11 +1004,13 @@ def enhance(data, sheets, meta, font=None):
         value = meta.get(field)
         if value:
             info[key] = po.text_string(str(value))
-        elif key in old_info:
-            info[key] = old_info[key]
     info[b"CreationDate"] = String(created.encode("ascii", "replace"))
     info[b"ModDate"] = String(modified.encode("ascii"))
-    info[b"Trapped"] = Name(b"False")
+    trapped = old_info.get(b"Trapped")
+    trapped = bytes(trapped).decode("latin-1") if isinstance(trapped, Name) else "False"
+    if trapped not in ("True", "False"):
+        trapped = "False"  # "Unknown" is not allowed in PDF/A or PDF/X
+    info[b"Trapped"] = Name(trapped.encode("ascii"))
     doc.trailer[b"Info"] = doc.add(info)
     full = dict(meta)
     for key, field in (
@@ -919,10 +1024,11 @@ def enhance(data, sheets, meta, font=None):
             full[field] = po.decode_text_string(info[key])
     root[b"Metadata"] = doc.add(
         {b"Type": Name(b"Metadata"), b"Subtype": Name(b"XML")},
-        xmp(full, _iso_date(created), _iso_date(modified), pdfa),
+        xmp(full, _iso_date(created), _iso_date(modified), kept, trapped),
     )
     doc.objects[doc.trailer[b"Root"].num] = root
-    version = doc.version if pdfa else max(doc.version, b"1.5")
+    version = doc.version if archival else max(doc.version, b"1.5")
+    doc.prune()  # the replaced contents, the old metadata...: not in the file twice
     return doc.write(version), report
 
 

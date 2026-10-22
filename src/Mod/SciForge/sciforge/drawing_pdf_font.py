@@ -230,12 +230,11 @@ class TrueType:
         if self.fs_type & 0x0200:
             raise FontRefused("The font's licence allows only bitmaps to be embedded.")
 
-    def subset(self, gids):
-        """A font file with only the glyphs `gids` (and what they are made of) kept, glyph
-        numbers unchanged. The whole font when its licence forbids subsetting."""
-        self.check_licence()
+    def kept(self, gids):
+        """The glyph numbers a subset for `gids` holds: those, what composite glyphs are
+        made of, and .notdef (all of them when the licence forbids subsetting)."""
         if self.fs_type & 0x0100:
-            return self.data
+            return set(range(self.num_glyphs))
         offsets = self._offsets()
         glyf = self.table("glyf")
         keep = {0}
@@ -248,6 +247,17 @@ class TrueType:
             for part in self._components(glyf[offsets[gid] : offsets[gid + 1]]):
                 if part not in keep and part < self.num_glyphs:
                     todo.append(part)
+        return keep
+
+    def subset(self, gids):
+        """A font file with only the glyphs `gids` (and what they are made of) kept, glyph
+        numbers unchanged. The whole font when its licence forbids subsetting."""
+        self.check_licence()
+        if self.fs_type & 0x0100:
+            return self.data
+        offsets = self._offsets()
+        glyf = self.table("glyf")
+        keep = self.kept(gids)
         new_glyf = bytearray()
         new_loca = []
         for gid in range(self.num_glyphs):
@@ -326,13 +336,30 @@ def _to_unicode(pairs):
     return b"\n".join(lines) + b"\n"
 
 
+def cid_set(cids):
+    """A CIDSet stream's bytes: one bit per CID, the high bit of the first byte for CID 0
+    (PDF/A-1 wants one for every CID font subset: which CIDs its program holds)."""
+    bits = bytearray(max(cids) // 8 + 1 if cids else 1)
+    for cid in cids:
+        bits[cid // 8] |= 0x80 >> (cid % 8)
+    return bytes(bits)
+
+
 class EmbeddedFont:
     """A TrueType font being used in a PDF: collects the characters written with it, then
     becomes the PDF objects (a Type0 font over a CIDFontType2 with its subset)."""
 
+    embedded = True  # its program goes into the file (PDF/A and PDF/X want that)
+
     def __init__(self, font):
         self.font = font
         self.used = {}  # gid -> character
+
+    def covers(self, text):
+        """True when the font has a glyph for every character of `text` (a character it
+        lacks is shown as .notdef, which has no text: drawing_pdf_core then gives the
+        whole text as ActualText)."""
+        return all(self.font.glyph(c) for c in text)
 
     def encode(self, text):
         """The string to show `text` with this font (two bytes per glyph)."""
@@ -374,6 +401,9 @@ class EmbeddedFont:
                 b"CapHeight": round(font.cap_height * k),
                 b"StemV": 80,
                 b"FontFile2": program_ref,
+                b"CIDSet": document.add(
+                    {b"Filter": Name(b"FlateDecode")}, zlib.compress(cid_set(font.kept(gids)))
+                ),
             }
         )
         widths = []
@@ -511,6 +541,15 @@ class StandardFont:
         334,
         584,
     ]
+
+    embedded = False
+
+    def covers(self, text):
+        try:
+            text.encode("cp1252")
+            return True
+        except UnicodeEncodeError:
+            return False
 
     def encode(self, text):
         return String(text.encode("cp1252", "replace"))

@@ -378,8 +378,9 @@ def value_text(page, value_mm):
     return dc.number(value_mm, None, units)
 
 
-def prims_of(obj, data=None, page=None):
-    """The annotation's shapes on the page (drawing_annot_core primitives)."""
+def prims_of(obj, data=None, page=None, spoken=False):
+    """The annotation's shapes on the page (drawing_annot_core primitives); spoken=True
+    adds the text a drawn symbol stands for (a PDF's searchable text)."""
     data = data if data is not None else annotation_data(obj)
     page = page if page is not None else drawing.page_of(obj)
     standard = drawing.standard_of(page) if page is not None else "ISO"
@@ -395,7 +396,7 @@ def prims_of(obj, data=None, page=None):
             return ac.text_lines(data.get("lines") or [""], place[0], place[1])
         return ac.leader(anchor_pt, place, data.get("lines") or [""])
     if kind == "fcf":
-        prims, _box = ac.feature_control(anchor_pt, place, data.get("fcf") or {})
+        prims, _box = ac.feature_control(anchor_pt, place, data.get("fcf") or {}, spoken=spoken)
         return prims
     if kind == "datum":
         return ac.datum_identifier(
@@ -551,11 +552,11 @@ def follow(page, geometry=False):
     return changed
 
 
-def to_dxf(dxf, obj):
+def to_dxf(dxf, obj, spoken=False):
     data = annotation_data(obj)
     layer = DXF_LAYERS.get(data.get("kind"), "TEXT")
     dxf.layer("SYMBOLS", 5)
-    ac.to_dxf(dxf, prims_of(obj, data), layer)
+    ac.to_dxf(dxf, prims_of(obj, data, spoken=spoken), layer)
 
 
 def describe(obj):

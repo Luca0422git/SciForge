@@ -47,6 +47,25 @@ CHARACTERISTICS = (
     ("total_runout", "Total Runout"),
 )
 CHARACTERISTIC_NAMES = tuple(c[0] for c in CHARACTERISTICS)
+# the Unicode characters for the symbols (Miscellaneous Technical block): the text a
+# drawn symbol stands for, for the searchable text of a PDF (spoken=True)
+CHARACTERISTIC_CHARS = {
+    "position": "\u2316",
+    "concentricity": "\u25ce",
+    "symmetry": "\u232f",
+    "parallelism": "\u2225",
+    "perpendicularity": "\u27c2",
+    "angularity": "\u2220",
+    "cylindricity": "\u232d",
+    "flatness": "\u23e5",
+    "circularity": "\u25cb",
+    "straightness": "\u23e4",
+    "profile_surface": "\u2313",
+    "profile_line": "\u2312",
+    "circular_runout": "\u2197",
+    "total_runout": "\u2330",
+}
+DIAMETER_CHAR = "\u2300"
 # characteristics that take no datum (form tolerances)
 FORM_ONLY = ("cylindricity", "flatness", "circularity", "straightness")
 MODIFIERS = (("", "None"), ("M", "Maximum material (M)"), ("L", "Least material (L)"))
@@ -233,18 +252,28 @@ def _runs_width(runs, s):
     return width
 
 
-def _draw_runs(runs, x, cy, s):
+def _draw_runs(runs, x, cy, s, spoken=False):
+    """The runs of a cell; spoken=True also gives the diameter sign as text, joined to the
+    tolerance after it (searchable PDF text: "\u23000.05")."""
     out = []
+    sign = None
     for run in runs:
         if run[0] == "dia":
             out += diameter_symbol(x + s * 0.5, cy, s)
+            sign = x
             x += s * 1.0
         elif run[0] == "mod":
             out += modifier_symbol(run[1], x + s * 0.575, cy, s)
             x += s * 1.15
         else:
-            out.append(("text", x, cy - s * 0.35, s, run[1], "start", 0.0))
+            if sign is not None and spoken:
+                out.append(("text", sign, cy - s * 0.35, s, DIAMETER_CHAR + run[1], "start", 0.0))
+                sign = None
+            else:
+                out.append(("text", x, cy - s * 0.35, s, run[1], "start", 0.0))
             x += text_width(run[1], s)
+    if sign is not None and spoken:
+        out.append(("text", sign, cy - s * 0.35, s, DIAMETER_CHAR, "start", 0.0))
     return out
 
 
@@ -273,10 +302,12 @@ def fcf_rows(data):
     return rows
 
 
-def feature_control_frame(data, x, y, s=TEXT):
+def feature_control_frame(data, x, y, s=TEXT, spoken=False):
     """A feature control frame with its top left corner at (x, y): one row, or two
     (composite: the second row shares the characteristic cell; else two frames
-    stacked). Returns (primitives, box (x0, y0, x1, y1))."""
+    stacked). Returns (primitives, box (x0, y0, x1, y1)). spoken=True adds the drawn
+    symbols as text too (CHARACTERISTIC_CHARS, DIAMETER_CHAR), for a PDF's searchable
+    text; never for what is drawn."""
     rows = fcf_rows(data) or [
         {"char": "position", "dia": False, "tol": "0", "mod": "", "datums": []}
     ]
@@ -323,11 +354,16 @@ def feature_control_frame(data, x, y, s=TEXT):
             if composite and r == 0:
                 out.append(("line", x + char_w, top, x + char_w, top - 2 * h, LINE))
                 out += characteristic_symbol(row["char"], x + char_w / 2.0, top - h, s)
+                sym_y = top - h
             else:
                 out.append(("line", x + char_w, top, x + char_w, bottom, LINE))
                 out += characteristic_symbol(row["char"], x + char_w / 2.0, cy, s)
+                sym_y = cy
+            if spoken and row["char"] in CHARACTERISTIC_CHARS:
+                char = CHARACTERISTIC_CHARS[row["char"]]
+                out.append(("text", x + char_w / 2.0, sym_y - s * 0.35, s, char, "middle", 0.0))
         cx = x + char_w
-        out += _draw_runs(cells[r][0], cx + pad, cy, s)
+        out += _draw_runs(cells[r][0], cx + pad, cy, s, spoken)
         cx += tol_w
         for i, runs in enumerate(cells[r][1]):
             out.append(("line", cx, top, cx, bottom, LINE))
@@ -348,12 +384,12 @@ def fcf_text(data):
     return " / ".join(parts)
 
 
-def feature_control(anchor, place, data, s=TEXT):
+def feature_control(anchor, place, data, s=TEXT, spoken=False):
     """A feature control frame placed with its left middle at `place`, with a leader
     from the edge point `anchor` (no leader when anchor is None)."""
     rows = len(fcf_rows(data)) or 1
     h = s * 2.0
-    frame, box = feature_control_frame(data, place[0], place[1] + rows * h / 2.0, s)
+    frame, box = feature_control_frame(data, place[0], place[1] + rows * h / 2.0, s, spoken)
     out = list(frame)
     if anchor is not None:
         out += leader_to_box(anchor, box)
