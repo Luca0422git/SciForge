@@ -1028,7 +1028,14 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         try:
             drafting.check(self.base.Shape, self.plane_ref, names, self.options)
         except drafting.DraftError as exc:
-            self.error = str(exc)
+            reason = str(exc)
+            # The handle may reach Draft's own 89.9 degree stop: a dragged / typed angle there
+            # is held at the steepest one the faces take, like any angle that is too steep.
+            steep = "between -89.9 and 89.9" in reason
+            if steep and self.limit_refused("too steep: " + reason):
+                self._preview()
+                return
+            self.error = reason
             self.show_status()
             return
         self.error = None
