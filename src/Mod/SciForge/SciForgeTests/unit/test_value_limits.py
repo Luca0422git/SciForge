@@ -125,6 +125,15 @@ class Search(unittest.TestCase):
 
         self.assertEqual(vl.search(works, 0.5, 9.0, 0.01)[0], 2.5)
 
+    def test_tidy_trials(self):
+        # the trials are tidy values when one lies between: the last one that works is the
+        # answer, no build of the tidy value under an untidy one (Draft on a part of 180
+        # faces: 11 trial drafts of ~0.3 s became 8)
+        works = Counter(7.95)
+        self.assertEqual(vl.search(works, 3.0, 15.0, 0.1), (7.9, True))
+        self.assertLessEqual(len(works.calls), 8)
+        self.assertTrue(all(abs(v * 10 - round(v * 10)) < 1e-9 for v in works.calls))
+
     def test_time_budget(self):
         # a slow part: the clock jumps 1 s a build; the search stops after MIN_TRIALS and
         # still returns a value that works (safe side)
