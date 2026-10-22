@@ -59,9 +59,21 @@ FreeCAD before it was fixed. No FreeCAD core file changed (nothing for `core-pat
   defaults, pattern defaults, documentation links) in real FreeCAD.
 - docs_runner checks every call of every document and example: at most one new undo step,
   named "AI: ...", none for failed calls and for show_hide / activate, and no undo step left
-  open. It found `delete_bodies` ("Delete"), fixed too.
+  open. It found two more: `delete_bodies` made a step named "Delete", and an `edit_step`
+  that failed with "Largest radius that fits here" still left an empty "AI: Edit Fillet1"
+  step (also on `integration`), so the AI's next `undo` did nothing visible. Both fixed: the
+  executor now closes a transaction FreeCAD left open right after commit / abort (aborted when
+  the call failed), before the recompute and the value search can land in it.
 - GUI scenario `ai_undo_steps` (Undo last AI step after suppress and roll, group is one step,
   show_hide leaves nothing open); `ai_docs_gui` checks the two handbook files and the sizes.
+
+## Test runs
+
+`run_tests.sh --only base`: all passed (unit 2103, golden 451 pass + 2 known xfail, headless
+202 calls, docs 141 items / 924 calls, agent 70 checks, smoke, journey, restart). Scenarios
+ai_undo_steps, ai_docs_gui, ai_tools_gui, ai_bridge, ai_chat, ai_panel, ai_agent_e2e,
+direct_commands, direct_components, direct_step_box, modify_remove, misc_preferences: all
+passed.
 
 ## Left as it was
 
