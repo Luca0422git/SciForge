@@ -23,7 +23,7 @@ import math
 import FreeCAD as App
 
 from .. import log, warn
-from . import bridge_core, catalog, geometry_facts
+from . import bridge_core, catalog, geometry_facts, value_fit
 
 DEFAULT_IDS = {
     "create_sketch": "Sketch",
@@ -336,8 +336,6 @@ class Context:
 
     def build(self):
         """A tool that is design steps: built with sciforge/ai/ops in one Undo step."""
-        from .ops.core import BuildError
-
         doc = self.need_doc(create="design" not in self.entry["needs"])
         builder = self.builder(doc)
         step_id = self.new_id(self.entry["id_base"] or DEFAULT_IDS.get(self.tool, "Step"))
@@ -345,27 +343,27 @@ class Context:
         steps = [_at_marker(doc, s) for s in steps]
         before = _broken(doc)
         shapes_before = shape_signature(doc) if self.tool not in KEEPS_SHAPES else None
-        doc.openTransaction(self.title)
-        try:
-            for step in steps:
-                builder.run(step)
-            doc.commitTransaction()
-        except Exception as exc:
-            doc.abortTransaction()
-            try:
-                doc.recompute()
-            except Exception:
-                pass
-            builder.objects.pop(step_id, None)
-            text = _plain(exc)
-            if isinstance(exc, KeyError):  # an id the design does not have
-                text = (
-                    "there is no step, sketch or body called %s here (get_design and "
-                    "get_timeline list the ids)" % text
-                )
-            elif not isinstance(exc, (BuildError, UserError)):
-                warn("AI %s: %s" % (self.tool, text))
-            return bridge_core.error_result("Not done (%s): %s" % (self.title, _clean(text)))
+        limited = bool(value_fit.candidates(self.tool, self.args))
+        failed = self._run_steps(doc, builder, steps, step_id, before, shapes_before, limited)
+        if failed is not None:
+            text, no_change = failed
+            if limited and (no_change or value_fit.is_limit(text)):
+                extra = self._largest(doc, builder, step_id, before, shapes_before)
+                if extra:
+                    text = text.rstrip()
+                    if not text.endswith("."):
+                        text += "."
+                    return bridge_core.error_result(
+                        "Not done (%s): %s%s" % (self.title, text, extra)
+                    )
+            if not no_change:
+                return bridge_core.error_result("Not done (%s): %s" % (self.title, text))
+            # changed nothing and no smaller value helps: built as asked, with the warning
+            # below (as before value_fit)
+            steps = [_at_marker(doc, s) for s in catalog.to_steps(self.tool, self.args, step_id)]
+            failed = self._run_steps(doc, builder, steps, step_id, before, shapes_before, False)
+            if failed is not None:
+                return bridge_core.error_result("Not done (%s): %s" % (self.title, failed[0]))
         doc.recompute()
         if builder.body is not None and _alive(builder.body):
             self.host.set_active_body(builder.body)
@@ -391,6 +389,85 @@ class Context:
             "Done: %s.%s %s%s%s" % (self.title, named, summary(doc), broke, unchanged)
         )
 
+    def _run_steps(self, doc, builder, steps, step_id, before, shapes_before, limited):
+        """Build the steps as one Undo step. None when done; else (the reason in words,
+        True when the steps built but changed no solid: only checked when `limited`, a
+        call with a size value that may not fit). A failure takes everything back."""
+        from .ops.core import BuildError
+
+        doc.openTransaction(self.title)
+        try:
+            for step in steps:
+                builder.run(step)
+            if limited and self._changed_nothing(doc, before, shapes_before):
+                raise _NoChange(self.title)  # (a shell thicker than the part)
+            doc.commitTransaction()
+            return None
+        except Exception as exc:
+            doc.abortTransaction()
+            try:
+                doc.recompute()
+            except Exception:
+                pass
+            builder.objects.pop(step_id, None)
+            text = _plain(exc)
+            if isinstance(exc, KeyError):  # an id the design does not have
+                text = (
+                    "there is no step, sketch or body called %s here (get_design and "
+                    "get_timeline list the ids)" % text
+                )
+            elif not isinstance(exc, (BuildError, UserError, _NoChange)):
+                warn("AI %s: %s" % (self.tool, text))
+            return _clean(text), isinstance(exc, _NoChange)
+
+    def _changed_nothing(self, doc, before, shapes_before):
+        """True when the steps just built left every solid as it was (no step broke and the
+        history marker is at the end, so the bodies show the result)."""
+        if shapes_before is None or not _marker_at_end(doc):
+            return False
+        if broke_text(doc, before):
+            return False
+        return shape_signature(doc) == shapes_before
+
+    def _trial(self, doc, builder, step_id, args, before, shapes_before):
+        """Build this call with other arguments in a transaction that is taken back: True
+        when it builds, breaks no step and (for a tool that changes solids) changes one."""
+        ok = False
+        doc.openTransaction("AI: trying a value")
+        try:
+            steps = catalog.to_steps(self.tool, args, step_id)
+            for step in [_at_marker(doc, s) for s in steps]:
+                builder.run(step)
+            ok = (
+                not broke_text(doc, before)
+                and not self._changed_nothing(doc, before, shapes_before)
+                and _solids_valid(doc, shapes_before)
+            )
+        except Exception:
+            ok = False
+        finally:
+            doc.abortTransaction()
+            builder.objects.pop(step_id, None)
+        return ok
+
+    def _largest(self, doc, builder, step_id, before, shapes_before):
+        """The sentence giving the largest value that fits (value_fit), or "". The design
+        is left exactly as it was."""
+        try:
+            return value_fit.largest(
+                self.tool,
+                self.args,
+                lambda args: self._trial(doc, builder, step_id, args, before, shapes_before),
+            )
+        except Exception as exc:
+            warn("AI %s: the largest value that fits was not found (%s)" % (self.tool, exc))
+            return ""
+        finally:
+            try:
+                doc.recompute()
+            except Exception:
+                pass
+
     def done(self, text, doc=None, before=None):
         doc = doc or self.doc
         tail = ""
@@ -400,6 +477,38 @@ class Context:
 
 
 _BUILDERS = {}
+
+
+def _solids_valid(doc, shapes_before):
+    """True when every body a trial changed is a valid shape (a trial is stricter than a
+    real call, so the largest value it finds always builds)."""
+    from .. import bodies
+
+    try:
+        found = bodies.solid_bodies(doc)
+    except Exception:
+        return True
+    now = shape_signature(doc) or {}
+    for body in found:
+        if shapes_before is not None and now.get(body.Name) == shapes_before.get(body.Name):
+            continue
+        try:
+            if not body.Shape.isValid():
+                return False
+        except Exception:
+            return False
+    return True
+
+
+class _NoChange(Exception):
+    """A step with a size value built but changed no solid (the size does not fit)."""
+
+    def __init__(self, title):
+        Exception.__init__(
+            self,
+            "%s changed no solid: the value does not fit here (OpenCASCADE gave the part back "
+            "unchanged)." % title.replace("AI: ", ""),
+        )
 
 
 def forget(doc_name, closed=False):
@@ -638,5 +747,3 @@ def json_result(data, text=None, compact=False):
     else:
         body = json.dumps(data, indent=1, ensure_ascii=False, default=str)
     return bridge_core.result(body if text is None else text + "\n" + body)
-
-

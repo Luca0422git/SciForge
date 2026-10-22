@@ -6,7 +6,8 @@ code behind the timeline's menus and drags, each one Undo step of its own); edit
 "*_edit" design steps of sciforge/ai/ops or the dialogs' own read / apply functions, so the
 later steps keep their faces and edges (follow.py)."""
 
-from .. import bridge_core
+from ... import warn
+from .. import bridge_core, executor, value_fit
 from ..executor import UserError, _broken, json_result, jsonable, summary
 from . import action
 
@@ -358,7 +359,7 @@ def edit_step(ctx, args):
     builder = ctx.builder(doc)
     before = _broken(doc)
 
-    def work():
+    def work(changes=changes):
         target = obj.Name
         builder.objects[target] = obj
         if kind in _EDIT_OPS:
@@ -408,8 +409,120 @@ def edit_step(ctx, args):
             builder.run({"op": "edit", "target": target, "set": changes})
         doc.recompute()
 
-    ctx.change(work)
+    try:
+        ctx.change(work)
+    except Exception as exc:
+        text = executor._plain(exc)
+        extra = ""
+        if value_fit.is_limit(text) and edit_candidates(kind, changes):
+            extra = _largest_edit(ctx, doc, kind, changes, work)
+        if not extra:
+            raise
+        text = executor._clean(text).rstrip()
+        raise UserError(
+            "Not done (%s): %s%s%s" % (ctx.title, text, "" if text.endswith(".") else ".", extra)
+        )
     return ctx.done("Done: %s." % ctx.title, doc, before)
+
+
+# Values of a step whose safe side is toward 0 (value_fit, as the dialogs hold them), per
+# kind of step; "*": every kind not named.
+_EDIT_LIMITED = {
+    "extrude": ("taper", "taper2"),
+    "*": (
+        "radius",
+        "chord",
+        "start",
+        "end",
+        "distance",
+        "distance2",
+        "size",
+        "size2",
+        "thickness",
+        "inside",
+        "outside",
+        "angle",
+        "angle2",
+        "torus_diameter",
+        "section_size",
+        "hole",
+        "fillet",
+        "backlash",
+    ),
+}
+_EDIT_NOT_LIMITED = (
+    "construct",
+    "hole",
+    "thread",
+    "text",
+    "fusion_pattern",
+    "sf_scale",
+    "sf_revolve",
+    "emboss",
+    "move_face",
+    "sf_scale_sketch",
+    "sf_hardware",
+)
+
+
+def edit_candidates(kind, changes):
+    """[(key, value)] of the size values an edit sets that may not fit (tried in order)."""
+    if kind in _EDIT_NOT_LIMITED:
+        return []
+    keys = _EDIT_LIMITED.get(kind, _EDIT_LIMITED["*"])
+    out = []
+    for key, value in changes.items():
+        if key.lower() not in keys or isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)) and value != 0:
+            out.append((key, float(value)))
+    return out
+
+
+def _largest_edit(ctx, doc, kind, changes, work):
+    """The sentence giving the largest value of an edit that fits (value_fit, found by
+    trying values in transactions that are taken back), or ""."""
+    from ... import value_limits
+
+    def trial(key, value):
+        new = dict(changes)
+        new[key] = value
+        before = _broken(doc)
+        doc.openTransaction("AI: trying a value")
+        try:
+            work(new)
+            return not executor.broke_text(doc, before)
+        except Exception:
+            return False
+        finally:
+            doc.abortTransaction()
+
+    try:
+        for key, value in edit_candidates(kind, changes):
+            unit = "deg" if "angle" in key.lower() or "taper" in key.lower() else "mm"
+            step = value_limits.step_for(unit)
+            if abs(value) <= step:
+                continue
+            limit, exact = value_limits.search(
+                lambda v, k=key: trial(k, v),
+                step if value > 0 else -step,
+                value,
+                step,
+                budget=value_fit.BUDGET,
+            )
+            if limit is not None:
+                return value_fit.sentence(
+                    value_fit.words_for(key), unit, value, limit, exact, "set." + key
+                )
+        return ""
+    except Exception as exc:
+        warn("AI edit_step: the largest value that fits was not found (%s)" % exc)
+        return ""
+    finally:
+        try:
+            doc.recompute()
+        except Exception:
+            pass
 
 
 def _later(doc, obj):

@@ -161,8 +161,7 @@ def open_design(ctx, args):
     if body is not None:
         ctx.host.set_active_body(body)
     return bridge_core.result(
-        "Opened %s as design %r (id %r). %s%s"
-        % (path, doc.Label, doc.Name, summary(doc), notes)
+        "Opened %s as design %r (id %r). %s%s" % (path, doc.Label, doc.Name, summary(doc), notes)
     )
 
 
