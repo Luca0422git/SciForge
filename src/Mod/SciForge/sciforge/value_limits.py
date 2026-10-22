@@ -243,11 +243,24 @@ def side_of(value, good):
     return "hi" if value > good else "lo"
 
 
+def slot_of(side, value):
+    """Where a limit is kept: its side and the side of zero it lies on ("hi+", "lo-"...). A
+    limit found for positive values says nothing about negative ones: a coil's height may
+    not get too small going down, yet dragged through zero it is a coil the other way."""
+    if side[-1:] in "+-" and len(side) == 3:
+        return side
+    return side + ("+" if value > 0 else "-")
+
+
+SLOTS = ("hi+", "hi-", "lo+", "lo-")
+
+
 class LimitCache:
     """The limits found, per set of inputs (make_key). Each entry has an upper ('hi') and a
-    lower ('lo') side: (limit, bad) when found, or (None, bad) when a search found that no
-    smaller value helps (then it is not searched again for these inputs). `keep` holds objects
-    the key names by identity (the base shape), so their identity cannot be reused meanwhile."""
+    lower ('lo') limit on each side of zero: (limit, bad) when found, or (None, bad) when a
+    search found that no smaller value helps (then it is not searched again for these
+    inputs). A limit holds only values on its own side of zero. `keep` holds objects the key
+    names by identity (the base shape), so their identity cannot be reused meanwhile."""
 
     def __init__(self, size=48):
         self.size = size
@@ -256,40 +269,58 @@ class LimitCache:
     def clear(self):
         self.entries.clear()
 
-    def get(self, key, side):
+    def get(self, key, slot):
         entry = self.entries.get(key)
         if entry is None:
             return None
         self.entries.move_to_end(key)
-        return entry.get(side)
+        if slot in ("hi", "lo"):  # either side of zero (tests, simple callers)
+            return entry.get(slot + "+") or entry.get(slot + "-")
+        return entry.get(slot)
 
-    def searched(self, key, side):
-        return self.get(key, side) is not None
+    def searched(self, key, slot):
+        return self.get(key, slot) is not None
 
     def store(self, key, side, limit, bad, keep=None):
+        """Keep `limit` (None: no limit) found when `bad` was refused; `side` is "hi" / "lo"
+        (the side of zero is the refused value's) or a slot ("hi+"...)."""
         entry = self.entries.setdefault(key, {})
-        entry[side] = (limit, bad)
+        entry[slot_of(side, bad)] = (limit, bad)
         if keep is not None:
             entry["keep"] = keep
         self.entries.move_to_end(key)
         while len(self.entries) > self.size:
             self.entries.popitem(last=False)
 
-    def limit(self, key, side):
-        found = self.get(key, side)
+    def limit(self, key, slot):
+        found = self.get(key, slot)
         return found[0] if found else None
 
     def clamp(self, key, value):
-        """(value, limit, side): `value` held at a known limit it went past, else unchanged
-        (limit None)."""
-        for side in ("hi", "lo"):
-            found = self.get(key, side)
+        """(value, limit, side): `value` held at a known limit it went past on its own side
+        of zero, else unchanged (limit None)."""
+        entry = self.entries.get(key)
+        if not entry:
+            return value, None, None
+        for slot in SLOTS:
+            found = entry.get(slot)
             if not found or found[0] is None:
                 continue
-            limit = found[0]
+            if (slot[2] == "+" and value <= 0) or (slot[2] == "-" and value >= 0):
+                continue  # the other side of zero: this limit says nothing about it
+            limit, side = found[0], slot[:2]
             if (side == "hi" and value > limit + 1e-12) or (side == "lo" and value < limit - 1e-12):
                 return limit, limit, side
         return value, None, None
+
+    def on_limit(self, key, value):
+        """(limit, side) when `value` sits right on a known limit, else None."""
+        entry = self.entries.get(key) or {}
+        for slot in SLOTS:
+            found = entry.get(slot)
+            if found and found[0] is not None and abs(value - found[0]) < 1e-9:
+                return found[0], slot[:2]
+        return None
 
 
 class Limiter:
@@ -317,10 +348,9 @@ class Limiter:
         held, limit, side = self.cache.clamp(key, value)
         if limit is None:
             self.note = ""
-            for edge in ("hi", "lo"):  # sitting right on the limit (the arrow let go there)
-                found = self.cache.get(key, edge)
-                if found and found[0] is not None and abs(value - found[0]) < 1e-9:
-                    self.note = note_reached(found[0], edge, unit, self.step(unit))
+            on = self.cache.on_limit(key, value)  # sitting right on it (the arrow let go there)
+            if on is not None:
+                self.note = note_reached(on[0], on[1], unit, self.step(unit))
             return value
         self.note = (
             note_typed(value, limit, unit, self.step(unit))
@@ -338,7 +368,8 @@ class Limiter:
         searched once between `good` and `value`. None when nothing between works (not a
         limit: the refusal stays) - remembered too, so it is not searched again."""
         side = side_of(value, good)
-        found = self.cache.get(key, side)
+        slot = slot_of(side, value)
+        found = self.cache.get(key, slot)
         if found is not None:
             limit = found[0]
             if limit is None:
@@ -354,7 +385,7 @@ class Limiter:
         )
         if limit is not None and (limit - value) * (1 if side == "hi" else -1) >= 0:
             limit = None  # a "limit" beyond the refused value: the value works after all
-        self.cache.store(key, side, limit, value, keep)
+        self.cache.store(key, slot, limit, value, keep)
         return limit
 
     def limited(self, key, value, limit, typed, unit=None):

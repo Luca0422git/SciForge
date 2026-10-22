@@ -152,6 +152,23 @@ class Cache(unittest.TestCase):
         self.assertEqual(cache.clamp(key, 1.0), (1.0, None, None))
         self.assertEqual(cache.clamp(vl.make_key("other"), 9.0), (9.0, None, None))
 
+    def test_a_limit_holds_its_own_side_of_zero(self):
+        # a coil's height may not get under 10.01 going down, yet dragged through zero it is
+        # a coil the other way (-20 works): the limit must not hold it at +10.01
+        limiter = vl.Limiter()
+        key = vl.make_key("coil")
+
+        def works(value):
+            return abs(value) >= 10.0 or value == 0.0
+
+        self.assertEqual(limiter.find(key, works, 5.0, 12.0, good_known=True), 10.0)
+        self.assertEqual(limiter.clamp(key, 7.0), 10.0)
+        self.assertEqual(limiter.clamp(key, -20.0), -20.0)  # the other side: as it is
+        # the negative side gets its own limit, kept apart
+        self.assertEqual(limiter.find(key, works, -5.0, -12.0, good_known=True), -10.0)
+        self.assertEqual(limiter.clamp(key, -7.0), -10.0)
+        self.assertEqual(limiter.clamp(key, 7.0), 10.0)
+
     def test_size_bound(self):
         cache = vl.LimitCache(size=3)
         for i in range(5):
@@ -220,6 +237,147 @@ class LimiterFlow(unittest.TestCase):
         self.assertEqual(limiter.clamp(key, -50.0), -3.23)
         self.assertEqual(limiter.note, "Furthest that fits here: -3.23 mm")
         self.assertEqual(limiter.clamp(key, 10.0), 10.0)  # the other side has no limit
+
+
+class FakePanel(vl.LimitedValues):
+    """A dialog with one value ("wall") that fits up to `edge` for the picks it has."""
+
+    def __init__(self, edge=3.4789):
+        self.limit_init()
+        self.edge = edge
+        self.picks = ("Face6",)
+        self.value = 1.0
+        self.builds = 0
+
+    def limit_key(self, what):
+        return vl.make_key("fake", self.picks, what)
+
+    def limit_works(self, what):
+        def works(value):
+            self.builds += 1
+            if value > self.edge:
+                raise ValueError("A %g mm wall is too thick for this part." % value)
+            return True
+
+        return works
+
+    def limit_value(self, what):
+        return self.value
+
+    def limit_set(self, what, value):
+        self.value = value
+
+    def edit(self, value, source):
+        """What the dialog does with a new value: hold it, then 'preview' it."""
+        self.value = self.limit_edit("wall", value, source)
+        if self.value > self.edge:
+            reason = "A %g mm wall is too thick for this part." % self.value
+            if self.limit_refused(reason):
+                return "held"
+            return "error: " + self.limit_hint(reason)
+        self.limit_good()
+        return "ok"
+
+
+class LimitedValuesFlow(unittest.TestCase):
+    def test_drag_past_the_limit_and_back(self):
+        p = FakePanel()
+        self.assertEqual(p.edit(2.0, "dragged"), "ok")
+        self.assertEqual(p.edit(6.0, "dragged"), "held")  # searched once, from 2.0 (known)
+        self.assertEqual(p.value, 3.47)
+        self.assertEqual(p.limits.note, "Largest that fits here: 3.47 mm")
+        builds = p.builds
+        for value in (8.0, 12.0, 30.0):  # further drag steps: the cache, nothing built
+            self.assertEqual(p.edit(value, "dragged"), "ok")
+            self.assertEqual(p.value, 3.47)
+        self.assertEqual(p.builds, builds)
+        self.assertEqual(p.limits.searches, 1)
+        self.assertEqual(p.edit(2.5, "dragged"), "ok")  # back below: used as it is
+        self.assertEqual(p.limits.note, "")
+
+    def test_typed(self):
+        p = FakePanel()
+        p.edit(1.0, "typed")
+        self.assertEqual(p.edit(5.0, "typed"), "held")
+        self.assertEqual(p.value, 3.47)
+        self.assertEqual(p.limits.note, "5 mm does not fit: limited to 3.47 mm")
+
+    def test_formula_is_not_rewritten(self):
+        p = FakePanel()
+        p.edit(1.0, "typed")
+        result = p.edit(5.0, "formula")
+        self.assertTrue(result.startswith("error: "), result)
+        self.assertIn("Largest that fits here: 3.47 mm.", result)
+        self.assertEqual(p.value, 5.0)
+
+    def test_other_picks_other_limit(self):
+        p = FakePanel()
+        p.edit(1.0, "typed")
+        p.edit(9.0, "dragged")
+        p.picks, p.edge = ("Face6", "Face2"), 2.0  # a face added: another limit
+        self.assertEqual(p.edit(9.0, "dragged"), "held")
+        self.assertEqual(p.value, 2.0)
+        self.assertEqual(p.limits.searches, 2)
+
+    def test_forget(self):
+        p = FakePanel()
+        p.edit(1.0, "typed")
+        p.limit_forget()
+        self.assertFalse(p.limit_refused("A 9 mm wall is too thick for this part."))
+        self.assertEqual(p.limit_hint("too thick"), "too thick")
+
+
+class FakeField:
+    """A DistanceField as ShowWhenLeft sees it: a value, the text being typed, the box."""
+
+    class Widget:
+        def __init__(self):
+            self.slots = []
+            self.editingFinished = self
+
+        def connect(self, slot):
+            self.slots.append(slot)
+
+        def leave(self):
+            for slot in self.slots:
+                slot()
+
+    def __init__(self, value):
+        self._value = value
+        self._typed = None
+        self.widget = FakeField.Widget()
+
+    def value(self):
+        return self._value
+
+    def set_value(self, value):
+        self._value = value
+
+
+class ShowLater(unittest.TestCase):
+    def test_the_limit_shows_when_the_box_is_left(self):
+        field = FakeField(5.0)
+        field._typed = "5"  # being typed
+        shower = vl.ShowWhenLeft()
+        vl.show_held(shower, "wall", field, 5.0, 3.47)
+        self.assertEqual(field.value(), 5.0)  # not rewritten under the cursor
+        field._typed = None
+        field.widget.leave()
+        self.assertEqual(field.value(), 3.47)
+
+    def test_something_else_typed_meanwhile(self):
+        field = FakeField(5.0)
+        field._typed = "5"
+        shower = vl.ShowWhenLeft()
+        shower.hold("wall", field, 5.0, 3.47)
+        field._typed, field._value = None, 2.0  # the user typed 2 instead
+        field.widget.leave()
+        self.assertEqual(field.value(), 2.0)
+
+    def test_not_typing_shows_at_once(self):
+        field = FakeField(5.0)
+        vl.show_held(vl.ShowWhenLeft(), "wall", field, 5.0, 3.47)
+        self.assertEqual(field.value(), 3.47)
 
 
 if __name__ == "__main__":
