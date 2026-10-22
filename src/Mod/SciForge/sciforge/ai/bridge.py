@@ -316,6 +316,8 @@ class GuiHost(executor.Host):
         return _confirm_overwrite(path)
 
     def refuse_overwrite_text(self, path):
+        if isinstance(path, (list, tuple)):
+            path = ", ".join(path)
         return "The person did not allow replacing %s." % path
 
     def save(self, doc, path=None):
@@ -468,6 +470,12 @@ def add_listener(fn):
 
 # -- questions -------------------------------------------------------------------------
 def _confirm_overwrite(path):
+    if isinstance(path, (list, tuple)):  # (One File Per Body: one question for them all)
+        return ask(
+            "AI control",
+            "The AI app wants to write over these files\n%s\n\nAllow it to replace them?"
+            % "\n".join(path),
+        )
     return ask(
         "AI control",
         "The AI app wants to write over the file\n%s\n\nAllow it to replace that file?" % path,

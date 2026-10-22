@@ -152,6 +152,33 @@ def parse_tool(text):
     return name, args
 
 
+def read_calls(options):
+    """The tool calls of `run`: --tool in order, then --tools-file's. ValueError (or
+    OSError: the file cannot be read) with a plain reason for a bad one (exit status 2)."""
+    calls = [parse_tool(t) for t in options.tool]
+    if options.tools_file:
+        with open(options.tools_file, encoding="utf-8") as handle:
+            try:
+                items = json.load(handle)
+            except ValueError as exc:
+                raise ValueError("%s is not JSON: %s" % (options.tools_file, exc))
+        if not isinstance(items, list):
+            raise ValueError(
+                '%s must hold a list: [{"tool": name, "arguments": {...}}]' % options.tools_file
+            )
+        for i, item in enumerate(items, start=1):
+            if not isinstance(item, dict) or not isinstance(item.get("tool"), str):
+                raise ValueError('item %d of %s has no "tool" name' % (i, options.tools_file))
+            args = item.get("arguments", {})
+            if not isinstance(args, dict):
+                raise ValueError(
+                    'the "arguments" of item %d of %s must be a JSON object'
+                    % (i, options.tools_file)
+                )
+            calls.append((item["tool"], args))
+    return calls
+
+
 def _tools(options, out):
     from sciforge.ai import catalog
 
@@ -265,6 +292,13 @@ def main(argv=None, out=None):
         if options.allow_overwrite:
             args.append("--allow-overwrite")
         return sciforge_mcp.main(args)
+    calls = []
+    if options.command == "run":
+        try:
+            calls = read_calls(options)
+        except (ValueError, OSError) as exc:
+            sys.stderr.write("[SciForge] run: %s\n" % exc)
+            return 2
     if not _need_freecad():
         return 2
     from sciforge.ai import headless
@@ -278,7 +312,11 @@ def main(argv=None, out=None):
         if options.command == "info":
             say(json.dumps(headless.info(options.file), indent=1, ensure_ascii=False, default=str))
             return 0
-        host = headless.HeadlessHost(allow_overwrite=getattr(options, "force", False))
+        host = headless.HeadlessHost(
+            allow_overwrite=getattr(options, "force", False),
+            overwrite_option="--force",
+            relative_base=os.getcwd(),  # (a relative path in a tool call: from here)
+        )
         if options.command == "check":
             headless.open_file(options.file, host)
             args = {"interference": not options.no_interference}
@@ -294,11 +332,6 @@ def main(argv=None, out=None):
             answer = headless.convert(options.source, options.target, host)
             say(answer["text"])
             return 1 if answer["is_error"] else 0
-        calls = [parse_tool(t) for t in options.tool]
-        if options.tools_file:
-            with open(options.tools_file, encoding="utf-8") as handle:
-                for item in json.load(handle):
-                    calls.append((item["tool"], item.get("arguments", {})))
         if options.save:
             calls.append(("save_as", {"path": os.path.abspath(options.save)}))
         if not calls and not options.file:

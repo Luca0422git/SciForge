@@ -440,7 +440,7 @@ def export_drawing(ctx, args):
     from ... import drawing, drawing_sheets
 
     page = _page(ctx, args.get("drawing"))
-    path = os.path.abspath(args["path"])
+    path = ctx.full_path(args["path"])
     if os.path.exists(path) and not ctx.host.confirm_overwrite(path):
         raise UserError(ctx.host.refuse_overwrite_text(path))
     _recompute(page)

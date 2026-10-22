@@ -53,6 +53,8 @@ class Host:
 
     gui = False
     allow_overwrite = False
+    overwrite_option = "--allow-overwrite"  # how this host was told it may replace files
+    relative_base = None  # the folder relative paths are read from (the command line's)
 
     def __init__(self):
         self._active = {}  # document name -> body name (the window keeps it otherwise)
@@ -85,12 +87,22 @@ class Host:
 
     # files
     def confirm_overwrite(self, path):
+        """May the file (or the list of files: asked once) be replaced?"""
         return bool(self.allow_overwrite)
 
     def refuse_overwrite_text(self, path):
+        if isinstance(path, (list, tuple)):
+            what = "%s already exist" % ", ".join(path)
+        else:
+            what = "%s already exists" % path
+        if self.overwrite_option != Host.overwrite_option:  # (sciforge-cli: --force)
+            return "%s: add %s to the command to replace it, or pick another path." % (
+                what,
+                self.overwrite_option,
+            )
         return (
-            "%s already exists. Headless SciForge never replaces files unless it was started "
-            "with --allow-overwrite; pick another path." % path
+            "%s. Headless SciForge never replaces files unless it was started with %s; pick "
+            "another path." % (what, self.overwrite_option)
         )
 
     def save(self, doc, path=None):
@@ -240,6 +252,8 @@ def _plain(exc):
 class Context:
     """What one call works with: the host, the design, the step builder."""
 
+    _missing = None  # the id the last steps did not find (a KeyError's)
+
     def __init__(self, host, tool, args):
         self.host = host
         self.tool = tool
@@ -289,6 +303,25 @@ class Context:
         """The object an id names: its Name, its Label, or the timeline's name for it."""
         doc = self.need_doc()
         return resolve(doc, ident, what)
+
+    def full_path(self, path):
+        """A file path the AI gave: ~ is the home folder. A relative path is refused (the
+        AI cannot know which folder SciForge runs in, so the file would land somewhere
+        unexpected), except on the command line, where it is read from the folder the
+        command was typed in (the host's relative_base)."""
+        import os
+
+        if not isinstance(path, str) or not path.strip():
+            raise UserError("Give a full path for the file.")
+        path = os.path.expanduser(path.strip())
+        if not os.path.isabs(path):
+            if not self.host.relative_base:
+                raise UserError(
+                    "%r is not a full path: give the whole path, like %s (SciForge does not "
+                    "guess the folder)." % (path, os.path.join(os.path.expanduser("~"), path))
+                )
+            path = os.path.join(self.host.relative_base, path)
+        return os.path.abspath(path)
 
     def body_of(self, ident):
         from .. import bodies
@@ -345,6 +378,13 @@ class Context:
         shapes_before = shape_signature(doc) if self.tool not in KEEPS_SHAPES else None
         limited = bool(value_fit.candidates(self.tool, self.args))
         failed = self._run_steps(doc, builder, steps, step_id, before, shapes_before, limited)
+        for _attempt in range(8):  # a step named as get_timeline shows it ("Sketch 1")
+            args = _ids_for_names(doc, self.args, self._missing) if failed else None
+            if args is None:
+                break
+            self.args = args
+            steps = [_at_marker(doc, s) for s in catalog.to_steps(self.tool, args, step_id)]
+            failed = self._run_steps(doc, builder, steps, step_id, before, shapes_before, limited)
         if failed is not None:
             text, no_change = failed
             if limited and (no_change or value_fit.is_limit(text)):
@@ -395,6 +435,7 @@ class Context:
         call with a size value that may not fit). A failure takes everything back."""
         from .ops.core import BuildError
 
+        self._missing = None
         doc.openTransaction(self.title)
         try:
             for step in steps:
@@ -412,6 +453,7 @@ class Context:
             builder.objects.pop(step_id, None)
             text = _plain(exc)
             if isinstance(exc, KeyError):  # an id the design does not have
+                self._missing = exc.args[0] if exc.args else None
                 text = (
                     "there is no step, sketch or body called %s here (get_design and "
                     "get_timeline list the ids)" % text
@@ -569,6 +611,37 @@ def _at_marker(doc, step):
             "only works at the end of the timeline)."
         )
     return out
+
+
+_NOT_IDS = ("label", "name", "text", "title", "comment", "description", "value", "expression")
+
+
+def _ids_for_names(doc, args, missing):
+    """The arguments with `missing` (an id the steps did not find) replaced by the id of the
+    step it names: the timeline's name for it ("Sketch 1", what get_timeline shows) or its
+    label. None when it names nothing, or is already an id."""
+    if not isinstance(missing, str) or not missing or doc.getObject(missing) is not None:
+        return None
+    try:
+        obj = resolve(doc, missing)
+    except UserError:
+        return None
+    if obj is None or obj.Name == missing:
+        return None
+    found = []
+
+    def swap(value, key=None):
+        if isinstance(value, dict):
+            return {k: (v if k in _NOT_IDS else swap(v, k)) for k, v in value.items()}
+        if isinstance(value, list):
+            return [swap(v, key) for v in value]
+        if value == missing:
+            found.append(key)
+            return obj.Name
+        return value
+
+    out = swap(args)
+    return out if found else None
 
 
 def resolve(doc, ident, what="step, body or component"):

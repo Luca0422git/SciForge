@@ -336,6 +336,148 @@ _EXTRUDE_KEYS = {
 }
 
 
+def _option_keys(obj, kind):
+    """The option names an edit of this kind of step takes (the options its dialog shows:
+    get_step's definition), or None when they cannot be listed here (the edit then checks
+    them itself, or the "nothing changed" check below catches a name it ignored)."""
+    from ... import (
+        blend,
+        coil,
+        combine,
+        drafting,
+        emboss,
+        gear,
+        hole,
+        loft,
+        pattern,
+        pipe,
+        primitives,
+        replace_face,
+        revolve,
+        rib,
+        shelling,
+        silhouette,
+        split_face,
+        surface,
+        sweep,
+        thread,
+    )
+    from ..ops import bodies_ops, core, hardware_ops
+
+    refs = ("target", "tool", "direction", "from", "to")  # (modify_edit: picked again)
+    readers = {
+        "blend": lambda o: blend.read(o),
+        "hole": lambda o: hole.read(o),
+        "thread": lambda o: thread.read(o),
+        "emboss": lambda o: emboss.read(o)[3],
+        "sf_shell": lambda o: list(shelling.read(o)[2]) + ["thickness"],
+        "sf_primitive": lambda o: primitives.read(o)[2],
+        "sf_coil": lambda o: coil.read(o)[1],
+        "sf_pipe": lambda o: pipe.read(o)[1],
+        "sf_gear": lambda o: gear.read(o)[1],
+        "sf_draft2": lambda o: drafting.read(o)[3],
+        "sf_revolve": lambda o: list(revolve.read(o)[2]) + ["expressions"],
+        "sf_sweep": lambda o: list(sweep.read(o)[3]) + ["expressions"],
+        "sf_loft": lambda o: loft.read(o)[3],
+        "sf_rib": lambda o: rib.read(o)[1],
+        "sf_surface": lambda o: surface.read(o)[2],
+        "combine": lambda o: combine.read(o),
+        "fusion_pattern": lambda o: list(pattern.read(o)[1]) + ["type"],
+        "replace_face": lambda o: list(replace_face.read(o)) + list(refs),
+        "split_face": lambda o: list(split_face.read(o)) + list(refs),
+        "silhouette_split": lambda o: list(silhouette.read(o)) + list(refs),
+        "split_body": lambda o: ("tool", "extend"),
+        "move_bodies": lambda o: bodies_ops.MOVE_KEYS + ("pivot", "from_point", "to_point"),
+        "sf_hardware": lambda o: hardware_ops.HARDWARE_KEYS,
+        "sf_scale": lambda o: ("factor", "factors"),
+        "sf_scale_sketch": lambda o: ("factor",),
+        "move_face": lambda o: ("move", "rotate"),
+        "extrude": lambda o: tuple(_EXTRUDE_KEYS) + ("through_all", "flip"),
+        "construct": lambda o: ("distance", "angle", "fraction", "distance_type"),
+    }
+    reader = readers.get(kind)
+    if reader is None:
+        reader = (lambda o: core._EDIT_PROPS[kind]) if kind in core._EDIT_PROPS else None
+    if reader is None:
+        return None
+    try:
+        return sorted(str(k) for k in reader(obj))
+    except Exception as exc:
+        warn("AI edit_step: the options of %s could not be listed (%s)" % (obj.Name, exc))
+        return None
+
+
+def _norm(key):
+    return str(key).strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _checked_changes(obj, kind, changes):
+    """set with the option names as the step has them: "Radius" / "Length" (get_step's
+    values spellings) become radius / length, a shell's thickness becomes its inside or
+    outside wall (as the shell tool reads it). A name the step does not have is refused with
+    the ones it has, instead of being ignored with "Done"."""
+    keys = _option_keys(obj, kind)
+    if keys is None:
+        return changes
+    known = {_norm(k): k for k in keys}
+    out = {}
+    unknown = []
+    for key, value in changes.items():
+        name = key if key in keys else known.get(_norm(key))
+        if name is None:
+            unknown.append(key)
+        else:
+            out[name] = value
+    if unknown:
+        shown = [k for k in keys if k != "expressions"]
+        raise UserError(
+            "%s has no option %s: set takes %s (get_step shows their values). Nothing was "
+            "changed." % (obj.Label, ", ".join(repr(k) for k in unknown), ", ".join(shown))
+        )
+    if kind == "sf_shell" and "thickness" in out:
+        from ... import shelling
+
+        thickness = out.pop("thickness")
+        direction = out.get("direction") or shelling.read(obj)[2].get("direction", "inside")
+        for side in ("inside", "outside"):
+            if direction in (side, "both"):
+                out.setdefault(side, thickness)
+    return out
+
+
+def _edit_state(doc, obj, kind):
+    """What an edit can change, to tell an edit that changed nothing: the step's options,
+    its formulas, its own shape and every solid."""
+    try:
+        definition = json_result(_read(obj, kind))["text"] if kind else None
+    except Exception:
+        definition = None
+    try:
+        shape = obj.Shape
+        box = shape.BoundBox
+        own = (
+            round(shape.Volume, 6),
+            round(shape.Area, 6),
+            round(shape.Length, 6),
+            len(shape.Faces),
+            len(shape.Edges),
+            tuple(
+                round(v, 6) for v in (box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax)
+            ),
+        )
+    except Exception:
+        own = None
+    try:
+        formulas = sorted(obj.ExpressionEngine)
+    except Exception:
+        formulas = None
+    return definition, own, formulas, executor.shape_signature(doc)
+
+
+class _Unchanged(UserError):
+    """An edit that left the step exactly as it was (taken back: no Undo step)."""
+
+
 @action("edit_step")
 def edit_step(ctx, args):
     obj = ctx.resolve(args["step"])
@@ -356,8 +498,10 @@ def edit_step(ctx, args):
         )
     if (args.get("add_edges") or args.get("add_faces")) and kind != "blend":
         raise UserError("add_edges / add_faces only apply to a fillet or chamfer.")
+    changes = _checked_changes(obj, kind, changes)
     builder = ctx.builder(doc)
     before = _broken(doc)
+    state = _edit_state(doc, obj, kind)
 
     def work(changes=changes):
         target = obj.Name
@@ -409,8 +553,18 @@ def edit_step(ctx, args):
             builder.run({"op": "edit", "target": target, "set": changes})
         doc.recompute()
 
+    def checked_work():
+        work()
+        if _edit_state(doc, obj, kind) == state:
+            raise _Unchanged(obj.Label)  # (taken back by ctx.change: no Undo step)
+
     try:
-        ctx.change(work)
+        ctx.change(checked_work)
+    except _Unchanged:
+        return bridge_core.result(
+            "No change: %s already has these values, so nothing was done (no Undo step). "
+            "get_step shows its options and values." % obj.Label
+        )
     except Exception as exc:
         text = executor._plain(exc)
         extra = ""

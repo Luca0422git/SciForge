@@ -101,7 +101,7 @@ SciForge offers 117 tools to AI apps (through MCP, the built-in chat panel and t
 | [`new_design`](sciforge://docs/reference/new_design.md) | New design | Designs and files | File > New Design | changes the open designs (not an undo step) | nothing |
 | [`open_design`](sciforge://docs/reference/open_design.md) | Open design | Designs and files | File > Open | changes which design is open or active, changes no design | nothing |
 | [`save_as`](sciforge://docs/reference/save_as.md) | Save as | Designs and files | File > Save As | writes files | an open design |
-| [`close_design`](sciforge://docs/reference/close_design.md) | Close design | Designs and files | File > Close | changes the open designs (not an undo step), destructive | an open design |
+| [`close_design`](sciforge://docs/reference/close_design.md) | Close design | Designs and files | File > Close | changes the open designs (not an undo step), destructive | nothing |
 | [`list_designs`](sciforge://docs/reference/list_designs.md) | List designs | Designs and files | the design tabs | read-only | nothing |
 | [`switch_design`](sciforge://docs/reference/switch_design.md) | Switch design | Designs and files | click a design tab | changes which design is open or active, changes no design | nothing |
 | [`import_file`](sciforge://docs/reference/import_file.md) | Insert file | Import and export | INSERT > Insert Mesh / Insert DXF / Insert STEP, and Insert into Current Design | changes the design (one undo step) | nothing |
