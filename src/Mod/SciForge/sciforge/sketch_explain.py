@@ -22,7 +22,7 @@ import time
 
 import FreeCAD as App
 
-from . import log, warn
+from . import log, sketch_geometry, warn
 from . import sketch_explain_core as core
 
 HIGHLIGHT_MS = 2500
@@ -227,7 +227,7 @@ def redundant_culprits(sketch, index, exclude=(), solved=False):
     base = len(redundant)
     if index not in redundant or not base:
         return found
-    geometry = sketch.Geometry
+    geometry = sketch_geometry.snapshot(sketch)
     itself = _solves_itself(sketch)  # then setActive solves: no second solve of ours
     tries = 0
     slowest = 0.0
@@ -268,15 +268,16 @@ def redundant_culprits(sketch, index, exclude=(), solved=False):
 
 
 def _restore_geometry(sketch, geometry):
-    """Put the curves back if the solver moved any while constraints were switched off (it
-    should not: the curves already met every constraint)."""
+    """Put the curves back (`geometry`: sketch_geometry.snapshot) if the solver moved any
+    while constraints were switched off (it should not: the curves already met every
+    constraint). Construction flags and geometry ids stay (sketch_geometry.restore)."""
     try:
         now = sketch.Geometry
         if len(now) != len(geometry):
             return
-        for a, b in zip(now, geometry):
+        for a, b in zip(now, sketch_geometry.curves(geometry)):
             if not _same_curve(a, b):
-                sketch.Geometry = geometry
+                sketch_geometry.restore(sketch, geometry)
                 sketch.solve()
                 return
     except Exception as exc:
@@ -300,7 +301,7 @@ REDUNDANT = -2  # SketchObject.solve(): redundant constraints (the others are wo
 def _solve_without(sketch, new):
     """(solve code, conflicting, redundant) of the sketch with the constraints `new`
     switched off, then switched on again (the curves put back)."""
-    geometry = sketch.Geometry
+    geometry = sketch_geometry.snapshot(sketch)
     try:
         for i in new:
             sketch.setActive(i, False)
@@ -789,8 +790,8 @@ def add_checked(sketch, constraints):
     if not constraints:
         return []
     touched = _curves_of(constraints)
-    geometry = sketch.Geometry  # a cheap copy (only setting it back costs)
-    flat_before = _collapsed_among(sketch, touched, geometry)
+    geometry = sketch_geometry.snapshot(sketch)  # a cheap copy (only setting it back costs)
+    flat_before = _collapsed_among(sketch, touched, sketch_geometry.curves(geometry))
     first = len(sketch.Constraints)
     sketch.addConstraint(constraints)
     present = list(constraints)  # in the sketch from `first` on, in this order
@@ -810,7 +811,8 @@ def add_checked(sketch, constraints):
         sketch.delConstraint(first + at, True)  # no solve: the next step solves
         del present[at]
         if state["collapsed"]:
-            sketch.Geometry = geometry  # the solver squeezed a curve: the curves go back
+            # the solver squeezed a curve: the curves go back (construction flags, ids kept)
+            sketch_geometry.restore(sketch, geometry)
             state["collapsed"] = False
         state["stale"] = True
 

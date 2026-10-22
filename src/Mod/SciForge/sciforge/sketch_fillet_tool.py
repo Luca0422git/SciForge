@@ -30,6 +30,7 @@ from . import log, value_limits
 from . import sketch_draw as draw
 from . import sketch_fillet_core as core
 from .sketch_draw import LENGTH, Field
+from .sketch_geometry import set_geometry
 
 LINE = "Part::GeomLineSegment"
 ARC = "Part::GeomArcOfCircle"
@@ -72,32 +73,6 @@ def _cut_end(sketch, geo, joint):
         if mine and theirs:
             return mine[0], theirs[0]
     return None, None
-
-
-def set_geometry(sketch, changes):
-    """Replace some curves of the sketch ({index: new geometry}), keeping every curve's
-    construction flag and geometry id (assigning sketch.Geometry loses them: points came
-    back as normal points with new ids)."""
-    count = len(sketch.Geometry)
-    flags = [sketch.getConstruction(i) for i in range(count)]
-    ids = []
-    for i in range(count):
-        try:
-            ids.append((i, sketch.getGeometryId(i)))
-        except Exception:
-            pass
-    geos = list(sketch.Geometry)
-    for index, geometry in changes.items():
-        geos[index] = geometry
-    sketch.Geometry = geos
-    for i, flag in enumerate(flags):
-        if sketch.getConstruction(i) != flag:
-            sketch.setConstruction(i, flag)
-    if ids:
-        try:
-            sketch.setGeometryIds(ids)
-        except Exception:
-            pass
 
 
 def _end_point(geometry, pos):

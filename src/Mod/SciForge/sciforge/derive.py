@@ -205,9 +205,14 @@ def read_doc(doc):
             geos = []
             for i, geo in enumerate(obj.Geometry):
                 try:
-                    geos.append((geo.copy(), bool(obj.getConstruction(i))))
+                    construction = bool(obj.getConstruction(i))
                 except Exception:
-                    geos.append((geo.copy(), False))
+                    construction = False
+                try:
+                    gid = obj.getGeometryId(i)
+                except Exception:
+                    gid = None
+                geos.append((geo.copy(), construction, gid))
             items[key] = {"label": obj.Label, "geometry": geos, "global": glob, "local": local}
         elif obj.TypeId in DATUM_TYPES:
             if getattr(obj, "SciForgeTimeline", True) is False and not getattr(
@@ -551,17 +556,29 @@ def _copy_look(body, data):
 
 
 def _fill_sketch(sketch, data):
+    """The derived sketch's curves: the source's, fixed (Block). Each curve takes the
+    geometry id of its source curve, so an update (every curve deleted and added again)
+    keeps the ids that later steps and references name (they were new on every update)."""
     import Sketcher
 
     if sketch.GeometryCount:
         sketch.deleteAllGeometry()
-    for geo, construction in data["geometry"]:
+    ids = []
+    for item in data["geometry"]:
+        geo, construction = item[0], item[1]
         index = sketch.addGeometry(geo.copy(), construction)
+        if len(item) > 2 and item[2] is not None:
+            ids.append((index, item[2]))
         if not construction:
             try:
                 sketch.addConstraint(Sketcher.Constraint("Block", index))
             except Exception:
                 pass
+    if ids:
+        try:
+            sketch.setGeometryIds(ids)
+        except Exception as exc:
+            warn("derive: %s keeps new curve ids (%s)" % (sketch.Label, exc))
 
 
 def _build_sketch(master, data, body):

@@ -488,14 +488,16 @@ def scale_sketch(sketch, factor, center=None):
     """Scale every curve of `sketch` by `factor` about `center` (sketch coordinates, None
     the sketch origin); its dimensions are scaled with it. Returns the names of dimensions
     that follow a parameter (they keep their value)."""
+    from . import sketch_geometry
+
     factor = float(factor)
     check_factors((factor, factor, factor), True)
     center = App.Vector(center) if center is not None else App.Vector(0, 0, 0)
-    geometry = []
-    for geo in sketch.Geometry:
+    changes = {}
+    for index, geo in enumerate(sketch.Geometry):
         copy = geo.copy()
         copy.scale(center, factor)
-        geometry.append(copy)
+        changes[index] = copy
     dims = []
     kept = []
     for i, con in enumerate(sketch.Constraints):
@@ -507,7 +509,9 @@ def scale_sketch(sketch, factor, center=None):
     # The curves first, then each dimension: FreeCAD solves after every new value, and
     # with the curves already scaled each solve only confirms them (setting the curves
     # with the dimensions as references and solving moved the corners half way).
-    sketch.Geometry = geometry
+    # (sketch_geometry: assigning sketch.Geometry made construction points normal ones
+    # with new ids)
+    sketch_geometry.set_geometry(sketch, changes)
     for i, value in dims:
         sketch.setDatum(i, App.Units.Quantity(value * factor, App.Units.Unit("mm")))
     try:
