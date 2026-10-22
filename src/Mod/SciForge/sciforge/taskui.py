@@ -1419,10 +1419,12 @@ class Panel:
     HELD_REST_MIN_MS = 100
     HELD_REST_MAX_MS = 900
     # A rebuild cheaper than this tells nothing of the cost (Press Pull or Extrude at 0
-    # builds nothing): on a part with HEAVY_FACES faces or more, a drag then waits for the
-    # rest until a real rebuild was timed (review finding DRAFT-2-F2: the first move of a
-    # drag froze the handle for 0.5-1.3 s)
+    # builds next to nothing)
     TRIVIAL_COST = 0.03
+    # On a part with HEAVY_FACES faces or more, a drag waits for the rest until a rebuild
+    # made while a handle was held has shown it quick: the rebuild when the dialog opened
+    # (a value of 0) says nothing of one during the drag (review finding DRAFT-2-F2: the
+    # first move of a drag froze the handle for 0.5-1.3 s)
     HEAVY_FACES = 120
 
     def __init__(self, doc, transaction):
@@ -1553,7 +1555,10 @@ class Panel:
         cost = getattr(self, "_preview_cost", None)
         if cost is not None and cost > self.SLOW_DRAG:
             return True
-        if (cost is None or cost < self.TRIVIAL_COST) and button_held():
+        if button_held():
+            held = getattr(self, "_held_cost", None)
+            if held is not None:
+                return held > self.SLOW_DRAG
             return self._heavy_part()
         return False
 
@@ -1623,6 +1628,7 @@ class Panel:
             pass
         self._pending = False
         self._waits_rest = False
+        held = button_held()
         started = time.perf_counter()
         try:
             self._recompute()
@@ -1630,6 +1636,8 @@ class Panel:
             warn("preview: %s" % exc)
         ended = time.perf_counter()
         self._preview_cost = ended - started
+        if held:
+            self._held_cost = self._preview_cost  # what a rebuild during a drag costs
         gap = min(self.PREVIEW_MAX_MS / 1000.0, 1.5 * (ended - started))
         self._calm_until = ended + gap
         try:

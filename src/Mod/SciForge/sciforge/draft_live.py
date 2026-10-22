@@ -297,7 +297,12 @@ class Picture:
                 for i, j, t in recipe:
                     if i == j:
                         p = line[i]
-                        beside = self._beside(p, sides, others)
+                        # the end of an upright edge can lie on a slanted top too
+                        on = list(others)
+                        on += [
+                            f for f in self._on_caps(p, caps) if not any(f.isSame(o) for o in on)
+                        ]
+                        beside = self._beside(p, sides, on)
                         terms, slant = self._terms(p, face, beside)
                         if slant is not None:
                             self.line_slants.append((len(self.line_points), slant[0], slant[1]))

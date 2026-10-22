@@ -168,6 +168,20 @@ def _middle(lo, hi):
     return (lo + hi) / 2.0
 
 
+def _settled(lo, hi, step, good):
+    """True when the bisection between `lo` (works) and `hi` (does not) is done: they are
+    within half a step, or no tidy value lies between the tidy value at `lo` and `hi` (the
+    answer is known: 7.92 works, 8.0 does not -> 7.9; building 7.96 as well changed nothing
+    but cost a trial build, 0.3-0.45 s on a part of 180 faces)."""
+    if abs(hi - lo) <= step * 0.5:
+        return True
+    if step <= 0:
+        return False
+    sign = 1.0 if hi > lo else -1.0
+    nearest = tidy(lo, step, lo - sign)  # the tidy value at `lo`, on the side that works
+    return (nearest + sign * step - hi) * sign >= -1e-9
+
+
 def search(
     works,
     good,
@@ -258,7 +272,7 @@ def search_steps(
     start = begun if strict else clock()
     lo, hi = good, bad  # lo works, hi does not (lo may be above hi for a lower limit)
     trials = 0
-    while abs(hi - lo) > step * 0.5:
+    while not _settled(lo, hi, step, good):
         if strict:
             if not room():
                 break
@@ -277,7 +291,7 @@ def search_steps(
             seen["works"], seen["fails"] = lo, hi
     if seen is not None:
         seen["fails"] = hi
-    exact = abs(hi - lo) <= step * 0.5
+    exact = _settled(lo, hi, step, good)
     toward = 1.0 if good > bad else -1.0
     digits = _digits(step) + 2
     # The tidy value just short of the refused one, when it lies beyond the last value that
