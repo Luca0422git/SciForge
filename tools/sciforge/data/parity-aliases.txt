@@ -1,0 +1,38 @@
+# Deliberate naming differences between Fusion's command names (fusion-menus.txt) and
+# SciForge's menu labels, read by tools/sciforge/parity.py.
+#
+#   Fusion name = SciForge name
+#   Fusion name = SciForge name | another SciForge name      (the first one found counts)
+#   AREA > Panel > Fusion name = SciForge name               (only for that place: the left
+#                                                             side is the end of the path)
+#
+# Case, spaces round "/" and a trailing "..." do not matter. Only map a name when SciForge's
+# entry really is that command (an honest checklist beats a high number); a unit test checks
+# that every line here still matches a Fusion name and a SciForge label.
+
+# Browser and timeline: SciForge's labels for the same entries
+Activate Component = Activate
+Drive Joint = Drive Joints
+BROWSER > Analysis > Edit = Edit Feature
+Do Not Capture Design History = Capture Design History
+FILE MENU > New Drawing > From Design = New Drawing
+
+# Timeline playback buttons (SciForge's tooltips)
+Move to Beginning = Go to beginning
+Play = Play the history
+Move to End = Go to end
+
+# Ribbon
+# One SciForge entry does both of Fusion's (parity/inspect.md: a click on a face uses the
+# clicked spot, a second pick sets the point)
+Axis Perpendicular at Point = Axis Perpendicular to Face at Point
+Revert = Revert Position
+Edit Title Block = Title Block
+Insert Fastener = Hardware
+# SciForge's sketch Chamfer has Fusion's three chamfer types in one dialog (sf/modeling-2)
+Equal Distance Chamfer = Chamfer
+Distance and Angle Chamfer = Chamfer
+Two Distance Chamfer = Chamfer
+
+# Marking menus
+MARKING MENU > Overflow list > Show/Hide = Hide
