@@ -126,6 +126,48 @@ def _volume_between(name, low, high):
     return check
 
 
+def _sketch_state(sketch):
+    """[(type, construction, geometry id, internal role)] of every curve of a sketch."""
+    return [
+        (f.Geometry.TypeId, bool(f.Construction), f.Id, f.InternalType)
+        for f in sketch.GeometryFacadeList
+    ]
+
+
+def _remember_sketch(name):
+    """Keep the sketch's curves (type, construction flag, id) for _sketch_kept."""
+
+    def check(answer, run):
+        sketch = run.obj(name)
+        if sketch is None:
+            return "no sketch %s" % name
+        state = _sketch_state(sketch)
+        if not any(c for _t, c, _i, _r in state):
+            return "the sketch has no construction curve to watch: %s" % state
+        run.kept_sketches = getattr(run, "kept_sketches", {})
+        run.kept_sketches[name] = state
+        return None
+
+    return check
+
+
+def _sketch_kept(name):
+    """The sketch's curves kept their construction flags and geometry ids (sketch_geometry:
+    assigning sketch.Geometry made construction points normal points with new ids)."""
+
+    def check(answer, run):
+        sketch = run.obj(name)
+        want = getattr(run, "kept_sketches", {}).get(name)
+        if sketch is None or want is None:
+            return "no sketch %s remembered" % name
+        now = _sketch_state(sketch)
+        if now != want:
+            return "curves changed: %s -> %s" % (want, now)
+        return None
+
+    return check
+
+
 def _json_check(fn):
     def check(answer, run):
         data = json_of(answer)
@@ -731,6 +773,17 @@ SESSION = [
         "check": _volume_between("block2", 3000, 3999.9),
     },
     {"tool": "scale", "args": {"factor": 1.5}},
+    {
+        "tool": "create_sketch",
+        "save": "s_keep",
+        "args": {"plane": "XY", "geometry": [{"center_rect": [600, 0, 10, 6]}]},
+        "check": _remember_sketch("s_keep"),
+    },
+    {
+        "tool": "scale",  # (a sketch with a construction centre point)
+        "args": {"sketch": "$s_keep", "factor": 2},
+        "check": _sketch_kept("s_keep"),
+    },
     {
         "tool": "create_sketch",
         "save": "s_ring",
