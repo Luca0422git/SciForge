@@ -16,8 +16,9 @@ core-patches entry, no full build needed).
   all when nothing is lost. It is not a pop-up: you do not have to click anything; it goes
   away by itself after 10-30 seconds (the mouse over it keeps it), or with its x.
 - It works for File > Export (STEP, IGES, STL, 3MF, OBJ, DXF, DWG), right-click a sketch >
-  Save As DXF, Save As Mesh, 3D Print (only what matters for printing: hidden bodies,
-  colours, bodies merged in an STL, the unit, cosmetic threads, mesh bodies with holes),
+  Save As DXF, Save As Mesh, 3D Print (only what matters for printing: colours, bodies
+  merged in an STL, the unit, cosmetic threads, mesh bodies with holes; not hidden bodies:
+  3D Print exports the bodies ticked in its dialog, corrected 2026-10-22),
   Export Everything (one card for the four files; "(STL, 3MF, OBJ)" after an item only some
   of them lose) and a drawing's Export PDF / Export DXF.
 - After Insert Mesh, Insert SVG / DXF and File > Open / Insert STEP or IGES, the same card

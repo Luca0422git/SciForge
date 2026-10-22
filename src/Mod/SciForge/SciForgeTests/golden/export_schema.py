@@ -12,7 +12,7 @@ and wraps schema.validate, as hardware_schema does.
       counts; with roundtrip (the default) the file is written and read back to prove the
       claims (what is lost is gone, what is kept is there).
   {"op": "import_report_expect", "file": "open_box.stl" | "two_objects_inch.3mf" |
-   "mixed.step" | "faces.igs" | "extras.dxf" | "extras.svg", "expect": {"open_edges": 4}}
+   "tetra_micron.3mf" | "mixed.step" | "faces.igs" | "extras.dxf" | "extras.svg", "expect": {"open_edges": 4}}
       a file made on the spot (export_checks.make_import_file) is read the way Insert /
       Open read it; what export_report says did not come in must be exactly `expect`.
   {"op": "hide_bodies", "bodies": ["e3"]}       hide the steps' bodies (as the eye icon)
@@ -36,6 +36,7 @@ schema.STEP_KEYS["import_report_expect"] = ({"file", "expect"}, {"comment"})
 IMPORT_FILES = (
     "open_box.stl",
     "two_objects_inch.3mf",
+    "tetra_micron.3mf",
     "mixed.step",
     "faces.igs",
     "extras.dxf",

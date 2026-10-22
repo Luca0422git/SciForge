@@ -59,7 +59,7 @@ Exported /home/me/sciforge/plate.stl (208 triangles).
 Not kept in this file:
 - the timeline (4 steps): the file holds the finished shapes only
 - 2 sketches
-- exact curves: 1 curved face become small flat triangles (within 0.0508 mm)
+- exact curves: 1 curved face becomes small flat triangles (within 0.0508 mm)
 ```
 
 ## Example 2: a STEP file for other CAD programs

@@ -440,10 +440,10 @@ SVG_EXTRAS = (
 )
 THREE_MF = (
     '<?xml version="1.0" encoding="UTF-8"?>'
-    '<model unit="inch" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
-    '<resources><basematerials id="1"><base name="red" displaycolor="#FF0000"/></basematerials>'
-    "%s</resources><build>%s</build></model>"
+    '<model unit="%s" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+    "<resources>%s%s</resources><build>%s</build></model>"
 )
+RED = '<basematerials id="1"><base name="red" displaycolor="#FF0000"/></basematerials>'
 TETRA = (
     '<object id="%d" type="model" name="T%d"><mesh><vertices>'
     '<vertex x="%d" y="0" z="0"/><vertex x="%d" y="0" z="0"/><vertex x="%d" y="1" z="0"/>'
@@ -463,11 +463,15 @@ def make_import_file(name, folder):
         box = Mesh.createBox(10, 10, 10)
         points, facets = box.Topology
         Mesh.Mesh([[points[i] for i in f] for f in facets[2:]]).write(path)
-    elif name == "two_objects_inch.3mf":  # two closed tetrahedra, red, in inches
-        objects = "".join(TETRA % (n + 2, n, 3 * n, 3 * n + 1, 3 * n, 3 * n) for n in range(2))
-        build = "".join('<item objectid="%d"/>' % (n + 2) for n in range(2))
+    elif name in ("two_objects_inch.3mf", "tetra_micron.3mf"):
+        # two closed tetrahedra, red, in inches / one plain tetrahedron in microns
+        count, unit, red = (2, "inch", RED) if name.startswith("two") else (1, "micron", "")
+        objects = "".join(
+            TETRA % (n + 2, n, 3 * n, 3 * n + 1, 3 * n, 3 * n) for n in range(count)
+        )
+        build = "".join('<item objectid="%d"/>' % (n + 2) for n in range(count))
         with zipfile.ZipFile(path, "w") as archive:
-            archive.writestr("3D/3dmodel.model", THREE_MF % (objects, build))
+            archive.writestr("3D/3dmodel.model", THREE_MF % (unit, red, objects, build))
             archive.writestr(
                 "[Content_Types].xml",
                 '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/'

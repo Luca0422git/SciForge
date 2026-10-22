@@ -108,12 +108,12 @@ claim proven by writing the file and reading it back, `golden/export_checks.py`)
 | File | What it does not keep (checked in FreeCAD 1.1.4) |
 |---|---|
 | Every 3D file | the timeline, sketches, construction planes / axes / points, parameters (values built in), joints, physical materials, cosmetic threads, decals and canvases; hidden bodies and surface bodies are not exported |
-| STEP | keeps components, copies and colours (with the window open; FreeCAD's headless writer has none); see-through looks come out opaque; bodies in a component come back Body1, Body2 ... (a single body at the design's root keeps its name); mesh bodies cannot go in |
-| IGES | no components, no colours, no names (one unnamed product); mesh bodies cannot go in |
+| STEP | written body by body (Export > Selected bodies, Export Everything, the AI's STEP export with the window open) it is flat: no components; File > Export of the whole design or a component keeps components, copies and colours (with the window open; FreeCAD's headless writer has none); see-through looks come out opaque; bodies in a component come back Body1, Body2 ... (a single body at the design's root keeps its name); mesh bodies cannot go in |
+| IGES | no components, no colours; the body names are in the file (other programs read them) but SciForge's own reader brings them back as Body1, Body2 ...; mesh bodies cannot go in |
 | STL | one mesh (several bodies merged: no names, no parts), no colours, no unit; curved faces become triangles |
 | 3MF | names and unit kept; no colours, no components; curved faces become triangles |
 | OBJ | names kept (groups); no colours (no material file), no unit, no components |
-| DXF / DWG of a sketch | dimensions, constraints, construction curves, points, projected curves; flat in the sketch's own X and Y |
+| DXF / DWG of a sketch | dimensions, constraints, construction curves, points, projected curves that are only references (Project and Auto project make "defining" curves, which are written); flat in the sketch's own X and Y |
 | Drawing DXF | dimensions and symbols as plain lines and text, curves that are not circles / arcs as short lines, hatching as separate lines, no named font; hidden views; the other sheets with Current Sheet |
 | Drawing PDF | hidden views; the other sheets with Current Sheet |
 
@@ -122,7 +122,8 @@ triangles, a 3MF's several objects in one body, its colours, its own unit when i
 from Unit Type), Insert DXF (entities FreeCAD's importer cannot read, from its own
 statistics; texts / dimensions and points, which are not curves), Insert SVG (texts,
 pictures), Open / Insert STEP and IGES (loose faces of a part that also has solids, loose
-curves and points, loose faces sewn into surface bodies, shapes with errors).
+curves and points, loose faces sewn into surface bodies, shapes with errors: checked on the
+first 300 faces of a file only, the check is slow on big parts).
 
 ## Sources (Part 1)
 
