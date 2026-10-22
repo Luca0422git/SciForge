@@ -12,6 +12,10 @@ SCIFORGE_PERF_STRICT=1 makes the benchmark fail on it (for a run on the same mac
 baseline). SCIFORGE_PERF_BASELINE names another baseline file; "none" switches the guard off.
 SCIFORGE_PERF_WRITE_BASELINE=<file> stores this run's times there (merged with what the file
 already holds: both benchmarks can share one baseline).
+
+The reports also show, next to each time, the baseline's and the one from before the speed work
+on big designs (SciForgeTests/gui/perf_before.json: perf_big_model measured at commit 0b1da82,
+2026-10-21), so a report says by itself how far things have come (columns()).
 """
 import json
 import os
@@ -19,6 +23,7 @@ import os
 FACTOR = 2.0  # "much slower": more than twice the baseline's time
 FLOOR = 0.005  # differences under 5 ms are noise (timer jitter, a garbage collection)
 DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "perf_baseline.json")
+BEFORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "perf_before.json")
 
 
 def baseline_path(environ=None):
@@ -145,3 +150,18 @@ def markdown(guard):
             % (row["label"], row["now"] * 1000.0, row["before"] * 1000.0, row["ratio"])
         )
     return lines
+
+
+def columns(guard, before_path=BEFORE):
+    """For the report's table: a function label -> (baseline, before) as text in milliseconds
+    ("" when that file has no such measurement): the stored baseline the guard compared with,
+    and the time measured before the speed work on big designs."""
+    base = load(guard.get("baseline"))
+    before = load(before_path)
+
+    def cells(label):
+        return tuple(
+            "%.1f" % (times[label] * 1000.0) if label in times else "" for times in (base, before)
+        )
+
+    return cells

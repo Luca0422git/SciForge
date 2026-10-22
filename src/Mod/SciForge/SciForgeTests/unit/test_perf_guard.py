@@ -87,6 +87,25 @@ class Guard(unittest.TestCase):
         self.assertEqual(written, path)
         self.assertEqual(perf_guard.load(path), {"old": 0.5, "a": 0.1})
 
+    def test_columns(self):
+        """The report's baseline / before cells, in milliseconds, empty when not stored."""
+        base = self.baseline({"a": 0.0125})
+        before = os.path.join(self.tmp.name, "before.json")
+        with open(before, "w") as handle:
+            json.dump({"a": 0.5, "b": 2.0}, handle)
+        cells = perf_guard.columns({"baseline": base}, before)
+        self.assertEqual(cells("a"), ("12.5", "500.0"))
+        self.assertEqual(cells("b"), ("", "2000.0"))
+        self.assertEqual(cells("c"), ("", ""))
+        self.assertEqual(perf_guard.columns({"baseline": None}, None)("a"), ("", ""))
+
+    def test_stored_before_readable(self):
+        """The times from before the speed work kept in the repository can be read."""
+        if os.path.exists(perf_guard.BEFORE):
+            stored = perf_guard.load(perf_guard.BEFORE)
+            self.assertIn("Idle: busy time per second (timers)", stored)
+            self.assertGreater(stored["Edit the plate's first step: Undo (Ctrl+Z)"], 1.0)
+
     def test_stored_baseline_readable(self):
         """The baseline kept in the repository is one the guard can read."""
         if os.path.exists(perf_guard.DEFAULT):

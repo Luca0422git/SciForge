@@ -536,18 +536,27 @@ def report():
         "# SciForge speed benchmark",
         "",
         "Milliseconds; slowest change first. open = command to dialog with a preview, change = "
-        "one value (or one mouse step), finish = OK / Cancel.",
+        "one value (or one mouse step), finish = OK / Cancel; baseline = the change stored for "
+        "the speed guard.",
         "",
-        "| What | open | change | change max | finish |",
-        "|---|---:|---:|---:|---:|",
+        "| What | open | change | change max | finish | change, baseline |",
+        "|---|---:|---:|---:|---:|---:|",
     ]
+    cells = perf_guard.columns(guard)
     for r in rows:
         if "error" in r:
-            lines.append("| %s | error: %s | | | |" % (r["label"], r["error"]))
+            lines.append("| %s | error: %s | | | | |" % (r["label"], r["error"]))
             continue
         lines.append(
-            "| %s | %s | %s | %s | %s |"
-            % (r["label"], ms(r.get("open")), ms(r.get("change")), ms(r.get("change_max")), ms(r.get("finish")))
+            "| %s | %s | %s | %s | %s | %s |"
+            % (
+                r["label"],
+                ms(r.get("open")),
+                ms(r.get("change")),
+                ms(r.get("change_max")),
+                ms(r.get("finish")),
+                cells(r["label"])[0],
+            )
         )
     lines.append("")
     lines += perf_guard.markdown(guard) + [""]

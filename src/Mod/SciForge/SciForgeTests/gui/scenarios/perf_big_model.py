@@ -594,16 +594,22 @@ def report():
         "Design: %s" % json.dumps(S.get("size")),
         "",
         "Milliseconds (idle: per second). wall = what a person waits, sciforge = the part "
-        "of it spent in SciForge's own Python code (and what that code called).",
+        "of it spent in SciForge's own Python code (and what that code called). baseline = "
+        "the wall time stored for the speed guard; before = the wall time at commit 0b1da82, "
+        "before the speed work on big designs (2026-10-21).",
         "",
-        "| What | wall | worst | sciforge |",
-        "|---|---:|---:|---:|",
+        "| What | wall | worst | sciforge | baseline | before |",
+        "|---|---:|---:|---:|---:|---:|",
     ]
+    cells = perf_guard.columns(guard)
     for r in RESULTS:
         if "error" in r:
-            lines.append("| %s | error: %s | | |" % (r["label"], r["error"]))
+            lines.append("| %s | error: %s | | | | |" % (r["label"], r["error"]))
             continue
-        lines.append("| %s | %s | %s | %s |" % (r["label"], ms(r.get("change")), ms(r.get("change_max")), ms(r.get("python"))))
+        lines.append(
+            "| %s | %s | %s | %s | %s | %s |"
+            % ((r["label"], ms(r.get("change")), ms(r.get("change_max")), ms(r.get("python"))) + cells(r["label"]))
+        )
     lines.append("")
     lines += perf_guard.markdown(guard)
     for r in RESULTS:
