@@ -43,6 +43,7 @@ MAX_DOC_BYTES = 2 * 1024 * 1024
 PAGE_CHARS = 12000  # one page of docs_read: about 3000 tokens
 DOCS_URI = "sciforge://docs/"
 GOLDEN_URI = "sciforge://examples/golden/"
+TOOLS_URI = "sciforge://tools/"  # the tools' MCP resources (mcp_resources.py)
 CALLS_TAG = "sciforge-calls"  # the fence info word of a block of tool calls
 
 # The order the hand-written documents come in (the export, the prompt index); any other
@@ -204,6 +205,15 @@ def call_blocks(text):
 CODE_WEIGHT = 0.25  # words in code blocks (calls, recorded answers) count a quarter
 LOW_WEIGHT = 0.3  # and the words of sections that only point elsewhere
 LOW_SECTIONS = ("see also", "contents")
+REPEATED = 3  # a section found word for word in this many documents is indexed once
+USER_WEIGHT = 0.6  # the words of user/ (Luca's documents, about the dialogs)
+
+
+def _section_key(sec, lines):
+    """What makes two sections the same: their title and their text (not the heading line)."""
+    first = sec["start"] + (1 if sec["level"] else 0)
+    text = " ".join("\n".join(lines[first : sec["body_end"]]).split())
+    return (sec["title"].lower(), text)
 
 
 def split_code(text):
@@ -488,6 +498,8 @@ class Library:
     def doc_index(self):
         if self._doc_index is None:
             units = []
+            seen = set()
+            repeated = self._repeated_sections()
             for doc in self.docs:
                 lines = doc.text.split("\n")
                 head = words(doc.title) + words(doc.rel.replace("/", " ").replace("-", " "))
@@ -503,17 +515,37 @@ class Library:
                 ]
                 for sec in secs:
                     body = "\n".join(lines[sec["start"] : sec["body_end"]])
-                    weighted = [(w, 3) for w in words(sec["title"])]
-                    weighted += [(w, 1) for w in head]
+                    key = _section_key(sec, lines)
+                    if key in repeated:
+                        # the same section on many pages (every reference page's Answer):
+                        # indexed once and weighted down, so it does not fill the results
+                        # for its words ahead of the page that explains them
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                    # Luca's documents (user/) describe the dialogs: the AI's own pages first
+                    scale = USER_WEIGHT if doc.rel.startswith("user/") else 1.0
+                    weighted = [(w, 3 * scale) for w in words(sec["title"])]
+                    weighted += [(w, scale) for w in head]
                     prose, code = split_code(body)
-                    low = sec["title"].lower() in LOW_SECTIONS  # lists of links, mostly
-                    weighted += [(w, LOW_WEIGHT if low else 1) for w in words(prose)]
-                    weighted += [(w, CODE_WEIGHT) for w in words(code)]
+                    low = sec["title"].lower() in LOW_SECTIONS or key in repeated
+                    weighted += [(w, (LOW_WEIGHT if low else 1) * scale) for w in words(prose)]
+                    weighted += [(w, CODE_WEIGHT * scale) for w in words(code)]
                     units.append(
                         _Unit(doc.rel, sec["anchor"], sec["title"], sec["level"], body, weighted)
                     )
             self._doc_index = _Index(units)
         return self._doc_index
+
+    def _repeated_sections(self):
+        """The keys (_section_key) of sections that several documents have word for word."""
+        count = {}
+        for doc in self.docs:
+            lines = doc.text.split("\n")
+            for sec in self.sections_of(doc.rel):
+                key = _section_key(sec, lines)
+                count[key] = count.get(key, 0) + 1
+        return {k for k, n in count.items() if n >= REPEATED and k[1]}
 
     # examples
     def examples(self):
@@ -636,13 +668,14 @@ def search(query, limit=8, scope="all", per_doc=3, lib=None):
     Returns {query, results: [{uri, path, anchor, document, section, score, snippet}],
     total}."""
     lib = lib or library()
+    scope = known_scope(scope, lib)
     query_words = words(query or "")
     index = lib.doc_index()
     results = []
     per = {}
     total = 0
     for score, unit in index.scores(query_words):
-        if scope and scope != "all":
+        if scope != "all":
             folder = scope.rstrip("/") + "/"
             if unit.doc != scope and not unit.doc.startswith(folder):
                 continue
@@ -669,6 +702,29 @@ def search(query, limit=8, scope="all", per_doc=3, lib=None):
     return {"query": query, "results": results, "total": total}
 
 
+class UnknownScope(ValueError):
+    """docs_search was given a scope that is no folder or document of the docs root."""
+
+
+def known_scope(scope, lib):
+    """The scope as search() uses it: "all", a folder ("recipes") or a document
+    ("handbook.md"; "handbook" is taken for it). UnknownScope for anything else."""
+    scope = (scope or "all").strip().strip("/") or "all"
+    if scope == "all":
+        return scope
+    rels = [d.rel for d in lib.docs]
+    if scope in rels or any(r.startswith(scope + "/") for r in rels):
+        return scope
+    if scope + ".md" in rels:
+        return scope + ".md"
+    folders = sorted({r.split("/", 1)[0] for r in rels if "/" in r})
+    raise UnknownScope(
+        "%r is not a folder or document of the documentation: give all, a folder (%s) or a "
+        "document such as handbook.md (docs_read with path index lists them)."
+        % (scope, ", ".join(folders))
+    )
+
+
 def parse_target(target):
     """A docs_read target -> ("doc", relative path, anchor) or ("golden", id, "").
     Accepts sciforge://docs/<path>[#anchor], sciforge://examples/golden/<id>, a path under the
@@ -682,6 +738,13 @@ def parse_target(target):
         return ("golden", text[len("golden/") :].replace(".json", "").strip("/"), "")
     if text.startswith(DOCS_URI):
         text = text[len(DOCS_URI) :]
+    elif text.startswith(TOOLS_URI):  # a tool's MCP resource: its reference page
+        name, _sep, anchor = text[len(TOOLS_URI) :].partition("#")
+        return ("doc", "reference/%s.md" % name.strip("/"), anchor.strip())
+    elif text.rstrip("/") == "sciforge://tools":
+        return ("doc", "tools.md", "")
+    elif text.startswith("sciforge://handbook"):  # every document in one file: the list
+        return ("doc", "index", "")
     elif text.startswith("sciforge://"):
         return None
     rel, _sep, anchor = text.partition("#")
@@ -938,6 +1001,15 @@ def prompt_index(lib=None, max_chars=3000):
 EXPORT_TITLE = "SciForge for AI models (all the documentation in one file)"
 
 
+def tokens_text(characters):
+    """About how many tokens (what AI apps count their context in) a text of this many
+    characters is, in words: about 4 characters a token for English Markdown."""
+    tokens = characters / 4.0
+    if tokens >= 1000:
+        return "{:,}".format(int(round(tokens, -3)))
+    return "{:,}".format(int(round(tokens, -2)) or 100)
+
+
 def export_text(full=False, lib=None, compact=False):
     """Every document in one Markdown file, for AI apps that load files. Leaves out the copy
     of the user documentation (user/) unless full; compact also leaves out the reference
@@ -1003,9 +1075,15 @@ def tool_answer(tool, args, lib=None):
                 True,
             )
         if tool == "docs_search":
-            found = search(
-                args.get("query", ""), int(args.get("limit", 8)), args.get("scope", "all"), lib=lib
-            )
+            try:
+                found = search(
+                    args.get("query", ""),
+                    int(args.get("limit", 8)),
+                    args.get("scope", "all"),
+                    lib=lib,
+                )
+            except UnknownScope as exc:
+                return str(exc), True
             if not found["results"]:
                 return (
                     "Nothing in the documentation matches %r%s. Try other or fewer words; "

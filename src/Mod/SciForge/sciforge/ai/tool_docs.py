@@ -71,6 +71,9 @@ NEED_WORDS = {
 }
 # Tools that change the open designs rather than a design's history: no undo step.
 NOT_UNDO_STEPS = ("new_design", "close_design", "undo", "redo")
+# Tools that change only what is shown or which body is active: neither is recorded, so they
+# make no undo step and an `undo` after them takes back the step before.
+VIEW_STATE_ONLY = ("show_hide", "activate")
 # Tools that only open or switch designs (they write nothing and change no design).
 OPENS_DESIGNS = ("open_design", "switch_design")
 
@@ -132,6 +135,8 @@ def _unit(key, node):
         and node["items"].get("type") == "number"
     ):
         return ""
+    if "degree" in words and "mm" in words:
+        return "mm or deg"  # (a dimension's value: a length or an angle)
     if "degree" in words or key in ("angle", "angle2", "taper", "taper2", "twist", "rotation"):
         return "deg"
     if kind == "integer":
@@ -227,6 +232,11 @@ def _flags(entry):
                 words.append("brings back the last undone step")
             elif entry["name"] in NOT_UNDO_STEPS:
                 words.append("changes the open designs (not an undo step)")
+            elif entry["name"] in VIEW_STATE_ONLY:
+                words.append(
+                    "not an undo step: `undo` after it takes back the step before it; call it "
+                    "again to reverse it"
+                )
             else:
                 words.append("changes the design (one undo step)")
         if entry["writes_files"]:
@@ -474,7 +484,7 @@ def reference_page(entry, results, recipes=(), golden=()):
     examples = examples_of(name, results)
     flags = _flags(entry)
     undo = ""
-    if entry["changes_design"] and name not in NOT_UNDO_STEPS:
+    if entry["changes_design"] and name not in NOT_UNDO_STEPS + VIEW_STATE_ONLY:
         sample = (
             examples[0]["args"]
             if examples

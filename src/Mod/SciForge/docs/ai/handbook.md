@@ -274,8 +274,9 @@ Two rules that trip models up:
   sketch on a face (`face`) moves with that face. Sketch on the face when the sketch belongs
   to it (holes in a top face that must follow the thickness).
 - Directions: an extrude goes along its sketch's normal (`flip: true` the other way), so a
-  cut from a sketch lying on the top face needs `flip: true`; a hole drills against its
-  sketch's normal, into the face the sketch lies on.
+  cut from a sketch lying on the top face needs `flip: true`; a hole drills into the part
+  from its sketch (from a sketch under the part it goes up by itself), and `flip: true`
+  makes it go along the sketch's normal instead.
 
 <a id="ids-and-names"></a>
 
@@ -305,9 +306,15 @@ Every call that changes the design is exactly one undo step, named after the cal
 Extrude 10 mm", "AI: Fillet 5 mm", "AI: Edit Extrude1"), the same as a step made by hand: the
 person sees it in Edit > Undo and can undo it with Ctrl+Z, and the AI panel's **Undo last AI
 step** button undoes the newest step when an AI made it. `undo` and `redo` do the same for
-you, one call per step. A call that fails changes nothing, so there is nothing to undo. Files
-written (`save`, `export`) are not undone. Opening, creating, switching and closing designs
-are not undo steps either.
+you, one call per step. Timeline tools are named the same way ("AI: Suppress", "AI: Roll
+history marker", "AI: Group steps"). A call that fails changes nothing, so there is nothing to
+undo. Files written (`save`, `export`) are not undone. Opening, creating, switching and
+closing designs are not undo steps either.
+
+`show_hide` and `activate` are not undo steps: what is shown and which body is active are
+not recorded (in Fusion and FreeCAD alike). An `undo` right after them takes back the step
+before them (a fillet, say), not the hiding. Call them again to reverse them
+(`show_hide` with `visible: true`, `activate` with the body that was active).
 
 ```json sciforge-calls
 [
@@ -319,7 +326,16 @@ are not undo steps either.
    "expect": {"contains": ["Done: AI: Edit Extrude1.", "48000 mm3"]}},
   {"tool": "undo", "args": {}, "expect": {"contains": ["Undo: AI: Edit Extrude1.", "24000 mm3"]}},
   {"tool": "undo", "args": {}, "expect": {"contains": ["Undo: AI: Extrude 10 mm.", "No solid body yet."]}},
-  {"tool": "redo", "args": {}, "expect": {"contains": ["Redo: AI: Extrude 10 mm.", "24000 mm3"]}}
+  {"tool": "redo", "args": {}, "expect": {"contains": ["Redo: AI: Extrude 10 mm.", "24000 mm3"]}},
+  {"tool": "suppress_step", "args": {"steps": ["Extrude1"]}},
+  {"tool": "undo", "args": {}, "expect": {"contains": ["Undo: AI: Suppress.", "24000 mm3"]}},
+  {"tool": "group_steps", "args": {"steps": ["Sketch1", "Extrude1"], "name": "Base"}},
+  {"tool": "undo", "args": {}, "expect": {"contains": ["Undo: AI: Group steps."]}},
+  {"tool": "show_hide", "args": {"targets": ["Extrude1"], "visible": false},
+   "expect": {"contains": ["Hid Extrude1."]}},
+  {"tool": "show_hide", "args": {"targets": ["Extrude1"], "visible": true}},
+  {"tool": "undo", "args": {}, "expect": {"contains": ["Undo: AI: Extrude 10 mm."]}},
+  {"tool": "redo", "args": {}, "expect": {"contains": ["24000 mm3"]}}
 ]
 ```
 

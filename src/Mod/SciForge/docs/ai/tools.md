@@ -77,7 +77,7 @@ SciForge offers 117 tools to AI apps (through MCP, the built-in chat panel and t
 | [`new_component`](sciforge://docs/reference/new_component.md) | New component | Assemble | ASSEMBLE > New Component | changes the design (one undo step) | nothing |
 | [`components_from_bodies`](sciforge://docs/reference/components_from_bodies.md) | Components from bodies | Assemble | BROWSER > a body > Create Components from Bodies | changes the design (one undo step) | an open design |
 | [`copy_component`](sciforge://docs/reference/copy_component.md) | Copy / paste component | Assemble | Copy (Ctrl+C) a component, then Paste / Paste New | changes the design (one undo step) | an open design |
-| [`activate`](sciforge://docs/reference/activate.md) | Activate body / component | Assemble | BROWSER > a body or component > Activate | changes the design (one undo step) | an open design |
+| [`activate`](sciforge://docs/reference/activate.md) | Activate body / component | Assemble | BROWSER > a body or component > Activate | not an undo step: `undo` after it takes back the step before it; call it again to reverse it | an open design |
 | [`new_body`](sciforge://docs/reference/new_body.md) | New body | Assemble | BROWSER > Bodies > New Body | changes the design (one undo step) | nothing |
 | [`joint`](sciforge://docs/reference/joint.md) | Joint | Assemble | ASSEMBLE > Joint (J) | changes the design (one undo step) | an open design |
 | [`drive_joint`](sciforge://docs/reference/drive_joint.md) | Drive joint | Assemble | ASSEMBLE > Drive Joints | changes the design (one undo step) | an open design |
@@ -114,7 +114,7 @@ SciForge offers 117 tools to AI apps (through MCP, the built-in chat panel and t
 | [`set_view`](sciforge://docs/reference/set_view.md) | Set view | View | NAVIGATION BAR and VIEWCUBE (Home, Fit, Orbit, Look At) | read-only | an open design, the SciForge window |
 | [`get_view`](sciforge://docs/reference/get_view.md) | Get view | View | (the 3D view's camera) | read-only | an open design, the SciForge window |
 | [`named_view`](sciforge://docs/reference/named_view.md) | Named view | View | BROWSER > Named Views (New Named View, go to, delete) | changes the design (one undo step) | an open design |
-| [`show_hide`](sciforge://docs/reference/show_hide.md) | Show / hide | View | BROWSER > the eye icon (Show / Hide) | changes the design (one undo step) | an open design |
+| [`show_hide`](sciforge://docs/reference/show_hide.md) | Show / hide | View | BROWSER > the eye icon (Show / Hide) | not an undo step: `undo` after it takes back the step before it; call it again to reverse it | an open design |
 | [`get_help`](sciforge://docs/reference/get_help.md) | Get help | Help | (SciForge's documentation for AI models) | read-only | nothing |
 | [`list_tools`](sciforge://docs/reference/list_tools.md) | List tools | Help | (SciForge's command list) | read-only | nothing |
 | [`inspect_design`](sciforge://docs/reference/inspect_design.md) | Inspect design | Inspect and measure | BROWSER + TIMELINE + Properties (everything at once) | read-only | nothing |
@@ -291,7 +291,7 @@ SciForge offers 117 tools to AI apps (through MCP, the built-in chat panel and t
 
 ### overview
 
-SciForge is a parametric CAD program (built on FreeCAD) that works like Autodesk Fusion. These tools build and change the design open in SciForge step by step in its timeline, with the same code as SciForge's own dialogs; every change is one undo step. All lengths are in millimetres (mm) and all angles in degrees. Faces and edges are picked with selectors that describe their geometry (get_help topic selectors), never by internal names. Steps, sketches, bodies and components are named by the ids the tools report and get_design / get_timeline list (for example 'Sketch1', 'Extrude2'). A body is named by any step in it (the step that made it, usually). Errors come back as plain sentences: read them, fix the arguments and try again; a size that does not fit (a fillet radius, a shell thickness, a draft angle...) is refused with the largest value that does, never built smaller in its place. Read-only tools (inspect_design, query_geometry, check_design, render, diff_design, get_design, get_timeline, get_step, measure, physical_properties...) never change anything.
+SciForge is a parametric CAD program (built on FreeCAD) that works like Autodesk Fusion. These tools build and change the design open in SciForge step by step in its timeline, with the same code as SciForge's own dialogs; every change is one undo step (show_hide and activate are none). All lengths are in millimetres (mm) and all angles in degrees. Faces and edges are picked with selectors that describe their geometry (get_help topic selectors), never by internal names. Steps, sketches, bodies and components are named by the ids the tools report and get_design / get_timeline list (for example 'Sketch1', 'Extrude2'). A body is named by any step in it (the step that made it, usually). Errors come back as plain sentences: read them, fix the arguments and try again; a size that does not fit (a fillet radius, a shell thickness, a draft angle...) is refused with the largest value that does, never built smaller in its place. Read-only tools (inspect_design, query_geometry, check_design, render, diff_design, get_design, get_timeline, get_step, measure, physical_properties...) never change anything.
 
 <a id="help-selectors"></a>
 
@@ -343,7 +343,7 @@ A body pick is "XY" | "XZ" | "YZ" (an origin plane), "X" | "Y" | "Z" (an origin 
 
 ### sketches
 
-Sketch planes are the origin planes: XY (normal +Z, sketch x/y are X/Y), XZ (normal -Y, sketch x/y are X/Z) and YZ (normal +X, sketch x/y are Y/Z). offset moves the sketch along that normal. Instead of a plane you can give face, a selector that picks exactly one flat face of the part; the sketch's x/y axes are then the ones SciForge gives that face, so prefer an origin plane with an offset when you can.
+Sketch planes are the origin planes: XY (normal +Z, sketch x/y are X/Y), XZ (normal -Y, sketch x/y are X/Z) and YZ (normal +X, sketch x/y are Y/Z). offset moves the sketch along that normal. Instead of a plane you can give face, a selector that picks exactly one flat face of the part; the sketch's x/y axes are then the ones SciForge gives that face. Sketch on the face when the sketch must follow it (holes in a top face whose height may change); an origin plane with an offset gives plain coordinates and stays where it is.
 
 <a id="help-geometry"></a>
 

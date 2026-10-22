@@ -45,7 +45,7 @@ head: pi x 4^2 x 30 = 1508.0 mm3 more.
 
 ## 3. The thread
 
-[thread](sciforge://tools/thread) takes the size from the cylinder (8 mm: M8 x 1.25 coarse).
+[thread](sciforge://docs/reference/thread.md) takes the size from the cylinder (8 mm: M8 x 1.25 coarse).
 `modeled: true` cuts the real ISO 68-1 groove (a cosmetic thread, the default, changes
 nothing in the solid: only drawings and the timeline know it). `full_length: false` with
 `length` threads part of the shank.

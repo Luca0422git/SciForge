@@ -26,7 +26,7 @@ pi 400 x 15 + pi x 5 / 3 (400 + 320 + 256) = 23959.9 mm3.
 
 A groove is a 3 mm circle centred on the rim (x = 20), cut upward 15 mm from the bottom. The
 sketch is on XY at z = 0 (the knob's underside); an XY extrude goes up (+Z), into the knob,
-so no `flip` here. Then [circular_pattern](sciforge://tools/circular_pattern) repeats the
+so no `flip` here. Then [circular_pattern](sciforge://docs/reference/circular_pattern.md) repeats the
 cut around Z.
 
 ```json sciforge-calls
@@ -43,10 +43,9 @@ cut around Z.
 
 ## 3. The bore and the top edge
 
-The bore is a cut too (6 mm, 12 deep, upward from the bottom sketch). A `hole` would drill
-against its sketch's normal, down from z = 0 into empty space: `hole` belongs on the face
-the hole starts from, so for a hole from below the sketch would need to be on the bottom face
-itself (`create_sketch` with `face`). The top edge is the circle of radius 16 at the top.
+The bore is a cut too (6 mm, 12 deep, upward from the bottom sketch). A `hole` from the same
+sketch would do as well: a hole drills into the part, so from a sketch under the part it
+goes up by itself. The top edge is the circle of radius 16 at the top.
 
 ```json sciforge-calls
 [

@@ -33,7 +33,7 @@ a boundary whose curves meet end to end.
 
 ## 2. Patch, then thicken
 
-[surface](sciforge://tools/surface) with `kind: "patch"` fills the boundary given in
+[surface](sciforge://docs/reference/surface.md) with `kind: "patch"` fills the boundary given in
 `refs` (each `{"sketch": id}` adds all its curves). A surface body has an area but no
 volume. The patch goes into a body of its own (Body2 here) and the thicken makes another
 (Body3), as in Fusion; the design's first body stays empty. `kind: "thicken"` with
@@ -61,11 +61,15 @@ surface body (keep it to edit the patch later, or hide it with `show_hide`).
 
 ## 3. Check the shape
 
-The panel's corners stay at z = 0 and its middle rises a little above the arcs' height
-(the patch is a smooth surface through the boundary, not a part of a sphere).
+The panel's corners stay at z = 0. Its middle rises well above the arcs' tops (8.3 mm for
+the long arcs, 6.2 mm for the short ones), to about 14.8 mm: the patch is a smooth surface
+through the boundary, not a part of a sphere, and bulges more than the arcs alone suggest.
+For a flatter panel use flatter arcs (a bigger radius over a shorter angle).
 
 ```json sciforge-calls
 [
+  {"tool": "inspect_design", "args": {"bodies": ["Surface1"]},
+   "expect": {"json": {"bodies.0.bbox_mm.max.2": [14.84, 0.05]}}},
   {"tool": "inspect_design", "args": {"bodies": ["Surface2"]},
    "expect": {"json": {"bodies.0.solid": true, "bodies.0.valid": true}}},
   {"tool": "render", "args": {"view": "iso", "width": 480, "height": 360},

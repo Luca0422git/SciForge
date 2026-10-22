@@ -932,9 +932,8 @@ def group_steps(ctx, args):
         return bridge_core.result("Ungrouped %s." % args["group"])
     names = _names(ctx, args["steps"])
     try:
-        gid = timeline_ops.group(doc, names, args.get("name"))
-        if args.get("name"):
-            timeline_ops.rename_group(doc, gid, args["name"])
+        # the name goes in with the group: one undo step (no "Rename Group" after it)
+        gid = timeline_ops.group(doc, names, (args.get("name") or "").strip() or None)
     except timeline_ops.TimelineError as exc:
         raise UserError(str(exc))
     ctx.host.after_change(doc)

@@ -31,7 +31,7 @@ goes along +X. The L's area is 40 x 5 + 5 x 35 = 375 mm2, so 60 mm of it is 2250
 ## 2. Inside fillet and outside chamfer
 
 The inside corner is the straight edge along X at y = 5, z = 5. Ask
-[query_geometry](sciforge://tools/query_geometry) first when you are not sure a selector
+[query_geometry](sciforge://docs/reference/query_geometry.md) first when you are not sure a selector
 picks the right edge: it lists what the selector picks, with a `ref` that picks exactly that
 edge. A fillet in an inside corner adds material: (r^2 - pi r^2 / 4) x 60 = 206.0 mm3 for
 r = 4. The outside corner (y = 0, z = 0) gets a 2 mm chamfer, which removes 2 x 2 / 2 x 60 =
@@ -78,9 +78,9 @@ removes pi x 3.25^2 x 5 = 165.9 mm3.
 
 ## 4. Material, then check everything
 
-[physical_material](sciforge://tools/physical_material) sets the density, so the mass is
-right: aluminium (2.7 g/cm3) gives about 59.2 g. [check_design](sciforge://tools/check_design)
-confirms one valid closed solid and no failed step; [query_geometry](sciforge://tools/query_geometry)
+[physical_material](sciforge://docs/reference/physical_material.md) sets the density, so the mass is
+right: aluminium (2.7 g/cm3) gives about 59.2 g. [check_design](sciforge://docs/reference/check_design.md)
+confirms one valid closed solid and no failed step; [query_geometry](sciforge://docs/reference/query_geometry.md)
 confirms the four holes.
 
 ```json sciforge-calls

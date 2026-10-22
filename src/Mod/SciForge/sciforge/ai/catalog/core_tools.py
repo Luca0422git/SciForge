@@ -387,9 +387,8 @@ def _extra_hole(args, problems):
     if extent is None and not (fusion or placed):
         if through == ("depth" in args):
             problems.append("give either depth or through_all: true")
-    elif not through and extent != "to" and "depth" not in args and not args.get("tap_type"):
-        if "depth" not in args:
-            problems.append("give depth, through_all: true or extent all / to")
+    elif not through and extent != "to" and "depth" not in args:
+        problems.append("give depth, through_all: true or extent all / to")
     if args.get("through_all") and extent not in (None, "all"):
         problems.append("through_all contradicts extent %s" % extent)
     if "counterbore" in args and "countersink" in args:
@@ -638,7 +637,9 @@ def _steps_chamfer(a, step_id):
 
 
 def _fusion_hole_options(a):
-    options = {}
+    # the documented default: the same flat bottom as the plain hole (hole.py's dialog
+    # default is a 118 degree drill point)
+    options = {"drill_point": "flat"}
     for key in HOLE_FUSION:
         if key in a and key not in ("to",):
             options["direction" if key == "thread_direction" else key] = copy.deepcopy(a[key])
@@ -1133,8 +1134,8 @@ define(
     "Drill holes into the part (SciForge's Hole). First create_sketch on "
     "the face where the holes start (for example plane XY with offset = the top's height) "
     "with a small circle at each hole centre; the holes go at the circles' centres, "
-    "whatever their size. Give depth or through_all. Optional counterbore {diameter, "
-    "depth} or countersink {diameter, angle} (angle in degrees, default 90). "
+    "whatever their size; the holes go into the part (also from a sketch under it). Give "
+    "depth or through_all. Optional counterbore {diameter, depth} or countersink {diameter, angle} (angle in degrees, default 90). "
     "Single Hole instead of a sketch: face (the flat face clicked) and at ([x, y, z] on it), "
     "with up to two references [{edge: edge selector, distance}] that place the centre from "
     "straight edges. All of Fusion's Hole dialog: hole_type simple | counterbore | countersink "
@@ -1190,7 +1191,7 @@ define(
             "drill_angle": kit.number("drill point angle (degrees)", above=0, maximum=180),
             "tap_type": enum(["simple", "clearance", "tapped", "taper"], default="simple"),
             "standard": enum(["iso", "ansi"], default="iso"),
-            "size": string("nominal size, e.g. 6 (M6) or 1/4"),
+            "size": string("nominal size, e.g. 8 (M8: its coarse thread) or 1/4"),
             "designation": string("thread designation, e.g. M6x1 or 1/4-20 UNC"),
             "fit": enum(["close", "normal", "loose"], "clearance hole fit", default="normal"),
             "fastener": enum(
@@ -1205,7 +1206,10 @@ define(
             "modeled": boolean("cut the real thread (default: cosmetic)"),
             "full_tap": boolean("thread the whole depth"),
             "tap_depth": positive("thread depth (mm)"),
-            "flip": boolean("drill the other way"),
+            "flip": boolean(
+                "drill along the sketch's normal (left out: into the part, whichever side "
+                "the sketch is on)"
+            ),
         },
     ),
     ops=["hole", "hole_points", "hole_at"],

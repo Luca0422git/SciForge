@@ -21,7 +21,7 @@ Fusion's Rectangular Pattern dialog: repeat features (step ids), faces or the wh
 | `compute` | `optimized` \| `identical` \| `adjust` |  |  |  | Compute Option |
 | `direction` (required) | string or object |  |  |  | X, Y, Z or a pick |
 | `quantity` | integer | count | `2` | >= 1 |  |
-| `distance` | number | mm |  |  | span or spacing (mm) |
+| `distance` | number | mm | `20` |  | span or spacing (mm) |
 | `distribution` | `extent` \| `spacing` |  | `"extent"` |  |  |
 | `direction_type` | `one` \| `symmetric` |  | `"one"` |  |  |
 | `direction2` | string or object |  |  |  | X, Y, Z or a pick |

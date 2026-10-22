@@ -150,7 +150,9 @@ Implemented in `src/Mod/SciForge/`:
   they work while SciForge is closed); MCP resources `sciforge://docs/<path>[#anchor]`,
   `sciforge://examples/golden/<id>`, `sciforge://handbook` (all in one file; `/compact`,
   `/full`); the chat panel's system prompt has a short index of the documents.
-- One file for AI apps that load files: **+ Add an AI > Save AI handbook...**,
+- One file for AI apps that load files: **+ Add an AI > Save AI handbook...** (writes the
+  compact file to load, about 45 thousand tokens, and next to it the one with every tool's
+  page, about 170 thousand; the dialog gives both sizes in tokens),
   `sciforge-cli docs export FILE [--compact | --full]`.
 
 | What | SciForge |

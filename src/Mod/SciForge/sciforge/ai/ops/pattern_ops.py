@@ -136,6 +136,7 @@ def op_rectangular_pattern(self, step):
 
 def op_circular_pattern(self, step):
     options = _options(self, step)
+    options.setdefault("quantity", 3)  # the Circular Pattern dialog's default (Fusion's)
     options["axis"] = _ref(self, step, "axis", _AXIS_ROLE)
     return _build(self, step, "circular", options)
 

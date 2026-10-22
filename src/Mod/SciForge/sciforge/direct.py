@@ -888,7 +888,7 @@ def history_off(doc):
         raise DirectError("Finish the base feature first (Finish Base Feature).")
     if not doc.UndoMode:
         doc.UndoMode = 1
-    doc.openTransaction(core.CAPTURE_OFF)
+    doc.openTransaction(timeline_ops.transaction_title(core.CAPTURE_OFF))
     try:
         with timeline_ops.quiet():
             _roll_to_end(doc)
@@ -933,11 +933,13 @@ def _drop_suppressed_leftovers(doc):
 def history_on(doc):
     """Capture Design History (Fusion): the timeline comes back, each body's frozen step is a
     Base Feature at its start (they share one base feature id). One undo step."""
+    from . import timeline_ops
+
     if not is_direct(doc):
         return False
     if not doc.UndoMode:
         doc.UndoMode = 1
-    doc.openTransaction(core.CAPTURE_ON)
+    doc.openTransaction(timeline_ops.transaction_title(core.CAPTURE_ON))
     try:
         bake(doc)  # anything a FreeCAD command left unbaked
         base_id = core.next_base_id(_base_ids(doc))

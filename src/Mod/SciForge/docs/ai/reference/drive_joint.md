@@ -58,8 +58,8 @@ Done: Revolute 1 at angle 45 degrees, slide 0 mm. Bodies now: Body001: 36000 mm3
 
 ## More argument examples
 
-- turn the revolute joint to 45 degrees:
-  `{"joint": "Joint1", "angle": 45}`
+- turn the first joint (id Joint) to 45 degrees:
+  `{"joint": "Joint", "angle": 45}`
 
 ## See also
 

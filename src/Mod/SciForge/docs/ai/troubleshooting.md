@@ -32,7 +32,9 @@ fails and lists what it picked. Fix the selector (add `type`, `at`, `radius`), o
 ]
 ```
 
-## A size that does not fit
+<a id="a-size-that-does-not-fit"></a>
+
+## A size that does not fit (radius too big, wall too thick: the largest that fits)
 
 A fillet or chamfer bigger than the faces next to it, a shell wall thicker than the part, a
 draft angle steeper than the face takes, a press pull deeper than the part: the call fails
@@ -70,9 +72,11 @@ that does not fit.
 ## It points the wrong way (nothing changed)
 
 An extrude goes along its sketch's normal; a cut from a sketch on the top face (XY with
-offset 10) goes up into empty space unless `flip` is true. A hole drills against its
-sketch's normal: from a sketch on the bottom plane (XY, z = 0) it drills downward, away from
-the part. In both cases the answer ends with `Warning: no solid changed`.
+offset 10) goes up into empty space unless `flip` is true, and the answer ends with
+`Warning: no solid changed`. A hole is different: it drills into the part from its sketch,
+so from a sketch on the bottom plane (XY, z = 0) it goes up into the part by itself.
+`flip: true` makes a hole go along its sketch's normal (up, from a sketch on XY), which
+drills into empty space from a sketch on the top face.
 
 ```json sciforge-calls
 [
@@ -85,6 +89,12 @@ the part. In both cases the answer ends with `Warning: no solid changed`.
     "flip": true}, "expect": {"contains": ["23685.8 mm3"], "not_contains": ["Warning"]}},
   {"tool": "create_sketch", "args": {"plane": "XY", "geometry": [{"circle": [10, 10, 2]}]}},
   {"tool": "hole", "args": {"sketch": "Sketch3", "diameter": 4, "depth": 5},
+   "expect": {"contains": ["23623 mm3"], "not_contains": ["Warning"]}},
+  {"tool": "undo", "args": {}},
+  {"tool": "hole", "args": {"sketch": "Sketch3", "diameter": 4, "depth": 5,
+    "drill_point": "flat"}, "expect": {"contains": ["23623 mm3"], "not_contains": ["Warning"]}},
+  {"tool": "undo", "args": {}},
+  {"tool": "hole", "args": {"sketch": "Sketch2", "diameter": 4, "depth": 5, "flip": true},
    "expect": {"contains": ["Warning: no solid changed"]}},
   {"tool": "undo", "args": {}}
 ]

@@ -27,13 +27,18 @@ pi (50^2 - 10^2) x 10 + pi (20^2 - 10^2) x 20 = 94247.8 mm3.
 
 A hole only needs its centre: draw a small circle where it goes, on a sketch in the plane of
 the face it drills into (the disc's top, z = 10). Then repeat the hole step around Z with
-[circular_pattern](sciforge://tools/circular_pattern): `quantity` counts the original too.
-Each hole removes pi x 4.5^2 x 10 = 636.17 mm3.
+[circular_pattern](sciforge://docs/reference/circular_pattern.md): `quantity` counts the original too.
+Each hole removes pi x 4.5^2 x 10 = 636.17 mm3. The first call shows the same hole from
+the standard (an M8 clearance hole, normal fit, is 9 mm); it is undone and drilled again by
+its diameter, the plain way.
 
 ```json sciforge-calls
 [
   {"tool": "create_sketch", "args": {"plane": "XY", "offset": 10, "geometry": [
     {"circle": [35, 0, 1]}]}},
+  {"tool": "hole", "args": {"sketch": "Sketch2", "tap_type": "clearance", "standard": "iso",
+    "size": "8", "fit": "normal", "through_all": true}, "expect": {"contains": ["93611.6 mm3"]}},
+  {"tool": "undo", "args": {}, "expect": {"contains": ["94247.8 mm3"]}},
   {"tool": "hole", "args": {"sketch": "Sketch2", "diameter": 9, "through_all": true},
    "expect": {"contains": ["Its id is 'Hole1'", "93611.6 mm3"]}},
   {"tool": "circular_pattern", "args": {"features": ["Hole1"], "axis": "Z", "quantity": 6},
@@ -76,4 +81,5 @@ chamfer removes a 1 x 1 triangle turned at radius 10.33 (about -32.5 mm3).
   (`set_sketch_dimension` on its `g0.x`).
 - A raised face: another revolve, or `press_pull` on the disc's top face.
 - Bolt holes from a standard: `hole` with `tap_type: "clearance"`, `standard: "iso"`,
-  `size: "8"`, `fit: "normal"` sizes the hole for M8 by itself.
+  `size: "8"` (or `"M8"`), `fit: "normal"` sizes the hole for M8 by itself (9 mm, as in
+  section 2); `size` picks the coarse thread, `designation` (`"M8x1"`) a fine one.

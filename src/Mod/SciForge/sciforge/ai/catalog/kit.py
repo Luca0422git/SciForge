@@ -76,8 +76,9 @@ SKETCH_HELP = (
     "Sketch planes are the origin planes: XY (normal +Z, sketch x/y are X/Y), XZ (normal -Y, "
     "sketch x/y are X/Z) and YZ (normal +X, sketch x/y are Y/Z). offset moves the sketch along "
     "that normal. Instead of a plane you can give face, a selector that picks exactly one flat "
-    "face of the part; the sketch's x/y axes are then the ones SciForge gives that face, so "
-    "prefer an origin plane with an offset when you can."
+    "face of the part; the sketch's x/y axes are then the ones SciForge gives that face. "
+    "Sketch on the face when the sketch must follow it (holes in a top face whose height may "
+    "change); an origin plane with an offset gives plain coordinates and stays where it is."
 )
 
 GEOMETRY_HELP = (

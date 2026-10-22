@@ -384,6 +384,18 @@ class Builder:
             )
         return fillet
 
+    def _hole_into_part(self, feature):
+        """Turn the hole round when its sketch lies under the part, as Fusion's Hole and
+        SciForge's Hole dialog do (hole.auto_flip): one direction rule for every hole."""
+        from sciforge import hole
+
+        try:
+            feature.Reversed = bool(hole.auto_flip(feature))
+        except Exception as exc:  # the hole keeps FreeCAD's direction
+            from sciforge import warn
+
+            warn("hole %s: direction not checked: %s" % (feature.Name, exc))
+
     def op_hole(self, step):
         feature = self._add(step, "PartDesign::Hole")
         feature.Profile = self.objects[step["sketch"]]
@@ -394,6 +406,7 @@ class Builder:
             feature.DepthType = "Dimension"
             feature.Depth = step["depth"]
         feature.DrillPoint = "Flat"
+        self._hole_into_part(feature)
         if "counterbore" in step:
             feature.HoleCutType = "Counterbore"
             feature.HoleCutCustomValues = True

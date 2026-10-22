@@ -979,10 +979,36 @@ def _set_marker_note(doc, name):
 
 
 # -- helpers for operations ------------------------------------------------------------
+class undo_title:
+    """While it is entered, the undo steps these operations make are named `title` instead
+    of their own name ("Suppress Fillet 1"). The AI tools name every undo step after the
+    call ("AI: Suppress"), which the AI panel's Undo last AI step looks for
+    (sciforge/ai/executor.py)."""
+
+    titles = []
+
+    def __init__(self, title):
+        self.title = title
+
+    def __enter__(self):
+        undo_title.titles.append(self.title)
+        return self
+
+    def __exit__(self, *exc):
+        undo_title.titles.pop()
+        return False
+
+
+def transaction_title(title):
+    """The name an undo step this module (or direct.py) opens gets: `title`, or the name
+    undo_title asked for."""
+    return undo_title.titles[-1] if undo_title.titles else title
+
+
 def _transaction(doc, title):
     if not doc.UndoMode:
         doc.UndoMode = 1  # headless documents: a refused move must be able to roll back
-    doc.openTransaction(title)
+    doc.openTransaction(transaction_title(title))
 
 
 def _set_tips(doc, tips):

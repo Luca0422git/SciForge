@@ -51,17 +51,18 @@ SciForge's tests in real FreeCAD.
 - The same single file is written by `sciforge-cli docs export FILE`, by
   `tools/sciforge/make_ai_docs.py --export FILE`, and by SciForge's **Add an AI app** dialog
   (**Save AI handbook...**), for AI apps that load files (Claude Desktop projects and the
-  like).
+  like). The dialog writes the compact file (about 45 thousand tokens, without the tool
+  pages) to load, and next to it the one with every tool's page (about 170 thousand tokens).
 
 ## Checking your own work
 
 Build one step at a time and check each step with numbers before trusting a picture:
-[inspect_design](sciforge://tools/inspect_design) (every body, step and parameter, with a
-snapshot id), [diff_design](sciforge://tools/diff_design) (what changed since that snapshot,
-since `last_change` or since a step), [query_geometry](sciforge://tools/query_geometry) (the
+[inspect_design](sciforge://docs/reference/inspect_design.md) (every body, step and parameter, with a
+snapshot id), [diff_design](sciforge://docs/reference/diff_design.md) (what changed since that snapshot,
+since `last_change` or since a step), [query_geometry](sciforge://docs/reference/query_geometry.md) (the
 faces and edges a selector picks, each with a `ref` selector that picks exactly that one),
-[check_design](sciforge://tools/check_design) (valid solids, failed steps, overlapping bodies)
-and [render](sciforge://tools/render) (a picture, with `highlight` to mark what a selector
+[check_design](sciforge://docs/reference/check_design.md) (valid solids, failed steps, overlapping bodies)
+and [render](sciforge://docs/reference/render.md) (a picture, with `highlight` to mark what a selector
 picks).
 
 ## For SciForge's developers

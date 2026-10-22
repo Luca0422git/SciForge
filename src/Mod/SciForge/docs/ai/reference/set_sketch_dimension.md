@@ -16,7 +16,7 @@ Change a sketch dimension: by its name (rectangles made by create_sketch with a 
 | `sketch` (required) | string |  |  |  | the sketch |
 | `constraint` | string |  |  |  | the dimension's name, e.g. base.width |
 | `index` | integer |  |  | >= 0 | the constraint's index (get_sketch) |
-| `value` | number | deg |  |  | mm or degrees |
+| `value` | number | mm or deg |  |  | mm or degrees |
 | `expression` | string |  |  |  | a formula, e.g. width * 2 |
 
 ## Answer

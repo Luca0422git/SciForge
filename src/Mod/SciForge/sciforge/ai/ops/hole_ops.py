@@ -81,10 +81,44 @@ THREAD_OPTIONS = (
 _EDIT_PROPS["thread"] = {"length": "Length", "offset": "Offset", "modeled": "Modeled"}
 
 
+def _size_and_designation(options, step):
+    """Make `size` and `designation` agree, as the dialog does when one of them changes.
+    hole.designation_of() looks the designation up first and hole.DEFAULTS has 'M6x1', so a
+    call that gives only size "8" (or "M8") would otherwise get an M6 hole."""
+    from sciforge import hole
+    from sciforge import thread_tables as tables
+
+    standard = options.get("standard") or hole.DEFAULTS["standard"]
+
+    def by_size(text):
+        text = str(text).strip()
+        found = tables.designations(standard, text)
+        if not found and text[:1] in ("M", "m"):
+            found = tables.designations(standard, text[1:].strip())
+        return found[0] if found else None  # coarse pitch first, like the dialog
+
+    if "designation" in options:
+        found = tables.find(standard, options["designation"]) or by_size(options["designation"])
+        what = "designation %r" % options["designation"]
+    elif "size" in options:
+        found = by_size(options["size"])
+        what = "size %r" % options["size"]
+    else:
+        return
+    if found is None:
+        raise BuildError(
+            "%s %r: unknown %s for standard %s; sizes: %s"
+            % (step["op"], step["id"], what, standard, ", ".join(tables.sizes(standard)))
+        )
+    options["size"] = found.size
+    options["designation"] = found.label
+
+
 def _hole_options(builder, step):
     from sciforge import hole
 
     options = {k: step[k] for k in HOLE_OPTIONS if k in step}
+    _size_and_designation(options, step)
     if step.get("fastener_head"):
         # the dialog fills the counterbore / countersink in from the fastener's head
         options = hole.with_fastener_head(options)

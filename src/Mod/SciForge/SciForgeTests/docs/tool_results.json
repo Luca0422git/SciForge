@@ -1589,7 +1589,7 @@
   },
   "note": "a single 6 mm hole, 8 mm deep, on the top face",
   "answer": {
-   "text": "Done: AI: Hole 6 mm. Its id is 'Hole1'. Bodies now: Body1: 23756.8 mm3, 60 x 40 x 10 mm.",
+   "text": "Done: AI: Hole 6 mm. Its id is 'Hole1'. Bodies now: Body1: 23773.8 mm3, 60 x 40 x 10 mm.",
    "is_error": false
   }
  },

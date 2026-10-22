@@ -11,7 +11,7 @@ d + 2 m (44 mm and 84 mm), centre distance a = m (z1 + z2) / 2 = 60 mm.
 
 ## 1. The two gears
 
-[gear](sciforge://tools/gear) makes an involute gear as a new body (by default) centred at
+[gear](sciforge://docs/reference/gear.md) makes an involute gear as a new body (by default) centred at
 x / y on its plane. The wheel goes 60 mm along X.
 
 ```json sciforge-calls
@@ -28,7 +28,7 @@ x / y on its plane. The wheel goes 60 mm along X.
 
 Both gears have a tooth pointing along +X. Seen from the pinion, the wheel's tooth at 180
 degrees points straight at the pinion's tooth: they collide.
-[interference](sciforge://tools/interference) shows it. Turning the wheel by half its tooth
+[interference](sciforge://docs/reference/interference.md) shows it. Turning the wheel by half its tooth
 pitch (360 / 40 / 2 = 4.5 degrees) about its own centre puts a gap opposite each tooth. The
 wheel's body is named by its step id (the id the gear answer gave).
 
@@ -46,7 +46,7 @@ wheel's body is named by its step id (the id the gear answer gave).
 ## 3. Components (optional)
 
 For an assembly, put each body in a component of its own
-([components_from_bodies](sciforge://tools/components_from_bodies): the answer gives the
+([components_from_bodies](sciforge://docs/reference/components_from_bodies.md): the answer gives the
 component's id and its label) and ground the pinion, so nothing moves it when joints solve.
 
 ```json sciforge-calls

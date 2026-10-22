@@ -236,6 +236,16 @@ def help_topics():
 
 
 # -- the lists --------------------------------------------------------------------------------
+def _size(root, **kind):
+    """ About how big a single-file export is, in tokens (an AI app's context is counted in
+    them), for its resource description."""
+    try:
+        text = docs_core.export_text(lib=docs_core.library(root or docs_root()), **kind)
+        return " About %s tokens." % docs_core.tokens_text(len(text))
+    except Exception:
+        return ""
+
+
 def resources(root=None):
     """resources/list's resources (every document listed, not only the index)."""
     out = []
@@ -284,7 +294,7 @@ def resources(root=None):
             "name": "handbook",
             "title": "SciForge for AI models (one file)",
             "description": "Every document for AI models in one Markdown file: handbook, "
-            "recipes and the reference page of every tool.",
+            "recipes and the reference page of every tool." + _size(root),
             "mimeType": "text/markdown",
         }
     )
@@ -294,7 +304,8 @@ def resources(root=None):
             "name": "handbook-compact",
             "title": "SciForge for AI models, compact (one file)",
             "description": "The handbook, the guides, the recipes and the list of tools in one "
-            "Markdown file (without the reference page of every tool).",
+            "Markdown file (without the reference page of every tool)."
+            + _size(root, compact=True),
             "mimeType": "text/markdown",
         }
     )
@@ -304,7 +315,8 @@ def resources(root=None):
             "name": "handbook-full",
             "title": "SciForge for AI models, with the user documentation (one file)",
             "description": "sciforge://handbook plus SciForge's documentation for people "
-            "(cheat sheet, known issues, the Fusion parity spec of every feature).",
+            "(cheat sheet, known issues, the Fusion parity spec of every feature)."
+            + _size(root, full=True),
             "mimeType": "text/markdown",
         }
     )

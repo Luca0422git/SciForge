@@ -9,15 +9,15 @@ before you say a part is done. Every block below is run by SciForge's tests.
 | Tool | Answers | Use it |
 |---|---|---|
 | the change's own answer | `Bodies now: Body1: 23497.3 mm3, 60 x 40 x 10 mm`, broken steps, "no solid changed" | after every change: does the volume and size move the way you meant? |
-| [inspect_design](sciforge://tools/inspect_design) | every body (valid, closed, volume, area, bounding box, centre of mass, counts, material, mass), every step (state, status, error, values), parameters, sketches, components, joints, the selection; a snapshot id | at the start, and before a series of changes (its snapshot id is a checkpoint) |
-| [diff_design](sciforge://tools/diff_design) | what changed since a snapshot id, since `last_change` or since a step: bodies, steps, parameters | after a change, to confirm exactly what it did and nothing else |
-| [query_geometry](sciforge://tools/query_geometry) | the faces / edges / corners a selector picks, with facts and a `ref` each | before a fillet, chamfer, shell, draft or sketch on a face |
-| [check_design](sciforge://tools/check_design) | ok, problems (invalid or open solids, bodies in several pieces, failed steps, broken sketches, overlapping bodies), warnings | after a series of changes, and at the end |
-| [measure](sciforge://tools/measure) | distance and angle between two picks with X / Y / Z parts and the nearest points; the size of one pick | wall thickness, hole positions, clearances |
-| [physical_properties](sciforge://tools/physical_properties) | volume, area, mass, density, centre of mass, bounding box per body | weight and balance |
-| [interference](sciforge://tools/interference) | which bodies overlap and by how much | assemblies, parts that must fit |
-| [section_analysis](sciforge://tools/section_analysis) | the cut faces through a plane | inside features, wall thickness |
-| [render](sciforge://tools/render) | a PNG picture (iso, front, top... or a direction), faces / edges highlighted in orange | to look, second: after the numbers agree |
+| [inspect_design](sciforge://docs/reference/inspect_design.md) | every body (valid, closed, volume, area, bounding box, centre of mass, counts, material, mass), every step (state, status, error, values), parameters, sketches, components, joints, the selection; a snapshot id | at the start, and before a series of changes (its snapshot id is a checkpoint) |
+| [diff_design](sciforge://docs/reference/diff_design.md) | what changed since a snapshot id, since `last_change` or since a step: bodies, steps, parameters | after a change, to confirm exactly what it did and nothing else |
+| [query_geometry](sciforge://docs/reference/query_geometry.md) | the faces / edges / corners a selector picks, with facts and a `ref` each | before a fillet, chamfer, shell, draft or sketch on a face |
+| [check_design](sciforge://docs/reference/check_design.md) | ok, problems (invalid or open solids, bodies in several pieces, failed steps, broken sketches, overlapping bodies), warnings | after a series of changes, and at the end |
+| [measure](sciforge://docs/reference/measure.md) | distance and angle between two picks with X / Y / Z parts and the nearest points; the size of one pick | wall thickness, hole positions, clearances |
+| [physical_properties](sciforge://docs/reference/physical_properties.md) | volume, area, mass, density, centre of mass, bounding box per body | weight and balance |
+| [interference](sciforge://docs/reference/interference.md) | which bodies overlap and by how much | assemblies, parts that must fit |
+| [section_analysis](sciforge://docs/reference/section_analysis.md) | the cut faces through a plane | inside features, wall thickness |
+| [render](sciforge://docs/reference/render.md) | a PNG picture (iso, front, top... or a direction), faces / edges highlighted in orange | to look, second: after the numbers agree |
 
 ## A checking routine
 
