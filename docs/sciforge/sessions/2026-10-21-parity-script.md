@@ -134,5 +134,23 @@ agents work in parallel); merge these notes into it.
   and the line, no traceback).
 - `run_tests.sh --only base`: unit 1823 OK (9 skipped), golden 446 pass + 2 known xfail,
   smoke, journey, restart: all passed.
-- No SciForge module was changed, so no existing scenario is affected. The scenarios cited as
-  evidence in core-workflows.md were run here (results below).
+- No SciForge module was changed, so no existing scenario is affected. The 52 scenarios cited
+  as evidence in core-workflows.md were run here with real FreeCAD 1.1.4 under xvfb, all
+  passed:
+  - workflows 1-2: fillet_qa_part, fixsketch_fillet / _hole / _join / _move / _presspull /
+    _shell_draft, gaps_timeline_start, patterns_qa_edit, pi5_case (124 checks),
+    revolve_qa_part, sketch_infer, sketch_qa_part, sketch_tools_constraints,
+    sketch_tools_extrude, timeline_browser_qa, timeline_rolled_cut;
+  - workflow 3: components_basic, components2_move / _copy / _pattern / _bodies,
+    joints_basic, joints_types, joints_components, joints2_drag / _slider / _motion /
+    _nested, joints_asbuilt_group;
+  - workflow 4: drawing_new, drawing_views, drawing2_views, drawing_section, drawing_detail,
+    drawing_dimensions, drawing2_tolerance, drawing2_ordinate, drawing2_symbols,
+    drawing_annotations, drawing_update, drawing2_update, drawing_assembly, drawing_export,
+    drawing2_sheets;
+  - workflows 5-6: exchange2_step_open, exchange2_step_insert, insert_step, exchange2_export,
+    export_formats, export_print, send_to_slicer, export_everything, mesh_print.
+- Resumed after a machine restart: the second scenario batch was cut off and was run again
+  in full (all passed); `--only unit` rerun after the resume: 1823 OK (9 skipped);
+  `parity.py --check` passes. One count corrected in core-workflows.md (19 `sf_revolve_*`
+  golden models, not 21).
