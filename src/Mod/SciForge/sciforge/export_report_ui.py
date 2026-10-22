@@ -69,7 +69,7 @@ def show(title, lead, lines, kind="export"):
 
 
 # -- entry points for the export and import paths --------------------------------------------
-def report_export(file_name, entries, verb="Exported"):
+def report_export(file_name, entries, verb="Exported", lead="Not kept in this file:"):
     """After an export: the card and the log line, when the file leaves something out.
     Returns the entries."""
     try:
@@ -78,7 +78,7 @@ def report_export(file_name, entries, verb="Exported"):
         export_report.log_report(file_name, entries)
         show(
             "%s %s" % (verb, file_name),
-            "Not kept in this file:",
+            lead,
             core.notice_lines(entries),
             "export",
         )
@@ -91,14 +91,16 @@ def report_losses(doc, objects, fmt, file_name, purpose="file", verb="Exported",
     """Count and show what an export of `objects` as `fmt` leaves out (see
     export_report.losses). Never raises."""
     entries = export_report.safe_losses(doc, objects, fmt, purpose, **options)
-    return report_export(file_name, entries, verb)
+    several = str(file_name).endswith(" files")  # One File Per Body: "3 files"
+    lead = "Not kept in these files:" if several else "Not kept in this file:"
+    return report_export(file_name, entries, verb, lead)
 
 
 def report_combined(file_names, reports, verb="Exported"):
     """Several files at once (Export Everything): reports = [(format name, entries)]."""
     try:
         entries = core.combine(reports)
-        return report_export(file_names, entries, verb)
+        return report_export(file_names, entries, verb, "Not kept in these files:")
     except Exception as exc:
         warn("export report: %s" % exc)
         return []
