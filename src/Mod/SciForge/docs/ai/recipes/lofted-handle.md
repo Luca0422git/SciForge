@@ -24,7 +24,7 @@ major radius along sketch x.
 
 ## 2. The loft
 
-[loft](sciforge://tools/loft) goes through the profiles in the order given (Fusion's Loft).
+[loft](sciforge://docs/reference/loft.md) goes through the profiles in the order given (Fusion's Loft).
 A loft through three or more profiles is a smooth surface through them; here it stays
 within the largest profile (24 x 16 mm), but with very different profiles it can bulge
 between them: check the bounding box, and add profiles or guide it with `rails` /

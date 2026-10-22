@@ -8,7 +8,7 @@ SciForge's tests; `expect` is what the answer must contain.
 
 ## 1. The parameters
 
-[set_parameter](sciforge://tools/set_parameter) creates (or changes) a user parameter;
+[set_parameter](sciforge://docs/reference/set_parameter.md) creates (or changes) a user parameter;
 `unit` is mm by default. A value may be a formula of other parameters.
 
 ```json sciforge-calls
@@ -27,10 +27,10 @@ SciForge's tests; `expect` is what the answer must contain.
 ## 2. The plate follows width, depth and thickness
 
 A rectangle drawn with `"name": "plate"` has the dimensions `plate.width` and
-`plate.height`; [set_sketch_dimension](sciforge://tools/set_sketch_dimension) with
+`plate.height`; [set_sketch_dimension](sciforge://docs/reference/set_sketch_dimension.md) with
 `expression` ties them to the parameters. The extrude's distance is its model parameter
 `Distance` (list_parameters shows every model parameter's label):
-[set_model_parameter](sciforge://tools/set_model_parameter) ties it to `thickness`.
+[set_model_parameter](sciforge://docs/reference/set_model_parameter.md) ties it to `thickness`.
 
 ```json sciforge-calls
 [
@@ -79,8 +79,8 @@ mm remove 4 x pi x 2.75^2 x 6 = 570.2 mm3.
 ## 4. Change one parameter, check everything followed
 
 Make the plate 100 wide: the volume becomes 100 x 50 x 6 - 570.2 = 29429.8 mm3 and the far
-holes move to x = 92 (100 - margin). [diff_design](sciforge://tools/diff_design) since the
-snapshot shows what changed; [query_geometry](sciforge://tools/query_geometry) shows where
+holes move to x = 92 (100 - margin). [diff_design](sciforge://docs/reference/diff_design.md) since the
+snapshot shows what changed; [query_geometry](sciforge://docs/reference/query_geometry.md) shows where
 the holes are now.
 
 ```json sciforge-calls

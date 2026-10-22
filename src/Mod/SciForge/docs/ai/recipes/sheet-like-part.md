@@ -9,7 +9,7 @@ Every call was run by SciForge's tests; `expect` is what the answer must contain
 
 ## 1. The open profile, thin extruded
 
-[create_curve_sketch](sciforge://tools/create_curve_sketch) draws open curves (a
+[create_curve_sketch](sciforge://docs/reference/create_curve_sketch.md) draws open curves (a
 `create_sketch` polyline is always closed). An extrude of `curves` needs `thin`: a wall of
 `thickness` along the curve. `location: "side1"` puts the wall on the curve's left: the
 curve runs down the left leg, along the base and up the right leg, so its left is the inside
@@ -34,7 +34,7 @@ once) = 172 mm2, x 30 = 5160 mm3.
 A bend is a fillet on the outside corner (radius = inside radius + thickness) and on the
 inside corner, so the sheet stays 2 mm thick around it. The outside corners are the straight
 edges along Y at z = 0 (x = 0 and x = 40), the inside ones those at z = 2.
-[fillet_sets](sciforge://tools/fillet_sets) does both radii in one step: -2 x 16 (1 - pi / 4)
+[fillet_sets](sciforge://docs/reference/fillet_sets.md) does both radii in one step: -2 x 16 (1 - pi / 4)
 x 30 + 2 x 4 (1 - pi / 4) x 30 = -154.5 mm3.
 
 ```json sciforge-calls

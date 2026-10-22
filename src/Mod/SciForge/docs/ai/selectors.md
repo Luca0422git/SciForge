@@ -4,7 +4,7 @@ In Fusion you click a face or an edge. SciForge's tools pick them with a selecto
 object that describes the geometry a person would click ("the four straight edges at the
 top"), never internal names like `Edge7` (those change whenever the model changes). Every
 tool that takes `edges`, `faces`, `face`, `select`, a pick (`{"face": ...}`) or a highlight
-uses this language; [query_geometry](sciforge://tools/query_geometry) shows what a selector
+uses this language; [query_geometry](sciforge://docs/reference/query_geometry.md) shows what a selector
 picks before you use it.
 
 ## The filters

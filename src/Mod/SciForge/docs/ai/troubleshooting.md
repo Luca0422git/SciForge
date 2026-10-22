@@ -32,7 +32,9 @@ fails and lists what it picked. Fix the selector (add `type`, `at`, `radius`), o
 ]
 ```
 
-## A size that does not fit
+<a id="a-size-that-does-not-fit"></a>
+
+## A size that does not fit (radius too big, wall too thick: the largest that fits)
 
 A fillet or chamfer bigger than the faces next to it, a shell wall thicker than the part, a
 draft angle steeper than the face takes, a press pull deeper than the part: the call fails

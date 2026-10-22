@@ -33,7 +33,7 @@ are 24404.5 mm3.
 
 ## 2. The lid, a body of its own
 
-[new_body](sciforge://tools/new_body) makes an empty body and makes it the active one: the
+[new_body](sciforge://docs/reference/new_body.md) makes an empty body and makes it the active one: the
 next sketches and extrudes go into it (Fusion: a new body, or a new component for parts that
 move). The lid sits on the box (z = 30 to 33). The plug hangs 3 mm down from the lid's
 underside: a sketch on XY at offset 30 extruded with `flip: true` goes down (-Z). Its outline
@@ -57,7 +57,7 @@ is the box's inside (76 x 56) minus 0.2 mm on every side.
 
 Both sets of vertical edges are straight lines along Z; `at` with a number keeps the edges
 whose centre is at that height: the lid's edges are centred at z = 31.5, the plug's at
-z = 28.5. [fillet_sets](sciforge://tools/fillet_sets) gives each set its own radius in one
+z = 28.5. [fillet_sets](sciforge://docs/reference/fillet_sets.md) gives each set its own radius in one
 timeline step: 5 mm outside (like the box) and 2.8 mm on the plug (the box's inside radius 3
 minus the clearance), so the plug clears the box's rounded inside corners.
 
@@ -77,7 +77,7 @@ minus the clearance), so the plug clears the box's rounded inside corners.
 
 ## 4. Check the fit
 
-[check_design](sciforge://tools/check_design) also looks for bodies that overlap
+[check_design](sciforge://docs/reference/check_design.md) also looks for bodies that overlap
 (Fusion's Interference): with the clearance there is none. Two bodies, both valid.
 
 ```json sciforge-calls

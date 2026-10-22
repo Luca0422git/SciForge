@@ -33,7 +33,7 @@ a boundary whose curves meet end to end.
 
 ## 2. Patch, then thicken
 
-[surface](sciforge://tools/surface) with `kind: "patch"` fills the boundary given in
+[surface](sciforge://docs/reference/surface.md) with `kind: "patch"` fills the boundary given in
 `refs` (each `{"sketch": id}` adds all its curves). A surface body has an area but no
 volume. The patch goes into a body of its own (Body2 here) and the thicken makes another
 (Body3), as in Fusion; the design's first body stays empty. `kind: "thicken"` with

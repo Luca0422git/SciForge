@@ -27,7 +27,7 @@ pi (50^2 - 10^2) x 10 + pi (20^2 - 10^2) x 20 = 94247.8 mm3.
 
 A hole only needs its centre: draw a small circle where it goes, on a sketch in the plane of
 the face it drills into (the disc's top, z = 10). Then repeat the hole step around Z with
-[circular_pattern](sciforge://tools/circular_pattern): `quantity` counts the original too.
+[circular_pattern](sciforge://docs/reference/circular_pattern.md): `quantity` counts the original too.
 Each hole removes pi x 4.5^2 x 10 = 636.17 mm3.
 
 ```json sciforge-calls

@@ -26,7 +26,7 @@ pi 400 x 15 + pi x 5 / 3 (400 + 320 + 256) = 23959.9 mm3.
 
 A groove is a 3 mm circle centred on the rim (x = 20), cut upward 15 mm from the bottom. The
 sketch is on XY at z = 0 (the knob's underside); an XY extrude goes up (+Z), into the knob,
-so no `flip` here. Then [circular_pattern](sciforge://tools/circular_pattern) repeats the
+so no `flip` here. Then [circular_pattern](sciforge://docs/reference/circular_pattern.md) repeats the
 cut around Z.
 
 ```json sciforge-calls
