@@ -667,10 +667,15 @@ def steep_again():
     samples = rec.get("samples", [])
     shown = [x["live"] for x in samples if x["shown"]]
     angles = [x["angle"] for x in samples]
+    # the search now runs to its end (review finding DRAFT-1-F5): the wall is then the limit
+    # itself (it works), every angle past it is known not to
+    top = max(angles + shown) if angles else None
     h.check(
         "dragged past it again: the dialog and the picture stay before the angles known not "
         "to work",
-        bool(angles) and wall is not None and max(angles + shown) < wall,
+        bool(angles)
+        and wall is not None
+        and (top < wall or (abs(wall - limit) < 1e-9 and top <= limit + 1e-9)),
         (max(angles) if angles else None, max(shown) if shown else None, limit, wall),
     )
     h.check("held at the steepest angle again", 6.0 <= limit < 8.0, limit)
