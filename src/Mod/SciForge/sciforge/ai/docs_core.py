@@ -43,6 +43,7 @@ MAX_DOC_BYTES = 2 * 1024 * 1024
 PAGE_CHARS = 12000  # one page of docs_read: about 3000 tokens
 DOCS_URI = "sciforge://docs/"
 GOLDEN_URI = "sciforge://examples/golden/"
+TOOLS_URI = "sciforge://tools/"  # the tools' MCP resources (mcp_resources.py)
 CALLS_TAG = "sciforge-calls"  # the fence info word of a block of tool calls
 
 # The order the hand-written documents come in (the export, the prompt index); any other
