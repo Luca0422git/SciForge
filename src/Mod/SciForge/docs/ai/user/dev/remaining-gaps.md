@@ -1,110 +1,174 @@
 <!-- A copy of docs/sciforge/dev/remaining-gaps.md for AI models, made by tools/sciforge/make_ai_docs.py: edit the original, then run the script. -->
 
-# Remaining gaps after the first plan (survey of 2026-10-14)
+# Remaining gaps: the ranked work list
 
-Every area of the first plan is merged (up to `sf/gaps`). This survey lists what the parity
-docs (`docs/sciforge/parity/*.md`) still mark as missing or different from Fusion. Wave 4
-(briefs in `docs/sciforge/dev/briefs/*-2.md`) takes the top of it.
+**This is the one work list** (decision of 2026-10-21, idea 5 of
+[cadcraft-lessons.md](cadcraft-lessons.md)). One row per gap, ranked by how much it hurts
+Luca's everyday work. A commit that closes a gap deletes its row (or narrows it) in the same
+commit and adds a line to "Closed" at the end; a new gap gets the next free ID. IDs never
+change, so briefs and commits can name them ("closes G-07").
 
-## By area
+Three companions, each with its own job:
 
-- **sketch.md**: (Chamfer types with typed values and dimensions by sf/modeling-2; the typed
-  line angle from the X axis matches Fusion's forum answers; a sketch on an edited face shows
-  the part as it is now, and an older sketch edited from the timeline shows its own body
-  rolled back, by sf/fix-sketch-face.) Editing an older sketch rolls back only its own body in
-  the drawing (Fusion rolls back the other bodies too); suppressing a Move also suppresses a
-  sketch on its face. (3D Sketch on SciForge's own handler, Projected Curves belonging to the
-  sketch, SciForge's own Fillet, line-arc Chamfer, by sf/sketch-2.) Left: no Centerline line
-  type; 3D curves have no constraints, dimensions, arcs or typed length / angle; projected
-  curves cannot be dimensioned and have no Break Link; FreeCAD loses some projections when the
-  source edge moves (re-project by hand).
-- **extrude-presspull.md**: (To Object extend options, Offset and a following Start: Object by
-  sf/modeling-2; a clicked face or corner sets the height, and a held arrow snaps to it, by
-  sf/fix-extrude-to-face; value boxes on Move's triad, Scale, Draft and the other handles by
-  sf/polish-2.) Press Pull on a face (an offset) does not snap to a clicked face; no snapping to edges or sketch points
-  while dragging.
-- **fillet.md**: (sf/fillet-2 built radius sets, Chord Length, Variable, Tangent Chain off,
-  Rule and Full Round fillets.) Left: G2, Setback, Asymmetric (kernel); Full Round only on a
-  straight rib between parallel walls; radius points take plain numbers.
-- **hole-thread.md**: (NPT / BSPT, fastener clearance, thread class, curved faces by
-  sf/modeling-2.) Taper threads are cosmetic only; three screw types in the tables.
-- **patterns.md**: (Components by sf/components-2; Compute Option Adjust and the Path start
-  point by sf/modify-2; body patterns and mirrors copy the body as it is at the pattern, roll
-  back with the marker and survive the original's deletion, by sf/fix-pattern-bodies.) Left:
-  Mirror of components; Adjust only re-runs extrudes; Delete on one copy deletes only that
-  copy (Fusion deletes the whole pattern); editing a pattern does not roll the design back to
-  it; undo of a marker roll before a step outside the bodies leaves the marker after it.
-- **joints.md**: (sf/joints-2 built Component Drag, position modes, Motion Link, Contact Sets,
-  Motion Study, nested components, no auto-ground.) Left: a drag pulls one joint at a time (no
-  whole-mechanism drag solver), no contact during Animate, no Motion Study graph, no Lock
-  Motion or Animate Joint Relationships.
-- **components.md**: (sf/components-2 built Move/Copy, Set Pivot, Copy/Paste instances, Paste
-  New, component patterns, the marker hiding components, the see-through look.) Left: a copy's
-  nested components are flattened; deleting the original freezes its copies; no paste between
-  designs; no Mirror of components; no "position pending" question.
-- **drawings.md**: (tolerances, fits, dimension text, ordinate / baseline / chain, Leader,
-  GD&T, sheets, Full / Half / Offset / Aligned sections, depth, breakout and auto centre marks
-  by sf/drawings-2.) Left: Exploded views, Note and Weld symbols, Arrange Dimensions, hole notes,
-  per-sheet size, DWG, depth only on straight cut lines.
-- **bodies.md**: (Combine New Component, multi-tool Split, Set Pivot, component moves by
-  sf/components-2; Move Object Faces by sf/modify-2.) Left: faces of one body per Move.
-- **direct-modify.md**: (Press Pull Offset Type and Replace Face onto any surface by
-  sf/modify-2.) Features in a direct design cannot be edited.
-- **revolve.md**: (Objects To Cut for Revolve, Sweep and Loft by sf/modeling-2.) Editing an
-  older step does not roll the timeline back first.
-- **primitives.md**: no snapping to edge midpoints or to points off the plane.
-- **shell-draft-scale.md**: (Parting Line, Two Side, Symmetric, several bodies per step and
-  Scale of sketches by sf/modify-2.) Left: Move Parting Line (kernel), components not scaled,
-  non-uniform scale of a sketch.
-- **sweep-loft-rib.md**: (Sweep formulas by sf/modeling-2; solid Loft Tangent Edges Merge, end
+- [core-workflows.md](core-workflows.md): the everyday Fusion workflows, end to end (depth).
+- [../parity-checklist.md](../parity-checklist.md): every Fusion menu entry, present or not
+  (breadth), generated by `tools/sciforge/parity.py`; the rows here that cite it come from its
+  "Not in SciForge yet" list.
+- `docs/sciforge/parity/*.md`: the details and sources of each area (the "Area" column).
+
+Started from the survey of 2026-10-14 (every area of the first plan merged, up to `sf/gaps`;
+waves 4 and 5 took the top of it), re-ranked 2026-10-22.
+
+**Impact**: **High** = gets in the way of a workflow of [core-workflows.md](core-workflows.md)
+(Luca's daily printable parts, mechanisms, robotics hardware); **Medium** = a tool he uses
+sometimes works differently or lacks an option; **Low** = rare, cosmetic or a corner case.
+**Effort**: **S** = a session or less, **M** = a few sessions, **L** = a project of its own,
+**K** = needs FreeCAD's C++ or the OpenCASCADE kernel (see the last table).
+
+## The list, best first
+
+| Rank | ID | Area | Gap | Impact | Effort |
+|---:|---|---|---|---|---|
+| 1 | G-01 | timeline | No golden model of "a part edited at step 2 after 20 more steps" (outline 2.3 asks for it); the longest edit chains tested are about five steps (`edit_width_after_fillet_and_hole`, `fillet_qa_part` path 8). Build one from the Pi 5 case | High | S |
+| 2 | G-02 | sketch | Projected curves cannot be dimensioned and have no Break Link; FreeCAD loses some projections when the source edge moves (re-project by hand) | High | M |
+| 3 | G-03 | sketch | A constraint that does not fit says so but does not name the constraints it conflicts with, nor highlight them (cadcraft idea 1; FreeCAD's solver reports them) | High | M |
+| 4 | G-04 | timeline | After a big change to an early step a later step attached to a face or edge can lose it; the timeline names the step to re-pick (known-issues.md). Fusion keeps more of them | High | L |
+| 5 | G-05 | joints | A drag pulls one joint at a time: no whole-mechanism drag solver | High | L |
+| 6 | G-06 | sketch | No padlock / "fully constrained" mark on a sketch in the browser and timeline, no count of what is left to define (cadcraft idea 1) | Medium | S |
+| 7 | G-07 | patterns | Editing a pattern does not roll the design back to it (narrowed 2026-10-21: `edit_rollback.py` rolls the marker for dialog edits from the timeline; check patterns and a double-click in the 3D view, which does not roll back) | Medium | S |
+| 8 | G-08 | revolve | Editing an older step does not roll the timeline back first (same narrowing and check as G-07) | Medium | S |
+| 9 | G-09 | sketch | No Centerline line type | Medium | S |
+| 10 | G-10 | insert-export | Bodies inside a component come back as Body1, Body2 after a STEP round trip | Medium | S |
+| 11 | G-11 | selection | SELECT > Selection Filters > Components and Select Component Priority are greyed although components exist; no Joint Origins / Canvases filters; no Invert Selection | Medium | S |
+| 12 | G-12 | sketch | Editing an older sketch rolls back only its own body in the drawing (Fusion rolls back the other bodies too) | Medium | M |
+| 13 | G-13 | components | No Mirror of components (also patterns.md) | Medium | M |
+| 14 | G-14 | components | A copy's nested components are flattened | Medium | M |
+| 15 | G-15 | components | Deleting the original freezes its copies | Medium | M |
+| 16 | G-16 | components | No paste between designs | Medium | M |
+| 17 | G-17 | joints | No contact during Animate | Medium | M |
+| 18 | G-18 | extrude-presspull | Press Pull on a face (an offset) does not snap to a clicked face | Medium | M |
+| 19 | G-19 | extrude-presspull | No snapping to edges or sketch points while dragging an arrow | Medium | M |
+| 20 | G-20 | drawings | No Arrange Dimensions | Medium | M |
+| 21 | G-21 | drawings | No hole notes (Hole and Thread note) | Medium | M |
+| 22 | G-22 | insert-export | An inserted design's own components come in flat | Medium | M |
+| 23 | G-23 | browser | Right-click menus of bodies and components lack Physical Material, Appearance, Properties, Opacity Control, Selectable/Unselectable, Create Selection Set, Cut, Move/Copy, Texture Map Controls; a sketch lacks Redefine Sketch Plane (parity-checklist.md, BROWSER) | Medium | M |
+| 24 | G-24 | drawings | One sheet size per drawing (no per-sheet size) | Low | S |
+| 25 | G-25 | fillet | Radius points (variable fillet) take plain numbers, no formulas | Low | S |
+| 26 | G-26 | hole-thread | Three screw types in the fastener clearance tables | Low | S |
+| 27 | G-27 | patterns | Delete on one copy deletes only that copy (Fusion deletes the whole pattern) | Low | S |
+| 28 | G-28 | patterns | Undo of a marker roll before a step outside the bodies leaves the marker after it | Low | S |
+| 29 | G-29 | components | No "position pending" question | Low | S |
+| 30 | G-30 | shell-draft-scale | No non-uniform scale of a sketch | Low | S |
+| 31 | G-31 | surface | Surface Extrude All counts the bodies visible when the step was made | Low | S |
+| 32 | G-32 | insert-export | DWG needs a free converter (none bundled) | Low | S |
+| 33 | G-33 | insert-export | The decal's scale arrow has no value box | Low | S |
+| 34 | G-34 | inspect | Analyses other than Zebra refuse mesh bodies (only Zebra is documented for meshes) | Low | S |
+| 35 | G-35 | ui-shell | File menu: no Upload, New Design from File, View submenu (show / hide panels, reset layout); ViewCube: no Set Current View as Front / Reset Front | Low | S |
+| 36 | G-36 | inspect | No Cycle Component Color | Low | S |
+| 37 | G-37 | timeline-browser | Groups cannot nest; no New Body command | Low | S |
+| 38 | G-38 | versions | No Move / Copy of whole folders; Get Latest updates every out-of-date reference at once; FreeCAD's Close All Documents still asks FreeCAD's question | Low | S |
+| 39 | G-39 | joints | No Motion Study graph | Low | M |
+| 40 | G-40 | joints | No Lock Motion, no Animate Joint Relationships | Low | M |
+| 41 | G-41 | drawings | No Note and no Weld symbols | Low | M |
+| 42 | G-42 | drawings | No DWG export | Low | M |
+| 43 | G-43 | drawings | Section depth only on straight cut lines | Low | M |
+| 44 | G-44 | sketch | Suppressing a Move also suppresses a sketch on its face | Low | M |
+| 45 | G-45 | fillet | Full Round only on a straight rib between parallel walls | Low | M |
+| 46 | G-46 | hole-thread | Taper threads (NPT / BSPT) are cosmetic only | Low | M |
+| 47 | G-47 | patterns | Compute Option Adjust only re-runs extrudes | Low | M |
+| 48 | G-48 | bodies | Move Object Faces: faces of one body per Move | Low | M |
+| 49 | G-49 | primitives | No snapping to edge midpoints or to points off the plane | Low | M |
+| 50 | G-50 | shell-draft-scale | Components are not scaled | Low | M |
+| 51 | G-51 | sweep-loft-rib | Three or more rails are refused; a closed loft with rails or a centerline is refused | Low | M |
+| 52 | G-52 | sweep-loft-rib | No start-point matching for closed lofts | Low | M |
+| 53 | G-53 | surface | Surface Sweep Path + Guide Rail: no extents | Low | M |
+| 54 | G-54 | surface | No taper from a slanted or curved start | Low | M |
+| 55 | G-55 | surface | Patch: no per-edge continuity and Tangency Weight | Low | M |
+| 56 | G-56 | surface | Extend: no Align Edges | Low | M |
+| 57 | G-57 | insert-export | A linked copy can be edited in place (Fusion: Edit In Place on a linked component) | Low | M |
+| 58 | G-58 | mesh | No contextual ribbon tab for mesh Direct Edit (one dialog); Move is an arrow, not Fusion's triad | Low | M |
+| 59 | G-59 | mesh | No Remesh / Reduce on picked face groups; no Shift+F face-group colours | Low | M |
+| 60 | G-60 | misc | A decal on a component's copy is listed only under the original; a face that changes shape and moves in one step may lose its decal (red, Select Face puts it back) | Low | M |
+| 61 | G-61 | ui-shell | No COMMENTS panel (Fusion's comments are a cloud feature: probably out of scope, ask Luca) | Low | M |
+| 62 | G-62 | drawings | No Exploded views | Low | L |
+| 63 | G-63 | sketch | 3D curves have no constraints, dimensions, arcs or typed length / angle | Low | L |
+| 64 | G-64 | direct-modify | Features in a direct design cannot be edited | Low | L |
+| 65 | G-65 | insert-export | No SAT / SMT / F3D / FBX / USD (F3D is closed: never, MEMORY 2026-10-16) | Low | L |
+| 66 | G-66 | configure | No CONFIGURE panel (configurations: variants of one design from a table). (Fusion's two "Axis Perpendicular ... at Point" entries are one in SciForge, which does both: parity/inspect.md) | Low | L |
+| 67 | G-67 | misc | No adsk add-in API (Fusion's scripts do not run) | Low | L |
+| 68 | G-68 | ui-shell | Dialogs are docked, not floating | Low | L |
+| 69 | G-69 | sweep-loft-rib | Loft Tangent Edges Merge is off by default (OpenCASCADE's volume of a merged side is 5.6 % off) | Low | K |
+| 70 | G-70 | sweep-loft-rib | Turning rail lofts are about 1 % off | Low | K |
+| 71 | G-71 | ui-shell | No lit environments, reflections or ambient occlusion (FreeCAD's viewer: background only) | Low | K |
+
+## Needs FreeCAD C++ or the kernel (K)
+
+| ID | Gap | Where it stands |
+|---|---|---|
+| G-80 | Fillet G2 (curvature) continuity, Setback corners, Asymmetric radius; Fillet Tangent Chain off | OpenCASCADE limits (fillet.md); shown greyed with the reason |
+| G-81 | Patch Curvature continuity | Core patch #14, in full build #6 (63fe08ff6d) and later |
+| G-82 | A hole's seam line across bent section views | TechDraw's DrawViewSection (C++); straight sections hide it (sf/drawings-2) |
+| G-83 | Sketch Curvature constraint between a spline and an arc | FreeCAD's solver has none (G2 only spline-line) |
+| G-84 | Move Parting Line (Draft) | Kernel (shell-draft-scale.md) |
+
+## Closed
+
+What the waves already closed, by area (kept from the survey of 2026-10-14; newest last).
+
+- **sketch**: Chamfer types with typed values and dimensions (sf/modeling-2); the typed line
+  angle from the X axis matches Fusion's forum answers; a sketch on an edited face shows the
+  part as it is now, and an older sketch edited from the timeline shows its own body rolled
+  back (sf/fix-sketch-face); 3D Sketch on SciForge's own handler, Projected Curves belonging
+  to the sketch, SciForge's own Fillet, line-arc Chamfer (sf/sketch-2).
+- **extrude-presspull**: To Object extend options, Offset and a following Start: Object
+  (sf/modeling-2); a clicked face or corner sets the height, and a held arrow snaps to it
+  (sf/fix-extrude-to-face); value boxes on Move's triad, Scale, Draft and the other handles
+  (sf/polish-2).
+- **fillet**: radius sets, Chord Length, Variable, Tangent Chain off, Rule and Full Round
+  fillets (sf/fillet-2).
+- **hole-thread**: NPT / BSPT, fastener clearance, thread class, curved faces (sf/modeling-2).
+- **patterns**: components (sf/components-2); Compute Option Adjust and the Path start point
+  (sf/modify-2); body patterns and mirrors copy the body as it is at the pattern, roll back
+  with the marker and survive the original's deletion (sf/fix-pattern-bodies).
+- **joints**: Component Drag, position modes, Motion Link, Contact Sets, Motion Study, nested
+  components, no auto-ground (sf/joints-2).
+- **components**: Move/Copy, Set Pivot, Copy/Paste instances, Paste New, component patterns,
+  the marker hiding components, the see-through look (sf/components-2).
+- **drawings**: tolerances, fits, dimension text, ordinate / baseline / chain, Leader, GD&T,
+  sheets, Full / Half / Offset / Aligned sections, depth, breakout and auto centre marks
+  (sf/drawings-2).
+- **bodies**: Combine New Component, multi-tool Split, Set Pivot, component moves
+  (sf/components-2); Move Object Faces (sf/modify-2).
+- **direct-modify**: Press Pull Offset Type and Replace Face onto any surface (sf/modify-2).
+- **revolve**: Objects To Cut for Revolve, Sweep and Loft (sf/modeling-2).
+- **shell-draft-scale**: Parting Line, Two Side, Symmetric, several bodies per step and Scale
+  of sketches (sf/modify-2); Draft of curved and free-form walls (experimental, 2026-10-20).
+- **sweep-loft-rib**: Sweep formulas (sf/modeling-2); solid Loft Tangent Edges Merge, end
   conditions with rails / a centerline, rails on other bodies' edges, parameters for the end
-  values, by sf/surface-2.) Left: Tangent Edges Merge is off by default (OpenCASCADE's volume
-  of a merged side is 5.6 % off); three or more rails are refused; a closed loft with rails or
-  a centerline is refused; no start-point matching for closed lofts; turning rail lofts are
-  about 1 % off.
-- **surface.md**: (Surface Extrude From Object / All / To Object with Chain Faces, Revolve
-  To, Sweep with a guide rail, profile scaling, taper and twist, Loft rails / centerline / end
-  conditions / Merge, Stitch's green edges, by sf/surface-2.) Left: Sweep Path + Guide Rail
-  extents; Extrude All counts the bodies visible when the step was made; no taper from a
-  slanted or curved start; Patch per-edge continuity and Tangency Weight; Extend Align Edges.
-- **text-emboss.md**: (a text frame resized by dragging its corner by sf/sketch-2.)
-- **insert-export.md**: (STEP / IGES open and insert as components, STEP export with
-  structure, IGES / DXF / mesh export, SVG / DXF / Canvas manipulators, Insert Design as a
-  linked component with Break Link, Data Panel Upload, by sf/exchange-2.) Left: bodies inside
-  a component come back as Body1, Body2 after a STEP round trip; an inserted design's own
-  components come in flat; a linked copy can be edited in place; DWG needs a free converter
-  (none bundled); no SAT / SMT / F3D / FBX / USD; no McMaster-Carr; the decal's scale arrow has
-  no value box.
-- **mesh.md**: (Direct Edit with brush / window / free-form selection, delete, move, smooth,
-  Erase and Fill, Reverse Normal; Create / Combine Face Groups; mesh steps roll back with the
-  marker, by sf/mesh-inspect-2.) Left: no contextual ribbon tab (one dialog); Move is an arrow,
-  not Fusion's triad; no Remesh / Reduce on picked face groups; no Shift+F face-group colours.
-- **inspect.md**: (Interference Create Bodies and Measure's Component filter by
-  sf/mesh-inspect-2.) Left: no Cycle Component Color.
-- **inspect-analysis.md**: (Zebra on mesh bodies and Include Sharp Curves in Minimum Radius by
-  sf/mesh-inspect-2.) The other analyses refuse mesh bodies (only Zebra is documented for
-  meshes).
-- **misc.md**: (Decals follow their face through moves, joints, face edits and component
-  copies by sf/fix-decal; Derive keeps the component structure and takes a chosen version, by
-  sf/polish-2.) No adsk add-in API. A decal on a component's copy is listed only under the
-  original; a face that changes shape and moves in one step may lose its decal (red, Select
-  Face puts it back).
-- **selection.md**: (double-click chain selection in sketches, Fusion's box modifiers, box
-  selection of planes, axes and points, by sf/sketch-2.)
-- **timeline-browser.md**: (Groups dragged as a whole, Roll History Marker Here on a group, by
-  sf/polish-2; the rolled-back Extrude switching to Cut was already fixed in 27d4492778.)
-  Groups cannot nest. No New Body command.
-- **versions.md**: (Milestones, automatic version on close, Data Panel Move / Copy of designs,
-  the out-of-date button, by sf/polish-2.) No Move / Copy of whole folders; Get Latest updates
-  every out-of-date reference at once; FreeCAD's Close All Documents still asks FreeCAD's
-  question.
-- **ui-shell.md**: dialogs are docked, not floating. Document tabs are at the bottom. No
-  COMMENTS panel. No lit environments.
-
-## Needs FreeCAD C++ or the kernel
-
-- Patch Curvature continuity: core patch #14, in full build #6 (63fe08ff6d) and later.
-- A hole's seam line across bent section views: TechDraw's DrawViewSection (C++); straight
-  sections hide it (sf/drawings-2).
-- Fillet Tangent Chain off, G2 fillets, setback corners: OpenCASCADE limits (fillet.md).
-- Sketch Curvature constraint: FreeCAD's solver has none (G2 only spline-line).
+  values (sf/surface-2).
+- **surface**: Surface Extrude From Object / All / To Object with Chain Faces, Revolve To,
+  Sweep with a guide rail, profile scaling, taper and twist, Loft rails / centerline / end
+  conditions / Merge, Stitch's green edges (sf/surface-2).
+- **text-emboss**: a text frame resized by dragging its corner (sf/sketch-2).
+- **insert-export**: STEP / IGES open and insert as components, STEP export with structure,
+  IGES / DXF / mesh export, SVG / DXF / Canvas manipulators, Insert Design as a linked
+  component with Break Link, Data Panel Upload (sf/exchange-2). McMaster-Carr: left out on
+  purpose (an online catalogue; a downloaded STEP goes in with Insert STEP).
+- **mesh**: Direct Edit with brush / window / free-form selection, delete, move, smooth, Erase
+  and Fill, Reverse Normal; Create / Combine Face Groups; mesh steps roll back with the
+  marker (sf/mesh-inspect-2).
+- **inspect**: Interference Create Bodies and Measure's Component filter (sf/mesh-inspect-2).
+- **inspect-analysis**: Zebra on mesh bodies and Include Sharp Curves in Minimum Radius
+  (sf/mesh-inspect-2).
+- **misc**: decals follow their face through moves, joints, face edits and component copies
+  (sf/fix-decal); Derive keeps the component structure and takes a chosen version
+  (sf/polish-2).
+- **selection**: double-click chain selection in sketches, Fusion's box modifiers, box
+  selection of planes, axes and points (sf/sketch-2).
+- **timeline-browser**: groups dragged as a whole, Roll History Marker Here on a group
+  (sf/polish-2); the rolled-back Extrude switching to Cut (27d4492778); edits roll the marker
+  back like Fusion (`edit_rollback.py`, experimental 2026-10-21).
+- **versions**: Milestones, automatic version on close, Data Panel Move / Copy of designs, the
+  out-of-date button (sf/polish-2).
+- **ui-shell**: document tabs at the top like Fusion's (2026-10-16, `doc_tabs.py`; the survey
+  of 2026-10-14 still listed them at the bottom).

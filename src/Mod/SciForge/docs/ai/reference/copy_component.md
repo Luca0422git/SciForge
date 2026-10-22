@@ -65,5 +65,5 @@ Done: AI: Paste Wheel. Its id is 'Component002' (shown as 'Wheel:2'). Bodies now
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `comp_paste_instance_follows`, `comp_paste_new_independent`
+- Golden models built with its steps (read one with docs_read golden/<id>): `comp_paste_instance_follows`, `comp_paste_new_independent`, `export_report_design`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

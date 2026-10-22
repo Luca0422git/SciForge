@@ -17,6 +17,33 @@ Every row says where its behaviour comes from:
 - **Forum**: an Autodesk community forum answer (a user or an Autodesk employee).
 - **Guess**: nothing found; SciForge's choice, to confirm in real Fusion.
 
+## Values past what fits stop at the limit (Luca's decision, 2026-10-21)
+
+**This deliberately differs from Fusion.** Fusion refuses a value that does not fit (a
+radius too big, a wall too thick, an angle too steep) with an error, and the dialog waits
+until a smaller value is typed. Luca (2026-10-21): "limit edits to stop at that limit, so if
+I want to chamfer something to the max I can quickly drag it without having to type
+whatever obscure value the error spits out", and "add the functionality to any tool that
+can give that sort of error". So in SciForge (shared helper `sciforge/value_limits.py`):
+
+- an arrow (or disc) dragged past the limit stops there, like the end of a slider; the
+  preview shows that result and a blue note under the message says "Largest that fits
+  here: 3.47 mm" ("Furthest that fits here" for a limit on the other side: a push into the
+  part, a negative angle); OK works at once;
+- a plain number typed past the limit is set to it and the note says so: "5 mm does not
+  fit: limited to 3.47 mm" (the box keeps what is being typed and shows the limit once it
+  is left);
+- the limit is found once (a time-budgeted bisection), rounded toward the safe side to the
+  box's precision (0.01 mm, 0.1 deg) and built once more to be sure; it is kept for the
+  inputs it was found for (the part, the picks, the other values), so a drag never runs a
+  search on every mouse move;
+- a value from a formula or parameter ("width / 2") is never rewritten: the dialog keeps
+  the explanation, with "Largest that fits here: ..." added, and OK waits.
+
+Not held here: MESH > Shell keeps its refusal ("A 2.00 mm wall does not fit: the body is
+... at its thinnest"), which already names the thinnest size; the mesh dialogs have no
+drag handle on the value.
+
 ## Wave 5: Direct Edit, face groups, the history marker (behaviour spec, 2026-10-16)
 
 Sources read (search excerpts): help "Edit a mesh body directly" (MESH-DIRECT-EDIT.htm), "Mesh

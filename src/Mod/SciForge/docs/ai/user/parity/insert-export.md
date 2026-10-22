@@ -86,6 +86,44 @@ Community answer; Guess = no source found, to check in real Fusion)
 - A decal keeps its own manipulator (decal_ui.py: arrows, turn and scale, value boxes on the
   arrows and the turn); its scale arrow has no value box.
 
+## Part 3 (export-report, 2026-10-21): what an export leaves out, what an import skipped
+
+Idea 2 of `docs/sciforge/dev/cadcraft-lessons.md`, approved by Luca: never drop data
+silently. After every export (File > Export, Save As DXF, 3D Print, Export Everything, a
+drawing's Export PDF / DXF) a short card in the bottom right corner of the 3D view says what
+the file does not keep, counted from this design ("Not kept in this file: the timeline (4
+steps); 2 sketches; the colours of 1 body ..."); after Insert Mesh, Insert SVG / DXF and
+Open / Insert STEP it says what did not come in. No card when nothing is lost; no pop-up;
+the same line goes to the Report view. Fusion has no such message (this goes beyond it, as
+CADCraft does); the wording is SciForge's own.
+
+Built in `src/Mod/SciForge/sciforge/`: `export_report_core.py` (no FreeCAD: the rules per
+format and the sentences, unit tested in `test_export_report_core.py`), `export_report.py`
+(the counts from the real design, following each export path exactly; `losses(doc, objects,
+fmt)` is the function the AI tools can call), `export_report_ui.py` (the card). Golden
+models `export_report_design`, `export_report_sketch_dxf`, `export_report_imports` (each
+claim proven by writing the file and reading it back, `golden/export_checks.py`); scenarios
+`export_report`, `import_report`, and `drawing_export` checks the drawing DXF's message.
+
+| File | What it does not keep (checked in FreeCAD 1.1.4) |
+|---|---|
+| Every 3D file | the timeline, sketches, construction planes / axes / points, parameters (values built in), joints, physical materials, cosmetic threads, decals and canvases; hidden bodies and surface bodies are not exported |
+| STEP | keeps components, copies and colours (with the window open; FreeCAD's headless writer has none); see-through looks come out opaque; bodies in a component come back Body1, Body2 ... (a single body at the design's root keeps its name); mesh bodies cannot go in |
+| IGES | no components, no colours, no names (one unnamed product); mesh bodies cannot go in |
+| STL | one mesh (several bodies merged: no names, no parts), no colours, no unit; curved faces become triangles |
+| 3MF | names and unit kept; no colours, no components; curved faces become triangles |
+| OBJ | names kept (groups); no colours (no material file), no unit, no components |
+| DXF / DWG of a sketch | dimensions, constraints, construction curves, points, projected curves; flat in the sketch's own X and Y |
+| Drawing DXF | dimensions and symbols as plain lines and text, curves that are not circles / arcs as short lines, hatching as separate lines, no named font; hidden views; the other sheets with Current Sheet |
+| Drawing PDF | hidden views; the other sheets with Current Sheet |
+
+Imports: Insert Mesh (open edges, edges shared by more than two triangles, flipped
+triangles, a 3MF's several objects in one body, its colours, its own unit when it differs
+from Unit Type), Insert DXF (entities FreeCAD's importer cannot read, from its own
+statistics; texts / dimensions and points, which are not curves), Insert SVG (texts,
+pictures), Open / Insert STEP and IGES (loose faces of a part that also has solids, loose
+curves and points, loose faces sewn into surface bodies, shapes with errors).
+
 ## Sources (Part 1)
 
 Autodesk's public help and support pages (read through search summaries on 2026-10-13; the

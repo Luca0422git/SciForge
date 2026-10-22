@@ -122,5 +122,5 @@ Done: AI: Extrude 5 mm. Its id is 'Extrude2'. Bodies now: Body1: 36446 mm3, 61.7
 - Recipe: [sheet-like U bracket (thin extrude with bends)](sciforge://docs/recipes/sheet-like-part.md)
 - Recipe: [cantilever snap-fit hook](sciforge://docs/recipes/snap-fit.md)
 - Recipe: [threaded fastener (hex bolt M8 x 30)](sciforge://docs/recipes/threaded-fastener.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain`, `blend_fillet_top_face`, `blend_insert_chamfer_before_fillet`, `bodies_combine_cut`, `bodies_combine_cut_cylinder` and 336 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain`, `blend_fillet_top_face`, `blend_insert_chamfer_before_fillet`, `bodies_combine_cut`, `bodies_combine_cut_cylinder` and 339 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

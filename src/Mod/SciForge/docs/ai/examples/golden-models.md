@@ -2,7 +2,7 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-SciForge's golden models are 450 small designs, each a list of design steps with the measurements the finished part must have (volume, area, faces, bounding box), worked out by hand where possible (`expect.source: analytic`, the formula in `expect.note`). The tests rebuild every one in real FreeCAD. They prove what each feature does and show which options exist. Their steps are SciForge's design-step language (what the AI tools build), not tool calls: the table at the end gives the tools that build each op. Read one with docs_read `golden/<id>` (or the resource sciforge://examples/golden/<id>); examples_search finds them by words, op, tool or tag. Models marked (known gap) document something SciForge does not do yet.
+SciForge's golden models are 453 small designs, each a list of design steps with the measurements the finished part must have (volume, area, faces, bounding box), worked out by hand where possible (`expect.source: analytic`, the formula in `expect.note`). The tests rebuild every one in real FreeCAD. They prove what each feature does and show which options exist. Their steps are SciForge's design-step language (what the AI tools build), not tool calls: the table at the end gives the tools that build each op. Read one with docs_read `golden/<id>` (or the resource sciforge://examples/golden/<id>); examples_search finds them by words, op, tool or tag. Models marked (known gap) document something SciForge does not do yet.
 
 ## By feature
 
@@ -544,6 +544,11 @@ Each model is listed under its first tag; its other tags follow it.
 - `inspect_com_materials`: Center of Mass of a steel and an aluminium box (mass-weighted) [center-of-mass, material]
 - `inspect_measure_section`: Box with a round boss: Measure distances / angles and Section Analysis cuts [measure, section]
 
+### export (2)
+
+- `export_report_design`: Export report: what STEP, IGES, STL, 3MF and OBJ leave out of a design with components, a hidden body and a material [export-report, components]
+- `export_report_sketch_dxf`: Export report: what Save As DXF leaves out of a sketch (dimensions, constraints, construction, points, its place in 3D) [export-report, dxf, sketch]
+
 ### picks (2)
 
 - `picks_fillet_chamfer_kept_after_reopen`: A round and a chamfer keep their edges when the extrude under them gets a taper, after the design was saved and opened again [reference-stability, reopen]
@@ -552,6 +557,10 @@ Each model is listed under its first tag; its other tags follow it.
 ### coil (1)
 
 - `sf_coil_old_narrow_upgraded`: A narrowing coil saved by SciForge before the 2026-10-11 fixes (its mirror image) is rebuilt right when the file is opened [reopen, upgrade]
+
+### import (1)
+
+- `export_report_imports`: Import report: what Insert Mesh, Insert DXF / SVG and Open / Insert STEP say did not come in [export-report]
 
 ### join (1)
 
@@ -577,10 +586,10 @@ Each model is listed under its first tag; its other tags follow it.
 | `align_bodies` | `align` | 2 | `direct_align_block_on_table`, `direct_align_flip_angle` |
 | `blend_chamfer` | `chamfer` | 5 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `picks_fillet_chamfer_kept_after_reopen` |
 | `blend_edit` | `edit_step` | 1 | `blend_edit_keeps_later_chamfer` |
-| `blend_fillet` | `fillet` | 10 | `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain` |
+| `blend_fillet` | `fillet` | 11 | `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain` |
 | `blend_insert` | `fillet`, `chamfer` | 1 | `blend_insert_chamfer_before_fillet` |
 | `blend_radius_expect` | (a test helper) | 1 | `fillet2_variable_points` |
-| `body_material` | `physical_material` | 1 | `inspect_com_materials` |
+| `body_material` | `physical_material` | 2 | `export_report_design`, `inspect_com_materials` |
 | `body_tool_edit` | `edit_step` | 4 | `bodies_combine_edit_operation`, `bodies_move_edit`, `bodies_move_two_bodies`, `bodies_split_edit_tool` |
 | `chamfer` | (a test helper) | 2 | `chamfer_one_edge`, `chamfer_top_edges` |
 | `check` | (a test helper) | 59 | `blend_edit_keeps_later_chamfer`, `blend_fillet_edit_radius`, `blend_insert_chamfer_before_fillet`, `bodies_combine_edit_operation`, `bodies_combine_follows_tool` |
@@ -588,9 +597,9 @@ Each model is listed under its first tag; its other tags follow it.
 | `com_expect` | (a test helper) | 2 | `inspect_com_interference`, `inspect_com_materials` |
 | `combine` | `combine` | 10 | `bodies_combine_cut`, `bodies_combine_cut_cylinder`, `bodies_combine_edit_operation`, `bodies_combine_follows_tool`, `bodies_combine_intersect` |
 | `component_move` | `move_copy` | 3 | `comp_move_captured_roll`, `comp_move_rotate_pivot`, `pattern_bodies_in_moved_component` |
-| `component_paste` | `copy_component` | 2 | `comp_paste_instance_follows`, `comp_paste_new_independent` |
+| `component_paste` | `copy_component` | 3 | `comp_paste_instance_follows`, `comp_paste_new_independent`, `export_report_design` |
 | `component_pattern` | `pattern_components` | 2 | `comp_pattern_circular_6`, `comp_pattern_rect_extent` |
-| `components_from_bodies` | `components_from_bodies` | 7 | `comp_move_captured_roll`, `comp_move_rotate_pivot`, `comp_paste_instance_follows`, `comp_paste_new_independent`, `comp_pattern_circular_6` |
+| `components_from_bodies` | `components_from_bodies` | 8 | `comp_move_captured_roll`, `comp_move_rotate_pivot`, `comp_paste_instance_follows`, `comp_paste_new_independent`, `comp_pattern_circular_6` |
 | `construct` | `construct_plane`, `construct_axis`, `construct_point` | 6 | `inspect_angle_plane_notch`, `inspect_construct_all`, `inspect_midplane_hole`, `inspect_offset_plane_boss`, `inspect_offset_plane_to_object` |
 | `construct_expect` | (a test helper) | 6 | `inspect_angle_plane_notch`, `inspect_construct_all`, `inspect_midplane_hole`, `inspect_offset_plane_boss`, `inspect_offset_plane_to_object` |
 | `construct_extrude` | (a test helper) | 5 | `inspect_angle_plane_notch`, `inspect_midplane_hole`, `inspect_offset_plane_boss`, `inspect_offset_plane_to_object`, `inspect_three_points_oblique_hole` |
@@ -603,16 +612,19 @@ Each model is listed under its first tag; its other tags follow it.
 | `expect_component` | (a test helper) | 1 | `sf_cylinder_new_component` |
 | `expect_move_refused` | (a test helper) | 1 | `extrude_multi_move` |
 | `expect_radius` | (a test helper) | 1 | `sf_sweep_guide_surface` |
-| `extrude` | `extrude` | 348 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
+| `export_report_expect` | (a test helper) | 2 | `export_report_design`, `export_report_sketch_dxf` |
+| `extrude` | `extrude` | 351 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
 | `fillet` | (a test helper) | 14 | `bodies_delete_face_fillet`, `bracket_inner_fillet`, `edit_fillet_radius`, `edit_width_after_fillet_and_hole`, `fillet_all_edges` |
 | `fillet_sets` | `fillet_sets` | 8 | `fillet2_chamfer_sets_angle_flip`, `fillet2_chord_90_120`, `fillet2_face_and_its_edge_in_two_sets`, `fillet2_presspull_set_radius`, `fillet2_sets_tangent_chain_each` |
 | `full_round` | `full_round_fillet` | 1 | `fillet2_full_round_rib` |
 | `fusion_mirror` | `mirror` | 8 | `mirror_body_join_face`, `mirror_body_new_body`, `mirror_body_new_body_move_after`, `mirror_faces_hole`, `mirror_features_yz_fusion` |
+| `hide_bodies` | (a test helper) | 1 | `export_report_design` |
 | `history_off` | `capture_design_history` | 1 | `direct_history_off_on` |
 | `history_on` | `capture_design_history` | 1 | `direct_history_off_on` |
 | `hole` | `hole` | 3 | `hole_blind`, `hole_counterbore`, `hole_countersink` |
 | `hole_at` | `hole` | 17 | `hardware_countersunk_m4_on_rim`, `hole_clearance_countersunk`, `hole_clearance_m6`, `hole_clearance_socket_cbore`, `hole_curved_follows` |
 | `hole_points` | `hole` | 1 | `hole_points_flipped` |
+| `import_report_expect` | (a test helper) | 1 | `export_report_imports` |
 | `interference_expect` | (a test helper) | 1 | `inspect_com_interference` |
 | `measure_bodies` | (a test helper) | 28 | `bodies_combine_tool_deleted`, `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit` |
 | `measure_components` | (a test helper) | 3 | `comp_paste_instance_follows`, `comp_paste_new_independent`, `pattern_bodies_in_moved_component` |
@@ -623,7 +635,7 @@ Each model is listed under its first tag; its other tags follow it.
 | `move_bodies` | `move_copy` | 12 | `bodies_move_copy`, `bodies_move_edit`, `bodies_move_free`, `bodies_move_point_to_point`, `bodies_move_point_to_position` |
 | `move_face` | `move_copy` | 5 | `modify2_move_face_boss_down`, `modify2_move_face_edit`, `modify2_move_face_hole`, `modify2_move_face_tilt`, `modify2_move_face_top` |
 | `move_face_edit` | `edit_step` | 1 | `modify2_move_face_edit` |
-| `parameter` | `set_parameter` | 12 | `param_driven_box`, `pattern_quantity_parameter`, `pattern_symmetric_parameter`, `sf_box_param_driven`, `sf_coil_param_driven` |
+| `parameter` | `set_parameter` | 13 | `export_report_design`, `param_driven_box`, `pattern_quantity_parameter`, `pattern_symmetric_parameter`, `sf_box_param_driven` |
 | `path_pattern` | `pattern_on_path` | 4 | `modify2_pattern_path_auto_start`, `modify2_pattern_path_start_point`, `pattern_path_bosses`, `pattern_path_circle_turned` |
 | `pattern_circ` | `pattern` | 1 | `flange_polar_holes` |
 | `pattern_edit` | `edit_step` | 2 | `pattern_edit_keeps_later_fillet`, `pattern_edit_quantity_fusion` |
@@ -672,7 +684,8 @@ Each model is listed under its first tag; its other tags follow it.
 | `sf_sweep_edit` | `edit_step` | 1 | `sf_sweep_edit_distance` |
 | `shell` | `shell` | 3 | `edit_extrude_then_shell`, `shell_filleted_box`, `shell_open_box` |
 | `silhouette_split` | `silhouette_split` | 3 | `direct_silhouette_body_sphere`, `direct_silhouette_edit_to_faces`, `direct_silhouette_faces_sphere` |
-| `sketch` | `create_sketch` | 386 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
+| `sketch` | `create_sketch` | 389 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
+| `sketch_extras` | (a test helper) | 1 | `export_report_sketch_dxf` |
 | `sketch_polygon` | `sketch_polygon` | 2 | `sketch_inscribed_pentagon`, `sketch_nut_trap_polygon` |
 | `sketch_trim` | `sketch_trim` | 1 | `sketch_trim_union` |
 | `split_body` | `split_body` | 6 | `bodies_split_by_body`, `bodies_split_edit_tool`, `bodies_split_face_extended`, `bodies_split_sketch_line`, `bodies_split_two_planes` |

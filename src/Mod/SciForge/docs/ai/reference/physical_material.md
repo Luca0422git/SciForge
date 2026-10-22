@@ -59,5 +59,5 @@ Done: Body1 is Aluminium, 64.8 g.
 ## See also
 
 - Recipe: [L bracket with mounting holes](sciforge://docs/recipes/bracket.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `inspect_com_materials`
+- Golden models built with its steps (read one with docs_read golden/<id>): `export_report_design`, `inspect_com_materials`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)
