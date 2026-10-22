@@ -1415,9 +1415,10 @@ class Panel:
     # waits HELD_REST times its last cost (between HELD_REST_MIN_MS and HELD_REST_MAX_MS), so
     # a hesitation on a heavy part does not start a rebuild that then freezes the next mouse
     # moves (review finding DRAFT-2-F3); letting go rebuilds at once (handle_released).
-    HELD_REST = 2.0
+    # (A stop longer than HELD_REST_MAX_MS is a look: rebuilt even with the button down.)
+    HELD_REST = 1.5
     HELD_REST_MIN_MS = 100
-    HELD_REST_MAX_MS = 900
+    HELD_REST_MAX_MS = 450
     # A rebuild cheaper than this tells nothing of the cost (Press Pull or Extrude at 0
     # builds next to nothing)
     TRIVIAL_COST = 0.03

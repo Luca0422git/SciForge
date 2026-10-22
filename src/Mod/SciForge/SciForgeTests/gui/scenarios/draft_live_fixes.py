@@ -286,11 +286,10 @@ def f2_check():
 
 # -- F3: the wedge's sloping top -----------------------------------------------------------------
 def f3_typed(angle):
+    """Type the angle; the picture's points are compared with the exact preview the dialog
+    builds once the typing rests (f3_check), and with drafting.draft_shape."""
+
     def step():
-        import Part
-
-        from sciforge import drafting
-
         p = panel()
         sd.type_into(p.angle.widget, "%g" % angle)
         live = p._live
@@ -298,31 +297,54 @@ def f3_typed(angle):
             h.check("F3: picture made at %g deg" % angle, False)
             return
         pic = live.pictures[0]
-        faces, lines = pic.points_at(float(angle))
+        S["f3"] = (pic, pic.points_at(float(angle)))
+
+    step.__name__ = "f3_typed_%g" % angle
+    step.wait_ms = 2500
+    return step
+
+
+def f3_check(angle):
+    def step():
+        import Part
+
+        from sciforge import drafting
+
+        p = panel()
+        if "f3" not in S:
+            return
+        pic, (faces, lines) = S.pop("f3")
         options = dict(p._spec_options())
         options["angle"] = float(angle)
-        exact = drafting.draft_shape(
+        scratch = drafting.draft_shape(
             p.base.Shape, list(p.names()), drafting.build_spec(p.plane_ref, options, p.base)
         )
+        preview = p.target.Shape  # the step built in the document (global coordinates)
 
-        def worst(points):
+        def worst(points, exact, local):
             out = 0.0
             for q in points:
                 v = V(*q)
-                if pic.placement is not None:
+                if local and pic.placement is not None:
                     v = pic.placement.inverse().multVec(v)
                 out = max(out, exact.distToShape(Part.Vertex(v))[0])
             return round(out, 4)
 
-        info = {"faces": worst(faces), "lines": worst(lines), "points": len(faces)}
+        info = {
+            "preview: faces": worst(faces, preview, False),
+            "preview: lines": worst(lines, preview, False),
+            "draft_shape: faces": worst(faces, scratch, True),
+            "draft_shape: lines": worst(lines, scratch, True),
+            "preview angle": kept_angle(),
+        }
         h.check(
             "F3: wedge at %g deg: the picture lies on the exact solid" % angle,
-            info["faces"] < 2e-3 and info["lines"] < 2e-3,
+            info["preview angle"] == float(angle)
+            and max(v for k, v in info.items() if ":" in k) < 2e-3,
             info,
         )
 
-    step.__name__ = "f3_typed_%g" % angle
-    step.wait_ms = 2500
+    step.__name__ = "f3_check_%g" % angle
     return step
 
 
@@ -367,11 +389,12 @@ def f6_typed(text):
 def f6_check_60():
     p = panel()
     h.check(
-        "F6: YZ body, 60 deg is accepted",
+        "F6: YZ body, then 60 deg is accepted (it was held at a false 36.8)",
         p.options.get("angle") == 60.0 and not p.limits.note and not p.error,
         (p.options.get("angle"), p.limits.note, p.error),
     )
     h.check("F6: the preview at 60 deg", kept_angle() == 60.0, kept_angle())
+    cancel()
 
 
 def f6_check_80():
@@ -381,7 +404,6 @@ def f6_check_80():
         p.options.get("angle") == 71.5,
         (p.options.get("angle"), p.limits.note),
     )
-    cancel()
 
 
 # -- 2-F7: a held limit inside the disc's snap-to-0 zone -------------------------------------------
@@ -459,13 +481,15 @@ h.run(
         f1_enter,
         f1_check,
         opener("YZBox", YZBOX, front_faces, 2500),
-        f6_typed("60"),
-        f6_check_60,
         f6_typed("80"),
         f6_check_80,
+        f6_typed("60"),
+        f6_check_60,
         opener("Wedge", WEDGE, front_faces, 2500),
         f3_typed(15),
+        f3_check(15),
         f3_typed(5),
+        f3_check(5),
         cancel,
         opener("Refused", FILLETED, front_faces, 2500),
         f4_typed,

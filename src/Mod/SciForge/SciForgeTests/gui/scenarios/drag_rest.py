@@ -315,8 +315,10 @@ def draft_hesitant_check():
     last = probe.moves[-1]
     during = [(ms(s - probe.press), ms(e - s), v) for s, e, v in probe.rebuilds if s <= last]
     cost = S.get("draft cost")
-    if cost is not None and cost * 2.0 * 1000.0 < 340:
-        # a quicker machine: a rebuild of under 0.17 s may run in a 0.32 s stop (as designed)
+    from sciforge import taskui
+
+    if cost is not None and cost * taskui.Panel.HELD_REST * 1000.0 < 340:
+        # a quicker machine: a quick rebuild may run in a 0.32 s stop (as designed)
         h.check("2-F3: (rebuild quick enough to run in a short stop)", True, cost)
         return
     h.check(

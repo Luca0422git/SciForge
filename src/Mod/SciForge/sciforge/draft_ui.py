@@ -1176,7 +1176,12 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         the search runs to its end at once (OK takes the held angle and closes in one press:
         review finding DRAFT-1-F1), else in the background (limit_refused_soon)."""
         if self._accepting:
-            return "again" if self.limit_refused(reason) else None
+            # a part of a few hundred faces takes a few seconds (one trial draft ~0.3 s)
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+            try:
+                return "again" if self.limit_refused(reason) else None
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
         return self.limit_refused_soon(reason, self._limit_searched, self._dragging)
 
     def _dragging(self):
@@ -1456,7 +1461,12 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 return False
             self._accepting = True
             try:
-                self.limit_finish()  # a search of the steepest angle still running: its end now
+                if self.limit_searching():  # the search still running: its end now
+                    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+                    try:
+                        self.limit_finish()
+                    finally:
+                        QtWidgets.QApplication.restoreOverrideCursor()
                 self._timer.stop()
                 self._preview()  # an angle past what fits is held at the limit here (at once)
             finally:
