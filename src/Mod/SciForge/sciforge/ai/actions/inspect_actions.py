@@ -163,12 +163,40 @@ def measure(ctx, args):
 
     builder = ctx.builder()
     a = inspect_ops._ref(builder, args["a"], "measure a")
+    first = measuring.entity(*a)
+    details = {"a": _entity_info(measuring, first)}
+    if "b" not in args:
+        rows = details["a"]["properties"]
+        words = ", ".join(
+            "%s %.6g %s" % (k.rsplit("_", 1)[0].replace("_", " "), v, k.rsplit("_", 1)[-1])
+            for k, v in rows.items()
+        )
+        return json_result(details, "Measured a (%s): %s." % (details["a"]["kind"], words))
     b = inspect_ops._ref(builder, args["b"], "measure b")
-    found = measuring.relation(measuring.entity(*a), measuring.entity(*b))
+    second = measuring.entity(*b)
+    found = measuring.relation(first, second)
     words = ["distance %.6g mm" % found["distance"]]
     if found.get("angle") is not None:
         words.append("angle %.6g degrees" % found["angle"])
-    return bridge_core.result("Measured: " + ", ".join(words) + ".")
+    details["b"] = _entity_info(measuring, second)
+    details.update(
+        distance_mm=_round(found["distance"]),
+        angle_deg=_round(found["angle"]) if found.get("angle") is not None else None,
+        delta_mm=[_round(found["dx"]), _round(found["dy"]), _round(found["dz"])],
+        nearest_points_mm=[[_round(c) for c in p] for p in found["points"]],
+    )
+    return json_result(details, "Measured: " + ", ".join(words) + ".")
+
+
+_UNITS = {"length": "mm", "area": "mm2", "volume": "mm3", "angle": "deg", "coordinate": "mm"}
+
+
+def _entity_info(measuring, entity):
+    """What one pick is, as Fusion's Measure shows it: {kind, properties {name_unit: value}}."""
+    rows = {}
+    for name, value, quantity in measuring.properties(entity):
+        rows["%s_%s" % (name.lower().replace(" ", "_"), _UNITS.get(quantity, ""))] = _round(value)
+    return {"kind": entity.kind, "properties": rows}
 
 
 def _chosen_bodies(ctx, args):

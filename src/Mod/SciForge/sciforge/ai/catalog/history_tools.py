@@ -776,6 +776,7 @@ HELP_TOPICS = (
     "steps",
     "expressions",
     "workflow",
+    "checking",
     "tools",
 )
 define(
@@ -786,8 +787,9 @@ define(
     "Read SciForge's rules for AI tools: overview, selectors (how to pick faces and edges), "
     "picks (planes, axes, faces, edges, corners), body_picks, sketches (planes and "
     "coordinates), geometry (sketch shapes), curves (paths and rails), steps (ids), "
-    "expressions (parameters in fields), workflow (how to build and check a part), tools "
-    "(every tool by category with its Fusion command). Without topic: overview.",
+    "expressions (parameters in fields), workflow (how to build and check a part), checking "
+    "(the tools that check your work with numbers and pictures), tools (every tool by "
+    "category with its Fusion command). Without topic: overview.",
     schema({"topic": enum(HELP_TOPICS, default="overview")}),
     changes=False,
     needs=(),

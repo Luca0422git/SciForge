@@ -142,6 +142,19 @@ class Host:
     def view(self, doc):
         return None
 
+    def selection(self, doc):
+        """What the person has selected in the design: [{object, label, elements}] (none
+        without the window)."""
+        return []
+
+    def push_highlight(self, doc, marked):
+        """Show marked faces / edges (render's highlight) in the window; returns what to
+        put back with pop_highlight. Nothing to do without the window."""
+        return None
+
+    def pop_highlight(self, doc, saved):
+        pass
+
     def screenshot(self, doc, width, height):
         raise UserError(catalog.NEEDS["gui"])
 
@@ -194,14 +207,21 @@ def run(tool, args, host):
         if not ok:
             return bridge_core.error_result(why)
         ctx = Context(host, tool, args)
-        if entry["kind"] == "steps":
-            return ctx.build()
         from . import actions
+        from .actions import verify_actions
 
-        handler = actions.ACTIONS.get(tool)
-        if handler is None:
-            return bridge_core.error_result("SciForge cannot do %s yet." % tool)
-        return handler(ctx, args)
+        doc = App.ActiveDocument
+        before = verify_actions.before_change(doc) if entry["changes_design"] else None
+        if entry["kind"] == "steps":
+            answer = ctx.build()
+        else:
+            handler = actions.ACTIONS.get(tool)
+            if handler is None:
+                return bridge_core.error_result("SciForge cannot do %s yet." % tool)
+            answer = handler(ctx, args)
+        if before is not None and not answer.get("is_error"):
+            verify_actions.after_change(before["doc"], before)  # (diff_design last_change)
+        return answer
     except UserError as exc:
         return bridge_core.error_result(str(exc))
     except Exception as exc:  # never let a tool call end SciForge

@@ -368,6 +368,53 @@ class GuiHost(executor.Host):
         view = gui_doc.ActiveView if gui_doc is not None else None
         return view if view is not None and hasattr(view, "saveImage") else None
 
+    def selection(self, doc):
+        from . import geometry_facts
+
+        rows = []
+        for sel in Gui.Selection.getSelectionEx(doc.Name):
+            obj = sel.Object
+            row = {"object": obj.Name, "label": obj.Label, "elements": []}
+            subs = [n.split(".")[-1] for n in sel.SubElementNames if n]
+            row["elements"] = subs
+            try:
+                shape = obj.Shape
+                for element, prefix in (("faces", "Face"), ("edges", "Edge")):
+                    wanted = {n for n in subs if n.startswith(prefix)}
+                    if wanted:
+                        refs = geometry_facts.stable_refs(shape, element, wanted)
+                        row.setdefault("refs", {}).update(refs)
+            except Exception:
+                pass
+            rows.append(row)
+        return rows
+
+    def push_highlight(self, doc, marked):
+        source = marked.get("source") if marked else None
+        if source is None:
+            return None
+        saved = []
+        for sel in Gui.Selection.getSelectionEx(doc.Name, 0):
+            names = sel.SubElementNames or ("",)
+            saved += [(sel.Object.Name, n) for n in names]
+        Gui.Selection.clearSelection()
+        for name in sorted(marked["faces"]) + sorted(marked["edges"]):
+            try:
+                Gui.Selection.addSelection(doc.Name, source.Name, name)
+            except Exception as exc:
+                warn("AI render: %s" % exc)
+        return saved
+
+    def pop_highlight(self, doc, saved):
+        if saved is None:
+            return
+        try:
+            Gui.Selection.clearSelection()
+            for name, sub in saved:
+                Gui.Selection.addSelection(doc.Name, name, sub)
+        except Exception as exc:
+            warn("AI render: %s" % exc)
+
     def screenshot(self, doc, width, height):
         from .. import capture_ui
 

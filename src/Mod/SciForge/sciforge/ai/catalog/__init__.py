@@ -13,8 +13,9 @@ the Claude extension's manifest (installers) and the generated documentation.
 
 The tools are defined in the modules below, grouped like Fusion's ribbon: core_tools (the
 first sixteen, whose names and argument shapes never change), sketch_tools, create_tools,
-modify_tools, more_tools (surface, construct, assemble, inspect) and history_tools
-(timeline, parameters, files, drawings, view, help). There is no tool that runs arbitrary
+modify_tools, more_tools (surface, construct, assemble, inspect), history_tools
+(timeline, parameters, files, drawings, view, help) and verify_tools (the tools an agent checks
+its own work with: inspect_design, query_geometry, check_design, render, diff_design). There is no tool that runs arbitrary
 code. Pure Python: no FreeCAD, no Qt (the MCP server an AI app starts imports it).
 """
 
@@ -27,6 +28,7 @@ from . import create_tools  # noqa: F401
 from . import modify_tools  # noqa: F401
 from . import more_tools  # noqa: F401
 from . import history_tools  # noqa: F401
+from . import verify_tools  # noqa: F401  (checking: inspect_design, query_geometry, render...)
 from .kit import (  # noqa: F401  (the shared texts, re-exported)
     BODY_PICK_HELP,
     CURVES_HELP,
@@ -150,6 +152,11 @@ def mcp_tools():
 CHAT_ORDER = (
     "list_tools",
     "get_help",
+    "inspect_design",
+    "query_geometry",
+    "check_design",
+    "render",
+    "diff_design",
     "get_timeline",
     "get_step",
     "edit_step",
@@ -296,19 +303,37 @@ OVERVIEW = (
     + UNITS
     + " Faces and edges are picked with selectors that describe their geometry (get_help "
     "topic selectors), never by internal names. " + STEP_HELP + " Errors come back as plain "
-    "sentences: read them, fix the arguments and try again. Read-only tools (get_design, "
-    "get_timeline, get_step, measure, physical_properties...) never change anything."
+    "sentences: read them, fix the arguments and try again. Read-only tools (inspect_design, "
+    "query_geometry, check_design, render, diff_design, get_design, get_timeline, get_step, "
+    "measure, physical_properties...) never change anything."
 )
 WORKFLOW = (
-    "1. get_design (or list_designs / new_design / open_design) to see what is there. "
-    "2. Build: create_sketch on a plane, then extrude / revolve / sweep / loft; primitive, "
-    "coil, pipe, gear make solids directly; hole, thread, fillet, chamfer, shell, draft "
-    "change the solid. 3. After every change check the numbers it answers (volumes, bounding "
-    "boxes) and, when in doubt, get_design, measure, physical_properties or screenshot. "
+    "1. inspect_design (or get_design, list_designs / new_design / open_design) to see what "
+    "is there. 2. Build: create_sketch on a plane, then extrude / revolve / sweep / loft; "
+    "primitive, coil, pipe, gear make solids directly; hole, thread, fillet, chamfer, shell, "
+    "draft change the solid. 3. After every change check the numbers it answers (volumes, "
+    "bounding boxes); diff_design since last_change says exactly what it did; query_geometry "
+    "lists the faces / edges a selector picks (with a stable ref for each) before you fillet "
+    "or chamfer them; check_design says whether the design is sound; render returns a picture "
+    "(highlight shows what a selector picks). Trust the numbers first, the picture second. "
     "4. Name things with set_parameter and expressions so the design stays easy to change; "
     "edit_step and set_model_parameter change what exists; get_timeline shows the history "
     "and roll_timeline / suppress_step / move_step / delete_step change it. 5. undo takes "
     "back the last change. 6. save / save_as / export / export_drawing write files."
+)
+CHECKING_HELP = (
+    "Check your work with numbers before trusting a picture. inspect_design: every body "
+    "(valid?, volume, area, bounding box, centre of mass, faces / edges / corners), every "
+    "step (state, error message, values), parameters, components, joints, the selection; it "
+    "answers a snapshot id. diff_design since that id, since last_change or since a step id: "
+    "what changed (bodies, steps, parameters). query_geometry: the faces / edges / corners a "
+    "selector picks with their facts (type, area / length, normal, axis, radius, centre) and "
+    "a ref, a selector that picks exactly that element: give it to fillet / chamfer / shell "
+    "/ draft, or pick ({\"face\": ref}) to measure / create_sketch. check_design: invalid "
+    "or open solids, bodies in several pieces, failed steps, overlapping bodies. measure: the "
+    "distance / angle between two picks, or the size of one. render: a PNG picture (iso, "
+    "front, top... or a direction), highlight marks faces / edges in orange; it works "
+    "without the window too (renderer software)."
 )
 HELP = {
     "overview": OVERVIEW,
@@ -323,6 +348,7 @@ HELP = {
     + " User parameters are made with set_parameter; formulas use their names with + - * / "
     "( ) and mm / deg units.",
     "workflow": WORKFLOW,
+    "checking": CHECKING_HELP,
 }
 
 
@@ -361,4 +387,6 @@ INSTRUCTIONS = (
     + SKETCH_HELP
     + " Curves: "
     + CURVES_HELP
+    + " Checking: "
+    + CHECKING_HELP
 )

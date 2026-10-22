@@ -855,8 +855,10 @@ define(
     "INSPECT > Measure",
     "Measure between two picks a and b of the current body or the origin: "
     "the minimum distance (mm) and, where it makes sense, the angle (degrees), like "
-    "SciForge's Measure tool. " + kit.PICK_HELP + " " + SELECTOR_HELP,
-    schema({"a": pick("the first pick"), "b": pick("the second pick")}, ["a", "b"]),
+    "SciForge's Measure tool; also the X / Y / Z distances, the two nearest points and what "
+    "each pick is (length, area, radius...). Only a: the size of that one pick (an edge's "
+    "length and radius, a face's area and perimeter). " + kit.PICK_HELP + " " + SELECTOR_HELP,
+    schema({"a": pick("the first pick"), "b": pick("the second pick (optional)")}, ["a"]),
     changes=False,
     needs=("design",),
     extra=_extra_measure,

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The AI tools that are not design steps (sciforge/ai/catalog says which): reading the
 design, the timeline, parameters, design files, drawings, the view, sketch editing,
-assembly. Each action is a function (ctx, args) -> bridge_core result, registered with
+assembly, and the checking tools (verify_actions). Each action is a function (ctx, args) -> bridge_core result, registered with
 @action("tool name"); sciforge/ai/executor.py calls it after the arguments were checked and
 the tool is available. Actions call the same SciForge code as the commands and dialogs
 (timeline_ops, parameters, drawing, joints...), never raw FreeCAD calls that would skip
@@ -25,3 +25,4 @@ from . import timeline_actions  # noqa: E402,F401
 from . import assemble_actions  # noqa: E402,F401
 from . import drawing_actions  # noqa: E402,F401
 from . import view_actions  # noqa: E402,F401
+from . import verify_actions  # noqa: E402,F401
