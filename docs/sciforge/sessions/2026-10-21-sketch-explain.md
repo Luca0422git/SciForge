@@ -112,9 +112,12 @@ is the session's log.
 - The rings are placed at a dimension's value or by the middle of the constrained curves, not
   exactly on FreeCAD's glyphs; they do not follow a zoom/pan (the next wheel turn or click
   ends the highlight anyway).
-- Finding a redundancy's culprits switches up to 150 connected constraints off one at a time
-  (at most 1.5 s); on a very large sketch the list can be incomplete (then the constraints on
-  the same curves are named).
+- Finding a redundancy's culprits switches up to 150 connected constraints off one at a time.
+  (Corrected on 2026-10-22, docs/sciforge/sessions/2026-10-22-fix-sketch.md: the "at most
+  1.5 s" written here was not true, the solves before and after were not counted and the
+  candidates were tried in index order. Now the nearest are tried first, the whole search
+  including its solves stops after 1 s, and a cut-short list is said to be only part of the
+  reason, without guessing.)
 - Messages are English only, like the rest of SciForge.
 
 ## Tests
