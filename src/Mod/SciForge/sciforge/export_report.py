@@ -188,6 +188,9 @@ def design_facts(doc, objects=None, fmt="step", unit="Millimeter", per_body=Fals
         "unit": unit or "Millimeter",
         "per_body": bool(per_body),
         "colours_written": False,
+        # a list of bodies is written flat, STEP too (exchange._mirror_document, scope
+        # "bodies"; export.export_step): their components are not in the file
+        "flat": scope == "bodies",
     }
     # left out
     if scope == "bodies":

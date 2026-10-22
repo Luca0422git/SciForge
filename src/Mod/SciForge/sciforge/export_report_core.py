@@ -279,7 +279,7 @@ def items(fmt, facts, purpose="file"):
         _left_out(facts, fmt, out)
         _history(facts, out, design_wide=facts.get("scope", "design") != "bodies")
         comps = _n(facts, "components")
-        if comps and fmt != "step":
+        if comps and (fmt != "step" or facts.get("flat")):  # (STEP keeps them, unless flat)
             out.append(
                 _item(
                     "components",

@@ -1197,6 +1197,22 @@ SESSION = [
         "expect": "error",
         "contains": ["more than 0"],
     },
+    # A refused call changes nothing, but trying it empties the Redo list: the answer says so
+    # (review X5)
+    {"tool": "extrude", "args": {"profile": "$s_origin", "distance": 5}},
+    {
+        "tool": "fillet",
+        "args": {"edges": {"type": "circle", "at": {"axis": "z", "value": "max"}, "count": 1},
+                 "radius": 1},
+    },
+    {"tool": "undo", "args": {}, "contains": ["Fillet 1 mm"]},
+    {
+        "tool": "fillet",
+        "args": {"edges": {"type": "circle", "at": {"axis": "z", "value": "max"}, "count": 1},
+                 "radius": 50},
+        "expect": "error",
+        "contains": ["that fits here", "emptied the Redo list: 'AI: Fillet 1 mm'"],
+    },
 ]
 
 

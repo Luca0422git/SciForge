@@ -199,6 +199,43 @@ def run(tool, args, host):
     """One tool call -> a bridge_core result. Never raises."""
     if args is None:
         args = {}
+    redo = _redo_names()
+    answer = _run(tool, args, host)
+    if answer.get("is_error") and redo:
+        answer = _redo_note(answer, redo)
+    return answer
+
+
+def _redo_names():
+    """(design name, [what Redo would bring back]) of the active design, or None."""
+    try:
+        doc = App.ActiveDocument
+        return (doc.Name, list(doc.RedoNames)) if doc is not None and doc.RedoNames else None
+    except Exception:
+        return None
+
+
+def _redo_note(answer, redo):
+    """A refused call changes nothing, but FreeCAD empties the Redo list whenever a change is
+    tried (it opens a transaction, then takes it back): the answer says so, rather than
+    leaving the person's Ctrl+Y doing nothing unexplained (review X5)."""
+    try:
+        doc = App.getDocument(redo[0]) if redo[0] in App.listDocuments() else None
+        if doc is None or list(doc.RedoNames) == redo[1]:
+            return answer
+        text = answer["text"].rstrip()
+        answer = dict(answer)
+        answer["text"] = text + (
+            "\n(The design is as it was, but trying this emptied the Redo list: %s can no "
+            "longer be redone.)" % ", ".join("'%s'" % name for name in redo[1][:3])
+        )
+        log("AI: a refused call emptied the Redo list")
+    except Exception:
+        pass
+    return answer
+
+
+def _run(tool, args, host):
     try:
         problems = catalog.validate(tool, args)
         if problems:

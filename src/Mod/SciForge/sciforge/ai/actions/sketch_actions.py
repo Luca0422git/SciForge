@@ -339,12 +339,14 @@ def _explained(ctx, sketch, text, culprits):
     or changes them by index); highlighted in the window, as the dialogs do."""
     from ... import sketch_explain, sketch_explain_core
 
-    if ctx.host.gui and culprits:
+    if ctx.host.gui and culprits and _shown(sketch):
         try:
             sketch_explain.highlight(sketch, culprits)
         except Exception as exc:
             warn("AI sketch: the culprits were not highlighted (%s)" % exc)
     else:
+        # (headless, or a sketch nobody can see: hidden after an extrude, its body hidden;
+        # the rings and the selection would show nothing, review X6)
         text = text.replace(sketch_explain_core.SHOWN, "")
     if culprits:
         text = text.rstrip().rstrip(".") + (
@@ -352,6 +354,30 @@ def _explained(ctx, sketch, text, culprits):
             % ("s" if len(culprits) > 1 else "", ", ".join(str(i) for i in culprits), sketch.Name)
         )
     return text
+
+
+def _shown(sketch):
+    """True when the person can see the sketch in the window: open in edit, or shown with
+    every container above it (a body, a component) shown."""
+    from ... import bodies
+
+    try:
+        import FreeCADGui as Gui
+
+        gdoc = Gui.getDocument(sketch.Document.Name)
+        editing = gdoc.getInEdit() if gdoc is not None else None
+        if editing is not None and getattr(editing, "Object", None) == sketch:
+            return True
+        if not bodies.is_shown(sketch):
+            return False
+        parent = sketch.getParentGeoFeatureGroup()
+        while parent is not None:
+            if not bodies.is_shown(parent):
+                return False
+            parent = parent.getParentGeoFeatureGroup()
+        return True
+    except Exception:
+        return False
 
 
 def _listed(sketch, new):

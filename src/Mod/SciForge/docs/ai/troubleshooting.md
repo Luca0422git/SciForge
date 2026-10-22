@@ -1,7 +1,8 @@
 # Troubleshooting: failures and how to recover
 
 What goes wrong most often when an AI builds in SciForge, what SciForge answers, and what to
-do. A call that fails changes nothing (there is nothing to undo); a call that worked but did
+do. A call that fails changes nothing (there is nothing to undo; only what `redo` could
+bring back is gone, as after any change, and the answer says so); a call that worked but did
 the wrong thing is taken back with `undo`. Every block below is run by SciForge's tests, so
 the messages are the real ones.
 

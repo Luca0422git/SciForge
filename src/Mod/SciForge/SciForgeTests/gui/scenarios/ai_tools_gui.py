@@ -14,6 +14,12 @@ Path 6, undo takes the last change back; a tool that needs the window is never r
 Path 7 (integration, 2026-10-22), export STEP with the window open: the answer says what the
   file does not keep (the timeline, the sketch) and the window shows the same message card
   (export_report_ui); colours are written with the window, so no colour line.
+Path 8 (review of the merged branches, X4), the block made a component "Base": the AI's STEP
+  of the whole design keeps it, as File > Export and sciforge-cli do (the window wrote a flat
+  list of bodies); a STEP of picked bodies is flat, and the answer says the component is lost.
+Path 9 (X6), a dimension the AI adds that conflicts: on a sketch the person can see, the
+  culprit is highlighted and the answer says so; once the sketch is extruded (and hidden),
+  nothing is highlighted or selected and the answer does not say "highlighted".
 """
 
 import base64
@@ -180,4 +186,70 @@ def export_report():
     )
 
 
-h.run("ai_tools_gui", [block, camera, hide_and_edit, save, drawing, undo, export_report])
+# -- Path 8 -------------------------------------------------------------------------------------
+def export_components():
+    a = call("components_from_bodies", {"bodies": [s["pad"]], "label": "Base"})
+    ok("the block is now the component Base", a, not a["is_error"])
+    path = os.path.join(s["dir"], "ai-gui-design.step")
+    a = call("export", {"format": "step", "path": path})
+    text = open(path, encoding="latin-1").read() if os.path.isfile(path) else ""
+    ok("the AI's STEP keeps the component, as File > Export", a, "PRODUCT('Base'" in text)
+    ok("and the answer does not call it lost", a, "the components (" not in a["text"])
+    path = os.path.join(s["dir"], "ai-gui-bodies.step")
+    a = call("export", {"format": "step", "path": path, "bodies": [s["pad"]]})
+    ok(
+        "a STEP of picked bodies is flat, and says the component is lost",
+        a,
+        os.path.isfile(path) and "the components (1): every body is written on its own" in a["text"],
+    )
+
+
+# -- Path 9 -------------------------------------------------------------------------------------
+def conflict_highlight():
+    import re
+
+    import FreeCADGui as Gui
+
+    from sciforge import sketch_explain
+
+    a = call("create_sketch", {"plane": "XY", "geometry": [{"circle": [80, 0, 5]}]})
+    found = re.search(r"Its id is '([^']+)'", a["text"])
+    sketch = found.group(1) if found else "Sketch"
+    twelve = {"sketch": sketch, "kind": "diameter", "items": [{"curve": 0}], "value": 12}
+    a = call("sketch_dimension", twelve)
+    h.check(
+        "a conflicting dimension on a shown sketch: highlighted, and said",
+        a["is_error"] and "(highlighted in the sketch)" in a["text"] and sketch_explain.highlighted(),
+        (a["text"][:300], sketch_explain.highlighted()),
+    )
+    sketch_explain.clear_highlight()
+    a = call("extrude", {"profile": sketch, "distance": 5})
+    ok("the circle is extruded", a)
+    shown = App.ActiveDocument.getObject(sketch).ViewObject.Visibility
+    a = call("sketch_dimension", twelve)
+    selected = [(x.ObjectName, x.SubElementNames) for x in Gui.Selection.getSelectionEx()]
+    h.check(
+        "on the hidden sketch: refused, nothing highlighted or selected, not said",
+        a["is_error"]
+        and "highlighted" not in a["text"]
+        and not sketch_explain.highlighted()
+        and not sketch_explain.highlight_rings()
+        and not selected,
+        (shown, a["text"][:300], sketch_explain.highlighted(), selected),
+    )
+
+
+h.run(
+    "ai_tools_gui",
+    [
+        block,
+        camera,
+        hide_and_edit,
+        save,
+        drawing,
+        undo,
+        export_report,
+        export_components,
+        conflict_highlight,
+    ],
+)

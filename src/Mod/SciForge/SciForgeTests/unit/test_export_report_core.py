@@ -175,6 +175,12 @@ class Meshes(unittest.TestCase):
         self.assertEqual(core.items("STEP", {"open_meshes": 1}), [])
         self.assertEqual(keys(core.items("STL", {"open_meshes": 1}, "print")), ["open_meshes"])
 
+    def test_flat_step_loses_the_components(self):
+        # review X4: a STEP of a list of bodies (Export Everything, picked bodies) is flat
+        items = core.items("STEP", dict(DESIGN, components=1, flat=True))
+        self.assertIn("components", keys(items))
+        self.assertNotIn("components", keys(core.items("STEP", dict(DESIGN, components=1))))
+
     def test_components_flattened(self):
         self.assertIn("components", keys(core.items("3MF", {"components": 2})))
 
