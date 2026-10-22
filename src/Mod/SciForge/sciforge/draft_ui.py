@@ -1084,7 +1084,9 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             # The handle may reach Draft's own 89.9 degree stop: a dragged / typed angle there
             # is held at the steepest one the faces take, like any angle that is too steep.
             steep = "between -89.9 and 89.9" in reason
-            held = self.limit_refused_soon("too steep: " + reason, self._limit_searched) if steep else None
+            held = None
+            if steep:
+                held = self.limit_refused_soon("too steep: " + reason, self._limit_searched)
             if held == "again":
                 return self._build_preview()
             if held == "later":

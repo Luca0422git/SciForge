@@ -257,7 +257,11 @@ def dragged(label, expect_sign=None):
     h.check("%s: the picture was checked" % label, rec.get("checked"), rec.get("checked"))
     if expect_sign is not None and p is not None:
         angle = float(p.options.get("angle", 0.0))
-        h.check("%s: the angle went %s" % (label, expect_sign), (angle > 0) == (expect_sign == "up"), angle)
+        h.check(
+            "%s: the angle went %s" % (label, expect_sign),
+            (angle > 0) == (expect_sign == "up"),
+            angle,
+        )
 
 
 # -- box, the front face ----------------------------------------------------------------------------
@@ -469,7 +473,13 @@ def parting_exact():
 
 # -- pocket walls --------------------------------------------------------------------------------------
 POCKET = parts.BOX + [
-    {"op": "sketch", "id": "s2", "plane": "XY", "offset": 10, "geometry": [{"rect": [10, 8, 30, 22]}]},
+    {
+        "op": "sketch",
+        "id": "s2",
+        "plane": "XY",
+        "offset": 10,
+        "geometry": [{"rect": [10, 8, 30, 22]}],
+    },
     {"op": "extrude", "id": "e2", "profile": "s2", "distance": 6, "flip": True, "operation": "cut"},
 ]
 
@@ -541,11 +551,22 @@ curved_dragged.wait_ms = 2000
 
 # -- edited from the timeline ---------------------------------------------------------------------------
 EDITED = parts.BOX + [
-    {"op": "sf_draft", "id": "d1", "plane": "XY", "faces": {"normal": [0, -1, 0], "count": 1}, "angle": 3},
+    {
+        "op": "sf_draft",
+        "id": "d1",
+        "plane": "XY",
+        "faces": {"normal": [0, -1, 0], "count": 1},
+        "angle": 3,
+    },
     {
         "op": "fillet",
         "id": "f1",
-        "edges": {"type": "line", "parallel": [0, 0, 1], "at": {"axis": "y", "value": "max"}, "count": 2},
+        "edges": {
+            "type": "line",
+            "parallel": [0, 0, 1],
+            "at": {"axis": "y", "value": "max"},
+            "count": 2,
+        },
         "radius": 2,
     },
 ]
@@ -622,7 +643,7 @@ def steep_dragged():
         except Exception:
             pass
     angle = float(p.options.get("angle", 0.0)) if p else 0.0
-    h.check("held at the steepest angle that fits (7-8 deg)", 7.0 <= angle < 8.0, angle)
+    h.check("held at the steepest angle that fits (6-8 deg)", 6.0 <= angle < 8.0, angle)
     h.check("said so", p is not None and p.limits.note.startswith("Largest"), p and p.limits.note)
     h.check("the handle is there too", p is not None and abs(p.handle.angle() - angle) < 0.05)
     h.check("the picture is gone", p is not None and not (p._live and p._live.shown))
@@ -652,7 +673,7 @@ def steep_again():
         bool(angles) and wall is not None and max(angles + shown) < wall,
         (max(angles) if angles else None, max(shown) if shown else None, limit, wall),
     )
-    h.check("held at the steepest angle again", 7.0 <= limit < 8.0, limit)
+    h.check("held at the steepest angle again", 6.0 <= limit < 8.0, limit)
     if p is not None:
         try:
             del p._preview

@@ -216,7 +216,9 @@ class Picture:
                 if len(line) < 2:
                     continue
                 hs = [self.height(p) for p in line]
-                recipe = core.split_line(hs) if self.bends else [(k, k, 0.0) for k in range(len(line))]
+                recipe = (
+                    core.split_line(hs) if self.bends else [(k, k, 0.0) for k in range(len(line))]
+                )
                 count = 0
                 for i, j, t in recipe:
                     if i == j:

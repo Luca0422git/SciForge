@@ -14,7 +14,12 @@ BOX = [
     {"op": "extrude", "id": "e1", "profile": "s1", "distance": 10},
 ]
 
-HOLES = [(x, y) for x in (10, 30, 70, 90) for y in (8, 52)] + [(10, 30), (90, 30), (50, 8), (50, 52)]
+HOLES = [(x, y) for x in (10, 30, 70, 90) for y in (8, 52)] + [
+    (10, 30),
+    (90, 30),
+    (50, 8),
+    (50, 52),
+]
 PINS = [(x, y) for x in (36, 44, 56, 64) for y in (23, 30, 37)]
 TOP_RECESSES = [(x, y) for x in range(15, 90, 10) for y in (15, 45)]
 BOTTOM_RECESSES = [(x, y) for x in range(15, 90, 10) for y in (16, 24, 36, 44)]
@@ -35,15 +40,35 @@ PART = [
         "offset": 30,
         "geometry": [{"circle": [x, y, 3]} for x, y in HOLES],
     },
-    {"op": "extrude", "id": "e2", "profile": "s2", "distance": 30, "flip": True, "operation": "cut"},
+    {
+        "op": "extrude",
+        "id": "e2",
+        "profile": "s2",
+        "distance": 30,
+        "flip": True,
+        "operation": "cut",
+    },
     {
         "op": "chamfer",
         "id": "c1",
         "edges": {"type": "circle", "radius": 3, "at": {"axis": "z", "value": "max"}, "count": 12},
         "distance": 0.8,
     },
-    {"op": "sketch", "id": "s3", "plane": "XY", "offset": 30, "geometry": [{"rect": [30, 18, 70, 42]}]},
-    {"op": "extrude", "id": "e3", "profile": "s3", "distance": 12, "flip": True, "operation": "cut"},
+    {
+        "op": "sketch",
+        "id": "s3",
+        "plane": "XY",
+        "offset": 30,
+        "geometry": [{"rect": [30, 18, 70, 42]}],
+    },
+    {
+        "op": "extrude",
+        "id": "e3",
+        "profile": "s3",
+        "distance": 12,
+        "flip": True,
+        "operation": "cut",
+    },
     {
         "op": "fillet",
         "id": "f2",

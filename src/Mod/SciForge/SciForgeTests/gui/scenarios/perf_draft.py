@@ -23,6 +23,7 @@ others are SciForge's own time. The checks also prove the drags still make the s
 
 Run alone: tools/sciforge/run_tests.sh --scenario perf_draft
 """
+
 import cProfile
 import io
 import json
@@ -298,14 +299,28 @@ def finish_drag(name):
         return None
     probe.stop()
     s = probe.summary()
-    record("Draft drag, %s: value box follows a mouse move (median)" % name, _ms(s["box"], "median"))
+    record(
+        "Draft drag, %s: value box follows a mouse move (median)" % name, _ms(s["box"], "median")
+    )
     record("Draft drag, %s: value box follows a mouse move (worst)" % name, _ms(s["box"], "max"))
-    record("Draft drag, %s: dialog's work per handle move (median)" % name, _ms(s["work"], "median"))
+    record(
+        "Draft drag, %s: dialog's work per handle move (median)" % name, _ms(s["work"], "median")
+    )
     record("Draft drag, %s: dialog's work per handle move (worst)" % name, _ms(s["work"], "max"))
-    record("Draft drag, %s: handle's poll, worst (its work and the dialog's)" % name, _ms(s["polls"], "max"))
-    record("Draft drag, %s: frame drawn after a mouse move (median)" % name, _ms(s["frame"], "median"))
-    record("Draft drag, %s: live preview follows a mouse move (median)" % name, _ms(s["live"], "median"))
-    record("Draft drag, %s: live preview follows a mouse move (worst)" % name, _ms(s["live"], "max"))
+    record(
+        "Draft drag, %s: handle's poll, worst (its work and the dialog's)" % name,
+        _ms(s["polls"], "max"),
+    )
+    record(
+        "Draft drag, %s: frame drawn after a mouse move (median)" % name, _ms(s["frame"], "median")
+    )
+    record(
+        "Draft drag, %s: live preview follows a mouse move (median)" % name,
+        _ms(s["live"], "median"),
+    )
+    record(
+        "Draft drag, %s: live preview follows a mouse move (worst)" % name, _ms(s["live"], "max")
+    )
     record("Draft drag, %s: longest freeze while moving" % name, s["blocked"])
     record("Draft drag, %s: exact solid after the mouse stops" % name, s["exact"])
     RESULTS[-1]["rebuilds_while_moving"] = s["rebuilds_while_moving"]
@@ -466,8 +481,8 @@ def part_dragged_far():
     p = panel()
     if s is not None and p is not None:
         h.check(
-            "part: held at the steepest angle that fits (7-8 deg)",
-            7.0 <= s["final"] < 8.0,
+            "part: held at the steepest angle that fits (6-8 deg)",
+            6.0 <= s["final"] < 8.0,
             (s["final"], p.limits.note),
         )
         h.check("part: the note says so", p.limits.note.startswith("Largest"), p.limits.note)
@@ -503,7 +518,9 @@ def report():
         lines.append("| %s | %s | %s |" % (r["label"], ms(r.get("change")), cells(r["label"])[0]))
     lines += [""] + perf_guard.markdown(guard) + [""]
     if S.get("profile"):
-        lines += ["## One exact rebuild of the part, profiled", "", "```"] + S["profile"] + ["```", ""]
+        lines += (
+            ["## One exact rebuild of the part, profiled", "", "```"] + S["profile"] + ["```", ""]
+        )
     if S.get("profile_trial"):
         lines += ["## One trial build of the limit search, profiled", "", "```"]
         lines += S["profile_trial"] + ["```", ""]

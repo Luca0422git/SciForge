@@ -175,7 +175,9 @@ class StepByStep(unittest.TestCase):
     def test_same_as_at_once(self):
         a, _ = self.works(7.43)
         b, _ = self.works(7.43)
-        self.assertEqual(vl.search(a, 1.0, 19.4, 0.1), vl.run_steps(vl.search_steps(b, 1.0, 19.4, 0.1)))
+        self.assertEqual(
+            vl.search(a, 1.0, 19.4, 0.1), vl.run_steps(vl.search_steps(b, 1.0, 19.4, 0.1))
+        )
 
     def test_find_steps_stores_the_limit(self):
         limiter = vl.Limiter("deg")
@@ -198,9 +200,7 @@ class StepByStep(unittest.TestCase):
             return value <= 7.43
 
         limiter = vl.Limiter("deg")
-        limit = vl.run_steps(
-            limiter.find_steps(vl.make_key("k"), works, 19.4, 1.0, clock=clock)
-        )
+        limit = vl.run_steps(limiter.find_steps(vl.make_key("k"), works, 19.4, 1.0, clock=clock))
         self.assertIsNotNone(limit)
         self.assertLessEqual(limit, 7.43)
         self.assertLess(spent[0], vl.BUDGET + vl.VERIFY_TRIES * 0.4 + 1.0)
