@@ -152,10 +152,54 @@ noise under software GL, so none is changed (worth measuring again on a real GPU
 
 ## Tests
 
-- Unit (plain Python): `test_doc_epoch`, `test_undo_fast`, `test_perf_guard` (32 tests, pass).
+- Unit (plain Python): `test_doc_epoch`, `test_undo_fast`, `test_perf_guard` (34 tests, pass).
 - GUI scenarios (new): `perf_big_model` (33 checks), `undo_fast` (35 checks: paths A-D, real
   timeline double-clicks, typing, OK, Ctrl+Z / Ctrl+Y and the quick-access Undo / Redo;
   every skipped rebuild checked against a full rebuild giving the same shapes).
 - Related scenarios and `--only base`: see the results below.
 
-RESULTS_PLACEHOLDER
+Results (all on this branch's final code, real FreeCAD in the sandbox):
+
+- `--only base`: unit 1831 tests OK (9 skipped), golden 446 pass + 2 known XFAIL
+  (`plate_hole_grid`, `sf_loft_merge_slot_volume`, the same as on the base commit), smoke
+  and journey all passed (run twice: by the second session and again by the third).
+- Related GUI scenarios, all PASS (65 scenarios):
+  - timeline / browser / selection / view: `timeline_browser`, `_2`, `_qa`, `_qa2`, `_qa3`,
+    `_qa4`, `timeline_roll_view`, `timeline_rolled_cut`, `selection_box`, `_dialogs`,
+    `_filters`, `_other`, `_sketch`, `view_angle_snap`, `view_origin_planes`,
+    `viewcube_click`;
+  - recovery copies and saving: `versions_recovery`, `versions_save`, `versions_link`,
+    `versions_data_panel`, `crash_notice`, `home_screen`, `welcome_line`;
+  - extrude body checks, surfaces: `extrude_bodies_highlight`, `extrude_multibody`,
+    `_edit`, `_move`, `components_extrude`, `gaps_extrude_taper_to`, `surface_extrude`,
+    `surface_misc`, `surface_trim`, `surface_reopen`, `gaps_thin_extrude`,
+    `gaps_offset_plane_to`, `revolve_qa_to`, `extrudeface_objects`;
+  - lost picks found again (curves / picks refind): `gaps_picks_kept`, `fillet_qa`,
+    `fillet_qa_part`, `fillet2_edit_later`, `fillet2_sets`, `modify2_move_face`,
+    `modify_replace_face`, `construct_live`, `inspect_construct_use`, `surface2_loft`;
+  - Undo / Redo (after_undo now often skips its rebuild): `undo_fast`, `bodies_combine`,
+    `bodies_delete`, `bodies_qa`, `bodies_qa_2`, `bodies_timeline`, `direct_history`,
+    `direct_step_box`, `modify_remove`, `modify_align`, `modify2_shell`, `patterns_qa_edit`,
+    `components2_pattern`, `joints2_slider`, `joints_drive`, `hole_qa`, `insert_mesh`,
+    `misc_scripts`, `misc_derive`, `shell_draft_hollow`;
+  - the benchmarks: `perf_benchmark` (21 checks, guard: 16 measurements compared, none more
+    than 2x slower) and `perf_big_model` (33 checks, guard: 27 compared, none 2x slower).
+- No existing scenario needed a changed expectation.
+
+Last `perf_big_model` run (third session, a quieter machine than the side-by-side runs, so
+everything is a little faster, FreeCAD's own work included): idle 17 ms/s, orbit / zoom /
+pan 24-28 ms a frame (SciForge 0.2-1.5 ms), hover 6 ms, a click 26 ms, timeline / browser
+tick 0.0 / 0.9 ms, Undo / Redo of the plate edit 1.2 / 1.1 s, of the tower edit 0.5 / 0.6 s,
+open 3.8 s.
+
+## Limitations
+
+- The benchmark times depend on the machine and on what else runs on it (other agents ran
+  FreeCAD tests at the same time): the guard only warns by default, and the stored baseline
+  should be rewritten (`SCIFORGE_PERF_WRITE_BASELINE`) when it is used on another machine.
+- Undo / Redo still rebuild (as before) when the ledger cannot vouch for the shapes: a change
+  made by a script outside a transaction in between, a spreadsheet / parameter step (no
+  Shape to put back), or an undo stack whose start it did not see. That is the safe side:
+  the worst case is the old speed, never a wrong shape.
+- Orbit / zoom drawing itself is software OpenGL in the sandbox; nothing measured there says
+  how a real GPU behaves, and view settings (RenderCache, VBO) were left as they are.
