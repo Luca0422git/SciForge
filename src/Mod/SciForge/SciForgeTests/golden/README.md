@@ -121,6 +121,10 @@ own integration, which is up to about 1 % off on B-spline faces (drafted free-fo
 
 | `sf_surface` | `id`, `kind` (extrude/revolve/sweep/loft/patch/ruled/offset/boundary_fill/thicken/trim/untrim/extend/stitch/unstitch/reverse_normal), `refs` / `refs2` / `refs3` (the dialog's boxes in order: `{"sketch", "at": [x, y]}` a sketch curve, chained; `{"sketch"}` all its curves; `{"plane"}`; `{"axis"}`; `{"step"}` that step's body; `{"step", "faces" / "edges": selector}`), `options` (the dialog's fields, `surface_core.KINDS`), `remove` [{`step`, `at`: [x, y, z]}] (Trim's pieces), `cells` [[x, y, z]] (Boundary Fill), `bodies` (Reverse Normal), `target` (a Join / Cut body) | the SURFACE tab's tools (`sciforge/ai/ops/surface_ops.py`, `sciforge/surface.py`: the dialogs' code). A surface result is measured by its area and faces (no volume) |
 | `sf_surface_edit` | `target`, `set` {options} | double-click a surface step in the timeline and change its fields |
+| `export_report_expect` | `format` (STEP/IGES/STL (Binary)/STL (ASCII)/3MF/OBJ/DXF), `target` (none = the whole design; [step ids] = their bodies; a component step; a sketch for DXF), `expect` {item key: count}, `unit`, `per_body`, `roundtrip` (default true) | what File > Export / Save As DXF says the file leaves out (`sciforge/export_report.py`); with `roundtrip` the file is written and read back to prove it (`golden/export_checks.py`) |
+| `import_report_expect` | `file` (open_box.stl / two_objects_inch.3mf / mixed.step / faces.igs / extras.dxf / extras.svg, made on the spot), `expect` {item key: count} | what Insert Mesh / Insert DXF / SVG / Open STEP say did not come in |
+| `hide_bodies` | `bodies` [step ids] | test setup: the bodies hidden (the browser's eye icon) |
+| `sketch_extras` | `target` (a sketch), `points` [[x, y]], `construction` [[x0, y0, x1, y1]] | test setup: points and construction lines added to a sketch |
 
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).

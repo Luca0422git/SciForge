@@ -1,0 +1,29 @@
+{
+  "id": "export_report_imports",
+  "title": "Import report: what Insert Mesh, Insert DXF / SVG and Open / Insert STEP say did not come in",
+  "tags": ["import", "export-report"],
+  "steps": [
+    {"op": "sketch", "id": "s1", "plane": "XY", "geometry": [{"rect": [0, 0, 20, 10], "name": "base"}]},
+    {"op": "extrude", "id": "e1", "profile": "s1", "distance": 5},
+    {"op": "import_report_expect", "file": "open_box.stl", "expect": {"open_edges": 4},
+     "comment": "a box with one side (2 triangles) missing: the hole has 4 open edges"},
+    {"op": "import_report_expect", "file": "two_objects_inch.3mf", "expect": {"objects": 2, "colours": 1, "unit": 1},
+     "comment": "FreeCAD reads a 3MF's objects into one mesh, without its colours or its unit (inch, brought in as mm)"},
+    {"op": "import_report_expect", "file": "mixed.step", "expect": {"loose_faces": 5, "loose_curves": 1},
+     "comment": "one part holding a solid, an open box of 5 faces and a line: only the solid comes in"},
+    {"op": "import_report_expect", "file": "faces.igs", "expect": {"sewn": 1},
+     "comment": "5 loose faces that do not close: one surface body"},
+    {"op": "import_report_expect", "file": "extras.dxf", "expect": {"unsupported": 1, "texts": 1, "points": 1},
+     "comment": "FreeCAD's DXF importer cannot read the HATCH; the TEXT and the POINT are not curves"},
+    {"op": "import_report_expect", "file": "extras.svg", "expect": {"texts": 1, "images": 1},
+     "comment": "FreeCAD's SVG reader takes the rectangle, not the text or the picture"}
+  ],
+  "expect": {
+    "volume": 1000,
+    "faces": 6,
+    "solids": 1,
+    "bbox": [0, 0, 0, 20, 10, 5],
+    "source": "analytic",
+    "note": "20 x 10 x 5 = 1000; the import checks are the point of this model"
+  }
+}

@@ -32,12 +32,15 @@ class Made:
         self.instances = []
         self.bodies = []
         self.built = {}  # file key -> component
+        self.notes = {}  # what the file had that did not come in (export_report.cad_items)
 
 
 # -- reading -----------------------------------------------------------------------------------
-def read_tree(path):
+def read_tree(path, notes=None):
     """The file's top nodes (exchange_core.node), with each part's solids in the file's
-    coordinates as (shape, [colours], surface?) and each node's placement in the file."""
+    coordinates as (shape, [colours], surface?) and each node's placement in the file.
+    `notes` (a dict): filled with what does not come in (loose faces and curves, faces
+    sewn into surface bodies, shapes with errors) for export_report.cad_items."""
     import os
 
     import Import
@@ -64,7 +67,7 @@ def read_tree(path):
         units = [o for o in doc.Objects if o.TypeId not in SKIP_TYPES]
         names = {o.Name for o in units}
         tops = [o for o in units if not any(p.Name in names for p in o.InList if p is not o)]
-        nodes = [_walk(top, top, "", colours) for top in tops]
+        nodes = [_walk(top, top, "", colours, notes) for top in tops]
         nodes = [n for n in nodes if n is not None]
         if not nodes:
             raise core.ExchangeError("Nothing could be read from the file.")
@@ -100,7 +103,7 @@ def _children_of(obj):
     return []
 
 
-def _walk(top, obj, sub, colours):
+def _walk(top, obj, sub, colours, notes=None):
     """A node for `obj`, reached from `top` by the sub-object path `sub`."""
     link = None
     target = obj
@@ -117,7 +120,7 @@ def _walk(top, obj, sub, colours):
     if kids or target.TypeId in ("App::LinkGroup", "App::Part"):
         children = []
         for child in kids:
-            n = _walk(top, child, sub + child.Name + ".", colours)
+            n = _walk(top, child, sub + child.Name + ".", colours, notes)
             if n is not None:
                 children.append(n)
         return core.node(
@@ -126,12 +129,18 @@ def _walk(top, obj, sub, colours):
     shape = _shape(top, sub)
     if shape is None:
         return None
+    pieces = _pieces(shape, colours.get(target.Name, []))
+    if notes is not None and link is None:  # a repeated occurrence was counted once
+        from . import export_report
+
+        export_report.shape_notes(shape, notes)
+        export_report.piece_notes(pieces, notes)
     return core.node(
         obj.Label,
         core.PART,
         key=target.Name,
         link=link,
-        pieces=_pieces(shape, colours.get(target.Name, [])),
+        pieces=pieces,
         place=place,
     )
 
@@ -194,10 +203,10 @@ def import_file(doc, path, mode=core.OPEN, parent=None, label=None):
     product is the design (File > Open into a new design); INSERT: the whole file becomes
     one component (named `label`, else after the file) inside `parent` (None: the root).
     No undo step of its own (the caller's). Returns a Made."""
-    tops = read_tree(path)
+    made = Made()
+    tops = read_tree(path, made.notes)
     name = label or core.base_name(path)
     level = core.plan(tops, mode, name)
-    made = Made()
     container = parent
     if level["component"]:
         container = components.new_component(doc, _component_label(doc, name), parent)
