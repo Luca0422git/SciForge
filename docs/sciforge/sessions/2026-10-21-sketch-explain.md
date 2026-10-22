@@ -119,7 +119,7 @@ is the session's log.
 
 ## Tests
 
-- Unit: `SciForgeTests/unit/test_sketch_explain_core.py` (23 tests).
+- Unit: `SciForgeTests/unit/test_sketch_explain_core.py` (22 tests).
 - GUI scenarios (real input): `sketch_explain` (A padlock in browser, timeline and palette
   after drawing and dimensioning a rectangle; B Equal conflict from FreeCAD's tool: refused,
   named, rings; C Parallel repeat; D Collinear conflict in SciForge's pick tool, rings and
@@ -131,4 +131,16 @@ is the session's log.
 
 ## Test results
 
-(filled in at the end of the session)
+All with real FreeCAD 1.1.4 (`tools/sciforge/run_tests.sh`), on the final code:
+
+- `--only base` (1821 unit tests, 448 golden models, smoke, journey): all passed.
+- New scenarios: `sketch_explain` PASS (159 checks), `parameters_trial` PASS (36 checks).
+- Existing related scenarios, 75 in all: every `fixsketch_*`, `sketch2_*` and `sketch_*`
+  scenario (there are no `sketch3_*` files), the timeline/browser ones (`timeline_browser*`,
+  `timeline_roll_view`, `timeline_rolled_cut`, `polish2_timeline_groups`, `bodies_timeline`,
+  `gaps_timeline_start`), the parameter ones (`misc_derive`, `shell_draft_qa_scale`,
+  `patterns_params`, `gaps_formula_units`) and `modeling2_sketch`, `polish2_sketch_check`,
+  `selection_sketch`, `hole_sketch`, `extrude_edit_sketch_shown`, `extrude_from_edited_sketch`:
+  all PASS. `sketch_draw` failed once ("sketch palette shown" right after Create Sketch) while
+  three test runs shared the 4 CPUs; run again alone it passed (134 checks): a timing check
+  under load, not this change. No existing test expectation was changed.
