@@ -2240,7 +2240,27 @@ def delete_drawing(page):
 
 # ------------------------------------------------------------------ export
 def export_pdf(page, path):
-    """The sheet as a PDF (needs FreeCAD's GUI: TechDraw prints its own page view)."""
+    """The sheet as a PDF with layers, searchable text, links and metadata
+    (drawing_pdf_export.py; needs FreeCAD's GUI: TechDraw prints its own page view)."""
+    from . import drawing_pdf_export
+
+    return drawing_pdf_export.export([page], path)
+
+
+def sheet_size_of(page):
+    """(width, height) of the sheet in mm."""
+    try:
+        template = page.Template
+        width, height = _value(template.Width), _value(template.Height)
+        if width > 0 and height > 0:
+            return width, height
+    except Exception:
+        pass
+    return core.sheet_size(standard_of(page), sheet_of(page))
+
+
+def print_pdf(page, path):
+    """The sheet as TechDraw prints it (Qt's PDF writer), nothing added."""
     import TechDrawGui
 
     folder = os.path.dirname(path)
