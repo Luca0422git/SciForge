@@ -1250,6 +1250,23 @@ def _orange_right_of(fraction, minimum=200):
     return check
 
 
+def _snapshot_then_close(data, run):
+    """Keep the snapshot id, then close the design the way the window's File > Close does
+    (FreeCAD gives the next design of that name the same internal name)."""
+    import FreeCAD as App
+
+    run.ids["r_snapshot"] = data["snapshot"]
+    App.closeDocument(data["id"])
+    return None
+
+
+def _close_active(answer, run):
+    import FreeCAD as App
+
+    App.closeDocument(App.ActiveDocument.Name)
+    return None
+
+
 def _refs_round_trip(data, run):
     """Every ref picks its own element when the real selector code runs it."""
     from sciforge import bodies
@@ -1356,6 +1373,33 @@ VERIFY_SESSION = [
     },
     {"tool": "roll_timeline", "args": {"to": "end"}},
     {"tool": "diff_design", "args": {"since": "$v_fillet"}, "contains": ["the solid is the same"]},
+    # snapshots belong to their design: one closed in the window (not with close_design) and
+    # a new one under the same name must not be compared with it (F6)
+    {"tool": "new_design", "args": {"name": "VerifyReuse"}},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 60, 40]}]},
+        "save": "r_sk",
+    },
+    {"tool": "extrude", "args": {"profile": "$r_sk", "distance": 10}},
+    {"tool": "inspect_design", "args": {}, "check": _json_check(_snapshot_then_close)},
+    {"tool": "new_design", "args": {"name": "VerifyReuse"}, "contains": ["(id 'VerifyReuse')"]},
+    {"tool": "primitive", "args": {"kind": "cylinder", "plane": "XY", "diameter": 10, "height": 5}},
+    {
+        "tool": "diff_design",
+        "args": {"since": "$r_snapshot"},
+        "expect": "error",
+        "contains": ["no snapshot"],
+    },
+    {"tool": "diff_design", "args": {"since": "last_change"}, "contains": ["Cylinder"]},
+    {"tool": "get_timeline", "args": {}, "check": _close_active},
+    {"tool": "new_design", "args": {"name": "VerifyReuse"}},
+    {
+        "tool": "diff_design",
+        "args": {"since": "last_change"},
+        "expect": "error",
+        "contains": ["No AI change"],
+    },
 ]
 
 
