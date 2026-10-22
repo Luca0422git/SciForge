@@ -291,16 +291,18 @@ SKIP_TYPES = (
 SIGNED = ("DistanceX", "DistanceY")  # FreeCAD keeps their sign: it is their direction
 
 
-def broken_steps(doc, signs=None):
+def broken_steps(doc, signs=None, typed=None):
     """{object name: reason} of the steps that are broken now, in document order. `signs`
     (from signs_of): a horizontal/vertical sketch dimension whose sign is not the one it had
-    has turned inside out (the profile flips), which breaks its sketch too."""
+    has turned inside out (the profile flips), which breaks its sketch too. `typed`
+    ({"Parameters.width": -5.0}): a value typed for a length parameter that FreeCAD held
+    at 0 (a length is never negative to it), for the formulas that use it."""
     out = {}
     for obj in doc.Objects:
         if obj.TypeId in SKIP_TYPES:
             continue
         try:
-            reason = _broken(obj, signs)
+            reason = _broken(obj, signs, typed)
         except Exception:
             reason = ""
         if reason:
@@ -320,12 +322,16 @@ def signs_of(doc):
     return out
 
 
-def _formula_value(obj, index, value):
+def _formula_value(obj, index, value, typed=None):
     """The value a sketch dimension's formula gives (FreeCAD stores 0 for a length whose
-    formula gives less: the message says what it gave)."""
+    formula gives less: the message says what it gave, with the values `typed`)."""
+    import re
+
     expr = dict(obj.ExpressionEngine).get(".Constraints[%d]" % index)
     if not expr:
         return value
+    for ref, number in (typed or {}).items():
+        expr = re.sub(r"(?<![\w.])%s(?![\w])" % re.escape(ref), "(%r mm)" % number, expr)
     try:
         got = obj.evalExpression(expr)
         return float(got.Value) if hasattr(got, "Value") else float(got)
@@ -333,7 +339,7 @@ def _formula_value(obj, index, value):
         return value
 
 
-def _broken(obj, signs=None):
+def _broken(obj, signs=None, typed=None):
     from . import sketch_explain_core as explain_core
 
     if obj.TypeId == "App::VarSet":
@@ -355,7 +361,7 @@ def _broken(obj, signs=None):
         for i, c in enumerate(obj.Constraints):
             if not c.Driving or c.Type not in explain_core.LENGTHS:
                 continue
-            value = _formula_value(obj, i, c.Value)
+            value = _formula_value(obj, i, c.Value, typed)
             flipped = (
                 signs is not None
                 and c.Type in SIGNED
@@ -480,12 +486,7 @@ def _solver_refusal(obj, path, exc, what):
 
     index = int(path[len(".Constraints[") : -1])
     c = obj.Constraints[index]
-    typed = None
-    if " = " in what:
-        try:
-            typed = App.Units.Quantity(what.split(" = ", 1)[1]).Value
-        except Exception:
-            typed = None
+    typed = _typed_number(what)
     if typed is not None and c.Type in explain_core.LENGTHS and typed <= 1e-7:
         info = sketch_explain.constraint_info(obj, index, c)
         info["value"] = typed
@@ -500,6 +501,35 @@ def _solver_refusal(obj, path, exc, what):
     if text:
         return "that value conflicts with %s" % text
     return NO_FIT
+
+
+def _typed_number(what):
+    """The plain number typed in a change named "width = -5" (None for a formula)."""
+    if " = " not in what:
+        return None
+    text = what.split(" = ", 1)[1]
+    if not is_plain_number(text):
+        return None
+    try:
+        return App.Units.Quantity(text).Value
+    except Exception:
+        return None
+
+
+def _held_back(obj, path, what):
+    """{"Parameters.width": -5.0} when the number typed for a length parameter is not what it
+    holds now (FreeCAD keeps a length at 0 or more), else {}."""
+    try:
+        if obj.TypeId != "App::VarSet" or path in dict(obj.ExpressionEngine):
+            return {}
+        number = _typed_number(what)
+        held = getattr(obj, path)
+        held = held.Value if hasattr(held, "Value") else float(held)
+        if number is not None and abs(number - held) > 1e-9:
+            return {"%s.%s" % (obj.Name, path): number}
+    except Exception:
+        pass
+    return {}
 
 
 def change_checked(doc, obj, path, apply, what):
@@ -532,7 +562,7 @@ def change_checked(doc, obj, path, apply, what):
         log("parameters: refused %s: %s: %s" % (what, problem[0], reason))
         return explain_core.parameter_refusal(what, [problem])
     doc.recompute()
-    after = broken_steps(doc, signs)
+    after = broken_steps(doc, signs, _held_back(obj, path, what))
     new = [(name, reason) for name, reason in after.items() if name not in before]
     if not new:
         return ""
