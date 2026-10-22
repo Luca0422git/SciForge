@@ -13,7 +13,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import _remember, browser_core as core
-from . import commands, components, timeline_ops as ops, ui_icon, warn
+from . import commands, components, doc_epoch, timeline_ops as ops, ui_icon, warn
 from .compat import QtCore, QtGui, QtWidgets
 from .inline_edit import InlineEditor
 
@@ -654,10 +654,12 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self.customContextMenuRequested.connect(self._menu)
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(500)
-        self._timer.timeout.connect(self.refresh)
+        self._timer.timeout.connect(self._poll)
+        self._gate = doc_epoch.Gate()  # the poll reads the design only after a change
         self._observer = None
 
     def start(self):
+        doc_epoch.install()
         self.refresh()
         self._timer.start()
         if self._observer is None:
@@ -719,15 +721,33 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             active_component=component.Name if component is not None else None,
         )
 
+    def _poll(self):
+        """The timer's tick: reads the design only when something may have changed since
+        the last read (doc_epoch: on a design of 160 objects the read took 55 ms every
+        500 ms while nothing happened)."""
+        try:
+            if doc_epoch.busy():
+                return  # a long recompute runs the timers from inside it: read it once done
+            key = doc_epoch.key()
+            if key is not None and not self._gate.ready(key):
+                self._sync_selection()
+                return
+            self.refresh()
+        except Exception as exc:
+            _remember("info", "browser poll: %s" % exc)
+
     def refresh(self, force=False):
         if self._busy:
             return
         try:
             if self._renaming is not None:
                 return  # do not rebuild under the user's typing
+            key = doc_epoch.key()  # (before reading: a change during the read is read again)
             tree = self.tree()
             _follow_active(self._doc)
             sig = core.signature(tree)
+            if key is not None:
+                self._gate.done(key)
             if sig != self._sig or force:
                 self._sig = sig
                 self._tree = tree

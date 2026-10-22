@@ -1369,6 +1369,7 @@ class Recovery:
         self.timer.timeout.connect(self.tick)
         self.postponed = False
         self.written = 0  # copies written this session (tests read it)
+        self._copied = {}  # design name -> doc_epoch.value() when its last copy was written
 
     def start(self):
         self.timer.setInterval(autosave_interval_ms())
@@ -1422,9 +1423,23 @@ class Recovery:
                 continue
             if not forced and not is_modified(doc):
                 continue
+            if not forced and self._unchanged_since_copy(doc):
+                continue
             if self.save_copy(doc):
                 count += 1
         return count
+
+    def _unchanged_since_copy(self, doc):
+        """Nothing in any open design changed since this design's last copy (doc_epoch):
+        the copy on disk is still the design. Writing a big design takes seconds, during
+        which the window does not answer (2 s for a design of 120 steps and 1700 faces),
+        and it came back every 5 minutes while the person only looked at it."""
+        try:
+            from . import doc_epoch
+
+            return doc_epoch.installed() and self._copied.get(doc.Name) == doc_epoch.value()
+        except Exception:
+            return False
 
     def key_of(self, doc):
         return _recovered.get(doc.Name) or core.recovery_key(doc.Name, doc.FileName)
@@ -1441,6 +1456,12 @@ class Recovery:
             os.replace(tmp, copy)
             core.write_recovery_sidecar(self.folder, key, doc.Label, doc.FileName, self.session)
             self.written += 1
+            try:
+                from . import doc_epoch
+
+                self._copied[doc.Name] = doc_epoch.value()
+            except Exception:
+                pass
             log("recovery copy of %s written" % doc.Label)
             return True
         except Exception as exc:

@@ -293,31 +293,72 @@ def _where(point, box):
     return App.Vector(*out)
 
 
-def _find_again(shape, rec):
+class _Pool:
+    """One shape's elements described once for any number of lost elements looked for on it
+    (curves.refind, picks): the records of its edges / faces and its bounding box. A fillet
+    of a hundred edges on a part of two thousand faces lost them all after an edit of the
+    first step: looking for each one described every edge again (153 052 records and 253
+    bounding boxes, 31 s); described once, the same search is the same answer in well under
+    a second (SciForge speed with big designs, 2026-10-21)."""
+
+    def __init__(self, shape):
+        self.shape = shape
+        self._box = None
+        self._kinds = {}
+
+    def box(self):
+        if self._box is None:
+            self._box = _box(self.shape)
+        return self._box
+
+    def elements(self, kind):
+        """[(index, element or its record)] of `kind`: vertices as they are (their Point is
+        all that is compared), edges and faces as their _record."""
+        if kind not in self._kinds:
+            pool = {"Edge": self.shape.Edges, "Face": self.shape.Faces, "Vertex": self.shape.Vertexes}
+            out = []
+            for i, other in enumerate(pool.get(kind) or [], start=1):
+                if kind == "Vertex":
+                    out.append((i, other))
+                    continue
+                try:
+                    out.append((i, _record(other)))
+                except Exception:
+                    continue
+            self._kinds[kind] = out
+        return self._kinds[kind]
+
+
+def _find_again(shape, rec, pool=None):
     """Name ("Edge3") of the element of `shape` that is most likely `rec`'s, or None. Nearest
     first: relative to the part's bounding box when the record has the box it was taken in
-    (the part may have grown), else in place."""
+    (the part may have grown), else in place. `pool` (a _Pool of `shape`) shares the
+    elements' descriptions between several searches on the same shape."""
     kind = rec.get("k")
-    pool = {"Edge": shape.Edges, "Face": shape.Faces, "Vertex": shape.Vertexes}.get(kind)
-    if not pool or "c" not in rec:
+    if kind not in ("Edge", "Face", "Vertex") or "c" not in rec:
+        return None
+    if pool is None:
+        pool = _Pool(shape)
+    candidates = pool.elements(kind)
+    if not candidates:
         return None
     centre = App.Vector(*rec["c"])
     old_box = rec.get("b")
-    new_box = _box(shape) if old_box else None
+    new_box = pool.box() if old_box else None
+    old_where = _where(centre, old_box) if old_box else None
 
     def gap(point):
         far = (point - centre).Length
         if not old_box:
             return far
-        return (_where(point, new_box) - _where(centre, old_box)).Length + 1e-6 * far
+        return (_where(point, new_box) - old_where).Length + 1e-6 * far
 
     best = None
-    for i, other in enumerate(pool, start=1):
+    for i, there in candidates:
         try:
             if kind == "Vertex":
-                distance = gap(other.Point)
+                distance = gap(there.Point)
             else:
-                there = _record(other)
                 if there.get("t") != rec.get("t"):
                     continue
                 if (
@@ -369,6 +410,7 @@ def remember(feature, props, memory=MEMORY):
     import json
 
     data = {}
+    shapes = {}  # linked object -> (shape, its box): one bounding box per part, not per pick
     for prop in props:
         rows = []
         for linked, subs in _items(getattr(feature, prop, None)):
@@ -379,8 +421,14 @@ def remember(feature, props, memory=MEMORY):
                 if not short or sub.startswith("?"):
                     continue
                 try:
-                    rec = _record(linked.Shape.getElement(short))
-                    rec["b"] = _box(linked.Shape)
+                    if linked.Name not in shapes:
+                        shape = linked.Shape
+                        shapes[linked.Name] = [shape, None]
+                    entry = shapes[linked.Name]
+                    rec = _record(entry[0].getElement(short))
+                    if entry[1] is None:
+                        entry[1] = _box(entry[0])
+                    rec["b"] = list(entry[1])
                     rows.append([linked.Name, short, rec])
                 except Exception:
                     continue
@@ -405,6 +453,7 @@ def refind(feature, props, memory=MEMORY):
     except Exception:
         return {}
     changed = {}
+    pools = {}  # linked object -> _Pool: its elements described once for all lost picks
     for prop in props:
         rows = memory.get(prop) or []
         if not rows:
@@ -428,7 +477,12 @@ def refind(feature, props, memory=MEMORY):
                             (r for n, s, r in rows if s == short and doc.getObject(n) is None),
                             None,
                         )
-                    found = _find_again(linked.Shape, rec) if rec else None
+                    found = None
+                    if rec:
+                        if linked.Name not in pools:
+                            pools[linked.Name] = _Pool(linked.Shape)
+                        pool = pools[linked.Name]
+                        found = _find_again(pool.shape, rec, pool)
                     if found is not None:
                         renames[(linked.Name, short)] = found
                         sub = found

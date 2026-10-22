@@ -375,7 +375,9 @@ def farthest(shapes, start, direction):
             continue
         points = [v.Point for v in shape.Vertexes]
         try:
-            points += list(shape.tessellate(0.05)[0])
+            # on a copy of the topology: a body's own shape may be passed as it is
+            # (bodies.global_shape(copy=False)) and its faces must not keep this mesh
+            points += list(shape.copy(False).tessellate(0.05)[0])
         except Exception:
             pass
         for point in points:
