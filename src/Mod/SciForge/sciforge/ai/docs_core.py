@@ -960,8 +960,7 @@ def export_text(full=False, lib=None, compact=False):
         "Fusion. This file holds SciForge's documentation for AI models: %s. Each part "
         'starts with a line "File: <path>"; a link sciforge://docs/<path> in the text means '
         "that part. When SciForge's MCP server is connected, the same documents are "
-        "resources and the tools docs_search / docs_read / examples_search search them."
-        % what,
+        "resources and the tools docs_search / docs_read / examples_search search them." % what,
         "",
         "## Contents",
         "",

@@ -2,7 +2,7 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-Fusion: File > Open. Category: Designs and files. Read-only. Needs nothing.
+Fusion: File > Open. Category: Designs and files. Changes which design is open or active, changes no design. Needs nothing.
 
 ## What it does
 

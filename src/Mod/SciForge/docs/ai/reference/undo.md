@@ -2,7 +2,7 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-Fusion: Quick Access Toolbar > Undo (Ctrl+Z). Category: Designs and files. Changes the open designs (not an undo step). Needs an open design.
+Fusion: Quick Access Toolbar > Undo (Ctrl+Z). Category: Designs and files. Takes back the last undo step. Needs an open design.
 
 ## What it does
 

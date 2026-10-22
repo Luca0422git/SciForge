@@ -27,9 +27,13 @@ def _extra_read(args, problems):
 
 
 def _extra_examples(args, problems):
-    if not any(
-        isinstance(args.get(k), str) and args.get(k).strip() for k in ("query", "tool", "op", "tag")
-    ) and args.get("kind", "all") == "all":
+    if (
+        not any(
+            isinstance(args.get(k), str) and args.get(k).strip()
+            for k in ("query", "tool", "op", "tag")
+        )
+        and args.get("kind", "all") == "all"
+    ):
         problems.append("give query, tool, op, tag or kind (recipe / golden): what to look for")
 
 
@@ -98,9 +102,7 @@ define(
     extra=_extra_read,
     examples=[
         example({"path": "handbook.md"}, "the handbook, first page"),
-        example(
-            {"path": "selectors.md", "section": "cookbook"}, "only the selector cookbook"
-        ),
+        example({"path": "selectors.md", "section": "cookbook"}, "only the selector cookbook"),
         example({"path": "golden/box_basic"}, "a golden model's steps and measurements"),
     ],
 )

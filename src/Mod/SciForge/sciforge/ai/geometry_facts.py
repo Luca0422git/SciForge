@@ -36,6 +36,7 @@ def tight_box(shape):
         pass
     return shape.BoundBox
 
+
 TOL = 1e-4  # the selectors' "at" tolerance (selectors.select keeps |c - target| < 1e-4)
 
 

@@ -17,7 +17,8 @@ modify_tools, more_tools (surface, construct, assemble, inspect), history_tools
 (timeline, parameters, files, drawings, view, help), verify_tools (the tools an agent checks
 its own work with: inspect_design, query_geometry, check_design, render, diff_design) and
 docs_tools (the documentation: docs_search, docs_read, examples_search). There is no tool
-that runs arbitrary code. Pure Python: no FreeCAD, no Qt (the MCP server an AI app starts imports it).
+that runs arbitrary code. Pure Python: no FreeCAD, no Qt (the MCP server an AI app starts
+imports it).
 """
 
 import copy

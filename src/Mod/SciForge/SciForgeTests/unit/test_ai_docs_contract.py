@@ -82,7 +82,9 @@ class ToolReference(unittest.TestCase):
             self.assertIn("## Errors", text, name)
             self.assertIn("## Example 1:", text, name)
             self.assertIn("The answer:", text, name)
-            self.assertIn("sciforge://docs/%s" % tool_docs.page_path(name), read_doc(tool_docs.FILE))
+            self.assertIn(
+                "sciforge://docs/%s" % tool_docs.page_path(name), read_doc(tool_docs.FILE)
+            )
 
     def test_file_is_what_the_catalogue_writes(self):
         self.assertEqual(
@@ -100,8 +102,9 @@ class ToolReference(unittest.TestCase):
             self.assertTrue(os.path.isfile(path), "%s is missing: run make_ai_docs.py" % rel)
             with open(path, encoding="utf-8") as handle:
                 self.assertEqual(
-                    handle.read(), text, "docs/ai/%s is out of date: run "
-                    "tools/sciforge/make_ai_docs.py" % rel
+                    handle.read(),
+                    text,
+                    "docs/ai/%s is out of date: run " "tools/sciforge/make_ai_docs.py" % rel,
                 )
         for folder in tool_docs.generated_folders():
             if folder == tool_docs.USER and not IN_SOURCE_TREE:
@@ -115,8 +118,14 @@ class ToolReference(unittest.TestCase):
         if not IN_SOURCE_TREE:
             self.skipTest("not in the source tree")
         files = tool_docs.generated(REPO)
-        for name in ("cheat-sheet.md", "known-issues.md", "feature-outline.md",
-                     "parity/fillet.md", "parity/ai.md", "dev/feature-guide.md"):
+        for name in (
+            "cheat-sheet.md",
+            "known-issues.md",
+            "feature-outline.md",
+            "parity/fillet.md",
+            "parity/ai.md",
+            "dev/feature-guide.md",
+        ):
             self.assertIn("user/" + name, files, name)
         self.assertFalse([r for r in files if r.startswith("user/sessions/")])
         self.assertFalse([r for r in files if r.startswith("user/dev/briefs/")])
@@ -216,8 +225,11 @@ class Resources(unittest.TestCase):
         reply = rpc("resources/read", {"uri": "sciforge://examples/golden/nope"})
         self.assertEqual(reply["error"]["code"], mcp_resources.RESOURCE_NOT_FOUND)
         sizes = {}
-        for uri in ("sciforge://handbook/compact", "sciforge://handbook",
-                    "sciforge://handbook/full"):
+        for uri in (
+            "sciforge://handbook/compact",
+            "sciforge://handbook",
+            "sciforge://handbook/full",
+        ):
             text = rpc("resources/read", {"uri": uri})["result"]["contents"][0]["text"]
             self.assertTrue(text.startswith("# " + docs_core.EXPORT_TITLE), uri)
             self.assertIn("File: handbook.md", text, uri)

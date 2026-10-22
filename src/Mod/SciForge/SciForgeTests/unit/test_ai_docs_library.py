@@ -109,7 +109,7 @@ class Markdown(unittest.TestCase):
         with self.assertRaises(ValueError):
             docs_core.call_blocks('```json sciforge-calls\n[{"args": {}}]\n```\n')
         with self.assertRaises(ValueError):
-            docs_core.call_blocks('```json sciforge-calls\n[]\n')
+            docs_core.call_blocks("```json sciforge-calls\n[]\n")
         self.assertEqual(docs_core.call_blocks("```json\n[1]\n```\n"), [])
 
     def test_words(self):
@@ -249,7 +249,9 @@ class Accuracy(unittest.TestCase):
 
     def test_recipes_are_listed_tagged_and_tested(self):
         index = LIB.doc("recipes/index.md").text
-        recipes = [d for d in LIB.docs if d.rel.startswith("recipes/") and d.rel != "recipes/index.md"]
+        recipes = [
+            d for d in LIB.docs if d.rel.startswith("recipes/") and d.rel != "recipes/index.md"
+        ]
         self.assertGreaterEqual(len(recipes), 12)
         for doc in recipes:
             self.assertIn("sciforge://docs/%s" % doc.rel, index, doc.rel)
@@ -340,7 +342,9 @@ class ToolExamples(unittest.TestCase):
         from SciForgeTests.headless import docs_runner
 
         a = {"text": "Body1: 23785.4 mm3, 60 x 40", "is_error": False}
-        self.assertIsNone(docs_runner.same_answer(a, dict(a, text="Body1: 23785.40001 mm3, 60 x 40")))
+        self.assertIsNone(
+            docs_runner.same_answer(a, dict(a, text="Body1: 23785.40001 mm3, 60 x 40"))
+        )
         self.assertTrue(docs_runner.same_answer(a, dict(a, text="Body1: 23000 mm3, 60 x 40")))
         self.assertTrue(docs_runner.same_answer(a, dict(a, text="Body2: 23785.4 mm3, 60 x 40")))
         self.assertTrue(docs_runner.same_answer(a, dict(a, is_error=True)))
@@ -386,15 +390,23 @@ class Offered(unittest.TestCase):
             ("examples_search", {"tool": "gear"}),
         ):
             reply = mcp_core.handle(
-                {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                 "params": {"name": name, "arguments": args}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": name, "arguments": args},
+                },
                 closed,
                 "1",
             )
             self.assertFalse(reply["result"]["isError"], (name, reply))
         reply = mcp_core.handle(
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-             "params": {"name": "get_design", "arguments": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "get_design", "arguments": {}},
+            },
             closed,
             "1",
         )
@@ -430,7 +442,8 @@ class Export(unittest.TestCase):
         cli = os.path.join(ROOT, "sciforge", "ai", "cli.py")
         done = subprocess.run(
             [sys.executable, cli, "docs", "search", "keyway", "shaft"],
-            capture_output=True, timeout=60,
+            capture_output=True,
+            timeout=60,
         )
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn(b"shaft-with-keyway", done.stdout)
@@ -442,7 +455,8 @@ class Export(unittest.TestCase):
             out = os.path.join(tmp, "all.md")
             done = subprocess.run(
                 [sys.executable, cli, "docs", "export", out, "--compact"],
-                capture_output=True, timeout=60,
+                capture_output=True,
+                timeout=60,
             )
             self.assertEqual(done.returncode, 0, done.stderr)
             with open(out, encoding="utf-8") as handle:

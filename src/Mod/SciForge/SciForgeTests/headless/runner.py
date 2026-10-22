@@ -224,17 +224,19 @@ SESSION = [
     {
         "tool": "docs_search",
         "args": {"query": "fillet radius too big", "limit": 3},
-        "check": _json_check(
-            lambda d, r: None if d["results"] else "docs_search found nothing"
-        ),
+        "check": _json_check(lambda d, r: None if d["results"] else "docs_search found nothing"),
     },
     {
         "tool": "docs_read",
         "args": {"path": "handbook.md", "section": "units-and-coordinates"},
         "contains": ["Units and coordinates", "millimetres"],
     },
-    {"tool": "docs_read", "args": {"path": "nothing.md"}, "expect": "error",
-     "contains": ["There is no document"]},
+    {
+        "tool": "docs_read",
+        "args": {"path": "nothing.md"},
+        "expect": "error",
+        "contains": ["There is no document"],
+    },
     {
         "tool": "examples_search",
         "args": {"query": "flange bolt circle", "limit": 3},

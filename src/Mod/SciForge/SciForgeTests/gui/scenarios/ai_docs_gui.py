@@ -68,7 +68,8 @@ def docs_tools():
     a = call("docs_read", {"path": "handbook.md", "section": "units-and-coordinates"})
     h.check(
         "docs_read reads one section",
-        not a["is_error"] and "## Units and coordinates" in a["text"]
+        not a["is_error"]
+        and "## Units and coordinates" in a["text"]
         and "## Fusion's ideas" not in a["text"],
         a["text"][:300],
     )

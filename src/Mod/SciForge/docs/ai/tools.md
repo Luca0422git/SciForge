@@ -20,8 +20,8 @@ SciForge offers 117 tools to AI apps (through MCP, the built-in chat panel and t
 | [`pattern`](sciforge://docs/reference/pattern.md) | Pattern | Create (SOLID) | SOLID > CREATE > Pattern > Rectangular / Circular Pattern (features) | changes the design (one undo step) | a solid body |
 | [`shell`](sciforge://docs/reference/shell.md) | Shell | Modify | SOLID > MODIFY > Shell | changes the design (one undo step) | a solid body |
 | [`set_parameter`](sciforge://docs/reference/set_parameter.md) | Set parameter | Parameters | MODIFY > Change Parameters (User Parameters, +) | changes the design (one undo step) | nothing |
-| [`undo`](sciforge://docs/reference/undo.md) | Undo | Designs and files | Quick Access Toolbar > Undo (Ctrl+Z) | changes the open designs (not an undo step) | an open design |
-| [`redo`](sciforge://docs/reference/redo.md) | Redo | Designs and files | Quick Access Toolbar > Redo (Ctrl+Y) | changes the open designs (not an undo step) | an open design |
+| [`undo`](sciforge://docs/reference/undo.md) | Undo | Designs and files | Quick Access Toolbar > Undo (Ctrl+Z) | takes back the last undo step | an open design |
+| [`redo`](sciforge://docs/reference/redo.md) | Redo | Designs and files | Quick Access Toolbar > Redo (Ctrl+Y) | brings back the last undone step | an open design |
 | [`save`](sciforge://docs/reference/save.md) | Save | Designs and files | Quick Access Toolbar > Save | writes files | an open design |
 | [`export`](sciforge://docs/reference/export.md) | Export | Import and export | File > Export | writes files | an open design |
 | [`create_curve_sketch`](sciforge://docs/reference/create_curve_sketch.md) | Create sketch of curves | Sketch | SOLID > CREATE > Create Sketch (lines, arcs, points) | changes the design (one undo step) | nothing |
@@ -69,7 +69,7 @@ SciForge offers 117 tools to AI apps (through MCP, the built-in chat panel and t
 | [`physical_material`](sciforge://docs/reference/physical_material.md) | Physical material | Modify | SOLID > MODIFY > Physical Material | changes the design (one undo step) | an open design |
 | [`list_materials`](sciforge://docs/reference/list_materials.md) | List materials | Modify | SOLID > MODIFY > Physical Material / Appearance (libraries) | read-only | nothing |
 | [`appearance`](sciforge://docs/reference/appearance.md) | Appearance | Modify | SOLID > MODIFY > Appearance (A) | changes the design (one undo step) | an open design |
-| [`capture_design_history`](sciforge://docs/reference/capture_design_history.md) | Capture design history | Timeline (history) | the design's menu: Capture Design History / Do Not Capture Design History | changes the open designs (not an undo step), destructive | an open design |
+| [`capture_design_history`](sciforge://docs/reference/capture_design_history.md) | Capture design history | Timeline (history) | the design's menu: Capture Design History / Do Not Capture Design History | changes the design (one undo step), destructive | an open design |
 | [`surface`](sciforge://docs/reference/surface.md) | Surface | Surface | SURFACE > CREATE / MODIFY (Extrude, Revolve, Sweep, Loft, Patch, Ruled, Offset, Boundary Fill, Thicken, Trim, Untrim, Extend, Stitch, Unstitch, Reverse Normal) | changes the design (one undo step) | nothing |
 | [`construct_plane`](sciforge://docs/reference/construct_plane.md) | Construction plane | Construct | SOLID > CONSTRUCT > (planes) | changes the design (one undo step) | an open design |
 | [`construct_axis`](sciforge://docs/reference/construct_axis.md) | Construction axis | Construct | SOLID > CONSTRUCT > (axes) | changes the design (one undo step) | an open design |
@@ -99,11 +99,11 @@ SciForge offers 117 tools to AI apps (through MCP, the built-in chat panel and t
 | [`delete_parameter`](sciforge://docs/reference/delete_parameter.md) | Delete parameter | Parameters | MODIFY > Change Parameters > a user parameter > Delete | changes the design (one undo step), destructive | an open design |
 | [`set_model_parameter`](sciforge://docs/reference/set_model_parameter.md) | Set model parameter | Parameters | MODIFY > Change Parameters > Model Parameters | changes the design (one undo step) | an open design |
 | [`new_design`](sciforge://docs/reference/new_design.md) | New design | Designs and files | File > New Design | changes the open designs (not an undo step) | nothing |
-| [`open_design`](sciforge://docs/reference/open_design.md) | Open design | Designs and files | File > Open | read-only | nothing |
+| [`open_design`](sciforge://docs/reference/open_design.md) | Open design | Designs and files | File > Open | changes which design is open or active, changes no design | nothing |
 | [`save_as`](sciforge://docs/reference/save_as.md) | Save as | Designs and files | File > Save As | writes files | an open design |
 | [`close_design`](sciforge://docs/reference/close_design.md) | Close design | Designs and files | File > Close | changes the open designs (not an undo step), destructive | an open design |
 | [`list_designs`](sciforge://docs/reference/list_designs.md) | List designs | Designs and files | the design tabs | read-only | nothing |
-| [`switch_design`](sciforge://docs/reference/switch_design.md) | Switch design | Designs and files | click a design tab | read-only | nothing |
+| [`switch_design`](sciforge://docs/reference/switch_design.md) | Switch design | Designs and files | click a design tab | changes which design is open or active, changes no design | nothing |
 | [`import_file`](sciforge://docs/reference/import_file.md) | Insert file | Import and export | INSERT > Insert Mesh / Insert DXF / Insert STEP, and Insert into Current Design | changes the design (one undo step) | nothing |
 | [`create_drawing`](sciforge://docs/reference/create_drawing.md) | Create drawing | Drawings | File > New Drawing > From Design | changes the design (one undo step) | a solid body |
 | [`add_drawing_view`](sciforge://docs/reference/add_drawing_view.md) | Add drawing view | Drawings | DRAWING > CREATE > Base View / Projected View / Section View / Detail View | changes the design (one undo step) | a drawing |

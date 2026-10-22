@@ -70,7 +70,9 @@ NEED_WORDS = {
     "drawing": "a drawing",
 }
 # Tools that change the open designs rather than a design's history: no undo step.
-NOT_UNDO_STEPS = ("new_design", "close_design", "undo", "redo", "capture_design_history")
+NOT_UNDO_STEPS = ("new_design", "close_design", "undo", "redo")
+# Tools that only open or switch designs (they write nothing and change no design).
+OPENS_DESIGNS = ("open_design", "switch_design")
 
 
 def _shorten(text, base=""):
@@ -125,22 +127,44 @@ def _unit(key, node):
     words = (node.get("description") or "").lower()
     kind = node.get("type")
     if kind not in ("number", "integer") and not (
-        kind == "array" and isinstance(node.get("items"), dict)
+        kind == "array"
+        and isinstance(node.get("items"), dict)
         and node["items"].get("type") == "number"
     ):
         return ""
     if "degree" in words or key in ("angle", "angle2", "taper", "taper2", "twist", "rotation"):
         return "deg"
     if kind == "integer":
-        return "count" if key in ("quantity", "quantity2", "count", "count2", "teeth", "sides") else ""
+        return (
+            "count" if key in ("quantity", "quantity2", "count", "count2", "teeth", "sides") else ""
+        )
     if "pixel" in words:
         return "px"
     if "0..1" in words or "fraction" in key:
         return "0..1"
     if "mm" in words or key in (
-        "distance", "distance2", "depth", "radius", "diameter", "thickness", "length",
-        "width", "height", "offset", "x", "y", "dx", "dy", "dz", "spacing", "spacing2",
-        "section_size", "at", "point", "center", "corner",
+        "distance",
+        "distance2",
+        "depth",
+        "radius",
+        "diameter",
+        "thickness",
+        "length",
+        "width",
+        "height",
+        "offset",
+        "x",
+        "y",
+        "dx",
+        "dy",
+        "dz",
+        "spacing",
+        "spacing2",
+        "section_size",
+        "at",
+        "point",
+        "center",
+        "corner",
     ):
         return "mm"
     return ""
@@ -191,11 +215,17 @@ def _arguments(schema):
 
 def _flags(entry):
     words = []
-    if registry.is_read_only(entry):
+    if entry["name"] in OPENS_DESIGNS:
+        words.append("changes which design is open or active, changes no design")
+    elif registry.is_read_only(entry):
         words.append("read-only")
     else:
         if entry["changes_design"]:
-            if entry["name"] in NOT_UNDO_STEPS:
+            if entry["name"] == "undo":
+                words.append("takes back the last undo step")
+            elif entry["name"] == "redo":
+                words.append("brings back the last undone step")
+            elif entry["name"] in NOT_UNDO_STEPS:
                 words.append("changes the open designs (not an undo step)")
             else:
                 words.append("changes the design (one undo step)")
@@ -384,7 +414,7 @@ def _errors(entry):
         )
     lines.append(
         "- Arguments of the wrong type, out of their limits or not in the table are refused "
-        "the same way, each problem in a sentence (\"radius must be a number above 0\")."
+        'the same way, each problem in a sentence ("radius must be a number above 0").'
     )
     if entry["kind"] == "steps":
         lines.append(
@@ -410,8 +440,11 @@ def reference_page(entry, results, recipes=(), golden=()):
     flags = _flags(entry)
     undo = ""
     if entry["changes_design"] and name not in NOT_UNDO_STEPS:
-        sample = (examples[0]["args"] if examples else
-                  (entry["examples"][0]["arguments"] if entry["examples"] else {}))
+        sample = (
+            examples[0]["args"]
+            if examples
+            else (entry["examples"][0]["arguments"] if entry["examples"] else {})
+        )
         undo = ' Its undo step is named like "%s".' % catalog.step_title(name, sample)
     out = [
         "# `%s`: %s" % (name, entry["title"]),
@@ -419,8 +452,13 @@ def reference_page(entry, results, recipes=(), golden=()):
         HEADER,
         "",
         "Fusion: %s. Category: %s. %s.%s Needs %s."
-        % (entry["ribbon"], titles[entry["category"]], flags[:1].upper() + flags[1:], undo,
-           _needs(entry)),
+        % (
+            entry["ribbon"],
+            titles[entry["category"]],
+            flags[:1].upper() + flags[1:],
+            undo,
+            _needs(entry),
+        ),
     ]
     if entry["ops"]:
         out.append(
@@ -436,13 +474,24 @@ def reference_page(entry, results, recipes=(), golden=()):
         if ex.get("setup_calls"):
             out += ["", "Starting from this design (made by these calls):", "", "```json", "["]
             calls = ex["setup_calls"]
-            out += ["  %s%s" % (_call_line(c), "," if j < len(calls) - 1 else "")
-                    for j, c in enumerate(calls)]
+            out += [
+                "  %s%s" % (_call_line(c), "," if j < len(calls) - 1 else "")
+                for j, c in enumerate(calls)
+            ]
             out += ["]", "```"]
         else:
             out += ["", "Starting from SciForge with no design open."]
-        out += ["", "The call:", "", "```json", _call_line({"tool": name, "args": ex["args"]}),
-                "```", "", "The answer:", ""]
+        out += [
+            "",
+            "The call:",
+            "",
+            "```json",
+            _call_line({"tool": name, "args": ex["args"]}),
+            "```",
+            "",
+            "The answer:",
+            "",
+        ]
         out += _answer_block(ex["answer"])
     if entry["examples"]:
         out += ["", "## More argument examples", ""]
@@ -460,8 +509,9 @@ def reference_page(entry, results, recipes=(), golden=()):
             "- Golden models built with its steps (read one with docs_read golden/<id>): "
             "%s%s" % (ids, more)
         )
-    see.append("- [All tools](sciforge://docs/%s), [the handbook](sciforge://docs/handbook.md)"
-               % FILE)
+    see.append(
+        "- [All tools](sciforge://docs/%s), [the handbook](sciforge://docs/handbook.md)" % FILE
+    )
     out += ["", "## See also", ""] + see
     return "\n".join(out).rstrip() + "\n"
 
@@ -483,8 +533,7 @@ def golden_index(models=None):
         "AI tools build), not tool calls: the table at the end gives the tools that build "
         "each op. Read one with docs_read `golden/<id>` (or the resource "
         "sciforge://examples/golden/<id>); examples_search finds them by words, op, tool or "
-        "tag. Models marked (known gap) document something SciForge does not do yet."
-        % len(models),
+        "tag. Models marked (known gap) document something SciForge does not do yet." % len(models),
         "",
         "## By feature",
         "",
@@ -558,7 +607,7 @@ def _recipes_by_tool():
     for ex in lib.examples():
         if ex["kind"] != "recipe":
             continue
-        rel = ex["uri"][len(docs_core.DOCS_URI):]
+        rel = ex["uri"][len(docs_core.DOCS_URI) :]
         for tool in ex["tools"]:
             out.setdefault(tool, []).append((rel, ex["title"]))
     return out

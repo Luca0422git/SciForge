@@ -134,9 +134,12 @@ def check_expect(expect, answer):
                 except (KeyError, IndexError, ValueError, TypeError):
                     problems.append("the answer has no %s" % path)
                     continue
-                if isinstance(want, list) and len(want) == 2 and all(
-                    isinstance(v, (int, float)) and not isinstance(v, bool) for v in want
-                ) and not isinstance(got, list):
+                if (
+                    isinstance(want, list)
+                    and len(want) == 2
+                    and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in want)
+                    and not isinstance(got, list)
+                ):
                     target, tol = want
                     if not isinstance(got, (int, float)) or abs(got - target) > tol:
                         problems.append("%s is %s, expected %s +- %s" % (path, got, target, tol))
@@ -144,7 +147,9 @@ def check_expect(expect, answer):
                     problems.append("%s is %r, expected %r" % (path, got, want))
     if "image" in expect:
         if answer.get("image") != list(expect["image"]):
-            problems.append("the picture is %s, expected %s" % (answer.get("image"), expect["image"]))
+            problems.append(
+                "the picture is %s, expected %s" % (answer.get("image"), expect["image"])
+            )
     return problems
 
 
@@ -237,13 +242,20 @@ def run_documents(text_filter="", root=None):
                     count += 1
                     answer = session.call(call["tool"], call.get("args", {}))
                     if os.environ.get("SCIFORGE_DOCS_VERBOSE"):
-                        print("[SciForge] docs call %s %s -> %s" % (
-                            call["tool"], json.dumps(call.get("args", {}))[:200],
-                            answer["text"][: int(os.environ["SCIFORGE_DOCS_VERBOSE"])]))
+                        print(
+                            "[SciForge] docs call %s %s -> %s"
+                            % (
+                                call["tool"],
+                                json.dumps(call.get("args", {}))[:200],
+                                answer["text"][: int(os.environ["SCIFORGE_DOCS_VERBOSE"])],
+                            )
+                        )
                     for problem in check_expect(call.get("expect"), answer):
                         problems.append("line %d, %s: %s" % (line, call["tool"], problem))
-                    if problems and answer["is_error"] and not (call.get("expect") or {}).get(
-                        "error"
+                    if (
+                        problems
+                        and answer["is_error"]
+                        and not (call.get("expect") or {}).get("error")
                     ):
                         break  # the rest of the document builds on this call
                 if problems:
@@ -336,7 +348,9 @@ def run_examples(record=False, text_filter="", gui=False, path=RESULTS):
                         problems.append("recorded for other arguments: record again")
                     else:
                         if ex.get("volatile"):  # (answers about the documentation itself)
-                            difference = same_answer(_first_line(old["answer"]), _first_line(answer))
+                            difference = same_answer(
+                                _first_line(old["answer"]), _first_line(answer)
+                            )
                         else:
                             difference = same_answer(old["answer"], answer)
                         if difference:
@@ -347,7 +361,9 @@ def run_examples(record=False, text_filter="", gui=False, path=RESULTS):
                             )
         finally:
             session.close()
-        rows.append(_row("example " + key, problems, len(spec["setup_calls"]) + 1, time.time() - start))
+        rows.append(
+            _row("example " + key, problems, len(spec["setup_calls"]) + 1, time.time() - start)
+        )
     if record and changed:
         keys = [k for k, _ex in numbered(tool_examples.EXAMPLES)]
         ordered = {k: recorded[k] for k in keys if k in recorded}

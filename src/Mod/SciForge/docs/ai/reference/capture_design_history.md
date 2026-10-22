@@ -2,7 +2,7 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-Fusion: the design's menu: Capture Design History / Do Not Capture Design History. Category: Timeline (history). Changes the open designs (not an undo step), destructive. Needs an open design.
+Fusion: the design's menu: Capture Design History / Do Not Capture Design History. Category: Timeline (history). Changes the design (one undo step), destructive. Its undo step is named like "AI: Do not capture design history". Needs an open design.
 It builds the design step(s) `history_on`, `history_off` (the golden models' step language).
 
 ## What it does

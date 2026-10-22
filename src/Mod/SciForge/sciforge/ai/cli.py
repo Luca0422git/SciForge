@@ -182,8 +182,7 @@ def _docs(options, out):
         text = docs_core.export_text(full=options.full, compact=options.compact)
         with open(target, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
-        say("Wrote %s (%d characters, %d documents)." % (
-            target, len(text), text.count("\nFile: ")))
+        say("Wrote %s (%d characters, %d documents)." % (target, len(text), text.count("\nFile: ")))
         return 0
     if options.action == "search":
         text, failed = docs_core.tool_answer("docs_search", {"query": words})
