@@ -7,9 +7,11 @@ FreeCAD 1.1.4 hands a sketch point to Python without its sketch data, so assigni
 `sketch.Geometry = [...]` turned every construction point (the old corner a sketch fillet
 keeps) into a real point with a new id: the sketch's shape got a stray vertex, and what
 named the point by its id (FreeCAD's element map, external references, SciForge's picks)
-lost it. A fully constrained 20 x 10 rectangle (-30, 0)-(-10, 10), its top-right corner
-filleted with SciForge's own Fillet (real clicks and keys: MODIFY > Fillet, the corner, 3,
-Enter: the old corner stays as a construction point on both lines), then:
+lost it (and an ellipse's foci lost their role). A fully constrained 20 x 10 rectangle
+(-30, 0)-(-10, 10) and a 12 x 6 ellipse at (-20, -20) with its helper curves, the
+rectangle's top-right corner filleted with SciForge's own Fillet (real clicks and keys:
+MODIFY > Fillet, the corner, 3, Enter: the old corner stays as a construction point on both
+lines), then:
 
   E  sketch_explain puts curves back (a copy of the filleted sketch in its own document):
      E1 inferred guesses that only fit by squeezing a line (add_checked takes the weakest
@@ -19,7 +21,7 @@ Enter: the old corner stays as a construction point on both lines), then:
         time the old corner stays construction with its id, the other curves keep theirs
   S  Finish Sketch; the sketch's browser row, MODIFY > Scale, factor 2, OK (real input):
      every curve keeps its construction flag and id, the constraints are the same (the
-     dimensions doubled), still fully constrained, the profile 4 times the area, no stray
+     dimensions doubled), still fully constrained, the profiles 4 times the area, no stray
      vertex; Ctrl+Z: as before
   T  the sketch opened again from the timeline, SKETCH > CREATE > Text (real input), its
      frame's corner dragged (text.set_frame): the rectangle's curves keep their flags and ids
@@ -130,11 +132,27 @@ def setup():
         Sketcher.Constraint("Distance", lines[1], 10.0),
     ]
     sketch.addConstraint(cons)
+    # an ellipse with its helper curves (internal alignment: two axis lines, two foci)
+    ellipse = sketch.addGeometry(Part.Ellipse(V(-14, -20, 0), 6, 3))
+    sketch.exposeInternalGeometry(ellipse)
+    roles = {f.InternalType: i for i, f in enumerate(sketch.GeometryFacadeList)}
+    major, minor = roles.get("EllipseMajorDiameter"), roles.get("EllipseMinorDiameter")
+    sketch.addConstraint(
+        [
+            Sketcher.Constraint("DistanceX", -1, 1, ellipse, 3, -20.0),
+            Sketcher.Constraint("DistanceY", -1, 1, ellipse, 3, -20.0),
+            Sketcher.Constraint("Horizontal", major),
+            Sketcher.Constraint("Distance", major, 12.0),
+            Sketcher.Constraint("Distance", minor, 6.0),
+        ]
+    )
     doc.commitTransaction()
     sketch.solve()
     doc.recompute()
     h.fit(iso=False)
-    h.check("the rectangle is fully constrained", locked(sketch), sketch.DoF)
+    h.check("the sketch is fully constrained", locked(sketch), sketch.DoF)
+    inner = [x for x in state(sketch) if x[3] != "None"]
+    h.check("the ellipse has its four helper curves", len(inner) == 4, state(sketch))
 
 
 def fillet_open():
@@ -174,7 +192,7 @@ def fillet_check():
     s["base"] = state(sketch)
     s["cons"] = constraints(sketch)
     s["areas"] = areas(sketch)
-    h.check("one profile", len(s["areas"]) == 1, s["areas"])
+    h.check("two profiles", len(s["areas"]) == 2, s["areas"])
     st.esc()
 
 
@@ -248,7 +266,7 @@ def e_collapse():
         constraints(copy)[: len(s["cons"])],
     )
     copy.solve()
-    h.check("E1 the profile is unchanged", areas(copy)[:1] == s["areas"], areas(copy))
+    h.check("E1 the profiles are unchanged", areas(copy) == s["areas"], areas(copy))
     App.closeDocument(d.Name)
     _back_to_doc()
     QtTest.QTest.qWait(300)
@@ -318,7 +336,8 @@ def s_closed():
     h.check("the sketch closes", h.in_sketch() is None)
     same_state("S closed", sk(), s["base"])
     s["vertices"] = len(sk().Shape.Vertexes)  # (the open sketch's shape is from before)
-    h.check("S the old corner is no vertex of the shape", s["vertices"] == 5, s["vertices"])
+    # (5 for the rectangle's corners and the fillet, 1 for the ellipse)
+    h.check("S the old corner is no vertex of the shape", s["vertices"] == 6, s["vertices"])
     Gui.Selection.clearSelection()
     h.click_empty()
 
