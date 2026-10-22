@@ -229,6 +229,50 @@ class LimiterFlow(unittest.TestCase):
         self.assertEqual(len(works.calls), calls)
         self.assertEqual(limiter.searches, 1)
 
+    def test_a_search_cut_short_is_not_a_wall(self):
+        # review finding L2: on a slow part the time budget stops the bisection after
+        # MIN_TRIALS builds (50 -> 26, 14, 8 all refused): 2.0 (the value that worked) is used
+        # for the 50 typed, but values between 2.0 and 8.0 were never tried: they must be
+        # built, not held at 2.0 ("2.5 mm does not fit" while it does)
+        now = [0.0]
+
+        def clock():
+            return now[0]
+
+        works = Counter(3.0)
+
+        def slow(value):
+            now[0] += 2.0
+            return works(value)
+
+        limiter = vl.Limiter()
+        limiter.search_clock = clock
+        key = vl.make_key("plate", "61 edges")
+        limit = limiter.find(key, slow, 50.0, 2.0, good_known=True)
+        self.assertEqual(limit, 2.0)
+        self.assertEqual(works.calls[:3], [26.0, 14.0, 8.0])
+        # 2.5 and 5.0 were never tried: used as they are (the preview tries them)
+        self.assertEqual(limiter.clamp(key, 2.5, typed=True), 2.5)
+        self.assertEqual(limiter.note, "")
+        self.assertEqual(limiter.clamp(key, 5.0, typed=True), 5.0)
+        # past the nearest refused value (8.0): held without a build, and said
+        self.assertEqual(limiter.clamp(key, 9.0, typed=True), 2.0)
+        self.assertEqual(limiter.note, "9 mm does not fit: limited to 2.00 mm")
+        # 5.0 refused by its preview: the gap 2.0 .. 5.0 is searched, a better limit found
+        calls = len(works.calls)
+        limit = limiter.find(key, slow, 5.0, 2.0, good_known=True)
+        self.assertGreater(len(works.calls), calls)
+        self.assertGreater(limit, 2.0)
+        self.assertLessEqual(limit, 3.0)
+        # the nearest refused value only comes closer
+        self.assertEqual(limiter.clamp(key, 9.0), limit)
+
+    def test_an_exact_limit_is_a_wall(self):
+        limiter = vl.Limiter()
+        key = vl.make_key("k")
+        self.assertEqual(limiter.find(key, Counter(3.4789), 50.0, 1.0, good_known=True), 3.47)
+        self.assertEqual(limiter.clamp(key, 3.6, typed=True), 3.47)
+
     def test_lower_side(self):
         limiter = vl.Limiter()
         key = vl.make_key("face")

@@ -872,19 +872,24 @@ def check_build(kind, info, refs, options):
     names = blended_edges(info, refs)
     label, size = _size_name(kind, options)
     angle = math.radians(float(options.get("angle", 45.0)))
-    second = 0.0
+    groups = {}  # the second distance -> the edges with that corner angle
     for name in names:
         frame = info.frame(name)
         gamma = frame["gamma"] if frame else math.pi / 2.0
         far = math.sin(angle + gamma)
         if far <= 1e-9:
             raise BlendError(too_big(kind, label, size))
-        second = max(second, size * math.sin(angle) / far)
-    two = dict(options, chamfer_type="two", distance=size, distance2=second)
-    try:
-        trial(kind, info, refs, two)
-    except BlendError:
-        raise BlendError(too_big(kind, label, size))
+        groups.setdefault(round(size * math.sin(angle) / far, 9), []).append(name)
+    # Each edge gets its own second distance (FreeCAD's Distance and Angle chamfer does that
+    # too): Part's chamfer takes one pair of distances for all its edges, so the edges are
+    # checked in groups of the same corner angle. One bevel with the largest second distance
+    # on every edge refused chamfers FreeCAD builds (a 90 and a 135 degree edge together).
+    for second, group in groups.items():
+        two = dict(options, chamfer_type="two", distance=size, distance2=second)
+        try:
+            trial(kind, info, group, two)
+        except BlendError:
+            raise BlendError(too_big(kind, label, size))
 
 
 def too_big(kind, label, size, exc=None):
