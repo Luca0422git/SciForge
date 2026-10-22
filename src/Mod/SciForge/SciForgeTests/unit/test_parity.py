@@ -369,6 +369,21 @@ class TestRealMenus(unittest.TestCase):
                 forgotten.append(" > ".join(result.item.path))
         self.assertEqual(forgotten, [], "add them to docs/sciforge/dev/remaining-gaps.md")
 
+    def test_core_workflows_names_only_open_gaps(self):
+        # a gap closed on the work list must not stay "missing" on the workflow page
+        # (2026-10-22: workflow 1 still listed G-03 and G-06 after they were closed)
+        import re
+
+        dev = os.path.join(REPO, "docs", "sciforge", "dev")
+        with open(os.path.join(dev, "remaining-gaps.md"), encoding="utf-8") as handle:
+            gaps = handle.read()
+        with open(os.path.join(dev, "core-workflows.md"), encoding="utf-8") as handle:
+            page = handle.read()
+        open_ids = set(re.findall(r"^\|(?: *\d+ *\|)? *(G-\d+) *\|", gaps, re.M))
+        self.assertGreater(len(open_ids), 50)
+        named = set(re.findall(r"\bG-\d+\b", page))
+        self.assertEqual(sorted(named - open_ids), [], "closed or unknown gaps named")
+
     def test_the_numbers_add_up(self):
         results = parity.compare(self.items, self.entries, self.aliases)
         self.assertEqual(len(results), len(self.items))

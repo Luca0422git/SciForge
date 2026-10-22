@@ -17,6 +17,9 @@ Rules for this page:
   against hand-worked numbers (golden models in `SciForgeTests/golden/models/`). Each was
   read for what it really does, not trusted by its name. "Run" says when it last passed here.
 - Change a verdict only with a test that shows it, in the same commit.
+- A commit that closes or narrows a gap of [remaining-gaps.md](remaining-gaps.md) updates
+  the G- numbers here in the same commit; the unit test `test_parity` fails while this page
+  names a G- number the work list no longer has open.
 
 Checked 2026-10-22 on `experimental` at 0b1da82 (`tools/sciforge/run_tests.sh` with the
 real FreeCAD 1.1.4): unit tests, the 448 golden models (446 pass, 2 known xfail: OpenCASCADE
@@ -24,14 +27,14 @@ volume limits), smoke and journey test, and every scenario named below.
 
 | # | Workflow | Works end to end |
 |---|---|---|
-| 1 | Sketch, constrain, extrude / revolve, fillet | **yes** |
+| 1 | Sketch, constrain, extrude / revolve, fillet | **partly** |
 | 2 | Go back and edit an early step of the timeline | **partly** |
 | 3 | Components and joints (a mechanism) | **partly** |
 | 4 | A drawing with dimensions, to PDF | **yes** |
 | 5 | STEP round trip (Fusion's STEP in, edit, STEP out) | **yes** |
 | 6 | Export for 3D printing | **yes** |
 
-## 1. Sketch, constrain, extrude / revolve, fillet: yes
+## 1. Sketch, constrain, extrude / revolve, fillet: partly
 
 The bread and butter: Create Sketch on a plane or a face, rectangle / circle / lines with
 typed sizes, constraints and dimensions, Extrude (Join / Cut chosen by itself), Revolve,
@@ -52,14 +55,22 @@ Evidence:
 - `revolve_qa_part.py` (a groove revolved about an edge, Cut chosen by itself, edited after
   a Press Pull change, close and reopen), `fillet_qa_part.py` (fillets and chamfers on a
   multi-step part, Press Pull on a round, history edits round fillets).
+- `sketch_explain.py` (since 2026-10-22, wf/sketch-explain): a constraint that does not fit
+  is refused with the constraints it fights named and ringed in red; the padlock on a fully
+  constrained sketch in the browser and the timeline.
 - Golden models: `fillet_top_edges`, `fillet_all_edges`, `edit_fillet_radius`,
   `revolve_washer`, the 19 `sf_revolve_*`, `sketch_nut_trap_polygon`, `param_driven_box`.
 
-Missing (none blocks the workflow): conflicting constraints are refused without naming the
-culprits (G-03), no fully-constrained padlock (G-06), no Centerline line type (G-09),
-projected curves cannot be dimensioned (G-02), Fillet G2 / setback / asymmetric need the
-kernel (G-80), FreeCAD's solver has no curvature constraint between a spline and an arc
-(G-83).
+Why only partly (2026-10-22: it said yes while the work list ranked G-02 High, "gets in the
+way of a workflow"; by this page's rules a workaround in normal use is partly):
+- **Projected edges** (a sketch on a face, dimensioned to the face's edges, the everyday
+  Fusion move): projected curves cannot be dimensioned and have no Break Link, and FreeCAD
+  loses some projections when the source edge moves, so they are projected again by hand
+  (G-02).
+
+Also missing (Luca rarely needs them): no Centerline line type (G-09), Fillet G2 / setback /
+asymmetric need the kernel (G-80), FreeCAD's solver has no curvature constraint between a
+spline and an arc (G-83).
 
 ## 2. Go back and edit an early step: partly
 
@@ -88,9 +99,10 @@ Why only partly:
   steps" does not exist; the longest edit chain tested is about five steps (G-01).
 - **Faces can be lost on big edits** (FreeCAD's topological naming): a later step can lose
   its face; SciForge names the step to re-pick (known-issues.md). Fusion keeps more (G-04).
-- An older sketch edited shows only its own body rolled back (G-12); editing a pattern or an
-  older revolve: check that they roll back like the rest (G-07, G-08); an edit opened by a
-  double-click in the 3D view does not roll back (2026-10-21 notes).
+- An older sketch edited shows only its own body rolled back (G-12); an edit opened by a
+  double-click in the 3D view does not roll back (G-07; it nearly always opens the last
+  step). Patterns and older revolves edited from the timeline do roll back
+  (`gaps_edit_rollback.py`, 2026-10-22).
 
 ## 3. Components and joints: partly
 
@@ -131,12 +143,16 @@ Evidence:
   by real clicks on the sheet), `drawing2_tolerance.py` (tolerances, ISO fits, basic and
   reference), `drawing2_ordinate.py`, `drawing2_symbols.py`, `drawing_annotations.py`.
 - `drawing_update.py` and `drawing2_update.py` (the fillet radius changed in the design:
-  the views and the dimensions follow), `drawing_assembly.py` (parts list and balloons),
+  the views and the dimensions follow; `drawing_update.py` also undoes the change with
+  Ctrl+Z and the drawing goes back. On the merged branches of 2026-10-22 it did not: the
+  faster Undo of `undo_fast.py` left the drawing showing the undone design; fixed in
+  fix/parity, the drawing is recomputed after such an Undo), `drawing_assembly.py` (parts list and balloons),
   `drawing_export.py` (Export PDF and DXF, files read back), `drawing2_sheets.py`.
 
 Missing: Arrange Dimensions (G-20), hole notes (G-21), Note and weld symbols (G-41),
 exploded views (G-62), one sheet size per drawing (G-24), DWG (G-42), Move / Rotate of a
-view are greyed (drag the view by its frame instead).
+view are greyed (drag the view by its frame instead), hole tables and the other drawing
+entries of G-85 / G-86.
 
 ## 5. STEP round trip: yes
 

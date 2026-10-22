@@ -3,7 +3,8 @@
 **This is the one work list** (decision of 2026-10-21, idea 5 of
 [cadcraft-lessons.md](cadcraft-lessons.md)). One row per gap, ranked by how much it hurts
 Luca's everyday work. A commit that closes a gap deletes its row (or narrows it) in the same
-commit and adds a line to "Closed" at the end; a new gap gets the next free ID. IDs never
+commit and adds a line to "Closed" at the end (and updates [core-workflows.md](core-workflows.md)
+when it names the gap); a new gap gets the next free ID. IDs never
 change, so briefs and commits can name them ("closes G-07").
 
 Three companions, each with its own job:
