@@ -36,6 +36,11 @@ define(
                 ("summary", "full"), "full adds every step's definition", default="summary"
             ),
             "bodies": step_ids("only these bodies (default: all)"),
+            "snapshot": boolean(
+                "false: keep no snapshot (the resource sciforge://design reads this way, so "
+                "reading it does not push out the snapshot ids you hold)",
+                default=True,
+            ),
         }
     ),
     changes=False,

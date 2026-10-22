@@ -18,7 +18,7 @@ from ..executor import UserError, json_result
 from . import action
 
 MAX_SNAPSHOTS = 20  # per design, oldest dropped first
-_SNAPSHOTS = {}  # document name -> {"S1": record, ...}
+_SNAPSHOTS = {}  # document name -> {"S1": record, ...} (records of that very document only)
 _LAST = {}  # document name -> the record taken before the latest change
 _COUNTER = {"n": 0}
 
@@ -293,7 +293,14 @@ def record(doc):
     from ... import bodies, timeline_ops
     from .timeline_actions import _values_of
 
-    out = {"doc": doc.Name, "time": time.time(), "bodies": {}, "steps": {}, "order": []}
+    out = {
+        "doc": doc.Name,
+        "uid": identity(doc),
+        "time": time.time(),
+        "bodies": {},
+        "steps": {},
+        "order": [],
+    }
     for body in bodies.list_bodies(doc):
         out["bodies"][body.Name] = body_row(body, full=False)
     try:
@@ -316,10 +323,34 @@ def record(doc):
     return out
 
 
+def identity(doc):
+    """What tells this document from a later one with the same internal name (FreeCAD gives
+    "Unnamed" again once the first is closed, also when it was closed in the window, where
+    forget() is not called): its Uid, new for every new document."""
+    try:
+        return str(doc.Uid)
+    except Exception:
+        return "%s@%x" % (doc.Name, id(doc))
+
+
+def _snapshots(doc):
+    """The snapshots of this document ({id: record}); those of a closed document that had
+    the same name are dropped."""
+    uid = identity(doc)
+    store = _SNAPSHOTS.get(doc.Name)
+    if store and any(rec.get("uid") != uid for rec in store.values()):
+        store = None
+    if store is None:
+        store = _SNAPSHOTS[doc.Name] = {}
+    if _LAST.get(doc.Name) is not None and _LAST[doc.Name].get("uid") != uid:
+        _LAST.pop(doc.Name, None)
+    return store
+
+
 def keep_snapshot(doc):
     _COUNTER["n"] += 1
     ident = "S%d" % _COUNTER["n"]
-    store = _SNAPSHOTS.setdefault(doc.Name, {})
+    store = _snapshots(doc)
     store[ident] = record(doc)
     while len(store) > MAX_SNAPSHOTS:
         store.pop(next(iter(store)))
@@ -391,7 +422,8 @@ def inspect_design(ctx, args):
         "invalid_bodies": [b["id"] for b in invalid],
         "total_volume_mm3": _r(sum(b.get("volume_mm3", 0.0) for b in rows if b.get("solid"))),
     }
-    info["snapshot"] = keep_snapshot(doc)
+    if args.get("snapshot", True):
+        info["snapshot"] = keep_snapshot(doc)
     words = "%s: %d bod%s, %d step%s" % (
         doc.Label,
         len(rows),
@@ -403,7 +435,9 @@ def inspect_design(ctx, args):
         words += ", %d failed (%s)" % (len(failed), ", ".join(s["id"] for s in failed))
     if invalid:
         words += ", %d invalid bod%s" % (len(invalid), "y" if len(invalid) == 1 else "ies")
-    return json_result(info, words + ". Snapshot %s." % info["snapshot"], compact=True)
+    if info.get("snapshot"):
+        words += ". Snapshot %s" % info["snapshot"]
+    return json_result(info, words + ".", compact=True)
 
 
 # -- query_geometry ---------------------------------------------------------------------------
@@ -701,8 +735,12 @@ def scene(ctx, doc, marked, edges=True):
                 )
     if source is not None and not any(
         source is b or getattr(b, "Tip", None) is source for b in shown
-    ):  # an earlier step (not what the body shows now): its marked faces / edges drawn alone
-        shape = marked["shape"]
+    ):  # an earlier step (not what the body shows now): its marked faces / edges drawn alone,
+        # where that solid is in the design (its body's and component's placement applied)
+        try:
+            shape = bodies.global_shape(source, copy=False)
+        except Exception:
+            shape = marked["shape"]
         tol = _tolerance(shape)
         for name in sorted(marked["faces"]):
             points, tris = shape.getElement(name).tessellate(tol)
@@ -975,6 +1013,23 @@ def _since_step(ctx, doc, ident):
     if body is None:
         raise UserError("%s is not in a body: give a step of a body, or a snapshot id." % ident)
     try:
+        tl = timeline_ops.timeline(doc)
+        item = next((i for i in tl.items if i.name == obj.Name), None)
+    except Exception:
+        tl, item = None, None
+    if item is not None and item.state == "rolled_back":
+        # (FreeCAD keeps the solid it had before the marker was rolled back: not its result)
+        raise UserError(
+            "%s is after the history marker (rolled back), so its solid is not computed: "
+            'roll_timeline {"to": "end"} (or to after %s) first, or diff since a snapshot.'
+            % (obj.Name, obj.Name)
+        )
+    if item is not None and item.status == "error":
+        raise UserError(
+            "%s failed, so the solid it holds is not its result: repair it first (check_design "
+            "says why), or diff since a snapshot." % obj.Name
+        )
+    try:
         old_shape = bodies.global_shape(obj)
     except Exception:
         old_shape = None
@@ -994,7 +1049,6 @@ def _since_step(ctx, doc, ident):
     now = body_row(body, full=False)
     later = []
     try:
-        tl = timeline_ops.timeline(doc)
         names = tl.names()
         if obj.Name in names:
             start = names.index(obj.Name)
@@ -1033,6 +1087,7 @@ def _since_step(ctx, doc, ident):
 def diff_design(ctx, args):
     doc = ctx.need_doc()
     since = args["since"]
+    snapshots = _snapshots(doc)  # (also drops a last_change of a closed namesake)
     if since == "last_change":
         old = _LAST.get(doc.Name)
         if old is None:
@@ -1041,8 +1096,8 @@ def diff_design(ctx, args):
                 "last_change: call inspect_design for a snapshot id and diff since it later."
             )
         label = "the last change"
-    elif since in _SNAPSHOTS.get(doc.Name, {}):
-        old = _SNAPSHOTS[doc.Name][since]
+    elif since in snapshots:
+        old = snapshots[since]
         label = since
     elif since[:1] == "S" and since[1:].isdigit():
         raise UserError(

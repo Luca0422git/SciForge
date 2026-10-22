@@ -43,6 +43,7 @@ MAX_DOC_BYTES = docs_core.MAX_DOC_BYTES
 
 RESOURCE_NOT_FOUND = -32002  # (the MCP specification's code for an unknown resource)
 INVALID_PARAMS = -32602
+INTERNAL_ERROR = -32603  # (JSON-RPC's: SciForge could not answer a design resource)
 
 
 class ResourceError(Exception):
@@ -70,7 +71,7 @@ DESIGN_RESOURCES = (
         "timeline step (state, error, values), parameters, components, joints, the selection "
         "(the inspect_design tool).",
         "inspect_design",
-        {},
+        {"snapshot": False},
     ),
     (
         "sciforge://design/check",
@@ -137,28 +138,47 @@ TEMPLATES = (
 
 
 def _json_part(text):
-    """The JSON of a tool's answer (the sentence before it dropped), or None."""
-    start = text.find("{")
-    if start < 0:
-        return None
-    try:
-        return json.dumps(json.loads(text[start:]), indent=1, ensure_ascii=False)
-    except ValueError:
-        return None
+    """The JSON of a tool's answer (the sentence before it dropped), or None. The JSON is
+    the whole answer or starts on a line of its own (executor.json_result: sentence, newline,
+    JSON), so a brace in the sentence (a design called "Bracket {v2}") is not taken for it."""
+    starts = [0] if text[:1] in "{[" else []
+    pos = text.find("\n")
+    while pos >= 0:
+        if text[pos + 1 : pos + 2] in ("{", "["):
+            starts.append(pos + 1)
+        pos = text.find("\n", pos + 1)
+    for start in starts:
+        try:
+            return json.dumps(json.loads(text[start:]), indent=1, ensure_ascii=False)
+        except ValueError:
+            continue
+    return None
 
 
-def _from_tool(uri, tool, args, call_tool):
+def _from_tool(uri, tool, args, call_tool, template=False):
+    """A design resource read through a tool. A tool that cannot answer is an error, not
+    contents: -32002 (Resource not found) for a template whose id names nothing (an unknown
+    step), -32603 otherwise (no design open, SciForge not running...), the sentence in the
+    message and in data.reason."""
     try:
         answer = call_tool(tool, args)
     except Exception as exc:
-        return [
-            {"uri": uri, "mimeType": "text/plain", "text": "SciForge could not answer: %s" % exc}
-        ]
+        raise ResourceError(
+            INTERNAL_ERROR, "SciForge could not answer: %s" % exc, {"uri": uri, "reason": str(exc)}
+        )
     text = (answer or {}).get("text", "") if isinstance(answer, dict) else str(answer)
-    if isinstance(answer, dict) and not answer.get("is_error"):
-        body = _json_part(text)
-        if body is not None:
-            return [{"uri": uri, "mimeType": "application/json", "text": body}]
+    if not isinstance(answer, dict) or answer.get("is_error"):
+        reason = text.strip() or "SciForge gave no answer."
+        if template:
+            raise ResourceError(
+                RESOURCE_NOT_FOUND,
+                "Resource not found: %s (%s)" % (uri, reason),
+                {"uri": uri, "reason": reason},
+            )
+        raise ResourceError(INTERNAL_ERROR, reason, {"uri": uri, "reason": reason})
+    body = _json_part(text)
+    if body is not None:
+        return [{"uri": uri, "mimeType": "application/json", "text": body}]
     return [{"uri": uri, "mimeType": "text/plain", "text": text}]
 
 
@@ -328,7 +348,9 @@ def read(uri, call_tool, root=None):
         if topic in help_topics():
             return [{"uri": uri, "mimeType": "text/plain", "text": catalog.help_text(topic)}]
     if rest.startswith("step/") and len(rest) > len("step/"):
-        return _from_tool(uri, "get_step", {"step": rest[len("step/") :]}, call_tool)
+        return _from_tool(
+            uri, "get_step", {"step": rest[len("step/") :]}, call_tool, template=True
+        )
     if rest == "docs/index":
         return [{"uri": uri, "mimeType": "text/markdown", "text": docs_index(root)}]
     if rest in ("handbook", "handbook/full", "handbook/compact"):

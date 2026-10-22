@@ -253,10 +253,32 @@ class Resources(unittest.TestCase):
         self.assertEqual([c[0] for c in fake.calls][-1], "get_step")
 
     def test_design_resource_when_sciforge_is_not_there(self):
-        contents = rpc("resources/read", {"uri": "sciforge://design"}, FakeSciForge(True))
-        content = contents["result"]["contents"][0]
-        self.assertEqual(content["mimeType"], "text/plain")
-        self.assertIn("not running", content["text"])
+        answer = rpc("resources/read", {"uri": "sciforge://design"}, FakeSciForge(True))
+        self.assertNotIn("result", answer)  # (an error, not contents that read as the design)
+        self.assertEqual(answer["error"]["code"], -32603)
+        self.assertIn("not running", answer["error"]["message"])
+        self.assertEqual(answer["error"]["data"]["uri"], "sciforge://design")
+
+    def test_unknown_step_is_resource_not_found(self):
+        def no_step(name, args):
+            return {"text": "There is no step called 'Nope'.", "is_error": True}
+
+        answer = rpc("resources/read", {"uri": "sciforge://step/Nope"}, no_step)
+        self.assertEqual(answer["error"]["code"], -32002)
+        self.assertEqual(answer["error"]["data"]["uri"], "sciforge://step/Nope")
+        self.assertIn("no step called", answer["error"]["data"]["reason"])
+
+    def test_design_json_found_after_a_sentence_with_braces(self):
+        def braces(name, args):
+            body = json.dumps({"design": "Bracket {v2}", "args": args})
+            return {"text": "Bracket {v2}: 1 body.\n" + body, "is_error": False}
+
+        content = rpc("resources/read", {"uri": "sciforge://design"}, braces)["result"]
+        content = content["contents"][0]
+        self.assertEqual(content["mimeType"], "application/json")
+        self.assertEqual(json.loads(content["text"])["design"], "Bracket {v2}")
+        # the resource keeps no snapshot (it would push out the AI's snapshot ids)
+        self.assertEqual(json.loads(content["text"])["args"], {"snapshot": False})
 
     def test_templates(self):
         templates = rpc("resources/templates/list")["result"]["resourceTemplates"]
